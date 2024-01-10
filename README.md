@@ -3,6 +3,12 @@
 This repo contains a quick template on how to hook up a rust project to CI. This readme also
 contains additional information on how to compile rust for different platforms.
 
+## Note About Features & Workspaces
+
+If you have different crates which depend on other crates with varying degrees of feature
+requirements, it may be best to separate those into separate workspaces. E.g.: When mixing crates
+with web-assembly or uniffi-gen guarded behind features, it's possible for certain test with no
+dependency on these platforms to be "poisoned" with feature code.
 
 ## Web Assembly (WASM)
 
@@ -167,6 +173,7 @@ The snippet below illustrates the necessary steps required to generate an xcfram
 used with the iOS application.
 
 Note that this snippet only handles the generated binaries, it needs to be extended to include the
+generate swift header files.
 
 ```
     echo "Building x86_64 Sim"
