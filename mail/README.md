@@ -1,92 +1,204 @@
 # rust-template
 
+This repo contains a quick template on how to hook up a rust project to CI. This readme also
+contains additional information on how to compile rust for different platforms.
 
 
-## Getting started
+## Web Assembly (WASM)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+For WASM the project needs to be compiled with `wasm-pack`, available in the docker image for this
+template.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+It's recommended to feature gate the binding generation code and only enable it when
+actively compiling for these targets.
 
-## Add your files
-
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+In your crate simply run:
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.protontech.ch/rust/inbox/templates/rust-template.git
-git branch -M master
-git push -uf origin master
+wasm-pack build -d $OUTPUT --target web --features="feature1,feature2"
 ```
 
-## Integrate with your tools
+## Mobile
 
-- [ ] [Set up project integrations](https://gitlab.protontech.ch/rust/inbox/templates/rust-template/-/settings/integrations)
+To generate bindings for mobile you need to use [uniffi-rs](https://github.com/mozilla/uniffi-rs).
 
-## Collaborate with your team
+Please use the [procedural macro
+API](https://mozilla.github.io/uniffi-rs/proc_macro/index.html), this makes it easier to generate
+the final binding set for the application.
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Generating the bindings is a 2 step process. First, you need to generate the final dynamic library
+for the application and then run the `uniffi-bindgen` command to generate the bindings for the
+target language.
 
-## Test and Deploy
+Finally it's recommended to feature gate the binding generation code and only enable it when
+actively compiling for these targets.
 
-Use the built-in continuous integration in GitLab.
+### Android
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+**IMPORTANT:** Be sure to read the [Kotlin Lifetime chapter](https://mozilla.github.io/uniffi-rs/kotlin/lifetimes.html) to avoid memory leaks.
 
-***
+#### Generate Kotlin bindings
 
-# Editing this README
+```
+cargo run  --release -p uniffi-bindgen generate --library $PATH_TO_SHARED_LIBRARY --language kotlin --out-dir $OUT_DIR
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+#### Integration with Android Project
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+There are different ways to integrate the cargo build process:
 
-## Name
-Choose a self-explaining name for your project.
+* [rust android gradle](https://github.com/mozilla/rust-android-gradle)
+* [uniffi-rs docs](https://mozilla.github.io/uniffi-rs/kotlin/gradle.html)
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+For rust-android-gradle you just need the add the following snippets to the app's `build.gradle`
+file and replace as needed.
+```
+cargo {
+    module = "../../rust/mailbox/mailbox-ffi"
+    libname = "mailbox_ffi"
+    targets = ["x86_64", "arm64"]
+    targetIncludes = ["libmailbox_ffi.so", "libgopenpgp-sys.so"]
+    targetDirectory = "../../rust/mailbox/target"
+    profile = "release"
+    features {
+        noDefaultBut()
+    }
+}
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+task genKotlinBindings(type: Exec) {
+    String rustFolder = "${project.getProjectDir()}/../../rust"
+    workingDir rustFolder
+    //TODO: Update this per CPU architecture.
+    commandLine "cargo", "run", "--release" ,"-p", "uniffi-bindgen", "generate", "--library", ${rustFolder}/target/aarch64-linux-android/release/libmailbox_uniffi.so","--language", "kotlin", "--out-dir", "${project.getProjectDir()}/src/main/java"
+}
+genKotlinBindings.dependsOn 'cargoBuild'
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+tasks.whenTaskAdded { task ->
+    //TODO: Cargo clean on project clean
+    // Require cargo to be run before copying native libraries.
+    if ((task.name == 'mergeDebugJniLibFolders' || task.name == 'mergeReleaseJniLibFolders')) {
+        task.dependsOn 'cargoBuild'
+    }
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+    if ((task.name == 'javaPreCompileDebug' || task.name == 'javaPreCompileRelease')) {
+        task.dependsOn 'cargoBuild'
+        task.dependsOn genKotlinBindings
+    }
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+    if ((task.name == 'compileReleaseKotlin' || task.name == 'compileDebugKotlin')) {
+        task.dependsOn 'cargoBuild'
+        task.dependsOn genKotlinBindings
+    }
+}
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+afterEvaluate {
+    // The `cargoBuild` task isn't available until after evaluation.
+    android.applicationVariants.all { variant ->
+        def productFlavor = ""
+        variant.productFlavors.each {
+            productFlavor += "${it.name.capitalize()}"
+        }
+        def buildType = "${variant.buildType.name.capitalize()}"
+        tasks["generate${productFlavor}${buildType}Assets"].dependsOn(tasks["cargoBuild"])
+    }
+}
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+Additionally you also need to specify the NDK version and the NDK target architectures:
 
-## License
-For open source projects, say how it is licensed.
+```
+android {
+    ndkVersion "26.1.10909125"
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+    defaultConfig {
+        ndk {
+            //noinspection ChromeOsAbiSupport
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+    }
+
+}
+```
+
+#### Building on CI
+
+Due to the crypto code that is still in go, building for android on ci is not as straight forward.
+
+You need to set a bunch of environment variables so that the go code can be compiled correctly.
+
+The snippet below demonstrates how to set up the environment variables for aarch64 and x86_64. Note
+that rust-android-gradle sets these for you.
+```
+    if [ "$2" == "arm64-v8a" ]; then
+        CARGO="env CC_aarch64-linux-android=${android_tools}/aarch64-linux-android21-clang"
+        CARGO="${CARGO} CC=${android_tools}/aarch64-linux-android21-clang"
+        CARGO="${CARGO} AR_aarch64-linux-android=$android_tools/llvm-ar"
+        CARGO="${CARGO} CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$android_tools/aarch64-linux-android21-clang"
+        CARGO_TARGET="--target=aarch64-linux-android"
+        CARGO_TARGET_DIR="target/aarch64-linux-android/release"
+    elif [ "$2" == "x86_64" ]; then
+        CARGO="env CC_x86_64-linux-android=$android_tools/x86_64-linux-android21-clang"
+        CARGO="${CARGO} CC=$android_tools/x86_64-linux-android21-clang"
+        CARGO="${CARGO} AR_x86_64-linux-android=$android_tools/llvm-ar"
+        CARGO="${CARGO} CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$android_tools/x86_64-linux-android21-clang"
+        CARGO_TARGET="--target=x86_64-linux-android"
+        CARGO_TARGET_DIR="target/x86_64-linux-android/release"
+    else
+        echo "Invalid android arch, please pick arm64-v8a or x86_64"
+        popd
+        exit -1
+    fi
+```
+
+### IOS
+
+#### Generate Swift bindings
+```
+cargo run  --release -p uniffi-bindgen generate --library $PATH_TO_SHARED_LIBRARY --language swift --out-dir $OUT_DIR
+```
+
+#### Generating an xcframework
+
+The snippet below illustrates the necessary steps required to generate an xcframework that can be
+used with the iOS application.
+
+Note that this snippet only handles the generated binaries, it needs to be extended to include the
+
+```
+    echo "Building x86_64 Sim"
+    cargo build --release -p mailbox-ffi ${CARGO_TARGET} --target x86_64-apple-ios
+    check_exit
+
+    echo "Building aarch64 Sim"
+    cargo build --release -p mailbox-ffi ${CARGO_TARGET} --target aarch64-apple-ios-sim
+    check_exit
+
+    echo "Building aarch64"
+    cargo build --release -p mailbox-ffi ${CARGO_TARGET} --target aarch64-apple-ios
+    check_exit
+
+    mkdir -p "$CP_DIR/ios-sim"
+    check_exit
+
+    mkdir -p "$CP_DIR/ios-dev"
+    check_exit
+
+    echo "Generating universal sim universal binary"
+    lipo -create -output "$CP_DIR/ios-sim/libmailbox_ffi_sim.dylib" \
+"target/x86_64-apple-ios/release/libmailbox_ffi.dylib" \
+"target/aarch64-apple-ios-sim/release/libmailbox_ffi.dylib"
+    check_exit
+
+    cp "target/aarch64-apple-ios/release/libmailbox_ffi.dylib" "$CP_DIR/ios-dev/libmailbox_ffi_dev.dylib"
+    check_exit
+
+    xcodebuild -create-xcframework \
+        -output "$CP_DIR/libmailbox_ffi.xcframework" \
+        -library "$CP_DIR/ios-sim/libmailbox_ffi_sim.dylib" \
+        -library "$CP_DIR/ios-dev/libmailbox_ffi_dev.dylib"
+    check_exit
+```
