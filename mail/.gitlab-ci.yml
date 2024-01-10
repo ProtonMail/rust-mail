@@ -13,9 +13,6 @@ stages:
   - lint
   - build
 
-.example_setup:
-  script:
-    - cd example
 
 .do_fmt_check:
    script:
@@ -25,21 +22,18 @@ stages:
    script:
      - cargo clippy -- -D warnings
 
-format-example:
+format:
   stage: lint
   script:
-    - !reference [.example_setup, script]
     - !reference [.do_fmt_check, script]
 
-clippy-example:
+clippy:
   stage: lint
   script:
-    - !reference [.example_setup, script]
     - !reference [.do_clippy_check, script]
 
-build-example:
+build:
   stage: build
   script:
-    - !reference [.example_setup, script]
     - cargo build
     - cargo test
