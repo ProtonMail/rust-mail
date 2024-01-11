@@ -1,0 +1,27 @@
+[package]
+name = "proton-mail-md"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+scraper = "0.18"
+lazy_static = "1"
+ego-tree = "0.6.2"
+wasm-bindgen = {version = "0.2", optional = true}
+
+# We need to overwrite gerandom here to enable the JS feature when compiling for webassebly.
+[dependencies.getrandom]
+version = "0.2"
+optional = true
+
+[features]
+default = []
+web = ["wasm-bindgen","getrandom/js"]
+
+[lints]
+workspace = true

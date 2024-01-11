@@ -1,0 +1,21 @@
+[package]
+name = "proton-labels"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+proton-api-rs = {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
+proton-async= {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
+
+[dev-dependencies]
+mockall = "0.12"
+proton-event-loop = {path ="../proton-event-loop"}
+env_logger = "0.10"
+
+# overwirte tokio for signal feature
+tokio = {version = "1", features = ["rt-multi-thread", "macros", "signal"]}
+
+[lints]
+workspace = true
