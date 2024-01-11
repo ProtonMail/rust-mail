@@ -1,7 +1,9 @@
 [workspace]
 resolver ="2"
 members = [
-   "example"
+   "proton-event-loop",
+   "proton-mail-labels",
+   "proton-mail-md",
 ]
 
 [workspace.lints.rust]

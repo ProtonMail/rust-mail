@@ -1,0 +1,12 @@
+use wasm_bindgen::prelude::*;
+
+// To build the wasm version
+// wasm-pack build -d ./web/pkg --target web --features="web"
+
+#[wasm_bindgen]
+pub struct LocateBlockquoteResult(String, String);
+#[wasm_bindgen]
+pub fn locate_blockquote(input: &str) -> LocateBlockquoteResult {
+    let (before, after) = crate::locate_blockquote(input);
+    LocateBlockquoteResult(before, after)
+}
