@@ -1,12 +1,14 @@
 use proton_api_rs::domain::{Event, Label, LabelId, TwoFactorAuth};
 use proton_api_rs::exports::anyhow;
-use proton_api_rs::exports::log::{info, LevelFilter};
+use proton_api_rs::exports::log::{error, info, LevelFilter};
 use proton_api_rs::http::{Client, ClientBuilder};
 use proton_api_rs::LoginError;
 use proton_async::async_trait::async_trait;
 use proton_async::tokio;
-use proton_event_loop::{Subscriber, SubscriberError};
+use proton_event_loop::{LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError};
 use proton_labels::{Callback, Labels, MemoryStore, ProtonProvider};
+use std::pin::pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 struct CliCallback {}
@@ -25,10 +27,21 @@ impl Callback for CliCallback {
     }
 }
 
+struct EventLoopErrorHandler {}
+impl proton_event_loop::LoopErrorHandler for EventLoopErrorHandler {
+    fn on_error(&self, error: LoopError) -> LoopErrorHandlerReply {
+        error!("Event loop error: {error}");
+        return LoopErrorHandlerReply::Abort;
+    }
+}
+
 struct LabelEventSubscriber(tokio::sync::mpsc::Sender<Vec<Event>>);
 
 #[async_trait]
 impl Subscriber for LabelEventSubscriber {
+    fn name(&self) -> &str {
+        "Label Event Subscriber"
+    }
     async fn on_events(&self, event: &[Event]) -> Result<(), SubscriberError> {
         let event = Vec::from_iter(event.iter().cloned());
         if self.0.is_closed() {
@@ -53,7 +66,7 @@ async fn main() {
 
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() < 3 {
-        eprintln!("Usage {} email password", args[0]);
+        error!("Usage {} email password", args[0]);
         return;
     }
 
@@ -62,6 +75,7 @@ async fn main() {
 
     let client = ClientBuilder::new()
         .app_version("Other")
+        .connect_timeout(Duration::from_secs(30))
         .build::<Client>()
         .expect("failed to create client");
 
@@ -70,18 +84,17 @@ async fn main() {
             .await
             .expect("Failed to login")
     else {
-        eprintln!("{}", LoginError::Unsupported2FA(TwoFactorAuth::TOTP));
+        error!("{}", LoginError::Unsupported2FA(TwoFactorAuth::TOTP));
         return;
     };
 
     let event_provider = proton_event_loop::ProtonProvider::new(client.clone(), session.clone());
     let event_store = proton_event_loop::InMemoryStore::default();
+    let event_error_handler = EventLoopErrorHandler {};
 
-    let mut event_loop =
-        proton_event_loop::Loop::new(Box::new(event_store), Box::new(event_provider));
-    let cancellation_token =
-        proton_event_loop::proton_async::tokio_util::sync::CancellationToken::new();
+    let event_loop = proton_event_loop::Loop::new();
 
+    proton_event_loop::Loop::new();
     let label_provider = ProtonProvider::new(client.clone(), session.clone());
     let label_store = MemoryStore::new();
 
@@ -99,27 +112,30 @@ async fn main() {
         .await
         .expect("Failed to init");
 
+    if let Err(e) = event_loop
+        .start(
+            Duration::from_secs(10),
+            Box::new(event_store),
+            Box::new(event_provider),
+            Box::new(event_error_handler),
+        )
+        .await
     {
-        let token = cancellation_token.clone();
-        tokio::spawn(async move {
-            let subscriber: Box<dyn Subscriber> = Box::new(LabelEventSubscriber(sender));
-            info!("Starting event loop");
-            if let Err(e) = event_loop
-                .run(token, Duration::from_secs(5), [subscriber])
-                .await
-            {
-                eprintln!("Event loop exited with error {e}");
-            }
-        });
+        error!("Failed to start event loop: {e}");
+        return;
     }
+    let subscriber: Arc<dyn Subscriber> = Arc::new(LabelEventSubscriber(sender));
+
+    event_loop.subscribe(subscriber).await;
+    event_loop.resume();
 
     {
-        let token = cancellation_token.clone();
+        let loop_cloned = event_loop.clone();
         tokio::spawn(async move {
             tokio::signal::ctrl_c()
                 .await
                 .expect("failed to wait for ctrl+c");
-            token.cancel();
+            loop_cloned.cancel();
         });
     }
 
@@ -135,9 +151,11 @@ async fn main() {
 
     println!("Started, waiting on ctrl+c to exit");
 
+    let event_loop = pin!(event_loop);
+
     loop {
         tokio::select! {
-            _ = cancellation_token.cancelled() => {
+            _ =  event_loop.wait_on_cancelled() => {
                 return;
             }
 
@@ -149,7 +167,7 @@ async fn main() {
                 for evt in &events {
                     if let Some(events) = &evt.labels {
                         if let Err(e)= labels.on_events(events).await {
-                            eprintln!("Failed to apply event ({}): {e}", evt.event_id);
+                            error!("Failed to apply event ({}): {e}", evt.event_id);
                             return
                         }
                     }
