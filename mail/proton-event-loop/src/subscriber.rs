@@ -14,5 +14,6 @@ pub enum SubscriberError {
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait Subscriber: Send + Sync {
+    fn name(&self) -> &str;
     async fn on_events(&self, event: &[Event]) -> Result<(), SubscriberError>;
 }

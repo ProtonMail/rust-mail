@@ -3,18 +3,16 @@ use crate::store::Store;
 use crate::subscriber::{Subscriber, SubscriberError};
 use proton_api_rs::domain::{Event, EventId, MoreEvents};
 use proton_api_rs::exports::anyhow;
-use proton_api_rs::exports::log::debug;
+use proton_api_rs::exports::log::{debug, error};
 use proton_api_rs::exports::thiserror;
 use proton_api_rs::http;
 use proton_api_rs::http::Error;
 use proton_async::tokio;
+use proton_async::tokio::time::MissedTickBehavior;
 use proton_async::tokio_util::sync::CancellationToken;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
-
-pub struct Loop {
-    store: Box<dyn Store>,
-    provider: Box<dyn Provider>,
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoopError {
@@ -24,96 +22,169 @@ pub enum LoopError {
     StoreWrite(anyhow::Error),
     #[error("Failed to retrieve event: {0}")]
     Provider(#[from] Error),
-    #[error("Subscriber failed to apply event: {0}")]
-    Subscriber(anyhow::Error),
+    #[error("Subscriber ({0}) failed to apply event: {1}")]
+    Subscriber(String, anyhow::Error),
 }
 
 const MAX_EVENTS_PER_POLL: usize = 50;
 
-//TODO(@Leander): Unsubscribe
-//TODO(@Leander): Error reporting and recovery
-//TODO(@Leander): Pause Resume
-//TODO(@Leander): Self contained task execution since we no longer rely on wasm async
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+/// Response returned by the `LoopErrorHandler` to control the behavior of the event loop after an error occurs.
+pub enum LoopErrorHandlerReply {
+    /// Pause the loop execution until it is manually resumed.
+    Pause,
+    /// Retry the event loop with the same event id.
+    Retry,
+    /// Abort and stop processing all events.
+    Abort,
+}
+
+/// If the event loop runs into an error, the user can control the desired behavior through an implementation of
+/// this trait.
+#[cfg_attr(test, mockall::automock)]
+pub trait LoopErrorHandler: Send + Sync {
+    fn on_error(&self, error: LoopError) -> LoopErrorHandlerReply;
+}
+
+/// This type polls the proton events at a given interval and distributes incoming events among its subscribers.
+#[derive(Clone)]
+pub struct Loop {
+    inner: Arc<SharedLoopState>,
+}
+impl Default for Loop {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Loop {
-    pub fn new(store: Box<dyn Store>, provider: Box<dyn Provider>) -> Self {
-        Self { store, provider }
+    pub fn new() -> Self {
+        let shared = Arc::new(SharedLoopState {
+            paused: AtomicBool::new(true),
+            pending_subscribers: Default::default(),
+            token: CancellationToken::new(),
+        });
+
+        Self { inner: shared }
     }
 
-    pub async fn run(
-        &mut self,
-        token: CancellationToken,
-        poll_interval: Duration,
-        subscribers: impl IntoIterator<Item = Box<dyn Subscriber>>,
-    ) -> Result<(), LoopError> {
-        let mut last_event_id = match self.store.load().await.map_err(LoopError::StoreRead)? {
+    /// Wait until the event loop has been cancelled. This does not imply the event loop has finished executing, but
+    /// a cancel signal was received. The event loop will terminate shortly after that.
+    pub async fn wait_on_cancelled(&self) {
+        self.inner.token.cancelled().await
+    }
+
+    pub async fn start(
+        &self,
+        interval: Duration,
+        store: Box<dyn Store>,
+        provider: Box<dyn Provider>,
+        error_handler: Box<dyn LoopErrorHandler>,
+    ) -> Result<tokio::task::JoinHandle<()>, LoopError> {
+        let last_event_id = match store.load().await.map_err(LoopError::StoreRead)? {
             Some(id) => id,
             None => {
                 debug!("No event id in event store, retrieving latest");
-                let id = self.provider.get_latest_event_id().await?;
-                self.store.store(&id).await.map_err(LoopError::StoreRead)?;
+                let id = provider.get_latest_event_id().await?;
+                store.store(&id).await.map_err(LoopError::StoreRead)?;
                 id
             }
         };
 
-        let subscribers = subscribers.into_iter().collect::<Vec<_>>();
+        let mut loop_state = LoopState {
+            store,
+            provider,
+            shared: self.inner.clone(),
+            error_handler,
+            subscribers: Vec::new(),
+        };
 
+        Ok(tokio::spawn(async move {
+            loop_state.run(interval, last_event_id).await
+        }))
+    }
+
+    /// Cancel the execution of the event loop.
+    pub fn cancel(&self) {
+        self.inner.token.cancel()
+    }
+
+    /// Pause the event loop. Will affect the next poll cycle.
+    pub fn resume(&self) {
+        self.inner.paused.store(false, Ordering::Release);
+    }
+
+    /// Resume the event loop. Note that this is not an immediate action, the event loop will resume after the next
+    /// interval timeout.
+    pub fn pause(&self) {
+        self.inner.paused.store(true, Ordering::Release);
+    }
+
+    /// Check whether the event loop is paused.
+    pub fn is_paused(&self) -> bool {
+        self.inner.paused.load(Ordering::Acquire)
+    }
+
+    /// Add a new subscriber to the event loop.
+    pub async fn subscribe(&self, subscriber: Arc<dyn Subscriber>) {
+        let mut accessor = self.inner.pending_subscribers.lock().await;
+        accessor.push(SubscriberOperation::Register(subscriber));
+    }
+
+    /// Remove a subscriber from the event loop.
+    pub async fn unsubscribe(&self, subscriber: Arc<dyn Subscriber>) {
+        let mut accessor = self.inner.pending_subscribers.lock().await;
+        accessor.push(SubscriberOperation::Unregister(subscriber));
+    }
+}
+
+impl Drop for Loop {
+    fn drop(&mut self) {
+        self.cancel()
+    }
+}
+
+#[doc(hidden)]
+enum SubscriberOperation {
+    Register(Arc<dyn Subscriber>),
+    Unregister(Arc<dyn Subscriber>),
+}
+
+#[doc(hidden)]
+struct SharedLoopState {
+    paused: AtomicBool,
+    pending_subscribers: tokio::sync::Mutex<Vec<SubscriberOperation>>,
+    token: CancellationToken,
+}
+
+#[doc(hidden)]
+struct LoopState {
+    store: Box<dyn Store>,
+    provider: Box<dyn Provider>,
+    error_handler: Box<dyn LoopErrorHandler>,
+    shared: Arc<SharedLoopState>,
+    subscribers: Vec<Arc<dyn Subscriber>>,
+}
+
+#[doc(hidden)]
+impl LoopState {
+    async fn run(&mut self, poll_interval: Duration, mut last_event_id: EventId) {
         let mut events = Vec::with_capacity(MAX_EVENTS_PER_POLL);
 
         let interval = tokio::time::interval(poll_interval);
         let mut interval = std::pin::pin!(interval);
+        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         debug!("Starting loop");
         loop {
             tokio::select! {
-                _= token.cancelled() => {
-                    return Ok(());
+                _= self.shared.token.cancelled() => {
+                    debug!("Cancellation requested, exiting");
+                    return;
                 }
 
                 _= interval.tick() => {
-                    self.collect_events(&last_event_id, &mut events).await?;
-
-                    if events
-                        .last()
-                        .expect("should be at least one event object present")
-                        .event_id
-                        == last_event_id
-                    {
-                        debug!("No new events");
-                        //no new api events
-                        continue;
-                    }
-
-                    debug!("Received new events: {:?}", events.iter().map(|e| e.event_id.clone()).collect::<Vec<_>>());
-
-                    for subscriber in &subscribers {
-                        if let Err(e) = subscriber.on_events(&events).await {
-                            match e {
-                                SubscriberError::Http(e) => {
-                                    match e {
-                                        Error::Redirect(_, _)
-                                        | Error::Timeout(_)
-                                        | Error::Connection(_) => {
-                                            // failed due to network error try again later
-                                            continue;
-                                        }
-                                        _ => return Err(LoopError::Subscriber(anyhow::anyhow!(e))),
-                                    }
-                                }
-                                SubscriberError::Other(e) => return Err(LoopError::Subscriber(e)),
-                            }
-                        }
-                    }
-
-                    let new_event_id = events
-                        .last()
-                        .expect("should be at least one event object present")
-                        .event_id
-                        .clone();
-                    if let Err(e) = self.store.store(&new_event_id).await {
-                        return Err(LoopError::StoreWrite(e));
-                    }
-
-                    last_event_id = new_event_id;
+                    self.get_and_publish_events(&mut last_event_id, &mut events).await
                 }
             }
         }
@@ -147,5 +218,122 @@ impl Loop {
         }
 
         Ok(())
+    }
+
+    async fn get_and_publish_events(
+        &mut self,
+        last_event_id: &mut EventId,
+        events: &mut Vec<Event>,
+    ) {
+        // Process pending subscriber operations
+        {
+            let mut accessor = self.shared.pending_subscribers.lock().await;
+            for operation in accessor.drain(..) {
+                match operation {
+                    SubscriberOperation::Register(s) => {
+                        let new_subscriber_name = s.name();
+                        debug!("Registering subscriber {new_subscriber_name}");
+                        if !self
+                            .subscribers
+                            .iter()
+                            .any(move |v| v.name() == new_subscriber_name)
+                        {
+                            self.subscribers.push(s);
+                        }
+                    }
+
+                    SubscriberOperation::Unregister(s) => {
+                        let new_subscriber_name = s.name();
+                        debug!("Unregistering subscriber {new_subscriber_name}");
+                        self.subscribers
+                            .retain(move |v| v.name() != new_subscriber_name);
+                    }
+                }
+            }
+        }
+
+        if self.shared.paused.load(Ordering::Acquire) {
+            return;
+        }
+
+        if let Err(e) = self.collect_events(last_event_id, events).await {
+            self.on_error(LoopError::Provider(e));
+            return;
+        }
+
+        if events
+            .last()
+            .expect("should be at least one event object present")
+            .event_id
+            == *last_event_id
+        {
+            debug!("No new events");
+            //no new api events
+            return;
+        }
+
+        debug!(
+            "Received new events: {:?}",
+            events
+                .iter()
+                .map(|e| e.event_id.clone())
+                .collect::<Vec<_>>()
+        );
+
+        for subscriber in &self.subscribers {
+            if let Err(e) = subscriber.on_events(events).await {
+                error!("Failed to publish events to '{}': {e}", subscriber.name());
+                match e {
+                    SubscriberError::Http(e) => {
+                        match e {
+                            Error::Redirect(_, _) | Error::Timeout(_) | Error::Connection(_) => {
+                                // failed due to network error try again later
+                                return;
+                            }
+                            _ => {
+                                self.on_error(LoopError::Subscriber(
+                                    subscriber.name().into(),
+                                    anyhow::anyhow!(e),
+                                ));
+                                return;
+                            }
+                        }
+                    }
+                    SubscriberError::Other(e) => {
+                        self.on_error(LoopError::Subscriber(
+                            subscriber.name().into(),
+                            anyhow::anyhow!(e),
+                        ));
+                        return;
+                    }
+                }
+            }
+        }
+
+        let new_event_id = events
+            .last()
+            .expect("should be at least one event object present")
+            .event_id
+            .clone();
+        if let Err(e) = self.store.store(&new_event_id).await {
+            self.on_error(LoopError::StoreWrite(e));
+            return;
+        }
+
+        *last_event_id = new_event_id;
+    }
+
+    fn on_error(&mut self, error: LoopError) {
+        match self.error_handler.on_error(error) {
+            LoopErrorHandlerReply::Pause => {
+                self.shared.paused.store(true, Ordering::Release);
+            }
+            LoopErrorHandlerReply::Retry => {
+                // Nothing to do
+            }
+            LoopErrorHandlerReply::Abort => {
+                self.shared.token.cancel();
+            }
+        }
     }
 }

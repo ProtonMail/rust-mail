@@ -7,6 +7,6 @@ mod subscriber;
 
 pub use proton_async;
 pub use provider::*;
-pub use r#loop::Loop;
+pub use r#loop::*;
 pub use store::*;
 pub use subscriber::*;
