@@ -3,7 +3,7 @@ resolver ="2"
 members = [
    "proton-event-loop",
    "proton-mail-labels",
-   "proton-mail-md",
+    "proton-mail-message-detector",
 ]
 
 [workspace.lints.rust]

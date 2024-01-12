@@ -50,11 +50,11 @@ build-mail-md-wasm:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cd proton-mail-md
+    - cd proton-mail-message-detector
     - wasm-pack build -d ./web_pkg --target web --features="web"
   artifacts:
-    name: proton-mail-md-wasm
+    name: proton-mail-message-detector-wasm
     paths:
-      - proton-mail-md/web_pkg
+      - proton-mail-message-detector/web_pkg
     when: always
     expire_in: 4 hrs
