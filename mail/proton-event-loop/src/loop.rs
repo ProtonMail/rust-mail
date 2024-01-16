@@ -15,6 +15,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(Debug, thiserror::Error)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
+#[cfg_attr(feature = "uniffi", uniffi(flat_error))]
 pub enum LoopError {
     #[error("Failed to read from store: {0}")]
     StoreRead(anyhow::Error),
@@ -28,8 +30,9 @@ pub enum LoopError {
 
 const MAX_EVENTS_PER_POLL: usize = 50;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 /// Response returned by the `LoopErrorHandler` to control the behavior of the event loop after an error occurs.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum LoopErrorHandlerReply {
     /// Pause the loop execution until it is manually resumed.
     Pause,

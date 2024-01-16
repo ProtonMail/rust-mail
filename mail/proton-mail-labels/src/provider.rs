@@ -5,7 +5,7 @@ use proton_async::async_trait::async_trait;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Provider {
+pub trait Provider: Send + Sync {
     async fn get_labels(&self, label_type: LabelType) -> http::Result<Vec<Label>>;
 
     async fn create_label<'a>(

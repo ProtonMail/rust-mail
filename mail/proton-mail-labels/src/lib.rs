@@ -1,6 +1,9 @@
 mod provider;
 mod store;
 
+#[cfg(feature = "uniffi")]
+pub mod uniffi_bindgen;
+
 use proton_api_rs::domain::{EventAction, Label, LabelEvent, LabelId, LabelType};
 use proton_api_rs::exports::{anyhow, anyhow::anyhow, thiserror};
 use proton_api_rs::http;
@@ -10,11 +13,11 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 pub use store::*;
 
-pub trait Callback {
-    fn label_created(&mut self, label: &Label);
-    fn label_updated(&mut self, label: &Label);
+pub trait Callback: Send + Sync {
+    fn label_created(&self, label: &Label);
+    fn label_updated(&self, label: &Label);
 
-    fn label_deleted(&mut self, id: &LabelId);
+    fn label_deleted(&self, id: &LabelId);
 }
 
 pub struct Labels {
@@ -25,6 +28,8 @@ pub struct Labels {
 }
 
 #[derive(Debug, thiserror::Error)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
+#[cfg_attr(feature = "uniffi", uniffi(flat_error))]
 pub enum LabelsError {
     #[error("{0}")]
     Provider(#[from] http::Error),
@@ -180,3 +185,6 @@ impl Labels {
         labels
     }
 }
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();

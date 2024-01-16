@@ -43,7 +43,7 @@ build:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cargo build
+    - cargo build --release
     - cargo test
 
 build-mail-md-wasm:
@@ -58,3 +58,16 @@ build-mail-md-wasm:
       - proton-mail-message-detector/web_pkg
     when: always
     expire_in: 4 hrs
+
+build-mail-uniffi:
+  stage: build
+  script:
+    - !reference [.script-config-git, script]
+    - cargo build --features="uniffi" --release
+
+generate-labels-uniffi-bindings:
+  stage: build
+  needs: ["build-mail-uniffi"]
+  script:
+    - uniffi-bindgen generate --library target/release/libproton_mail_labels.so --language kotlin --out-dir bindings/proton-mail-labels/kotlin
+    - uniffi-bindgen generate --library target/release/libproton_mail_labels.so --language swift --out-dir bindings/proton-mail-labels/swift
