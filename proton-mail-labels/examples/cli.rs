@@ -8,7 +8,6 @@ use proton_async::tokio;
 use proton_event_loop::{LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError};
 use proton_labels::{Callback, Labels, MemoryStore, ProtonProvider};
 use std::pin::pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 struct CliCallback {}
@@ -42,7 +41,7 @@ impl Subscriber for LabelEventSubscriber {
     fn name(&self) -> &str {
         "Label Event Subscriber"
     }
-    async fn on_events(&self, event: &[Event]) -> Result<(), SubscriberError> {
+    async fn on_events(&mut self, event: &[Event]) -> Result<(), SubscriberError> {
         let event = Vec::from_iter(event.iter().cloned());
         if self.0.is_closed() {
             return Err(SubscriberError::Other(anyhow::anyhow!("channel closed")));
@@ -124,7 +123,7 @@ async fn main() {
         error!("Failed to start event loop: {e}");
         return;
     }
-    let subscriber: Arc<dyn Subscriber> = Arc::new(LabelEventSubscriber(sender));
+    let subscriber: Box<dyn Subscriber> = Box::new(LabelEventSubscriber(sender));
 
     event_loop.subscribe(subscriber).await;
     event_loop.resume();

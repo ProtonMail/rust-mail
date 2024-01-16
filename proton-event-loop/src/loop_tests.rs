@@ -7,7 +7,6 @@ use mockall::Sequence;
 use proton_api_rs::domain::{Event, EventId, MoreEvents};
 use proton_api_rs::exports::anyhow::anyhow;
 use proton_async::tokio;
-use std::sync::Arc;
 use std::time::Duration;
 
 #[tokio::test]
@@ -112,7 +111,7 @@ async fn test_loop_event_collection() {
             });
     }
 
-    let subscriber: Arc<dyn Subscriber> = Arc::new(subscriber);
+    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(
@@ -226,7 +225,7 @@ async fn test_error_handler_retry_retries_loop() {
             });
     }
 
-    let subscriber: Arc<dyn Subscriber> = Arc::new(subscriber);
+    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(
@@ -289,7 +288,7 @@ async fn test_error_handler_pause_pauses_loop() {
         })
         .in_sequence(&mut sequence);
 
-    let subscriber: Arc<dyn Subscriber> = Arc::new(subscriber);
+    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(
@@ -346,7 +345,7 @@ async fn test_error_handler_abort_causes_loop_exit() {
         .in_sequence(&mut sequence);
 
     let eloop = Loop::new();
-    let subscriber: Arc<dyn Subscriber> = Arc::new(subscriber);
+    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(
