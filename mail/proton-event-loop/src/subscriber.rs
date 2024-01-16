@@ -107,7 +107,21 @@ impl ChanneledSubscriberHandler {
 
         let r = (f)(&events);
 
-        if let Err(e) = self.sender.send(r.map_err(|e| e.into())).await {
+        self.reply(r.map_err(|e| e.into())).await
+    }
+
+    /// Receive events from event loop.
+    /// Note: Each call to `receive` must have an `reply` counter part.
+    pub async fn receive(&mut self) -> Option<Vec<Event>> {
+        self.receiver.recv().await
+    }
+
+    /// Report the result of handling `receive` to the event loop.
+    pub async fn reply(
+        &self,
+        reply: Result<(), SubscriberError>,
+    ) -> Result<(), ChanneledSubscriberError> {
+        if let Err(e) = self.sender.send(reply).await {
             return Err(ChanneledSubscriberError::Send(e.0));
         }
 
@@ -142,7 +156,10 @@ async fn test_channeled_subscriber_failed_to_send() {
     };
 
     let events = new_dummy_events();
-    assert!(matches!(s.on_events(&events).await.expect_err("expected error"), SubscriberError::Send));
+    assert!(matches!(
+        s.on_events(&events).await.expect_err("expected error"),
+        SubscriberError::Send
+    ));
 }
 
 #[tokio::test]
@@ -154,19 +171,27 @@ async fn test_channeled_subscriber_failed_to_receive() {
         drop(h);
     });
     let events = new_dummy_events();
-    assert!(matches!(s.on_events(&events).await.expect_err("expected error"), SubscriberError::Receive));
+    assert!(matches!(
+        s.on_events(&events).await.expect_err("expected error"),
+        SubscriberError::Receive
+    ));
 
     task.await.expect("expected no error on join");
 }
 
 #[tokio::test]
 async fn test_channeled_subscriber_handler_failed_to_receive() {
-    let mut h= {
+    let mut h = {
         let (_, h) = ChannelledSubscriber::new("test".into());
         h
     };
 
-    assert!(matches!(h.handle_events(|_| -> Result<(), SubscriberError>{Ok(())}).await.expect_err("expected error"), ChanneledSubscriberError::Receive));
+    assert!(matches!(
+        h.handle_events(|_| -> Result<(), SubscriberError> { Ok(()) })
+            .await
+            .expect_err("expected error"),
+        ChanneledSubscriberError::Receive
+    ));
 }
 
 #[tokio::test]
@@ -180,7 +205,12 @@ async fn test_channeled_subscriber_handler_failed_to_send() {
     });
 
     task.await.expect("expected no error on join");
-    assert!(matches!(h.handle_events(|_| -> Result<(), SubscriberError>{Ok(())}).await.expect_err("expected error"), ChanneledSubscriberError::Send(_)));
+    assert!(matches!(
+        h.handle_events(|_| -> Result<(), SubscriberError> { Ok(()) })
+            .await
+            .expect_err("expected error"),
+        ChanneledSubscriberError::Send(_)
+    ));
 }
 
 #[cfg(test)]
