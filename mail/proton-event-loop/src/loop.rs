@@ -23,7 +23,7 @@ pub enum LoopError {
     #[error("Failed to retrieve event: {0}")]
     Provider(#[from] Error),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
-    Subscriber(String, anyhow::Error),
+    Subscriber(String, SubscriberError),
 }
 
 const MAX_EVENTS_PER_POLL: usize = 50;
@@ -126,15 +126,15 @@ impl Loop {
     }
 
     /// Add a new subscriber to the event loop.
-    pub async fn subscribe(&self, subscriber: Arc<dyn Subscriber>) {
+    pub async fn subscribe(&self, subscriber: Box<dyn Subscriber>) {
         let mut accessor = self.inner.pending_subscribers.lock().await;
         accessor.push(SubscriberOperation::Register(subscriber));
     }
 
     /// Remove a subscriber from the event loop.
-    pub async fn unsubscribe(&self, subscriber: Arc<dyn Subscriber>) {
+    pub async fn unsubscribe(&self, subscriber_name: impl Into<String>) {
         let mut accessor = self.inner.pending_subscribers.lock().await;
-        accessor.push(SubscriberOperation::Unregister(subscriber));
+        accessor.push(SubscriberOperation::Unregister(subscriber_name.into()));
     }
 }
 
@@ -146,8 +146,8 @@ impl Drop for Loop {
 
 #[doc(hidden)]
 enum SubscriberOperation {
-    Register(Arc<dyn Subscriber>),
-    Unregister(Arc<dyn Subscriber>),
+    Register(Box<dyn Subscriber>),
+    Unregister(String),
 }
 
 #[doc(hidden)]
@@ -163,7 +163,7 @@ struct LoopState {
     provider: Box<dyn Provider>,
     error_handler: Box<dyn LoopErrorHandler>,
     shared: Arc<SharedLoopState>,
-    subscribers: Vec<Arc<dyn Subscriber>>,
+    subscribers: Vec<Box<dyn Subscriber>>,
 }
 
 #[doc(hidden)]
@@ -243,10 +243,8 @@ impl LoopState {
                     }
 
                     SubscriberOperation::Unregister(s) => {
-                        let new_subscriber_name = s.name();
-                        debug!("Unregistering subscriber {new_subscriber_name}");
-                        self.subscribers
-                            .retain(move |v| v.name() != new_subscriber_name);
+                        debug!("Unregistering subscriber {s}");
+                        self.subscribers.retain(|v| v.name() != s);
                     }
                 }
             }
@@ -280,34 +278,9 @@ impl LoopState {
                 .collect::<Vec<_>>()
         );
 
-        for subscriber in &self.subscribers {
-            if let Err(e) = subscriber.on_events(events).await {
-                error!("Failed to publish events to '{}': {e}", subscriber.name());
-                match e {
-                    SubscriberError::Http(e) => {
-                        match e {
-                            Error::Redirect(_, _) | Error::Timeout(_) | Error::Connection(_) => {
-                                // failed due to network error try again later
-                                return;
-                            }
-                            _ => {
-                                self.on_error(LoopError::Subscriber(
-                                    subscriber.name().into(),
-                                    anyhow::anyhow!(e),
-                                ));
-                                return;
-                            }
-                        }
-                    }
-                    SubscriberError::Other(e) => {
-                        self.on_error(LoopError::Subscriber(
-                            subscriber.name().into(),
-                            anyhow::anyhow!(e),
-                        ));
-                        return;
-                    }
-                }
-            }
+        if let Err(e) = self.publish_events_to_subscribers(events).await {
+            self.on_error(e);
+            return;
         }
 
         let new_event_id = events
@@ -335,5 +308,16 @@ impl LoopState {
                 self.shared.token.cancel();
             }
         }
+    }
+
+    async fn publish_events_to_subscribers(&mut self, events: &[Event]) -> Result<(), LoopError> {
+        for subscriber in &mut self.subscribers {
+            if let Err(e) = subscriber.on_events(events).await {
+                error!("Failed to publish events to '{}': {e}", subscriber.name());
+                return Err(LoopError::Subscriber(subscriber.name().into(), e));
+            }
+        }
+
+        Ok(())
     }
 }
