@@ -7,7 +7,7 @@ use proton_async::tokio;
 use proton_event_loop::{
     ChannelledSubscriber, LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError,
 };
-use proton_labels::{Callback, Labels, MemoryStore, ProtonProvider};
+use proton_mail_labels::{Callback, Labels, MemoryStore, ProtonProvider};
 use std::pin::pin;
 use std::time::Duration;
 use tokio::runtime;
@@ -15,15 +15,15 @@ use tokio::runtime;
 struct CliCallback {}
 
 impl Callback for CliCallback {
-    fn label_created(&mut self, label: &Label) {
+    fn label_created(&self, label: &Label) {
         println!("Label Created: {:?}", label)
     }
 
-    fn label_updated(&mut self, label: &Label) {
+    fn label_updated(&self, label: &Label) {
         println!("Label Updated: {:?}", label)
     }
 
-    fn label_deleted(&mut self, id: &LabelId) {
+    fn label_deleted(&self, id: &LabelId) {
         println!("Label Deleted: ${id}")
     }
 }
