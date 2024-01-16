@@ -1,14 +1,16 @@
-use proton_api_rs::domain::{Event, Label, LabelId, TwoFactorAuth};
+use proton_api_rs::domain::{Label, LabelId, TwoFactorAuth};
 use proton_api_rs::exports::anyhow;
 use proton_api_rs::exports::log::{error, info, LevelFilter};
 use proton_api_rs::http::{Client, ClientBuilder};
 use proton_api_rs::LoginError;
-use proton_async::async_trait::async_trait;
 use proton_async::tokio;
-use proton_event_loop::{LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError};
+use proton_event_loop::{
+    ChannelledSubscriber, LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError,
+};
 use proton_labels::{Callback, Labels, MemoryStore, ProtonProvider};
 use std::pin::pin;
 use std::time::Duration;
+use tokio::runtime;
 
 struct CliCallback {}
 
@@ -31,27 +33,6 @@ impl proton_event_loop::LoopErrorHandler for EventLoopErrorHandler {
     fn on_error(&self, error: LoopError) -> LoopErrorHandlerReply {
         error!("Event loop error: {error}");
         return LoopErrorHandlerReply::Abort;
-    }
-}
-
-struct LabelEventSubscriber(tokio::sync::mpsc::Sender<Vec<Event>>);
-
-#[async_trait]
-impl Subscriber for LabelEventSubscriber {
-    fn name(&self) -> &str {
-        "Label Event Subscriber"
-    }
-    async fn on_events(&mut self, event: &[Event]) -> Result<(), SubscriberError> {
-        let event = Vec::from_iter(event.iter().cloned());
-        if self.0.is_closed() {
-            return Err(SubscriberError::Other(anyhow::anyhow!("channel closed")));
-        }
-        if let Err(_) = self.0.send(event).await {
-            return Err(SubscriberError::Other(anyhow::anyhow!(
-                "failed to send on channel"
-            )));
-        }
-        Ok(())
     }
 }
 
@@ -103,7 +84,7 @@ async fn main() {
         Box::new(CliCallback {}),
     );
 
-    let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+    let (sender, mut receiver) = ChannelledSubscriber::new("labels".into());
 
     info!("Loading labels");
     labels
@@ -123,7 +104,7 @@ async fn main() {
         error!("Failed to start event loop: {e}");
         return;
     }
-    let subscriber: Box<dyn Subscriber> = Box::new(LabelEventSubscriber(sender));
+    let subscriber: Box<dyn Subscriber> = Box::new(sender);
 
     event_loop.subscribe(subscriber).await;
     event_loop.resume();
@@ -158,19 +139,20 @@ async fn main() {
                 return;
             }
 
-            events = receiver.recv() => {
-                let Some(events) = events else {
-                    continue;
-                };
-
-                for evt in &events {
-                    if let Some(events) = &evt.labels {
-                        if let Err(e)= labels.on_events(events).await {
-                            error!("Failed to apply event ({}): {e}", evt.event_id);
-                            return
+            _ = receiver.handle_events(|events| -> Result<(), SubscriberError> {
+                runtime::Handle::current().block_on(async {
+                    for evt in events {
+                        if let Some(events) = &evt.labels {
+                            if let Err(e)= labels.on_events(events).await {
+                                error!("Failed to apply event ({}): {e}", evt.event_id);
+                                return Err(SubscriberError::Other(anyhow::anyhow!("Failed to apply event ({}): {e}", evt.event_id)));
+                            }
                         }
                     }
-                }
+
+                    Ok(())
+                })
+            })=> {
             }
         }
     }
