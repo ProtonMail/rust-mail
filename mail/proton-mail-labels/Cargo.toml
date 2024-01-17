@@ -21,7 +21,7 @@ env_logger = "0.10"
 tokio = {version = "1", features = ["rt-multi-thread", "macros", "signal"]}
 
 [features]
-uniffi=["proton-api-rs/ffi", "dep:uniffi"]
+uniffi=["proton-api-rs/ffi", "dep:uniffi", "proton-event-loop/uniffi"]
 
 [lints]
 workspace = true
