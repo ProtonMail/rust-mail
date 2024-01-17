@@ -65,9 +65,10 @@ build-mail-uniffi:
     - !reference [.script-config-git, script]
     - cargo build --features="uniffi" --release
 
-generate-labels-uniffi-bindings:
-  stage: build
-  needs: ["build-mail-uniffi"]
-  script:
-    - uniffi-bindgen generate --library target/release/libproton_mail_labels.so --language kotlin --out-dir bindings/proton-mail-labels/kotlin
-    - uniffi-bindgen generate --library target/release/libproton_mail_labels.so --language swift --out-dir bindings/proton-mail-labels/swift
+#generate-labels-uniffi-bindings:
+#  stage: build
+#  needs: ["build-mail-uniffi"]
+#  script:
+#    - !reference [.script-config-git, script]
+#    - uniffi-bindgen generate --library target/release/libproton_mail_labels.so --language kotlin --out-dir bindings/proton-mail-labels/kotlin
+#    - uniffi-bindgen generate --library target/release/libproton_mail_labels.so --language swift --out-dir bindings/proton-mail-labels/swift
