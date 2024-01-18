@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
 proton-api-rs = {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}

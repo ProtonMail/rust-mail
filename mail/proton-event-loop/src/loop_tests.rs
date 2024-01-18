@@ -269,7 +269,11 @@ async fn test_error_handler_pause_pauses_loop() {
             .times(1)
             .in_sequence(&mut sequence)
             .withf(move |id| *id == first_event_id)
-            .return_once(move |_| Err(proton_api_rs::http::Error::Other(anyhow!("Failure"))));
+            .return_once(move |_| {
+                Err(proton_api_rs::http::HttpRequestError::Other(anyhow!(
+                    "Failure"
+                )))
+            });
     }
 
     subscriber.expect_name().return_const("foo".into());
@@ -333,7 +337,11 @@ async fn test_error_handler_abort_causes_loop_exit() {
             .times(1)
             .in_sequence(&mut sequence)
             .withf(move |id| *id == first_event_id)
-            .return_once(move |_| Err(proton_api_rs::http::Error::Other(anyhow!("Failure"))));
+            .return_once(move |_| {
+                Err(proton_api_rs::http::HttpRequestError::Other(anyhow!(
+                    "Failure"
+                )))
+            });
     }
 
     subscriber.expect_name().return_const("foo".into());

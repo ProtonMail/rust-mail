@@ -8,7 +8,7 @@ use proton_async::tokio;
 pub enum SubscriberError {
     /// Http error should be returned when the error resulted due to an API or Network error.
     #[error("{0}")]
-    Http(proton_api_rs::http::Error),
+    Http(proton_api_rs::http::HttpRequestError),
     /// Subscriber specific errors should be returned here.
     #[error("{0}")]
     Other(anyhow::Error),
