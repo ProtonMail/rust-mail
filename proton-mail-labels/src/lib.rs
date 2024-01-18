@@ -32,7 +32,7 @@ pub struct Labels {
 #[cfg_attr(feature = "uniffi", uniffi(flat_error))]
 pub enum LabelsError {
     #[error("{0}")]
-    Provider(#[from] http::Error),
+    Provider(#[from] http::HttpRequestError),
     #[error("{0}")]
     Store(#[source] anyhow::Error),
     #[error("Label {0} does not exists")]

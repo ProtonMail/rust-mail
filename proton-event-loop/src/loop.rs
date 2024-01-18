@@ -6,7 +6,7 @@ use proton_api_rs::exports::anyhow;
 use proton_api_rs::exports::log::{debug, error};
 use proton_api_rs::exports::thiserror;
 use proton_api_rs::http;
-use proton_api_rs::http::Error;
+use proton_api_rs::http::HttpRequestError;
 use proton_async::tokio;
 use proton_async::tokio::time::MissedTickBehavior;
 use proton_async::tokio_util::sync::CancellationToken;
@@ -23,7 +23,7 @@ pub enum LoopError {
     #[error("Failed to write store: {0}")]
     StoreWrite(anyhow::Error),
     #[error("Failed to retrieve event: {0}")]
-    Provider(#[from] Error),
+    Provider(#[from] HttpRequestError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
 }
