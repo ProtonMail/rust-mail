@@ -1,5 +1,6 @@
+use serde;
+use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use serde::{Serialize,Deserialize};
 
 crate::utils::string_id!(EventId);
 
@@ -20,14 +21,7 @@ pub enum EventAction {
 
 /// Marker to indicate that that the type is a valid event type.
 pub trait IsEvent:
-    for<'de> Deserialize<'de>
-    + Serialize
-    + Clone
-    + Eq
-    + PartialEq
-    + std::fmt::Debug
-    + Send
-    + Sync
+    for<'de> Deserialize<'de> + Serialize + Clone + Eq + PartialEq + std::fmt::Debug + Send + Sync
 {
     fn event_id(&self) -> &EventId;
 
@@ -56,9 +50,6 @@ macro_rules! declare_event {
         }
     };
 }
-
-#[cfg(test)]
-use serde;
 
 #[test]
 fn test_custom_event_type() {

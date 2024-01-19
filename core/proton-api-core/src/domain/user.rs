@@ -1,7 +1,8 @@
 use proton_crypto_rs::domain::{KeyError, UserKeys};
 use proton_crypto_rs::keyring::{KeyRing, LockedKey};
 use proton_crypto_rs::salts::{SaltError, SaltedPassword, Salts};
-use serde::Deserialize;
+use serde;
+use serde::{Deserialize, Serialize};
 
 crate::utils::string_id!(UserUid);
 impl secrecy::Zeroize for UserUid {

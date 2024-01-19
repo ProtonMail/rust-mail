@@ -4,7 +4,8 @@
 #[macro_export]
 macro_rules! string_id {
     ($name:ident) => {
-        #[derive(Debug, serde::Deserialize, serde::Serialize, Eq, PartialEq, Hash, Clone)]
+        #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Clone)]
+        #[serde(crate = "self::serde")]
         /// Id for an API Event.
         pub struct $name(pub String);
 
