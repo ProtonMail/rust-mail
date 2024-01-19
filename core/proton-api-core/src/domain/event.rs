@@ -18,7 +18,11 @@ pub enum EventAction {
 }
 
 /// Marker to indicate that that the type is a valid event type.
-pub trait IsEvent: for<'de> serde::Deserialize<'de> + serde::Serialize {}
+pub trait IsEvent: for<'de> serde::Deserialize<'de> + serde::Serialize {
+    fn event_id(&self) -> &EventId;
+
+    fn has_more(&self) -> bool;
+}
 #[macro_export]
 macro_rules! declare_event {
     ($name:ident, {$($member_name:ident : $member_type:ty),+}) => {
@@ -31,7 +35,15 @@ macro_rules! declare_event {
             $(pub $member_name: $member_type,)+
         }
 
-        impl $crate::domain::IsEvent for $name {}
+        impl $crate::domain::IsEvent for $name {
+            fn event_id(&self) -> &EventId {
+                &self.event_id
+            }
+
+            fn has_more(&self) -> bool {
+                self.more == $crate::domain::MoreEvents::Yes
+            }
+        }
     };
 }
 
