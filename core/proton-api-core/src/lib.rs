@@ -1,7 +1,7 @@
 //! Rust bindings for the REST API for Proton
 
 #[macro_use]
-mod utils;
+pub mod utils;
 
 pub mod clientv2;
 pub mod domain;
