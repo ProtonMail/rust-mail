@@ -3,12 +3,14 @@ use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::{proton_api_core, MailSession};
 use proton_async::{async_trait, tokio};
-use proton_event_loop::{LoopError, SubscriberError};
+use proton_event_loop::{LoopError, LoopErrorHandler, LoopErrorHandlerReply, SubscriberError};
 use std::sync::Arc;
 use std::time::Duration;
 
 #[derive(uniffi::Object, Clone)]
 pub struct EventLoop(pub proton_event_loop::Loop<MailEvent>);
+
+proton_event_loop::gen_event_loop_error_handler!(MailEventLoopErrorHandler, UniffiLoopErrorHandler);
 
 #[uniffi::export]
 impl EventLoop {
@@ -24,12 +26,11 @@ impl EventLoop {
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn new_event_loop(
     session: &proton_api_core::uniffi_bindgen::Session,
-    error_handler: Box<dyn proton_event_loop::uniffi_bindings::LoopErrorHandler>,
+    error_handler: Box<dyn MailEventLoopErrorHandler>,
 ) -> Result<Arc<EventLoop>, LoopError> {
     let event_provider = proton_event_loop::ProtonProvider::new(session.0.clone());
     let event_store = proton_event_loop::InMemoryStore::default();
-    let event_error_handler =
-        proton_event_loop::uniffi_bindings::UniffiLoopErrorHandler(error_handler);
+    let event_error_handler = UniffiLoopErrorHandler(error_handler);
     let eloop = proton_event_loop::Loop::new();
 
     //TODO: task handle?
