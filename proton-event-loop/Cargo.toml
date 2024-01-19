@@ -5,8 +5,8 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-proton-api-rs = {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
-proton-async= {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
+proton-api-core = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
 uniffi = { version="0.25", optional = true }
 
 [dev-dependencies]
@@ -14,7 +14,7 @@ mockall = "0.12"
 
 [features]
 default=[]
-uniffi=["proton-api-rs/ffi", "dep:uniffi"]
+uniffi=["proton-api-core/uniffi", "dep:uniffi"]
 
 [lints]
 workspace = true

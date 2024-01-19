@@ -1,8 +1,10 @@
-use proton_api_rs::domain::{Label, LabelId, TwoFactorAuth};
-use proton_api_rs::exports::anyhow;
-use proton_api_rs::exports::log::{error, info, LevelFilter};
-use proton_api_rs::http::{Client, ClientBuilder};
-use proton_api_rs::LoginError;
+use proton_api_mail::domain::{Label, LabelId, MailEvent};
+use proton_api_mail::proton_api_core::domain::TwoFactorAuth;
+use proton_api_mail::proton_api_core::exports::anyhow;
+use proton_api_mail::proton_api_core::exports::log::{error, info, LevelFilter};
+use proton_api_mail::proton_api_core::http::ClientBuilder;
+use proton_api_mail::proton_api_core::{LoginError, Session};
+use proton_api_mail::MailSession;
 use proton_async::tokio;
 use proton_event_loop::{
     ChannelledSubscriber, LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError,
@@ -56,11 +58,11 @@ async fn main() {
     let client = ClientBuilder::new()
         .app_version("Other")
         .connect_timeout(Duration::from_secs(30))
-        .build::<Client>()
+        .build()
         .expect("failed to create client");
 
-    let proton_api_rs::SessionType::Authenticated(session) =
-        proton_api_rs::Session::login(&client, &email, &password, None)
+    let proton_api_mail::proton_api_core::SessionType::Authenticated(session) =
+        Session::login(client, &email, &password, None)
             .await
             .expect("Failed to login")
     else {
@@ -68,14 +70,14 @@ async fn main() {
         return;
     };
 
-    let event_provider = proton_event_loop::ProtonProvider::new(client.clone(), session.clone());
+    let event_provider = proton_event_loop::ProtonProvider::new(session.clone());
     let event_store = proton_event_loop::InMemoryStore::default();
     let event_error_handler = EventLoopErrorHandler {};
 
     let event_loop = proton_event_loop::Loop::new();
 
-    proton_event_loop::Loop::new();
-    let label_provider = ProtonProvider::new(client.clone(), session.clone());
+    proton_event_loop::Loop::<MailEvent>::new();
+    let label_provider = ProtonProvider::new(MailSession::new(session.clone()));
     let label_store = MemoryStore::new();
 
     let mut labels = Labels::new(
@@ -104,7 +106,7 @@ async fn main() {
         error!("Failed to start event loop: {e}");
         return;
     }
-    let subscriber: Box<dyn Subscriber> = Box::new(sender);
+    let subscriber: Box<dyn Subscriber<MailEvent>> = Box::new(sender);
 
     event_loop.subscribe(subscriber).await;
     event_loop.resume();

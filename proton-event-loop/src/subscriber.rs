@@ -1,6 +1,10 @@
-use proton_api_rs::domain::Event;
-use proton_api_rs::exports::anyhow;
-use proton_api_rs::exports::thiserror;
+use proton_api_core::domain::IsEvent;
+use proton_api_core::exports::anyhow;
+#[cfg(test)]
+use proton_api_core::exports::serde;
+#[cfg(test)]
+use proton_api_core::exports::serde::{Deserialize, Serialize};
+use proton_api_core::exports::thiserror;
 use proton_async::async_trait::async_trait;
 use proton_async::tokio;
 
@@ -8,7 +12,7 @@ use proton_async::tokio;
 pub enum SubscriberError {
     /// Http error should be returned when the error resulted due to an API or Network error.
     #[error("{0}")]
-    Http(proton_api_rs::http::HttpRequestError),
+    Http(proton_api_core::http::HttpRequestError),
     /// Subscriber specific errors should be returned here.
     #[error("{0}")]
     Other(anyhow::Error),
@@ -23,29 +27,29 @@ pub enum SubscriberError {
 /// Subscriber traits allow anyone to access the events from the event loop.
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Subscriber: Send + Sync {
+pub trait Subscriber<T: IsEvent + Send + Sync>: Send + Sync {
     /// Return the name/id of this subscriber.
     fn name(&self) -> &str;
 
     /// Handle incoming events.
-    async fn on_events(&mut self, event: &[Event]) -> Result<(), SubscriberError>;
+    async fn on_events(&mut self, event: &[T]) -> Result<(), SubscriberError>;
 }
 
 /// A Subscriber in which all event communication is performed via channels. This may be useful if your subscribe is
 /// running on another task and do not wish to make the state sharable.
-pub struct ChannelledSubscriber {
+pub struct ChannelledSubscriber<T: IsEvent + Send + Sync> {
     name: String,
-    sender: tokio::sync::mpsc::Sender<Vec<Event>>,
+    sender: tokio::sync::mpsc::Sender<Vec<T>>,
     receiver: tokio::sync::mpsc::Receiver<Result<(), SubscriberError>>,
 }
 
 #[async_trait]
-impl Subscriber for ChannelledSubscriber {
+impl<T: IsEvent + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
     fn name(&self) -> &str {
         &self.name
     }
 
-    async fn on_events(&mut self, event: &[Event]) -> Result<(), SubscriberError> {
+    async fn on_events(&mut self, event: &[T]) -> Result<(), SubscriberError> {
         if self.sender.send(Vec::from(event)).await.is_err() {
             return Err(SubscriberError::Send);
         }
@@ -58,8 +62,8 @@ impl Subscriber for ChannelledSubscriber {
     }
 }
 
-impl ChannelledSubscriber {
-    pub fn new(name: String) -> (ChannelledSubscriber, ChanneledSubscriberHandler) {
+impl<T: IsEvent> ChannelledSubscriber<T> {
+    pub fn new(name: String) -> (ChannelledSubscriber<T>, ChanneledSubscriberHandler<T>) {
         let (subscriber_sender, subscriber_receiver) = tokio::sync::mpsc::channel(1);
         let (handler_sender, handler_receiver) = tokio::sync::mpsc::channel(1);
 
@@ -79,8 +83,8 @@ impl ChannelledSubscriber {
 
 /// ChanneledSubscriberHandler waits on events to be send over a channel. These can then be consumed by the
 /// `handle_events` function.
-pub struct ChanneledSubscriberHandler {
-    receiver: tokio::sync::mpsc::Receiver<Vec<Event>>,
+pub struct ChanneledSubscriberHandler<T: IsEvent> {
+    receiver: tokio::sync::mpsc::Receiver<Vec<T>>,
     sender: tokio::sync::mpsc::Sender<Result<(), SubscriberError>>,
 }
 
@@ -95,11 +99,11 @@ pub enum ChanneledSubscriberError {
     #[error("Failed to send result on channel")]
     Send(Result<(), SubscriberError>),
 }
-impl ChanneledSubscriberHandler {
+impl<T: IsEvent> ChanneledSubscriberHandler<T> {
     /// Handle the events from the event loop.
     pub async fn handle_events<Error: Into<SubscriberError>>(
         &mut self,
-        mut f: impl FnMut(&[Event]) -> Result<(), Error>,
+        mut f: impl FnMut(&[T]) -> Result<(), Error>,
     ) -> Result<(), ChanneledSubscriberError> {
         let Some(events) = self.receiver.recv().await else {
             return Err(ChanneledSubscriberError::Receive);
@@ -112,7 +116,7 @@ impl ChanneledSubscriberHandler {
 
     /// Receive events from event loop.
     /// Note: Each call to `receive` must have an `reply` counter part.
-    pub async fn receive(&mut self) -> Option<Vec<Event>> {
+    pub async fn receive(&mut self) -> Option<Vec<T>> {
         self.receiver.recv().await
     }
 
@@ -129,13 +133,16 @@ impl ChanneledSubscriberHandler {
     }
 }
 
+#[cfg(test)]
+proton_api_core::declare_event!(TestEvent,{foo:u32});
+
 #[tokio::test]
 async fn test_channeled_subscriber_handle_and_reply() {
-    use proton_api_rs::domain::EventId;
+    use proton_api_core::domain::EventId;
     let (mut s, mut h) = ChannelledSubscriber::new("test".into());
 
     let task = tokio::spawn(async move {
-        h.handle_events(|events| -> Result<(), SubscriberError> {
+        h.handle_events(|events: &[TestEvent]| -> Result<(), SubscriberError> {
             assert_eq!(events[0].event_id, EventId::from(DUMMY_EVENT_ID));
             Ok(())
         })
@@ -187,7 +194,7 @@ async fn test_channeled_subscriber_handler_failed_to_receive() {
     };
 
     assert!(matches!(
-        h.handle_events(|_| -> Result<(), SubscriberError> { Ok(()) })
+        h.handle_events(|_: &[TestEvent]| -> Result<(), SubscriberError> { Ok(()) })
             .await
             .expect_err("expected error"),
         ChanneledSubscriberError::Receive
@@ -217,12 +224,11 @@ async fn test_channeled_subscriber_handler_failed_to_send() {
 const DUMMY_EVENT_ID: &str = "EVT_FOO";
 
 #[cfg(test)]
-fn new_dummy_events() -> Vec<Event> {
-    use proton_api_rs::domain::{EventId, MoreEvents};
-    vec![Event {
+fn new_dummy_events() -> Vec<TestEvent> {
+    use proton_api_core::domain::{EventId, MoreEvents};
+    vec![TestEvent {
         event_id: EventId::from(DUMMY_EVENT_ID),
         more: MoreEvents::No,
-        messages: None,
-        labels: None,
+        foo: 0,
     }]
 }

@@ -1,5 +1,5 @@
-use proton_api_rs::domain::{Label, LabelId};
-use proton_api_rs::exports::anyhow;
+use proton_api_mail::domain::{Label, LabelId};
+use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_async::async_trait::async_trait;
 use proton_async::tokio;
 use std::collections::HashMap;
