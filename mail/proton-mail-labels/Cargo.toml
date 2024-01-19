@@ -9,8 +9,8 @@ edition = "2021"
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
-proton-api-rs = {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
-proton-async= {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
+proton-api-mail = {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
+proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
 uniffi = { version="0.25", optional = true ,features = ["tokio"]}
 proton-event-loop = {path ="../proton-event-loop"}
 
@@ -21,7 +21,7 @@ env_logger = "0.10"
 tokio = {version = "1", features = ["rt-multi-thread", "macros", "signal"]}
 
 [features]
-uniffi=["proton-api-rs/ffi", "dep:uniffi", "proton-event-loop/uniffi"]
+uniffi=["proton-api-mail/uniffi", "dep:uniffi", "proton-event-loop/uniffi"]
 
 [lints]
 workspace = true

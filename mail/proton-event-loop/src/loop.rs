@@ -1,12 +1,12 @@
 use crate::provider::Provider;
 use crate::store::Store;
 use crate::subscriber::{Subscriber, SubscriberError};
-use proton_api_rs::domain::{Event, EventId, MoreEvents};
-use proton_api_rs::exports::anyhow;
-use proton_api_rs::exports::log::{debug, error};
-use proton_api_rs::exports::thiserror;
-use proton_api_rs::http;
-use proton_api_rs::http::HttpRequestError;
+use proton_api_core::domain::{EventId, IsEvent};
+use proton_api_core::exports::anyhow;
+use proton_api_core::exports::log::{debug, error};
+use proton_api_core::exports::thiserror;
+use proton_api_core::http;
+use proton_api_core::http::HttpRequestError;
 use proton_async::tokio;
 use proton_async::tokio::time::MissedTickBehavior;
 use proton_async::tokio_util::sync::CancellationToken;
@@ -51,16 +51,16 @@ pub trait LoopErrorHandler: Send + Sync {
 
 /// This type polls the proton events at a given interval and distributes incoming events among its subscribers.
 #[derive(Clone)]
-pub struct Loop {
-    inner: Arc<SharedLoopState>,
+pub struct Loop<T: IsEvent + 'static> {
+    inner: Arc<SharedLoopState<T>>,
 }
-impl Default for Loop {
+impl<T: IsEvent + 'static> Default for Loop<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Loop {
+impl<T: IsEvent + 'static> Loop<T> {
     pub fn new() -> Self {
         let shared = Arc::new(SharedLoopState {
             paused: AtomicBool::new(true),
@@ -81,7 +81,7 @@ impl Loop {
         &self,
         interval: Duration,
         store: Box<dyn Store>,
-        provider: Box<dyn Provider>,
+        provider: Box<dyn Provider<T>>,
         error_handler: Box<dyn LoopErrorHandler>,
     ) -> Result<tokio::task::JoinHandle<()>, LoopError> {
         let last_event_id = match store.load().await.map_err(LoopError::StoreRead)? {
@@ -129,7 +129,7 @@ impl Loop {
     }
 
     /// Add a new subscriber to the event loop.
-    pub async fn subscribe(&self, subscriber: Box<dyn Subscriber>) {
+    pub async fn subscribe(&self, subscriber: Box<dyn Subscriber<T>>) {
         let mut accessor = self.inner.pending_subscribers.lock().await;
         accessor.push(SubscriberOperation::Register(subscriber));
     }
@@ -141,36 +141,36 @@ impl Loop {
     }
 }
 
-impl Drop for Loop {
+impl<T: IsEvent> Drop for Loop<T> {
     fn drop(&mut self) {
         self.cancel()
     }
 }
 
 #[doc(hidden)]
-enum SubscriberOperation {
-    Register(Box<dyn Subscriber>),
+enum SubscriberOperation<T: IsEvent> {
+    Register(Box<dyn Subscriber<T>>),
     Unregister(String),
 }
 
 #[doc(hidden)]
-struct SharedLoopState {
+struct SharedLoopState<T: IsEvent> {
     paused: AtomicBool,
-    pending_subscribers: tokio::sync::Mutex<Vec<SubscriberOperation>>,
+    pending_subscribers: tokio::sync::Mutex<Vec<SubscriberOperation<T>>>,
     token: CancellationToken,
 }
 
 #[doc(hidden)]
-struct LoopState {
+struct LoopState<T: IsEvent> {
     store: Box<dyn Store>,
-    provider: Box<dyn Provider>,
+    provider: Box<dyn Provider<T>>,
     error_handler: Box<dyn LoopErrorHandler>,
-    shared: Arc<SharedLoopState>,
-    subscribers: Vec<Box<dyn Subscriber>>,
+    shared: Arc<SharedLoopState<T>>,
+    subscribers: Vec<Box<dyn Subscriber<T>>>,
 }
 
 #[doc(hidden)]
-impl LoopState {
+impl<T: IsEvent> LoopState<T> {
     async fn run(&mut self, poll_interval: Duration, mut last_event_id: EventId) {
         let mut events = Vec::with_capacity(MAX_EVENTS_PER_POLL);
 
@@ -193,17 +193,13 @@ impl LoopState {
         }
     }
 
-    async fn collect_events(
-        &self,
-        last_event_id: &EventId,
-        out: &mut Vec<Event>,
-    ) -> http::Result<()> {
+    async fn collect_events(&self, last_event_id: &EventId, out: &mut Vec<T>) -> http::Result<()> {
         out.clear();
 
         let event = self.provider.get_event(last_event_id).await?;
 
-        let mut has_more = event.more == MoreEvents::Yes;
-        let mut next_event_id = event.event_id.clone();
+        let mut has_more = event.has_more();
+        let mut next_event_id = event.event_id().clone();
         out.push(event);
 
         let mut num_collected = 0_usize;
@@ -215,19 +211,15 @@ impl LoopState {
             }
 
             let event = self.provider.get_event(&next_event_id).await?;
-            has_more = event.more == MoreEvents::Yes;
-            next_event_id = event.event_id.clone();
+            has_more = event.has_more();
+            next_event_id = event.event_id().clone();
             out.push(event);
         }
 
         Ok(())
     }
 
-    async fn get_and_publish_events(
-        &mut self,
-        last_event_id: &mut EventId,
-        events: &mut Vec<Event>,
-    ) {
+    async fn get_and_publish_events(&mut self, last_event_id: &mut EventId, events: &mut Vec<T>) {
         // Process pending subscriber operations
         {
             let mut accessor = self.shared.pending_subscribers.lock().await;
@@ -262,10 +254,10 @@ impl LoopState {
             return;
         }
 
-        if events
+        if *events
             .last()
             .expect("should be at least one event object present")
-            .event_id
+            .event_id()
             == *last_event_id
         {
             debug!("No new events");
@@ -277,7 +269,7 @@ impl LoopState {
             "Received new events: {:?}",
             events
                 .iter()
-                .map(|e| e.event_id.clone())
+                .map(|e| e.event_id().clone())
                 .collect::<Vec<_>>()
         );
 
@@ -289,7 +281,7 @@ impl LoopState {
         let new_event_id = events
             .last()
             .expect("should be at least one event object present")
-            .event_id
+            .event_id()
             .clone();
         if let Err(e) = self.store.store(&new_event_id).await {
             self.on_error(LoopError::StoreWrite(e));
@@ -313,7 +305,7 @@ impl LoopState {
         }
     }
 
-    async fn publish_events_to_subscribers(&mut self, events: &[Event]) -> Result<(), LoopError> {
+    async fn publish_events_to_subscribers(&mut self, events: &[T]) -> Result<(), LoopError> {
         for subscriber in &mut self.subscribers {
             if let Err(e) = subscriber.on_events(events).await {
                 error!("Failed to publish events to '{}': {e}", subscriber.name());

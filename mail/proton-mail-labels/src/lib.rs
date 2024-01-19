@@ -4,9 +4,10 @@ mod store;
 #[cfg(feature = "uniffi")]
 pub mod uniffi_bindgen;
 
-use proton_api_rs::domain::{EventAction, Label, LabelEvent, LabelId, LabelType};
-use proton_api_rs::exports::{anyhow, anyhow::anyhow, thiserror};
-use proton_api_rs::http;
+use proton_api_mail::domain::{Label, LabelEvent, LabelId, LabelType};
+use proton_api_mail::proton_api_core::domain::EventAction;
+use proton_api_mail::proton_api_core::exports::{anyhow, anyhow::anyhow, thiserror};
+use proton_api_mail::proton_api_core::http;
 pub use provider::*;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;

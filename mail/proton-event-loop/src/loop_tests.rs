@@ -4,10 +4,14 @@ use crate::{
     SubscriberError,
 };
 use mockall::Sequence;
-use proton_api_rs::domain::{Event, EventId, MoreEvents};
-use proton_api_rs::exports::anyhow::anyhow;
+use proton_api_core::domain::{EventId, MoreEvents};
+use proton_api_core::exports::anyhow::anyhow;
+use proton_api_core::exports::serde;
+use proton_api_core::exports::serde::{Deserialize, Serialize};
 use proton_async::tokio;
 use std::time::Duration;
+
+proton_api_core::declare_event!(LoopEvent,{f:bool});
 
 #[tokio::test]
 async fn test_loop_event_collection() {
@@ -16,17 +20,15 @@ async fn test_loop_event_collection() {
     let third_event_id = EventId("2".into());
 
     let expected_events = [
-        Event {
+        LoopEvent {
             event_id: second_event_id.clone(),
             more: MoreEvents::Yes,
-            messages: None,
-            labels: None,
+            f: false,
         },
-        Event {
+        LoopEvent {
             event_id: third_event_id.clone(),
             more: MoreEvents::No,
-            messages: None,
-            labels: None,
+            f: false,
         },
     ];
 
@@ -111,7 +113,7 @@ async fn test_loop_event_collection() {
             });
     }
 
-    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
+    let subscriber: Box<dyn Subscriber<LoopEvent>> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(
@@ -132,11 +134,10 @@ async fn test_error_handler_retry_retries_loop() {
     let first_event_id = EventId("0".into());
     let second_event_id = EventId("1".into());
 
-    let expected_events = [Event {
+    let expected_events = [LoopEvent {
         event_id: second_event_id.clone(),
         more: MoreEvents::No,
-        messages: None,
-        labels: None,
+        f: false,
     }];
 
     let mut sequence = Sequence::new();
@@ -225,7 +226,7 @@ async fn test_error_handler_retry_retries_loop() {
             });
     }
 
-    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
+    let subscriber: Box<dyn Subscriber<LoopEvent>> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(
@@ -270,7 +271,7 @@ async fn test_error_handler_pause_pauses_loop() {
             .in_sequence(&mut sequence)
             .withf(move |id| *id == first_event_id)
             .return_once(move |_| {
-                Err(proton_api_rs::http::HttpRequestError::Other(anyhow!(
+                Err(proton_api_core::http::HttpRequestError::Other(anyhow!(
                     "Failure"
                 )))
             });
@@ -292,7 +293,7 @@ async fn test_error_handler_pause_pauses_loop() {
         })
         .in_sequence(&mut sequence);
 
-    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
+    let subscriber: Box<dyn Subscriber<LoopEvent>> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(
@@ -338,7 +339,7 @@ async fn test_error_handler_abort_causes_loop_exit() {
             .in_sequence(&mut sequence)
             .withf(move |id| *id == first_event_id)
             .return_once(move |_| {
-                Err(proton_api_rs::http::HttpRequestError::Other(anyhow!(
+                Err(proton_api_core::http::HttpRequestError::Other(anyhow!(
                     "Failure"
                 )))
             });
@@ -353,7 +354,7 @@ async fn test_error_handler_abort_causes_loop_exit() {
         .in_sequence(&mut sequence);
 
     let eloop = Loop::new();
-    let subscriber: Box<dyn Subscriber> = Box::new(subscriber);
+    let subscriber: Box<dyn Subscriber<LoopEvent>> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
         .start(

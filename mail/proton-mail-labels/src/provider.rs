@@ -1,6 +1,6 @@
-use proton_api_rs::domain::{Label, LabelId, LabelType};
-use proton_api_rs::http::Client;
-use proton_api_rs::{http, Session};
+use proton_api_mail::domain::{Label, LabelId, LabelType};
+use proton_api_mail::proton_api_core::http;
+use proton_api_mail::MailSession;
 use proton_async::async_trait::async_trait;
 
 #[cfg_attr(test, mockall::automock)]
@@ -28,20 +28,19 @@ pub trait Provider: Send + Sync {
 }
 
 pub struct ProtonProvider {
-    client: Client,
-    session: Session,
+    session: MailSession,
 }
 
 impl ProtonProvider {
-    pub fn new(client: Client, session: Session) -> Self {
-        Self { client, session }
+    pub fn new(session: MailSession) -> Self {
+        Self { session }
     }
 }
 
 #[async_trait]
 impl Provider for ProtonProvider {
     async fn get_labels(&self, label_type: LabelType) -> http::Result<Vec<Label>> {
-        self.session.get_labels(&self.client, label_type).await
+        self.session.get_labels(label_type).await
     }
 
     async fn create_label<'a>(
@@ -52,7 +51,7 @@ impl Provider for ProtonProvider {
         parent_id: Option<&'a LabelId>,
     ) -> http::Result<Label> {
         self.session
-            .create_label(&self.client, name, color, label_type, parent_id)
+            .create_label(name, color, label_type, parent_id)
             .await
     }
 
@@ -63,12 +62,10 @@ impl Provider for ProtonProvider {
         color: &str,
         parent_id: Option<&'a LabelId>,
     ) -> http::Result<Label> {
-        self.session
-            .update_label(&self.client, id, name, color, parent_id)
-            .await
+        self.session.update_label(id, name, color, parent_id).await
     }
 
     async fn delete_label(&self, id: &LabelId) -> http::Result<()> {
-        self.session.delete_label(&self.client, id).await
+        self.session.delete_label(id).await
     }
 }

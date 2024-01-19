@@ -1,5 +1,5 @@
-use proton_api_rs::domain::EventId;
-use proton_api_rs::exports::anyhow;
+use proton_api_core::domain::EventId;
+use proton_api_core::exports::anyhow;
 use proton_async::async_trait::async_trait;
 use proton_async::tokio;
 
