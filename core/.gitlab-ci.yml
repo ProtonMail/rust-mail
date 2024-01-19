@@ -1,0 +1,38 @@
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust
+
+# sccache location to speed up compilation.
+default:
+  tags:
+    - shared-medium
+  cache: &global_cache
+    key: sccache
+    paths:
+      - /tmp/cache
+
+stages:
+  - lint
+  - build
+
+.do_fmt_check:
+   script:
+     - cargo fmt --check
+
+.do_clippy_check:
+   script:
+     - cargo clippy -- -D warnings
+
+format:
+  stage: lint
+  script:
+    - !reference [.do_fmt_check, script]
+
+clippy:
+  stage: lint
+  script:
+    - !reference [.do_clippy_check, script]
+
+build:
+  stage: build
+  script:
+    - cargo build
+    - cargo test
