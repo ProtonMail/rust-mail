@@ -1,5 +1,6 @@
 use crate::domain::TwoFactorAuth;
-use crate::{http, LoginError};
+use crate::http;
+use crate::LoginError;
 use std::sync::Arc;
 use uniffi;
 #[derive(uniffi::Error, Debug, thiserror::Error)]
@@ -29,7 +30,7 @@ pub struct Session(pub crate::Session);
 #[uniffi::export(async_runtime = "tokio")]
 impl Session {
     pub async fn logout(&self) -> Result<(), http::HttpRequestError> {
-        self.0.logout(&client.0).await
+        self.0.logout().await
     }
 }
 

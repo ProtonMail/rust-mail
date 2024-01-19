@@ -9,6 +9,11 @@ default:
     paths:
       - /tmp/cache
 
+# Config git acccess to other repos
+.script-config-git:
+  script:
+    - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}.insteadOf https://${CI_SERVER_HOST}
+
 stages:
   - lint
   - build
@@ -19,6 +24,7 @@ stages:
 
 .do_clippy_check:
    script:
+     - !reference [.script-config-git, script]
      - cargo clippy -- -D warnings
 
 format:
@@ -34,5 +40,12 @@ clippy:
 build:
   stage: build
   script:
+    - !reference [.script-config-git, script]
     - cargo build
     - cargo test
+
+build-uniffi:
+  stage: build
+  script:
+    - !reference [.script-config-git, script]
+    - cargo build --features="uniffi"
