@@ -1,4 +1,5 @@
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde::{Serialize,Deserialize};
 
 crate::utils::string_id!(EventId);
 
@@ -18,7 +19,16 @@ pub enum EventAction {
 }
 
 /// Marker to indicate that that the type is a valid event type.
-pub trait IsEvent: for<'de> serde::Deserialize<'de> + serde::Serialize {
+pub trait IsEvent:
+    for<'de> Deserialize<'de>
+    + Serialize
+    + Clone
+    + Eq
+    + PartialEq
+    + std::fmt::Debug
+    + Send
+    + Sync
+{
     fn event_id(&self) -> &EventId;
 
     fn has_more(&self) -> bool;
@@ -26,8 +36,8 @@ pub trait IsEvent: for<'de> serde::Deserialize<'de> + serde::Serialize {
 #[macro_export]
 macro_rules! declare_event {
     ($name:ident, {$($member_name:ident : $member_type:ty),+}) => {
-        #[derive(Debug, $crate::exports::serde::Serialize, $crate::exports::serde::Deserialize, Clone, Eq, PartialEq)]
-        #[serde(rename_all ="PascalCase")]
+        #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+        #[serde(crate = "self::serde", rename_all ="PascalCase")]
         pub struct $name {
             #[serde(rename = "EventID")]
             pub event_id: $crate::domain::EventId,
@@ -46,6 +56,9 @@ macro_rules! declare_event {
         }
     };
 }
+
+#[cfg(test)]
+use serde;
 
 #[test]
 fn test_custom_event_type() {
