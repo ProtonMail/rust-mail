@@ -26,7 +26,7 @@ pub trait IsEvent: for<'de> serde::Deserialize<'de> + serde::Serialize {
 #[macro_export]
 macro_rules! declare_event {
     ($name:ident, {$($member_name:ident : $member_type:ty),+}) => {
-        #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Eq, PartialEq)]
+        #[derive(Debug, $crate::exports::serde::Serialize, $crate::exports::serde::Deserialize, Clone, Eq, PartialEq)]
         #[serde(rename_all ="PascalCase")]
         pub struct $name {
             #[serde(rename = "EventID")]
@@ -36,7 +36,7 @@ macro_rules! declare_event {
         }
 
         impl $crate::domain::IsEvent for $name {
-            fn event_id(&self) -> &EventId {
+            fn event_id(&self) -> &$crate::domain::EventId {
                 &self.event_id
             }
 
