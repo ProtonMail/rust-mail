@@ -1,49 +1,26 @@
 use crate::{LabelsResult, MemoryStore, ProtonProvider};
+use proton_api_core::exports::thiserror;
+use proton_api_core::http::HttpRequestError;
 use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::{proton_api_core, MailSession};
 use proton_async::{async_trait, tokio};
-use proton_event_loop::{LoopError, LoopErrorHandler, LoopErrorHandlerReply, SubscriberError};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::runtime;
 
-#[derive(uniffi::Object, Clone)]
-pub struct EventLoop(pub proton_event_loop::Loop<MailEvent>);
-
-proton_event_loop::gen_event_loop_error_handler!(MailEventLoopErrorHandler, UniffiLoopErrorHandler);
-
-#[uniffi::export]
-impl EventLoop {
-    pub fn resume(&self) {
-        self.0.resume()
-    }
-
-    pub fn pause(&self) {
-        self.0.pause()
-    }
-}
+proton_event_loop::gen_event_loop_uniffi_types!(Mail, MailEvent);
 
 #[uniffi::export(async_runtime = "tokio")]
 pub async fn new_event_loop(
     session: &proton_api_core::uniffi_bindgen::Session,
-    error_handler: Box<dyn MailEventLoopErrorHandler>,
-) -> Result<Arc<EventLoop>, LoopError> {
-    let event_provider = proton_event_loop::ProtonProvider::new(session.0.clone());
-    let event_store = proton_event_loop::InMemoryStore::default();
-    let event_error_handler = UniffiLoopErrorHandler(error_handler);
-    let eloop = proton_event_loop::Loop::new();
+    error_handler: Box<dyn MailLoopErrorHandler>,
+) -> Result<Arc<MailEventLoop>, MailLoopError> {
+    let eloop = MailEventLoop::new();
 
-    //TODO: task handle?
-    eloop
-        .start(
-            Duration::from_secs(10),
-            Box::new(event_store),
-            Box::new(event_provider),
-            Box::new(event_error_handler),
-        )
-        .await?;
+    eloop.start_poller(session, error_handler).await?;
 
-    Ok(Arc::new(EventLoop(eloop)))
+    Ok(eloop)
 }
 #[uniffi::export(callback_interface)]
 pub trait Callback: Send + Sync {
@@ -94,6 +71,11 @@ impl Labels {
         accessor.initialize_from_provider().await
     }
 
+    pub async fn count(&self) -> u64 {
+        let accessor = self.0.read().await;
+        accessor.len() as u64
+    }
+
     pub async fn create_label(
         &self,
         name: String,
@@ -139,10 +121,17 @@ impl Labels {
         let accessor = self.0.read().await;
         accessor.get_ordered_labels()
     }
+
+    pub fn len(&self) -> u64 {
+        runtime::Handle::current().block_on(async {
+            let accessor = self.0.read().await;
+            accessor.len() as u64
+        })
+    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
-pub async fn labels_subscribe_event_loop(labels: Arc<Labels>, event_loop: &EventLoop) {
+pub async fn labels_subscribe_event_loop(labels: Arc<Labels>, event_loop: &MailEventLoop) {
     event_loop
         .0
         .subscribe(Box::new(LabelSubscriber(labels)))
@@ -157,12 +146,15 @@ impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
         "LabelTestSubscriber"
     }
 
-    async fn on_events(&mut self, events: &[MailEvent]) -> Result<(), SubscriberError> {
+    async fn on_events(
+        &mut self,
+        events: &[MailEvent],
+    ) -> Result<(), proton_event_loop::SubscriberError> {
         let mut accessor = self.0 .0.write().await;
         for evt in events {
             if let Some(events) = &evt.labels {
                 if let Err(e) = accessor.on_events(events).await {
-                    return Err(SubscriberError::Other(anyhow::anyhow!(
+                    return Err(proton_event_loop::SubscriberError::Other(anyhow::anyhow!(
                         "Failed to apply event ({}): {e}",
                         evt.event_id
                     )));

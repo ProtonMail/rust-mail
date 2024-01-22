@@ -8,6 +8,7 @@ edition = "2021"
 proton-api-core = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
 proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
 uniffi = { version="0.25", optional = true }
+paste = "1"
 
 [dev-dependencies]
 mockall = "0.12"
