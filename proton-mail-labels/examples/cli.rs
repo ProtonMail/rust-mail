@@ -1,4 +1,4 @@
-use proton_api_mail::domain::{Label, LabelId, MailEvent};
+use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
 use proton_api_mail::proton_api_core::domain::TwoFactorAuth;
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::log::{error, info, LevelFilter};
@@ -122,8 +122,12 @@ async fn main() {
     }
 
     {
-        for (idx, label) in labels.get_ordered_labels().into_iter().enumerate() {
-            if let Some(path) = label.path {
+        for (idx, label) in labels
+            .get_labels_by_type(LabelType::Label)
+            .into_iter()
+            .enumerate()
+        {
+            if let Some(path) = &label.path {
                 println!("[{:02}] {}", idx, path);
             } else {
                 println!("[{:02}] {}", idx, label.name);
