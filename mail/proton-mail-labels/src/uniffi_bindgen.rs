@@ -47,8 +47,9 @@ impl crate::Callback for UniffiCallback {
     }
 }
 
+type SharedLabels = Arc<tokio::sync::RwLock<crate::Labels>>;
 #[derive(uniffi::Object)]
-pub struct Labels(tokio::sync::RwLock<crate::Labels>);
+pub struct Labels(SharedLabels);
 #[uniffi::export(async_runtime = "tokio")]
 impl Labels {
     #[uniffi::constructor]
@@ -59,10 +60,12 @@ impl Labels {
         let label_provider = ProtonProvider::new(MailSession::new(session.0.clone()));
         let label_store = MemoryStore::new();
 
-        Arc::new(Labels(tokio::sync::RwLock::new(crate::Labels::new(
-            Box::new(label_provider),
-            Box::new(label_store),
-            Box::new(UniffiCallback(callback)),
+        Arc::new(Labels(Arc::new(tokio::sync::RwLock::new(
+            crate::Labels::new(
+                Box::new(label_provider),
+                Box::new(label_store),
+                Box::new(UniffiCallback(callback)),
+            ),
         ))))
     }
 
@@ -117,9 +120,9 @@ impl Labels {
         accessor.get(&label_id).cloned()
     }
 
-    pub async fn get_ordered_labels(&self) -> Vec<Label> {
+    pub async fn get_labels(&self, label_type: LabelType) -> Vec<Label> {
         let accessor = self.0.read().await;
-        accessor.get_ordered_labels()
+        accessor.get_labels_by_type(label_type).to_vec()
     }
 
     pub fn len(&self) -> u64 {
@@ -134,11 +137,11 @@ impl Labels {
 pub async fn labels_subscribe_event_loop(labels: Arc<Labels>, event_loop: &MailEventLoop) {
     event_loop
         .0
-        .subscribe(Box::new(LabelSubscriber(labels)))
+        .subscribe(Box::new(LabelSubscriber(labels.0.clone())))
         .await
 }
 
-struct LabelSubscriber(Arc<Labels>);
+struct LabelSubscriber(SharedLabels);
 
 #[async_trait::async_trait]
 impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
@@ -150,7 +153,7 @@ impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
         &mut self,
         events: &[MailEvent],
     ) -> Result<(), proton_event_loop::SubscriberError> {
-        let mut accessor = self.0 .0.write().await;
+        let mut accessor = self.0.write().await;
         for evt in events {
             if let Some(events) = &evt.labels {
                 if let Err(e) = accessor.on_events(events).await {
@@ -163,5 +166,36 @@ impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
         }
 
         Ok(())
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct LabelView(SharedLabels, LabelType, tokio::runtime::Runtime);
+#[uniffi::export]
+impl LabelView {
+    #[uniffi::constructor]
+    pub fn new(labels: &Labels, label_type: LabelType) -> Arc<Self> {
+        let r = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        Arc::new(Self(labels.0.clone(), label_type, r))
+    }
+
+    pub fn len(&self) -> i64 {
+        self.2.block_on(async {
+            let accessor = self.0.read().await;
+            accessor.get_labels_by_type(self.1).len() as i64
+        })
+    }
+
+    pub fn at(&self, index: i64) -> Option<Label> {
+        debug_assert!(index >= 0);
+        self.2.block_on(async {
+            let accessor = self.0.read().await;
+            accessor
+                .get_labels_by_type(self.1)
+                .get(index as usize)
+                .cloned()
+        })
     }
 }
