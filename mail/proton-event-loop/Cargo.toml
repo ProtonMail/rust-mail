@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 proton-api-core = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
 proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
-uniffi = { version="0.25", optional = true }
+uniffi = { version="0.26", optional = true }
 paste = "1"
 
 [dev-dependencies]
