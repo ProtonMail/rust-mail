@@ -17,7 +17,7 @@ bytes = "1.4"
 log = "0.4"
 parking_lot = "0.12"
 proton-crypto-rs = {git="https://gitlab.protontech.ch/rust/proton-crypto-rs.git", default-features = false}
-uniffi = {version = "0.25", optional = true, features = ["tokio"]}
+uniffi = {version = "0.26", optional = true, features = ["tokio"]}
 
 
 [features]
