@@ -11,7 +11,7 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 [dependencies]
 proton-api-mail = {git = "https://gitlab.protontech.ch/rust/inbox/network.git"}
 proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
-uniffi = { version="0.25", optional = true ,features = ["tokio"]}
+uniffi = { version="0.26", optional = true ,features = ["tokio"]}
 proton-event-loop = {path ="../proton-event-loop"}
 
 [dev-dependencies]
