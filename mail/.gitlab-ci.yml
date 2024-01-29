@@ -46,6 +46,27 @@ build:
     - cargo build --release
     - cargo test
 
+build-macos:
+  tags:
+    - inbox-tart
+  image: "inbox-rust:1.75.0"
+  stage: build
+  script:
+    - !reference [.script-config-git, script]
+    - cargo build --release
+    - cargo test
+
+build-ios:
+  tags:
+    - inbox-tart
+  image: "inbox-rust:1.75.0"
+  stage: build
+  script:
+    - !reference [.script-config-git, script]
+    - cargo build --release --target --target x86_64-apple-ios
+    - cargo build --release --target --target aarch64-apple-ios-sim
+    - cargo build --release --target --target aarch64-apple-ios
+
 build-mail-md-wasm:
   stage: build
   script:
