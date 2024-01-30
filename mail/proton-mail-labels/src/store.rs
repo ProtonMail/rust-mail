@@ -1,4 +1,4 @@
-use proton_api_mail::domain::{Label, LabelId};
+use proton_api_mail::domain::{Label, LabelId, LabelType};
 use proton_api_mail::proton_api_core::exports::{anyhow, parking_lot};
 use std::collections::HashMap;
 
@@ -10,6 +10,13 @@ pub trait Store: Send + Sync {
 
 pub trait StoreReader {
     fn get(&self, id: &LabelId) -> anyhow::Result<Option<Label>>;
+
+    fn get_all_with_type(&self, label_type: LabelType) -> anyhow::Result<Vec<Label>>;
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 pub trait StoreWriter: StoreReader {
@@ -65,6 +72,18 @@ impl<'a> StoreReader for MemoryStoreReader<'a> {
 
         Ok(Some(label.clone()))
     }
+
+    fn get_all_with_type(&self, label_type: LabelType) -> anyhow::Result<Vec<Label>> {
+        Ok(self
+            .0
+            .values()
+            .filter(|l| l.label_type == label_type)
+            .cloned()
+            .collect::<Vec<_>>())
+    }
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl<'a> StoreReader for MemoryStoreWriter<'a> {
@@ -74,6 +93,18 @@ impl<'a> StoreReader for MemoryStoreWriter<'a> {
         };
 
         Ok(Some(label.clone()))
+    }
+
+    fn get_all_with_type(&self, label_type: LabelType) -> anyhow::Result<Vec<Label>> {
+        Ok(self
+            .0
+            .values()
+            .filter(|l| l.label_type == label_type)
+            .cloned()
+            .collect::<Vec<_>>())
+    }
+    fn len(&self) -> usize {
+        self.0.len()
     }
 }
 

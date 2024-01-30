@@ -9,10 +9,9 @@ use proton_async::tokio;
 use proton_event_loop::{
     ChannelledSubscriber, LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError,
 };
-use proton_mail_labels::{Callback, Labels, MemoryStore, ProtonProvider};
+use proton_mail_labels::{Callback, LabelView, Labels, MemoryStore, ProtonProvider};
 use std::pin::pin;
 use std::time::Duration;
-use tokio::runtime;
 
 struct CliCallback {}
 
@@ -38,8 +37,7 @@ impl proton_event_loop::LoopErrorHandler for EventLoopErrorHandler {
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     env_logger::Builder::new()
         .filter_level(LevelFilter::Debug)
         .filter(Some("cookie_store".into()), LevelFilter::Error)
@@ -62,8 +60,8 @@ async fn main() {
         .expect("failed to create client");
 
     let proton_api_mail::proton_api_core::SessionType::Authenticated(session) =
-        Session::login(client, &email, &password, None)
-            .await
+        proton_mail_labels::static_runtime()
+            .block_on(async { Session::login(client, &email, &password, None).await })
             .expect("Failed to login")
     else {
         error!("{}", LoginError::Unsupported2FA(TwoFactorAuth::TOTP));
@@ -80,50 +78,50 @@ async fn main() {
     let label_provider = ProtonProvider::new(MailSession::new(session.clone()));
     let label_store = MemoryStore::new();
 
-    let mut labels = Labels::new(
-        Box::new(label_provider),
-        Box::new(label_store),
-        Box::new(CliCallback {}),
-    );
+    let mut labels = Labels::new(Box::new(label_provider), Box::new(label_store));
+
+    labels.add_callback(Box::new(CliCallback {}));
 
     let (sender, mut receiver) = ChannelledSubscriber::new("labels".into());
 
     info!("Loading labels");
     labels.initialize_from_provider().expect("Failed to init");
 
-    if let Err(e) = event_loop
-        .start(
-            Duration::from_secs(10),
-            Box::new(event_store),
-            Box::new(event_provider),
-            Box::new(event_error_handler),
-        )
-        .await
-    {
+    if let Err(e) = proton_mail_labels::static_runtime().block_on(async {
+        event_loop
+            .start(
+                Duration::from_secs(10),
+                Box::new(event_store),
+                Box::new(event_provider),
+                Box::new(event_error_handler),
+            )
+            .await
+    }) {
         error!("Failed to start event loop: {e}");
         return;
     }
     let subscriber: Box<dyn Subscriber<MailEvent>> = Box::new(sender);
 
-    event_loop.subscribe(subscriber).await;
-    event_loop.resume();
+    proton_mail_labels::static_runtime().block_on(async {
+        event_loop.subscribe(subscriber).await;
+        event_loop.resume();
 
-    {
-        let loop_cloned = event_loop.clone();
-        tokio::spawn(async move {
-            tokio::signal::ctrl_c()
-                .await
-                .expect("failed to wait for ctrl+c");
-            loop_cloned.cancel();
-        });
-    }
-
-    {
-        for (idx, label) in labels
-            .get_labels_by_type(LabelType::Label)
-            .into_iter()
-            .enumerate()
         {
+            let loop_cloned = event_loop.clone();
+            tokio::spawn(async move {
+                tokio::signal::ctrl_c()
+                    .await
+                    .expect("failed to wait for ctrl+c");
+                loop_cloned.cancel();
+            });
+        }
+    });
+
+    let mut label_view =
+        LabelView::new(&mut labels, LabelType::Label).expect("failed to crete view");
+
+    {
+        for (idx, label) in label_view.as_ref().into_iter().enumerate() {
             if let Some(path) = &label.path {
                 println!("[{:02}] {}", idx, path);
             } else {
@@ -134,6 +132,8 @@ async fn main() {
 
     println!("Started, waiting on ctrl+c to exit");
 
+    proton_mail_labels::static_runtime().block_on(async {
+
     let event_loop = pin!(event_loop);
 
     loop {
@@ -143,7 +143,6 @@ async fn main() {
             }
 
             _ = receiver.handle_events_async(|events| -> Result<(), SubscriberError> {
-                runtime::Handle::current().block_on(async {
                     for evt in events {
                         if let Some(events) = &evt.labels {
                             if let Err(e)= labels.on_events(events) {
@@ -153,10 +152,14 @@ async fn main() {
                         }
                     }
 
-                    Ok(())
-                })
+                if label_view.has_pending_changes() {
+                    info!("Label view has pending changes");
+                    label_view.consume_pending_changes();
+                }
+                Ok(())
             })=> {
             }
         }
     }
+    })
 }

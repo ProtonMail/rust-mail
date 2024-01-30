@@ -7,10 +7,11 @@ pub mod uniffi_bindgen;
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{Label, LabelEvent, LabelId, LabelType};
 use proton_api_mail::proton_api_core::domain::EventAction;
-use proton_api_mail::proton_api_core::exports::{anyhow, anyhow::anyhow, thiserror};
+use proton_api_mail::proton_api_core::exports::{anyhow, anyhow::anyhow, parking_lot, thiserror};
 use proton_api_mail::proton_api_core::http;
 pub use provider::*;
 use std::ops::Deref;
+use std::sync::Arc;
 pub use store::*;
 
 pub trait Callback: Send + Sync {
@@ -27,14 +28,9 @@ const LABEL_CATEGORIES: [LabelType; 4] = [
     LabelType::ContactGroup,
 ];
 
-const fn label_type_to_index(label_type: LabelType) -> usize {
-    label_type as usize - 1
-}
-
 pub struct Labels {
     provider: Box<dyn Provider>,
     store: Box<dyn Store>,
-    labels: [Vec<Label>; LABEL_CATEGORIES.len()],
     cb: Vec<Box<dyn Callback>>,
 }
 
@@ -55,71 +51,41 @@ pub enum LabelsError {
 pub type LabelsResult<T> = Result<T, LabelsError>;
 
 impl Labels {
-    pub fn new(provider: Box<dyn Provider>, store: Box<dyn Store>, cb: Box<dyn Callback>) -> Self {
+    pub fn new(provider: Box<dyn Provider>, store: Box<dyn Store>) -> Self {
         Self {
             provider,
             store,
-            labels: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            cb: vec![cb],
+            cb: Vec::new(),
         }
     }
 
     pub fn initialize_from_provider(&mut self) -> LabelsResult<()> {
         let mut writer = self.store.write();
         for category in LABEL_CATEGORIES {
-            let mut labels =
-                RUNTIME.block_on(async { self.provider.get_labels(category).await })?;
+            let labels = RUNTIME.block_on(async { self.provider.get_labels(category).await })?;
             writer.store(&labels).map_err(LabelsError::Store)?;
-            labels.sort_by(|l1, l2| l1.order.cmp(&l2.order));
-
-            self.labels[label_type_to_index(category)] = labels;
         }
 
         Ok(())
     }
 
     pub fn len(&self) -> usize {
-        self.labels.len()
+        self.store.read().len()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.labels.is_empty()
-    }
-
-    pub fn get_with_type(&self, label_id: &LabelId, label_type: LabelType) -> Option<&Label> {
-        self.labels[label_type_to_index(label_type)]
-            .iter()
-            .find(|&l| l.id == *label_id)
-    }
-
-    pub fn get(&self, label_id: &LabelId) -> Option<&Label> {
-        for label_type in LABEL_CATEGORIES {
-            let Some(l) = self.get_with_type(label_id, label_type) else {
-                continue;
-            };
-
-            return Some(l);
-        }
-
-        None
+        self.len() == 0
     }
 
     pub fn add_callback(&mut self, cb: Box<dyn Callback>) {
         self.cb.push(cb);
     }
 
-    pub fn get_with_type_mut(
-        &mut self,
-        label_id: &LabelId,
-        label_type: LabelType,
-    ) -> Option<&mut Label> {
-        self.labels[label_type_to_index(label_type)]
-            .iter_mut()
-            .find(|l| l.id == *label_id)
-    }
-
-    pub fn get_labels_by_type(&self, label_type: LabelType) -> &[Label] {
-        &self.labels[label_type_to_index(label_type)]
+    pub fn get_labels_by_type(&self, label_type: LabelType) -> LabelsResult<Vec<Label>> {
+        self.store
+            .read()
+            .get_all_with_type(label_type)
+            .map_err(LabelsError::Store)
     }
 
     pub fn create_label(
@@ -137,26 +103,10 @@ impl Labels {
         let mut writer = self.store.write();
         writer.store_one(&label).map_err(LabelsError::Store)?;
 
-        self.labels[label_type_to_index(label_type)].push(label.clone());
-
         self.for_each_cb(|cb| {
             cb.label_created(&label);
         });
         Ok(label)
-    }
-
-    fn find_label_index(&self, label_id: &LabelId) -> Option<(LabelType, usize)> {
-        for category in LABEL_CATEGORIES {
-            if let Some((index, _)) = self.labels[label_type_to_index(category)]
-                .iter()
-                .enumerate()
-                .find(|(_, l)| l.id == *label_id)
-            {
-                return Some((category, index));
-            }
-        }
-
-        None
     }
 
     pub fn update_label(
@@ -166,65 +116,33 @@ impl Labels {
         color: &str,
         parent_id: Option<&LabelId>,
     ) -> LabelsResult<Label> {
-        let (label, order_changed) = {
-            let Some((label_type, index)) = self.find_label_index(label_id) else {
-                return Err(LabelsError::NotExist(label_id.clone()));
-            };
+        let updated_label = RUNTIME.block_on(async {
+            self.provider
+                .update_label(label_id, name, color, parent_id)
+                .await
+        })?;
 
-            let updated_label = RUNTIME.block_on(async {
-                self.provider
-                    .update_label(label_id, name, color, parent_id)
-                    .await
-            })?;
-
+        {
             let mut writer = self.store.write();
             writer.update(&updated_label).map_err(LabelsError::Store)?;
-
-            let label = &mut self.labels[label_type_to_index(label_type)][index];
-
-            let order_changed = updated_label.order != label.order;
-            *label = updated_label;
-
-            (label.clone(), order_changed)
-        };
+        }
 
         self.for_each_cb(|cb| {
-            cb.label_updated(&label);
+            cb.label_updated(&updated_label);
         });
 
-        if order_changed {
-            self.rebuild_sorted_label_vec(label.label_type);
-        }
-        Ok(label)
+        Ok(updated_label)
     }
 
     pub fn delete_label(&mut self, label_id: &LabelId) -> LabelsResult<()> {
         RUNTIME.block_on(async { self.provider.delete_label(label_id).await })?;
         let mut writer = self.store.write();
         writer.delete(label_id).map_err(LabelsError::Store)?;
-        for l in &mut self.labels {
-            l.retain(|l| l.id != *label_id)
-        }
-
         self.for_each_cb(|cb| {
             cb.label_deleted(label_id);
         });
 
         Ok(())
-    }
-
-    fn rebuild_sorted_label_vec(&mut self, label_type: LabelType) {
-        let label_index = label_type_to_index(label_type);
-        {
-            let labels = &mut self.labels[label_index];
-            labels.sort_by(|l1, l2| l1.order.cmp(&l2.order));
-        }
-        //TODO: Optimize update callback
-        self.for_each_cb(|cb| {
-            for l in &self.labels[label_index] {
-                cb.label_updated(l);
-            }
-        });
     }
 
     fn for_each_cb(&self, f: impl Fn(&dyn Callback)) {
@@ -234,12 +152,6 @@ impl Labels {
     }
 
     pub fn on_events(&mut self, events: &[LabelEvent]) -> LabelsResult<()> {
-        enum PendingOP {
-            Create(Label),
-            Update(Label),
-            Delete(LabelId),
-        }
-
         let mut pending_ops = Vec::new();
 
         //TODO: transactional rollback?
@@ -252,10 +164,7 @@ impl Labels {
             match event.action {
                 EventAction::Delete => {
                     writer.delete(&event.id).map_err(LabelsError::Store)?;
-                    for l in &mut self.labels {
-                        l.retain(|l| l.id != event.id)
-                    }
-                    pending_ops.push(PendingOP::Delete(event.id.clone()));
+                    pending_ops.push(PendingLabelOp::Delete(event.id.clone()));
                 }
                 EventAction::Create => {
                     let label = event.label.as_ref().ok_or(LabelsError::Unknown(anyhow!(
@@ -263,47 +172,31 @@ impl Labels {
                     )))?;
 
                     writer.store_one(label).map_err(LabelsError::Store)?;
-                    if let Some(existing_label) = self.labels[label_type_to_index(label.label_type)]
-                        .iter_mut()
-                        .find(|el| el.id == label.id)
-                    {
-                        *existing_label = label.clone();
-                        pending_ops.push(PendingOP::Update(label.clone()));
-                        continue;
-                    }
-
-                    self.labels[label_type_to_index(label.label_type)].push(label.clone());
-                    pending_ops.push(PendingOP::Create(label.clone()));
+                    pending_ops.push(PendingLabelOp::Create(label.clone()));
                 }
                 EventAction::Update | EventAction::UpdateFlags => {
                     let label = event.label.as_ref().ok_or(LabelsError::Unknown(anyhow!(
                         "Label data missing from update label event"
                     )))?;
                     writer.update(label).map_err(LabelsError::Store)?;
-                    if let Some(existing_label) = self.labels[label_type_to_index(label.label_type)]
-                        .iter_mut()
-                        .find(|l| l.id == label.id)
-                    {
-                        *existing_label = label.clone();
-                        pending_ops.push(PendingOP::Update(label.clone()));
-                    }
+                    pending_ops.push(PendingLabelOp::Update(label.clone()));
                 }
             }
         }
 
         for op in pending_ops {
             match op {
-                PendingOP::Create(label) => {
+                PendingLabelOp::Create(label) => {
                     self.for_each_cb(|cb| {
                         cb.label_created(&label);
                     });
                 }
-                PendingOP::Update(label) => {
+                PendingLabelOp::Update(label) => {
                     self.for_each_cb(|cb| {
                         cb.label_updated(&label);
                     });
                 }
-                PendingOP::Delete(id) => {
+                PendingLabelOp::Delete(id) => {
                     self.for_each_cb(|cb| {
                         cb.label_deleted(&id);
                     });
@@ -315,6 +208,157 @@ impl Labels {
     }
 }
 
+enum PendingLabelOp {
+    Create(Label),
+    Update(Label),
+    Delete(LabelId),
+}
+
+pub struct LabelView {
+    labels: Vec<Label>,
+    label_type: LabelType,
+    pending: LabelViewCallback,
+}
+
+impl LabelView {
+    pub fn new(labels: &mut Labels, label_type: LabelType) -> LabelsResult<Self> {
+        let l = labels.get_labels_by_type(label_type)?;
+        let mut view = Self {
+            labels: l,
+            label_type,
+            pending: LabelViewCallback::new(label_type),
+        };
+        view.sort();
+
+        labels.add_callback(Box::new(view.pending.clone()));
+
+        Ok(view)
+    }
+
+    pub fn label_type(&self) -> LabelType {
+        self.label_type
+    }
+
+    pub fn len(&self) -> usize {
+        self.labels.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.labels.is_empty()
+    }
+
+    pub fn get(&self, index: usize) -> Option<&Label> {
+        self.labels.get(index)
+    }
+
+    pub fn has_pending_changes(&self) -> bool {
+        !self.pending.inner.lock().pending.is_empty()
+    }
+
+    pub fn consume_pending_changes(&mut self) {
+        let pending = { self.pending.inner.lock().get_pending() };
+
+        self.apply_changed(pending);
+    }
+
+    fn sort(&mut self) {
+        self.labels.sort_by(|l1, l2| l1.order.cmp(&l2.order));
+    }
+
+    fn apply_changed(&mut self, pending: Vec<PendingLabelOp>) {
+        let mut resort = false;
+        for op in pending {
+            match op {
+                PendingLabelOp::Create(label) => {
+                    self.labels.push(label);
+                }
+                PendingLabelOp::Update(label) => {
+                    if let Some(l) = self.labels.iter_mut().find(|l| l.id == label.id) {
+                        resort = resort || l.order != label.order;
+                        *l = label;
+                    }
+                }
+                PendingLabelOp::Delete(id) => self.labels.retain(|x| x.id != id),
+            }
+        }
+
+        if resort {
+            self.sort();
+        }
+    }
+}
+
+impl AsRef<[Label]> for LabelView {
+    fn as_ref(&self) -> &[Label] {
+        &self.labels
+    }
+}
+
+#[derive(Clone)]
+struct LabelViewCallback {
+    inner: Arc<parking_lot::Mutex<LabelViewCallbackInner>>,
+}
+
+impl LabelViewCallback {
+    fn new(label_type: LabelType) -> Self {
+        Self {
+            inner: Arc::new(parking_lot::Mutex::new(LabelViewCallbackInner::new(
+                label_type,
+            ))),
+        }
+    }
+}
+
+struct LabelViewCallbackInner {
+    pending: Vec<PendingLabelOp>,
+    label_type: LabelType,
+}
+
+impl LabelViewCallbackInner {
+    pub fn new(label_type: LabelType) -> Self {
+        Self {
+            pending: Vec::new(),
+            label_type,
+        }
+    }
+}
+
+impl LabelViewCallbackInner {
+    fn label_add(&mut self, label: Label) {
+        if label.label_type == self.label_type {
+            self.pending.push(PendingLabelOp::Create(label));
+        }
+    }
+
+    pub fn label_updated(&mut self, label: Label) {
+        if label.label_type == self.label_type {
+            self.pending.push(PendingLabelOp::Create(label));
+        }
+    }
+
+    fn label_deleted(&mut self, label_id: LabelId) {
+        self.pending.push(PendingLabelOp::Delete(label_id));
+    }
+
+    fn get_pending(&mut self) -> Vec<PendingLabelOp> {
+        std::mem::take(&mut self.pending)
+    }
+}
+
+impl Callback for LabelViewCallback {
+    fn label_created(&self, label: &Label) {
+        self.inner.lock().label_add(label.clone());
+    }
+
+    fn label_updated(&self, label: &Label) {
+        self.inner.lock().label_updated(label.clone());
+    }
+
+    fn label_deleted(&self, id: &LabelId) {
+        self.inner.lock().label_deleted(id.clone());
+    }
+}
+
 lazy_static! {
     static ref RUNTIME: proton_async::tokio::runtime::Runtime = {
         proton_async::tokio::runtime::Builder::new_multi_thread()
@@ -322,6 +366,10 @@ lazy_static! {
             .build()
             .expect("Failed to build runtime")
     };
+}
+
+pub fn static_runtime() -> &'static proton_async::tokio::runtime::Runtime {
+    &RUNTIME
 }
 
 #[cfg(feature = "uniffi")]
