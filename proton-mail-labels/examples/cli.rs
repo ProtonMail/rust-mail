@@ -89,10 +89,7 @@ async fn main() {
     let (sender, mut receiver) = ChannelledSubscriber::new("labels".into());
 
     info!("Loading labels");
-    labels
-        .initialize_from_provider()
-        .await
-        .expect("Failed to init");
+    labels.initialize_from_provider().expect("Failed to init");
 
     if let Err(e) = event_loop
         .start(
@@ -149,7 +146,7 @@ async fn main() {
                 runtime::Handle::current().block_on(async {
                     for evt in events {
                         if let Some(events) = &evt.labels {
-                            if let Err(e)= labels.on_events(events).await {
+                            if let Err(e)= labels.on_events(events) {
                                 error!("Failed to apply event ({}): {e}", evt.event_id);
                                 return Err(SubscriberError::Other(anyhow::anyhow!("Failed to apply event ({}): {e}", evt.event_id)));
                             }

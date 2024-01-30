@@ -1,5 +1,6 @@
 use crate::{LabelsResult, MemoryStore, ProtonProvider};
-use proton_api_core::exports::thiserror;
+use lazy_static::lazy_static;
+use proton_api_core::exports::{parking_lot, thiserror};
 use proton_api_core::http::HttpRequestError;
 use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
 use proton_api_mail::proton_api_core::exports::anyhow;
@@ -7,20 +8,30 @@ use proton_api_mail::{proton_api_core, MailSession};
 use proton_async::{async_trait, tokio};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::runtime;
 
 proton_event_loop::gen_event_loop_uniffi_types!(Mail, MailEvent);
 
-#[uniffi::export(async_runtime = "tokio")]
-pub async fn new_event_loop(
+lazy_static! {
+    static ref RUNTIME: tokio::runtime::Runtime = {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to build runtime")
+    };
+}
+
+#[uniffi::export]
+pub fn new_event_loop(
     session: &proton_api_core::uniffi_bindgen::Session,
     error_handler: Box<dyn MailLoopErrorHandler>,
 ) -> Result<Arc<MailEventLoop>, MailLoopError> {
-    let eloop = MailEventLoop::new();
+    RUNTIME.block_on(async {
+        let eloop = MailEventLoop::new();
 
-    eloop.start_poller(session, error_handler).await?;
+        eloop.start_poller(session, error_handler).await?;
 
-    Ok(eloop)
+        Ok(eloop)
+    })
 }
 #[uniffi::export(callback_interface)]
 pub trait Callback: Send + Sync {
@@ -47,10 +58,10 @@ impl crate::Callback for UniffiCallback {
     }
 }
 
-type SharedLabels = Arc<tokio::sync::RwLock<crate::Labels>>;
+type SharedLabels = Arc<parking_lot::RwLock<crate::Labels>>;
 #[derive(uniffi::Object)]
 pub struct Labels(SharedLabels);
-#[uniffi::export(async_runtime = "tokio")]
+#[uniffi::export]
 impl Labels {
     #[uniffi::constructor]
     pub fn new(
@@ -60,7 +71,7 @@ impl Labels {
         let label_provider = ProtonProvider::new(MailSession::new(session.0.clone()));
         let label_store = MemoryStore::new();
 
-        Arc::new(Labels(Arc::new(tokio::sync::RwLock::new(
+        Arc::new(Labels(Arc::new(parking_lot::RwLock::new(
             crate::Labels::new(
                 Box::new(label_provider),
                 Box::new(label_store),
@@ -69,17 +80,17 @@ impl Labels {
         ))))
     }
 
-    pub async fn initialize_from_provider(&self) -> LabelsResult<()> {
-        let mut accessor = self.0.write().await;
-        accessor.initialize_from_provider().await
+    pub fn initialize_from_provider(&self) -> LabelsResult<()> {
+        let mut accessor = self.0.write();
+        accessor.initialize_from_provider()
     }
 
-    pub async fn count(&self) -> u64 {
-        let accessor = self.0.read().await;
+    pub fn count(&self) -> u64 {
+        let accessor = self.0.read();
         accessor.len() as u64
     }
 
-    pub async fn create_label(
+    pub fn create_label(
         &self,
         name: String,
         color: String,
@@ -87,13 +98,11 @@ impl Labels {
         parent_id: Option<String>,
     ) -> LabelsResult<Label> {
         let parent_id = parent_id.map(LabelId::from);
-        let mut accessor = self.0.write().await;
-        accessor
-            .create_label(&name, &color, label_type, parent_id.as_ref())
-            .await
+        let mut accessor = self.0.write();
+        accessor.create_label(&name, &color, label_type, parent_id.as_ref())
     }
 
-    pub async fn update_label(
+    pub fn update_label(
         &self,
         label_id: String,
         name: String,
@@ -102,34 +111,30 @@ impl Labels {
     ) -> LabelsResult<Label> {
         let label_id = LabelId::from(label_id);
         let parent_id = parent_id.map(LabelId::from);
-        let mut accessor = self.0.write().await;
-        accessor
-            .update_label(&label_id, &name, &color, parent_id.as_ref())
-            .await
+        let mut accessor = self.0.write();
+        accessor.update_label(&label_id, &name, &color, parent_id.as_ref())
     }
 
-    pub async fn delete_label(&self, label_id: String) -> LabelsResult<()> {
+    pub fn delete_label(&self, label_id: String) -> LabelsResult<()> {
         let label_id = LabelId::from(label_id);
-        let mut accessor = self.0.write().await;
-        accessor.delete_label(&label_id).await
+        let mut accessor = self.0.write();
+        accessor.delete_label(&label_id)
     }
 
-    pub async fn get_label(&self, label_id: String) -> Option<Label> {
-        let accessor = self.0.read().await;
+    pub fn get_label(&self, label_id: String) -> Option<Label> {
+        let accessor = self.0.read();
         let label_id = LabelId::from(label_id);
         accessor.get(&label_id).cloned()
     }
 
-    pub async fn get_labels(&self, label_type: LabelType) -> Vec<Label> {
-        let accessor = self.0.read().await;
+    pub fn get_labels(&self, label_type: LabelType) -> Vec<Label> {
+        let accessor = self.0.read();
         accessor.get_labels_by_type(label_type).to_vec()
     }
 
     pub fn len(&self) -> u64 {
-        runtime::Handle::current().block_on(async {
-            let accessor = self.0.read().await;
-            accessor.len() as u64
-        })
+        let accessor = self.0.read();
+        accessor.len() as u64
     }
 }
 
@@ -153,10 +158,10 @@ impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
         &mut self,
         events: &[MailEvent],
     ) -> Result<(), proton_event_loop::SubscriberError> {
-        let mut accessor = self.0.write().await;
+        let mut accessor = self.0.write();
         for evt in events {
             if let Some(events) = &evt.labels {
-                if let Err(e) = accessor.on_events(events).await {
+                if let Err(e) = accessor.on_events(events) {
                     return Err(proton_event_loop::SubscriberError::Other(anyhow::anyhow!(
                         "Failed to apply event ({}): {e}",
                         evt.event_id
@@ -170,32 +175,25 @@ impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
 }
 
 #[derive(uniffi::Object)]
-pub struct LabelView(SharedLabels, LabelType, tokio::runtime::Runtime);
+pub struct LabelView(SharedLabels, LabelType);
 #[uniffi::export]
 impl LabelView {
     #[uniffi::constructor]
     pub fn new(labels: &Labels, label_type: LabelType) -> Arc<Self> {
-        let r = tokio::runtime::Builder::new_current_thread()
-            .build()
-            .unwrap();
-        Arc::new(Self(labels.0.clone(), label_type, r))
+        Arc::new(Self(labels.0.clone(), label_type))
     }
 
     pub fn len(&self) -> i64 {
-        self.2.block_on(async {
-            let accessor = self.0.read().await;
-            accessor.get_labels_by_type(self.1).len() as i64
-        })
+        let accessor = self.0.read();
+        accessor.get_labels_by_type(self.1).len() as i64
     }
 
     pub fn at(&self, index: i64) -> Option<Label> {
         debug_assert!(index >= 0);
-        self.2.block_on(async {
-            let accessor = self.0.read().await;
-            accessor
-                .get_labels_by_type(self.1)
-                .get(index as usize)
-                .cloned()
-        })
+        let accessor = self.0.read();
+        accessor
+            .get_labels_by_type(self.1)
+            .get(index as usize)
+            .cloned()
     }
 }
