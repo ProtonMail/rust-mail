@@ -39,8 +39,8 @@ pub trait Subscriber<T: IsEvent + Send + Sync>: Send + Sync {
 /// running on another task and do not wish to make the state sharable.
 pub struct ChannelledSubscriber<T: IsEvent + Send + Sync> {
     name: String,
-    sender: tokio::sync::mpsc::Sender<Vec<T>>,
-    receiver: tokio::sync::mpsc::Receiver<Result<(), SubscriberError>>,
+    sender: proton_async::flume::Sender<Vec<T>>,
+    receiver: proton_async::flume::Receiver<Result<(), SubscriberError>>,
 }
 
 #[async_trait]
@@ -50,11 +50,11 @@ impl<T: IsEvent + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
     }
 
     async fn on_events(&mut self, event: &[T]) -> Result<(), SubscriberError> {
-        if self.sender.send(Vec::from(event)).await.is_err() {
+        if self.sender.send_async(Vec::from(event)).await.is_err() {
             return Err(SubscriberError::Send);
         }
 
-        let Some(reply) = self.receiver.recv().await else {
+        let Ok(reply) = self.receiver.recv_async().await else {
             return Err(SubscriberError::Receive);
         };
 
@@ -64,8 +64,8 @@ impl<T: IsEvent + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
 
 impl<T: IsEvent> ChannelledSubscriber<T> {
     pub fn new(name: String) -> (ChannelledSubscriber<T>, ChanneledSubscriberHandler<T>) {
-        let (subscriber_sender, subscriber_receiver) = tokio::sync::mpsc::channel(1);
-        let (handler_sender, handler_receiver) = tokio::sync::mpsc::channel(1);
+        let (subscriber_sender, subscriber_receiver) = proton_async::flume::bounded(1);
+        let (handler_sender, handler_receiver) = proton_async::flume::bounded(1);
 
         (
             ChannelledSubscriber {
@@ -84,8 +84,8 @@ impl<T: IsEvent> ChannelledSubscriber<T> {
 /// ChanneledSubscriberHandler waits on events to be send over a channel. These can then be consumed by the
 /// `handle_events` function.
 pub struct ChanneledSubscriberHandler<T: IsEvent> {
-    receiver: tokio::sync::mpsc::Receiver<Vec<T>>,
-    sender: tokio::sync::mpsc::Sender<Result<(), SubscriberError>>,
+    receiver: proton_async::flume::Receiver<Vec<T>>,
+    sender: proton_async::flume::Sender<Result<(), SubscriberError>>,
 }
 
 /// Error returned by `ChanneledSubscriberHandler` which includes errors when receiving events or transmitting
@@ -101,31 +101,71 @@ pub enum ChanneledSubscriberError {
 }
 impl<T: IsEvent> ChanneledSubscriberHandler<T> {
     /// Handle the events from the event loop.
-    pub async fn handle_events<Error: Into<SubscriberError>>(
+    pub async fn handle_events_async<Error: Into<SubscriberError>>(
         &mut self,
         mut f: impl FnMut(&[T]) -> Result<(), Error>,
     ) -> Result<(), ChanneledSubscriberError> {
-        let Some(events) = self.receiver.recv().await else {
+        let Ok(events) = self.receiver.recv_async().await else {
             return Err(ChanneledSubscriberError::Receive);
         };
 
         let r = (f)(&events);
 
-        self.reply(r.map_err(|e| e.into())).await
+        self.reply_async(r.map_err(|e| e.into())).await
+    }
+
+    /// Handle the events from the event loop.
+    pub fn handle_events<Error: Into<SubscriberError>>(
+        &mut self,
+        mut f: impl FnMut(&[T]) -> Result<(), Error>,
+    ) -> Result<(), ChanneledSubscriberError> {
+        let Ok(events) = self.receiver.recv() else {
+            return Err(ChanneledSubscriberError::Receive);
+        };
+
+        let r = (f)(&events);
+
+        self.reply(r.map_err(|e| e.into()))
     }
 
     /// Receive events from event loop.
     /// Note: Each call to `receive` must have an `reply` counter part.
-    pub async fn receive(&mut self) -> Option<Vec<T>> {
-        self.receiver.recv().await
+    pub async fn receive_async(&mut self) -> Option<Vec<T>> {
+        if let Ok(v) = self.receiver.recv_async().await {
+            return Some(v);
+        }
+
+        None
+    }
+
+    /// Receive events from event loop.
+    /// Note: Each call to `receive` must have an `reply` counter part.
+    pub fn receive(&mut self) -> Option<Vec<T>> {
+        if let Ok(v) = self.receiver.recv() {
+            return Some(v);
+        }
+
+        None
     }
 
     /// Report the result of handling `receive` to the event loop.
-    pub async fn reply(
+    pub async fn reply_async(
         &self,
         reply: Result<(), SubscriberError>,
     ) -> Result<(), ChanneledSubscriberError> {
-        if let Err(e) = self.sender.send(reply).await {
+        if let Err(e) = self.sender.send_async(reply).await {
+            return Err(ChanneledSubscriberError::Send(e.0));
+        }
+
+        Ok(())
+    }
+
+    /// Report the result of handling `receive` to the event loop.
+    pub fn reply(
+        &self,
+        reply: Result<(), SubscriberError>,
+    ) -> Result<(), ChanneledSubscriberError> {
+        if let Err(e) = self.sender.send(reply) {
             return Err(ChanneledSubscriberError::Send(e.0));
         }
 
@@ -142,7 +182,7 @@ async fn test_channeled_subscriber_handle_and_reply() {
     let (mut s, mut h) = ChannelledSubscriber::new("test".into());
 
     let task = tokio::spawn(async move {
-        h.handle_events(|events: &[TestEvent]| -> Result<(), SubscriberError> {
+        h.handle_events_async(|events: &[TestEvent]| -> Result<(), SubscriberError> {
             assert_eq!(events[0].event_id, EventId::from(DUMMY_EVENT_ID));
             Ok(())
         })
@@ -171,10 +211,13 @@ async fn test_channeled_subscriber_failed_to_send() {
 
 #[tokio::test]
 async fn test_channeled_subscriber_failed_to_receive() {
-    let (mut s, mut h) = ChannelledSubscriber::new("test".into());
+    let (mut s, h) = ChannelledSubscriber::new("test".into());
 
     let task = tokio::spawn(async move {
-        h.receiver.recv().await.expect("expected to receive data");
+        h.receiver
+            .recv_async()
+            .await
+            .expect("expected to receive data");
         drop(h);
     });
     let events = new_dummy_events();
@@ -194,7 +237,7 @@ async fn test_channeled_subscriber_handler_failed_to_receive() {
     };
 
     assert!(matches!(
-        h.handle_events(|_: &[TestEvent]| -> Result<(), SubscriberError> { Ok(()) })
+        h.handle_events_async(|_: &[TestEvent]| -> Result<(), SubscriberError> { Ok(()) })
             .await
             .expect_err("expected error"),
         ChanneledSubscriberError::Receive
@@ -207,13 +250,13 @@ async fn test_channeled_subscriber_handler_failed_to_send() {
 
     let task = tokio::spawn(async move {
         let events = new_dummy_events();
-        s.sender.send(events).await.expect("failed to send");
+        s.sender.send_async(events).await.expect("failed to send");
         drop(s);
     });
 
     task.await.expect("expected no error on join");
     assert!(matches!(
-        h.handle_events(|_| -> Result<(), SubscriberError> { Ok(()) })
+        h.handle_events_async(|_| -> Result<(), SubscriberError> { Ok(()) })
             .await
             .expect_err("expected error"),
         ChanneledSubscriberError::Send(_)

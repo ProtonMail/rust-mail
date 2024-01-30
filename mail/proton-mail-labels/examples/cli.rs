@@ -145,7 +145,7 @@ async fn main() {
                 return;
             }
 
-            _ = receiver.handle_events(|events| -> Result<(), SubscriberError> {
+            _ = receiver.handle_events_async(|events| -> Result<(), SubscriberError> {
                 runtime::Handle::current().block_on(async {
                     for evt in events {
                         if let Some(events) = &evt.labels {
