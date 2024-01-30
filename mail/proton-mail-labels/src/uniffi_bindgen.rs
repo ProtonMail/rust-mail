@@ -1,4 +1,4 @@
-use crate::{LabelsResult, MemoryStore, ProtonProvider};
+use crate::{LabelsResult, MemoryStore, ProtonProvider, UILabelViewCallback};
 use proton_api_core::exports::{parking_lot, thiserror};
 use proton_api_core::http::HttpRequestError;
 use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
@@ -7,7 +7,6 @@ use proton_api_mail::proton_api_core::exports::parking_lot::lock_api::RwLock;
 use proton_api_mail::{proton_api_core, MailSession};
 use proton_async::async_trait;
 use std::ops::DerefMut;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -151,11 +150,20 @@ impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
 pub trait LabelViewCallback: Send + Sync {
     fn on_has_pending(&self);
 }
+
+struct UniffiUILabelViewCallback {
+    cb: Box<dyn LabelViewCallback>,
+}
+
+impl UILabelViewCallback for UniffiUILabelViewCallback {
+    fn on_pending(&self) {
+        self.cb.on_has_pending();
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct LabelView {
     view: parking_lot::RwLock<crate::LabelView>,
-    cb: Box<dyn LabelViewCallback>,
-    cb_performed: AtomicBool,
 }
 
 #[uniffi::export]
@@ -168,27 +176,17 @@ impl LabelView {
     ) -> LabelsResult<Self> {
         let mut accessor = labels.0.write();
         Ok(Self {
-            view: RwLock::new(crate::LabelView::new(accessor.deref_mut(), label_type)?),
-            cb,
-            cb_performed: AtomicBool::new(false),
+            view: RwLock::new(crate::LabelView::new(
+                accessor.deref_mut(),
+                label_type,
+                Box::new(UniffiUILabelViewCallback { cb: cb }),
+            )?),
         })
     }
 
     pub fn len(&self) -> i64 {
-        let (len, has_pending) = {
-            let accessor = self.view.read();
-            (accessor.len() as i64, accessor.has_pending_changes())
-        };
-
-        // Perform calculation about pending changes here.
-        if has_pending {
-            if !self.cb_performed.load(Ordering::Acquire) {
-                self.cb.on_has_pending();
-                self.cb_performed.store(true, Ordering::Release)
-            }
-        }
-
-        len
+        let accessor = self.view.read();
+        accessor.len() as i64
     }
 
     pub fn at(&self, index: i64) -> Option<Label> {
@@ -197,8 +195,26 @@ impl LabelView {
         accessor.get(index as usize).cloned()
     }
 
-    pub fn consume_pending_changes(&self) {
-        self.view.write().consume_pending_changes();
-        self.cb_performed.store(false, Ordering::Release);
+    pub fn consume_pending_changes(&self) -> bool {
+        self.view.write().consume_pending_changes()
+    }
+
+    pub fn snapshot(&self) -> Arc<LabelViewSnapShot> {
+        Arc::new(LabelViewSnapShot(self.view.read().labels.clone()))
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct LabelViewSnapShot (Vec<Label>);
+
+#[uniffi::export]
+impl LabelViewSnapShot {
+    pub fn len(&self) -> i64 {
+        self.0.len() as i64
+    }
+
+    pub fn at(&self, index: i64) -> Option<Label> {
+        debug_assert!(index >= 0);
+        self.0.get(index as usize).cloned()
     }
 }
