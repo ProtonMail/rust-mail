@@ -24,7 +24,7 @@ pub fn new_event_loop(
     })
 }
 #[uniffi::export(callback_interface)]
-pub trait Callback: Send + Sync {
+pub trait LabelsCallback: Send + Sync {
     fn label_created(&self, label: Label);
     fn label_updated(&self, label: Label);
 
@@ -32,7 +32,7 @@ pub trait Callback: Send + Sync {
     fn label_deleted(&self, id: String);
 }
 
-struct UniffiCallback(Box<dyn Callback>);
+struct UniffiCallback(Box<dyn LabelsCallback>);
 
 impl crate::Callback for UniffiCallback {
     fn label_created(&self, label: &Label) {
@@ -56,7 +56,7 @@ impl Labels {
     #[uniffi::constructor]
     pub fn new(
         session: &proton_api_core::uniffi_bindgen::Session,
-        callback: Box<dyn Callback>,
+        callback: Box<dyn LabelsCallback>,
     ) -> Arc<Self> {
         let label_provider = ProtonProvider::new(MailSession::new(session.0.clone()));
         let label_store = MemoryStore::new();
