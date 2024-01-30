@@ -3,8 +3,11 @@ use proton_api_core::exports::{parking_lot, thiserror};
 use proton_api_core::http::HttpRequestError;
 use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
 use proton_api_mail::proton_api_core::exports::anyhow;
+use proton_api_mail::proton_api_core::exports::parking_lot::lock_api::RwLock;
 use proton_api_mail::{proton_api_core, MailSession};
 use proton_async::async_trait;
+use std::ops::DerefMut;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -61,13 +64,9 @@ impl Labels {
         let label_provider = ProtonProvider::new(MailSession::new(session.0.clone()));
         let label_store = MemoryStore::new();
 
-        Arc::new(Labels(Arc::new(parking_lot::RwLock::new(
-            crate::Labels::new(
-                Box::new(label_provider),
-                Box::new(label_store),
-                Box::new(UniffiCallback(callback)),
-            ),
-        ))))
+        let mut labels = crate::Labels::new(Box::new(label_provider), Box::new(label_store));
+        labels.add_callback(Box::new(UniffiCallback(callback)));
+        Arc::new(Labels(Arc::new(parking_lot::RwLock::new(labels))))
     }
 
     pub fn initialize_from_provider(&self) -> LabelsResult<()> {
@@ -110,22 +109,6 @@ impl Labels {
         let mut accessor = self.0.write();
         accessor.delete_label(&label_id)
     }
-
-    pub fn get_label(&self, label_id: String) -> Option<Label> {
-        let accessor = self.0.read();
-        let label_id = LabelId::from(label_id);
-        accessor.get(&label_id).cloned()
-    }
-
-    pub fn get_labels(&self, label_type: LabelType) -> Vec<Label> {
-        let accessor = self.0.read();
-        accessor.get_labels_by_type(label_type).to_vec()
-    }
-
-    pub fn len(&self) -> u64 {
-        let accessor = self.0.read();
-        accessor.len() as u64
-    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -164,26 +147,58 @@ impl proton_event_loop::Subscriber<MailEvent> for LabelSubscriber {
     }
 }
 
+#[uniffi::export(callback_interface)]
+pub trait LabelViewCallback: Send + Sync {
+    fn on_has_pending(&self);
+}
 #[derive(uniffi::Object)]
-pub struct LabelView(SharedLabels, LabelType);
+pub struct LabelView {
+    view: parking_lot::RwLock<crate::LabelView>,
+    cb: Box<dyn LabelViewCallback>,
+    cb_performed: AtomicBool,
+}
+
 #[uniffi::export]
 impl LabelView {
     #[uniffi::constructor]
-    pub fn new(labels: &Labels, label_type: LabelType) -> Arc<Self> {
-        Arc::new(Self(labels.0.clone(), label_type))
+    pub fn new(
+        labels: &Labels,
+        label_type: LabelType,
+        cb: Box<dyn LabelViewCallback>,
+    ) -> LabelsResult<Self> {
+        let mut accessor = labels.0.write();
+        Ok(Self {
+            view: RwLock::new(crate::LabelView::new(accessor.deref_mut(), label_type)?),
+            cb,
+            cb_performed: AtomicBool::new(false),
+        })
     }
 
     pub fn len(&self) -> i64 {
-        let accessor = self.0.read();
-        accessor.get_labels_by_type(self.1).len() as i64
+        let (len, has_pending) = {
+            let accessor = self.view.read();
+            (accessor.len() as i64, accessor.has_pending_changes())
+        };
+
+        // Perform calculation about pending changes here.
+        if has_pending {
+            if !self.cb_performed.load(Ordering::Acquire) {
+                self.cb.on_has_pending();
+                self.cb_performed.store(true, Ordering::Release)
+            }
+        }
+
+        len
     }
 
     pub fn at(&self, index: i64) -> Option<Label> {
         debug_assert!(index >= 0);
-        let accessor = self.0.read();
-        accessor
-            .get_labels_by_type(self.1)
-            .get(index as usize)
-            .cloned()
+        let accessor = self.view.read();
+        accessor.get(index as usize).cloned()
+    }
+
+    pub fn consume_pending_changes(&self) {
+        self.view.write().consume_pending_changes();
+        self.cb_performed.store(false, Ordering::Release);
     }
 }
