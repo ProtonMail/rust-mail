@@ -10,6 +10,7 @@ use proton_api_mail::proton_api_core::domain::EventAction;
 use proton_api_mail::proton_api_core::exports::{anyhow, anyhow::anyhow, thiserror};
 use proton_api_mail::proton_api_core::http;
 pub use provider::*;
+use std::ops::Deref;
 pub use store::*;
 
 pub trait Callback: Send + Sync {
@@ -34,7 +35,7 @@ pub struct Labels {
     provider: Box<dyn Provider>,
     store: Box<dyn Store>,
     labels: [Vec<Label>; LABEL_CATEGORIES.len()],
-    cb: Box<dyn Callback>,
+    cb: Vec<Box<dyn Callback>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,7 +60,7 @@ impl Labels {
             provider,
             store,
             labels: [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
-            cb,
+            cb: vec![cb],
         }
     }
 
@@ -103,6 +104,10 @@ impl Labels {
         None
     }
 
+    pub fn add_callback(&mut self, cb: Box<dyn Callback>) {
+        self.cb.push(cb);
+    }
+
     pub fn get_with_type_mut(
         &mut self,
         label_id: &LabelId,
@@ -133,7 +138,10 @@ impl Labels {
         writer.store_one(&label).map_err(LabelsError::Store)?;
 
         self.labels[label_type_to_index(label_type)].push(label.clone());
-        self.cb.label_created(&label);
+
+        self.for_each_cb(|cb| {
+            cb.label_created(&label);
+        });
         Ok(label)
     }
 
@@ -176,10 +184,13 @@ impl Labels {
 
             let order_changed = updated_label.order != label.order;
             *label = updated_label;
-            self.cb.label_updated(label);
 
             (label.clone(), order_changed)
         };
+
+        self.for_each_cb(|cb| {
+            cb.label_updated(&label);
+        });
 
         if order_changed {
             self.rebuild_sorted_label_vec(label.label_type);
@@ -194,21 +205,43 @@ impl Labels {
         for l in &mut self.labels {
             l.retain(|l| l.id != *label_id)
         }
-        self.cb.label_deleted(label_id);
+
+        self.for_each_cb(|cb| {
+            cb.label_deleted(label_id);
+        });
+
         Ok(())
     }
 
     fn rebuild_sorted_label_vec(&mut self, label_type: LabelType) {
-        let labels = &mut self.labels[label_type_to_index(label_type)];
-
-        labels.sort_by(|l1, l2| l1.order.cmp(&l2.order));
+        let label_index = label_type_to_index(label_type);
+        {
+            let labels = &mut self.labels[label_index];
+            labels.sort_by(|l1, l2| l1.order.cmp(&l2.order));
+        }
         //TODO: Optimize update callback
-        for l in labels {
-            self.cb.label_updated(l);
+        self.for_each_cb(|cb| {
+            for l in &self.labels[label_index] {
+                cb.label_updated(l);
+            }
+        });
+    }
+
+    fn for_each_cb(&self, f: impl Fn(&dyn Callback)) {
+        for cb in &self.cb {
+            (f)(cb.deref());
         }
     }
 
     pub fn on_events(&mut self, events: &[LabelEvent]) -> LabelsResult<()> {
+        enum PendingOP {
+            Create(Label),
+            Update(Label),
+            Delete(LabelId),
+        }
+
+        let mut pending_ops = Vec::new();
+
         //TODO: transactional rollback?
         //TODO: Order updates
         //TODO: Fix deadlock if callback calls labels, callbacks should be deferred until all label
@@ -222,7 +255,7 @@ impl Labels {
                     for l in &mut self.labels {
                         l.retain(|l| l.id != event.id)
                     }
-                    self.cb.label_deleted(&event.id);
+                    pending_ops.push(PendingOP::Delete(event.id.clone()));
                 }
                 EventAction::Create => {
                     let label = event.label.as_ref().ok_or(LabelsError::Unknown(anyhow!(
@@ -235,12 +268,12 @@ impl Labels {
                         .find(|el| el.id == label.id)
                     {
                         *existing_label = label.clone();
-                        self.cb.label_updated(label);
+                        pending_ops.push(PendingOP::Update(label.clone()));
                         continue;
                     }
 
                     self.labels[label_type_to_index(label.label_type)].push(label.clone());
-                    self.cb.label_created(label);
+                    pending_ops.push(PendingOP::Create(label.clone()));
                 }
                 EventAction::Update | EventAction::UpdateFlags => {
                     let label = event.label.as_ref().ok_or(LabelsError::Unknown(anyhow!(
@@ -252,8 +285,28 @@ impl Labels {
                         .find(|l| l.id == label.id)
                     {
                         *existing_label = label.clone();
-                        self.cb.label_updated(label);
+                        pending_ops.push(PendingOP::Update(label.clone()));
                     }
+                }
+            }
+        }
+
+        for op in pending_ops {
+            match op {
+                PendingOP::Create(label) => {
+                    self.for_each_cb(|cb| {
+                        cb.label_created(&label);
+                    });
+                }
+                PendingOP::Update(label) => {
+                    self.for_each_cb(|cb| {
+                        cb.label_updated(&label);
+                    });
+                }
+                PendingOP::Delete(id) => {
+                    self.for_each_cb(|cb| {
+                        cb.label_deleted(&id);
+                    });
                 }
             }
         }
