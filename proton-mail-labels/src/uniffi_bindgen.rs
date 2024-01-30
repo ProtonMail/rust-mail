@@ -1,31 +1,21 @@
 use crate::{LabelsResult, MemoryStore, ProtonProvider};
-use lazy_static::lazy_static;
 use proton_api_core::exports::{parking_lot, thiserror};
 use proton_api_core::http::HttpRequestError;
 use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::{proton_api_core, MailSession};
-use proton_async::{async_trait, tokio};
+use proton_async::async_trait;
 use std::sync::Arc;
 use std::time::Duration;
 
 proton_event_loop::gen_event_loop_uniffi_types!(Mail, MailEvent);
-
-lazy_static! {
-    static ref RUNTIME: tokio::runtime::Runtime = {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to build runtime")
-    };
-}
 
 #[uniffi::export]
 pub fn new_event_loop(
     session: &proton_api_core::uniffi_bindgen::Session,
     error_handler: Box<dyn MailLoopErrorHandler>,
 ) -> Result<Arc<MailEventLoop>, MailLoopError> {
-    RUNTIME.block_on(async {
+    crate::RUNTIME.block_on(async {
         let eloop = MailEventLoop::new();
 
         eloop.start_poller(session, error_handler).await?;
