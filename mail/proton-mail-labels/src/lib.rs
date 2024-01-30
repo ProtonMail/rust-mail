@@ -62,15 +62,16 @@ impl Labels {
         }
     }
 
-    pub async fn initialize_from_provider(&mut self) -> LabelsResult<()> {
-        let mut writer = self.store.write().await;
-
+    pub fn initialize_from_provider(&mut self) -> LabelsResult<()> {
+        let mut writer = self.store.write();
+        let runtime = proton_async::tokio::runtime::Handle::current();
         for category in LABEL_CATEGORIES {
-            let mut labels = self.provider.get_labels(category).await?;
-            writer.store(&labels).await.map_err(LabelsError::Store)?;
+            let mut labels =
+                runtime.block_on(async { self.provider.get_labels(category).await })?;
+            writer.store(&labels).map_err(LabelsError::Store)?;
             labels.sort_by(|l1, l2| l1.order.cmp(&l2.order));
 
-            self.labels[label_type_to_index(category)] = labels
+            self.labels[label_type_to_index(category)] = labels;
         }
 
         Ok(())
@@ -116,19 +117,21 @@ impl Labels {
         &self.labels[label_type_to_index(label_type)]
     }
 
-    pub async fn create_label(
+    pub fn create_label(
         &mut self,
         name: &str,
         color: &str,
         label_type: LabelType,
         parent_id: Option<&LabelId>,
     ) -> LabelsResult<Label> {
-        let label = self
-            .provider
-            .create_label(name, color, label_type, parent_id)
-            .await?;
-        let mut writer = self.store.write().await;
-        writer.store_one(&label).await.map_err(LabelsError::Store)?;
+        let runtime = proton_async::tokio::runtime::Handle::current();
+        let label = runtime.block_on(async {
+            self.provider
+                .create_label(name, color, label_type, parent_id)
+                .await
+        })?;
+        let mut writer = self.store.write();
+        writer.store_one(&label).map_err(LabelsError::Store)?;
 
         self.labels[label_type_to_index(label_type)].push(label.clone());
         self.cb.label_created(&label);
@@ -149,7 +152,7 @@ impl Labels {
         None
     }
 
-    pub async fn update_label(
+    pub fn update_label(
         &mut self,
         label_id: &LabelId,
         name: &str,
@@ -161,16 +164,16 @@ impl Labels {
                 return Err(LabelsError::NotExist(label_id.clone()));
             };
 
-            let updated_label = self
-                .provider
-                .update_label(label_id, name, color, parent_id)
-                .await?;
+            let runtime = proton_async::tokio::runtime::Handle::current();
 
-            let mut writer = self.store.write().await;
-            writer
-                .update(&updated_label)
-                .await
-                .map_err(LabelsError::Store)?;
+            let updated_label = runtime.block_on(async {
+                self.provider
+                    .update_label(label_id, name, color, parent_id)
+                    .await
+            })?;
+
+            let mut writer = self.store.write();
+            writer.update(&updated_label).map_err(LabelsError::Store)?;
 
             let label = &mut self.labels[label_type_to_index(label_type)][index];
 
@@ -187,10 +190,11 @@ impl Labels {
         Ok(label)
     }
 
-    pub async fn delete_label(&mut self, label_id: &LabelId) -> LabelsResult<()> {
-        self.provider.delete_label(label_id).await?;
-        let mut writer = self.store.write().await;
-        writer.delete(label_id).await.map_err(LabelsError::Store)?;
+    pub fn delete_label(&mut self, label_id: &LabelId) -> LabelsResult<()> {
+        let runtime = proton_async::tokio::runtime::Handle::current();
+        runtime.block_on(async { self.provider.delete_label(label_id).await })?;
+        let mut writer = self.store.write();
+        writer.delete(label_id).map_err(LabelsError::Store)?;
         for l in &mut self.labels {
             l.retain(|l| l.id != *label_id)
         }
@@ -208,17 +212,17 @@ impl Labels {
         }
     }
 
-    pub async fn on_events(&mut self, events: &[LabelEvent]) -> LabelsResult<()> {
+    pub fn on_events(&mut self, events: &[LabelEvent]) -> LabelsResult<()> {
         //TODO: transactional rollback?
         //TODO: Order updates
         //TODO: Fix deadlock if callback calls labels, callbacks should be deferred until all label
         // operations are applied.
-        let mut writer = self.store.write().await;
+        let mut writer = self.store.write();
 
         for event in events {
             match event.action {
                 EventAction::Delete => {
-                    writer.delete(&event.id).await.map_err(LabelsError::Store)?;
+                    writer.delete(&event.id).map_err(LabelsError::Store)?;
                     for l in &mut self.labels {
                         l.retain(|l| l.id != event.id)
                     }
@@ -229,7 +233,7 @@ impl Labels {
                         "Label data missing from create label event"
                     )))?;
 
-                    writer.store_one(label).await.map_err(LabelsError::Store)?;
+                    writer.store_one(label).map_err(LabelsError::Store)?;
                     if let Some(existing_label) = self.labels[label_type_to_index(label.label_type)]
                         .iter_mut()
                         .find(|el| el.id == label.id)
@@ -246,7 +250,7 @@ impl Labels {
                     let label = event.label.as_ref().ok_or(LabelsError::Unknown(anyhow!(
                         "Label data missing from update label event"
                     )))?;
-                    writer.update(label).await.map_err(LabelsError::Store)?;
+                    writer.update(label).map_err(LabelsError::Store)?;
                     if let Some(existing_label) = self.labels[label_type_to_index(label.label_type)]
                         .iter_mut()
                         .find(|l| l.id == label.id)
