@@ -4,6 +4,7 @@ mod store;
 #[cfg(feature = "uniffi")]
 pub mod uniffi_bindgen;
 
+use lazy_static::lazy_static;
 use proton_api_mail::domain::{Label, LabelEvent, LabelId, LabelType};
 use proton_api_mail::proton_api_core::domain::EventAction;
 use proton_api_mail::proton_api_core::exports::{anyhow, anyhow::anyhow, thiserror};
@@ -64,10 +65,9 @@ impl Labels {
 
     pub fn initialize_from_provider(&mut self) -> LabelsResult<()> {
         let mut writer = self.store.write();
-        let runtime = proton_async::tokio::runtime::Handle::current();
         for category in LABEL_CATEGORIES {
             let mut labels =
-                runtime.block_on(async { self.provider.get_labels(category).await })?;
+                RUNTIME.block_on(async { self.provider.get_labels(category).await })?;
             writer.store(&labels).map_err(LabelsError::Store)?;
             labels.sort_by(|l1, l2| l1.order.cmp(&l2.order));
 
@@ -124,8 +124,7 @@ impl Labels {
         label_type: LabelType,
         parent_id: Option<&LabelId>,
     ) -> LabelsResult<Label> {
-        let runtime = proton_async::tokio::runtime::Handle::current();
-        let label = runtime.block_on(async {
+        let label = RUNTIME.block_on(async {
             self.provider
                 .create_label(name, color, label_type, parent_id)
                 .await
@@ -164,9 +163,7 @@ impl Labels {
                 return Err(LabelsError::NotExist(label_id.clone()));
             };
 
-            let runtime = proton_async::tokio::runtime::Handle::current();
-
-            let updated_label = runtime.block_on(async {
+            let updated_label = RUNTIME.block_on(async {
                 self.provider
                     .update_label(label_id, name, color, parent_id)
                     .await
@@ -191,8 +188,7 @@ impl Labels {
     }
 
     pub fn delete_label(&mut self, label_id: &LabelId) -> LabelsResult<()> {
-        let runtime = proton_async::tokio::runtime::Handle::current();
-        runtime.block_on(async { self.provider.delete_label(label_id).await })?;
+        RUNTIME.block_on(async { self.provider.delete_label(label_id).await })?;
         let mut writer = self.store.write();
         writer.delete(label_id).map_err(LabelsError::Store)?;
         for l in &mut self.labels {
@@ -264,6 +260,15 @@ impl Labels {
 
         Ok(())
     }
+}
+
+lazy_static! {
+    static ref RUNTIME: proton_async::tokio::runtime::Runtime = {
+        proton_async::tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("Failed to build runtime")
+    };
 }
 
 #[cfg(feature = "uniffi")]
