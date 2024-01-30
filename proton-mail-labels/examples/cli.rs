@@ -9,7 +9,9 @@ use proton_async::tokio;
 use proton_event_loop::{
     ChannelledSubscriber, LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError,
 };
-use proton_mail_labels::{Callback, LabelView, Labels, MemoryStore, ProtonProvider};
+use proton_mail_labels::{
+    Callback, LabelView, Labels, MemoryStore, ProtonProvider, UILabelViewCallback,
+};
 use std::pin::pin;
 use std::time::Duration;
 
@@ -35,6 +37,12 @@ impl proton_event_loop::LoopErrorHandler for EventLoopErrorHandler {
         error!("Event loop error: {error}");
         return LoopErrorHandlerReply::Abort;
     }
+}
+
+struct UICallback {}
+
+impl UILabelViewCallback for UICallback {
+    fn on_pending(&self) {}
 }
 
 fn main() {
@@ -117,8 +125,8 @@ fn main() {
         }
     });
 
-    let mut label_view =
-        LabelView::new(&mut labels, LabelType::Label).expect("failed to crete view");
+    let mut label_view = LabelView::new(&mut labels, LabelType::Label, Box::new(UICallback {}))
+        .expect("failed to crete view");
 
     {
         for (idx, label) in label_view.as_ref().into_iter().enumerate() {

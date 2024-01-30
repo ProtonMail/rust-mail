@@ -221,12 +221,16 @@ pub struct LabelView {
 }
 
 impl LabelView {
-    pub fn new(labels: &mut Labels, label_type: LabelType) -> LabelsResult<Self> {
+    pub fn new(
+        labels: &mut Labels,
+        label_type: LabelType,
+        ui_cb: Box<dyn UILabelViewCallback>,
+    ) -> LabelsResult<Self> {
         let l = labels.get_labels_by_type(label_type)?;
         let mut view = Self {
             labels: l,
             label_type,
-            pending: LabelViewCallback::new(label_type),
+            pending: LabelViewCallback::new(label_type, ui_cb),
         };
         view.sort();
 
@@ -255,10 +259,12 @@ impl LabelView {
         !self.pending.inner.lock().pending.is_empty()
     }
 
-    pub fn consume_pending_changes(&mut self) {
+    pub fn consume_pending_changes(&mut self) -> bool {
         let pending = { self.pending.inner.lock().get_pending() };
-
+        let has_changes = !pending.is_empty();
         self.apply_changed(pending);
+
+        has_changes
     }
 
     fn sort(&mut self) {
@@ -270,7 +276,12 @@ impl LabelView {
         for op in pending {
             match op {
                 PendingLabelOp::Create(label) => {
-                    self.labels.push(label);
+                    if let Some(l) = self.labels.iter_mut().find(|l| l.id == label.id) {
+                        resort = resort || l.order != label.order;
+                        *l = label;
+                    } else {
+                        self.labels.push(label);
+                    }
                 }
                 PendingLabelOp::Update(label) => {
                     if let Some(l) = self.labels.iter_mut().find(|l| l.id == label.id) {
@@ -294,16 +305,21 @@ impl AsRef<[Label]> for LabelView {
     }
 }
 
+pub trait UILabelViewCallback: Send + Sync {
+    fn on_pending(&self);
+}
+
 #[derive(Clone)]
 struct LabelViewCallback {
     inner: Arc<parking_lot::Mutex<LabelViewCallbackInner>>,
 }
 
 impl LabelViewCallback {
-    fn new(label_type: LabelType) -> Self {
+    fn new(label_type: LabelType, ui_callback: Box<dyn UILabelViewCallback>) -> Self {
         Self {
             inner: Arc::new(parking_lot::Mutex::new(LabelViewCallbackInner::new(
                 label_type,
+                ui_callback,
             ))),
         }
     }
@@ -312,13 +328,15 @@ impl LabelViewCallback {
 struct LabelViewCallbackInner {
     pending: Vec<PendingLabelOp>,
     label_type: LabelType,
+    ui_callback: Box<dyn UILabelViewCallback>,
 }
 
 impl LabelViewCallbackInner {
-    pub fn new(label_type: LabelType) -> Self {
+    pub fn new(label_type: LabelType, ui_callback: Box<dyn UILabelViewCallback>) -> Self {
         Self {
             pending: Vec::new(),
             label_type,
+            ui_callback,
         }
     }
 }
@@ -327,17 +345,20 @@ impl LabelViewCallbackInner {
     fn label_add(&mut self, label: Label) {
         if label.label_type == self.label_type {
             self.pending.push(PendingLabelOp::Create(label));
+            self.ui_callback.on_pending();
         }
     }
 
     pub fn label_updated(&mut self, label: Label) {
         if label.label_type == self.label_type {
             self.pending.push(PendingLabelOp::Create(label));
+            self.ui_callback.on_pending();
         }
     }
 
     fn label_deleted(&mut self, label_id: LabelId) {
         self.pending.push(PendingLabelOp::Delete(label_id));
+        self.ui_callback.on_pending();
     }
 
     fn get_pending(&mut self) -> Vec<PendingLabelOp> {
