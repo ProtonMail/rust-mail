@@ -48,7 +48,7 @@ pub struct SqliteConnection {
 impl SqliteConnection {
     /// Convenience transaction wrapper. Creates a new transaction an if the supplied closure does not return an error,
     /// the transaction is committed. On Error, the transaction is rolled back.
-    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&Transaction) -> Result<T, E>>(
+    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut Transaction) -> Result<T, E>>(
         &mut self,
         mut closure: F,
     ) -> Result<T, E> {

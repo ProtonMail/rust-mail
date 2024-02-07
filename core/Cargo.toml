@@ -1,6 +1,6 @@
 [workspace]
 resolver ="2"
-members = [
+members = [ "proton-action-queue",
     "proton-api-core",
     "proton-async",
     "proton-sqlite3",

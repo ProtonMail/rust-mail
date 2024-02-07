@@ -9,7 +9,6 @@ edition = "2021"
 rusqlite = { version = "0.30", features = ["bundled", "modern_sqlite", "uuid", "chrono", "hooks"] }
 tracing = "0.1"
 thiserror = "1"
-log = "0.4.20"
 
 [dev-dependencies]
 rand = "0.8"

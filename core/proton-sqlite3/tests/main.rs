@@ -26,14 +26,14 @@ fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
     // Enable for Sqlite Hooks
     /*
     let thread_id = std::thread::current().id();
-    conn.update_hook(Some(move |action, db:&str, table:&str, row_id| {
+    conn.update_hook(Some(move |action, db: &str, table: &str, row_id| {
         match action {
             Action::UNKNOWN => {
                 println!("[{:?}][{db}:{table}] Unknown action", thread_id);
-            },
+            }
             Action::SQLITE_DELETE => {
                 println!("[{:?}][{db}:{table}] delete {row_id}", thread_id);
-            },
+            }
             Action::SQLITE_INSERT => {
                 println!("[{:?}][{db}:{table}] insert {row_id}", thread_id);
             }
@@ -140,7 +140,7 @@ fn run_random_command_test() {
     }
 
     let mut handles = Vec::new();
-    for _ in 0..100{
+    for _ in 0..100 {
         let pool = connection_pool.clone();
         handles.push(std::thread::spawn(move || {
             run_tasks(pool, 100).expect("Failed to execute");

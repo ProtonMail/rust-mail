@@ -70,7 +70,10 @@ impl User {
         Ok(salted)
     }
 
-    pub fn unlock_keys(&self, salted_password: &SaltedPassword) -> Result<PrivateKeyRing, KeyError> {
+    pub fn unlock_keys(
+        &self,
+        salted_password: &SaltedPassword,
+    ) -> Result<PrivateKeyRing, KeyError> {
         self.keys.unlock(salted_password)
     }
 }
