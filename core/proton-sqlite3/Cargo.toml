@@ -1,0 +1,17 @@
+[package]
+name = "proton-sqlite3"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rusqlite = { version = "0.30", features = ["bundled", "hooks"] }
+log = "0.4"
+
+[dev-dependencies]
+rand = "0.8"
+tempdir = "0.3"
+
+[lints]
+workspace = true

@@ -3,6 +3,7 @@ resolver ="2"
 members = [
     "proton-api-core",
     "proton-async",
+    "proton-sqlite3",
 ]
 
 [workspace.lints.rust]
