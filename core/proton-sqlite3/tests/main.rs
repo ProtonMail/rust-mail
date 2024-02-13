@@ -1,7 +1,6 @@
 use proton_sqlite3::rusqlite::Result;
 use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
 use rand::prelude::*;
-use rusqlite::hooks::Action;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -24,6 +23,8 @@ fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
     let mut conn = pool.acquire()?;
     let mut rng = thread_rng();
 
+    // Enable for Sqlite Hooks
+    /*
     let thread_id = std::thread::current().id();
     conn.update_hook(Some(move |action, db:&str, table:&str, row_id| {
         match action {
@@ -43,7 +44,7 @@ fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
                 println!("[{:?}][{db}:{table}] Other???", thread_id);
             }
         };
-    }));
+    }));*/
 
     for _ in 0..count {
         match rng.gen::<u32>() % 3 {
