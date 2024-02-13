@@ -23,14 +23,18 @@
 //! }
 //! ```
 
-use log::error;
+mod migration;
+
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use tracing::error;
 
 // re-export;
 pub use rusqlite;
-use rusqlite::{Connection, Transaction};
+use rusqlite::{Connection, OpenFlags, Transaction};
+
+pub use migration::*;
 
 pub const DEFAULT_OPEN_CONNECTION_LIMIT: usize = 8;
 
@@ -77,6 +81,14 @@ impl DerefMut for SqliteConnection {
     }
 }
 
+/// Sqlite Database Mode
+pub enum SqliteMode {
+    /// On disk with WAL2 journaling (Recommended).
+    File(PathBuf),
+    /// In Memory (For testing only)
+    InMemory,
+}
+
 /// Manages a pool of Sqlite3 connections and maintains up to a user defined connections open for re-use.
 #[derive(Clone)]
 pub struct SqliteConnectionPool {
@@ -85,18 +97,18 @@ pub struct SqliteConnectionPool {
 struct ConnectionPoolInner {
     lock: Mutex<Vec<Connection>>,
     max_open_connections: usize,
-    path: PathBuf,
+    mode: SqliteMode,
 }
 
 impl SqliteConnectionPool {
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self::with_open_connections_limit(path, DEFAULT_OPEN_CONNECTION_LIMIT)
+    pub fn new(mode: SqliteMode) -> Self {
+        Self::with_open_connections_limit(mode, DEFAULT_OPEN_CONNECTION_LIMIT)
     }
 
-    pub fn with_open_connections_limit(path: impl Into<PathBuf>, limit: usize) -> Self {
+    pub fn with_open_connections_limit(mode: SqliteMode, limit: usize) -> Self {
         Self {
             inner: Arc::new(ConnectionPoolInner {
-                path: path.into(),
+                mode,
                 lock: Mutex::new(Vec::with_capacity(limit)),
                 max_open_connections: limit,
             }),
@@ -146,10 +158,19 @@ impl ConnectionPoolInner {
     }
 
     fn new_connection(&self) -> rusqlite::Result<Connection> {
-        let conn = Connection::open(&self.path)?;
+        let conn = match &self.mode {
+            SqliteMode::File(path) => {
+                let conn = Connection::open(path)?;
+                conn.execute("PRAGMA synchronous=NORMAL;", ())?;
+                conn.execute("PRAGMA journal=WAL2;", ())?;
+                conn
+            }
+            SqliteMode::InMemory => Connection::open_in_memory_with_flags(
+                OpenFlags::default() | OpenFlags::SQLITE_OPEN_SHARED_CACHE,
+            )?,
+        };
+
         conn.execute("PRAGMA foreign_keys = ON;", ())?;
-        conn.execute("PRAGMA synchronous=NORMAL;", ())?;
-        conn.execute("PRAGMA journal=WAL2;", ())?;
 
         Ok(conn)
     }
@@ -179,8 +200,10 @@ fn new_test_dir() -> tempdir::TempDir {
 fn test_connection_pool() {
     let dir = new_test_dir();
     const CONN_LIMIT: usize = 2;
-    let pool =
-        SqliteConnectionPool::with_open_connections_limit(dir.path().join("sql.db"), CONN_LIMIT);
+    let pool = SqliteConnectionPool::with_open_connections_limit(
+        SqliteMode::File(dir.path().join("sql.db")),
+        CONN_LIMIT,
+    );
     assert_eq!(pool.inner.get_open_connection_count(), 0);
 
     // Acquire 2 connections and then release them to the pool.

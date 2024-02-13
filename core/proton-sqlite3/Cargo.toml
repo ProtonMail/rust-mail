@@ -6,8 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rusqlite = { version = "0.30", features = ["bundled", "hooks"] }
-log = "0.4"
+rusqlite = { version = "0.30", features = ["bundled", "modern_sqlite", "uuid", "chrono", "hooks"] }
+tracing = "0.1"
+thiserror = "1"
+log = "0.4.20"
 
 [dev-dependencies]
 rand = "0.8"

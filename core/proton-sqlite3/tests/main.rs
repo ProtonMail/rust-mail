@@ -1,5 +1,5 @@
 use proton_sqlite3::rusqlite::Result;
-use proton_sqlite3::SqliteConnectionPool;
+use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
 use rand::prelude::*;
 use rusqlite::hooks::Action;
 
@@ -110,7 +110,7 @@ fn run_random_command_test() {
     let dir = tempdir::TempDir::new("sqlite3_test").expect("failed to create temp dir");
     let db_path = dir.path().join("sqlite.db");
 
-    let connection_pool = SqliteConnectionPool::new(db_path);
+    let connection_pool = SqliteConnectionPool::new(SqliteMode::File(db_path));
 
     {
         // Create db tables.
