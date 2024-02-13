@@ -9,7 +9,7 @@ use proton_sqlite3::rusqlite::types::{
 use proton_sqlite3::rusqlite::{ToSql, Transaction};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -170,8 +170,8 @@ pub enum ActionFactoryError {
 pub enum ActionFactoryInstanceError {
     #[error("Action has invalid version {0}")]
     InvalidVersion(u32),
-    #[error("Action is not of expected type got '{0}', expected '{1}'")]
-    InvalidType(&'static str, &'static str),
+    #[error("Action is not of expected type got '{0:?}', expected '{1:?}'")]
+    InvalidType(TypeId, TypeId),
     #[error("Failed to deserialize: {0}")]
     Deserialize(#[from] rmp_serde::decode::Error),
     #[error("Failed to retrieve session: {0}")]

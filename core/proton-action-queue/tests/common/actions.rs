@@ -155,8 +155,8 @@ where
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(action) = action.downcast_ref::<T>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
-                std::any::type_name_of_val(action),
-                std::any::type_name::<T>(),
+                action.type_id(),
+                std::any::TypeId::of::<T>(),
             ));
         };
 

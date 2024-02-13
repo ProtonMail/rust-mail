@@ -120,8 +120,8 @@
 //!     fn local_handler<'r, 't: 'r>(&self, action: &'r dyn Any, _tx: &'r mut Transaction<'t>) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
 //!         let Some(action) = action.downcast_ref::<MyAction>() else {
 //!             return Err(ActionFactoryInstanceError::InvalidType(
-//!                 std::any::type_name_of_val(action),
-//!                 std::any::type_name::<MyAction>(),
+//!                 action.type_name(),
+//!                 std::any::TypeId::of::<MyAction>(),
 //!             ));
 //!         };
 //!
