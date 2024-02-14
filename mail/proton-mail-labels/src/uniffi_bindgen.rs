@@ -205,7 +205,7 @@ impl LabelView {
 }
 
 #[derive(uniffi::Object)]
-pub struct LabelViewSnapShot (Vec<Label>);
+pub struct LabelViewSnapShot(Vec<Label>);
 
 #[uniffi::export]
 impl LabelViewSnapShot {
