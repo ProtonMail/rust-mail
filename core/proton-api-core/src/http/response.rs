@@ -1,7 +1,7 @@
 use crate::http::{FromResponse, Result};
-use log::debug;
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
+use tracing::debug;
 
 #[derive(Copy, Clone)]
 pub struct NoResponse {}

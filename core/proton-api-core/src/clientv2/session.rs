@@ -221,7 +221,7 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
         Err(e) => {
             if let http::HttpRequestError::API(api_err) = &e {
                 if api_err.http_code == 401 {
-                    log::debug!("Account session expired, attempting refresh");
+                    tracing::debug!("Account session expired, attempting refresh");
 
                     let auth_refresh_request = {
                         let borrow = session.user_auth.read();
