@@ -1,6 +1,7 @@
 use proton_sqlite3::rusqlite::Result;
 use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
 use rand::prelude::*;
+use std::time::Duration;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -22,6 +23,8 @@ struct Person2 {
 fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
     let mut conn = pool.acquire()?;
     let mut rng = thread_rng();
+
+    conn.busy_timeout(Duration::from_secs(10))?;
 
     // Enable for Sqlite Hooks
     /*
