@@ -7,6 +7,6 @@ use wasm_bindgen::prelude::*;
 pub struct LocateBlockquoteResult(pub String, pub String);
 #[wasm_bindgen]
 pub fn locate_blockquote(input: &str) -> LocateBlockquoteResult {
-    let (before, after) = crate::locate_blockquote(input);
+    let (before, after) = proton_mail_message_detector::locate_blockquote(input);
     LocateBlockquoteResult(before, after)
 }

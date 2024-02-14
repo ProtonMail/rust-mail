@@ -14,6 +14,7 @@ default:
 .script-config-git:
   script:
     - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}.insteadOf https://${CI_SERVER_HOST}
+    - git submodule update --init --recursive
 
 stages:
   - lint
@@ -22,6 +23,7 @@ stages:
 
 .do_fmt_check:
    script:
+     - !reference [.script-config-git, script]
      - cargo fmt --check
 
 .do_clippy_check:
@@ -56,6 +58,19 @@ build-macos:
     - cargo build --release
     - cargo test
 
+build-mail-wasm:
+  stage: build
+  script:
+    - !reference [.script-config-git, script]
+    - cd proton-mail-wasm
+    - wasm-pack build -d ./web_pkg
+  artifacts:
+    name: proton-mail-wasm
+    paths:
+      - proton-mail-wasm/web_pkg
+    when: always
+    expire_in: 4 hrs
+
 build-ios:
   tags:
     - inbox-tart
@@ -63,20 +78,12 @@ build-ios:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cargo build --release --target --target x86_64-apple-ios
-    - cargo build --release --target --target aarch64-apple-ios-sim
-    - cargo build --release --target --target aarch64-apple-ios
+    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml /tmp/ios-framework
 
-build-mail-md-wasm:
-  stage: build
-  script:
-    - !reference [.script-config-git, script]
-    - cd proton-mail-message-detector
-    - wasm-pack build -d ./web_pkg --target web --features="web"
   artifacts:
-    name: proton-mail-message-detector-wasm
+    name: proton-mail-wasm
     paths:
-      - proton-mail-message-detector/web_pkg
+      - proton-mail-wasm/web_pkg
     when: always
     expire_in: 4 hrs
 
@@ -84,8 +91,9 @@ build-mail-android:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --features="uniffi" --release
-    - uniffi-bindgen generate --library target/aarch64-linux-android/release/libproton_mail_labels.so --language kotlin --config proton-mail-labels/uniffi.toml --out-dir bindings/proton-mail-labels/kotlin
+    - cd proton-mail-uniffi
+    - cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --release
+    - uniffi-bindgen generate --library ../target/aarch64-linux-android/release/libproton_mail_uniffi.so --language kotlin --config uniffi.toml --out-dir bindings/proton-mail-uniffi/kotlin
 
 #generate-labels-uniffi-bindings:
 #  stage: build
