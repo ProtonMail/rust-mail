@@ -3,9 +3,6 @@
 #[cfg(test)]
 mod test_messages;
 
-#[cfg(feature = "web")]
-mod wasm;
-
 use lazy_static::lazy_static;
 use scraper::{ElementRef, Node, Selector};
 use std::ops::Deref;
@@ -164,7 +161,7 @@ fn test_block_quote(parent_html: &str, blockquote: ElementRef) -> Option<(String
 
 ///Try to locate the eventual blockquote present in the document no matter the expeditor of the mail
 ///
-///Return the HTML content splitted at the blockquote start
+///Return the HTML content split at the blockquote start
 pub fn locate_blockquote(document: &str) -> (String, String) {
     // export const locateBlockquote = (inputDocument: Element | undefined): [content: string, blockquote: string] => {
     //     if (!inputDocument) {
