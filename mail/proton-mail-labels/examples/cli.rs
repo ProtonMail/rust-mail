@@ -1,10 +1,10 @@
 use proton_api_mail::domain::{Label, LabelId, LabelType, MailEvent};
 use proton_api_mail::proton_api_core::domain::TwoFactorAuth;
 use proton_api_mail::proton_api_core::exports::anyhow;
-use proton_api_mail::proton_api_core::exports::log::{error, info, LevelFilter};
+use proton_api_mail::proton_api_core::exports::tracing::{error, info};
 use proton_api_mail::proton_api_core::http::ClientBuilder;
 use proton_api_mail::proton_api_core::{LoginError, Session};
-use proton_api_mail::MailSession;
+use proton_api_mail::{proton_api_core, MailSession};
 use proton_async::tokio;
 use proton_event_loop::{
     ChannelledSubscriber, LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError,
@@ -46,11 +46,9 @@ impl UILabelViewCallback for UICallback {
 }
 
 fn main() {
-    env_logger::Builder::new()
-        .filter_level(LevelFilter::Debug)
-        .filter(Some("cookie_store".into()), LevelFilter::Error)
-        .filter(Some("rustls".into()), LevelFilter::Error)
-        .init();
+    let subscriber = tracing_subscriber::FmtSubscriber::new();
+    proton_api_core::exports::tracing::subscriber::set_global_default(subscriber)
+        .expect("failed to register tracing subscriber");
 
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() < 3 {

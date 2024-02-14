@@ -20,6 +20,7 @@ mockall = "0.12"
 env_logger = "0.10"
 # overwirte tokio for signal feature
 tokio = {version = "1", features = ["rt-multi-thread", "macros", "signal"]}
+tracing-subscriber = "0.3"
 
 [features]
 uniffi=["proton-api-mail/uniffi", "dep:uniffi", "proton-event-loop/uniffi"]
