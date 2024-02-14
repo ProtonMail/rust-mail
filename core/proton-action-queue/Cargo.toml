@@ -1,0 +1,26 @@
+[package]
+name = "proton-action-queue"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+proton-api-core = { path ="../proton-api-core"}
+uuid = {version = "1.7", features = ["v4"]}
+tracing = "0.1"
+serde = { version = "1.0.195", features = ["derive"] }
+rmp = "0.8"
+rmp-serde = "1.1"
+log = "0.4.20"
+chrono = { version = "0.4"}
+proton-sqlite3 = {path="../proton-sqlite3"}
+
+[dev-dependencies]
+mockall = "0.12"
+tracing-subscriber = "0.3"
+tempfile = "3"
+tracing-test = "0.2"
+
+[lints]
+workspace = true

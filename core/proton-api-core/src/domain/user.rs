@@ -1,5 +1,5 @@
 use proton_crypto_rs::domain::{KeyError, UserKeys};
-use proton_crypto_rs::keyring::{KeyRing, LockedKey};
+use proton_crypto_rs::keyring::{LockedKey, PrivateKeyRing};
 use proton_crypto_rs::salts::{SaltError, SaltedPassword, Salts};
 use serde;
 use serde::{Deserialize, Serialize};
@@ -70,7 +70,10 @@ impl User {
         Ok(salted)
     }
 
-    pub fn unlock_keys(&self, salted_password: &SaltedPassword) -> Result<KeyRing, KeyError> {
+    pub fn unlock_keys(
+        &self,
+        salted_password: &SaltedPassword,
+    ) -> Result<PrivateKeyRing, KeyError> {
         self.keys.unlock(salted_password)
     }
 }
