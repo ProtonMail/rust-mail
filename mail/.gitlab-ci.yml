@@ -85,7 +85,7 @@ build-mail-android:
   script:
     - !reference [.script-config-git, script]
     - cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --features="uniffi" --release
-    - uniffi-bindgen generate --library target/aarch64-linux-android/release/libproton_mail_labels.so --language kotlin --out-dir bindings/proton-mail-labels/kotlin
+    - uniffi-bindgen generate --library target/aarch64-linux-android/release/libproton_mail_labels.so --language kotlin --config proton-mail-labels/uniffi.toml --out-dir bindings/proton-mail-labels/kotlin
 
 #generate-labels-uniffi-bindings:
 #  stage: build
