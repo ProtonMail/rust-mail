@@ -1,0 +1,19 @@
+[package]
+name = "proton-api-mail"
+version = "0.1.0"
+edition = "2021"
+keywords = ["proton", "rest", "api"]
+categories = ["api-bindings"]
+
+[dependencies]
+proton-crypto-rs = {git = "https://gitlab.protontech.ch/rust/proton-crypto-rs.git"}
+proton-api-core = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+uniffi = {version = "0.26", optional = true, features = ["tokio"]}
+
+
+[features]
+default = []
+uniffi = ["dep:uniffi", "proton-api-core/uniffi"]
+
+[lints]
+workspace = true

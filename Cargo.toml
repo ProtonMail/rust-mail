@@ -4,6 +4,7 @@ members = [
    "proton-event-loop",
    "proton-mail-labels",
     "proton-mail-message-detector",
+    "proton-api-mail",
 ]
 
 [workspace.lints.rust]
