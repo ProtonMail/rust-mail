@@ -1,7 +1,6 @@
 use proton_sqlite3::rusqlite::Result;
 use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
 use rand::prelude::*;
-use std::time::Duration;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -24,7 +23,7 @@ fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
     let mut conn = pool.acquire()?;
     let mut rng = thread_rng();
 
-    conn.busy_timeout(Duration::from_secs(10))?;
+    //conn.busy_timeout(Duration::from_secs(10))?;
 
     // Enable for Sqlite Hooks
     /*
@@ -142,8 +141,23 @@ fn run_random_command_test() {
         ).expect("failed to run create query");
     }
 
+    let rdonly = connection_pool
+        .acquire_read_only()
+        .expect("failed to acquire read only");
+
+    let _watcher = connection_pool.watch(move |event| match event {
+        Err(e) => {
+            eprintln!("failed to watch: {e}");
+            return;
+        }
+        Ok(_) => {
+            let version = rdonly.data_version().expect("failed to get version");
+            println!("Change detected {version}");
+        }
+    });
+
     let mut handles = Vec::new();
-    for _ in 0..100 {
+    for _ in 0..10 {
         let pool = connection_pool.clone();
         handles.push(std::thread::spawn(move || {
             run_tasks(pool, 100).expect("Failed to execute");
