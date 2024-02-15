@@ -116,12 +116,13 @@ pub struct Message {
 
     pub num_attachments: u32,
 
-    pub header: String,
+    pub header: Option<String>,
     //TODO:
     //pub parsed_headers: Headers,
     pub body: Option<String>,
     #[serde(rename = "MIMEType")]
-    pub mime_type: MimeType,
+    pub mime_type: Option<MimeType>,
+    #[serde(default)]
     pub attachments: Vec<Attachment>,
 }
 
