@@ -4,6 +4,7 @@ members = [ "proton-action-queue",
     "proton-api-core",
     "proton-async",
     "proton-sqlite3",
+    "proton-event-loop",
 ]
 
 [workspace.lints.rust]
