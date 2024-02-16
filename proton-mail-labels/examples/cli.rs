@@ -7,7 +7,7 @@ use proton_api_mail::proton_api_core::{LoginError, Session};
 use proton_api_mail::{proton_api_core, MailSession};
 use proton_async::tokio;
 use proton_event_loop::{
-    ChannelledSubscriber, LoopError, LoopErrorHandlerReply, Subscriber, SubscriberError,
+    ChannelledSubscriber, EventLoopError, EventLoopErrorHandlerReply, Subscriber, SubscriberError,
 };
 use proton_mail_labels::{
     Callback, LabelView, Labels, MemoryStore, ProtonProvider, UILabelViewCallback,
@@ -32,10 +32,10 @@ impl Callback for CliCallback {
 }
 
 struct EventLoopErrorHandler {}
-impl proton_event_loop::LoopErrorHandler for EventLoopErrorHandler {
-    fn on_error(&self, error: LoopError) -> LoopErrorHandlerReply {
+impl proton_event_loop::EventLoopErrorHandler for EventLoopErrorHandler {
+    fn on_error(&self, error: EventLoopError) -> EventLoopErrorHandlerReply {
         error!("Event loop error: {error}");
-        return LoopErrorHandlerReply::Abort;
+        return EventLoopErrorHandlerReply::Abort;
     }
 }
 
@@ -78,9 +78,9 @@ fn main() {
     let event_store = proton_event_loop::InMemoryStore::default();
     let event_error_handler = EventLoopErrorHandler {};
 
-    let event_loop = proton_event_loop::Loop::new();
+    let event_loop = proton_event_loop::BackgroundEventLoop::new();
 
-    proton_event_loop::Loop::<MailEvent>::new();
+    proton_event_loop::BackgroundEventLoop::<MailEvent>::new();
     let label_provider = ProtonProvider::new(MailSession::new(session.clone()));
     let label_store = MemoryStore::new();
 

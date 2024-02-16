@@ -1,7 +1,7 @@
-use crate::r#loop::MockLoopErrorHandler;
+use crate::background_loop::MockEventLoopErrorHandler;
 use crate::{
-    Loop, LoopError, LoopErrorHandlerReply, MockProvider, MockStore, MockSubscriber, Subscriber,
-    SubscriberError,
+    BackgroundEventLoop, EventLoopError, EventLoopErrorHandlerReply, MockProvider, MockStore,
+    MockSubscriber, Subscriber, SubscriberError,
 };
 use mockall::Sequence;
 use proton_api_core::domain::{EventId, MoreEvents};
@@ -36,7 +36,7 @@ async fn test_loop_event_collection() {
     let mut store = MockStore::new();
     let mut subscriber = MockSubscriber::new();
     let mut provider = MockProvider::new();
-    let error_handler = MockLoopErrorHandler::new();
+    let error_handler = MockEventLoopErrorHandler::new();
 
     // Read store
     store
@@ -97,7 +97,7 @@ async fn test_loop_event_collection() {
 
     subscriber.expect_name().return_const("foo".into());
 
-    let eloop = Loop::new();
+    let eloop = BackgroundEventLoop::new();
     // store new event id
     {
         let loop_cloned = eloop.clone();
@@ -144,7 +144,7 @@ async fn test_error_handler_retry_retries_loop() {
     let mut store = MockStore::new();
     let mut subscriber = MockSubscriber::new();
     let mut provider = MockProvider::new();
-    let mut error_handler = MockLoopErrorHandler::new();
+    let mut error_handler = MockEventLoopErrorHandler::new();
 
     // Read store
     {
@@ -180,13 +180,13 @@ async fn test_error_handler_retry_retries_loop() {
 
     subscriber.expect_name().return_const("foo".into());
 
-    let eloop = Loop::new();
+    let eloop = BackgroundEventLoop::new();
 
     error_handler
         .expect_on_error()
-        .withf(|f| matches!(f, LoopError::Subscriber(_, _)))
+        .withf(|f| matches!(f, EventLoopError::Subscriber(_, _)))
         .times(1)
-        .return_const(LoopErrorHandlerReply::Retry)
+        .return_const(EventLoopErrorHandlerReply::Retry)
         .in_sequence(&mut sequence);
 
     // Re-fetch event.
@@ -251,7 +251,7 @@ async fn test_error_handler_pause_pauses_loop() {
     let mut store = MockStore::new();
     let mut subscriber = MockSubscriber::new();
     let mut provider = MockProvider::new();
-    let mut error_handler = MockLoopErrorHandler::new();
+    let mut error_handler = MockEventLoopErrorHandler::new();
 
     // Read store
     {
@@ -279,7 +279,7 @@ async fn test_error_handler_pause_pauses_loop() {
 
     subscriber.expect_name().return_const("foo".into());
 
-    let eloop = Loop::new();
+    let eloop = BackgroundEventLoop::new();
 
     let loop_cloned = eloop.clone();
     error_handler
@@ -289,7 +289,7 @@ async fn test_error_handler_pause_pauses_loop() {
             tokio::spawn(async move {
                 loop_cloned.cancel();
             });
-            LoopErrorHandlerReply::Pause
+            EventLoopErrorHandlerReply::Pause
         })
         .in_sequence(&mut sequence);
 
@@ -319,7 +319,7 @@ async fn test_error_handler_abort_causes_loop_exit() {
     let mut store = MockStore::new();
     let mut subscriber = MockSubscriber::new();
     let mut provider = MockProvider::new();
-    let mut error_handler = MockLoopErrorHandler::new();
+    let mut error_handler = MockEventLoopErrorHandler::new();
 
     // Read store
     {
@@ -350,10 +350,10 @@ async fn test_error_handler_abort_causes_loop_exit() {
     error_handler
         .expect_on_error()
         .times(1)
-        .return_const(LoopErrorHandlerReply::Abort)
+        .return_const(EventLoopErrorHandlerReply::Abort)
         .in_sequence(&mut sequence);
 
-    let eloop = Loop::new();
+    let eloop = BackgroundEventLoop::new();
     let subscriber: Box<dyn Subscriber<LoopEvent>> = Box::new(subscriber);
     eloop.subscribe(subscriber).await;
     let handle = eloop
