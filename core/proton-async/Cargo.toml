@@ -1,15 +1,23 @@
 [package]
 name = "proton-async"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = "0.1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-tokio-util = "0.7"
+tokio = { version = "1", default-features = false , features = ["net"]}
+tokio-util = { version="0.7"}
 flume = "0.11"
+pin-project = "1"
+futures = "0.3"
 
 [lints]
 workspace = true
+
+[features]
+default = ["tokio-runtime", "tokio-sync", "tokio-time"]
+tokio-runtime = ["tokio/rt-multi-thread"]
+tokio-sync=["tokio/sync"]
+tokio-time=["tokio/time"]

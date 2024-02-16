@@ -1,6 +1,12 @@
-//! Collection libraries in order for use with rust async.
+//! Wrapper functions of the most used async features in order to make it easier to integrate
+//! into different environments.
 
+pub mod runtime;
+pub mod sync;
+pub mod time;
+pub mod util;
+
+// re-export
 pub use async_trait;
-pub use flume;
-pub use tokio;
-pub use tokio_util;
+// re-export
+pub use futures;
