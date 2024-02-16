@@ -3,9 +3,8 @@ use crate::store::Store;
 use crate::{EventLoop, EventLoopError, Subscriber};
 use proton_api_core::domain::IsEvent;
 use proton_api_core::exports::tracing::debug;
-use proton_async::tokio;
-use proton_async::tokio::time::MissedTickBehavior;
-use proton_async::tokio_util::sync::CancellationToken;
+use proton_async::futures::FutureExt;
+use proton_async::util::CancellationToken;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,7 +42,7 @@ impl<T: IsEvent + 'static> BackgroundEventLoop<T> {
     pub fn new() -> Self {
         let shared = Arc::new(SharedBackgroundEventLoopState {
             paused: AtomicBool::new(true),
-            pending_subscribers: Default::default(),
+            pending_subscribers: proton_async::sync::Mutex::new(Vec::new()),
             token: CancellationToken::new(),
         });
 
@@ -63,7 +62,7 @@ impl<T: IsEvent + 'static> BackgroundEventLoop<T> {
         store: Box<dyn Store>,
         provider: Box<dyn Provider<T>>,
         error_handler: Box<dyn EventLoopErrorHandler>,
-    ) -> Result<tokio::task::JoinHandle<()>, EventLoopError> {
+    ) -> Result<impl proton_async::runtime::JoinHandle<()>, EventLoopError> {
         let event_loop = EventLoop::new(store, provider).await?;
 
         let mut loop_state = BackgroundLoopState {
@@ -72,7 +71,9 @@ impl<T: IsEvent + 'static> BackgroundEventLoop<T> {
             event_loop,
         };
 
-        Ok(tokio::spawn(async move { loop_state.run(interval).await }))
+        Ok(proton_async::runtime::spawn(async move {
+            loop_state.run(interval).await
+        }))
     }
 
     /// Cancel the execution of the event loop.
@@ -124,7 +125,7 @@ enum SubscriberOperation<T: IsEvent> {
 #[doc(hidden)]
 struct SharedBackgroundEventLoopState<T: IsEvent> {
     paused: AtomicBool,
-    pending_subscribers: tokio::sync::Mutex<Vec<SubscriberOperation<T>>>,
+    pending_subscribers: proton_async::sync::Mutex<Vec<SubscriberOperation<T>>>,
     token: CancellationToken,
 }
 
@@ -138,19 +139,15 @@ struct BackgroundLoopState<T: IsEvent> {
 #[doc(hidden)]
 impl<T: IsEvent> BackgroundLoopState<T> {
     async fn run(&mut self, poll_interval: Duration) {
-        let interval = tokio::time::interval(poll_interval);
-        let mut interval = std::pin::pin!(interval);
-        interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
-
         debug!("Starting loop");
         loop {
-            tokio::select! {
-                _= self.shared.token.cancelled() => {
+            proton_async::futures::select! {
+                _= self.shared.token.cancelled().fuse()=> {
                     debug!("Cancellation requested, exiting");
                     return;
                 }
 
-                _= interval.tick() => {
+                _= proton_async::time::sleep(poll_interval).fuse() => {
                     self.tick().await
                 }
             }
