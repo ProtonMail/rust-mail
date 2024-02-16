@@ -25,6 +25,7 @@
 
 mod migration;
 
+use notify::{Config, EventKind, RecursiveMode, Watcher};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -38,11 +39,18 @@ pub use migration::*;
 
 pub const DEFAULT_OPEN_CONNECTION_LIMIT: usize = 8;
 
+#[derive(Eq, PartialEq, Copy, Clone)]
+enum ConnectionAccess {
+    Read,
+    Write,
+}
+
 /// A connection borrowed from a pool. On drop will be returned to the pool it was acquired from.
 pub struct SqliteConnection {
     pool: Arc<ConnectionPoolInner>,
     // Unfortunately we can't transfer this resource on drop, so the only option we have is to wrap it with option.
     conn: Option<Connection>,
+    conn_access: ConnectionAccess,
 }
 
 impl SqliteConnection {
@@ -60,10 +68,18 @@ impl SqliteConnection {
 
         Ok(value)
     }
+
+    /// Return the data version of the database. The data version changes every time a change
+    /// has been made by another connection.
+    pub fn data_version(&self) -> rusqlite::Result<u64> {
+        self.deref()
+            .pragma_query_value(None, "data_version", |r| r.get(0))
+    }
 }
 impl Drop for SqliteConnection {
     fn drop(&mut self) {
-        self.pool.release(self.conn.take().unwrap());
+        self.pool
+            .release(self.conn.take().unwrap(), self.conn_access);
     }
 }
 
@@ -81,6 +97,24 @@ impl DerefMut for SqliteConnection {
     }
 }
 
+/// Wrapper type for read only connections.
+pub struct ReadOnlySqliteConnection(SqliteConnection);
+
+impl ReadOnlySqliteConnection {
+    /// Same as [`SqliteConnection::data_version`].
+    pub fn data_version(&self) -> rusqlite::Result<u64> {
+        self.0.data_version()
+    }
+}
+
+impl Deref for ReadOnlySqliteConnection {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
 /// Sqlite Database Mode
 pub enum SqliteMode {
     /// On disk with WAL2 journaling (Recommended).
@@ -95,7 +129,8 @@ pub struct SqliteConnectionPool {
     inner: Arc<ConnectionPoolInner>,
 }
 struct ConnectionPoolInner {
-    lock: Mutex<Vec<Connection>>,
+    writable_connection: Mutex<Vec<Connection>>,
+    readable_connection: Mutex<Vec<Connection>>,
     max_open_connections: usize,
     mode: SqliteMode,
 }
@@ -109,7 +144,8 @@ impl SqliteConnectionPool {
         Self {
             inner: Arc::new(ConnectionPoolInner {
                 mode,
-                lock: Mutex::new(Vec::with_capacity(limit)),
+                writable_connection: Mutex::new(Vec::with_capacity(limit)),
+                readable_connection: Mutex::new(Vec::new()),
                 max_open_connections: limit,
             }),
         }
@@ -117,11 +153,33 @@ impl SqliteConnectionPool {
 
     pub fn acquire(&self) -> rusqlite::Result<SqliteConnection> {
         self.inner
-            .get_or_create_connection()
+            .get_or_create_connection(ConnectionAccess::Write)
             .map(|c| SqliteConnection {
                 pool: self.inner.clone(),
                 conn: Some(c),
+                conn_access: ConnectionAccess::Write,
             })
+    }
+
+    pub fn acquire_read_only(&self) -> rusqlite::Result<ReadOnlySqliteConnection> {
+        self.inner
+            .get_or_create_connection(ConnectionAccess::Read)
+            .map(|c| {
+                ReadOnlySqliteConnection(SqliteConnection {
+                    pool: self.inner.clone(),
+                    conn: Some(c),
+                    conn_access: ConnectionAccess::Read,
+                })
+            })
+    }
+
+    /// Create a watcher for the database which will invoke the handler once an update to the db
+    /// has been detected.
+    pub fn watch<T: SqliteWatcherHandler>(
+        &self,
+        handler: T,
+    ) -> Result<SqliteWatcher, SqliteWatcherError> {
+        self.inner.watch(handler)
     }
 
     /// Close all connections in the pool. If a connection can't be closed, it will be put back into the pool
@@ -132,20 +190,32 @@ impl SqliteConnectionPool {
 }
 
 impl ConnectionPoolInner {
-    fn get_or_create_connection(&self) -> rusqlite::Result<Connection> {
+    fn get_or_create_connection(
+        &self,
+        connection_access: ConnectionAccess,
+    ) -> rusqlite::Result<Connection> {
         {
-            let mut accessor = self.lock.lock().expect("lock poisoning");
+            let mut accessor = match connection_access {
+                ConnectionAccess::Write => self.writable_connection.lock().expect("lock poisoning"),
+                ConnectionAccess::Read => self.readable_connection.lock().expect("lock poisoning"),
+            };
             if let Some(c) = accessor.pop() {
                 return Ok(c);
             }
         }
 
-        self.new_connection()
+        match connection_access {
+            ConnectionAccess::Read => self.new_read_only_connection(),
+            ConnectionAccess::Write => self.new_connection(),
+        }
     }
 
-    fn release(&self, conn: Connection) {
+    fn release(&self, conn: Connection, connection_access: ConnectionAccess) {
         {
-            let mut accessor = self.lock.lock().expect("lock poisoning");
+            let mut accessor = match connection_access {
+                ConnectionAccess::Write => self.writable_connection.lock().expect("lock poisoning"),
+                ConnectionAccess::Read => self.readable_connection.lock().expect("lock poisoning"),
+            };
             if accessor.len() < self.max_open_connections {
                 accessor.push(conn);
                 return;
@@ -158,37 +228,136 @@ impl ConnectionPoolInner {
     }
 
     fn new_connection(&self) -> rusqlite::Result<Connection> {
+        self.new_connection_impl(OpenFlags::default())
+    }
+
+    fn new_read_only_connection(&self) -> rusqlite::Result<Connection> {
+        let flags = OpenFlags::empty()
+            | OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        self.new_connection_impl(flags)
+    }
+
+    fn new_connection_impl(&self, flags: OpenFlags) -> rusqlite::Result<Connection> {
         let conn = match &self.mode {
             SqliteMode::File(path) => {
-                let conn = Connection::open(path)?;
-                conn.execute("PRAGMA synchronous=NORMAL;", ())?;
-                conn.execute("PRAGMA journal=WAL2;", ())?;
+                let conn = Connection::open_with_flags(path, flags)?;
+                conn.pragma_update(None, "synchronous", "FULL")?;
+                conn.pragma_update(None, "journal_mode", "WAL")?;
                 conn
             }
-            SqliteMode::InMemory => Connection::open_in_memory_with_flags(
-                OpenFlags::default() | OpenFlags::SQLITE_OPEN_SHARED_CACHE,
-            )?,
+            SqliteMode::InMemory => {
+                Connection::open_in_memory_with_flags(flags | OpenFlags::SQLITE_OPEN_SHARED_CACHE)?
+            }
         };
 
-        conn.execute("PRAGMA foreign_keys = ON;", ())?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
 
         Ok(conn)
     }
 
     fn close_all(&self) -> rusqlite::Result<()> {
-        let mut accessor = self.lock.lock().expect("lock poisoning");
-        while let Some(c) = accessor.pop() {
-            if let Err((c, e)) = c.close() {
-                accessor.push(c);
-                return Err(e);
+        {
+            let mut accessor = self.writable_connection.lock().expect("lock poisoning");
+            while let Some(c) = accessor.pop() {
+                if let Err((c, e)) = c.close() {
+                    accessor.push(c);
+                    return Err(e);
+                }
+            }
+        }
+        {
+            let mut accessor = self.readable_connection.lock().expect("lock poisoning");
+            while let Some(c) = accessor.pop() {
+                if let Err((c, e)) = c.close() {
+                    accessor.push(c);
+                    return Err(e);
+                }
             }
         }
         Ok(())
     }
 
+    fn get_wal_path(&self) -> Result<PathBuf, SqliteWatcherError> {
+        let SqliteMode::File(path) = &self.mode else {
+            return Err(SqliteWatcherError::InvalidMode);
+        };
+
+        let mut wal_file = path.clone().into_os_string();
+        wal_file.push("-wal");
+        Ok(wal_file.into())
+    }
+
+    fn watch<T: SqliteWatcherHandler>(
+        &self,
+        mut handler: T,
+    ) -> Result<SqliteWatcher, SqliteWatcherError> {
+        let wal_path = self.get_wal_path()?;
+        let config = Config::default();
+
+        let mut watcher = notify::RecommendedWatcher::new(
+            move |event: notify::Result<notify::Event>| {
+                let converted = match event {
+                    Ok(event) => {
+                        match event.kind {
+                            EventKind::Create(_) | EventKind::Modify(_) => Ok(()),
+                            EventKind::Remove(_) => Err(SqliteWatcherError::WatcherClosed),
+                            // We don't handle the other events
+                            _ => return,
+                        }
+                    }
+                    Err(e) => Err(e.into()),
+                };
+                handler.on_db_update(converted)
+            },
+            config,
+        )?;
+
+        watcher.watch(wal_path.as_ref(), RecursiveMode::NonRecursive)?;
+        Ok(SqliteWatcher::new(watcher))
+    }
+
     #[cfg(test)]
     fn get_open_connection_count(&self) -> usize {
-        self.lock.lock().expect("lock poisoning").len()
+        self.writable_connection
+            .lock()
+            .expect("lock poisoning")
+            .len()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SqliteWatcherError {
+    #[error("The watcher is only available when using file based storage")]
+    InvalidMode,
+    #[error("The watcher has been closed")]
+    WatcherClosed,
+    #[error("Notify Error: {0}")]
+    Notify(#[from] notify::Error),
+    #[error("Sqlite Error: {0}")]
+    SQL(#[from] rusqlite::Error),
+}
+
+/// When watching a database, [`Self::on_db_update`] will be called.
+pub trait SqliteWatcherHandler: Send + 'static {
+    fn on_db_update(&mut self, v: Result<(), SqliteWatcherError>);
+}
+
+impl<T: FnMut(Result<(), SqliteWatcherError>) + Send + 'static> SqliteWatcherHandler for T {
+    fn on_db_update(&mut self, v: Result<(), SqliteWatcherError>) {
+        (self)(v)
+    }
+}
+
+/// Observe a database from a [`SqliteConnectionPool`] for changes.
+pub struct SqliteWatcher {
+    _watcher: notify::RecommendedWatcher,
+}
+
+impl SqliteWatcher {
+    fn new(watcher: notify::RecommendedWatcher) -> Self {
+        Self { _watcher: watcher }
     }
 }
 
