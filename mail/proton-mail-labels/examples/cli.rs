@@ -5,7 +5,6 @@ use proton_api_mail::proton_api_core::exports::tracing::{error, info};
 use proton_api_mail::proton_api_core::http::ClientBuilder;
 use proton_api_mail::proton_api_core::{LoginError, Session};
 use proton_api_mail::{proton_api_core, MailSession};
-use proton_async::tokio;
 use proton_event_loop::{
     ChannelledSubscriber, EventLoopError, EventLoopErrorHandlerReply, Subscriber, SubscriberError,
 };

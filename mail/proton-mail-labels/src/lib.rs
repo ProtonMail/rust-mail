@@ -381,15 +381,11 @@ impl Callback for LabelViewCallback {
 }
 
 lazy_static! {
-    static ref RUNTIME: proton_async::tokio::runtime::Runtime = {
-        proton_async::tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Failed to build runtime")
-    };
+    static ref RUNTIME: proton_async::runtime::MTRuntime =
+        proton_async::runtime::MTRuntime::new().expect("Failed to build runtime");
 }
 
-pub fn static_runtime() -> &'static proton_async::tokio::runtime::Runtime {
+pub fn static_runtime() -> &'static proton_async::runtime::MTRuntime {
     &RUNTIME
 }
 
