@@ -36,10 +36,10 @@ pub struct Label {
     #[serde(default)]
     pub expanded: ProtonBoolean,
     #[serde(default = "default_label_order")]
-    pub order: i32,
+    pub order: u32,
 }
 
-fn default_label_order() -> i32 {
+fn default_label_order() -> u32 {
     0
 }
 
@@ -133,5 +133,30 @@ impl LabelId {
 impl std::fmt::Display for SysLabelId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
+    }
+}
+
+#[cfg(feature = "sql")]
+use proton_api_core::exports::proton_sqlite3::rusqlite;
+
+#[cfg(feature = "sql")]
+impl rusqlite::types::FromSql for LabelType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            1 => Ok(LabelType::Label),
+            2 => Ok(LabelType::ContactGroup),
+            3 => Ok(LabelType::Folder),
+            4 => Ok(LabelType::System),
+            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+        }
+    }
+}
+
+#[cfg(feature = "sql")]
+impl rusqlite::types::ToSql for LabelType {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Owned(
+            rusqlite::types::Value::Integer(*self as i64),
+        ))
     }
 }

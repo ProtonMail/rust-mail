@@ -7,13 +7,14 @@ categories = ["api-bindings"]
 
 [dependencies]
 proton-crypto-rs = {git = "https://gitlab.protontech.ch/rust/proton-crypto-rs.git"}
-proton-api-core = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-api-core = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git", features = ["sql"]}
 uniffi = {version = "0.26", optional = true, features = ["tokio"]}
 
 
 [features]
 default = []
 uniffi = ["dep:uniffi", "proton-api-core/uniffi"]
+sql =["proton-api-core/sql"]
 
 [lints]
 workspace = true
