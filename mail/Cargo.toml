@@ -5,7 +5,7 @@ members = [
     "proton-mail-message-detector",
     "proton-api-mail",
     "proton-mail-wasm",
-    "proton-mail-uniffi",
+    "proton-mail-uniffi", "proton-mail-db",
 ]
 
 [workspace.lints.rust]
