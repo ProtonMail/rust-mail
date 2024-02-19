@@ -8,3 +8,6 @@ pub use serde_json;
 pub use serde_repr;
 pub use thiserror;
 pub use tracing;
+
+#[cfg(feature = "sql")]
+pub use proton_sqlite3;

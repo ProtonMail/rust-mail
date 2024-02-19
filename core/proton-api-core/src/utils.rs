@@ -31,19 +31,21 @@ macro_rules! string_id {
         uniffi::custom_newtype!($name, String);
 
         #[cfg(feature = "sql")]
-        impl proton_sqlite3::rusqlite::ToSql for $name {
+        impl $crate::exports::proton_sqlite3::rusqlite::types::ToSql for $name {
             fn to_sql(
                 &self,
-            ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::ToSqlOutput<'_>> {
+            ) -> $crate::exports::proton_sqlite3::rusqlite::Result<
+                $crate::exports::proton_sqlite3::rusqlite::types::ToSqlOutput<'_>,
+            > {
                 self.0.to_sql()
             }
         }
 
         #[cfg(feature = "sql")]
-        impl proton_sqlite3::rusqlite::types::FromSql for $name {
+        impl $crate::exports::proton_sqlite3::rusqlite::types::FromSql for $name {
             fn column_result(
-                value: ValueRef<'_>,
-            ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+                value: $crate::exports::proton_sqlite3::rusqlite::types::ValueRef<'_>,
+            ) -> $crate::exports::proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
                 String::column_result(value).map($name)
             }
         }
