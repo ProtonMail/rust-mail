@@ -38,7 +38,7 @@ impl TestCtx {
         let guard = tracing::subscriber::set_default(subscriber);
         tracing::info!("DB crated at {:?}", tmp_file.path());
 
-        let pool = SqliteConnectionPool::new(SqliteMode::File(tmp_file.path().to_path_buf()));
+        let pool = SqliteConnectionPool::new(SqliteMode::File(tmp_file.path().to_path_buf()), true);
 
         let _ = TestLocalSource::new_with_init(&pool).expect("failed to crease local source");
         TestCtx {

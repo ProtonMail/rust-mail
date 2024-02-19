@@ -10,6 +10,7 @@ rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid",
 tracing = "0.1"
 thiserror = "1"
 notify = { version = "6", default-features  = false, features = ["macos_fsevent"] }
+log = "0.4.20"
 
 [dev-dependencies]
 rand = "0.8"
@@ -19,4 +20,5 @@ tempdir = "0.3"
 workspace = true
 
 [features]
+default = []
 trace = ["rusqlite/trace"]

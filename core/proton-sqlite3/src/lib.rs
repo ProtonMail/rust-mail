@@ -24,6 +24,7 @@
 //! ```
 
 mod migration;
+pub mod utils;
 
 use notify::{Config, EventKind, RecursiveMode, Watcher};
 use std::ops::{Deref, DerefMut};
@@ -133,27 +134,44 @@ struct ConnectionPoolInner {
     readable_connection: Mutex<Vec<Connection>>,
     max_open_connections: usize,
     mode: SqliteMode,
+    debug: bool,
 }
 
+#[cfg(feature = "trace")]
+const SQL_LOG_ONCE: std::sync::Once = std::sync::Once::new();
+
 impl SqliteConnectionPool {
-    pub fn new(mode: SqliteMode) -> Self {
-        Self::with_open_connections_limit(mode, DEFAULT_OPEN_CONNECTION_LIMIT)
+    pub fn new(mode: SqliteMode, debug: bool) -> Self {
+        #[cfg(feature = "trace")]
+        if debug {
+            SQL_LOG_ONCE.call_once(|| {
+                if let Err(e) = unsafe {
+                    rusqlite::trace::config_log(Some(|err_code, log| {
+                        error!("[{err_code}]: {log}");
+                    }))
+                } {
+                    error!("Failed to register sqlite log callback: {e}")
+                }
+            });
+        }
+        Self::with_open_connections_limit(mode, DEFAULT_OPEN_CONNECTION_LIMIT, debug)
     }
 
-    pub fn with_open_connections_limit(mode: SqliteMode, limit: usize) -> Self {
+    pub fn with_open_connections_limit(mode: SqliteMode, limit: usize, debug: bool) -> Self {
         Self {
             inner: Arc::new(ConnectionPoolInner {
                 mode,
                 writable_connection: Mutex::new(Vec::with_capacity(limit)),
                 readable_connection: Mutex::new(Vec::new()),
                 max_open_connections: limit,
+                debug,
             }),
         }
     }
 
     pub fn acquire(&self) -> rusqlite::Result<SqliteConnection> {
         self.inner
-            .get_or_create_connection(ConnectionAccess::Write)
+            .get_or_create_connection(ConnectionAccess::Write, self.inner.debug)
             .map(|c| SqliteConnection {
                 pool: self.inner.clone(),
                 conn: Some(c),
@@ -163,7 +181,7 @@ impl SqliteConnectionPool {
 
     pub fn acquire_read_only(&self) -> rusqlite::Result<ReadOnlySqliteConnection> {
         self.inner
-            .get_or_create_connection(ConnectionAccess::Read)
+            .get_or_create_connection(ConnectionAccess::Read, self.inner.debug)
             .map(|c| {
                 ReadOnlySqliteConnection(SqliteConnection {
                     pool: self.inner.clone(),
@@ -193,6 +211,7 @@ impl ConnectionPoolInner {
     fn get_or_create_connection(
         &self,
         connection_access: ConnectionAccess,
+        debug: bool,
     ) -> rusqlite::Result<Connection> {
         {
             let mut accessor = match connection_access {
@@ -205,8 +224,8 @@ impl ConnectionPoolInner {
         }
 
         match connection_access {
-            ConnectionAccess::Read => self.new_read_only_connection(),
-            ConnectionAccess::Write => self.new_connection(),
+            ConnectionAccess::Read => self.new_read_only_connection(debug),
+            ConnectionAccess::Write => self.new_connection(debug),
         }
     }
 
@@ -227,20 +246,21 @@ impl ConnectionPoolInner {
         }
     }
 
-    fn new_connection(&self) -> rusqlite::Result<Connection> {
-        self.new_connection_impl(OpenFlags::default())
+    fn new_connection(&self, debug: bool) -> rusqlite::Result<Connection> {
+        self.new_connection_impl(OpenFlags::default(), debug)
     }
 
-    fn new_read_only_connection(&self) -> rusqlite::Result<Connection> {
+    fn new_read_only_connection(&self, debug: bool) -> rusqlite::Result<Connection> {
         let flags = OpenFlags::empty()
             | OpenFlags::SQLITE_OPEN_READ_ONLY
             | OpenFlags::SQLITE_OPEN_URI
             | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-        self.new_connection_impl(flags)
+        self.new_connection_impl(flags, debug)
     }
 
-    fn new_connection_impl(&self, flags: OpenFlags) -> rusqlite::Result<Connection> {
-        let conn = match &self.mode {
+    fn new_connection_impl(&self, flags: OpenFlags, _debug: bool) -> rusqlite::Result<Connection> {
+        #[allow(unused_mut)]
+        let mut conn = match &self.mode {
             SqliteMode::File(path) => {
                 let conn = Connection::open_with_flags(path, flags)?;
                 conn.pragma_update(None, "synchronous", "FULL")?;
@@ -253,6 +273,13 @@ impl ConnectionPoolInner {
         };
 
         conn.pragma_update(None, "foreign_keys", "ON")?;
+
+        #[cfg(feature = "trace")]
+        if _debug {
+            conn.trace(Some(|l| {
+                tracing::trace!("{l}");
+            }));
+        }
 
         Ok(conn)
     }
@@ -372,6 +399,7 @@ fn test_connection_pool() {
     let pool = SqliteConnectionPool::with_open_connections_limit(
         SqliteMode::File(dir.path().join("sql.db")),
         CONN_LIMIT,
+        false,
     );
     assert_eq!(pool.inner.get_open_connection_count(), 0);
 

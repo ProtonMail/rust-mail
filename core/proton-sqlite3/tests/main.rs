@@ -113,7 +113,7 @@ fn run_random_command_test() {
     let dir = tempdir::TempDir::new("sqlite3_test").expect("failed to create temp dir");
     let db_path = dir.path().join("sqlite.db");
 
-    let connection_pool = SqliteConnectionPool::new(SqliteMode::File(db_path));
+    let connection_pool = SqliteConnectionPool::new(SqliteMode::File(db_path), false);
 
     {
         // Create db tables.

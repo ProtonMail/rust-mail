@@ -386,7 +386,8 @@ mod tests {
     }
 
     fn new_queue() -> crate::ActionQueue {
-        let pool = proton_sqlite3::SqliteConnectionPool::new(proton_sqlite3::SqliteMode::InMemory);
+        let pool =
+            proton_sqlite3::SqliteConnectionPool::new(proton_sqlite3::SqliteMode::InMemory, false);
         let conn = pool.acquire().expect("failed to acquire connection");
         let factory = crate::ActionFactory::new();
         crate::ActionQueue::new(

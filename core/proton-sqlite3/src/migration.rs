@@ -153,7 +153,7 @@ fn run_migrations(
 fn test_migration() {
     const TEST_TABLE_NAME: &str = "test_table_version";
 
-    let pool = crate::SqliteConnectionPool::new(crate::SqliteMode::InMemory);
+    let pool = crate::SqliteConnectionPool::new(crate::SqliteMode::InMemory, true);
     let mut conn = pool.acquire().expect("failed to acquire connection");
 
     let migrator = Migrator::new();
