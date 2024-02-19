@@ -18,11 +18,13 @@ tracing = "0.1"
 parking_lot = "0.12"
 proton-crypto-rs = {git="https://gitlab.protontech.ch/rust/proton-crypto-rs.git", default-features = false}
 uniffi = {version = "0.26", optional = true, features = ["tokio"]}
+proton-sqlite3 = {path = "../proton-sqlite3", optional = true}
 
 
 [features]
 default = []
 uniffi = ["dep:uniffi"]
+sql =["dep:proton-sqlite3"]
 
 [dependencies.reqwest]
 version = "0.11"
