@@ -65,7 +65,8 @@ impl Migrator {
                     version
                 } else {
                     debug!("No version table found, initializing");
-                    create_version_table(tx, version_table_name)?;
+                    create_version_table(tx)?;
+                    set_version_table_version(tx, version_table_name, 0)?;
                     0
                 };
 
@@ -85,7 +86,7 @@ fn get_current_table_version(
     table_name: &str,
 ) -> rusqlite::Result<Option<usize>> {
     let query = "SELECT COUNT(DISTINCT `name`) FROM sqlite_master WHERE `type`='table' AND name= ?";
-    let count = tx.query_row(query, [table_name], |r| r.get::<usize, u32>(0))?;
+    let count = tx.query_row(query, [VERSION_TABLE_NAME], |r| r.get::<usize, u32>(0))?;
     if count == 0 {
         return Ok(None);
     }
@@ -96,34 +97,33 @@ fn get_current_table_version(
 const VERSION_TABLE_FIELD_ID: &str = "id";
 const VERSION_TABLE_FIELD_VERSION: &str = "version";
 
-const VERSION_TABLE_QUERY_ID: u32 = 1;
+const VERSION_TABLE_NAME: &str = "proton_sqlite3_db_version";
 
-fn read_current_table_version(tx: &mut Transaction, table_name: &str) -> rusqlite::Result<usize> {
+fn read_current_table_version(tx: &mut Transaction, id: &str) -> rusqlite::Result<usize> {
     let query = format!(
-        "SELECT {VERSION_TABLE_FIELD_VERSION} FROM {table_name} WHERE {VERSION_TABLE_FIELD_ID}=?"
+        "SELECT {VERSION_TABLE_FIELD_VERSION} FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
-    let version = tx.query_row(&query, [VERSION_TABLE_QUERY_ID], |r| r.get(0))?;
+    let version = tx.query_row(&query, [id], |r| r.get(0))?;
     Ok(version)
 }
 
-fn create_version_table(tx: &mut Transaction, table_name: &str) -> rusqlite::Result<()> {
+fn create_version_table(tx: &mut Transaction) -> rusqlite::Result<()> {
     let query = format!(
-        "CREATE TABLE {table_name} ({VERSION_TABLE_FIELD_ID} INTEGER NOT NULL PRIMARY KEY, \
+        "CREATE TABLE {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID} TEXT UNIQUE NOT NULL PRIMARY KEY, \
 {VERSION_TABLE_FIELD_VERSION} INTEGER NOT NULL)"
     );
     tx.execute(&query, ())?;
-
-    set_version_table_version(tx, table_name, 0)
+    Ok(())
 }
 
 fn set_version_table_version(
     tx: &mut Transaction,
-    table_name: &str,
+    id: &str,
     version: usize,
 ) -> rusqlite::Result<()> {
-    let query = format!("INSERT INTO {table_name} ({VERSION_TABLE_FIELD_ID}, {VERSION_TABLE_FIELD_VERSION}) VALUES (?,?) \
+    let query = format!("INSERT INTO {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID}, {VERSION_TABLE_FIELD_VERSION}) VALUES (?,?) \
 ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION}=excluded.{VERSION_TABLE_FIELD_VERSION}");
-    tx.execute(&query, (VERSION_TABLE_QUERY_ID, version))?;
+    tx.execute(&query, (id, version))?;
     Ok(())
 }
 
