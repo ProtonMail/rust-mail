@@ -137,12 +137,10 @@ struct ConnectionPoolInner {
     debug: bool,
 }
 
-#[cfg(feature = "trace")]
-const SQL_LOG_ONCE: std::sync::Once = std::sync::Once::new();
+static SQL_LOG_ONCE: std::sync::Once = std::sync::Once::new();
 
 impl SqliteConnectionPool {
     pub fn new(mode: SqliteMode, debug: bool) -> Self {
-        #[cfg(feature = "trace")]
         if debug {
             SQL_LOG_ONCE.call_once(|| {
                 if let Err(e) = unsafe {
@@ -274,7 +272,6 @@ impl ConnectionPoolInner {
 
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
-        #[cfg(feature = "trace")]
         if _debug {
             conn.trace(Some(|l| {
                 tracing::trace!("{l}");
