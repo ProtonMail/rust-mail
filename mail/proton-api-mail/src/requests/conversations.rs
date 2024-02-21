@@ -1,31 +1,29 @@
-use crate::domain::{
-    Conversation, ConversationId, ConversationMetadata, ConversationMetadataFilter, MessageMetadata,
-};
+use crate::domain::{Conversation, ConversationFilter, ConversationId, MessageMetadata};
 use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
 
-pub struct GetConversationsMetadataRequest {
-    filter: ConversationMetadataFilter,
+pub struct GetConversationsRequest {
+    filter: ConversationFilter,
 }
 
-impl GetConversationsMetadataRequest {
-    pub fn new(filter: ConversationMetadataFilter) -> Self {
+impl GetConversationsRequest {
+    pub fn new(filter: ConversationFilter) -> Self {
         Self { filter }
     }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
-pub struct GetConversationsMetadataResponse {
-    pub conversations: Vec<ConversationMetadata>,
+pub struct GetConversationsResponse {
+    pub conversations: Vec<Conversation>,
     pub stale: ProtonBoolean,
     pub total: u64,
 }
 
-impl http::RequestDesc for GetConversationsMetadataRequest {
-    type Output = GetConversationsMetadataResponse;
+impl http::RequestDesc for GetConversationsRequest {
+    type Output = GetConversationsResponse;
     type Response = JsonResponse<Self::Output>;
 
     fn build(&self) -> RequestData {

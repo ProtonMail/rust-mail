@@ -14,6 +14,13 @@ pub enum LabelType {
     System = 4,
 }
 
+pub const ALL_LABEL_TYPES: [LabelType; 4] = [
+    LabelType::Label,
+    LabelType::ContactGroup,
+    LabelType::Folder,
+    LabelType::System,
+];
+
 #[derive(Debug, Deserialize, Serialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]

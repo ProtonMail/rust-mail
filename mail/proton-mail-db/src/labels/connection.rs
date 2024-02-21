@@ -260,6 +260,23 @@ expanded=?, notified=?, sticky=? WHERE id=?",
             .query_row(&query, [id], RemoteLabelSelect::from_row)
             .optional()
     }
+
+    pub fn resolve_remote_label_ids<'i>(
+        &self,
+        ids: impl ExactSizeIterator<Item = &'i LabelId>,
+    ) -> DBResult<Vec<LocalLabelId>> {
+        debug_assert!(ids.len() < 500);
+        let mut stmt = self.0.prepare(&format!(
+            "SELECT id FROM labels WHERE rid IN ({})",
+            gen_variable_in_argument_list(ids.len())
+        ))?;
+        let mut result = Vec::with_capacity(ids.len());
+        mapped_rows_into_vec(
+            &mut result,
+            stmt.query_map(params_from_iter(ids), |r| r.get(0))?,
+        )?;
+        Ok(result)
+    }
 }
 
 struct RemoteLabelSelect {}
