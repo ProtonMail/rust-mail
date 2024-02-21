@@ -52,6 +52,16 @@ impl From<ProtonBoolean> for bool {
     }
 }
 
+impl From<bool> for ProtonBoolean {
+    fn from(v: bool) -> Self {
+        if v {
+            ProtonBoolean::True
+        } else {
+            ProtonBoolean::False
+        }
+    }
+}
+
 impl Display for ProtonBoolean {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -62,5 +72,24 @@ impl Display for ProtonBoolean {
                 write!(f, "1")
             }
         }
+    }
+}
+
+#[cfg(feature = "sql")]
+impl proton_sqlite3::rusqlite::types::ToSql for ProtonBoolean {
+    fn to_sql(
+        &self,
+    ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
+        let b: bool = self.into();
+        b.to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl proton_sqlite3::rusqlite::types::FromSql for ProtonBoolean {
+    fn column_result(
+        value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
+    ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        bool::column_result(value).map(ProtonBoolean::from)
     }
 }
