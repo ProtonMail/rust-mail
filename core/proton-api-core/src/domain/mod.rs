@@ -94,9 +94,7 @@ impl proton_sqlite3::rusqlite::types::FromSql for ProtonBoolean {
         match i64::column_result(value)? {
             0 => Ok(ProtonBoolean::False),
             1 => Ok(ProtonBoolean::True),
-            v => Err(proton_sqlite3::rusqlite::types::FromSqlError::OutOfRange(
-                v
-            )),
+            v => Err(proton_sqlite3::rusqlite::types::FromSqlError::OutOfRange(v)),
         }
     }
 }
