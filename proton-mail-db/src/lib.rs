@@ -1,11 +1,16 @@
 //! Mapping of Mail domain into a Sqlite Database.
 
+mod addresses;
+mod attachments;
+mod conversations;
+mod ids;
 pub mod json;
 mod labels;
 mod migrations;
 mod state;
-mod uuid;
 
+pub use attachments::*;
+pub use conversations::*;
 pub use labels::*;
 pub use state::*;
 
@@ -17,9 +22,12 @@ use proton_sqlite3::{
 use std::ops::{Deref, DerefMut};
 
 pub type DBResult<T> = proton_sqlite3::rusqlite::Result<T>;
+pub type BDError = proton_sqlite3::rusqlite::Error;
+pub type BDMigrationError = MigratorError;
 
 /// Convenience wrapper around [`SqliteConnectionPool`] which always creates [`MailSqliteConnection`]
 /// rather than the default [`SqliteConnection`].
+#[derive(Clone)]
 pub struct MailSqliteConnectionPool(SqliteConnectionPool);
 
 impl MailSqliteConnectionPool {
@@ -141,4 +149,11 @@ pub(crate) fn new_test_connection() -> (
         MailSqliteConnectionPool::new(SqliteMode::InMemory, true).expect("failed to create pool");
     let conn = pool.acquire().expect("failed to acquire connection");
     (conn, pool, guard)
+}
+
+#[cfg(test)]
+pub(crate) fn with_tx(conn: &mut MailSqliteConnection, f: impl Fn(&mut MailSqliteConnectionMut)) {
+    let mut tx = conn.tx().expect("failed to create tx");
+    (f)(&mut tx.as_connection_mut());
+    tx.commit().expect("failed to commit");
 }

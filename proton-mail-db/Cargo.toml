@@ -12,6 +12,7 @@ uuid = {version = "1.7", features = ["v4"]}
 
 [dev-dependencies]
 tracing-subscriber = "0.3"
+lazy_static = "1"
 
 [lints]
 workspace = true

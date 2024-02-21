@@ -1,0 +1,27 @@
+use crate::new_u64_type;
+use proton_api_mail::domain::{AttachmentId, AttachmentMetadata, Disposition};
+
+new_u64_type!(LocalAttachmentId);
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct LocalAttachmentMetadata {
+    pub id: LocalAttachmentId,
+    pub rid: Option<AttachmentId>,
+    pub name: String,
+    pub size: u64,
+    pub mime_type: String,
+    pub disposition: Disposition,
+}
+
+impl LocalAttachmentMetadata {
+    pub fn from_attachment_metadata(id: LocalAttachmentId, metadata: AttachmentMetadata) -> Self {
+        Self {
+            id,
+            rid: Some(metadata.id),
+            name: metadata.name,
+            size: metadata.size,
+            mime_type: metadata.mime_type,
+            disposition: metadata.disposition,
+        }
+    }
+}

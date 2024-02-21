@@ -1,4 +1,4 @@
-use crate::domain::{AddressId, LabelId};
+use crate::domain::{AddressId, ConversationId, LabelId};
 use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
 
@@ -19,6 +19,7 @@ pub struct MessageAddress {
     pub display_sender_image: ProtonBoolean,
     #[serde(default)]
     pub is_simple_login: ProtonBoolean,
+    pub bimi_selector: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,6 +28,9 @@ pub struct MessageAddress {
 pub struct MessageMetadata {
     #[serde(rename = "ID")]
     pub id: MessageId,
+    #[serde(rename = "ConversationID")]
+    pub conversation_id: ConversationId,
+    pub order: u64,
     #[serde(rename = "AddressID")]
     pub address_id: AddressId,
     #[serde(rename = "LabelIDs")]
@@ -40,12 +44,10 @@ pub struct MessageMetadata {
     pub sender: MessageAddress,
     #[serde(default)]
     pub to_list: Vec<MessageAddress>,
-    #[serde(rename = "CCList")]
-    //TODO: Doesn't have to be default, but fails with GPA otherwise
-    pub cc_list: Option<Vec<MessageAddress>>,
-    #[serde(rename = "BCCList")]
-    //TODO: Doesn't have to be default, but fails with GPA otherwise
-    pub bcc_list: Option<Vec<MessageAddress>>,
+    #[serde(rename = "CCList", default)]
+    pub cc_list: Vec<MessageAddress>,
+    #[serde(rename = "BCCList", default)]
+    pub bcc_list: Vec<MessageAddress>,
     #[serde(default)]
     pub reply_tos: Vec<MessageAddress>,
     pub flags: u64,
@@ -55,8 +57,10 @@ pub struct MessageMetadata {
     pub is_replied: ProtonBoolean,
     pub is_replied_all: ProtonBoolean,
     pub is_forwarded: ProtonBoolean,
-
+    pub expiration_time: u64,
     pub num_attachments: u32,
+    #[serde(default)]
+    pub attachments_metadata: Vec<AttachmentMetadata>,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -80,18 +84,47 @@ pub enum Disposition {
     Inline,
     Attachment,
 }
+
+#[cfg(feature = "sql")]
+use proton_api_core::exports::proton_sqlite3::rusqlite;
+
+#[cfg(feature = "sql")]
+impl rusqlite::types::FromSql for Disposition {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            1 => Ok(Disposition::Inline),
+            2 => Ok(Disposition::Attachment),
+            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+        }
+    }
+}
+
+#[cfg(feature = "sql")]
+impl rusqlite::types::ToSql for Disposition {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Owned(
+            rusqlite::types::Value::Integer(match self {
+                Disposition::Inline => 1_i64,
+                Disposition::Attachment => 2_i64,
+            }),
+        ))
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct Message {
     #[serde(rename = "ID")]
     pub id: MessageId,
+    #[serde(rename = "ConversationID")]
+    pub conversation_id: ConversationId,
     #[serde(rename = "AddressID")]
     pub address_id: AddressId,
+    pub order: u64,
     #[serde(rename = "LabelIDs")]
     pub label_ids: Vec<LabelId>,
     #[serde(rename = "ExternalID")]
     pub external_id: Option<ExternalId>,
-
     #[serde(default)]
     pub subject: String,
     #[serde(default)]
@@ -146,6 +179,8 @@ pub struct AttachmentMetadata {
     #[serde(rename = "ID")]
     pub id: AttachmentId,
     pub size: u64,
+    #[serde(default)]
+    pub name: String,
     #[serde(rename = "MIMEType")]
     pub mime_type: String,
     pub disposition: Disposition,

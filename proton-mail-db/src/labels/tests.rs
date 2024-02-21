@@ -1,15 +1,10 @@
 use crate::{
-    new_test_connection, LabelColor, LocalLabel, LocalLabelId, MailSqliteConnection,
-    MailSqliteConnectionImpl, MailSqliteConnectionMut, RemoteLabel,
+    new_test_connection, with_tx, LabelColor, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
+    RemoteLabel,
 };
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 
-fn with_tx(conn: &mut MailSqliteConnection, f: impl Fn(&mut MailSqliteConnectionMut)) {
-    let mut tx = conn.tx().expect("failed to create tx");
-    (f)(&mut tx.as_connection_mut());
-    tx.commit().expect("failed to commit");
-}
 #[test]
 fn test_remote_label_add() {
     let (mut conn, _, _guard) = new_test_connection();
@@ -167,44 +162,6 @@ fn create_local_label_has_ascending_order_per_type() {
                 t
             );
         }
-    });
-}
-
-#[test]
-fn create_local_label_and_simulate_remote_submit() {
-    let (mut conn, _, _guard) = new_test_connection();
-    with_tx(&mut conn, |tx| {
-        let new_label = tx
-            .create_local_label(
-                LabelType::Folder,
-                "MyLabel".into(),
-                None,
-                None,
-                LabelColor::purple(),
-            )
-            .expect("failed to create label");
-        let remote_label = Label {
-            id: LabelId::from("remote-id"),
-            parent_id: None,
-            name: "MyLabel".into(),
-            path: None,
-            color: new_label.color.as_ref().to_string(),
-            label_type: LabelType::Folder,
-            notify: ProtonBoolean::True,
-            display: ProtonBoolean::True,
-            sticky: ProtonBoolean::False,
-            expanded: ProtonBoolean::True,
-            order: 0,
-        };
-
-        tx.create_remote_label(&remote_label)
-            .expect("Could not commit remote label");
-
-        let db_label = tx
-            .get_local_label(new_label.id)
-            .expect("failed to get label")
-            .expect("must have value");
-        assert_eq!(db_label.rid, Some(remote_label.id));
     });
 }
 

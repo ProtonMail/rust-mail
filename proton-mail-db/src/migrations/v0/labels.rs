@@ -9,7 +9,7 @@ pub fn create_labels_tables(tx: &mut Transaction) -> RResult<()> {
 parent_id TEXT DEFAULT NULL,
 type INTEGER NOT NULL,
 `order` INTEGER NOT NULL,
-name TEXT UNQIUE NOT NULL,
+name TEXT NOT NULL,
 path TEXT DEFAULT NULL,
 color TEXT NOT NULL,
 notified INTERGER NOT NULL,
@@ -23,7 +23,7 @@ sticky INTEGER NOT NULL
     tx.execute(
         r#"CREATE TABLE labels (
 id INTEGER PRIMARY KEY AUTOINCREMENT, rid TEXT UNIQUE, type INTEGER NOT NULL,
-`order` INTEGER NOT NULL, name TEXT UNIQUE NOT NULL, path TEXT,
+`order` INTEGER NOT NULL, name TEXT NOT NULL, path TEXT,
 parent_id BLOB DEFAUTL NULL, color TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0,
 notified INTERGER NOT NULL, expanded INTEGER NOT NULL, sticky INTEGER NOT NULL DEFAULT 0,
 CONSTRAINT constraint_labels_rid FOREIGN KEY (rid) REFERENCES labels_remote (id) ON DELETE SET NULL,
@@ -59,7 +59,7 @@ BEGIN \
     INSERT INTO labels (rid, parent_id, type, `order`, name, path, color, notified, expanded, sticky) \
     VALUES (NEW.id, {RESOLVE_PARENT_ID_TRIGGER}, NEW.type, \
     NEW.`order`, NEW.name, NEW.path, NEW.color, \
-    NEW.notified, NEW.expanded, NEW.sticky) ON CONFLICT (name) WHERE rid=NULL DO UPDATE SET rid=NEW.id, \
+    NEW.notified, NEW.expanded, NEW.sticky) ON CONFLICT (rid) DO UPDATE SET \
     parent_id={RESOLVE_PARENT_ID_TRIGGER}, `order`=NEW.`order`, name=NEW.name,path=NEW.path,color=NEW.color, \
     notified=NEW.notified, expanded=NEW.expanded, sticky=NEW.sticky; \
 END "),()

@@ -1,12 +1,11 @@
 use crate::domain::{
-    Address, ConversationId, ConversationMetadataFilter, Label, LabelId, LabelType, MailEvent,
-    Message, MessageId, MessageMetadataFilter,
+    Address, ConversationFilter, ConversationId, Label, LabelId, LabelType, MailEvent, Message,
+    MessageId, MessageMetadataFilter,
 };
 use crate::requests::{
     CreateLabelRequest, DeleteLabelRequest, GetAddressesRequest, GetConversationRequest,
-    GetConversationResponse, GetConversationsMetadataRequest, GetConversationsMetadataResponse,
-    GetLabelsRequest, GetMessageMetadataRequest, GetMessageRequest, MessageMetadataResponse,
-    UpdateLabelRequest,
+    GetConversationResponse, GetConversationsRequest, GetConversationsResponse, GetLabelsRequest,
+    GetMessageMetadataRequest, GetMessageRequest, MessageMetadataResponse, UpdateLabelRequest,
 };
 use proton_api_core::domain::EventId;
 use proton_api_core::{http, Session};
@@ -97,10 +96,10 @@ impl MailSession {
 
     pub async fn get_conversations(
         &self,
-        filter: ConversationMetadataFilter,
-    ) -> Result<GetConversationsMetadataResponse, http::HttpRequestError> {
+        filter: ConversationFilter,
+    ) -> Result<GetConversationsResponse, http::HttpRequestError> {
         self.session
-            .execute_request(GetConversationsMetadataRequest::new(filter))
+            .execute_request(GetConversationsRequest::new(filter))
             .await
     }
 

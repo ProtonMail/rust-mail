@@ -1,4 +1,5 @@
 use proton_api_core::domain::ProtonBoolean;
+use proton_api_core::exports::proton_sqlite3::rusqlite;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
 use proton_crypto_rs::domain::AddressKeys;
@@ -6,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 proton_api_core::utils::string_id!(AddressId);
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct Address {
     #[serde(rename = "ID")]
@@ -15,11 +16,33 @@ pub struct Address {
     pub send: ProtonBoolean,
     pub receive: ProtonBoolean,
     pub status: AddressStatus,
+    #[serde(rename = "DomainID")]
+    pub domain_id: Option<String>,
     #[serde(rename = "Type")]
     pub address_type: AddressType,
     pub order: u32,
     pub display_name: String,
+    pub signature: String,
     pub keys: AddressKeys,
+    pub catch_all: bool,
+    #[serde(rename = "ProtonMX")]
+    pub proton_mx: bool,
+    pub signed_key_list: AddressSignedKeyList,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct AddressSignedKeyList {
+    #[serde(rename = "MinEpochID")]
+    pub min_epoch_id: Option<u64>,
+    #[serde(rename = "MaxEpochID")]
+    pub max_epoch_id: Option<u64>,
+    #[serde(rename = "ExpectedMinEpochID")]
+    pub expected_min_epoch_id: Option<u64>,
+    pub data: Option<String>,
+    pub obsolescence_token: Option<String>,
+    pub signature: Option<String>,
+    pub revision: u64,
 }
 
 #[derive(Debug, Deserialize_repr, Serialize_repr, Eq, PartialEq, Copy, Clone, Hash)]
@@ -31,6 +54,27 @@ pub enum AddressStatus {
     Deleting = 2,
 }
 
+#[cfg(feature = "sql")]
+impl rusqlite::types::FromSql for AddressStatus {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            0 => Ok(AddressStatus::Disabled),
+            1 => Ok(AddressStatus::Enabled),
+            2 => Ok(AddressStatus::Deleting),
+            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+        }
+    }
+}
+
+#[cfg(feature = "sql")]
+impl rusqlite::types::ToSql for AddressStatus {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Owned(
+            rusqlite::types::Value::Integer(*self as i64),
+        ))
+    }
+}
+
 #[derive(Debug, Deserialize_repr, Serialize_repr, Eq, PartialEq, Copy, Clone, Hash)]
 #[repr(u8)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
@@ -40,4 +84,27 @@ pub enum AddressType {
     Custom = 3,
     Premium = 4,
     External = 5,
+}
+
+#[cfg(feature = "sql")]
+impl rusqlite::types::FromSql for AddressType {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            1 => Ok(AddressType::Original),
+            2 => Ok(AddressType::Alias),
+            3 => Ok(AddressType::Custom),
+            4 => Ok(AddressType::Premium),
+            5 => Ok(AddressType::External),
+            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+        }
+    }
+}
+
+#[cfg(feature = "sql")]
+impl rusqlite::types::ToSql for AddressType {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(rusqlite::types::ToSqlOutput::Owned(
+            rusqlite::types::Value::Integer(*self as i64),
+        ))
+    }
 }

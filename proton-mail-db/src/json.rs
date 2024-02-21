@@ -3,7 +3,7 @@ use proton_api_mail::proton_api_core::exports::serde::de::DeserializeOwned;
 use proton_api_mail::proton_api_core::exports::serde::Serialize;
 use proton_api_mail::proton_api_core::exports::serde_json;
 use proton_sqlite3::rusqlite::types::ToSqlOutput;
-use proton_sqlite3::rusqlite::ToSql;
+use proton_sqlite3::rusqlite::{Row, ToSql};
 use std::ops::Deref;
 use std::str;
 
@@ -77,6 +77,14 @@ impl<'w> ToSql for JsonWriteBufferResult<'w> {
     }
 }
 
+#[inline(always)]
 pub fn deserialize_json<T: DeserializeOwned>(value: &str) -> DBResult<T> {
     serde_json::from_str(value).map_err(serde_json_err_to_sql_err)
+}
+
+#[inline(always)]
+pub fn deserialize_json_from_row<T: DeserializeOwned>(r: &Row, index: usize) -> DBResult<T> {
+    let value_ref = r.get_ref(index)?;
+    let str = value_ref.as_str()?;
+    deserialize_json(str)
 }

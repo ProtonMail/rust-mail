@@ -35,6 +35,7 @@ pub struct ConversationMetadata {
     pub context_size: u64,
     pub context_time: u64,
     pub context_expiration_time: u64,
+    pub address_id: AddressId,
     #[serde(default)]
     pub attachments_metadata: Vec<AttachmentMetadata>,
     #[serde(default)]
@@ -69,8 +70,6 @@ pub struct Conversation {
     pub num_attachments: u64,
     pub expiration_time: u64,
     pub size: u64,
-    #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<LabelId>,
     #[serde(default)]
     pub labels: Vec<ConversationLabels>,
     #[serde(default)]
@@ -82,7 +81,7 @@ pub struct Conversation {
 }
 #[derive(Debug, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
-pub struct ConversationMetadataFilter {
+pub struct ConversationFilter {
     #[serde(rename = "ID")]
     pub ids: Option<Vec<ConversationId>>,
     pub subject: Option<String>,
@@ -100,7 +99,7 @@ pub struct ConversationMetadataFilter {
     pub page_size: usize,
 }
 
-impl ConversationMetadataFilter {
+impl ConversationFilter {
     fn new(page_number: usize, page_size: usize) -> Self {
         Self {
             ids: None,
@@ -118,11 +117,11 @@ impl ConversationMetadataFilter {
 }
 
 #[derive(Debug)]
-pub struct ConversationMetadataFilterBuilder(ConversationMetadataFilter);
+pub struct ConversationMetadataFilterBuilder(ConversationFilter);
 
 impl ConversationMetadataFilterBuilder {
     pub fn new(page_number: usize, page_size: usize) -> Self {
-        Self(ConversationMetadataFilter::new(page_number, page_size))
+        Self(ConversationFilter::new(page_number, page_size))
     }
     pub fn with_message_ids(mut self, ids: impl IntoIterator<Item = ConversationId>) -> Self {
         self.0.ids = Some(ids.into_iter().collect());
@@ -171,7 +170,7 @@ impl ConversationMetadataFilterBuilder {
         self
     }
 
-    pub fn build(self) -> ConversationMetadataFilter {
+    pub fn build(self) -> ConversationFilter {
         self.0
     }
 }

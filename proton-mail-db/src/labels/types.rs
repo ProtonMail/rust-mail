@@ -2,7 +2,7 @@ use proton_api_mail::domain::{Label, LabelId, LabelType};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use proton_sqlite3::rusqlite::ToSql;
 
-use crate::uuid::new_u64_type;
+use crate::ids::new_u64_type;
 
 new_u64_type!(LocalLabelId);
 #[derive(Debug, Clone, Eq, PartialEq)]
