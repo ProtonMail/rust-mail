@@ -80,8 +80,9 @@ impl proton_sqlite3::rusqlite::types::ToSql for ProtonBoolean {
     fn to_sql(
         &self,
     ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
-        let b: bool = self.into();
-        b.to_sql()
+        Ok(proton_sqlite3::rusqlite::types::ToSqlOutput::Owned(
+            proton_sqlite3::rusqlite::types::Value::Integer(*self as i64),
+        ))
     }
 }
 
@@ -90,6 +91,12 @@ impl proton_sqlite3::rusqlite::types::FromSql for ProtonBoolean {
     fn column_result(
         value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
     ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
-        bool::column_result(value).map(ProtonBoolean::from)
+        match i64::column_result(value)? {
+            0 => Ok(ProtonBoolean::False),
+            1 => Ok(ProtonBoolean::True),
+            v => Err(proton_sqlite3::rusqlite::types::FromSqlError::OutOfRange(
+                v
+            )),
+        }
     }
 }
