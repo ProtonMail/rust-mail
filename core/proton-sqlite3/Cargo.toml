@@ -10,11 +10,14 @@ rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid",
 tracing = "0.1"
 thiserror = "1"
 notify = { version = "6", default-features  = false, features = ["macos_fsevent"] }
-log = "0.4.20"
+parking_lot = "0.12"
+fixedbitset = "0.5"
+slotmap = "1"
 
 [dev-dependencies]
 rand = "0.8"
 tempdir = "0.3"
+mockall = "0.12"
 
 [lints]
 workspace = true

@@ -24,6 +24,8 @@
 //! ```
 
 mod migration;
+mod query;
+mod tracker;
 pub mod utils;
 
 use notify::{Config, EventKind, RecursiveMode, Watcher};
@@ -37,6 +39,8 @@ pub use rusqlite;
 use rusqlite::{Connection, OpenFlags, Transaction};
 
 pub use migration::*;
+pub use query::*;
+pub use tracker::*;
 
 pub const DEFAULT_OPEN_CONNECTION_LIMIT: usize = 8;
 

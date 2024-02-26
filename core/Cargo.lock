@@ -468,6 +468,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fixedbitset"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b51ee430d5ff16df7998870eb0b4775383ac5bc450f5a2ed547394fe2d617131"
+
+[[package]]
 name = "flate2"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1415,10 +1421,13 @@ dependencies = [
 name = "proton-sqlite3"
 version = "0.3.0"
 dependencies = [
- "log",
+ "fixedbitset",
+ "mockall",
  "notify",
+ "parking_lot",
  "rand 0.8.5",
  "rusqlite",
+ "slotmap",
  "tempdir",
  "thiserror",
  "tracing",
@@ -1895,6 +1904,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "slotmap"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbff4acf519f630b3a3ddcfaea6c06b42174d9a44bc70c620e9ed1649d58b82a"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]
