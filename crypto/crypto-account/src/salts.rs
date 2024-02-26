@@ -41,7 +41,7 @@ impl Salts {
 
     pub fn salt_for_key<T: SRPProvider>(
         &self,
-        srp_provider: T,
+        srp_provider: &T,
         key: &KeyId,
         key_pass: &[u8],
     ) -> Result<SaltedPassword<T::HashedPassword>, SaltError> {

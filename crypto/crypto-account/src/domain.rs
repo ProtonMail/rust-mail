@@ -39,7 +39,7 @@ impl UserKeys {
 
     pub fn unlock<T: proton_crypto::crypto::PGPProviderSync>(
         &self,
-        provider: T,
+        provider: &T,
         salted_password: &SaltedPassword<impl AsRef<[u8]>>,
     ) -> Result<PrivateKeyRing<T::PrivateKey>, KeyError> {
         let mut kr = PrivateKeyRing(Vec::with_capacity(self.0.len()));
@@ -58,7 +58,7 @@ impl UserKeys {
 
     pub async fn unlock_async<T: proton_crypto::crypto::PGPProviderAsync>(
         &self,
-        provider: T,
+        provider: &T,
         salted_password: &SaltedPassword<impl AsRef<[u8]>>,
     ) -> Result<PrivateKeyRing<T::PrivateKey>, KeyError> {
         let mut kr = PrivateKeyRing(Vec::with_capacity(self.0.len()));
@@ -93,7 +93,7 @@ impl AddressKeys {
 
     pub fn unlock<T: proton_crypto::crypto::PGPProviderSync>(
         &self,
-        provider: T,
+        provider: &T,
         user_key_ring: &PrivateKeyRing<T::PrivateKey>,
     ) -> Result<PrivateKeyRing<T::PrivateKey>, KeyError> {
         let mut kr = PrivateKeyRing(Vec::new());
@@ -117,7 +117,7 @@ impl AddressKeys {
 
     pub async fn unlock_async<T: proton_crypto::crypto::PGPProviderAsync>(
         &self,
-        provider: T,
+        provider: &T,
         user_key_ring: &PrivateKeyRing<T::PrivateKey>,
     ) -> Result<PrivateKeyRing<T::PrivateKey>, KeyError> {
         let mut kr = PrivateKeyRing(Vec::new());
