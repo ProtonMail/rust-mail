@@ -263,6 +263,8 @@ impl ConnectionPoolInner {
                 let conn = Connection::open_with_flags(path, flags)?;
                 conn.pragma_update(None, "synchronous", "FULL")?;
                 conn.pragma_update(None, "journal_mode", "WAL")?;
+                conn.pragma_update(None, "recursive_triggers", "ON")?;
+                conn.pragma_update(None, "temp_store", "MEMORY")?;
                 conn
             }
             SqliteMode::InMemory => {
