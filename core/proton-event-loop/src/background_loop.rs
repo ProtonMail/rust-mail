@@ -62,7 +62,7 @@ impl<T: IsEvent + 'static> BackgroundEventLoop<T> {
         store: Box<dyn Store>,
         provider: Box<dyn Provider<T>>,
         error_handler: Box<dyn EventLoopErrorHandler>,
-    ) -> Result<impl proton_async::runtime::JoinHandle<()>, EventLoopError> {
+    ) -> Result<proton_async::runtime::JoinHandle<()>, EventLoopError> {
         let event_loop = EventLoop::new(store, provider).await?;
 
         let mut loop_state = BackgroundLoopState {
