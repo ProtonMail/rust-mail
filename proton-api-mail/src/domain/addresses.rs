@@ -1,8 +1,8 @@
 use proton_api_core::domain::ProtonBoolean;
+use proton_api_core::exports::crypto::domain::AddressKeys;
 use proton_api_core::exports::proton_sqlite3::rusqlite;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
-use proton_crypto_rs::domain::AddressKeys;
 use serde::{Deserialize, Serialize};
 
 proton_api_core::utils::string_id!(AddressId);
