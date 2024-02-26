@@ -9,7 +9,8 @@ use crate::requests::{
     GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, TFAStatus, TOTPRequest, UserAuth,
     UserInfoRequest,
 };
-use proton_crypto_rs::salts::Salts;
+use proton_crypto_account::proton_crypto::srp::SRPProvider;
+use proton_crypto_account::salts::Salts;
 use secrecy::{ExposeSecret, Secret};
 use std::sync::Arc;
 
@@ -80,15 +81,17 @@ impl Session {
             .execute_request(AuthInfoRequest { username }.to_request())
             .await?;
 
-        let proof = proton_crypto_rs::srp::generate_client_proof(
-            username,
-            password,
-            auth_resp.version,
-            &auth_resp.salt,
-            &auth_resp.modulus,
-            &auth_resp.server_ephemeral,
-        )
-        .map_err(|e| LoginError::SRPProof(e.to_string()))?;
+        let srp_provider = proton_crypto_account::proton_crypto::new_srp_provider();
+        let proof = srp_provider
+            .generate_client_proof(
+                username,
+                password,
+                auth_resp.version,
+                &auth_resp.salt,
+                &auth_resp.modulus,
+                &auth_resp.server_ephemeral,
+            )
+            .map_err(|e| LoginError::SRPProof(e.to_string()))?;
 
         let auth_req_res = c
             .execute_request(
@@ -168,7 +171,7 @@ impl Session {
 
 fn validate_server_proof(
     client: Client,
-    proof: &proton_crypto_rs::srp::ClientProof,
+    proof: &proton_crypto_account::proton_crypto::srp::ClientProof,
     auth_response: AuthResponse,
 ) -> Result<SessionType, LoginError> {
     if proof.expected_server_proof != auth_response.server_proof {

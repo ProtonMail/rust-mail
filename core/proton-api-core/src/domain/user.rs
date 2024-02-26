@@ -1,6 +1,8 @@
-use proton_crypto_rs::domain::{KeyError, UserKeys};
-use proton_crypto_rs::keyring::{LockedKey, PrivateKeyRing};
-use proton_crypto_rs::salts::{SaltError, SaltedPassword, Salts};
+use proton_crypto_account::domain::{KeyError, PrivateKeyRing, UserKeys};
+use proton_crypto_account::keyring::LockedKey;
+use proton_crypto_account::proton_crypto::crypto::{PGPProvider, PGPProviderSync};
+use proton_crypto_account::proton_crypto::srp::SRPProvider;
+use proton_crypto_account::salts::{SaltError, SaltedPassword, Salts};
 use serde;
 use serde::{Deserialize, Serialize};
 
@@ -57,23 +59,24 @@ impl User {
         self.keys.0.iter().find(|&k| k.primary)
     }
 
-    pub fn salt_password(
+    pub fn salt_password<SRP: SRPProvider>(
         &self,
+        provider: &SRP,
         salts: &Salts,
         mailbox_password: impl AsRef<[u8]>,
-    ) -> Result<SaltedPassword, UserSaltError> {
+    ) -> Result<SaltedPassword<<SRP as SRPProvider>::HashedPassword>, UserSaltError> {
         let Some(primary_key) = self.get_primary_key() else {
             return Err(UserSaltError::PrimaryKeyNotFound);
         };
-
-        let salted = salts.salt_for_key(&primary_key.id, mailbox_password.as_ref())?;
+        let salted = salts.salt_for_key(provider, &primary_key.id, mailbox_password.as_ref())?;
         Ok(salted)
     }
 
-    pub fn unlock_keys(
+    pub fn unlock_keys<SRP: SRPProvider, PGP: PGPProviderSync>(
         &self,
-        salted_password: &SaltedPassword,
-    ) -> Result<PrivateKeyRing, KeyError> {
-        self.keys.unlock(salted_password)
+        provider: &PGP,
+        salted_password: &SaltedPassword<<SRP as SRPProvider>::HashedPassword>,
+    ) -> Result<PrivateKeyRing<<PGP as PGPProvider>::PrivateKey>, KeyError> {
+        self.keys.unlock(provider, salted_password)
     }
 }

@@ -1,7 +1,7 @@
 use crate::domain::User;
 use crate::http;
 use crate::http::{JsonResponse, RequestData};
-use proton_crypto_rs::salts::Salts;
+use proton_crypto_account::salts::Salts;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
