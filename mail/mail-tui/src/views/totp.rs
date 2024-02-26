@@ -83,7 +83,10 @@ impl View<AppViewContext, AppEvents> for TotpView {
             let width = vertical_layout[1].width.max(3) - 3;
             let scroll = self.input.visual_scroll(width as usize);
             frame.set_cursor(
-                vertical_layout[1].x + u16::try_from(self.input.cursor().max(scroll) - scroll).expect("invalid range") + 1,
+                vertical_layout[1].x
+                    + u16::try_from(self.input.cursor().max(scroll) - scroll)
+                        .expect("invalid range")
+                    + 1,
                 horizontal[1].y,
             );
         }
