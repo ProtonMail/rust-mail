@@ -1,0 +1,18 @@
+[package]
+name = "proton-crypto-inbox"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+proton-crypto = {path = "../proton-crypto", version = "0.2.0"}
+thiserror = "1"
+serde = { version="1", features = ["derive"]}
+base64 = "0.21"
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[lints]
+workspace = true
