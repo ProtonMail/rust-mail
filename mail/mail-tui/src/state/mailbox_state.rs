@@ -171,10 +171,9 @@ async fn load_labels(
     }
 
     let mut db = pool.acquire()?;
-    let mut tx = db.tx()?;
-    let mut conn = tx.as_connection_mut();
-    conn.create_remote_labels(all_labels.iter())?;
-    tx.commit()?;
+    db.tx(|tx| {
+        tx.create_remote_labels(all_labels.iter())
+    })?;
 
     Ok(db.as_connection_ref().get_all_local_labels()?)
 }
@@ -198,11 +197,9 @@ async fn load_conversations(
         remote_conversations.conversations.len()
     );
     let mut db = pool.acquire()?;
-    let mut tx = db.tx()?;
-    let mut conn = tx.as_connection_mut();
-    conn.create_conversations(remote_conversations.conversations.iter())?;
-    tx.commit()?;
-
+    db.tx(|tx| {
+        tx.create_conversations(remote_conversations.conversations.iter())
+    })?;
     let conversations = db
         .as_connection_ref()
         .get_conversations_with_context(label_id, 25)?;

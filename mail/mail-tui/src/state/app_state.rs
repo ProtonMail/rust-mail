@@ -115,9 +115,9 @@ fn init_log(log_path: impl AsRef<Path>) -> Result<(), Box<dyn Error>> {
 #[derive(Debug, thiserror::Error)]
 pub enum DataLoadError {
     #[error("DB: {0}")]
-    DB(#[from] proton_mail_db::BDError),
+    DB(#[from] proton_mail_db::DBError),
     #[error("DB: {0}")]
-    DBMigration(#[from] proton_mail_db::BDMigrationError),
+    DBMigration(#[from] proton_mail_db::DBMigrationError),
     #[error("HTTP: {0}")]
     Http(#[from] proton_api_mail::proton_api_core::http::HttpRequestError),
     #[error("Unexpected: {0}")]
