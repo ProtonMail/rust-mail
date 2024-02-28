@@ -93,6 +93,11 @@ impl InProcessTrackerService {
         self.inner.add_observer(observer)
     }
 
+    pub fn new_connection(&self) -> rusqlite::Result<TrackingConnection> {
+        let conn = self.pool.acquire()?;
+        TrackingConnection::new(conn, self.clone())
+    }
+
     /// Remove an observer.
     pub fn remove_observer(&self, id: TrackedObserverId) {
         self.inner.remove_observer(id)

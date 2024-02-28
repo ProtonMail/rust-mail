@@ -1,13 +1,14 @@
 use crate::clientv2::TotpSession;
 use crate::domain::{
-    EventId, HumanVerification, HumanVerificationLoginData, IsEvent, TwoFactorAuth, User, UserUid,
+    EventId, HumanVerification, HumanVerificationLoginData, IsEvent, TFAStatus, TwoFactorAuth,
+    User, UserSettings, UserUid,
 };
 use crate::http;
 use crate::http::{Client, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
     AuthInfoRequest, AuthRefreshRequest, AuthRequest, AuthResponse, GetEventRequest,
-    GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, TFAStatus, TOTPRequest, UserAuth,
-    UserInfoRequest,
+    GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, TOTPRequest, UserAuth,
+    UserInfoRequest, UserSettingsRequest,
 };
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::Salts;
@@ -151,6 +152,10 @@ impl Session {
 
     pub async fn get_event<T: IsEvent>(&self, id: &EventId) -> Result<T, http::HttpRequestError> {
         self.execute_request(GetEventRequest::new(id)).await
+    }
+
+    pub async fn get_user_settings(&self) -> Result<UserSettings, http::HttpRequestError> {
+        self.execute_request(UserSettingsRequest {}).await
     }
 
     pub fn get_refresh_data(&self) -> SessionRefreshData {

@@ -89,3 +89,29 @@ pub fn mapped_rows_to_hash_set<
     mapped_rows_into_hash_set(&mut hash_set, m)?;
     Ok(hash_set)
 }
+
+/// Small utility to allocate row indices.
+#[derive(Copy, Clone)]
+pub struct RowIndexAllocator(usize);
+
+impl Default for RowIndexAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl RowIndexAllocator {
+    pub fn new() -> RowIndexAllocator {
+        Self(0)
+    }
+
+    #[inline(always)]
+    pub fn fetch_and_add(&mut self) -> usize {
+        let index = self.0;
+        self.0 += 1;
+        index
+    }
+
+    pub fn reset(&mut self) {
+        self.0 = 0;
+    }
+}

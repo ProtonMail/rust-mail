@@ -1,3 +1,4 @@
+use crate::domain::ProtonBoolean;
 use proton_crypto_account::domain::{KeyError, PrivateKeyRing, UserKeys};
 use proton_crypto_account::keyring::LockedKey;
 use proton_crypto_account::proton_crypto::crypto::{PGPProvider, PGPProviderSync};
@@ -19,21 +20,55 @@ impl secrecy::DebugSecret for UserUid {}
 
 crate::utils::string_id!(UserId);
 
+new_integer_enum!(u8,UserType {
+    Proton = 1,
+    Managed = 2,
+    External = 3,
+});
+
+new_integer_enum!(u8, UserMnemonicStatus {
+    Disabled = 0,
+    EnabledButNotSet = 1,
+    EnabledNeedsReActivation = 2,
+    EnabledAndSet = 3,
+});
+
+#[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
+pub struct UserProductUsedSpace {
+    pub calender: u64,
+    pub contact: u64,
+    pub drive: u64,
+    pub mail: u64,
+    pub pass: u64,
+}
+
 /// Represents an API user
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct User {
     #[serde(rename = "ID")]
     pub id: UserId,
-    pub name: String,
-    pub display_name: String,
+    pub name: Option<String>,
+    pub display_name: Option<String>,
     pub email: String,
     pub used_space: i64,
     pub max_space: i64,
     pub max_upload: i64,
+    #[serde(rename = "Type")]
+    pub user_type: UserType,
+    pub create_time: u64,
     pub credit: i64,
     pub currency: String,
     pub keys: UserKeys,
+    pub product_used_space: UserProductUsedSpace,
+    pub to_migrate: ProtonBoolean,
+    pub mnemonic_status: UserMnemonicStatus,
+    pub role: u32,
+    pub private: u32,
+    pub subscribed: u32,
+    pub services: u32,
+    pub delinquent: u32,
+    pub flags: u32,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -59,6 +94,15 @@ impl User {
         self.keys.0.iter().find(|&k| k.primary)
     }
 
+    pub fn user_name(&self) -> &str {
+        if let Some(display_name) = self.display_name.as_deref() {
+            display_name
+        } else if let Some(name) = self.name.as_deref() {
+            name
+        } else {
+            &self.email
+        }
+    }
     pub fn salt_password<SRP: SRPProvider>(
         &self,
         provider: &SRP,

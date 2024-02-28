@@ -23,6 +23,7 @@
 //! }
 //! ```
 
+mod macros;
 mod migration;
 mod query;
 mod tracker;
@@ -30,18 +31,19 @@ pub mod utils;
 #[cfg(feature = "notify")]
 mod watcher;
 
+pub use migration::*;
+pub use query::*;
+pub use tracker::*;
+
+use rusqlite::{Connection, OpenFlags, Transaction};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::error;
 
 // re-export;
+pub use paste;
 pub use rusqlite;
-use rusqlite::{Connection, OpenFlags, Transaction};
-
-pub use migration::*;
-pub use query::*;
-pub use tracker::*;
 
 #[cfg(feature = "notify")]
 pub use watcher::*;

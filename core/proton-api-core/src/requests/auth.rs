@@ -1,10 +1,9 @@
-use crate::domain::{HumanVerificationLoginData, SecretString, UserUid};
+use crate::domain::{HumanVerificationLoginData, SecretString, TFAStatus, UserUid};
 use crate::http;
 use crate::http::{RequestData, X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE};
 use secrecy::Secret;
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
-use std::borrow::Cow;
 
 #[doc(hidden)]
 #[derive(Serialize)]
@@ -92,16 +91,6 @@ pub enum PasswordMode {
 }
 
 #[doc(hidden)]
-#[derive(Deserialize_repr, Copy, Clone, Eq, PartialEq, Debug)]
-#[repr(u8)]
-pub enum TFAStatus {
-    None = 0,
-    Totp = 1,
-    FIDO2 = 2,
-    TotpOrFIDO2 = 3,
-}
-
-#[doc(hidden)]
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct TFAInfo {
@@ -111,13 +100,13 @@ pub struct TFAInfo {
 }
 
 #[doc(hidden)]
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct FIDOKey<'a> {
-    pub attestation_format: Cow<'a, str>,
+pub struct FIDOKey {
+    pub attestation_format: String,
     #[serde(rename = "CredentialID")]
     pub credential_id: Vec<i32>,
-    pub name: Cow<'a, str>,
+    pub name: String,
 }
 
 #[doc(hidden)]
