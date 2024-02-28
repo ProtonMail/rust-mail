@@ -27,8 +27,9 @@ mod migration;
 mod query;
 mod tracker;
 pub mod utils;
+#[cfg(feature = "notify")]
+mod watcher;
 
-use notify::{Config, EventKind, RecursiveMode, Watcher};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -41,6 +42,9 @@ use rusqlite::{Connection, OpenFlags, Transaction};
 pub use migration::*;
 pub use query::*;
 pub use tracker::*;
+
+#[cfg(feature = "notify")]
+pub use watcher::*;
 
 pub const DEFAULT_OPEN_CONNECTION_LIMIT: usize = 8;
 
@@ -195,6 +199,8 @@ impl SqliteConnectionPool {
 
     /// Create a watcher for the database which will invoke the handler once an update to the db
     /// has been detected.
+    #[cfg_attr(doc, features = "notify")]
+    #[cfg(feature = "notify")]
     pub fn watch<T: SqliteWatcherHandler>(
         &self,
         handler: T,
@@ -309,6 +315,7 @@ impl ConnectionPoolInner {
         Ok(())
     }
 
+    #[cfg(feature = "notify")]
     fn get_wal_path(&self) -> Result<PathBuf, SqliteWatcherError> {
         let SqliteMode::File(path) = &self.mode else {
             return Err(SqliteWatcherError::InvalidMode);
@@ -319,10 +326,12 @@ impl ConnectionPoolInner {
         Ok(wal_file.into())
     }
 
+    #[cfg(feature = "notify")]
     fn watch<T: SqliteWatcherHandler>(
         &self,
         mut handler: T,
     ) -> Result<SqliteWatcher, SqliteWatcherError> {
+        use notify::{Config, EventKind, RecursiveMode, Watcher};
         let wal_path = self.get_wal_path()?;
         let config = Config::default();
 
@@ -354,40 +363,6 @@ impl ConnectionPoolInner {
             .lock()
             .expect("lock poisoning")
             .len()
-    }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum SqliteWatcherError {
-    #[error("The watcher is only available when using file based storage")]
-    InvalidMode,
-    #[error("The watcher has been closed")]
-    WatcherClosed,
-    #[error("Notify Error: {0}")]
-    Notify(#[from] notify::Error),
-    #[error("Sqlite Error: {0}")]
-    SQL(#[from] rusqlite::Error),
-}
-
-/// When watching a database, [`Self::on_db_update`] will be called.
-pub trait SqliteWatcherHandler: Send + 'static {
-    fn on_db_update(&mut self, v: Result<(), SqliteWatcherError>);
-}
-
-impl<T: FnMut(Result<(), SqliteWatcherError>) + Send + 'static> SqliteWatcherHandler for T {
-    fn on_db_update(&mut self, v: Result<(), SqliteWatcherError>) {
-        (self)(v)
-    }
-}
-
-/// Observe a database from a [`SqliteConnectionPool`] for changes.
-pub struct SqliteWatcher {
-    _watcher: notify::RecommendedWatcher,
-}
-
-impl SqliteWatcher {
-    fn new(watcher: notify::RecommendedWatcher) -> Self {
-        Self { _watcher: watcher }
     }
 }
 

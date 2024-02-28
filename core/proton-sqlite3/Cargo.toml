@@ -9,7 +9,7 @@ edition = "2021"
 rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid", "chrono", "functions", "trace"] }
 tracing = "0.1"
 thiserror = "1"
-notify = { version = "6", default-features  = false, features = ["macos_fsevent"] }
+notify = { version = "6", default-features  = false, features = ["macos_fsevent"], optional = true}
 parking_lot = "0.12"
 fixedbitset = "0.5"
 slotmap = "1"
@@ -24,3 +24,8 @@ workspace = true
 
 [features]
 default = []
+notify= ["dep:notify"]
+
+[[test]]
+name = "main"
+required-features = ["notify"]
