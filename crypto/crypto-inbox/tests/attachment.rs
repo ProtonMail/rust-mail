@@ -1,3 +1,5 @@
+use std::io;
+
 use base64::Engine;
 use proton_crypto_inbox::attachment::{
     AttachmentCryptoMetadata, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
@@ -146,14 +148,14 @@ fn test_attachment_decrypt_stream() {
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let mut output_buffer = Vec::new();
     let enc_data_reader: &[u8] = enc_data.as_ref();
-    let _verification_result = attachment_metadata
+    let mut verification_reader = attachment_metadata
         .decrypt_attachment_from_reader(
             &pgp_provider,
             &decryption_keys,
             &verification_keys,
             enc_data_reader,
-            &mut output_buffer,
         )
         .unwrap();
+    io::copy(&mut verification_reader, &mut output_buffer).unwrap();
     assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
 }
