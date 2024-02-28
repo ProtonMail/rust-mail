@@ -78,8 +78,14 @@ impl MailSqliteConnection {
 pub struct MailSqliteConnectionImpl<'c>(pub(crate) &'c proton_sqlite3::rusqlite::Connection);
 
 impl<'c> MailSqliteConnectionImpl<'c> {
-    fn new(conn: &'c proton_sqlite3::rusqlite::Connection) -> Self {
+    pub fn new(conn: &'c proton_sqlite3::rusqlite::Connection) -> Self {
         Self(conn)
+    }
+}
+
+impl<'c> From<&'c proton_sqlite3::rusqlite::Connection> for MailSqliteConnectionImpl<'c> {
+    fn from(value: &'c proton_sqlite3::rusqlite::Connection) -> Self {
+        Self::new(value)
     }
 }
 
