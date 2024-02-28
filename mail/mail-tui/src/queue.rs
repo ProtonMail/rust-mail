@@ -44,6 +44,7 @@ impl<T> DispatchQueue<T> {
 }
 
 type DispatchObject<T> = Box<dyn FnOnce(&mut T) + Send>;
+pub type LocalDispatchObject<T> = Box<dyn FnOnce(&mut T)>;
 pub struct QueueDispatcher<T>(Sender<DispatchObject<T>>);
 
 impl<T> Clone for QueueDispatcher<T> {

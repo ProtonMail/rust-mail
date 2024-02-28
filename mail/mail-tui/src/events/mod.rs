@@ -1,7 +1,7 @@
 use crate::state::{DataLoadError, UserState};
 use proton_api_mail::proton_api_core::http::HttpRequestError;
 use proton_api_mail::proton_api_core::{LoginError, TotpSession};
-use proton_mail_db::{LocalConversationWithContext, LocalLabel};
+use proton_mail_db::LocalLabel;
 
 pub mod login;
 pub mod mailbox;
@@ -32,9 +32,7 @@ impl AppEvents {
         AppEvents::Mailbox(mailbox::MailboxEvents::LoadLabels(r))
     }
 
-    pub fn mailbox_conversation_load(
-        r: Result<Vec<LocalConversationWithContext>, DataLoadError>,
-    ) -> Self {
+    pub fn mailbox_conversation_load(r: Result<(), DataLoadError>) -> Self {
         AppEvents::Mailbox(mailbox::MailboxEvents::LoadConversations(r))
     }
 }

@@ -1,4 +1,4 @@
-use crate::queue::{DispatchQueue, QueueDispatcher};
+use crate::queue::{DispatchQueue, LocalDispatchObject, QueueDispatcher};
 use crate::view::{View, ViewStack};
 use crate::views::ErrorDialog;
 use crate::TerminalType;
@@ -11,6 +11,7 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 pub struct AppContext<T: 'static, E: 'static + Send> {
     state: T,
     dispatch_queue: DispatchQueue<App<T, E>>,
+    local_queue: Vec<LocalDispatchObject<App<T, E>>>,
 }
 
 impl<T: 'static, E: 'static + Send> AppContext<T, E> {
@@ -36,8 +37,8 @@ impl<T: 'static, E: 'static + Send> AppContext<T, E> {
         AppDispatcher::new(self.dispatch_queue.dispatcher().clone())
     }
 
-    pub fn queue_on_main(&self, f: impl FnOnce(&mut App<T, E>) + 'static + Send) {
-        self.dispatch_queue.dispatcher().queue_sync(f);
+    pub fn queue_on_main(&mut self, f: impl FnOnce(&mut App<T, E>) + 'static) {
+        self.local_queue.push(Box::new(f));
     }
 
     pub fn state(&self) -> &T {
@@ -55,11 +56,11 @@ impl<T: 'static, E: 'static + Send> AppContext<T, E> {
             .queue_sync(|app| app.events.push(e))
     }
 
-    pub fn push_view<V: View<Self, E> + 'static + Send>(&mut self, view: V) {
+    pub fn push_view<V: View<Self, E> + 'static>(&mut self, view: V) {
         self.queue_on_main(|app| app.push_view(view));
     }
 
-    pub fn pop_and_push_view<V: View<Self, E> + 'static + Send>(&mut self, view: V) {
+    pub fn pop_and_push_view<V: View<Self, E> + 'static>(&mut self, view: V) {
         self.queue_on_main(|app| app.pop_and_push_view(view));
     }
 
@@ -134,6 +135,7 @@ impl<T: Sized + 'static, E: Send + 'static> App<T, E> {
             ctx: AppContext {
                 state,
                 dispatch_queue: DispatchQueue::new(),
+                local_queue: Vec::with_capacity(8),
             },
             views: ViewStack::new(),
             events: Vec::with_capacity(8),
@@ -177,6 +179,11 @@ impl<T: Sized + 'static, E: Send + 'static> App<T, E> {
 
     fn tick(&mut self) {
         while let Some(object) = self.ctx.dispatch_queue.try_receive() {
+            self.ctx.local_queue.push(object);
+        }
+
+        let queue = std::mem::take(&mut self.ctx.local_queue);
+        for object in queue {
             (object)(self)
         }
 

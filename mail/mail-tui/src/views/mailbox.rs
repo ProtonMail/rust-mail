@@ -1,6 +1,6 @@
 use crate::events::mailbox::MailboxEvents;
 use crate::events::AppEvents;
-use crate::state::{DataLoadError, LoginState, MailboxState};
+use crate::state::{DataLoadError, LoginState, MailboxConversationQuery, MailboxState};
 use crate::tui_utils::inset_rect;
 use crate::view::View;
 use crate::views::AppViewContext;
@@ -8,6 +8,9 @@ use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use proton_api_mail::domain::LabelType;
+use proton_api_mail::proton_api_core::exports::proton_sqlite3::{
+    InProcessTrackerService, LiveQuery, LiveQueryBuilder,
+};
 use proton_mail_db::{LocalLabel, LocalLabelId};
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::prelude::Text;
@@ -31,6 +34,7 @@ enum FocusedWidget {
 
 pub struct ConversationView {
     state: LoadingState,
+    conversations: Option<LiveQuery<MailboxConversationQuery>>,
     conversation_list_state: ScrollableListState,
     system_labels_list_state: ScrollableListState,
     folder_list_state: ScrollableListState,
@@ -42,6 +46,7 @@ impl ConversationView {
     pub fn new() -> Self {
         let mut r = Self {
             state: LoadingState::Unloaded,
+            conversations: None,
             conversation_list_state: ScrollableListState::new(2, Some(0)),
             system_labels_list_state: ScrollableListState::new(1, Some(0)),
             folder_list_state: ScrollableListState::new(1, None),
@@ -111,43 +116,51 @@ impl ConversationView {
         }
     }
 
-    fn draw_conversation_area(&mut self, state: &MailboxState, frame: &mut Frame, area: Rect) {
-        let list_items = state
-            .conversation_list
-            .iter()
-            .enumerate()
-            .map(|(idx, conv)| {
-                let senders = {
-                    if conv.senders.len() == 1 {
-                        conv.senders[0].name.clone()
-                    } else {
-                        conv.senders
-                            .iter()
-                            .map(|s| s.name.clone())
-                            .collect::<Vec<_>>()
-                            .join(",")
-                    }
-                };
-                let line = Text::from(vec![
-                    if conv.num_messages > 1 {
-                        format!("[{}] {}", conv.num_messages, senders).into()
-                    } else {
-                        senders.into()
-                    },
-                    conv.subject.clone().into(),
-                ]);
-                let item = ListItem::new(line);
-                let item = if idx % 2 == 0 {
-                    item.on_light_magenta()
+    fn draw_conversation_area(&mut self, active_label_name: &str, frame: &mut Frame, area: Rect) {
+        let Some(conversations) = &mut self.conversations else {
+            let chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .flex(Flex::Center)
+                .constraints([Constraint::Length(1)])
+                .split(area);
+            frame.render_widget(Text::from("Loading Conversations...").centered(), chunks[0]);
+            return;
+        };
+
+        let conversations = conversations.value();
+        self.conversation_list_state.set_len(conversations.len());
+        let list_items = conversations.iter().enumerate().map(|(idx, conv)| {
+            let senders = {
+                if conv.senders.len() == 1 {
+                    conv.senders[0].name.clone()
                 } else {
-                    item
-                };
-                if conv.num_unread != 0 {
-                    item.bold()
-                } else {
-                    item
+                    conv.senders
+                        .iter()
+                        .map(|s| s.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(",")
                 }
-            });
+            };
+            let line = Text::from(vec![
+                if conv.num_messages > 1 {
+                    format!("[{}] {}", conv.num_messages, senders).into()
+                } else {
+                    senders.into()
+                },
+                conv.subject.clone().into(),
+            ]);
+            let item = ListItem::new(line);
+            let item = if idx % 2 == 0 {
+                item.on_light_magenta()
+            } else {
+                item
+            };
+            if conv.num_unread != 0 {
+                item.bold()
+            } else {
+                item
+            }
+        });
 
         frame.render_stateful_widget(
             ScrollableList::new(
@@ -163,7 +176,7 @@ impl ConversationView {
                     })
                     .block(
                         Block::new()
-                            .title(format!(" {} ", state.active_label_name()))
+                            .title(format!(" {} ", active_label_name))
                             .borders(Borders::all()),
                     ),
             ),
@@ -198,6 +211,10 @@ impl ConversationView {
             return;
         };
         self.state = LoadingState::LoadingConversations;
+        self.conversations = Some(new_conversations_live_query(
+            user_state.db_pool.tracker_service().clone(),
+            label.id,
+        ));
         state
             .mailbox_state
             .load_label(label, user_state, dispatcher, &state.runtime);
@@ -210,16 +227,6 @@ impl ConversationView {
             .set_len(state.label_list(LabelType::Folder).len());
         self.labels_list_state
             .set_len(state.label_list(LabelType::Label).len());
-    }
-
-    fn update_conversation_list(&mut self, state: &MailboxState) {
-        if state.conversation_list.is_empty() {
-            self.conversation_list_state.set_len(0);
-            return;
-        }
-
-        self.conversation_list_state
-            .set_len(state.conversation_list.len());
     }
 
     fn set_focused_widget(&mut self, state: &MailboxState, f: FocusedWidget) {
@@ -334,18 +341,14 @@ impl View<AppViewContext, AppEvents> for ConversationView {
                     .split(conversation_area);
                 frame.render_widget(Text::from("Loading Labels...").centered(), chunks[0]);
             }
-            LoadingState::LoadingConversations => {
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .flex(Flex::Center)
-                    .constraints([Constraint::Length(1)])
-                    .split(conversation_area);
-                frame.render_widget(Text::from("Loading Conversations...").centered(), chunks[0]);
-            }
-            LoadingState::Done => {
-                self.draw_conversation_area(&state.mailbox_state, frame, conversation_area);
-            }
+            _ => {}
         }
+
+        self.draw_conversation_area(
+            state.mailbox_state.active_label_name(),
+            frame,
+            conversation_area,
+        );
     }
 
     fn draw_help(&self, _: &AppViewContext, frame: &mut Frame, area: Rect) {
@@ -387,10 +390,15 @@ impl View<AppViewContext, AppEvents> for ConversationView {
                         }
                     },
                     MailboxEvents::LoadConversations(r) => match r {
-                        Ok(conv) => {
-                            ctx.state_mut().mailbox_state.conversation_list = conv;
+                        Ok(_) => {
+                            if let LoginState::LoggedIn(state) = &ctx.state().login_state {
+                                if self.conversations.is_none() {
+                                    self.conversations = Some(new_conversations_live_query_inbox(
+                                        state.db_pool.tracker_service().clone(),
+                                    ));
+                                }
+                            };
                             self.conversation_list_state.select(Some(0));
-                            self.update_conversation_list(&ctx.state().mailbox_state);
                             self.state = LoadingState::Done;
                         }
                         Err(e) => {
@@ -491,4 +499,21 @@ impl View<AppViewContext, AppEvents> for ConversationView {
     fn name(&self) -> &'static str {
         "Mailbox"
     }
+}
+
+fn new_conversations_live_query(
+    tracker: InProcessTrackerService,
+    label_id: LocalLabelId,
+) -> LiveQuery<MailboxConversationQuery> {
+    LiveQueryBuilder::new(tracker)
+        .with_background_initializer()
+        .build(MailboxConversationQuery::with_label(label_id))
+}
+
+fn new_conversations_live_query_inbox(
+    tracker: InProcessTrackerService,
+) -> LiveQuery<MailboxConversationQuery> {
+    LiveQueryBuilder::new(tracker)
+        .with_background_initializer()
+        .build(MailboxConversationQuery::new())
 }

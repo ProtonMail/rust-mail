@@ -5,17 +5,21 @@ use anyhow::anyhow;
 use proton_api_mail::domain::{
     ConversationMetadataFilterBuilder, LabelId, LabelType, SysLabelId, ALL_LABEL_TYPES,
 };
+use proton_api_mail::proton_api_core::exports::proton_sqlite3::{
+    ObservableQuery, SqliteConnection,
+};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::MailSession;
 use proton_async::runtime::MTRuntime;
 use proton_mail_db::{
-    LabelColor, LocalConversationWithContext, LocalLabel, LocalLabelId, MailSqliteConnectionPool,
+    LabelColor, LocalConversationWithContext, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
+    MailSqliteConnectionPool,
 };
+use std::ops::Deref;
 
 pub struct MailboxState {
     active_label: LocalLabel,
     label_list: [Vec<LocalLabel>; ALL_LABEL_TYPES.len()],
-    pub conversation_list: Vec<LocalConversationWithContext>,
 }
 
 const fn label_type_to_index(l: LabelType) -> usize {
@@ -38,7 +42,6 @@ impl MailboxState {
                 sticky: false,
             },
             label_list: Default::default(),
-            conversation_list: Default::default(),
         }
     }
 
@@ -71,7 +74,6 @@ impl MailboxState {
         for l in &mut self.label_list {
             l.clear();
         }
-        self.conversation_list.clear();
     }
 
     pub fn first_load(
@@ -95,11 +97,12 @@ impl MailboxState {
             };
 
             // resolve local label id
-            let Some(label_id) = labels
+            if labels
                 .iter()
                 .find(|l| l.rid.as_ref() == Some(&remote_label_id))
                 .map(|l| l.id)
-            else {
+                .is_none()
+            {
                 app_dispatcher
                     .queue_event_async(AppEvents::mailbox_label_load(Err(DataLoadError::Other(
                         anyhow!("Failed to find local label if for {remote_label_id}"),
@@ -107,11 +110,12 @@ impl MailboxState {
                     .await;
                 return;
             };
+
             app_dispatcher.queue_event(AppEvents::mailbox_label_load(Ok(labels)));
 
             app_dispatcher
                 .queue_event_async(AppEvents::mailbox_conversation_load(
-                    load_conversations(&session, &db, label_id, &remote_label_id).await,
+                    load_conversations(&session, &db, &remote_label_id).await,
                 ))
                 .await;
         });
@@ -127,7 +131,6 @@ impl MailboxState {
         self.active_label = label;
         let session = user_state.session.clone();
         let db = user_state.db_pool.clone();
-        let label_id = self.active_label.id;
         let Some(remote_label_id) = self.active_label.rid.clone() else {
             app_dispatcher.set_error(
                 "Invalid State",
@@ -140,7 +143,7 @@ impl MailboxState {
             return;
         };
         runtime.spawn(async move {
-            let conv = load_conversations(&session, &db, label_id, &remote_label_id)
+            let conv = load_conversations(&session, &db, &remote_label_id)
                 .await
                 .map_err(|e| {
                     tracing::error!("Failed to load conversations: {e}");
@@ -171,20 +174,17 @@ async fn load_labels(
     }
 
     let mut db = pool.acquire()?;
-    db.tx(|tx| {
-        tx.create_remote_labels(all_labels.iter())
-    })?;
+    db.tx(|tx| tx.create_remote_labels(all_labels.iter()))?;
 
     Ok(db.as_connection_ref().get_all_local_labels()?)
 }
 
-#[tracing::instrument(skip(session,pool),fields(label_id=?label_id))]
+#[tracing::instrument(skip(session,pool),fields(label_id=?remote_label_id))]
 async fn load_conversations(
     session: &MailSession,
     pool: &MailSqliteConnectionPool,
-    label_id: LocalLabelId,
     remote_label_id: &LabelId,
-) -> Result<Vec<LocalConversationWithContext>, DataLoadError> {
+) -> Result<(), DataLoadError> {
     tracing::debug!("Loading conversations");
     let filter = ConversationMetadataFilterBuilder::new(0, 25)
         .descending()
@@ -197,12 +197,50 @@ async fn load_conversations(
         remote_conversations.conversations.len()
     );
     let mut db = pool.acquire()?;
-    db.tx(|tx| {
-        tx.create_conversations(remote_conversations.conversations.iter())
-    })?;
-    let conversations = db
-        .as_connection_ref()
-        .get_conversations_with_context(label_id, 25)?;
-    tracing::debug!("Retrieved {} conversation from db", conversations.len());
-    Ok(conversations)
+    db.tx(|tx| tx.create_conversations(remote_conversations.conversations.iter()))?;
+    Ok(())
+}
+
+#[derive(Clone, Default)]
+pub struct MailboxConversationQuery(Option<LocalLabelId>);
+
+impl MailboxConversationQuery {
+    pub fn new() -> Self {
+        Self(None)
+    }
+    pub fn with_label(label_id: LocalLabelId) -> Self {
+        Self(Some(label_id))
+    }
+}
+
+impl ObservableQuery for MailboxConversationQuery {
+    type Output = Vec<LocalConversationWithContext>;
+
+    fn debug_name(&self) -> &'static str {
+        "MailboxViewQuery"
+    }
+
+    fn tables(&self) -> Vec<String> {
+        vec![
+            "conversations".to_string(),
+            "conversation_labels".to_string(),
+        ]
+    }
+
+    fn execute(
+        &self,
+        connection: &SqliteConnection,
+    ) -> proton_api_mail::proton_api_core::exports::proton_sqlite3::rusqlite::Result<Self::Output>
+    {
+        let conn = MailSqliteConnectionImpl::new(connection.deref());
+        let label_id = if let Some(id) = self.0 {
+            id
+        } else {
+            conn.resolve_remote_label_ids(std::iter::once(&LabelId::from(SysLabelId::INBOX)))?[0]
+        };
+
+        let conversations = conn.get_conversations_with_context(label_id, 25)?;
+        tracing::debug!("Retrieved {} conversation from db", conversations.len());
+        Ok(conversations)
+    }
 }
