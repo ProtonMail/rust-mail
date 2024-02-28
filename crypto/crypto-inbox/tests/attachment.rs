@@ -1,26 +1,115 @@
-use std::fs::{self, File};
-use std::path::PathBuf;
-
-use proton_crypto_inbox::attachment::{Attachment, AttachmentCrypto};
+use base64::Engine;
+use proton_crypto_inbox::attachment::{
+    AttachmentCryptoMetadata, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+};
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
+
+const TEST_ATTACHMENT_METADATA_KP: &str = "wV4Di5gBfuEszfESAQdAUGm56qPuhgLjuStIEcL07fKh10ptOYc0UnB2kTwqqhMw2ivOpsuDSOM17OPsxG35znCodjKBxM1O+DeFuYhel8TsuJjNxKltBgv/jVs48LGw";
+
+const TEST_ATTACHMENT_METADATA_SIG: &str = "-----BEGIN PGP SIGNATURE-----
+Version: ProtonMail
+
+wnUEABYKACcFgmXfEFQJkFX2DKhfS5UBFiEESUD3387U/LDImeGNVfYMqF9L
+lQEAAFdZAQC8eHZNqU3wS/4YVktAE2JYHwUevloBCSiR+ACiF4y6vgD9EcZN
+t5Wf5KU9FQ3zqhrBIqeaLDLhnox+Yyq/K7U8mgs=
+=/5GZ
+-----END PGP SIGNATURE-----
+";
+
+const TEST_ATTACHMENT_METADATA_ENC_SIG: &str = "-----BEGIN PGP MESSAGE-----
+Version: ProtonMail
+
+wV4Di5gBfuEszfESAQdAhEdKb/7Gvp/iz/tCs3+rmSW93ySpnCUoizzGDfUs
+zUIwwJ3V8I+Mm7Y0L1Tw9uyLzkOWjQMzyRteFkIpMZKK0+ZjukxQIsmgheC3
+9sE51xvd0qgB6U1djOrlhXcSu4ufZ6NSpFM/T1JKZe7EVu2kXPTKv0veqlfh
+P/VM6YWaNGugaPzvZcchQQC5tRhxogVmbDrSUirJYnNa9z/qEF6FcBpOXc59
+3w6S5zRMD3bWEA53PVNFQBHAVdBFIkKW14/QIQ26lZM295VLu1WUXPX9eso4
+EiWuw4/+aNQICAeabHV26Mtsp/DI6AZ7DtjMdNxDOFFeQ5Col6Ofu8E=
+=pQ9a
+-----END PGP MESSAGE-----
+";
+
+const TEST_ATTACHMENT_DECRYPTION_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xYYEZWRmVhYJKwYBBAHaRw8BAQdA5Y8bUHq5hTJBWZEa/mxOKJkOOd4h9CVo
+2vISFQLcccD+CQMIjfpijTBBdLZgAAAAAAAAAAAAAAAAAAAAADVVVCD463al
+FCG7D19/mw35yvsW48YAc3YgmfyK23GC9aptruPrkpjqqxeC6sRve0FxDzA7
+Xs0pbHVidXg0QHByb3Rvbi5ibGFjayA8bHVidXg0QHByb3Rvbi5ibGFjaz7C
+jAQQFgoAPgWCZWRmVgQLCQcICZDvQqbsF76qjAMVCAoEFgACAQIZAQKbAwIe
+ARYhBKcQ8sEYupYe38hwRu9CpuwXvqqMAAB5OQD/XyIK1r+JOFT3cYiBcaFx
+iox1yFrsr4uTg8kL1fQPyuoBAIG92J1MoimhMPuYvvTmIvNrvWPZvutw+BF2
+hJvRYDYCx4sEZWRmVhIKKwYBBAGXVQEFAQEHQIaaQMB4FXy/xC3qgmlhtnvR
+WceanT3nlzFjIrS96RUmAwEIB/4JAwionksZv9YLIGAAAAAAAAAAAAAAAAAA
+AAAAGKNKSqywbz5XuXX0Y/zrqKPNIvKBIT/+9dSKlTofYIoP7jtxqdz7UBMb
+KkA00FuCKspj/lxrwngEGBYIACoFgmVkZlYJkO9CpuwXvqqMApsMFiEEpxDy
+wRi6lh7fyHBG70Km7Be+qowAAHeFAP91gCl/VD/zHEvYIpWEK672jkPUPDpP
+Ll+erDsL2C10mgEA5fbBK09OVIjtYUJxiId1YYfn/4/ym92WNEAT20prLww=
+-----END PGP PRIVATE KEY BLOCK-----";
+
+const TEST_ATTACHMENT_VERIFICATION_KEY: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: ProtonMail
+
+xjMEZSfovhYJKwYBBAHaRw8BAQdA6gS5mfVImh6ONhKgZGSVrLH4cdZaS9IW
+6FhqYGWe2wrNJ2x1YnV4QHByb3Rvbi5ibGFjayA8bHVidXhAcHJvdG9uLmJs
+YWNrPsKMBBAWCgA+BYJlJ+i+BAsJBwgJkFX2DKhfS5UBAxUICgQWAAIBAhkB
+ApsDAh4BFiEESUD3387U/LDImeGNVfYMqF9LlQEAACDjAPsFKRBgJvErAzLf
+7bmk0mK1fwwbFM02LRW86AZE/nTi0QEA72eGf2FJ+5l+9b9Kl1U3xmOaC52P
+PFrqPXcklJ7PJAfCqAQQFggAWgUCZSfpJQkQ1NIaBVGnsuwWIQQ2FUO/DaVt
+pgyz2pTU0hoFUaey7CwcVGVzdCBPcGVuUEdQIENBIDx0ZXN0LW9wZW5wZ3At
+Y2FAcHJvdG9uLm1lPgWDAO1OAAAAkXwBAL39GUNMDxogH4siqyBwb+PEWnse
+ciEZ3MJ0HcXnsliTAP9lLk5htuRDHLdq4oevD2rz2rA42N9ijKZ5u1m3raET
+DM44BGUn6L4SCisGAQQBl1UBBQEBB0DzvEDbVNT8WhIxijPVGHKGQ1Y3s9Zw
+1i63nkkSnpLzNwMBCAfCeAQYFggAKgWCZSfovgmQVfYMqF9LlQECmwwWIQRJ
+QPffztT8sMiZ4Y1V9gyoX0uVAQAAEqkBAOKorIkfBBwuku/xLFIUtrrop9bW
+NCkNI9Y5q5Phx0LoAP4p9pTwojv+kXUi15215xo/u5T+ufqqzFx2/pqgUXVr
+AA==
+=5WZT
+-----END PGP PUBLIC KEY BLOCK-----
+";
+
+const TEST_ATTACHMENT_ENC_DATA: &str =
+    "0kABGVu3HPPyl7wHJhXxg7+E69aHqqYR2cPcDn5Fai0jb2K/1fC8rqzo5jKxF4yca3CK5PRmLz4F9S2GobFvgmtv";
+
+const TEST_ATTACHMENT_PLAIN_DATA: &str = "test attachment";
+
+fn get_test_attachment_metadata() -> AttachmentCryptoMetadata {
+    AttachmentCryptoMetadata {
+        key_packets: KeyPackets::from(TEST_ATTACHMENT_METADATA_KP),
+        signature: Some(AttachmentSignature::from(TEST_ATTACHMENT_METADATA_SIG)),
+        enc_signature: Some(AttachmentEncryptedSignature::from(
+            TEST_ATTACHMENT_METADATA_ENC_SIG,
+        )),
+    }
+}
+
+fn get_test_attachment_encrypted_data() -> Vec<u8> {
+    let b64 = base64::engine::general_purpose::GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        base64::engine::general_purpose::PAD,
+    );
+    b64.decode(TEST_ATTACHMENT_ENC_DATA).unwrap()
+}
 
 #[test]
 fn test_attachment_decrypt() {
-    let root_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-example");
-    let attachment_metadata_json =
-        File::open(root_path.clone().join("attachment_metadata.json")).unwrap();
-    let attachment_metadata: Attachment =
-        serde_json::from_reader(attachment_metadata_json).unwrap();
-
+    let attachment_metadata = get_test_attachment_metadata();
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
-    let private_key =
-        fs::read_to_string(root_path.clone().join("receiver_decryption_key.asc")).unwrap();
-    let imported_key = pgp_provider
-        .private_key_import(private_key, "password", DataEncoding::Armor)
+
+    let decryption_key = pgp_provider
+        .private_key_import(
+            TEST_ATTACHMENT_DECRYPTION_KEY,
+            "password",
+            DataEncoding::Armor,
+        )
         .unwrap();
-    let decryption_keys = vec![imported_key];
-    let verification_keys = Vec::new();
-    let enc_data: Vec<u8> = fs::read(root_path.clone().join("attachment")).unwrap();
+
+    let verification_key = pgp_provider
+        .public_key_import(TEST_ATTACHMENT_VERIFICATION_KEY, DataEncoding::Armor)
+        .unwrap();
+    let decryption_keys = vec![decryption_key];
+    let verification_keys = vec![verification_key];
+
+    let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let decrypted_attachment = attachment_metadata
         .decrypt_attachment(
             &pgp_provider,
@@ -29,36 +118,42 @@ fn test_attachment_decrypt() {
             enc_data,
         )
         .unwrap();
-    let expected_data: Vec<u8> = fs::read(root_path.clone().join("out.png")).unwrap();
-    assert_eq!(decrypted_attachment.as_ref(), &expected_data)
+
+    assert_eq!(
+        decrypted_attachment.as_ref(),
+        TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
+    )
 }
 
 #[test]
 fn test_attachment_decrypt_stream() {
+    let attachment_metadata = get_test_attachment_metadata();
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
-    let root_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-example");
-    let attachment_metadata_json =
-        File::open(root_path.clone().join("attachment_metadata.json")).unwrap();
-    let attachment_metadata: Attachment =
-        serde_json::from_reader(attachment_metadata_json).unwrap();
-    let private_key =
-        fs::read_to_string(root_path.clone().join("receiver_decryption_key.asc")).unwrap();
-    let imported_key = pgp_provider
-        .private_key_import(private_key, "password", DataEncoding::Armor)
+
+    let decryption_key = pgp_provider
+        .private_key_import(
+            TEST_ATTACHMENT_DECRYPTION_KEY,
+            "password",
+            DataEncoding::Armor,
+        )
         .unwrap();
-    let decryption_keys = vec![imported_key];
-    let verification_keys = Vec::new();
-    let enc_data = File::open(root_path.clone().join("attachment")).unwrap();
+    let verification_key = pgp_provider
+        .public_key_import(TEST_ATTACHMENT_VERIFICATION_KEY, DataEncoding::Armor)
+        .unwrap();
+    let decryption_keys = vec![decryption_key];
+    let verification_keys = vec![verification_key];
+
+    let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let mut output_buffer = Vec::new();
+    let enc_data_reader: &[u8] = enc_data.as_ref();
     let _verification_result = attachment_metadata
         .decrypt_attachment_from_reader(
             &pgp_provider,
             &decryption_keys,
             &verification_keys,
-            enc_data,
+            enc_data_reader,
             &mut output_buffer,
         )
         .unwrap();
-    let expected_data: Vec<u8> = fs::read(root_path.clone().join("out.png")).unwrap();
-    assert_eq!(&output_buffer, &expected_data)
+    assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
 }
