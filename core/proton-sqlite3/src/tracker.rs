@@ -28,6 +28,12 @@ pub struct TrackingConnection {
     tracker: LocalTracker,
 }
 
+impl AsRef<SqliteConnection> for TrackingConnection {
+    fn as_ref(&self) -> &SqliteConnection {
+        &self.connection
+    }
+}
+
 impl TrackingConnection {
     /// Create a new tracking connection with a given service.
     pub fn new(
