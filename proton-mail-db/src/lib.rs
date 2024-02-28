@@ -14,61 +14,61 @@ pub use conversations::*;
 pub use labels::*;
 pub use state::*;
 
-use proton_sqlite3::rusqlite::Transaction;
-use proton_sqlite3::{
-    MigratorError, SqliteConnection, SqliteConnectionPool, SqliteMode, SqliteWatcher,
-    SqliteWatcherError, SqliteWatcherHandler,
-};
+use proton_sqlite3::{InProcessTrackerService, MigratorError, TrackingConnection};
 use std::ops::{Deref, DerefMut};
 
 pub type DBResult<T> = proton_sqlite3::rusqlite::Result<T>;
-pub type BDError = proton_sqlite3::rusqlite::Error;
-pub type BDMigrationError = MigratorError;
+pub type DBError = proton_sqlite3::rusqlite::Error;
+pub type DBMigrationError = MigratorError;
 
-/// Convenience wrapper around [`SqliteConnectionPool`] which always creates [`MailSqliteConnection`]
+/// Convenience wrapper around [`InProcessTrackerService`] which always creates [`MailSqliteConnection`]
 /// rather than the default [`SqliteConnection`].
 #[derive(Clone)]
-pub struct MailSqliteConnectionPool(SqliteConnectionPool);
+pub struct MailSqliteConnectionPool(InProcessTrackerService);
 
 impl MailSqliteConnectionPool {
-    pub fn new(mode: SqliteMode, debug: bool) -> Result<Self, MigratorError> {
-        let pool = SqliteConnectionPool::new(mode, debug);
-        let mut conn = pool.acquire()?;
+    pub fn new(service: InProcessTrackerService) -> Result<Self, MigratorError> {
+        let mut conn = service.db_pool().acquire()?;
         migrations::migrate_db(&mut conn)?;
-        Ok(Self(pool))
+        Ok(Self(service))
+    }
+
+    pub fn tracker_service(&self) -> &InProcessTrackerService {
+        &self.0
     }
 
     /// Same as [`SqliteConnectionPool::acquire`].
     pub fn acquire(&self) -> DBResult<MailSqliteConnection> {
-        self.0.acquire().map(MailSqliteConnection)
-    }
-
-    /// Same as [`SqliteConnectionPool::watch`].
-    pub fn watch<T: SqliteWatcherHandler>(
-        &self,
-        handler: T,
-    ) -> Result<SqliteWatcher, SqliteWatcherError> {
-        self.0.watch(handler)
+        let conn = self.0.db_pool().acquire()?;
+        let conn = TrackingConnection::new(conn, self.0.clone())?;
+        Ok(MailSqliteConnection(conn))
     }
 }
 
 /// This type provides access to all the required features to access and manipulate the data of
 /// the mail domain. To access the feature set please use [`MailSqliteConnectionImpl`].
-pub struct MailSqliteConnection(pub(crate) SqliteConnection);
+pub struct MailSqliteConnection(pub(crate) TrackingConnection);
 
 impl MailSqliteConnection {
-    pub fn new(conn: SqliteConnection) -> Self {
+    pub fn new(conn: TrackingConnection) -> Self {
         Self(conn)
     }
 
     /// Get access to read only connection implementations.
     pub fn as_connection_ref(&self) -> MailSqliteConnectionRef<'_> {
-        MailSqliteConnectionRef(MailSqliteConnectionImpl::new(self.0.deref()))
+        MailSqliteConnectionRef(MailSqliteConnectionImpl::new(self.0.as_ref()))
     }
 
     /// Create a new transaction.
-    pub fn tx(&mut self) -> DBResult<MailSqliteTransaction<'_>> {
-        self.0.transaction().map(MailSqliteTransaction::new)
+    pub fn tx<T, E: From<DBError>>(
+        &mut self,
+        mut closure: impl FnMut(&mut MailSqliteConnectionMut) -> Result<T, E>,
+    ) -> Result<T, E> {
+        self.0.tx(|tx| {
+            let conn_impl = MailSqliteConnectionImpl(tx.deref());
+            let mut conn = MailSqliteConnectionMut(conn_impl);
+            closure(&mut conn)
+        })
     }
 }
 
@@ -111,31 +111,14 @@ impl<'c> DerefMut for MailSqliteConnectionMut<'c> {
     }
 }
 
-/// Mail Transaction, if not committed will rollback.
-pub struct MailSqliteTransaction<'t>(pub(crate) Transaction<'t>);
-
-impl<'t> MailSqliteTransaction<'t> {
-    fn new(tx: Transaction<'t>) -> Self {
-        Self(tx)
-    }
-
-    /// Get access to the connection reference.
-    pub fn as_connection_mut(&mut self) -> MailSqliteConnectionMut<'_> {
-        MailSqliteConnectionMut(MailSqliteConnectionImpl::new(self.0.deref()))
-    }
-
-    /// Commit the transaction.
-    pub fn commit(self) -> DBResult<()> {
-        self.0.commit()
-    }
-}
-
 #[cfg(test)]
 pub(crate) fn new_test_connection() -> (
     MailSqliteConnection,
     MailSqliteConnectionPool,
     proton_api_mail::proton_api_core::exports::tracing::subscriber::DefaultGuard,
 ) {
+    use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
+
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
         // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
         // will be written to stdout.
@@ -145,15 +128,20 @@ pub(crate) fn new_test_connection() -> (
 
     let guard =
         proton_api_mail::proton_api_core::exports::tracing::subscriber::set_default(subscriber);
-    let pool =
-        MailSqliteConnectionPool::new(SqliteMode::InMemory, true).expect("failed to create pool");
+
+    let pool = SqliteConnectionPool::new(SqliteMode::InMemory, true);
+    let service = InProcessTrackerService::new(pool);
+
+    let pool = MailSqliteConnectionPool::new(service).expect("failed to create pool");
     let conn = pool.acquire().expect("failed to acquire connection");
     (conn, pool, guard)
 }
 
 #[cfg(test)]
 pub(crate) fn with_tx(conn: &mut MailSqliteConnection, f: impl Fn(&mut MailSqliteConnectionMut)) {
-    let mut tx = conn.tx().expect("failed to create tx");
-    (f)(&mut tx.as_connection_mut());
-    tx.commit().expect("failed to commit");
+    conn.tx(move |tx| -> DBResult<()> {
+        (f)(tx);
+        Ok(())
+    })
+    .expect("failed transaction");
 }
