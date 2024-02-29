@@ -28,16 +28,18 @@ impl AsRef<str> for KeyId {
 pub struct LockedKey {
     #[serde(rename = "ID")]
     pub id: KeyId,
+    pub version: u32,
     pub private_key: String,
-    #[serde(default)]
-    pub token: String,
-    #[serde(default)]
-    pub signature: String,
+    pub token: Option<String>,
+    pub signature: Option<String>,
+    pub activation: Option<String>,
     #[serde(deserialize_with = "bool_from_integer")]
     pub primary: bool,
     #[serde(deserialize_with = "bool_from_integer")]
     pub active: bool,
     pub flags: Option<u32>,
+    pub recovery_secret: Option<String>,
+    pub recovery_secret_signature: Option<String>,
 }
 
 /// Deserialize bool from integer

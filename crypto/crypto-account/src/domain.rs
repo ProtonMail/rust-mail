@@ -98,16 +98,16 @@ impl AddressKeys {
     ) -> Result<PrivateKeyRing<T::PrivateKey>, KeyError> {
         let mut kr = PrivateKeyRing(Vec::new());
         for locked_key in &self.0 {
-            if locked_key.token.is_empty() || locked_key.signature.is_empty() {
+            let (Some(token), Some(signature)) = (&locked_key.token, &locked_key.signature) else {
                 return Err(KeyError::MissingTokenOrSignature(locked_key.id.clone()));
-            }
+            };
 
             let key = provider
                 .private_key_import_from_token(
                     &locked_key.private_key,
                     user_key_ring,
-                    &locked_key.token,
-                    &locked_key.signature,
+                    token,
+                    signature,
                 )
                 .map_err(|e| KeyError::Unlock(locked_key.id.clone(), e))?;
             kr.0.push(key)
@@ -122,16 +122,16 @@ impl AddressKeys {
     ) -> Result<PrivateKeyRing<T::PrivateKey>, KeyError> {
         let mut kr = PrivateKeyRing(Vec::new());
         for locked_key in &self.0 {
-            if locked_key.token.is_empty() || locked_key.signature.is_empty() {
+            let (Some(token), Some(signature)) = (&locked_key.token, &locked_key.signature) else {
                 return Err(KeyError::MissingTokenOrSignature(locked_key.id.clone()));
-            }
+            };
 
             let key = provider
                 .private_key_import_from_token_async(
                     &locked_key.private_key,
                     user_key_ring,
-                    &locked_key.token,
-                    &locked_key.signature,
+                    token,
+                    signature,
                 )
                 .await
                 .map_err(|e| KeyError::Unlock(locked_key.id.clone(), e))?;
