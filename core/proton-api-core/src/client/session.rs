@@ -1,4 +1,4 @@
-use crate::clientv2::TotpSession;
+use crate::client::TotpSession;
 use crate::domain::{
     EventId, HumanVerification, HumanVerificationLoginData, IsEvent, TFAStatus, TwoFactorAuth,
     User, UserSettings, UserUid,

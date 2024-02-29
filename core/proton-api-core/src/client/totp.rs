@@ -1,4 +1,4 @@
-use crate::clientv2::Session;
+use crate::client::Session;
 use crate::http;
 
 #[derive(Debug, Clone)]
