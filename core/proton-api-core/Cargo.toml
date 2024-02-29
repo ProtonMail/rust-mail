@@ -32,8 +32,8 @@ default-features = false
 features = ["json", "deflate", "stream", "cookies", "multipart", "rustls","rustls-tls", "socks"]
 
 [dev-dependencies]
-env_logger = "0.10"
 tokio = {version ="1", features = ["full"]}
+tracing-subscriber = { version="0.3", features = ["env-filter"] }
 
 [[example]]
 name = "user_id"

@@ -1,7 +1,7 @@
 use crate::client::Session;
 use crate::http;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TotpSession(pub(super) Session);
 
 impl TotpSession {

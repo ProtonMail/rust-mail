@@ -1,8 +1,8 @@
-use crate::domain::{HumanVerificationLoginData, SecretString, TFAStatus, UserUid};
+use crate::auth::AuthScope;
+use crate::domain::{HumanVerificationLoginData, SecretString, TFAStatus, Uid, UserId};
 use crate::http;
 use crate::http::{RequestData, X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE};
-use secrecy::Secret;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_repr::Deserialize_repr;
 
 #[doc(hidden)]
@@ -69,14 +69,14 @@ impl<'a> http::RequestDesc for AuthRequest<'a> {
 #[serde(rename_all = "PascalCase")]
 pub struct AuthResponse {
     #[serde(rename = "UserID")]
-    pub user_id: String,
+    pub user_id: UserId,
     #[serde(rename = "UID")]
-    pub uid: String,
+    pub uid: Uid,
     pub token_type: Option<String>,
-    pub access_token: String,
-    pub refresh_token: String,
+    pub access_token: DeserializableSecretString,
+    pub refresh_token: DeserializableSecretString,
     pub server_proof: String,
-    pub scope: String,
+    pub scope: AuthScope,
     #[serde(rename = "2FA")]
     pub tfa: TFAInfo,
     pub password_mode: PasswordMode,
@@ -173,32 +173,6 @@ impl<'a> http::RequestDesc for TOTPRequest<'a> {
 }
 
 #[doc(hidden)]
-#[derive(Debug, Clone)]
-pub struct UserAuth {
-    pub uid: Secret<UserUid>,
-    pub access_token: SecretString,
-    pub refresh_token: SecretString,
-}
-
-impl UserAuth {
-    pub fn from_auth_response(auth: AuthResponse) -> Self {
-        Self {
-            uid: Secret::new(UserUid(auth.uid)),
-            access_token: SecretString::new(auth.access_token),
-            refresh_token: SecretString::new(auth.refresh_token),
-        }
-    }
-
-    pub fn from_auth_refresh_response(auth: AuthRefreshResponse) -> Self {
-        Self {
-            uid: Secret::new(UserUid(auth.uid)),
-            access_token: SecretString::new(auth.access_token),
-            refresh_token: SecretString::new(auth.refresh_token),
-        }
-    }
-}
-
-#[doc(hidden)]
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct AuthRefresh<'a> {
@@ -216,20 +190,20 @@ pub struct AuthRefresh<'a> {
 #[serde(rename_all = "PascalCase")]
 pub struct AuthRefreshResponse {
     #[serde(rename = "UID")]
-    pub uid: String,
+    pub uid: Uid,
     pub token_type: Option<String>,
-    pub access_token: String,
-    pub refresh_token: String,
-    pub scope: String,
+    pub access_token: DeserializableSecretString,
+    pub refresh_token: DeserializableSecretString,
+    pub scope: AuthScope,
 }
 
 pub struct AuthRefreshRequest<'a> {
-    uid: &'a UserUid,
+    uid: &'a Uid,
     token: &'a str,
 }
 
 impl<'a> AuthRefreshRequest<'a> {
-    pub fn new(uid: &'a UserUid, token: &'a str) -> Self {
+    pub fn new(uid: &'a Uid, token: &'a str) -> Self {
         Self { uid, token }
     }
 }
@@ -282,5 +256,18 @@ impl<'a> http::RequestDesc for CaptchaRequest<'a> {
         }
 
         data.query("Token", self.token)
+    }
+}
+
+#[derive(Debug)]
+pub struct DeserializableSecretString(pub SecretString);
+
+impl<'de> Deserialize<'de> for DeserializableSecretString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let string = String::deserialize(deserializer)?;
+        Ok(Self(SecretString::new(string)))
     }
 }

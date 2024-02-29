@@ -7,16 +7,16 @@ use proton_crypto_account::salts::{SaltError, SaltedPassword, Salts};
 use serde;
 use serde::{Deserialize, Serialize};
 
-crate::utils::string_id!(UserUid);
-impl secrecy::Zeroize for UserUid {
+crate::utils::string_id!(Uid);
+impl secrecy::Zeroize for Uid {
     fn zeroize(&mut self) {
         self.0.zeroize()
     }
 }
 
-impl secrecy::CloneableSecret for UserUid {}
+impl secrecy::CloneableSecret for Uid {}
 
-impl secrecy::DebugSecret for UserUid {}
+impl secrecy::DebugSecret for Uid {}
 
 crate::utils::string_id!(UserId);
 
@@ -31,15 +31,34 @@ new_integer_enum!(u8, UserMnemonicStatus {
     EnabledButNotSet = 1,
     EnabledNeedsReActivation = 2,
     EnabledAndSet = 3,
+    Unknown = 4,
 });
 
 #[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
 pub struct UserProductUsedSpace {
-    pub calender: u64,
+    pub calendar: u64,
     pub contact: u64,
     pub drive: u64,
     pub mail: u64,
     pub pass: u64,
+}
+#[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
+pub struct UserFlags {
+    pub protected: bool,
+    #[serde(rename = "onboard-checklist-storage-granted")]
+    pub onboard_checklist_storage_granted: bool,
+    #[serde(rename = "has-temporary-password")]
+    pub has_temporary_password: bool,
+    #[serde(rename = "test-account")]
+    pub test_account: bool,
+    #[serde(rename = "no-login")]
+    pub no_login: bool,
+    #[serde(rename = "recovery-attempt")]
+    pub recovery_attempt: bool,
+    pub sso: bool,
+    #[serde(rename = "no-proton-address")]
+    pub no_proton_address: bool,
 }
 
 /// Represents an API user
@@ -68,7 +87,7 @@ pub struct User {
     pub subscribed: u32,
     pub services: u32,
     pub delinquent: u32,
-    pub flags: u32,
+    pub flags: UserFlags,
 }
 
 #[derive(Debug, thiserror::Error)]

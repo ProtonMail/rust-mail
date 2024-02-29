@@ -1,8 +1,10 @@
+use crate::auth::{new_arc_auth_store, InMemoryStore};
 use crate::domain::TwoFactorAuth;
 use crate::http;
 use crate::LoginError;
 use std::sync::Arc;
 use uniffi;
+
 #[derive(uniffi::Error, Debug, thiserror::Error)]
 #[uniffi(flat_error)]
 pub enum ClientError {
@@ -40,8 +42,9 @@ pub async fn session_login(
     email: String,
     password: String,
 ) -> Result<Arc<Session>, LoginError> {
+    let auth_store = new_arc_auth_store(InMemoryStore::default());
     let crate::SessionType::Authenticated(session) =
-        crate::Session::login(client.0.clone(), &email, &password, None).await?
+        crate::Session::login(client.0.clone(), auth_store, &email, &password, None).await?
     else {
         return Err(LoginError::Unsupported2FA(TwoFactorAuth::TOTP));
     };

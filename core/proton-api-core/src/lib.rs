@@ -3,6 +3,7 @@
 #[macro_use]
 pub mod utils;
 
+pub mod auth;
 pub mod client;
 pub mod domain;
 pub mod exports;

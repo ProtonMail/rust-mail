@@ -32,7 +32,7 @@ pub struct UserSettingsPhone {
 pub struct UserSettings2FA {
     pub enabled: TFAStatus,
     pub allowed: TFAStatus,
-    pub expiration_time: u64,
+    pub expiration_time: Option<u64>,
     #[serde(default)]
     pub registered_keys: Vec<FIDOKey>,
 }
@@ -84,7 +84,7 @@ pub struct UserSettingsFlags {
 #[serde(rename_all = "PascalCase")]
 pub struct UserSettingsReferral {
     pub link: String,
-    pub eligible: ProtonBoolean,
+    pub eligible: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -98,7 +98,7 @@ pub struct UserSettingsHighSecurity {
 #[serde(rename_all = "PascalCase")]
 pub struct UserSettingsPassword {
     pub mode: u32,
-    pub expiration_time: u64,
+    pub expiration_time: Option<u64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
@@ -108,7 +108,7 @@ pub struct UserSettings {
     pub phone: UserSettingsPhone,
     #[serde(rename = "2FA")]
     pub two_factor_auth: UserSettings2FA,
-    pub news: u8,
+    pub news: u32,
     pub locale: String,
     pub log_auth: UserLogAuth,
     pub invoice_text: String,

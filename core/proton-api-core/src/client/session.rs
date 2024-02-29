@@ -1,19 +1,20 @@
+use crate::auth::ArcAuthStore;
 use crate::client::TotpSession;
 use crate::domain::{
-    EventId, HumanVerification, HumanVerificationLoginData, IsEvent, TFAStatus, TwoFactorAuth,
-    User, UserSettings, UserUid,
+    EventId, HumanVerification, HumanVerificationLoginData, IsEvent, TFAStatus, TwoFactorAuth, Uid,
+    User, UserSettings,
 };
 use crate::http;
 use crate::http::{Client, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
     AuthInfoRequest, AuthRefreshRequest, AuthRequest, AuthResponse, GetEventRequest,
-    GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, TOTPRequest, UserAuth,
-    UserInfoRequest, UserSettingsRequest,
+    GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, TOTPRequest, UserInfoRequest,
+    UserSettingsRequest,
 };
+use anyhow::anyhow;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::Salts;
-use secrecy::{ExposeSecret, Secret};
-use std::sync::Arc;
+use secrecy::ExposeSecret;
 
 #[derive(Debug, thiserror::Error)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
@@ -35,22 +36,6 @@ pub enum LoginError {
     SRPProof(String),
 }
 
-/// Data which can be used to save a session and restore it later.
-pub struct SessionRefreshData {
-    pub user_uid: Secret<UserUid>,
-    pub token: Secret<String>,
-}
-
-impl PartialEq for SessionRefreshData {
-    fn eq(&self, other: &Self) -> bool {
-        self.user_uid.expose_secret() == other.user_uid.expose_secret()
-            && self.token.expose_secret() == other.token.expose_secret()
-    }
-}
-
-impl Eq for SessionRefreshData {}
-
-#[derive(Debug)]
 pub enum SessionType {
     Authenticated(Session),
     AwaitingTotp(TotpSession),
@@ -58,22 +43,20 @@ pub enum SessionType {
 
 /// Authenticated Session from which one can access data/functionality restricted to authenticated
 /// users.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Session {
-    pub(super) user_auth: Arc<parking_lot::RwLock<UserAuth>>,
+    auth_store: ArcAuthStore,
     client: Client,
 }
 
 impl Session {
-    fn new(client: Client, user: UserAuth) -> Self {
-        Self {
-            user_auth: Arc::new(parking_lot::RwLock::new(user)),
-            client,
-        }
+    fn new(client: Client, auth_store: ArcAuthStore) -> Self {
+        Self { auth_store, client }
     }
 
     pub async fn login<'a>(
         c: Client,
+        auth_store: ArcAuthStore,
         username: &'a str,
         password: &'a str,
         human_verification: Option<HumanVerificationLoginData>,
@@ -107,7 +90,8 @@ impl Session {
             )
             .await?;
 
-        validate_server_proof(c, &proof, auth_req_res).map_err(map_human_verification_err)
+        validate_server_proof(c, auth_store, &proof, auth_req_res)
+            .map_err(map_human_verification_err)
     }
 
     pub async fn submit_totp(&self, code: &str) -> Result<(), http::HttpRequestError> {
@@ -116,15 +100,18 @@ impl Session {
 
     pub async fn refresh(
         c: Client,
-        user_uid: &UserUid,
+        auth_store: ArcAuthStore,
+        user_uid: &Uid,
         token: &str,
     ) -> Result<Self, http::HttpRequestError> {
         let client = c.clone();
         c.execute_request(AuthRefreshRequest::new(user_uid, token).to_request())
             .await
             .map(move |r| {
-                let user = UserAuth::from_auth_refresh_response(r);
-                Session::new(client, user)
+                auth_store
+                    .write()
+                    .set_auth(r.uid, r.refresh_token.0, r.access_token.0, r.scope);
+                Session::new(client, auth_store)
             })
     }
 
@@ -141,7 +128,9 @@ impl Session {
     }
 
     pub async fn logout(&self) -> Result<(), http::HttpRequestError> {
-        self.execute_request(LogoutRequest {}).await
+        self.execute_request(LogoutRequest {}).await?;
+        self.auth_store.write().clear_auth();
+        Ok(())
     }
 
     pub async fn get_latest_event(&self) -> Result<EventId, http::HttpRequestError> {
@@ -155,15 +144,9 @@ impl Session {
     }
 
     pub async fn get_user_settings(&self) -> Result<UserSettings, http::HttpRequestError> {
-        self.execute_request(UserSettingsRequest {}).await
-    }
-
-    pub fn get_refresh_data(&self) -> SessionRefreshData {
-        let reader = self.user_auth.read();
-        SessionRefreshData {
-            user_uid: reader.uid.clone(),
-            token: reader.refresh_token.clone(),
-        }
+        self.execute_request(UserSettingsRequest {})
+            .await
+            .map(|v| v.user_settings)
     }
 
     pub async fn execute_request<'a, 'b: 'a, R: RequestDesc + 'a>(
@@ -176,6 +159,7 @@ impl Session {
 
 fn validate_server_proof(
     client: Client,
+    auth_store: ArcAuthStore,
     proof: &proton_crypto_account::proton_crypto::srp::ClientProof,
     auth_response: AuthResponse,
 ) -> Result<SessionType, LoginError> {
@@ -186,9 +170,16 @@ fn validate_server_proof(
     }
 
     let tfa_enabled = auth_response.tfa.enabled;
-    let user = UserAuth::from_auth_response(auth_response);
+    {
+        auth_store.write().set_auth(
+            auth_response.uid,
+            auth_response.refresh_token.0,
+            auth_response.access_token.0,
+            auth_response.scope,
+        );
+    }
 
-    let session = Session::new(client, user);
+    let session = Session::new(client, auth_store);
 
     match tfa_enabled {
         TFAStatus::None => Ok(SessionType::Authenticated(session)),
@@ -213,11 +204,15 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
     session: &'a Session,
     r: R,
 ) -> Result<R::Output, http::HttpRequestError> {
+    let r = r.build();
     let data = {
-        let borrow = session.user_auth.read();
-        r.build()
-            .header(X_PM_UID_HEADER, borrow.uid.expose_secret().as_ref())
-            .bearer_token(borrow.access_token.expose_secret())
+        let borrow = session.auth_store.read();
+        if let Some(auth) = borrow.get_auth() {
+            r.header(X_PM_UID_HEADER, auth.uid.as_ref())
+                .bearer_token(auth.access_token.expose_secret())
+        } else {
+            r
+        }
     };
 
     // While we clone headers and url, the body clone is handled efficiently.
@@ -232,21 +227,32 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
                     tracing::debug!("Account session expired, attempting refresh");
 
                     let auth_refresh_request = {
-                        let borrow = session.user_auth.read();
-                        AuthRefreshRequest::new(
-                            borrow.uid.expose_secret(),
-                            borrow.refresh_token.expose_secret(),
-                        )
-                        .to_request()
+                        let reader = session.auth_store.read();
+                        let Some(auth) = reader.get_auth() else {
+                            return Err(http::HttpRequestError::Other(anyhow!(
+                                "Authentication info missing for refresh"
+                            )));
+                        };
+                        let request =
+                            AuthRefreshRequest::new(&auth.uid, auth.refresh_token.expose_secret())
+                                .to_request();
+                        request
                     };
 
                     let auth_refresh_response =
                         client.execute_request(auth_refresh_request).await?;
                     let data = {
-                        let mut writer = session.user_auth.write();
-                        *writer = UserAuth::from_auth_refresh_response(auth_refresh_response);
-                        data.header(X_PM_UID_HEADER, writer.uid.expose_secret().as_ref())
-                            .bearer_token(writer.access_token.expose_secret())
+                        let mut writer = session.auth_store.write();
+                        let data = data
+                            .header(X_PM_UID_HEADER, auth_refresh_response.uid.as_ref())
+                            .bearer_token(auth_refresh_response.access_token.0.expose_secret());
+                        writer.set_auth(
+                            auth_refresh_response.uid,
+                            auth_refresh_response.refresh_token.0,
+                            auth_refresh_response.access_token.0,
+                            auth_refresh_response.scope,
+                        );
+                        data
                     };
 
                     return client

@@ -1,7 +1,7 @@
 use crate::DBResult;
 use proton_api_core::domain::{
-    ProtonBoolean, TFAStatus, User, UserId, UserLogAuth, UserProductUsedSpace, UserSettings,
-    UserSettings2FA, UserSettingsDateFormat, UserSettingsDensity, UserSettingsEmail,
+    ProtonBoolean, TFAStatus, User, UserFlags, UserId, UserLogAuth, UserProductUsedSpace,
+    UserSettings, UserSettings2FA, UserSettingsDateFormat, UserSettingsDensity, UserSettingsEmail,
     UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword, UserSettingsPhone,
     UserSettingsTimeFormat, UserSettingsWeekStart,
 };
@@ -53,7 +53,7 @@ fn test_core_store_and_load_user() {
             recovery_secret_signature: Some("recovery_signature".to_string()),
         }]),
         product_used_space: UserProductUsedSpace {
-            calender: 23,
+            calendar: 23,
             contact: 44,
             drive: 99,
             mail: 12,
@@ -66,7 +66,16 @@ fn test_core_store_and_load_user() {
         subscribed: 3234234,
         services: 23123123,
         delinquent: 4,
-        flags: 9124,
+        flags: UserFlags {
+            protected: false,
+            onboard_checklist_storage_granted: true,
+            has_temporary_password: false,
+            test_account: true,
+            no_login: false,
+            recovery_attempt: true,
+            sso: false,
+            no_proton_address: true,
+        },
     };
 
     conn.tx(|tx| -> DBResult<()> {
@@ -96,7 +105,7 @@ fn test_core_store_and_load_user_settings() {
         },
         password: UserSettingsPassword {
             mode: 2,
-            expiration_time: 1034,
+            expiration_time: Some(1034),
         },
         phone: UserSettingsPhone {
             value: "1234556".to_string(),
@@ -107,7 +116,7 @@ fn test_core_store_and_load_user_settings() {
         two_factor_auth: UserSettings2FA {
             enabled: TFAStatus::FIDO2,
             allowed: TFAStatus::TotpOrFIDO2,
-            expiration_time: 9999,
+            expiration_time: Some(9999),
             registered_keys: vec![],
         },
         news: 111,

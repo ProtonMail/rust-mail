@@ -1,6 +1,6 @@
 use crate::{CoreSqliteConnectionImpl, DBResult};
 use proton_api_core::domain::{
-    ProtonBoolean, User, UserId, UserProductUsedSpace, UserSettings, UserSettings2FA,
+    User, UserFlags, UserId, UserProductUsedSpace, UserSettings, UserSettings2FA,
     UserSettingsEmail, UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword,
     UserSettingsPhone, UserSettingsReferral,
 };
@@ -36,8 +36,8 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             user.subscribed,
             user.services,
             user.delinquent,
-            user.flags,
-            user.product_used_space.calender,
+            user_flags_to_u32(&user.flags),
+            user.product_used_space.calendar,
             user.product_used_space.contact,
             user.product_used_space.drive,
             user.product_used_space.mail,
@@ -176,9 +176,9 @@ impl UserSelector {
             subscribed: r.get(15)?,
             services: r.get(16)?,
             delinquent: r.get(17)?,
-            flags: r.get(18)?,
+            flags: user_flags_from_u32(r.get(18)?),
             product_used_space: UserProductUsedSpace {
-                calender: r.get(19)?,
+                calendar: r.get(19)?,
                 contact: r.get(20)?,
                 drive: r.get(21)?,
                 mail: r.get(22)?,
@@ -230,7 +230,7 @@ impl UserSettingsSelector {
             alloc: &mut RowIndexAllocator,
         ) -> DBResult<Option<UserSettingsReferral>> {
             let link: Option<String> = r.get(alloc.fetch_and_add())?;
-            let eligible: Option<ProtonBoolean> = r.get(alloc.fetch_and_add())?;
+            let eligible: Option<bool> = r.get(alloc.fetch_and_add())?;
             Ok(if let (Some(link), Some(eligible)) = (link, eligible) {
                 Some(UserSettingsReferral { link, eligible })
             } else {
@@ -288,5 +288,31 @@ impl UserSettingsSelector {
             },
             session_account_recovery: r.get(alloc.fetch_and_add())?,
         })
+    }
+}
+
+fn user_flags_to_u32(flags: &UserFlags) -> u32 {
+    let mut v = 0u32;
+    v |= flags.protected as u32;
+    v |= (flags.onboard_checklist_storage_granted as u32) << 1;
+    v |= (flags.has_temporary_password as u32) << 2;
+    v |= (flags.test_account as u32) << 3;
+    v |= (flags.no_login as u32) << 4;
+    v |= (flags.recovery_attempt as u32) << 5;
+    v |= (flags.sso as u32) << 6;
+    v |= (flags.no_proton_address as u32) << 7;
+    v
+}
+
+fn user_flags_from_u32(v: u32) -> UserFlags {
+    UserFlags {
+        protected: (v & 0x01) != 0,
+        onboard_checklist_storage_granted: ((v >> 1) & 0x01) != 0,
+        has_temporary_password: ((v >> 2) & 0x01) != 0,
+        test_account: ((v >> 3) & 0x01) != 0,
+        no_login: ((v >> 4) & 0x01) != 0,
+        recovery_attempt: ((v >> 5) & 0x01) != 0,
+        sso: ((v >> 6) & 0x01) != 0,
+        no_proton_address: ((v >> 7) & 0x01) != 0,
     }
 }
