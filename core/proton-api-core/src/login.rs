@@ -3,6 +3,7 @@ use crate::domain::{
 };
 use crate::requests::{AuthInfoRequest, AuthRequest, TOTPRequest};
 use crate::{http, Session};
+use anyhow::anyhow;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 
 #[derive(Debug, thiserror::Error)]
@@ -92,12 +93,20 @@ impl LoginFlow {
 
         let tfa_enabled = auth_response.tfa.enabled;
         {
-            self.session.auth_store().write().set_auth(
-                auth_response.uid,
-                auth_response.refresh_token.0,
-                auth_response.access_token.0,
-                auth_response.scope,
-            );
+            self.session
+                .auth_store()
+                .write()
+                .set_auth(
+                    auth_response.uid,
+                    auth_response.refresh_token.0,
+                    auth_response.access_token.0,
+                    auth_response.scope,
+                )
+                .map_err(|e| {
+                    LoginFlowError::Request(http::HttpRequestError::Other(anyhow!(
+                        "Failed to to store auth: {e}"
+                    )))
+                })?;
         }
 
         if tfa_enabled != TFAStatus::None {
@@ -146,6 +155,14 @@ impl LoginFlow {
     pub fn reset_and_take_user(&mut self) -> Option<User> {
         self.state = LoginState::LoggedOut;
         self.user.take()
+    }
+
+    pub fn user(&self) -> Option<&User> {
+        self.user.as_ref()
+    }
+
+    pub fn session(&self) -> &Session {
+        &self.session
     }
 
     async fn post_login_user_fetch(&mut self) -> Result<(), LoginFlowError> {

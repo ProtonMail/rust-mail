@@ -13,6 +13,8 @@ mod session;
 pub use migrations::*;
 pub use session::*;
 
+pub use proton_sqlite3;
+
 pub type DBResult<T> = proton_sqlite3::rusqlite::Result<T>;
 pub type DBError = proton_sqlite3::rusqlite::Error;
 pub type DBMigrationError = MigratorError;

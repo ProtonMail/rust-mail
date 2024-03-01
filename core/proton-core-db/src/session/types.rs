@@ -3,8 +3,9 @@ use aes_gcm::aead::Nonce;
 use aes_gcm::aes::Aes256;
 use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
-    Aes256Gcm, AesGcm, Key,
+    Aes256Gcm, AesGcm, Key, KeySizeUser,
 };
+use proton_api_core::auth::AuthScope;
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid, UserId};
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
@@ -18,8 +19,7 @@ pub struct DecryptedUserSession {
     pub email: String,
     pub refresh_token: SecretString,
     pub access_token: SecretString,
-    pub scopes: Option<String>,
-    pub product: Option<String>,
+    pub scopes: Option<AuthScope>,
 }
 
 impl DecryptedUserSession {
@@ -38,7 +38,6 @@ impl DecryptedUserSession {
             refresh_token: encrypted_refresh_token,
             access_token: encrypted_access_token,
             scopes: self.scopes.clone(),
-            product: self.product.clone(),
         })
     }
 }
@@ -51,8 +50,7 @@ pub struct EncryptedUserSession {
     pub email: String,
     pub refresh_token: EncryptedData,
     pub access_token: EncryptedData,
-    pub scopes: Option<String>,
-    pub product: Option<String>,
+    pub scopes: Option<AuthScope>,
 }
 
 impl EncryptedUserSession {
@@ -79,7 +77,6 @@ impl EncryptedUserSession {
             refresh_token: decrypted_refresh_token,
             access_token: decrypted_access_token,
             scopes: self.scopes.clone(),
-            product: self.product.clone(),
         })
     }
 }
@@ -138,6 +135,17 @@ impl SessionEncryptionKey {
     pub fn random() -> Self {
         let key = Aes256Gcm::generate_key(OsRng);
         Self { key }
+    }
+
+    pub fn with_bytes(mut bytes: Vec<u8>) -> Result<Self, Vec<u8>> {
+        if bytes.len() < Aes256Gcm::key_size() {
+            return Err(bytes);
+        }
+        let k = SessionEncryptionKey {
+            key: Key::<Aes256Gcm>::clone_from_slice(&bytes),
+        };
+        bytes.zeroize();
+        Ok(k)
     }
 
     pub fn encrypt(&self, data: &[u8]) -> Result<EncryptedData, aes_gcm::Error> {

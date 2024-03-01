@@ -1480,6 +1480,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-core-common"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "proton-api-core",
+ "proton-core-db",
+ "proton-event-loop",
+]
+
+[[package]]
 name = "proton-core-db"
 version = "0.1.0"
 dependencies = [

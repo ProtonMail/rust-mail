@@ -3,7 +3,7 @@ use parking_lot::RwLock;
 use serde::Deserialize;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 pub struct AuthScope(String);
 
 impl AsRef<str> for AuthScope {
@@ -15,6 +15,24 @@ impl AsRef<str> for AuthScope {
 impl<T: Into<String>> From<T> for AuthScope {
     fn from(value: T) -> Self {
         Self(value.into())
+    }
+}
+
+#[cfg(feature = "sql")]
+impl proton_sqlite3::rusqlite::types::ToSql for AuthScope {
+    fn to_sql(
+        &self,
+    ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl proton_sqlite3::rusqlite::types::FromSql for AuthScope {
+    fn column_result(
+        value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
+    ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).map(Self)
     }
 }
 
@@ -40,9 +58,12 @@ pub trait AuthStore: Send + Sync + 'static {
         refresh_token: SecretString,
         access_token: SecretString,
         scopes: AuthScope,
-    );
-    fn set_scopes(&mut self, scopes: AuthScope) -> Option<&Auth>;
-    fn clear_auth(&mut self);
+    ) -> Result<(), Box<dyn std::error::Error>>;
+    fn set_scopes(
+        &mut self,
+        scopes: AuthScope,
+    ) -> Result<Option<&Auth>, Box<dyn std::error::Error>>;
+    fn clear_auth(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 /// In memory authentication storage.
@@ -63,26 +84,31 @@ impl AuthStore for InMemoryStore {
         refresh_token: SecretString,
         access_token: SecretString,
         scope: AuthScope,
-    ) {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.auth = Some(Auth {
             uid,
             refresh_token,
             access_token,
             scope,
-        })
+        });
+        Ok(())
     }
 
-    fn set_scopes(&mut self, scope: AuthScope) -> Option<&Auth> {
+    fn set_scopes(
+        &mut self,
+        scope: AuthScope,
+    ) -> Result<Option<&Auth>, Box<dyn std::error::Error>> {
         let Some(auth) = &mut self.auth else {
-            return None;
+            return Ok(None);
         };
 
         auth.scope = scope;
-        Some(auth)
+        Ok(Some(auth))
     }
 
-    fn clear_auth(&mut self) {
+    fn clear_auth(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         self.auth = None;
+        Ok(())
     }
 }
 pub type ArcAuthStore = Arc<RwLock<dyn AuthStore>>;

@@ -1,4 +1,5 @@
 use crate::{DBResult, SessionEncryptionKey};
+use proton_api_core::auth::AuthScope;
 
 #[test]
 fn test_encryption() {
@@ -29,8 +30,7 @@ fn test_session_store_load() {
         email: "foo@bar.com".to_string(),
         refresh_token: SecretString::new("token".to_string()),
         access_token: SecretString::new("access".to_string()),
-        scopes: Some("Scope".to_string()),
-        product: Some("Product".to_string()),
+        scopes: Some(AuthScope::from("Scope")),
     };
 
     let key = SessionEncryptionKey::random();
@@ -39,10 +39,13 @@ fn test_session_store_load() {
         .expect("failed to encrypt");
     let mut conn = new_test_connection();
     conn.tx(|tx| -> DBResult<()> {
-        tx.store_session(&encrypted_session)
+        tx.create_or_update_session(&encrypted_session)
             .expect("failed to store session");
 
-        let db_encrypted_session = tx.load_session(&session.user_id).unwrap().unwrap();
+        let db_encrypted_session = tx
+            .get_session_with_user_id(&session.user_id)
+            .unwrap()
+            .unwrap();
         assert_eq!(encrypted_session, db_encrypted_session);
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, session.session_id);
@@ -50,7 +53,6 @@ fn test_session_store_load() {
         assert_eq!(db_session.name, session.name);
         assert_eq!(db_session.email, session.email);
         assert_eq!(db_session.scopes, session.scopes);
-        assert_eq!(db_session.product, session.product);
         assert_eq!(
             db_session.access_token.expose_secret(),
             session.access_token.expose_secret()

@@ -1,5 +1,5 @@
 use crate::auth::ArcAuthStore;
-use crate::domain::{EventId, IsEvent, Uid, User, UserSettings};
+use crate::domain::{EventId, IsEvent, User, UserSettings};
 use crate::http;
 use crate::http::{Client, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
@@ -27,23 +27,6 @@ impl Session {
         &self.auth_store
     }
 
-    pub async fn refresh(
-        c: Client,
-        auth_store: ArcAuthStore,
-        user_uid: &Uid,
-        token: &str,
-    ) -> Result<Self, http::HttpRequestError> {
-        let client = c.clone();
-        c.execute_request(AuthRefreshRequest::new(user_uid, token).to_request())
-            .await
-            .map(move |r| {
-                auth_store
-                    .write()
-                    .set_auth(r.uid, r.refresh_token.0, r.access_token.0, r.scope);
-                Session::new(client, auth_store)
-            })
-    }
-
     pub async fn get_user(&self) -> Result<User, http::HttpRequestError> {
         self.execute_request(UserInfoRequest {})
             .await
@@ -58,7 +41,9 @@ impl Session {
 
     pub async fn logout(&self) -> Result<(), http::HttpRequestError> {
         self.execute_request(LogoutRequest {}).await?;
-        self.auth_store.write().clear_auth();
+        self.auth_store.write().clear_auth().map_err(|e| {
+            http::HttpRequestError::Other(anyhow!("Failed to remove auth from store: {e}"))
+        })?;
         Ok(())
     }
 
@@ -149,12 +134,16 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
                         let data = data
                             .header(X_PM_UID_HEADER, auth_refresh_response.uid.as_ref())
                             .bearer_token(auth_refresh_response.access_token.0.expose_secret());
-                        writer.set_auth(
-                            auth_refresh_response.uid,
-                            auth_refresh_response.refresh_token.0,
-                            auth_refresh_response.access_token.0,
-                            auth_refresh_response.scope,
-                        );
+                        writer
+                            .set_auth(
+                                auth_refresh_response.uid,
+                                auth_refresh_response.refresh_token.0,
+                                auth_refresh_response.access_token.0,
+                                auth_refresh_response.scope,
+                            )
+                            .map_err(|e| {
+                                http::HttpRequestError::Other(anyhow!("Failed to store auth: {e}"))
+                            })?;
                         data
                     };
 
