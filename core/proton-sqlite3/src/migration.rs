@@ -1,7 +1,7 @@
 //! Utilities to facility migration of the database.
 
 use crate::SqliteConnection;
-use rusqlite::Transaction;
+use rusqlite::{OptionalExtension, Transaction};
 use tracing::debug;
 
 /// Migration Unit.
@@ -103,8 +103,8 @@ fn read_current_table_version(tx: &mut Transaction, id: &str) -> rusqlite::Resul
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
-    let version = tx.query_row(&query, [id], |r| r.get(0))?;
-    Ok(version)
+    let version = tx.query_row(&query, [id], |r| r.get(0)).optional()?;
+    Ok(version.unwrap_or(0))
 }
 
 fn create_version_table(tx: &mut Transaction) -> rusqlite::Result<()> {
@@ -180,6 +180,29 @@ fn test_migration() {
         .expect_err("Migration should fail");
 
     assert!(matches!(err, MigratorError::InvalidVersion(2)))
+}
+
+#[test]
+fn test_migration_with_different_table_ids() {
+    const TEST_TABLE_NAME_1: &str = "test_table_version_foo";
+    const TEST_TABLE_NAME_2: &str = "test_table_version_bar";
+
+    let pool = crate::SqliteConnectionPool::new(crate::SqliteMode::InMemory, true);
+    let mut conn = pool.acquire().expect("failed to acquire connection");
+
+    let migrator = Migrator::new();
+
+    // first version
+    let version = migrator
+        .migrate(&mut conn, TEST_TABLE_NAME_1, &[create_migration_1()])
+        .expect("Failed to run migration");
+    assert_eq!(version, 1);
+
+    // second version
+    let version = migrator
+        .migrate(&mut conn, TEST_TABLE_NAME_2, &[create_migration_2()])
+        .expect("Failed to run migration");
+    assert_eq!(version, 1);
 }
 
 #[cfg(test)]
