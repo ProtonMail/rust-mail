@@ -7,3 +7,4 @@ mod user_context;
 pub use context::*;
 pub use keychain::*;
 pub use session::*;
+pub use user_context::*;
