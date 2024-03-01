@@ -1,246 +1,265 @@
-use crate::app::AppDispatcher;
-use crate::events::AppEvents;
-use crate::state::{AppState, DataLoadError, UserState};
-use anyhow::anyhow;
-use proton_api_mail::domain::{
-    ConversationMetadataFilterBuilder, LabelId, LabelType, SysLabelId, ALL_LABEL_TYPES,
+use crate::app::{AppBackgroundDispatcher, AppLocalDispatcher};
+use crate::events::mailbox::MailboxEvent;
+use crate::events::AppEvent;
+use crate::state::AppState;
+use crate::views::{ConversationView, SessionsView};
+use proton_mail_common::proton_api_mail::domain::{LabelType, SysLabelId};
+use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing;
+use proton_mail_common::proton_mail_db::{
+    ConversationsLiveQuery, LabelsByTypeLiveQuery, LocalLabel, LocalLabelId,
 };
-use proton_api_mail::proton_api_core::exports::proton_sqlite3::{
-    ObservableQuery, SqliteConnection,
+use proton_mail_common::{
+    MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
+    MailUserContextLoadingStage,
 };
-use proton_api_mail::proton_api_core::exports::tracing;
-use proton_api_mail::MailSession;
-use proton_async::runtime::MTRuntime;
-use proton_mail_db::{
-    LabelColor, LocalConversationWithContext, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
-    MailSqliteConnectionPool,
-};
-use std::ops::Deref;
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum LoadingState {
+    Unloaded,
+    Loading,
+    Done,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum MailboxStateError {
+    #[error("{0}")]
+    Context(
+        #[source]
+        #[from]
+        MailContextError,
+    ),
+    #[error("No user sessions available")]
+    NoContext,
+    #[error("Label {0}({1})has no remote id")]
+    LabelHasNoRemoteId(String, LocalLabelId),
+}
 
 pub struct MailboxState {
-    active_label: LocalLabel,
-    label_list: [Vec<LocalLabel>; ALL_LABEL_TYPES.len()],
+    user_context: Option<MailboxUserContextState>,
+    active_label: Option<LocalLabel>,
+    labels_loading_state: LoadingState,
+    conversation_loading_state: LoadingState,
 }
 
-const fn label_type_to_index(l: LabelType) -> usize {
-    (l as usize) - 1
+pub struct MailboxUserContextState {
+    context: MailUserContext,
+    pub conversations: ConversationsLiveQuery,
+    pub system_labels: LabelsByTypeLiveQuery,
+    pub folders: LabelsByTypeLiveQuery,
+    pub labels: LabelsByTypeLiveQuery,
 }
+
+impl MailboxUserContextState {
+    pub fn new(context: MailUserContext) -> Self {
+        Self {
+            conversations: context.new_inbox_conversations_live_query(),
+            system_labels: context.new_labels_by_type_live_query(LabelType::System),
+            folders: context.new_labels_by_type_live_query(LabelType::Folder),
+            labels: context.new_labels_by_type_live_query(LabelType::Label),
+            context,
+        }
+    }
+}
+
 impl MailboxState {
     pub fn new() -> Self {
         Self {
-            active_label: LocalLabel {
-                id: LocalLabelId::new(u64::MAX),
-                rid: Some(SysLabelId::INBOX.into()),
-                parent_id: None,
-                name: "".to_string(),
-                path: None,
-                color: LabelColor::black(),
-                label_type: LabelType::System,
-                order: 0,
-                notified: false,
-                expanded: false,
-                sticky: false,
-            },
-            label_list: Default::default(),
+            user_context: None,
+            active_label: None,
+            labels_loading_state: LoadingState::Unloaded,
+            conversation_loading_state: LoadingState::Unloaded,
         }
     }
 
-    pub fn active_label(&self) -> &LocalLabel {
-        &self.active_label
+    pub fn labels_loading_state(&self) -> LoadingState {
+        self.labels_loading_state
+    }
+
+    pub fn conversation_loading_state(&self) -> LoadingState {
+        self.conversation_loading_state
+    }
+
+    pub fn active_label(&self) -> Option<&LocalLabel> {
+        self.active_label.as_ref()
+    }
+
+    pub fn active_label_type(&self) -> LabelType {
+        self.active_label
+            .as_ref()
+            .map(|l| l.label_type)
+            .unwrap_or(LabelType::System)
     }
 
     pub fn active_label_name(&self) -> &str {
-        self.active_label
-            .path
-            .as_deref()
-            .unwrap_or(self.active_label.name.as_str())
-    }
-
-    pub fn assign_labels(&mut self, all_labels: Vec<LocalLabel>) {
-        for label in all_labels {
-            self.label_list[label_type_to_index(label.label_type)].push(label);
-        }
-
-        for l in &mut self.label_list {
-            l.sort_by(|l1, l2| l1.order.cmp(&l2.order))
+        if let Some(label) = &self.active_label {
+            label.path.as_deref().unwrap_or(label.name.as_str())
+        } else {
+            "Inbox"
         }
     }
 
-    pub fn label_list(&self, label_type: LabelType) -> &[LocalLabel] {
-        &self.label_list[label_type_to_index(label_type)]
+    pub fn mailbox_context(&self) -> Option<&MailboxUserContextState> {
+        self.user_context.as_ref()
     }
 
-    pub fn reset(&mut self) {
-        for l in &mut self.label_list {
-            l.clear();
-        }
-    }
-
-    pub fn first_load(
-        &self,
-        user_state: &UserState,
-        app_dispatcher: AppDispatcher<AppState, AppEvents>,
-        runtime: &MTRuntime,
+    fn on_refresh(
+        &mut self,
+        mail_context: &MailContext,
+        mut app_dispatcher: AppLocalDispatcher<AppState, AppEvent>,
     ) {
-        let remote_label_id = SysLabelId::INBOX.into();
-        let session = user_state.session.clone();
-        let db = user_state.db_pool.clone();
-        runtime.spawn(async move {
-            let labels = match load_labels(&session, &db).await {
-                Ok(l) => l,
-                Err(e) => {
-                    app_dispatcher
-                        .queue_event_async(AppEvents::mailbox_label_load(Err(e)))
-                        .await;
-                    return;
-                }
-            };
+        let Some(context) = &self.user_context else {
+            app_dispatcher.set_error("Mailbox Error", MailboxStateError::NoContext);
+            return;
+        };
 
-            // resolve local label id
-            if labels
-                .iter()
-                .find(|l| l.rid.as_ref() == Some(&remote_label_id))
-                .map(|l| l.id)
-                .is_none()
-            {
-                app_dispatcher
-                    .queue_event_async(AppEvents::mailbox_label_load(Err(DataLoadError::Other(
-                        anyhow!("Failed to find local label if for {remote_label_id}"),
-                    ))))
-                    .await;
+        self.labels_loading_state = LoadingState::Loading;
+        self.conversation_loading_state = LoadingState::Loading;
+
+        let label_id = if let Some(label) = &self.active_label {
+            let Some(id) = &label.rid else {
+                app_dispatcher.set_error(
+                    "Mailbox Error",
+                    MailboxStateError::LabelHasNoRemoteId(label.name.clone(), label.id),
+                );
                 return;
             };
-
-            app_dispatcher.queue_event(AppEvents::mailbox_label_load(Ok(labels)));
-
-            app_dispatcher
-                .queue_event_async(AppEvents::mailbox_conversation_load(
-                    load_conversations(&session, &db, &remote_label_id).await,
-                ))
-                .await;
-        });
+            id.clone()
+        } else {
+            SysLabelId::INBOX.into()
+        };
+        context.context.initialize(
+            mail_context,
+            label_id,
+            Box::new(MailboxInitCallback(app_dispatcher.background_dispatcher())),
+        );
     }
 
+    fn on_mailbox_open(
+        &mut self,
+        app_dispatcher: AppLocalDispatcher<AppState, AppEvent>,
+        mail_context: &MailContext,
+        user_context: MailUserContext,
+    ) {
+        self.user_context = Some(MailboxUserContextState::new(user_context));
+        self.on_refresh(mail_context, app_dispatcher);
+    }
     pub fn load_label(
         &mut self,
+        mail_context: &MailContext,
         label: LocalLabel,
-        user_state: &UserState,
-        app_dispatcher: AppDispatcher<AppState, AppEvents>,
-        runtime: &MTRuntime,
+        mut dispatcher: AppLocalDispatcher<AppState, AppEvent>,
     ) {
-        self.active_label = label;
-        let session = user_state.session.clone();
-        let db = user_state.db_pool.clone();
-        let Some(remote_label_id) = self.active_label.rid.clone() else {
-            app_dispatcher.set_error(
-                "Invalid State",
-                DataLoadError::Other(anyhow!(
-                    "Local label {}({}) has no remote id",
-                    self.active_label.name,
-                    self.active_label.id
-                )),
+        let Some(mailbox_context) = &mut self.user_context else {
+            dispatcher.set_error("Mailbox Error", MailboxStateError::NoContext);
+            return;
+        };
+        let Some(remote_label_id) = label.rid.clone() else {
+            dispatcher.set_error(
+                "Mailbox Error",
+                MailboxStateError::LabelHasNoRemoteId(label.name.clone(), label.id),
             );
             return;
         };
-        runtime.spawn(async move {
-            let conv = load_conversations(&session, &db, &remote_label_id)
+        mailbox_context.conversations = mailbox_context
+            .context
+            .new_conversation_live_query(label.id);
+        self.active_label = Some(label);
+        self.conversation_loading_state = LoadingState::Loading;
+        let context = mailbox_context.context.clone();
+        let dispatcher = dispatcher.background_dispatcher();
+        mail_context.async_runtime().spawn(async move {
+            let result = context
+                .sync_first_conversation_page(remote_label_id, 50)
                 .await
                 .map_err(|e| {
                     tracing::error!("Failed to load conversations: {e}");
-                    e
+                    e.into()
                 });
-            app_dispatcher
-                .queue_event_async(AppEvents::mailbox_conversation_load(conv))
+            dispatcher
+                .queue_event_async(MailboxEvent::LoadConversations(result))
                 .await;
         });
     }
-}
 
-async fn load_labels(
-    session: &MailSession,
-    pool: &MailSqliteConnectionPool,
-) -> Result<Vec<LocalLabel>, DataLoadError> {
-    {
-        let db = pool.acquire()?;
-        let labels = db.as_connection_ref().get_all_local_labels()?;
-        if !labels.is_empty() {
-            return Ok(labels);
+    pub fn handle_event(
+        &mut self,
+        mut dispatcher: AppLocalDispatcher<AppState, AppEvent>,
+        mail_context: &MailContext,
+        event: MailboxEvent,
+    ) {
+        match event {
+            MailboxEvent::LoadLabelRequest(label) => {
+                self.load_label(mail_context, label, dispatcher);
+            }
+            MailboxEvent::MailboxRefresh => {
+                self.on_refresh(mail_context, dispatcher);
+            }
+            MailboxEvent::NewMailboxSession(context) => {
+                dispatcher.push_view(ConversationView::new());
+                self.on_mailbox_open(dispatcher, mail_context, context);
+            }
+            MailboxEvent::LoadLabels(r) => match r {
+                Ok(_) => {
+                    self.labels_loading_state = LoadingState::Done;
+                }
+                Err(e) => {
+                    dispatcher.set_error("Failed to load labels", e);
+                }
+            },
+            MailboxEvent::LoadConversations(result) => match result {
+                Ok(_) => {
+                    self.conversation_loading_state = LoadingState::Done;
+                }
+                Err(e) => {
+                    self.conversation_loading_state = LoadingState::Done;
+                    dispatcher.set_error("Failed to load conversations", e);
+                }
+            },
+            MailboxEvent::Logout => {
+                if let Some(mailbox_context) = self.user_context.take() {
+                    let bg_dispatcher = dispatcher.background_dispatcher();
+                    mail_context.async_runtime().spawn(async move {
+                        if let Err(e) = mailbox_context.context.logout().await {
+                            bg_dispatcher.set_error("Failed to Logout", e);
+                        }
+                        bg_dispatcher.queue_on_main(|app| {
+                            app.pop_all_views();
+                            app.push_view(SessionsView::new());
+                        });
+                    });
+                }
+            }
         }
     }
-    let mut all_labels = Vec::new();
-    for category in ALL_LABEL_TYPES {
-        let labels = session.get_labels(category).await?;
-        all_labels.extend(labels);
-    }
-
-    let mut db = pool.acquire()?;
-    db.tx(|tx| tx.create_remote_labels(all_labels.iter()))?;
-
-    Ok(db.as_connection_ref().get_all_local_labels()?)
 }
 
-#[tracing::instrument(skip(session,pool),fields(label_id=?remote_label_id))]
-async fn load_conversations(
-    session: &MailSession,
-    pool: &MailSqliteConnectionPool,
-    remote_label_id: &LabelId,
-) -> Result<(), DataLoadError> {
-    tracing::debug!("Loading conversations");
-    let filter = ConversationMetadataFilterBuilder::new(0, 25)
-        .descending()
-        .with_label_id(remote_label_id.clone())
-        .build();
-    let remote_conversations = session.get_conversations(filter).await?;
-
-    tracing::debug!(
-        "Storing {} conversations in db",
-        remote_conversations.conversations.len()
-    );
-    let mut db = pool.acquire()?;
-    db.tx(|tx| tx.create_conversations(remote_conversations.conversations.iter()))?;
-    Ok(())
-}
-
-#[derive(Clone, Default)]
-pub struct MailboxConversationQuery(Option<LocalLabelId>);
-
-impl MailboxConversationQuery {
-    pub fn new() -> Self {
-        Self(None)
-    }
-    pub fn with_label(label_id: LocalLabelId) -> Self {
-        Self(Some(label_id))
-    }
-}
-
-impl ObservableQuery for MailboxConversationQuery {
-    type Output = Vec<LocalConversationWithContext>;
-
-    fn debug_name(&self) -> &'static str {
-        "MailboxViewQuery"
+pub struct MailboxInitCallback(AppBackgroundDispatcher<AppState, AppEvent>);
+impl MailUserContextInitializationCallback for MailboxInitCallback {
+    fn on_stage(&self, stage: MailUserContextLoadingStage) {
+        match stage {
+            MailUserContextLoadingStage::Conversation => {
+                self.0.queue_event(MailboxEvent::LoadLabels(Ok(())))
+            }
+            MailUserContextLoadingStage::Finished => {
+                self.0.queue_event(MailboxEvent::LoadConversations(Ok(())))
+            }
+            _ => {}
+        }
     }
 
-    fn tables(&self) -> Vec<String> {
-        vec![
-            "conversations".to_string(),
-            "conversation_labels".to_string(),
-        ]
-    }
-
-    fn execute(
-        &self,
-        connection: &SqliteConnection,
-    ) -> proton_api_mail::proton_api_core::exports::proton_sqlite3::rusqlite::Result<Self::Output>
-    {
-        let conn = MailSqliteConnectionImpl::new(connection.deref());
-        let label_id = if let Some(id) = self.0 {
-            id
-        } else {
-            conn.resolve_remote_label_ids(std::iter::once(&LabelId::from(SysLabelId::INBOX)))?[0]
-        };
-
-        let conversations = conn.get_conversations_with_context(label_id, 25)?;
-        tracing::debug!("Retrieved {} conversation from db", conversations.len());
-        Ok(conversations)
+    fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError) {
+        match stage {
+            MailUserContextLoadingStage::Labels => {
+                self.0
+                    .queue_event(MailboxEvent::LoadLabels(Err(err.into())));
+            }
+            MailUserContextLoadingStage::Conversation => {
+                self.0
+                    .queue_event(MailboxEvent::LoadConversations(Err(err.into())));
+            }
+            _ => {
+                self.0.set_error("Failed to load", err);
+            }
+        }
     }
 }

@@ -1,10 +1,17 @@
-use crate::state::{DataLoadError, UserState};
-use proton_api_mail::proton_api_core::http::HttpRequestError;
-use proton_api_mail::proton_api_core::{LoginError, TotpSession};
+use proton_mail_common::proton_api_mail::proton_api_core::login::{LoginFlow, LoginFlowError};
+use secrecy::SecretString;
 
-pub enum LoginEvents {
-    LoginFailed(LoginError),
-    LoginSuccess(Result<UserState, DataLoadError>),
-    LoginNeed2FA(TotpSession),
-    Login2FAFailed(HttpRequestError),
+#[derive(Debug)]
+pub enum LoginEvent {
+    LoginRequest {
+        user: String,
+        password: SecretString,
+    },
+    TwoFARequest(String),
+    LoginFailed(LoginFlowError),
+    LoginSuccess(LoginFlow),
+    LoginSuccess2FA(LoginFlow),
+    LoginNeed2FA(LoginFlow),
+    Login2FAFailed((LoginFlow, LoginFlowError)),
+    Logout,
 }

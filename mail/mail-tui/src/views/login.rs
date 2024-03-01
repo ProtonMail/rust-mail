@@ -1,22 +1,19 @@
-use crate::events::login::LoginEvents;
-use crate::events::AppEvents;
+use crate::events::login::LoginEvent;
+use crate::events::AppEvent;
 use crate::state::LoginState;
 use crate::view::View;
-use crate::views::mailbox::ConversationView;
-use crate::views::{AppViewContext, TotpView};
+use crate::views::AppViewContext;
+use crate::widgets::{HelpCategory, HelpItem, TextInput, TextInputState};
 use crossterm::event::{Event, KeyCode};
-use ratatui::layout::{Alignment, Constraint, Direction, Flex, Layout, Rect};
-use ratatui::style::Stylize;
-use ratatui::text::{Masked, Text};
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
+use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
+use ratatui::text::Text;
 use ratatui::Frame;
 use secrecy::SecretString;
-use tui_input::backend::crossterm::EventHandler;
 
 pub struct LoginView {
-    logging_in: bool,
     input_index: usize,
-    inputs: [tui_input::Input; 2],
+    email_input_state: TextInputState,
+    password_input_state: TextInputState,
 }
 
 const MAX_INPUT_INDICES: usize = 2;
@@ -25,27 +22,24 @@ const PASSWORD_INDEX: usize = 1;
 impl LoginView {
     pub fn new() -> Self {
         Self {
-            logging_in: false,
             input_index: EMAIL_INDEX,
-            inputs: [
-                tui_input::Input::default().with_cursor(1),
-                tui_input::Input::default().with_cursor(1),
-            ],
+            email_input_state: TextInputState::new().selected(true),
+            password_input_state: TextInputState::new().secret(true),
         }
     }
 }
-impl View<AppViewContext, AppEvents> for LoginView {
+impl View<AppViewContext, AppEvent> for LoginView {
     fn on_enter(&mut self, ctx: &mut AppViewContext) {
-        self.logging_in = false;
-        ctx.state_mut().logout();
+        ctx.app_local_dispatcher().queue_event(LoginEvent::Logout);
     }
 
     fn on_exit(&mut self, _: &mut AppViewContext) {
-        self.inputs[PASSWORD_INDEX].reset();
+        self.password_input_state.reset();
+        self.email_input_state.reset();
     }
 
-    fn draw(&mut self, _: &AppViewContext, frame: &mut Frame, area: Rect) {
-        if self.logging_in {
+    fn draw(&mut self, ctx: &AppViewContext, frame: &mut Frame, area: Rect) {
+        if matches!(ctx.state().login_state, LoginState::LoggingIn) {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .flex(Flex::Center)
@@ -53,6 +47,10 @@ impl View<AppViewContext, AppEvents> for LoginView {
                 .split(area);
             frame.render_widget(Text::from("Logging in...").centered(), chunks[0]);
         } else {
+            let area = area.inner(&Margin {
+                horizontal: 10,
+                vertical: 10,
+            });
             let [_, email_area, password_area, _] = Layout::default()
                 .direction(Direction::Vertical)
                 .flex(Flex::Center)
@@ -64,107 +62,58 @@ impl View<AppViewContext, AppEvents> for LoginView {
                 ])
                 .areas(area);
 
-            let mut draw_text_box = |index: usize, label: &str, area: Rect| {
-                let vertical_layout = Layout::default()
-                    .direction(Direction::Horizontal)
-                    .flex(Flex::Center)
-                    .constraints([
-                        Constraint::Percentage(10),
-                        Constraint::Percentage(20),
-                        Constraint::Percentage(10),
-                    ])
-                    .split(area);
-                let horizontal = Layout::default()
-                    .direction(Direction::Vertical)
-                    .flex(Flex::Center)
-                    .constraints([
-                        Constraint::Length(1),
-                        Constraint::Length(1),
-                        Constraint::Length(1),
-                    ])
-                    .split(vertical_layout[0]);
-                frame.render_widget(
-                    Text::from(label.bold()).alignment(Alignment::Right),
-                    horizontal[1],
-                );
+            const MAX_LABEL_SIZE: u16 = 10;
+            frame.render_stateful_widget(
+                TextInput::new("Email:").with_max_label_length(MAX_LABEL_SIZE),
+                email_area,
+                &mut self.email_input_state,
+            );
 
-                let mut block = Block::default().borders(Borders::all());
+            frame.render_stateful_widget(
+                TextInput::new("Password:").with_max_label_length(MAX_LABEL_SIZE),
+                password_area,
+                &mut self.password_input_state,
+            );
 
-                let input = &self.inputs[index];
-
-                if self.input_index == index {
-                    block = block.bold();
-                }
-
-                let p = if index == PASSWORD_INDEX {
-                    Paragraph::new(Masked::new(input.value(), '*'))
-                } else {
-                    Paragraph::new(input.value())
-                }
-                .wrap(Wrap { trim: true })
-                .block(block);
-                frame.render_widget(p, vertical_layout[1]);
-                if self.input_index == index {
-                    let width = vertical_layout[1].width.max(3) - 3;
-                    let scroll = input.visual_scroll(width as usize);
-                    frame.set_cursor(
-                        vertical_layout[1].x
-                            + u16::try_from(input.cursor().max(scroll) - scroll)
-                                .expect("invalid range")
-                            + 1,
-                        horizontal[1].y,
-                    );
-                }
-            };
-
-            draw_text_box(0, "Email:", email_area);
-            draw_text_box(1, "Password:", password_area);
+            let (x, y) = self.active_text_input_state_mut().frame_cursor();
+            frame.set_cursor(x, y);
         }
     }
 
-    fn draw_help(&self, _: &AppViewContext, frame: &mut Frame, area: Rect) {
-        frame.render_widget(Text::from("(Enter) Submit"), area);
+    fn help_items(&self) -> &[HelpCategory] {
+        static ITEMS: [HelpCategory; 1] = [HelpCategory {
+            name: "Login",
+            items: &[
+                HelpItem {
+                    key: "Esc",
+                    description: "Return to Sessions",
+                },
+                HelpItem {
+                    key: "Enter",
+                    description: "Login",
+                },
+            ],
+        }];
+
+        &ITEMS
     }
 
-    fn on_event(&mut self, ctx: &mut AppViewContext, event: AppEvents) -> Option<AppEvents> {
-        match event {
-            AppEvents::Login(e) => {
-                match e {
-                    LoginEvents::LoginFailed(err) => {
-                        ctx.set_error("Failed t login", err);
-                        self.logging_in = false;
-                    }
-                    LoginEvents::LoginSuccess(r) => match r {
-                        Ok(r) => {
-                            ctx.state_mut().login_state = LoginState::LoggedIn(r);
-                            ctx.push_view(ConversationView::new())
-                        }
-                        Err(e) => {
-                            ctx.set_error("Failed to prepare user data", e);
-                        }
-                    },
-                    LoginEvents::LoginNeed2FA(t) => {
-                        ctx.state_mut().login_state = LoginState::AwaitingTotp(t);
-                        ctx.push_view(TotpView::new())
-                    }
-                    _ => {}
-                }
-                None
-            }
-            _ => Some(event),
-        }
-    }
     fn on_input(&mut self, ctx: &mut AppViewContext, event: &Event) {
         if let Event::Key(k) = event {
             match k.code {
+                KeyCode::Esc => {
+                    ctx.app_local_dispatcher().pop_view();
+                }
                 KeyCode::Enter => {
                     self.do_login(ctx);
                 }
                 KeyCode::Tab => {
+                    self.active_text_input_state_mut().set_selected(false);
                     self.input_index = (self.input_index + 1) % MAX_INPUT_INDICES;
+                    self.active_text_input_state_mut().set_selected(true);
                 }
                 _ => {
-                    self.inputs[self.input_index].handle_event(event);
+                    self.active_text_input_state_mut().handle_event(event);
                 }
             }
         }
@@ -176,14 +125,21 @@ impl View<AppViewContext, AppEvents> for LoginView {
 }
 
 impl LoginView {
+    fn active_text_input_state_mut(&mut self) -> &mut TextInputState {
+        match self.input_index {
+            EMAIL_INDEX => &mut self.email_input_state,
+            PASSWORD_INDEX => &mut self.password_input_state,
+            _ => unreachable!(),
+        }
+    }
     fn do_login(&mut self, ctx: &mut AppViewContext) {
-        if self.logging_in {
+        if !matches!(ctx.state().login_state, LoginState::LoggedOut) {
             return;
         }
-        self.logging_in = true;
-        let dispatcher = ctx.dispatcher();
-        let email = self.inputs[EMAIL_INDEX].value().to_string();
-        let password = SecretString::from(self.inputs[PASSWORD_INDEX].to_string());
-        ctx.state_mut().login(dispatcher, email, password);
+        ctx.app_local_dispatcher()
+            .queue_event(LoginEvent::LoginRequest {
+                user: self.email_input_state.value().to_string(),
+                password: SecretString::new(self.password_input_state.value().to_string()),
+            });
     }
 }

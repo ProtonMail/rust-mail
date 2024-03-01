@@ -41,6 +41,9 @@ impl ScrollableListState {
     }
 
     pub fn next(&mut self) {
+        if self.element_len == 0 {
+            return;
+        }
         if let Some(index) = self.list_state.selected() {
             let next_index = (self.element_len - 1).min(index + 1);
             self.list_state.select(Some(next_index));
@@ -48,6 +51,9 @@ impl ScrollableListState {
     }
 
     pub fn prev(&mut self) {
+        if self.element_len == 0 {
+            return;
+        }
         if let Some(index) = self.list_state.selected() {
             let next_index = index.saturating_sub(1);
             self.list_state.select(Some(next_index));

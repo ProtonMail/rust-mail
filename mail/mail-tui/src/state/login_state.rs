@@ -1,112 +1,189 @@
-use crate::app::AppDispatcher;
-use crate::events::AppEvents;
-use crate::state::{AppState, DataLoadError, UserState};
-use anyhow::anyhow;
-use log::error;
-use proton_api_mail::proton_api_core;
-use proton_api_mail::proton_api_core::http::HttpRequestError;
-use proton_api_mail::proton_api_core::{LoginError, Session, SessionType, TotpSession};
+use crate::app::{AppBackgroundDispatcher, AppLocalDispatcher};
+use crate::events::login::LoginEvent;
+use crate::events::mailbox::MailboxEvent;
+use crate::events::AppEvent;
+use crate::state::AppState;
+use crate::views::TotpView;
 use proton_async::runtime::MTRuntime;
+use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::{debug, error};
+use proton_mail_common::proton_api_mail::proton_api_core::login::LoginFlow;
+use proton_mail_common::{MailContext, MailContextResult};
 use secrecy::{ExposeSecret, SecretString};
-use std::path::PathBuf;
 
 pub enum LoginState {
     LoggedOut,
-    AwaitingTotp(TotpSession),
-    LoggedIn(UserState),
+    LoggingIn,
+    AwaitingTotp(LoginFlow),
+    SubmittingTotp,
+    LoggedIn(LoginFlow),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum LoginStateError {
+    #[error("Database Error: {0}")]
+    DB(#[from] proton_mail_common::proton_mail_db::DBError),
+    #[error("Migration Error: {0}")]
+    DBMigration(#[from] proton_mail_common::proton_mail_db::DBMigrationError),
+    #[error("Network Error: {0}")]
+    Http(#[from] proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError),
+    #[error("Invalid Login State")]
+    InvalidState,
 }
 
 impl LoginState {
-    pub fn login(
+    fn login(
         &mut self,
-        dispatcher: AppDispatcher<AppState, AppEvents>,
-        runtime: &MTRuntime,
-        db_path: PathBuf,
+        mail_context: &MailContext,
+        dispatcher: AppBackgroundDispatcher<AppState, AppEvent>,
         email: String,
         password: SecretString,
-    ) {
-        self.logout(runtime);
-        runtime.spawn(async move {
-            match login(&email, password.expose_secret()).await {
-                Ok(s) => match s {
-                    SessionType::Authenticated(s) => {
-                        let user_state = UserState::new(s, db_path).await;
-                        dispatcher
-                            .queue_event_async(AppEvents::login_success(user_state))
-                            .await;
-                    }
-                    SessionType::AwaitingTotp(s) => {
-                        dispatcher
-                            .queue_event_async(AppEvents::login_needs_2fa(s))
-                            .await;
-                    }
-                },
-                Err(e) => {
-                    dispatcher
-                        .queue_event_async(AppEvents::login_failed(e))
-                        .await;
-                }
+    ) -> MailContextResult<()> {
+        self.logout(mail_context.async_runtime());
+        *self = LoginState::LoggingIn;
+        let mut login_flow = mail_context.new_login_flow(None)?;
+        mail_context.async_runtime().spawn(async move {
+            if let Err(e) = login_flow
+                .login(&email, password.expose_secret(), None)
+                .await
+            {
+                dispatcher
+                    .queue_event_async(LoginEvent::LoginFailed(e))
+                    .await;
+                return;
             }
+
+            if login_flow.is_awaiting_2fa() {
+                dispatcher
+                    .queue_event_async(LoginEvent::LoginNeed2FA(login_flow))
+                    .await;
+                return;
+            }
+
+            dispatcher
+                .queue_event_async(LoginEvent::LoginSuccess(login_flow))
+                .await;
         });
+        Ok(())
     }
 
-    pub fn submit_2fa(
-        &self,
-        dispatcher: AppDispatcher<AppState, AppEvents>,
+    fn submit_2fa(
+        &mut self,
+        dispatcher: AppBackgroundDispatcher<AppState, AppEvent>,
         runtime: &MTRuntime,
-        db_path: PathBuf,
         code: String,
     ) {
-        if let LoginState::AwaitingTotp(s) = self {
-            let s = s.clone();
+        let state = std::mem::replace(self, LoginState::SubmittingTotp);
+        if let LoginState::AwaitingTotp(mut flow) = state {
             runtime.spawn(async move {
-                match s.submit_totp(&code).await {
-                    Ok(s) => {
+                match flow.submit_totp(&code).await {
+                    Ok(_) => {
                         dispatcher
-                            .queue_event_async(AppEvents::login_success(
-                                UserState::new(s, db_path).await,
-                            ))
+                            .queue_event_async(LoginEvent::LoginSuccess2FA(flow))
                             .await;
                     }
                     Err(e) => {
                         dispatcher
-                            .queue_event_async(AppEvents::login_2fa_failed(e))
+                            .queue_event_async(LoginEvent::Login2FAFailed((flow, e)))
                             .await;
                     }
                 };
             });
         } else {
-            dispatcher.set_error(
-                "Invalid Login State",
-                DataLoadError::Other(anyhow!("Not waiting on any 2FA calls")),
-            );
+            *self = state;
+            dispatcher.set_error("Invalid Login State", LoginStateError::InvalidState);
         }
     }
-    pub fn logout(&mut self, runtime: &MTRuntime) {
+    fn logout(&mut self, runtime: &MTRuntime) {
         match std::mem::replace(self, LoginState::LoggedOut) {
-            LoginState::AwaitingTotp(t) => {
+            LoginState::AwaitingTotp(flow) => {
+                debug!("Logging out from TOTP state");
                 runtime.spawn(async move {
-                    if let Err(e) = t.logout().await {
+                    if let Err(e) = flow.session().logout().await {
                         error!("Failed to logout :{e}");
                     }
                 });
             }
-            LoginState::LoggedIn(user_state) => {
+            LoginState::LoggedIn(flow) => {
+                debug!("Logging out from logged in state");
                 runtime.spawn(async move {
-                    if let Err(e) = user_state.session.session().logout().await {
+                    if let Err(e) = flow.session().logout().await {
                         error!("Failed to logout :{e}");
                     }
                 });
             }
-            _ => {}
+            _ => {
+                debug!("No state found for logout");
+            }
         }
     }
-}
 
-async fn login(email: &str, password: &str) -> Result<SessionType, LoginError> {
-    let client = proton_api_core::http::ClientBuilder::new()
-        .app_version("Other")
-        .build()
-        .map_err(|e| LoginError::Request(HttpRequestError::Other(e)))?;
-    Session::login(client, email, password, None).await
+    fn session_from_login_flow(
+        &mut self,
+        mut dispatcher: AppLocalDispatcher<AppState, AppEvent>,
+        flow: LoginFlow,
+        mail_context: &MailContext,
+    ) {
+        match mail_context.user_context_from_login_flow(&flow) {
+            Ok(ctx) => {
+                dispatcher.queue_event(MailboxEvent::NewMailboxSession(ctx));
+                *self = LoginState::LoggedIn(flow);
+            }
+            Err(e) => {
+                dispatcher.set_error("Context Error", e);
+                *self = LoginState::LoggedOut;
+            }
+        }
+    }
+
+    pub fn handle_event(
+        &mut self,
+        mut dispatcher: AppLocalDispatcher<AppState, AppEvent>,
+        mail_context: &MailContext,
+        event: LoginEvent,
+    ) {
+        match event {
+            LoginEvent::LoginRequest { user, password } => {
+                if let Err(e) = self.login(
+                    mail_context,
+                    dispatcher.background_dispatcher(),
+                    user,
+                    password,
+                ) {
+                    *self = LoginState::LoggedOut;
+                    dispatcher.set_error("Failed to Login", e);
+                }
+            }
+            LoginEvent::TwoFARequest(code) => {
+                self.submit_2fa(
+                    dispatcher.background_dispatcher(),
+                    mail_context.async_runtime(),
+                    code,
+                );
+            }
+            LoginEvent::LoginFailed(err) => {
+                *self = LoginState::LoggedOut;
+                dispatcher.set_error("Failed to Login", err);
+            }
+            LoginEvent::LoginSuccess2FA(flow) => {
+                dispatcher.pop_view(); // pop 2fa
+                dispatcher.pop_view(); // pop login
+                self.session_from_login_flow(dispatcher, flow, mail_context)
+            }
+            LoginEvent::LoginSuccess(flow) => {
+                dispatcher.pop_view();
+                self.session_from_login_flow(dispatcher, flow, mail_context)
+            }
+            LoginEvent::LoginNeed2FA(flow) => {
+                *self = LoginState::AwaitingTotp(flow);
+                dispatcher.push_view(TotpView::new())
+            }
+            LoginEvent::Login2FAFailed((flow, error)) => {
+                *self = LoginState::AwaitingTotp(flow);
+                dispatcher.set_error("Failed to Submit Two Factor Code", error);
+            }
+            LoginEvent::Logout => {
+                self.logout(mail_context.async_runtime());
+            }
+        }
+    }
 }

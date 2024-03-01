@@ -1,40 +1,31 @@
-use crate::events::login::LoginEvents;
-use crate::events::AppEvents;
+use crate::events::login::LoginEvent;
+use crate::events::AppEvent;
 use crate::state::LoginState;
 use crate::view::View;
-use crate::views::mailbox::ConversationView;
 use crate::views::AppViewContext;
+use crate::widgets::{HelpCategory, HelpItem, TextInput, TextInputState};
 use crossterm::event::{Event, KeyCode};
-use ratatui::layout::{Alignment, Constraint, Direction, Flex, Layout, Rect};
-use ratatui::style::Stylize;
+use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::text::Text;
-use ratatui::widgets::{Block, Borders, Paragraph, Wrap};
 use ratatui::Frame;
-use tui_input::backend::crossterm::EventHandler;
 
 pub struct TotpView {
-    submitting: bool,
-    input: tui_input::Input,
+    input_state: TextInputState,
 }
 impl TotpView {
     pub fn new() -> Self {
         Self {
-            submitting: false,
-            input: tui_input::Input::default().with_cursor(1),
+            input_state: TextInputState::new().selected(true),
         }
     }
 }
-impl View<AppViewContext, AppEvents> for TotpView {
-    fn on_enter(&mut self, _: &mut AppViewContext) {
-        self.submitting = false;
-    }
-
+impl View<AppViewContext, AppEvent> for TotpView {
     fn on_exit(&mut self, _: &mut AppViewContext) {
-        self.input.reset();
+        self.input_state.reset();
     }
 
-    fn draw(&mut self, _: &AppViewContext, frame: &mut Frame, area: Rect) {
-        if self.submitting {
+    fn draw(&mut self, ctx: &AppViewContext, frame: &mut Frame, area: Rect) {
+        if matches!(ctx.state().login_state, LoginState::SubmittingTotp) {
             let chunks = Layout::default()
                 .direction(Direction::Vertical)
                 .flex(Flex::Center)
@@ -52,104 +43,58 @@ impl View<AppViewContext, AppEvents> for TotpView {
                 ])
                 .areas(area);
 
-            let vertical_layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .flex(Flex::Center)
-                .constraints([
-                    Constraint::Percentage(10),
-                    Constraint::Percentage(20),
-                    Constraint::Percentage(10),
-                ])
-                .split(totp_area);
-            let horizontal = Layout::default()
-                .direction(Direction::Vertical)
-                .flex(Flex::Center)
-                .constraints([
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                    Constraint::Length(1),
-                ])
-                .split(vertical_layout[0]);
-            frame.render_widget(
-                Text::from("TOTP".bold()).alignment(Alignment::Right),
-                horizontal[1],
+            frame.render_stateful_widget(
+                TextInput::new("Two Factor Code:"),
+                totp_area,
+                &mut self.input_state,
             );
 
-            let block = Block::default().borders(Borders::all()).bold();
-            let p = Paragraph::new(self.input.value())
-                .wrap(Wrap { trim: true })
-                .block(block);
-            frame.render_widget(p, vertical_layout[1]);
-            let width = vertical_layout[1].width.max(3) - 3;
-            let scroll = self.input.visual_scroll(width as usize);
-            frame.set_cursor(
-                vertical_layout[1].x
-                    + u16::try_from(self.input.cursor().max(scroll) - scroll)
-                        .expect("invalid range")
-                    + 1,
-                horizontal[1].y,
-            );
+            let (x, y) = self.input_state.frame_cursor();
+            frame.set_cursor(x, y);
         }
     }
 
-    fn draw_help(&self, _: &AppViewContext, frame: &mut Frame, area: Rect) {
-        frame.render_widget(Text::from("(Esc) Abort|(Enter) Submit"), area);
+    fn help_items(&self) -> &[HelpCategory] {
+        static ITEMS: [HelpCategory; 1] = [HelpCategory {
+            name: "2FA",
+            items: &[
+                HelpItem {
+                    key: "Enter",
+                    description: "Submit Code",
+                },
+                HelpItem {
+                    key: "Esc",
+                    description: "Return to Login",
+                },
+            ],
+        }];
+
+        &ITEMS
     }
 
-    fn on_event(&mut self, ctx: &mut AppViewContext, event: AppEvents) -> Option<AppEvents> {
-        match event {
-            AppEvents::Login(e) => {
-                match e {
-                    LoginEvents::Login2FAFailed(err) => {
-                        ctx.set_error("Failed t login", err);
-                        self.submitting = false;
-                    }
-                    LoginEvents::LoginSuccess(r) => match r {
-                        Ok(r) => {
-                            ctx.state_mut().login_state = LoginState::LoggedIn(r);
-                            ctx.pop_and_push_view(ConversationView::new())
-                        }
-                        Err(e) => {
-                            ctx.set_error("Failed to prepare user data", e);
-                        }
-                    },
-                    _ => {}
-                }
-                None
-            }
-            _ => Some(event),
-        }
-    }
     fn on_input(&mut self, ctx: &mut AppViewContext, event: &Event) {
         if let Event::Key(k) = event {
             match k.code {
                 KeyCode::Enter => {
                     self.do_submit(ctx);
                 }
-                KeyCode::Esc => {
-                    ctx.state_mut().logout();
-                    ctx.pop_view()
-                }
+                KeyCode::Esc => ctx.app_local_dispatcher().pop_view(),
                 _ => {
-                    self.input.handle_event(event);
+                    self.input_state.handle_event(event);
                 }
             }
         }
     }
 
     fn name(&self) -> &'static str {
-        "Totp"
+        "2FA"
     }
 }
 
 impl TotpView {
     fn do_submit(&mut self, ctx: &mut AppViewContext) {
-        if self.submitting {
-            return;
-        }
-        self.submitting = true;
-        let dispatcher = ctx.dispatcher();
-        let code = self.input.value().to_string();
-        ctx.state().submit_2fa(dispatcher, code);
+        let code = self.input_state.value().to_string();
+        ctx.app_local_dispatcher()
+            .queue_event(LoginEvent::TwoFARequest(code))
     }
 }

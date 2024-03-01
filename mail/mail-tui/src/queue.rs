@@ -1,5 +1,5 @@
-use proton_api_mail::proton_api_core::exports::tracing;
 use proton_async::sync::mpsc::{unbounded, Receiver, Sender, TryRecvError};
+use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing;
 
 pub struct DispatchQueue<T> {
     dispatcher: QueueDispatcher<T>,

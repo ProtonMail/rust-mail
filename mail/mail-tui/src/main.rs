@@ -1,5 +1,6 @@
 mod app;
 mod events;
+mod keychain;
 mod queue;
 mod state;
 mod style;
@@ -33,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = AppState::new()?;
     let mut app = App::new(state);
-    app.push_view(views::LoginView::new());
+    app.push_view(views::SessionsView::new());
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;

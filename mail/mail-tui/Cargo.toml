@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-tui"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -9,35 +9,39 @@ edition = "2021"
 dirs = "5"
 anyhow = "1"
 thiserror = "1"
-proton-api-mail = {git = "https://gitlab.protontech.ch/rust/inbox/mail.git"}
-proton-mail-db = {git = "https://gitlab.protontech.ch/rust/inbox/mail.git"}
-proton-async= {git= "https://gitlab.protontech.ch/rust/proton-api-core.git" }
-crossterm= "0.27.0"
-ratatui ={version = "0.26.1", features = ["all-widgets"]}
-log = "0.4.20"
+proton-core-common = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
+proton-mail-common = { git = "https://gitlab.protontech.ch/rust/inbox/mail.git" }
+proton-async = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
+crossterm = "0.27.0"
+ratatui = { version = "0.26.1", features = ["all-widgets"] }
 secrecy = "0.8"
+log = "0.4"
 tui-input = "0.8"
-tracing-subscriber ={ version = "0.3.18", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-error = "0.2"
+keyring = "2.3"
+hex = "0.4"
+tui-logger = { version = "0.11", features = ["tracing-support"] }
+
 
 
 [lints.rust]
-trivial_numeric_casts= "warn"
-unused_extern_crates ="warn"
-unused_import_braces="warn"
-trivial_casts="warn"
-unused_qualifications="warn"
+trivial_numeric_casts = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+trivial_casts = "warn"
+unused_qualifications = "warn"
 
 [lints.clippy]
-cast_possible_truncation="warn"
-cast_possible_wrap="warn"
-cast_precision_loss ="warn"
-cast_sign_loss ="warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_precision_loss = "warn"
+cast_sign_loss = "warn"
 # Useful to track missing comments on private items/code.
 # missing_docs_in_private_items ="warn"
-mut_mut="warn"
+mut_mut = "warn"
 #Disallow `println!`. Use `debug!` for debug output
 # (which is provided by the `log` crate).
 print_stdout = "warn"
-unseparated_literal_suffix ="warn"
-wrong_self_convention ="warn"
+unseparated_literal_suffix = "warn"
+wrong_self_convention = "warn"
