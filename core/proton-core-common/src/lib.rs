@@ -8,3 +8,5 @@ pub use context::*;
 pub use keychain::*;
 pub use session::*;
 pub use user_context::*;
+
+pub use proton_core_db::SessionEncryptionKey;
