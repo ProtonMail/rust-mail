@@ -1,3 +1,4 @@
+use crate::auth::Auth;
 use crate::domain::{
     HumanVerification, HumanVerificationLoginData, TFAStatus, TwoFactorAuth, User,
 };
@@ -93,15 +94,19 @@ impl LoginFlow {
 
         let tfa_enabled = auth_response.tfa.enabled;
         {
+            let auth = Auth {
+                email: username.to_string(),
+                user_id: auth_response.user_id,
+                uid: auth_response.uid,
+                refresh_token: auth_response.refresh_token.0,
+                access_token: auth_response.access_token.0,
+                scope: auth_response.scope,
+            };
+
             self.session
                 .auth_store()
                 .write()
-                .set_auth(
-                    auth_response.uid,
-                    auth_response.refresh_token.0,
-                    auth_response.access_token.0,
-                    auth_response.scope,
-                )
+                .set_auth(auth)
                 .map_err(|e| {
                     LoginFlowError::Request(http::HttpRequestError::Other(anyhow!(
                         "Failed to to store auth: {e}"

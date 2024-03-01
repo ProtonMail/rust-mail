@@ -1,4 +1,4 @@
-use crate::domain::{SecretString, Uid};
+use crate::domain::{SecretString, Uid, UserId};
 use parking_lot::RwLock;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -39,6 +39,10 @@ impl proton_sqlite3::rusqlite::types::FromSql for AuthScope {
 /// Session Authentication Data.
 #[derive(Clone)]
 pub struct Auth {
+    /// User email,
+    pub email: String,
+    /// User id,
+    pub user_id: UserId,
     /// Session UID.
     pub uid: Uid,
     /// Refresh Token
@@ -52,12 +56,14 @@ pub struct Auth {
 pub trait AuthStore: Send + Sync + 'static {
     /// Get the current auth if any.
     fn get_auth(&self) -> Option<&Auth>;
-    fn set_auth(
+    fn set_auth(&mut self, auth: Auth) -> Result<(), Box<dyn std::error::Error>>;
+
+    fn refresh_auth(
         &mut self,
         uid: Uid,
-        refresh_token: SecretString,
         access_token: SecretString,
-        scopes: AuthScope,
+        refresh_token: SecretString,
+        scope: AuthScope,
     ) -> Result<(), Box<dyn std::error::Error>>;
     fn set_scopes(
         &mut self,
@@ -78,19 +84,8 @@ impl AuthStore for InMemoryStore {
         self.auth.as_ref()
     }
 
-    fn set_auth(
-        &mut self,
-        uid: Uid,
-        refresh_token: SecretString,
-        access_token: SecretString,
-        scope: AuthScope,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        self.auth = Some(Auth {
-            uid,
-            refresh_token,
-            access_token,
-            scope,
-        });
+    fn set_auth(&mut self, auth: Auth) -> Result<(), Box<dyn std::error::Error>> {
+        self.auth = Some(auth);
         Ok(())
     }
 
@@ -104,6 +99,22 @@ impl AuthStore for InMemoryStore {
 
         auth.scope = scope;
         Ok(Some(auth))
+    }
+
+    fn refresh_auth(
+        &mut self,
+        uid: Uid,
+        access_token: SecretString,
+        refresh_token: SecretString,
+        scope: AuthScope,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(auth) = &mut self.auth {
+            auth.uid = uid;
+            auth.access_token = access_token;
+            auth.refresh_token = refresh_token;
+            auth.scope = scope;
+        }
+        Ok(())
     }
 
     fn clear_auth(&mut self) -> Result<(), Box<dyn std::error::Error>> {

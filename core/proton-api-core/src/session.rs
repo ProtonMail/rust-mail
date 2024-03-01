@@ -135,7 +135,7 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
                             .header(X_PM_UID_HEADER, auth_refresh_response.uid.as_ref())
                             .bearer_token(auth_refresh_response.access_token.0.expose_secret());
                         writer
-                            .set_auth(
+                            .refresh_auth(
                                 auth_refresh_response.uid,
                                 auth_refresh_response.refresh_token.0,
                                 auth_refresh_response.access_token.0,

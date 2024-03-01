@@ -1,11 +1,13 @@
 use crate::keychain::{session_encryption_key_from_key_chain, SessionKeyChain};
 use proton_api_core::auth::{Auth, AuthScope};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
+use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
-use proton_api_core::exports::{thiserror, tracing};
+use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_core_db::proton_sqlite3::SqliteConnectionPool;
 use proton_core_db::{
-    DBResult, DecryptedUserSession, EncryptedData, SessionEncryptionKey, SessionSqliteConnection,
+    DBResult, DecryptedUserSession, EncryptedData, EncryptedUserSession, SessionEncryptionKey,
+    SessionSqliteConnection,
 };
 use std::error::Error;
 
@@ -25,6 +27,8 @@ pub enum CoreSessionError {
     Crypto,
     #[error("Keychain Error: {0}")]
     KeyChain(Box<dyn Error + Send>),
+    #[error("Other: {0}")]
+    Other(anyhow::Error),
 }
 
 /// Core session retrieves the session
@@ -89,14 +93,60 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         self.auth.as_ref()
     }
 
-    #[tracing::instrument(skip(self), fields(uid=?uid))]
-    fn set_auth(
+    #[tracing::instrument(skip(self,auth), fields(uid = ?auth.uid, user_id= ?auth.user_id))]
+    fn set_auth(&mut self, auth: Auth) -> Result<(), Box<dyn Error>> {
+        let session_key = self.get_encryption_key().map_err(|e| {
+            error!("Failed to retrieve encryption key from keychain: {e}");
+            self.on_error(&e);
+            e
+        })?;
+
+        let (encrypted_access_token, encrypted_refresh_token) = self
+            .encrypt_tokens(session_key, &auth.access_token, &auth.refresh_token)
+            .map_err(|e| {
+                error!("Failed to encrypt tokens");
+                self.on_error(&e);
+                Box::new(e)
+            })?;
+
+        let mut conn = self.new_connection().map_err(|e| {
+            error!("Failed to get database connection:{e}");
+            self.on_error(&e);
+            e
+        })?;
+
+        let encrypted_session = auth_to_encrypted_session(
+            auth.clone(),
+            encrypted_access_token,
+            encrypted_refresh_token,
+        );
+
+        {
+            conn.tx(|tx| -> DBResult<()> { tx.create_or_update_session(&encrypted_session) })
+                .map_err(|e| {
+                    let e = CoreSessionError::DB(e);
+                    error!("Failed write auth to database:{e}");
+                    self.on_error(&e);
+                    e
+                })?;
+        }
+        self.auth = Some(auth);
+        Ok(())
+    }
+
+    #[tracing::instrument(skip(self), fields(uid = ? uid))]
+    fn refresh_auth(
         &mut self,
         uid: Uid,
-        refresh_token: SecretString,
         access_token: SecretString,
-        scopes: AuthScope,
+        refresh_token: SecretString,
+        scope: AuthScope,
     ) -> Result<(), Box<dyn Error>> {
+        if self.auth.is_none() {
+            return Err(Box::new(CoreSessionError::Other(anyhow!(
+                "no auth into to refresh"
+            ))));
+        };
         let session_key = self.get_encryption_key().map_err(|e| {
             error!("Failed to retrieve encryption key from keychain: {e}");
             self.on_error(&e);
@@ -118,14 +168,13 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         })?;
 
         {
-            let scopes = &scopes;
             let uid_ref = &uid;
             conn.tx(|tx| -> DBResult<()> {
                 tx.update_session(
                     uid_ref,
                     &encrypted_access_token,
                     &encrypted_refresh_token,
-                    Some(scopes),
+                    Some(&scope),
                 )
             })
             .map_err(|e| {
@@ -136,12 +185,12 @@ impl proton_api_core::auth::AuthStore for CoreSession {
             })?;
         }
 
-        self.auth = Some(Auth {
-            uid,
-            refresh_token,
-            access_token,
-            scope: scopes,
-        });
+        if let Some(cur_auth) = &mut self.auth {
+            cur_auth.uid = uid;
+            cur_auth.access_token = access_token;
+            cur_auth.refresh_token = refresh_token;
+            cur_auth.scope = scope;
+        }
 
         Ok(())
     }
@@ -177,9 +226,27 @@ impl proton_api_core::auth::AuthStore for CoreSession {
 
 fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
     Auth {
+        email: session.email,
+        user_id: session.user_id,
         uid: session.session_id,
         refresh_token: session.refresh_token,
         access_token: session.access_token,
         scope: session.scopes.unwrap_or(AuthScope::from("")),
+    }
+}
+
+fn auth_to_encrypted_session(
+    auth: Auth,
+    encrypted_access_token: EncryptedData,
+    encrypted_refresh_token: EncryptedData,
+) -> EncryptedUserSession {
+    EncryptedUserSession {
+        session_id: auth.uid,
+        user_id: auth.user_id,
+        name: None,
+        email: auth.email,
+        refresh_token: encrypted_refresh_token,
+        access_token: encrypted_access_token,
+        scopes: Some(auth.scope),
     }
 }
