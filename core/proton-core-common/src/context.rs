@@ -73,7 +73,11 @@ impl CoreContext {
         std::fs::create_dir_all(&session_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
         let session_db_path = get_session_db_path(&session_db_path);
-        let pool = SqliteConnectionPool::new(SqliteMode::File(session_db_path.clone()), false);
+
+        let pool = SqliteConnectionPool::new(
+            SqliteMode::File(session_db_path.clone()),
+            db_debug_enabled(),
+        );
         {
             let mut connection = pool.acquire()?;
             migrate_session_db(&mut connection)?;
@@ -180,7 +184,7 @@ impl CoreContext {
 
     fn new_user_db_pool(&self, user_id: &UserId) -> CoreContextResult<SqliteConnectionPool> {
         let user_db_path = get_user_db_path(&self.user_db_path, user_id);
-        let pool = SqliteConnectionPool::new(SqliteMode::File(user_db_path), false);
+        let pool = SqliteConnectionPool::new(SqliteMode::File(user_db_path), db_debug_enabled());
         let mut conn = pool.acquire()?;
         debug!("initializing core database");
         // initialize core db
@@ -211,4 +215,8 @@ fn new_session(arc_auth_store: ArcAuthStore) -> CoreContextResult<Session> {
         .build()
         .map_err(|e| CoreContextError::Other(anyhow!("Failed to create client: {e}")))?;
     Ok(Session::new(client, arc_auth_store))
+}
+
+fn db_debug_enabled() -> bool {
+    std::env::var("PROTON_CORE_CTX_DB_DEBUG").is_ok()
 }
