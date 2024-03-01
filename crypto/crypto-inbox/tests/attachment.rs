@@ -1,7 +1,7 @@
 use std::io;
 
 use base64::Engine;
-use proton_crypto::crypto::VerificationStatus;
+use proton_crypto::crypto::{PrivateKey, PublicKey, VerificationStatus};
 use proton_crypto_inbox::attachment::{
     self, AttachmentEncryptedSignature, AttachmentMetadataCryptoView, AttachmentSignature,
     KeyPackets,
@@ -74,6 +74,21 @@ struct TestAttachmentMetdata {
     enc_signature: Option<AttachmentEncryptedSignature>,
 }
 
+struct TestAddressKey<T: PrivateKey>(T);
+
+impl<T: PrivateKey> AsRef<T> for TestAddressKey<T> {
+    fn as_ref(&self) -> &T {
+        &self.0
+    }
+}
+struct TestAddressPubliKey<T: PublicKey>(T);
+
+impl<T: PublicKey> AsRef<T> for TestAddressPubliKey<T> {
+    fn as_ref(&self) -> &T {
+        &self.0
+    }
+}
+
 impl AttachmentMetadataCryptoView for TestAttachmentMetdata {
     fn get_attachment_key_packets(&self) -> &KeyPackets {
         &self.key_packets
@@ -108,6 +123,28 @@ fn get_test_attachment_metadata_enc_sig_only() -> TestAttachmentMetdata {
     }
 }
 
+fn get_test_address_keys<T: PGPProviderSync>(
+    pgp_provider: &T,
+) -> Vec<TestAddressKey<T::PrivateKey>> {
+    let decryption_key = pgp_provider
+        .private_key_import(
+            TEST_ATTACHMENT_DECRYPTION_KEY,
+            "password",
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    vec![TestAddressKey(decryption_key)]
+}
+
+fn get_test_public_address_keys<T: PGPProviderSync>(
+    pgp_provider: &T,
+) -> Vec<TestAddressPubliKey<T::PublicKey>> {
+    let verification_key = pgp_provider
+        .public_key_import(TEST_ATTACHMENT_VERIFICATION_KEY, DataEncoding::Armor)
+        .unwrap();
+    vec![TestAddressPubliKey(verification_key)]
+}
+
 fn get_test_attachment_encrypted_data() -> Vec<u8> {
     let b64 = base64::engine::general_purpose::GeneralPurpose::new(
         &base64::alphabet::STANDARD,
@@ -119,19 +156,8 @@ fn get_test_attachment_encrypted_data() -> Vec<u8> {
 fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let decryption_key = pgp_provider
-        .private_key_import(
-            TEST_ATTACHMENT_DECRYPTION_KEY,
-            "password",
-            DataEncoding::Armor,
-        )
-        .unwrap();
-
-    let verification_key = pgp_provider
-        .public_key_import(TEST_ATTACHMENT_VERIFICATION_KEY, DataEncoding::Armor)
-        .unwrap();
-    let decryption_keys = vec![decryption_key];
-    let verification_keys = vec![verification_key];
+    let decryption_keys = get_test_address_keys(&pgp_provider);
+    let verification_keys = get_test_public_address_keys(&pgp_provider);
 
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let decrypted_attachment = attachment::decrypt_attachment(
@@ -155,18 +181,8 @@ fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
 fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetdata) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let decryption_key = pgp_provider
-        .private_key_import(
-            TEST_ATTACHMENT_DECRYPTION_KEY,
-            "password",
-            DataEncoding::Armor,
-        )
-        .unwrap();
-    let verification_key = pgp_provider
-        .public_key_import(TEST_ATTACHMENT_VERIFICATION_KEY, DataEncoding::Armor)
-        .unwrap();
-    let decryption_keys = vec![decryption_key];
-    let verification_keys = vec![verification_key];
+    let decryption_keys = get_test_address_keys(&pgp_provider);
+    let verification_keys = get_test_public_address_keys(&pgp_provider);
 
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let mut output_buffer = Vec::new();

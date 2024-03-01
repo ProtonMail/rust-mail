@@ -9,7 +9,9 @@ edition = "2021"
 proton-crypto = {path = "../proton-crypto", version = "0.2.0"}
 thiserror = "1"
 serde = { version="1", features = ["derive"]}
+serde_repr = "0.1"
 base64 = "0.21"
+futures = { version="0.3.30", features = ["async-await"]}
 
 [lints]
 workspace = true

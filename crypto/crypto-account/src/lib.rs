@@ -1,7 +1,9 @@
 //! Wrapper library around cryptography primitives
 
+mod constants;
+use constants::*;
 pub mod domain;
-pub mod keyring;
+pub mod keys;
 pub mod salts;
 
 pub type Error = Box<dyn std::error::Error>;
