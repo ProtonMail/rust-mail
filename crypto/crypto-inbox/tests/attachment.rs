@@ -2,7 +2,8 @@ use std::io;
 
 use base64::Engine;
 use proton_crypto_inbox::attachment::{
-    AttachmentCryptoMetadata, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+    self, AttachmentEncryptedSignature, AttachmentMetadataCryptoView, AttachmentSignature,
+    KeyPackets,
 };
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
 
@@ -28,8 +29,7 @@ P/VM6YWaNGugaPzvZcchQQC5tRhxogVmbDrSUirJYnNa9z/qEF6FcBpOXc59
 3w6S5zRMD3bWEA53PVNFQBHAVdBFIkKW14/QIQ26lZM295VLu1WUXPX9eso4
 EiWuw4/+aNQICAeabHV26Mtsp/DI6AZ7DtjMdNxDOFFeQ5Col6Ofu8E=
 =pQ9a
------END PGP MESSAGE-----
-";
+-----END PGP MESSAGE-----";
 
 const TEST_ATTACHMENT_DECRYPTION_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -49,33 +49,46 @@ Ll+erDsL2C10mgEA5fbBK09OVIjtYUJxiId1YYfn/4/ym92WNEAT20prLww=
 -----END PGP PRIVATE KEY BLOCK-----";
 
 const TEST_ATTACHMENT_VERIFICATION_KEY: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
-Version: ProtonMail
 
 xjMEZSfovhYJKwYBBAHaRw8BAQdA6gS5mfVImh6ONhKgZGSVrLH4cdZaS9IW
 6FhqYGWe2wrNJ2x1YnV4QHByb3Rvbi5ibGFjayA8bHVidXhAcHJvdG9uLmJs
 YWNrPsKMBBAWCgA+BYJlJ+i+BAsJBwgJkFX2DKhfS5UBAxUICgQWAAIBAhkB
 ApsDAh4BFiEESUD3387U/LDImeGNVfYMqF9LlQEAACDjAPsFKRBgJvErAzLf
 7bmk0mK1fwwbFM02LRW86AZE/nTi0QEA72eGf2FJ+5l+9b9Kl1U3xmOaC52P
-PFrqPXcklJ7PJAfCqAQQFggAWgUCZSfpJQkQ1NIaBVGnsuwWIQQ2FUO/DaVt
-pgyz2pTU0hoFUaey7CwcVGVzdCBPcGVuUEdQIENBIDx0ZXN0LW9wZW5wZ3At
-Y2FAcHJvdG9uLm1lPgWDAO1OAAAAkXwBAL39GUNMDxogH4siqyBwb+PEWnse
-ciEZ3MJ0HcXnsliTAP9lLk5htuRDHLdq4oevD2rz2rA42N9ijKZ5u1m3raET
-DM44BGUn6L4SCisGAQQBl1UBBQEBB0DzvEDbVNT8WhIxijPVGHKGQ1Y3s9Zw
-1i63nkkSnpLzNwMBCAfCeAQYFggAKgWCZSfovgmQVfYMqF9LlQECmwwWIQRJ
-QPffztT8sMiZ4Y1V9gyoX0uVAQAAEqkBAOKorIkfBBwuku/xLFIUtrrop9bW
-NCkNI9Y5q5Phx0LoAP4p9pTwojv+kXUi15215xo/u5T+ufqqzFx2/pqgUXVr
-AA==
-=5WZT
------END PGP PUBLIC KEY BLOCK-----
-";
+PFrqPXcklJ7PJAfOOARlJ+i+EgorBgEEAZdVAQUBAQdA87xA21TU/FoSMYoz
+1RhyhkNWN7PWcNYut55JEp6S8zcDAQgHwngEGBYIACoFgmUn6L4JkFX2DKhf
+S5UBApsMFiEESUD3387U/LDImeGNVfYMqF9LlQEAABKpAQDiqKyJHwQcLpLv
+8SxSFLa66KfW1jQpDSPWOauT4cdC6AD+KfaU8KI7/pF1ItedtecaP7uU/rn6
+qsxcdv6aoFF1awA=
+-----END PGP PUBLIC KEY BLOCK-----";
 
 const TEST_ATTACHMENT_ENC_DATA: &str =
     "0kABGVu3HPPyl7wHJhXxg7+E69aHqqYR2cPcDn5Fai0jb2K/1fC8rqzo5jKxF4yca3CK5PRmLz4F9S2GobFvgmtv";
 
 const TEST_ATTACHMENT_PLAIN_DATA: &str = "test attachment";
 
-fn get_test_attachment_metadata() -> AttachmentCryptoMetadata {
-    AttachmentCryptoMetadata {
+struct TestAttachmentMetdata {
+    key_packets: KeyPackets,
+    signature: Option<AttachmentSignature>,
+    enc_signature: Option<AttachmentEncryptedSignature>,
+}
+
+impl AttachmentMetadataCryptoView for TestAttachmentMetdata {
+    fn get_attachment_key_packets(&self) -> &KeyPackets {
+        &self.key_packets
+    }
+
+    fn get_attachment_signature(&self) -> &Option<AttachmentSignature> {
+        &self.signature
+    }
+
+    fn get_attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature> {
+        &self.enc_signature
+    }
+}
+
+fn get_test_attachment_metadata() -> TestAttachmentMetdata {
+    TestAttachmentMetdata {
         key_packets: KeyPackets::from(TEST_ATTACHMENT_METADATA_KP),
         signature: Some(AttachmentSignature::from(TEST_ATTACHMENT_METADATA_SIG)),
         enc_signature: Some(AttachmentEncryptedSignature::from(
@@ -112,14 +125,14 @@ fn test_attachment_decrypt() {
     let verification_keys = vec![verification_key];
 
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
-    let decrypted_attachment = attachment_metadata
-        .decrypt_attachment(
-            &pgp_provider,
-            &decryption_keys,
-            &verification_keys,
-            enc_data,
-        )
-        .unwrap();
+    let decrypted_attachment = attachment::decrypt_attachment(
+        &attachment_metadata,
+        &pgp_provider,
+        &decryption_keys,
+        &verification_keys,
+        enc_data,
+    )
+    .unwrap();
 
     assert_eq!(
         decrypted_attachment.as_ref(),
@@ -148,14 +161,14 @@ fn test_attachment_decrypt_stream() {
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let mut output_buffer = Vec::new();
     let enc_data_reader: &[u8] = enc_data.as_ref();
-    let mut verification_reader = attachment_metadata
-        .decrypt_attachment_from_reader(
-            &pgp_provider,
-            &decryption_keys,
-            &verification_keys,
-            enc_data_reader,
-        )
-        .unwrap();
+    let mut verification_reader = attachment::decrypt_attachment_from_reader(
+        &attachment_metadata,
+        &pgp_provider,
+        &decryption_keys,
+        &verification_keys,
+        enc_data_reader,
+    )
+    .unwrap();
     io::copy(&mut verification_reader, &mut output_buffer).unwrap();
     assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
 }
