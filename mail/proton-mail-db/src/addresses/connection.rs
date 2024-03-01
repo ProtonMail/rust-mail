@@ -163,12 +163,16 @@ impl AddressKeySelector {
         //TODO: Forwarding Address Id
         Ok(LockedKey {
             id: KeyId::from(r.get::<usize, String>(0)?),
+            version: 0,
             private_key: r.get(1)?,
             token: r.get(2)?,
             signature: r.get(3)?,
+            activation: None,
             primary: r.get(4)?,
             active: r.get(5)?,
             flags: r.get(6)?,
+            recovery_secret: None,
+            recovery_secret_signature: None,
         })
     }
 }

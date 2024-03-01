@@ -11,7 +11,7 @@ use proton_api_core::domain::EventId;
 use proton_api_core::{http, Session};
 
 /// Authenticated Session from which one can access mail related functionality
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MailSession {
     session: Session,
 }

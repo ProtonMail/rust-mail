@@ -1,7 +1,6 @@
 [workspace]
 resolver ="2"
 members = [
-    "proton-mail-labels",
     "proton-mail-message-detector",
     "proton-api-mail",
     "proton-mail-wasm",
