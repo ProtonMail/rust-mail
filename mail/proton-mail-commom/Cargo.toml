@@ -1,0 +1,15 @@
+[package]
+name = "proton-mail-common"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+proton-core-common = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-mail-db = {path ="../proton-mail-db"}
+proton-api-mail = {path ="../proton-api-mail"}
+proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+
+[lints]
+workspace = true
