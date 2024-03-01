@@ -32,6 +32,19 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(result)
     }
 
+    pub fn get_local_label_by_type_ordered(
+        &self,
+        label_type: LabelType,
+    ) -> DBResult<Vec<LocalLabel>> {
+        let mut result = Vec::with_capacity(8);
+        let mut stmt = self.0.prepare(LocalLabelSelect::query_by_type_ordered())?;
+        mapped_rows_into_vec(
+            &mut result,
+            stmt.query_map([label_type], LocalLabelSelect::from_row)?,
+        )?;
+        Ok(result)
+    }
+
     pub fn get_local_label(&self, local_label_id: LocalLabelId) -> DBResult<Option<LocalLabel>> {
         self.0
             .query_row(
@@ -131,6 +144,10 @@ struct LocalLabelSelect {}
 impl LocalLabelSelect {
     fn query_all() -> &'static str {
         "SELECT id, rid, parent_id, type, `order`, name, path, color, notified, expanded, sticky FROM labels WHERE deleted=0"
+    }
+
+    fn query_by_type_ordered() -> &'static str {
+        "SELECT id, rid, parent_id, type, `order`, name, path, color, notified, expanded, sticky FROM labels WHERE deleted=0 AND type=? ORDER BY `order`"
     }
 
     fn query_with_id() -> String {

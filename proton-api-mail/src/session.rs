@@ -112,3 +112,9 @@ impl MailSession {
             .await
     }
 }
+
+impl From<Session> for MailSession {
+    fn from(value: Session) -> Self {
+        MailSession::new(value)
+    }
+}

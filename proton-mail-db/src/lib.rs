@@ -6,7 +6,7 @@ mod conversations;
 mod ids;
 pub mod json;
 mod labels;
-mod migrations;
+pub mod migrations;
 mod state;
 
 pub use attachments::*;
@@ -14,12 +14,17 @@ pub use conversations::*;
 pub use labels::*;
 pub use state::*;
 
-use proton_sqlite3::{InProcessTrackerService, MigratorError, TrackingConnection};
-use std::ops::{Deref, DerefMut};
+use proton_sqlite3::{
+    new_tracked_connection_wrapper, InProcessTrackerService, MigratorError, TrackingConnection,
+};
+use std::ops::Deref;
 
 pub type DBResult<T> = proton_sqlite3::rusqlite::Result<T>;
 pub type DBError = proton_sqlite3::rusqlite::Error;
 pub type DBMigrationError = MigratorError;
+pub use proton_sqlite3;
+
+new_tracked_connection_wrapper!(MailSqliteConnection);
 
 /// Convenience wrapper around [`InProcessTrackerService`] which always creates [`MailSqliteConnection`]
 /// rather than the default [`SqliteConnection`].
@@ -45,78 +50,6 @@ impl MailSqliteConnectionPool {
     }
 }
 
-/// This type provides access to all the required features to access and manipulate the data of
-/// the mail domain. To access the feature set please use [`MailSqliteConnectionImpl`].
-pub struct MailSqliteConnection(pub(crate) TrackingConnection);
-
-impl MailSqliteConnection {
-    pub fn new(conn: TrackingConnection) -> Self {
-        Self(conn)
-    }
-
-    /// Get access to read only connection implementations.
-    pub fn as_connection_ref(&self) -> MailSqliteConnectionRef<'_> {
-        MailSqliteConnectionRef(MailSqliteConnectionImpl::new(self.0.as_ref()))
-    }
-
-    /// Create a new transaction.
-    pub fn tx<T, E: From<DBError>>(
-        &mut self,
-        mut closure: impl FnMut(&mut MailSqliteConnectionMut) -> Result<T, E>,
-    ) -> Result<T, E> {
-        self.0.tx(|tx| {
-            let conn_impl = MailSqliteConnectionImpl(tx.deref());
-            let mut conn = MailSqliteConnectionMut(conn_impl);
-            closure(&mut conn)
-        })
-    }
-}
-
-/// Connection implementation, all changes should be implemented targeting this type, so that the
-/// same code can be used with regular connections or transactions and to enforce that the
-/// mutable methods can only be accessed via transactions.
-pub struct MailSqliteConnectionImpl<'c>(pub(crate) &'c proton_sqlite3::rusqlite::Connection);
-
-impl<'c> MailSqliteConnectionImpl<'c> {
-    pub fn new(conn: &'c proton_sqlite3::rusqlite::Connection) -> Self {
-        Self(conn)
-    }
-}
-
-impl<'c> From<&'c proton_sqlite3::rusqlite::Connection> for MailSqliteConnectionImpl<'c> {
-    fn from(value: &'c proton_sqlite3::rusqlite::Connection) -> Self {
-        Self::new(value)
-    }
-}
-
-/// Wrapper to promote read only access to [`MailSqliteConnectionImpl`].
-pub struct MailSqliteConnectionRef<'c>(MailSqliteConnectionImpl<'c>);
-
-impl<'c> Deref for MailSqliteConnectionRef<'c> {
-    type Target = MailSqliteConnectionImpl<'c>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// Wrapper to promote read and write access to [`MailSqliteConnectionImpl`].
-pub struct MailSqliteConnectionMut<'c>(MailSqliteConnectionImpl<'c>);
-
-impl<'c> Deref for MailSqliteConnectionMut<'c> {
-    type Target = MailSqliteConnectionImpl<'c>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl<'c> DerefMut for MailSqliteConnectionMut<'c> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 #[cfg(test)]
 pub(crate) fn new_test_connection() -> (
     MailSqliteConnection,
@@ -136,7 +69,7 @@ pub(crate) fn new_test_connection() -> (
         proton_api_mail::proton_api_core::exports::tracing::subscriber::set_default(subscriber);
 
     let pool = SqliteConnectionPool::new(SqliteMode::InMemory, true);
-    let service = InProcessTrackerService::new(pool);
+    let service = InProcessTrackerService::new(pool).expect("failed to create tracker service");
 
     let pool = MailSqliteConnectionPool::new(service).expect("failed to create pool");
     let conn = pool.acquire().expect("failed to acquire connection");
