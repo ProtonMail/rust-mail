@@ -1,6 +1,6 @@
 use proton_api_core::auth::{new_arc_auth_store, InMemoryStore};
-use proton_api_core::{http, ping};
-use proton_api_core::{Session, SessionType};
+use proton_api_core::login::LoginFlow;
+use proton_api_core::{http, Session};
 pub use tokio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::level_filters::LevelFilter;
@@ -33,64 +33,46 @@ async fn main() {
         .unwrap();
 
     let auth_store = new_arc_auth_store(InMemoryStore::default());
+    let session = Session::new(client, auth_store);
 
-    ping(&client).await.unwrap();
+    let mut login_flow = LoginFlow::new(session.clone());
+    login_flow
+        .login(&user_email, &user_password, None)
+        .await
+        .unwrap();
 
-    let session = match Session::login(
-        client,
-        auth_store.clone(),
-        &user_email,
-        &user_password,
-        None,
-    )
-    .await
-    .unwrap()
-    {
-        SessionType::Authenticated(c) => c,
+    if login_flow.is_awaiting_2fa() {
+        let mut stdout = tokio::io::stdout();
+        let mut line_reader = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+        {
+            for _ in 0..3 {
+                stdout
+                    .write_all("Please Input TOTP:".as_bytes())
+                    .await
+                    .unwrap();
+                stdout.flush().await.unwrap();
 
-        SessionType::AwaitingTotp(t) => {
-            let mut stdout = tokio::io::stdout();
-            let mut line_reader = tokio::io::BufReader::new(tokio::io::stdin()).lines();
-            let session = {
-                let mut session = None;
-                for _ in 0..3 {
-                    stdout
-                        .write_all("Please Input TOTP:".as_bytes())
-                        .await
-                        .unwrap();
-                    stdout.flush().await.unwrap();
+                let Some(line) = line_reader.next_line().await.unwrap() else {
+                    eprintln!("Failed to read totp");
+                    return;
+                };
 
-                    let Some(line) = line_reader.next_line().await.unwrap() else {
-                        eprintln!("Failed to read totp");
-                        return;
-                    };
+                let totp = line.trim_end_matches('\n');
 
-                    let totp = line.trim_end_matches('\n');
-
-                    match t.submit_totp(totp).await {
-                        Ok(ac) => {
-                            session = Some(ac);
-                            break;
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to submit totp: {e}");
-                            continue;
-                        }
+                match login_flow.submit_totp(totp).await {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to submit totp: {e}");
+                        continue;
                     }
                 }
+            }
+        };
+    }
 
-                session
-            };
-
-            let Some(c) = session else {
-                eprintln!("Failed to pass TOTP 2FA auth");
-                return;
-            };
-            c
-        }
-    };
-
-    let user = session.get_user().await.unwrap();
+    let user = login_flow.reset_and_take_user().unwrap();
     println!("User ID is {}", user.id);
 
     let settings = session.get_user_settings().await.unwrap();

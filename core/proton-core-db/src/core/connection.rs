@@ -292,7 +292,7 @@ impl UserSettingsSelector {
 }
 
 fn user_flags_to_u32(flags: &UserFlags) -> u32 {
-    let mut v = 0u32;
+    let mut v = 0_u32;
     v |= flags.protected as u32;
     v |= (flags.onboard_checklist_storage_granted as u32) << 1;
     v |= (flags.has_temporary_password as u32) << 2;

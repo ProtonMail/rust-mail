@@ -5,30 +5,14 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, AesGcm, Key,
 };
-use proton_api_core::domain::{ExposeSecret, SecretString, UserId};
-use proton_api_core::exports::serde::{self, Deserialize, Serialize};
+use proton_api_core::domain::{ExposeSecret, SecretString, Uid, UserId};
 use proton_api_core::exports::thiserror;
-use proton_api_core::string_id;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::string::FromUtf8Error;
 use zeroize::Zeroize;
 
-string_id!(SessionId);
-
-impl ToSql for SessionId {
-    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
-        self.0.to_sql()
-    }
-}
-
-impl FromSql for SessionId {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        String::column_result(value).map(Self)
-    }
-}
-
 pub struct DecryptedUserSession {
-    pub session_id: SessionId,
+    pub session_id: Uid,
     pub user_id: UserId,
     pub name: Option<String>,
     pub email: String,
@@ -61,7 +45,7 @@ impl DecryptedUserSession {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EncryptedUserSession {
-    pub session_id: SessionId,
+    pub session_id: Uid,
     pub user_id: UserId,
     pub name: Option<String>,
     pub email: String,

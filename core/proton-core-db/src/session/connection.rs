@@ -1,6 +1,6 @@
 use crate::session::types::EncryptedUserSession;
-use crate::{DBResult, SessionId, SessionSqliteConnectionImpl};
-use proton_api_core::domain::UserId;
+use crate::{DBResult, SessionSqliteConnectionImpl};
+use proton_api_core::domain::{Uid, UserId};
 use proton_sqlite3::rusqlite::OptionalExtension;
 
 impl<'c> SessionSqliteConnectionImpl<'c> {
@@ -40,7 +40,7 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
         .optional()
     }
 
-    pub fn delete_session(&self, session_id: &SessionId) -> DBResult<()> {
+    pub fn delete_session(&self, session_id: &Uid) -> DBResult<()> {
         self.0
             .execute("DELETE FROM core_sessions WHERE id =?", [session_id])?;
         Ok(())

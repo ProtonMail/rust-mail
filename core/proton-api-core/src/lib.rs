@@ -4,15 +4,14 @@
 pub mod utils;
 
 pub mod auth;
-pub mod client;
 pub mod domain;
 pub mod exports;
 pub mod http;
+pub mod login;
 mod requests;
-#[cfg(feature = "uniffi")]
-pub mod uniffi_bindgen;
+mod session;
 
-pub use client::*;
+pub use session::*;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();

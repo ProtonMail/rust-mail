@@ -1,45 +1,14 @@
 use crate::auth::ArcAuthStore;
-use crate::client::TotpSession;
-use crate::domain::{
-    EventId, HumanVerification, HumanVerificationLoginData, IsEvent, TFAStatus, TwoFactorAuth, Uid,
-    User, UserSettings,
-};
+use crate::domain::{EventId, IsEvent, Uid, User, UserSettings};
 use crate::http;
 use crate::http::{Client, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
-    AuthInfoRequest, AuthRefreshRequest, AuthRequest, AuthResponse, GetEventRequest,
-    GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, TOTPRequest, UserInfoRequest,
-    UserSettingsRequest,
+    AuthRefreshRequest, CaptchaRequest, GetEventRequest, GetLatestEventRequest,
+    GetUserSaltsRequest, LogoutRequest, UserInfoRequest, UserSettingsRequest,
 };
 use anyhow::anyhow;
-use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::Salts;
 use secrecy::ExposeSecret;
-
-#[derive(Debug, thiserror::Error)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
-#[cfg_attr(feature = "uniffi", uniffi(flat_error))]
-pub enum LoginError {
-    #[error("{0}")]
-    Request(
-        #[from]
-        #[source]
-        http::HttpRequestError,
-    ),
-    #[error("Server SRP proof verification failed: {0}")]
-    ServerProof(String),
-    #[error("Account 2FA method ({0})is not supported")]
-    Unsupported2FA(TwoFactorAuth),
-    #[error("Human Verification Required'")]
-    HumanVerificationRequired(HumanVerification),
-    #[error("Failed to calculate SRP Proof: {0}")]
-    SRPProof(String),
-}
-
-pub enum SessionType {
-    Authenticated(Session),
-    AwaitingTotp(TotpSession),
-}
 
 /// Authenticated Session from which one can access data/functionality restricted to authenticated
 /// users.
@@ -50,52 +19,12 @@ pub struct Session {
 }
 
 impl Session {
-    fn new(client: Client, auth_store: ArcAuthStore) -> Self {
+    pub fn new(client: Client, auth_store: ArcAuthStore) -> Self {
         Self { auth_store, client }
     }
 
-    pub async fn login<'a>(
-        c: Client,
-        auth_store: ArcAuthStore,
-        username: &'a str,
-        password: &'a str,
-        human_verification: Option<HumanVerificationLoginData>,
-    ) -> Result<SessionType, LoginError> {
-        let auth_resp = c
-            .execute_request(AuthInfoRequest { username }.to_request())
-            .await?;
-
-        let srp_provider = proton_crypto_account::proton_crypto::new_srp_provider();
-        let proof = srp_provider
-            .generate_client_proof(
-                username,
-                password,
-                auth_resp.version,
-                &auth_resp.salt,
-                &auth_resp.modulus,
-                &auth_resp.server_ephemeral,
-            )
-            .map_err(|e| LoginError::SRPProof(e.to_string()))?;
-
-        let auth_req_res = c
-            .execute_request(
-                AuthRequest {
-                    username,
-                    client_ephemeral: &proof.ephemeral,
-                    client_proof: &proof.proof,
-                    srp_session: &auth_resp.srp_session,
-                    human_verification: &human_verification,
-                }
-                .to_request(),
-            )
-            .await?;
-
-        validate_server_proof(c, auth_store, &proof, auth_req_res)
-            .map_err(map_human_verification_err)
-    }
-
-    pub async fn submit_totp(&self, code: &str) -> Result<(), http::HttpRequestError> {
-        self.execute_request(TOTPRequest::new(code)).await
+    pub fn auth_store(&self) -> &ArcAuthStore {
+        &self.auth_store
     }
 
     pub async fn refresh(
@@ -149,54 +78,28 @@ impl Session {
             .map(|v| v.user_settings)
     }
 
+    pub async fn ping(&self) -> Result<(), http::HttpRequestError> {
+        self.client
+            .execute_request(crate::requests::Ping {}.to_request())
+            .await
+    }
+
+    pub async fn captcha_get(
+        &self,
+        token: &str,
+        force_web: bool,
+    ) -> Result<String, http::HttpRequestError> {
+        self.client
+            .execute_request(CaptchaRequest::new(token, force_web).to_request())
+            .await
+    }
+
     pub async fn execute_request<'a, 'b: 'a, R: RequestDesc + 'a>(
         &'b self,
         r: R,
     ) -> Result<R::Output, http::HttpRequestError> {
         wrap_session_request(&self.client, self, r).await
     }
-}
-
-fn validate_server_proof(
-    client: Client,
-    auth_store: ArcAuthStore,
-    proof: &proton_crypto_account::proton_crypto::srp::ClientProof,
-    auth_response: AuthResponse,
-) -> Result<SessionType, LoginError> {
-    if proof.expected_server_proof != auth_response.server_proof {
-        return Err(LoginError::ServerProof(
-            "Server Proof does not match".to_string(),
-        ));
-    }
-
-    let tfa_enabled = auth_response.tfa.enabled;
-    {
-        auth_store.write().set_auth(
-            auth_response.uid,
-            auth_response.refresh_token.0,
-            auth_response.access_token.0,
-            auth_response.scope,
-        );
-    }
-
-    let session = Session::new(client, auth_store);
-
-    match tfa_enabled {
-        TFAStatus::None => Ok(SessionType::Authenticated(session)),
-        TFAStatus::Totp => Ok(SessionType::AwaitingTotp(TotpSession(session))),
-        TFAStatus::FIDO2 => Err(LoginError::Unsupported2FA(TwoFactorAuth::FIDO2)),
-        TFAStatus::TotpOrFIDO2 => Ok(SessionType::AwaitingTotp(TotpSession(session))),
-    }
-}
-
-fn map_human_verification_err(e: LoginError) -> LoginError {
-    if let LoginError::Request(http::HttpRequestError::API(e)) = &e {
-        if let Ok(hv) = e.try_get_human_verification_details() {
-            return LoginError::HumanVerificationRequired(hv);
-        }
-    }
-
-    e
 }
 
 async fn wrap_session_request<'a, R: RequestDesc + 'a>(

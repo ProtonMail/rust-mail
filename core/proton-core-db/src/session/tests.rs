@@ -20,10 +20,10 @@ fn new_test_connection() -> crate::SessionSqliteConnection {
 
 #[test]
 fn test_session_store_load() {
-    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey, SessionId};
-    use proton_api_core::domain::{ExposeSecret, SecretString, UserId};
+    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use proton_api_core::domain::{ExposeSecret, SecretString, Uid, UserId};
     let session = DecryptedUserSession {
-        session_id: SessionId::from("session_id"),
+        session_id: Uid::from("session_id"),
         user_id: UserId::from("user_id"),
         name: Some("foobar".to_string()),
         email: "foo@bar.com".to_string(),
