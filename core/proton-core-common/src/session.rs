@@ -15,7 +15,6 @@ use std::error::Error;
 pub trait CoreSessionCallback: Send + Sync {
     fn on_session_refresh(&self);
     fn on_session_deleted(&self);
-
     fn on_error(&self, err: &CoreSessionError);
 }
 
