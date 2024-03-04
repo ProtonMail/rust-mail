@@ -1,5 +1,6 @@
 use crate::keychain::session_encryption_key_from_key_chain;
 use crate::KeyChain;
+use log::debug;
 use proton_api_core::auth::{Auth, AuthScope};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
@@ -208,14 +209,15 @@ impl proton_api_core::auth::AuthStore for CoreSession {
             return Ok(());
         };
 
-        tracing::debug_span!("clear_auth", uid=?auth.uid).in_scope(
+        tracing::debug_span!("clear_auth", uid=?auth.uid, ?auth.user_id).in_scope(
             || -> Result<(), Box<dyn Error>> {
+                debug!("Deleting session");
                 let mut conn = self.new_connection().map_err(|e| {
                     error!("Failed to get db connection: {e}");
                     e
                 })?;
 
-                conn.tx(|tx| -> DBResult<()> { tx.delete_session(&auth.uid) })
+                conn.tx(|tx| -> DBResult<()> { tx.delete_session_with_user_id(&auth.user_id) })
                     .map_err(|e| {
                         let e = CoreSessionError::DB(e);
                         error!("Failed to remove session from db: {e}");
