@@ -8,3 +8,4 @@ pub use user_context::*;
 // re-exports
 pub use proton_api_mail;
 pub use proton_core_common;
+pub use proton_mail_db;
