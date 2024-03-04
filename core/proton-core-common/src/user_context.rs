@@ -26,12 +26,16 @@ impl Debug for UserContext {
 }
 
 impl UserContext {
-    pub(crate) fn new(session: Session, db_pool: SqliteConnectionPool, id: UserId) -> Self {
-        Self {
+    pub(crate) fn new(
+        session: Session,
+        db_pool: SqliteConnectionPool,
+        id: UserId,
+    ) -> std::io::Result<Self> {
+        Ok(Self {
             session,
-            db_tracker: InProcessTrackerService::new(db_pool),
+            db_tracker: InProcessTrackerService::new(db_pool)?,
             user_id: id,
-        }
+        })
     }
 
     pub fn session(&self) -> &Session {

@@ -17,7 +17,7 @@ fn new_core_test_connection() -> crate::CoreSqliteConnection {
         let mut conn = pool.acquire().unwrap();
         migrate_core_db(&mut conn).unwrap();
     }
-    let tracker = InProcessTrackerService::new(pool);
+    let tracker = InProcessTrackerService::new(pool).expect("failed to create tracker service");
     tracker
         .new_connection()
         .expect("failed to acquire connection")

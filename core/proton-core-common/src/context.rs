@@ -161,11 +161,9 @@ impl CoreContext {
         debug!("Creating new context for user {}({})", user.email, user.id);
         let db = self.new_user_db_pool(&user.id)?;
 
-        Ok(UserContext::new(
-            login_flow.session().clone(),
-            db,
-            user.id.clone(),
-        ))
+        let ctx = UserContext::new(login_flow.session().clone(), db, user.id.clone())?;
+
+        Ok(ctx)
     }
 
     /// Get a user context from an existing session.
@@ -190,7 +188,8 @@ impl CoreContext {
         ));
         debug!("Creating session");
         let session = new_session(core_session)?;
-        Ok(UserContext::new(session, db, user_id))
+        let ctx = UserContext::new(session, db, user_id)?;
+        Ok(ctx)
     }
 
     pub fn set_network_connected(&self, value: bool) {

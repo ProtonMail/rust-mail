@@ -50,7 +50,7 @@ fn test_tracker() {
             .expect("failed to create table");
     }
 
-    let tracker_service = InProcessTrackerService::new(connection_pool.clone());
+    let tracker_service = InProcessTrackerService::new(connection_pool.clone()).unwrap();
 
     let live_query = LiveQueryBuilder::new(tracker_service.clone()).build(TestQuery {});
 

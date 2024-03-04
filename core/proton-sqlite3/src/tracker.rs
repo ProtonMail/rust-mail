@@ -72,19 +72,21 @@ pub struct InProcessTrackerService {
 }
 
 impl InProcessTrackerService {
-    pub fn new(pool: SqliteConnectionPool) -> Self {
+    pub fn new(pool: SqliteConnectionPool) -> std::io::Result<Self> {
         let (sender, receiver) = std::sync::mpsc::channel();
         let inner = Arc::new(TrackerServiceInner::new());
         let inner_cloned = inner.clone();
         let pool_cloned = pool.clone();
-        std::thread::spawn(move || {
-            TrackerServiceInner::background_loop(receiver, inner_cloned, pool_cloned);
-        });
-        Self {
+        std::thread::Builder::new()
+            .name("db_tracker".into())
+            .spawn(move || {
+                TrackerServiceInner::background_loop(receiver, inner_cloned, pool_cloned);
+            })?;
+        Ok(Self {
             inner,
             sender,
             pool,
-        }
+        })
     }
 
     /// Register a new observer with a list of interested tables. This function returns an
@@ -822,7 +824,8 @@ fn test_service() {
         std::process::exit(-1);
     }));
     let pool = SqliteConnectionPool::new(crate::SqliteMode::InMemory, false);
-    let tracker_service = InProcessTrackerService::new(pool.clone());
+    let tracker_service =
+        InProcessTrackerService::new(pool.clone()).expect("failed to create tracker service");
 
     {
         let mut conn = pool.acquire().expect("failed to acquire connection");
