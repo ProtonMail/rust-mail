@@ -1,8 +1,8 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
+use crate::os::KeyChain;
 use crate::session::CoreSession;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
-use crate::CoreContextError::KeyChainHasNoKey;
-use crate::{CoreSessionCallback, KeyChain};
+use crate::CoreSessionCallback;
 use proton_api_core::auth::{new_arc_auth_store, ArcAuthStore};
 use proton_api_core::domain::UserId;
 use proton_api_core::exports::anyhow::anyhow;
@@ -19,6 +19,7 @@ use proton_core_db::{
 };
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
@@ -39,6 +40,11 @@ pub enum CoreContextError {
     Other(anyhow::Error),
 }
 
+/// Callback when the status of the network changes.
+pub trait NetworkStatusChanged: Send + Sync {
+    fn on_network_status_changed(&self, online: bool);
+}
+
 /// Result for core operations.
 pub type CoreContextResult<T> = Result<T, CoreContextError>;
 
@@ -49,10 +55,12 @@ pub struct CoreContext {
 }
 
 struct CoreContextInner {
+    network_connected: AtomicBool,
     user_db_path: PathBuf,
     session_db: SqliteConnectionPool,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
+    network_callback: Option<Box<dyn NetworkStatusChanged>>,
 }
 
 impl CoreContext {
@@ -64,17 +72,25 @@ impl CoreContext {
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
+        network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Self> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let session_db_path = session_db_path.into();
         let user_db_path = user_db_path.into();
-        Self::_new(session_db_path, user_db_path, key_chain, initializers)
+        Self::_new(
+            session_db_path,
+            user_db_path,
+            key_chain,
+            initializers,
+            network_callback,
+        )
     }
     fn _new(
         session_db_path: PathBuf,
         user_db_path: PathBuf,
         key_chain: Arc<dyn KeyChain>,
         initializers: Vec<Box<dyn UserDatabaseInitializer>>,
+        network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Self> {
         // create path.
         std::fs::create_dir_all(&session_db_path)?;
@@ -92,10 +108,12 @@ impl CoreContext {
 
         Ok(Self {
             inner: Arc::new(CoreContextInner {
+                network_connected: AtomicBool::new(true),
                 user_db_path,
                 key_chain,
                 session_db: pool,
                 user_db_initializers: initializers,
+                network_callback,
             }),
         })
     }
@@ -175,6 +193,19 @@ impl CoreContext {
         Ok(UserContext::new(session, db, user_id))
     }
 
+    pub fn set_network_connected(&self, value: bool) {
+        let old_value = self.inner.network_connected.load(Ordering::Acquire);
+        if old_value != value {
+            self.inner.network_connected.store(value, Ordering::Release);
+            if let Some(cb) = &self.inner.network_callback {
+                cb.on_network_status_changed(value);
+            }
+        }
+    }
+
+    pub fn is_network_corrected(&self) -> bool {
+        self.inner.network_connected.load(Ordering::Relaxed)
+    }
     fn get_connection(&self) -> CoreContextResult<SessionSqliteConnection> {
         let conn = self.inner.session_db.acquire()?;
         Ok(conn.into())
@@ -187,7 +218,7 @@ impl CoreContext {
             .get()
             .map_err(CoreContextError::KeyChain)?
         else {
-            return Err(KeyChainHasNoKey);
+            return Err(CoreContextError::KeyChainHasNoKey);
         };
 
         SessionEncryptionKey::with_bytes(key).map_err(|mut v| {

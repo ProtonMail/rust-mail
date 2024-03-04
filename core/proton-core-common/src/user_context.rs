@@ -12,6 +12,7 @@ pub trait UserDatabaseInitializer: Send + Sync {
 }
 
 /// Contains all the relevant information to an initialize user session.
+#[derive(Clone)]
 pub struct UserContext {
     session: Session,
     db_tracker: InProcessTrackerService,
