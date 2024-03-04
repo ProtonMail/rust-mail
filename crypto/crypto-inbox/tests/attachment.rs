@@ -1,6 +1,7 @@
 use std::io;
 
 use base64::Engine;
+use proton_crypto::crypto::VerificationStatus;
 use proton_crypto_inbox::attachment::{
     self, AttachmentEncryptedSignature, AttachmentMetadataCryptoView, AttachmentSignature,
     KeyPackets,
@@ -137,7 +138,13 @@ fn test_attachment_decrypt() {
     assert_eq!(
         decrypted_attachment.as_ref(),
         TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
-    )
+    );
+
+    let verification_status = decrypted_attachment.get_verification_status();
+    match verification_status.status {
+        VerificationStatus::Ok => (),
+        _ => panic!("signature verification failed"),
+    }
 }
 
 #[test]
@@ -170,5 +177,11 @@ fn test_attachment_decrypt_stream() {
     )
     .unwrap();
     io::copy(&mut verification_reader, &mut output_buffer).unwrap();
-    assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
+    assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
+
+    let verification_status = verification_reader.get_verification_status();
+    match verification_status.status {
+        VerificationStatus::Ok => (),
+        _ => panic!("signature verification failed"),
+    }
 }
