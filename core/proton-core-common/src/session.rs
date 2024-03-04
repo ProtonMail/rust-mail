@@ -1,4 +1,5 @@
-use crate::keychain::{session_encryption_key_from_key_chain, SessionKeyChain};
+use crate::keychain::session_encryption_key_from_key_chain;
+use crate::KeyChain;
 use proton_api_core::auth::{Auth, AuthScope};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
@@ -10,6 +11,7 @@ use proton_core_db::{
     SessionSqliteConnection,
 };
 use std::error::Error;
+use std::sync::Arc;
 
 /// Receive notifications when the session has been refreshed or deleted.
 pub trait CoreSessionCallback: Send + Sync {
@@ -25,7 +27,7 @@ pub enum CoreSessionError {
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
-    KeyChain(Box<dyn Error + Send>),
+    KeyChain(Box<dyn Error + Send + Sync>),
     #[error("Other: {0}")]
     Other(anyhow::Error),
 }
@@ -35,14 +37,14 @@ pub(crate) struct CoreSession {
     auth: Option<Auth>,
     db: SqliteConnectionPool,
     cb: Option<Box<dyn CoreSessionCallback>>,
-    keychain: Box<dyn SessionKeyChain>,
+    keychain: Arc<dyn KeyChain>,
 }
 
 impl CoreSession {
     pub(crate) fn new(
         session: Option<DecryptedUserSession>,
         pool: SqliteConnectionPool,
-        keychain: Box<dyn SessionKeyChain>,
+        keychain: Arc<dyn KeyChain>,
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> Self {
         Self {

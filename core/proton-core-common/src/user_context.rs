@@ -6,14 +6,8 @@ use proton_core_db::proton_sqlite3::{
 use proton_core_db::{DBMigrationError, DBResult};
 
 /// Extra initializer for the user database.
-pub trait UserDatabaseInitializer {
+pub trait UserDatabaseInitializer: Send + Sync {
     fn initialize(&self, conn: &mut SqliteConnection) -> Result<(), DBMigrationError>;
-}
-
-impl<F: Fn(&mut SqliteConnection) -> Result<(), DBMigrationError>> UserDatabaseInitializer for F {
-    fn initialize(&self, conn: &mut SqliteConnection) -> Result<(), DBMigrationError> {
-        (self)(conn)
-    }
 }
 
 /// Contains all the relevant information to an initialize user session.

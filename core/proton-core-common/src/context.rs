@@ -8,6 +8,7 @@ use proton_api_core::domain::UserId;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::proton_sqlite3::SqliteMode;
 use proton_api_core::exports::tracing::debug;
+use proton_api_core::exports::tracing::Level;
 use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_api_core::login::LoginFlow;
 use proton_api_core::{http, Session};
@@ -18,6 +19,7 @@ use proton_core_db::{
 };
 use std::error::Error;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreContextError {
@@ -26,7 +28,7 @@ pub enum CoreContextError {
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
-    KeyChain(Box<dyn Error>),
+    KeyChain(Box<dyn Error + Send + Sync>),
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Database Migration Error: {0}")]
@@ -41,10 +43,15 @@ pub enum CoreContextError {
 pub type CoreContextResult<T> = Result<T, CoreContextError>;
 
 /// Context for core operations.
+#[derive(Clone)]
 pub struct CoreContext {
+    inner: Arc<CoreContextInner>,
+}
+
+struct CoreContextInner {
     user_db_path: PathBuf,
     session_db: SqliteConnectionPool,
-    key_chain: Box<dyn KeyChain>,
+    key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
 }
 
@@ -55,7 +62,7 @@ impl CoreContext {
     pub fn new(
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
-        key_chain: Box<dyn KeyChain>,
+        key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
     ) -> CoreContextResult<Self> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
@@ -66,7 +73,7 @@ impl CoreContext {
     fn _new(
         session_db_path: PathBuf,
         user_db_path: PathBuf,
-        key_chain: Box<dyn KeyChain>,
+        key_chain: Arc<dyn KeyChain>,
         initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     ) -> CoreContextResult<Self> {
         // create path.
@@ -84,10 +91,12 @@ impl CoreContext {
         }
 
         Ok(Self {
-            user_db_path,
-            key_chain,
-            session_db: pool,
-            user_db_initializers: initializers,
+            inner: Arc::new(CoreContextInner {
+                user_db_path,
+                key_chain,
+                session_db: pool,
+                user_db_initializers: initializers,
+            }),
         })
     }
 
@@ -105,11 +114,10 @@ impl CoreContext {
     ) -> CoreContextResult<LoginFlow> {
         // Check if we have an encryption key
         let _ = self.get_encryption_key()?;
-        let session_key_chain = self.key_chain.new_session_key_chain();
         let core_session = new_arc_auth_store(CoreSession::new(
             None,
-            self.session_db.clone(),
-            session_key_chain,
+            self.inner.session_db.clone(),
+            self.inner.key_chain.clone(),
             cb,
         ));
 
@@ -119,6 +127,7 @@ impl CoreContext {
 
     /// Create a user context from a login flow. This will fail if the flow is not in the
     /// logged in state.
+    #[tracing::instrument(level=Level::DEBUG, skip(self, login_flow))]
     pub fn user_context_from_login_flow(
         &self,
         login_flow: &LoginFlow,
@@ -131,6 +140,7 @@ impl CoreContext {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
         };
 
+        debug!("Creating new context for user {}({})", user.email, user.id);
         let db = self.new_user_db_pool(&user.id)?;
 
         Ok(UserContext::new(
@@ -141,7 +151,7 @@ impl CoreContext {
     }
 
     /// Get a user context from an existing session.
-    #[tracing::instrument(skip(self,session, cb), fields(user_id=?session.user_id, uid=?session.session_id))]
+    #[tracing::instrument(level=Level::DEBUG, skip(self,session, cb), fields(user_id=?session.user_id, uid=?session.session_id))]
     pub fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
@@ -153,12 +163,11 @@ impl CoreContext {
         let decrypted_session = session
             .to_decrypted_session(&key)
             .map_err(|_| CoreContextError::Crypto)?;
-        let session_key_chain = self.key_chain.new_session_key_chain();
         let user_id = session.user_id.clone();
         let core_session = new_arc_auth_store(CoreSession::new(
             Some(decrypted_session),
-            self.session_db.clone(),
-            session_key_chain,
+            self.inner.session_db.clone(),
+            self.inner.key_chain.clone(),
             cb,
         ));
         debug!("Creating session");
@@ -167,12 +176,17 @@ impl CoreContext {
     }
 
     fn get_connection(&self) -> CoreContextResult<SessionSqliteConnection> {
-        let conn = self.session_db.acquire()?;
+        let conn = self.inner.session_db.acquire()?;
         Ok(conn.into())
     }
 
     fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
-        let Some(key) = self.key_chain.get().map_err(CoreContextError::KeyChain)? else {
+        let Some(key) = self
+            .inner
+            .key_chain
+            .get()
+            .map_err(CoreContextError::KeyChain)?
+        else {
             return Err(KeyChainHasNoKey);
         };
 
@@ -183,7 +197,7 @@ impl CoreContext {
     }
 
     fn new_user_db_pool(&self, user_id: &UserId) -> CoreContextResult<SqliteConnectionPool> {
-        let user_db_path = get_user_db_path(&self.user_db_path, user_id);
+        let user_db_path = get_user_db_path(&self.inner.user_db_path, user_id);
         let pool = SqliteConnectionPool::new(SqliteMode::File(user_db_path), db_debug_enabled());
         let mut conn = pool.acquire()?;
         debug!("initializing core database");
@@ -193,7 +207,7 @@ impl CoreContext {
         }
         debug!("initializing user ");
         // initialize user db
-        for initializer in &self.user_db_initializers {
+        for initializer in &self.inner.user_db_initializers {
             initializer.initialize(&mut conn)?;
         }
 
