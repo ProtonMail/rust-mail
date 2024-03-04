@@ -17,6 +17,7 @@ use proton_core_db::{
     migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey,
     SessionSqliteConnection,
 };
+use proton_event_loop::proton_async::runtime::MTRuntime;
 use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -55,6 +56,7 @@ pub struct CoreContext {
 }
 
 struct CoreContextInner {
+    runtime: MTRuntime,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
     session_db: SqliteConnectionPool,
@@ -68,6 +70,7 @@ impl CoreContext {
     /// an `user_db_path` for user databases, a`key_chain` implementation and a list of `initializers`
     /// for the user database.
     pub fn new(
+        async_runtime: MTRuntime,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -78,6 +81,7 @@ impl CoreContext {
         let session_db_path = session_db_path.into();
         let user_db_path = user_db_path.into();
         Self::_new(
+            async_runtime,
             session_db_path,
             user_db_path,
             key_chain,
@@ -86,6 +90,7 @@ impl CoreContext {
         )
     }
     fn _new(
+        async_runtime: MTRuntime,
         session_db_path: PathBuf,
         user_db_path: PathBuf,
         key_chain: Arc<dyn KeyChain>,
@@ -108,6 +113,7 @@ impl CoreContext {
 
         Ok(Self {
             inner: Arc::new(CoreContextInner {
+                runtime: async_runtime,
                 network_connected: AtomicBool::new(true),
                 user_db_path,
                 key_chain,
@@ -116,6 +122,10 @@ impl CoreContext {
                 network_callback,
             }),
         })
+    }
+
+    pub fn async_runtime(&self) -> &MTRuntime {
+        &self.inner.runtime
     }
 
     /// Get available sessions.
