@@ -204,6 +204,6 @@ fn map_human_verification_err(e: http::HttpRequestError) -> LoginFlowError {
 
 impl std::fmt::Debug for LoginFlow {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LoginFlow(state:{:?}, user:{:?})", self.state, self.user)
+        write!(f, "LoginFlow(state:{:?})", self.state)
     }
 }
