@@ -3,7 +3,9 @@ use crate::{
     TrackerObserver,
 };
 use parking_lot::lock_api::Mutex;
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tracing::error;
@@ -175,7 +177,7 @@ impl LiveQueryBuilder {
 /// when changes are made to the database.
 pub struct LiveQuery<Q: ObservableQuery> {
     _query: ObservedQuery,
-    last_value: Q::Output,
+    last_value: RefCell<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
     update_cb: Option<Box<dyn LiveQueryUpdated>>,
 }
@@ -194,7 +196,7 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
             shared_cloned.store(new_value);
         });
         Self {
-            last_value: value,
+            last_value: RefCell::new(value),
             _query: query,
             shared,
             update_cb: cb,
@@ -202,15 +204,15 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
     }
 
     /// Get the latest value or the last updated value.
-    pub fn value(&mut self) -> &Q::Output {
+    pub fn value(&self) -> impl Deref<Target = Q::Output> + '_ {
         if let Some(new_value) = self.shared.take() {
-            self.last_value = new_value;
+            *self.last_value.borrow_mut() = new_value;
             if let Some(cb) = &self.update_cb {
                 cb.on_live_query_updated();
             }
         }
 
-        &self.last_value
+        self.last_value.borrow()
     }
 }
 

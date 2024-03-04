@@ -1,9 +1,9 @@
+use proton_sqlite3::utils::mapped_rows_to_vec;
 use proton_sqlite3::{
     InProcessTrackerService, LiveQueryBuilder, ObservableQuery, SqliteConnection,
     SqliteConnectionPool, SqliteMode, TrackingConnection,
 };
-
-use proton_sqlite3::utils::mapped_rows_to_vec;
+use std::ops::Deref;
 use std::sync::mpsc::TryRecvError;
 
 #[derive(Clone)]
@@ -52,9 +52,9 @@ fn test_tracker() {
 
     let tracker_service = InProcessTrackerService::new(connection_pool.clone());
 
-    let mut live_query = LiveQueryBuilder::new(tracker_service.clone()).build(TestQuery {});
+    let live_query = LiveQueryBuilder::new(tracker_service.clone()).build(TestQuery {});
 
-    println!(">> {:?}", live_query.value());
+    println!(">> {:?}", live_query.value().deref());
     let (sender, receiver) = std::sync::mpsc::sync_channel::<()>(0);
 
     let mut join_handles = Vec::new();
@@ -91,7 +91,7 @@ fn test_tracker() {
     loop {
         match receiver.try_recv() {
             Ok(_) => {
-                println!(">> {:?}", live_query.value())
+                println!(">> {:?}", live_query.value().deref())
             }
             Err(e) => match e {
                 TryRecvError::Empty => continue,
@@ -99,5 +99,5 @@ fn test_tracker() {
             },
         }
     }
-    println!(">> {:?}", live_query.value())
+    println!(">> {:?}", live_query.value().deref())
 }
