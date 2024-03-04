@@ -141,10 +141,13 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         refresh_token: SecretString,
         scope: AuthScope,
     ) -> Result<(), Box<dyn Error>> {
-        if self.auth.is_none() {
-            return Err(Box::new(CoreSessionError::Other(anyhow!(
-                "no auth into to refresh"
-            ))));
+        let user_id = {
+            let Some(auth) = &self.auth else {
+                return Err(Box::new(CoreSessionError::Other(anyhow!(
+                    "no auth into to refresh"
+                ))));
+            };
+            auth.user_id.clone()
         };
         let session_key = self.get_encryption_key().map_err(|e| {
             error!("Failed to retrieve encryption key from keychain: {e}");
@@ -167,13 +170,13 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         })?;
 
         {
-            let uid_ref = &uid;
             conn.tx(|tx| -> DBResult<()> {
                 tx.update_session(
-                    uid_ref,
+                    &user_id,
+                    &uid,
                     &encrypted_access_token,
                     &encrypted_refresh_token,
-                    Some(&scope),
+                    &scope,
                 )
             })
             .map_err(|e| {
@@ -230,7 +233,7 @@ fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
         uid: session.session_id,
         refresh_token: session.refresh_token,
         access_token: session.access_token,
-        scope: session.scopes.unwrap_or(AuthScope::from("")),
+        scope: session.scopes,
     }
 }
 
@@ -246,6 +249,6 @@ fn auth_to_encrypted_session(
         email: auth.email,
         refresh_token: encrypted_refresh_token,
         access_token: encrypted_access_token,
-        scopes: Some(auth.scope),
+        scopes: auth.scope,
     }
 }

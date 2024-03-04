@@ -30,7 +30,7 @@ fn test_session_store_load() {
         email: "foo@bar.com".to_string(),
         refresh_token: SecretString::new("token".to_string()),
         access_token: SecretString::new("access".to_string()),
-        scopes: Some(AuthScope::from("Scope")),
+        scopes: AuthScope::from("Scope"),
     };
 
     let key = SessionEncryptionKey::random();
@@ -61,6 +61,139 @@ fn test_session_store_load() {
             db_session.refresh_token.expose_secret(),
             session.refresh_token.expose_secret()
         );
+        Ok(())
+    })
+    .expect("failed");
+}
+
+#[test]
+fn test_session_update() {
+    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use proton_api_core::domain::{ExposeSecret, SecretString, Uid, UserId};
+    let session = DecryptedUserSession {
+        session_id: Uid::from("session_id"),
+        user_id: UserId::from("user_id"),
+        name: Some("foobar".to_string()),
+        email: "foo@bar.com".to_string(),
+        refresh_token: SecretString::new("token".to_string()),
+        access_token: SecretString::new("access".to_string()),
+        scopes: AuthScope::from("Scope"),
+    };
+
+    let updated_session = DecryptedUserSession {
+        session_id: Uid::from("session_id_2"),
+        user_id: UserId::from("user_id"),
+        name: Some("foobar".to_string()),
+        email: "foo@bar.com".to_string(),
+        refresh_token: SecretString::new("refreshed".to_string()),
+        access_token: SecretString::new("another token".to_string()),
+        scopes: AuthScope::from("Scope Scope2"),
+    };
+
+    let key = SessionEncryptionKey::random();
+    let encrypted_session = session
+        .to_encrypted_session(&key)
+        .expect("failed to encrypt");
+    let encrypted_updated_session = updated_session
+        .to_encrypted_session(&key)
+        .expect("failed to encrypt");
+
+    let mut conn = new_test_connection();
+    conn.tx(|tx| -> DBResult<()> {
+        tx.create_or_update_session(&encrypted_session)
+            .expect("failed to store session");
+
+        tx.update_session(
+            &updated_session.user_id,
+            &updated_session.session_id,
+            &encrypted_updated_session.access_token,
+            &encrypted_updated_session.refresh_token,
+            &updated_session.scopes,
+        )
+        .expect("failed to update");
+        let db_encrypted_session = tx
+            .get_session_with_user_id(&session.user_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(encrypted_updated_session, db_encrypted_session);
+        let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
+        assert_eq!(db_session.session_id, updated_session.session_id);
+        assert_eq!(db_session.user_id, updated_session.user_id);
+        assert_eq!(db_session.name, updated_session.name);
+        assert_eq!(db_session.email, updated_session.email);
+        assert_eq!(db_session.scopes, updated_session.scopes);
+        assert_eq!(
+            db_session.access_token.expose_secret(),
+            updated_session.access_token.expose_secret()
+        );
+        assert_eq!(
+            db_session.refresh_token.expose_secret(),
+            updated_session.refresh_token.expose_secret()
+        );
+        Ok(())
+    })
+    .expect("failed");
+}
+
+#[test]
+fn test_session_delete_user_id() {
+    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use proton_api_core::domain::{SecretString, Uid, UserId};
+    let session = DecryptedUserSession {
+        session_id: Uid::from("session_id"),
+        user_id: UserId::from("user_id"),
+        name: Some("foobar".to_string()),
+        email: "foo@bar.com".to_string(),
+        refresh_token: SecretString::new("token".to_string()),
+        access_token: SecretString::new("access".to_string()),
+        scopes: AuthScope::from("Scope"),
+    };
+    let key = SessionEncryptionKey::random();
+    let encrypted_session = session
+        .to_encrypted_session(&key)
+        .expect("failed to encrypt");
+
+    let mut conn = new_test_connection();
+    conn.tx(|tx| -> DBResult<()> {
+        tx.create_or_update_session(&encrypted_session)
+            .expect("failed to store session");
+        tx.delete_session_with_user_id(&session.user_id)
+            .expect("expect failed to delete user");
+
+        let db_encrypted_session = tx.get_session_with_user_id(&session.user_id).unwrap();
+        assert!(matches!(db_encrypted_session, None));
+        Ok(())
+    })
+    .expect("failed");
+}
+
+#[test]
+fn test_session_delete_session_id() {
+    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use proton_api_core::domain::{SecretString, Uid, UserId};
+    let session = DecryptedUserSession {
+        session_id: Uid::from("session_id"),
+        user_id: UserId::from("user_id"),
+        name: Some("foobar".to_string()),
+        email: "foo@bar.com".to_string(),
+        refresh_token: SecretString::new("token".to_string()),
+        access_token: SecretString::new("access".to_string()),
+        scopes: AuthScope::from("Scope"),
+    };
+    let key = SessionEncryptionKey::random();
+    let encrypted_session = session
+        .to_encrypted_session(&key)
+        .expect("failed to encrypt");
+
+    let mut conn = new_test_connection();
+    conn.tx(|tx| -> DBResult<()> {
+        tx.create_or_update_session(&encrypted_session)
+            .expect("failed to store session");
+        tx.delete_session(&session.session_id)
+            .expect("expect failed to delete user");
+
+        let db_encrypted_session = tx.get_session_with_user_id(&session.user_id).unwrap();
+        assert!(matches!(db_encrypted_session, None));
         Ok(())
     })
     .expect("failed");

@@ -19,7 +19,7 @@ pub struct DecryptedUserSession {
     pub email: String,
     pub refresh_token: SecretString,
     pub access_token: SecretString,
-    pub scopes: Option<AuthScope>,
+    pub scopes: AuthScope,
 }
 
 impl DecryptedUserSession {
@@ -50,7 +50,7 @@ pub struct EncryptedUserSession {
     pub email: String,
     pub refresh_token: EncryptedData,
     pub access_token: EncryptedData,
-    pub scopes: Option<AuthScope>,
+    pub scopes: AuthScope,
 }
 
 impl EncryptedUserSession {

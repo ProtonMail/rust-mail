@@ -24,14 +24,15 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
 
     pub fn update_session(
         &mut self,
-        id: &Uid,
+        user_id: &UserId,
+        session_id: &Uid,
         access_token: &EncryptedData,
         refresh_token: &EncryptedData,
-        scopes: Option<&AuthScope>,
+        scopes: &AuthScope,
     ) -> DBResult<()> {
         self.0.execute(
-            "UPDATE core_sessions SET access_token=?, refresh_token=?, scopes=? WHERE id=?",
-            (access_token, refresh_token, scopes, id),
+            "UPDATE core_sessions SET access_token=?, refresh_token=?, scopes=?,id=? WHERE user_id=?",
+            (access_token, refresh_token, scopes, session_id, user_id),
         )?;
         Ok(())
     }
@@ -69,7 +70,7 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
 
     pub fn delete_session_with_user_id(&self, user_id: &UserId) -> DBResult<()> {
         self.0
-            .execute("DELETE FROM core_sessions WHERE id =?", [user_id])?;
+            .execute("DELETE FROM core_sessions WHERE user_id =?", [user_id])?;
         Ok(())
     }
 }

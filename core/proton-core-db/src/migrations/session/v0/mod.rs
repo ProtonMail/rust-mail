@@ -9,10 +9,8 @@ impl proton_sqlite3::Migration for SessionMigrationV0 {
     fn migrate(&self, tx: &mut Transaction) -> proton_sqlite3::rusqlite::Result<()> {
         tx.execute(
             "CREATE TABLE core_sessions (id TEXT UNIQUE NOT NULL, \
-user_id UNIQUE NOT NULL, email TEXT NOT NULL, name TEXT DEFAULT NULL,\
-access_token BLOB NOT NULL, refresh_token BLOB NOT NULL, scopes TEXT, \
-PRIMARY KEY (id, user_id))
-",
+user_id TEXT UNIQUE NOT NULL PRIMARY KEY, email TEXT NOT NULL, name TEXT DEFAULT NULL,\
+access_token BLOB NOT NULL, refresh_token BLOB NOT NULL, scopes TEXT NOT NULL DEFAULT '')",
             (),
         )?;
 
