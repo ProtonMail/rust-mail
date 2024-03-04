@@ -2,11 +2,29 @@ use crate::session::CoreSessionError;
 use proton_api_core::exports::parking_lot::Mutex;
 use proton_core_db::SessionEncryptionKey;
 use std::error::Error;
+use std::fmt::Formatter;
+
+#[derive(Debug)]
+pub struct KeyChainError(Box<dyn Error + Send>);
+
+impl std::fmt::Display for KeyChainError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for KeyChainError {}
+
+impl<T: Into<Box<dyn Error + Send>>> From<T> for KeyChainError {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
 
 pub trait KeyChain: Send + Sync {
-    fn store(&self, key: &[u8]) -> Result<(), Box<dyn Error>>;
-    fn delete(&self) -> Result<(), Box<dyn Error>>;
-    fn get(&self) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
+    fn store(&self, key: &[u8]) -> Result<(), KeyChainError>;
+    fn delete(&self) -> Result<(), KeyChainError>;
+    fn get(&self) -> Result<Option<Vec<u8>>, KeyChainError>;
 }
 
 pub(crate) fn session_encryption_key_from_key_chain(
@@ -23,7 +41,7 @@ pub struct InMemoryKeyChain {
 }
 
 impl KeyChain for InMemoryKeyChain {
-    fn store(&self, key: &[u8]) -> Result<(), Box<dyn Error>> {
+    fn store(&self, key: &[u8]) -> Result<(), KeyChainError> {
         let mut guard = self.data.lock();
         if let Some(v) = guard.as_mut() {
             v.clear();
@@ -34,12 +52,12 @@ impl KeyChain for InMemoryKeyChain {
         Ok(())
     }
 
-    fn delete(&self) -> Result<(), Box<dyn Error>> {
+    fn delete(&self) -> Result<(), KeyChainError> {
         *self.data.lock() = None;
         Ok(())
     }
 
-    fn get(&self) -> Result<Option<Vec<u8>>, Box<dyn Error>> {
+    fn get(&self) -> Result<Option<Vec<u8>>, KeyChainError> {
         let data = self.data.lock().clone();
         Ok(data)
     }

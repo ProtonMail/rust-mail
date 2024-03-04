@@ -1,4 +1,4 @@
-use crate::os::{session_encryption_key_from_key_chain, KeyChain};
+use crate::os::{session_encryption_key_from_key_chain, KeyChain, KeyChainError};
 use log::debug;
 use proton_api_core::auth::{Auth, AuthScope};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
@@ -27,7 +27,7 @@ pub enum CoreSessionError {
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
-    KeyChain(Box<dyn Error>),
+    KeyChain(#[from] KeyChainError),
     #[error("Keychain has no encryption key")]
     KeyChainHasNoKey,
     #[error("Other: {0}")]
@@ -65,8 +65,7 @@ impl CoreSession {
     fn get_encryption_key(&self) -> Result<SessionEncryptionKey, CoreSessionError> {
         let bytes = self
             .keychain
-            .get()
-            .map_err(CoreSessionError::KeyChain)?
+            .get()?
             .ok_or(CoreSessionError::KeyChainHasNoKey)?;
         session_encryption_key_from_key_chain(bytes)
     }

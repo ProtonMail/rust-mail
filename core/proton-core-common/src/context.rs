@@ -1,5 +1,5 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
-use crate::os::KeyChain;
+use crate::os::{KeyChain, KeyChainError};
 use crate::session::CoreSession;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
 use crate::CoreSessionCallback;
@@ -18,7 +18,6 @@ use proton_core_db::{
     SessionSqliteConnection,
 };
 use proton_event_loop::proton_async::runtime::MTRuntime;
-use std::error::Error;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -30,7 +29,7 @@ pub enum CoreContextError {
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
-    KeyChain(Box<dyn Error>),
+    KeyChain(#[from] KeyChainError),
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Database Migration Error: {0}")]
