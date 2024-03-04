@@ -49,7 +49,7 @@ impl View<AppViewContext, AppEvent> for LoginView {
         } else {
             let area = area.inner(&Margin {
                 horizontal: 10,
-                vertical: 10,
+                vertical: 2,
             });
             let [_, email_area, password_area, _] = Layout::default()
                 .direction(Direction::Vertical)

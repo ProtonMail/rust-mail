@@ -4,8 +4,8 @@ use crate::view::View;
 use crate::views::AppViewContext;
 use crate::widgets::{HelpCategory, HelpItem, ScrollableList, ScrollableListState};
 use crossterm::event::{Event, KeyCode};
-use ratatui::layout::{Margin, Rect};
-use ratatui::prelude::Stylize;
+use ratatui::layout::{Constraint, Flex, Margin, Rect};
+use ratatui::prelude::{Layout, Stylize};
 use ratatui::text::Text;
 use ratatui::widgets::{Block, Borders, List, ListItem};
 use ratatui::Frame;
@@ -32,9 +32,17 @@ impl View<AppViewContext, AppEvent> for SessionsView {
     fn draw(&mut self, ctx: &AppViewContext, frame: &mut Frame, area: Rect) {
         let area = area.inner(&Margin {
             horizontal: 10,
-            vertical: 10,
+            vertical: 2,
         });
         let sessions = ctx.state().session_state.sessions();
+
+        let [_, area, _] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Min(40),
+            Constraint::Fill(1),
+        ])
+        .flex(Flex::Center)
+        .areas(area);
 
         let list_sessions = sessions
             .iter()
