@@ -126,8 +126,8 @@ fn test_attachment_decrypt() {
 
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let decrypted_attachment = attachment::decrypt_attachment(
-        &attachment_metadata,
         &pgp_provider,
+        &attachment_metadata,
         &decryption_keys,
         &verification_keys,
         enc_data,
@@ -162,8 +162,8 @@ fn test_attachment_decrypt_stream() {
     let mut output_buffer = Vec::new();
     let enc_data_reader: &[u8] = enc_data.as_ref();
     let mut verification_reader = attachment::decrypt_attachment_from_reader(
-        &attachment_metadata,
         &pgp_provider,
+        &attachment_metadata,
         &decryption_keys,
         &verification_keys,
         enc_data_reader,
