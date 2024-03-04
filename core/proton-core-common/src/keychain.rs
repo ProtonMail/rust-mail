@@ -3,11 +3,11 @@ use proton_core_db::SessionEncryptionKey;
 use std::error::Error;
 
 pub trait KeyChain: Send + Sync {
-    fn store(&self, key: &[u8]) -> Result<(), Box<dyn Error + Send + Sync>>;
-    fn delete(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
-    fn get(&self) -> Result<Option<Vec<u8>>, Box<dyn Error + Send + Sync>>;
+    fn store(&self, key: &[u8]) -> Result<(), Box<dyn Error>>;
+    fn delete(&self) -> Result<(), Box<dyn Error>>;
+    fn get(&self) -> Result<Option<Vec<u8>>, Box<dyn Error>>;
 
-    fn get_or_error(&self) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>>;
+    fn get_or_error(&self) -> Result<Vec<u8>, Box<dyn Error>>;
 }
 
 pub(crate) fn session_encryption_key_from_key_chain(

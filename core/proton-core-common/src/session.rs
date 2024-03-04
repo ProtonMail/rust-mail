@@ -27,7 +27,7 @@ pub enum CoreSessionError {
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
-    KeyChain(Box<dyn Error + Send + Sync>),
+    KeyChain(Box<dyn Error>),
     #[error("Other: {0}")]
     Other(anyhow::Error),
 }

@@ -28,7 +28,7 @@ pub enum CoreContextError {
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
-    KeyChain(Box<dyn Error + Send + Sync>),
+    KeyChain(Box<dyn Error>),
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Database Migration Error: {0}")]
