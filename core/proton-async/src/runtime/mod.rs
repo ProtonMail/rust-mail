@@ -94,9 +94,10 @@ impl LocalRuntime {
 pub struct MTRuntime(RuntimeImpl);
 
 impl MTRuntime {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new(max_workers: usize) -> Result<Self, Box<dyn Error>> {
+        debug_assert!(max_workers > 0);
         #[cfg(feature = "tokio-runtime")]
-        Ok(Self(tokio_runtime::new_multi_thread_runtime()?))
+        Ok(Self(tokio_runtime::new_multi_thread_runtime(max_workers)?))
     }
     pub fn spawn<R: Send + 'static, F: Future<Output = R> + Send + 'static>(
         &self,
@@ -131,7 +132,7 @@ fn test_local_thread_runtime() {
 fn test_mt_runtime() {
     use std::time::Duration;
 
-    let runtime = MTRuntime::new().expect("failed to create runtime");
+    let runtime = MTRuntime::new(2).expect("failed to create runtime");
 
     let h = runtime.spawn(async {
         crate::time::sleep(Duration::from_millis(100)).await;

@@ -15,7 +15,7 @@ proton_api_core::declare_event!(LoopEvent,{f:bool});
 
 #[test]
 fn test_loop_event_collection() {
-    let rt = MTRuntime::new().expect("failed to creat runtime");
+    let rt = MTRuntime::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
         let second_event_id = EventId("1".into());
@@ -134,7 +134,7 @@ fn test_loop_event_collection() {
 
 #[test]
 fn test_error_handler_retry_retries_loop() {
-    let rt = MTRuntime::new().expect("failed to creat runtime");
+    let rt = MTRuntime::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
         let second_event_id = EventId("1".into());
@@ -251,7 +251,7 @@ fn test_error_handler_retry_retries_loop() {
 
 #[test]
 fn test_error_handler_pause_pauses_loop() {
-    let rt = MTRuntime::new().expect("failed to creat runtime");
+    let rt = MTRuntime::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
 
@@ -322,7 +322,7 @@ fn test_error_handler_pause_pauses_loop() {
 
 #[test]
 fn test_error_handler_abort_causes_loop_exit() {
-    let rt = MTRuntime::new().expect("failed to creat runtime");
+    let rt = MTRuntime::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
 

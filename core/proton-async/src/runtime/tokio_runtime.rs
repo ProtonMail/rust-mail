@@ -13,9 +13,10 @@ pub fn new_thread_local_runtime() -> Result<tokio::runtime::Runtime, Box<dyn Err
     Ok(r)
 }
 
-pub fn new_multi_thread_runtime() -> Result<tokio::runtime::Runtime, Box<dyn Error>> {
+pub fn new_multi_thread_runtime(workers: usize) -> Result<tokio::runtime::Runtime, Box<dyn Error>> {
     let r = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
+        .worker_threads(workers)
         .build()?;
     Ok(r)
 }

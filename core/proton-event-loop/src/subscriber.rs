@@ -178,7 +178,7 @@ proton_api_core::declare_event!(TestEvent,{foo:u32});
 #[test]
 fn test_channeled_subscriber_handle_and_reply() {
     use proton_api_core::domain::EventId;
-    let rt = proton_async::runtime::MTRuntime::new().expect("failed to create runtime");
+    let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
     rt.block_on(async {
         let (mut s, mut h) = ChannelledSubscriber::new("test".into());
 
@@ -216,7 +216,7 @@ fn test_channeled_subscriber_failed_to_send() {
 
 #[test]
 fn test_channeled_subscriber_failed_to_receive() {
-    let rt = proton_async::runtime::MTRuntime::new().expect("failed to create runtime");
+    let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
     rt.block_on(async {
         let (mut s, h) = ChannelledSubscriber::new("test".into());
 
@@ -257,7 +257,7 @@ fn test_channeled_subscriber_handler_failed_to_receive() {
 
 #[test]
 fn test_channeled_subscriber_handler_failed_to_send() {
-    let rt = proton_async::runtime::MTRuntime::new().expect("failed to create runtime");
+    let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
 
     rt.block_on(async {
         let (s, mut h) = ChannelledSubscriber::new("test".into());
