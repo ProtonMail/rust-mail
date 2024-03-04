@@ -6,6 +6,7 @@ use crate::requests::{AuthInfoRequest, AuthRequest, TOTPRequest};
 use crate::{http, Session};
 use anyhow::anyhow;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
+use std::fmt::Formatter;
 
 #[derive(Debug, thiserror::Error)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
@@ -184,6 +185,7 @@ impl LoginFlow {
     }
 }
 
+#[derive(Debug)]
 enum LoginState {
     LoggedOut,
     Awaiting2FA(TFAStatus),
@@ -198,4 +200,10 @@ fn map_human_verification_err(e: http::HttpRequestError) -> LoginFlowError {
     }
 
     LoginFlowError::Request(e)
+}
+
+impl std::fmt::Debug for LoginFlow {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LoginFlow(state:{:?}, user:{:?})", self.state, self.user)
+    }
 }

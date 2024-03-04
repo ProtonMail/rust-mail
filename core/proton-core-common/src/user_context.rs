@@ -4,6 +4,7 @@ use proton_core_db::proton_sqlite3::{
     InProcessTrackerService, SqliteConnection, SqliteConnectionPool, TrackingConnection,
 };
 use proton_core_db::{DBMigrationError, DBResult};
+use std::fmt::{Debug, Formatter};
 
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
@@ -15,6 +16,12 @@ pub struct UserContext {
     session: Session,
     db_tracker: InProcessTrackerService,
     user_id: UserId,
+}
+
+impl Debug for UserContext {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, " UserContext({})", self.user_id)
+    }
 }
 
 impl UserContext {
