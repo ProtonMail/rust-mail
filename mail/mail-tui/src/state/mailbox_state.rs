@@ -6,7 +6,7 @@ use crate::views::{ConversationView, SessionsView};
 use proton_mail_common::proton_api_mail::domain::{LabelType, SysLabelId};
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing;
 use proton_mail_common::proton_mail_db::{
-    ConversationsLiveQuery, LabelsByTypeLiveQuery, LocalLabel, LocalLabelId,
+    ConversationsLiveQuery, LabelsByTypeWithConversationCountLiveQuery, LocalLabel, LocalLabelId,
 };
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
@@ -44,18 +44,20 @@ pub struct MailboxState {
 pub struct MailboxUserContextState {
     context: MailUserContext,
     pub conversations: ConversationsLiveQuery,
-    pub system_labels: LabelsByTypeLiveQuery,
-    pub folders: LabelsByTypeLiveQuery,
-    pub labels: LabelsByTypeLiveQuery,
+    pub system_labels: LabelsByTypeWithConversationCountLiveQuery,
+    pub folders: LabelsByTypeWithConversationCountLiveQuery,
+    pub labels: LabelsByTypeWithConversationCountLiveQuery,
 }
 
 impl MailboxUserContextState {
     pub fn new(context: MailUserContext) -> Self {
         Self {
             conversations: context.new_inbox_conversations_live_query(),
-            system_labels: context.new_labels_by_type_live_query(LabelType::System),
-            folders: context.new_labels_by_type_live_query(LabelType::Folder),
-            labels: context.new_labels_by_type_live_query(LabelType::Label),
+            system_labels: context
+                .new_labels_by_type_with_conversation_count_live_query(LabelType::System),
+            folders: context
+                .new_labels_by_type_with_conversation_count_live_query(LabelType::Folder),
+            labels: context.new_labels_by_type_with_conversation_count_live_query(LabelType::Label),
             context,
         }
     }

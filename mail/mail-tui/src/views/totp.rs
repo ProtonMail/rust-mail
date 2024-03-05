@@ -5,7 +5,7 @@ use crate::view::View;
 use crate::views::AppViewContext;
 use crate::widgets::{HelpCategory, HelpItem, TextInput, TextInputState};
 use crossterm::event::{Event, KeyCode};
-use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
+use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
 use ratatui::text::Text;
 use ratatui::Frame;
 
@@ -33,6 +33,10 @@ impl View<AppViewContext, AppEvent> for TotpView {
                 .split(area);
             frame.render_widget(Text::from("Submitting Totp...").centered(), chunks[0]);
         } else {
+            let area = area.inner(&Margin {
+                horizontal: 10,
+                vertical: 2,
+            });
             let [_, totp_area, _] = Layout::default()
                 .direction(Direction::Vertical)
                 .flex(Flex::Center)

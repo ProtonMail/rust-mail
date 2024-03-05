@@ -7,7 +7,7 @@ use crate::views::AppViewContext;
 use crate::widgets::{HelpCategory, HelpItem, ScrollableList, ScrollableListState};
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use proton_mail_common::proton_api_mail::domain::LabelType;
-use proton_mail_common::proton_mail_db::{LocalLabel, LocalLabelId};
+use proton_mail_common::proton_mail_db::{LocalLabel, LocalLabelId, LocalLabelWithCount};
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::prelude::Text;
 use ratatui::style::{Color, Style, Stylize};
@@ -70,7 +70,7 @@ impl ConversationView {
         .areas(internal_area);
 
         fn list_from_labels<'a>(
-            labels: &'a [LocalLabel],
+            labels: &'a [LocalLabelWithCount],
             desc: &'static str,
         ) -> ScrollableList<'a> {
             let labels = labels
@@ -81,7 +81,7 @@ impl ConversationView {
                     } else {
                         l.name.as_str()
                     };
-                    ListItem::new(Text::from(name).not_bold())
+                    ListItem::new(Text::from(format!("[{}] {name}", l.unread_count)).not_bold())
                 })
                 .collect::<Vec<_>>();
             let block = Block::new().borders(Borders::TOP).title(desc).bold();
@@ -232,7 +232,7 @@ impl ConversationView {
         self.folder_list_state.set_focus_lost();
         self.conversation_list_state.set_focus_lost();
 
-        fn find_label_index(labels: &[LocalLabel], id: LocalLabelId) -> usize {
+        fn find_label_index(labels: &[LocalLabelWithCount], id: LocalLabelId) -> usize {
             for (idx, l) in labels.iter().enumerate() {
                 if l.id == id {
                     return idx;
@@ -294,7 +294,7 @@ impl ConversationView {
 fn labels_for_type(
     context: &MailboxUserContextState,
     label_type: LabelType,
-) -> impl Deref<Target = Vec<LocalLabel>> + '_ {
+) -> impl Deref<Target = Vec<LocalLabelWithCount>> + '_ {
     match label_type {
         LabelType::Label => context.labels.value(),
         LabelType::ContactGroup => {
@@ -437,7 +437,7 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                                         .get(index)
                                         .cloned();
                                     if let Some(label) = label {
-                                        self.load_label(ctx, label);
+                                        self.load_label(ctx, label.into());
                                     }
                                 }
                             }

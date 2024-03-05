@@ -15,7 +15,6 @@ pub enum LoginState {
     LoggingIn,
     AwaitingTotp(LoginFlow),
     SubmittingTotp,
-    LoggedIn(LoginFlow),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -103,14 +102,6 @@ impl LoginState {
                     }
                 });
             }
-            LoginState::LoggedIn(flow) => {
-                debug!("Logging out from logged in state");
-                runtime.spawn(async move {
-                    if let Err(e) = flow.session().logout().await {
-                        error!("Failed to logout :{e}");
-                    }
-                });
-            }
             _ => {
                 debug!("No state found for logout");
             }
@@ -126,13 +117,12 @@ impl LoginState {
         match mail_context.user_context_from_login_flow(&flow) {
             Ok(ctx) => {
                 dispatcher.queue_event(MailboxEvent::NewMailboxSession(ctx));
-                *self = LoginState::LoggedIn(flow);
             }
             Err(e) => {
                 dispatcher.set_error("Context Error", e);
-                *self = LoginState::LoggedOut;
             }
         }
+        *self = LoginState::LoggedOut;
     }
 
     pub fn handle_event(
