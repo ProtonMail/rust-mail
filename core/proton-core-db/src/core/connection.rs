@@ -82,6 +82,34 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(Some(user))
     }
 
+    pub fn update_user_used_space(&mut self, user_id: &UserId, used_space: i64) -> DBResult<()> {
+        self.0.execute(
+            "UPDATE users SET used_space=? WHERE id=?",
+            (used_space, user_id),
+        )?;
+        Ok(())
+    }
+
+    pub fn update_user_product_used_space(
+        &mut self,
+        user_id: &UserId,
+        used_space: &UserProductUsedSpace,
+    ) -> DBResult<()> {
+        self.0.execute(
+            "UPDATE users SET pus_calendar=?, pus_contact=?, pus_drive=?, \
+    pus_mail=?, pus_pass=? WHERE id=?",
+            (
+                used_space.calendar,
+                used_space.contact,
+                used_space.drive,
+                used_space.mail,
+                used_space.pass,
+                user_id,
+            ),
+        )?;
+        Ok(())
+    }
+
     pub fn create_or_update_user_settings(
         &mut self,
         user_id: &UserId,

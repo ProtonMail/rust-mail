@@ -37,11 +37,11 @@ new_integer_enum!(u8, UserMnemonicStatus {
 #[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserProductUsedSpace {
-    pub calendar: u64,
-    pub contact: u64,
-    pub drive: u64,
-    pub mail: u64,
-    pub pass: u64,
+    pub calendar: i64,
+    pub contact: i64,
+    pub drive: i64,
+    pub mail: i64,
+    pub pass: i64,
 }
 #[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct UserFlags {

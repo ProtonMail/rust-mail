@@ -27,60 +27,43 @@ fn new_core_test_connection() -> crate::CoreSqliteConnection {
 #[test]
 fn test_core_store_and_load_user() {
     let mut conn = new_core_test_connection();
-    let user = User {
-        id: UserId::from("my_user_id"),
-        name: Some("my_user_name".to_string()),
-        display_name: Some("My User Name".to_string()),
-        email: "my_name@user.me".to_string(),
-        used_space: 1024,
-        max_space: 4096,
-        max_upload: 512,
-        user_type: proton_api_core::domain::UserType::Proton,
-        create_time: 111111,
-        credit: 222222,
-        currency: "euro".to_string(),
-        keys: UserKeys(vec![LockedKey {
-            id: KeyId::from("My_key_id"),
-            version: 3,
-            private_key: "my_private_key".to_string(),
-            token: None,
-            signature: None,
-            activation: None,
-            primary: true,
-            active: false,
-            flags: None,
-            recovery_secret: Some("recovery_secret".to_string()),
-            recovery_secret_signature: Some("recovery_signature".to_string()),
-        }]),
-        product_used_space: UserProductUsedSpace {
-            calendar: 23,
-            contact: 44,
-            drive: 99,
-            mail: 12,
-            pass: 33,
-        },
-        to_migrate: Default::default(),
-        mnemonic_status: proton_api_core::domain::UserMnemonicStatus::Disabled,
-        role: 12345,
-        private: 442424,
-        subscribed: 3234234,
-        services: 23123123,
-        delinquent: 4,
-        flags: UserFlags {
-            protected: false,
-            onboard_checklist_storage_granted: true,
-            has_temporary_password: false,
-            test_account: true,
-            no_login: false,
-            recovery_attempt: true,
-            sso: false,
-            no_proton_address: true,
-        },
-    };
-
+    let user = new_test_user();
     conn.tx(|tx| -> DBResult<()> {
         tx.create_or_update_user(&user)
             .expect("failed to store user");
+        let db_user = tx
+            .get_user(&user.id)
+            .expect("failed to load user")
+            .expect("should have value");
+        assert_eq!(db_user, user);
+        Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn test_core_user_space_updates() {
+    let mut conn = new_core_test_connection();
+    let mut user = new_test_user();
+    conn.tx(|tx| -> DBResult<()> {
+        tx.create_or_update_user(&user)
+            .expect("failed to store user");
+
+        user.used_space = 912314142;
+        tx.update_user_used_space(&user.id, user.used_space)
+            .expect("failed to update used space");
+
+        user.product_used_space = UserProductUsedSpace {
+            calendar: 234235235235,
+            contact: 2342342111231,
+            drive: 32423487767455,
+            mail: 10202042014,
+            pass: 1234857671,
+        };
+
+        tx.update_user_product_used_space(&user.id, &user.product_used_space)
+            .expect("failed to update used space");
+
         let db_user = tx
             .get_user(&user.id)
             .expect("failed to load user")
@@ -156,4 +139,57 @@ fn test_core_store_and_load_user_settings() {
         Ok(())
     })
     .unwrap();
+}
+
+fn new_test_user() -> User {
+    User {
+        id: UserId::from("my_user_id"),
+        name: Some("my_user_name".to_string()),
+        display_name: Some("My User Name".to_string()),
+        email: "my_name@user.me".to_string(),
+        used_space: 1024,
+        max_space: 4096,
+        max_upload: 512,
+        user_type: proton_api_core::domain::UserType::Proton,
+        create_time: 111111,
+        credit: 222222,
+        currency: "euro".to_string(),
+        keys: UserKeys(vec![LockedKey {
+            id: KeyId::from("My_key_id"),
+            version: 3,
+            private_key: "my_private_key".to_string(),
+            token: None,
+            signature: None,
+            activation: None,
+            primary: true,
+            active: false,
+            flags: None,
+            recovery_secret: Some("recovery_secret".to_string()),
+            recovery_secret_signature: Some("recovery_signature".to_string()),
+        }]),
+        product_used_space: UserProductUsedSpace {
+            calendar: 23,
+            contact: 44,
+            drive: 99,
+            mail: 12,
+            pass: 33,
+        },
+        to_migrate: Default::default(),
+        mnemonic_status: proton_api_core::domain::UserMnemonicStatus::Disabled,
+        role: 12345,
+        private: 442424,
+        subscribed: 3234234,
+        services: 23123123,
+        delinquent: 4,
+        flags: UserFlags {
+            protected: false,
+            onboard_checklist_storage_granted: true,
+            has_temporary_password: false,
+            test_account: true,
+            no_login: false,
+            recovery_attempt: true,
+            sso: false,
+            no_proton_address: true,
+        },
+    }
 }

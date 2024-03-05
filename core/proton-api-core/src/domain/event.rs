@@ -21,7 +21,15 @@ pub enum EventAction {
 
 /// Marker to indicate that that the type is a valid event type.
 pub trait IsEvent:
-    for<'de> Deserialize<'de> + Serialize + Clone + Eq + PartialEq + std::fmt::Debug + Send + Sync
+    for<'de> Deserialize<'de>
+    + Serialize
+    + Clone
+    + Eq
+    + PartialEq
+    + std::fmt::Debug
+    + Send
+    + Sync
+    + 'static
 {
     fn event_id(&self) -> &EventId;
 
