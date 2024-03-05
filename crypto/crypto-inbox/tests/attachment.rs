@@ -141,10 +141,7 @@ fn test_attachment_decrypt() {
     );
 
     let verification_status = decrypted_attachment.get_verification_status();
-    match verification_status.status {
-        VerificationStatus::Ok => (),
-        _ => panic!("signature verification failed"),
-    }
+    assert!(matches!(verification_status.status, VerificationStatus::Ok));
 }
 
 #[test]
@@ -180,8 +177,5 @@ fn test_attachment_decrypt_stream() {
     assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
 
     let verification_status = verification_reader.get_verification_status();
-    match verification_status.status {
-        VerificationStatus::Ok => (),
-        _ => panic!("signature verification failed"),
-    }
+    assert!(matches!(verification_status.status, VerificationStatus::Ok));
 }
