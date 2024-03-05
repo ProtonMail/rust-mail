@@ -1,14 +1,14 @@
 use crate::conversations::types::LocalConversation;
 use crate::conversations::LocalConversationWithContext;
 use crate::{
-    new_test_connection, with_tx, DeletedState, LocalAttachmentMetadata, LocalLabelId,
-    MailSqliteConnectionMut,
+    new_test_connection, with_tx, DeletedState, LocalAttachmentMetadata, LocalConversationCount,
+    LocalLabelId, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType, AttachmentId,
-    AttachmentMetadata, Conversation, ConversationId, ConversationLabels, Disposition, Label,
-    LabelId, LabelType, MessageAddress,
+    AttachmentMetadata, Conversation, ConversationCount, ConversationId, ConversationLabels,
+    Disposition, Label, LabelId, LabelType, MessageAddress,
 };
 use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
@@ -126,6 +126,58 @@ fn test_conversation_delete() {
 
         let db_conversation = tx.get_conversation(id).expect("failed to get conversation");
         assert!(db_conversation.is_none());
+    });
+}
+
+#[test]
+fn test_conversation_counts() {
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let labels = create_address_and_labels(tx);
+        let counts = [
+            ConversationCount {
+                label_id: MY_LABEL_ID1.clone(),
+                total: 20,
+                unread: 4,
+            },
+            ConversationCount {
+                label_id: MY_LABEL_ID2.clone(),
+                total: 400,
+                unread: 124,
+            },
+        ];
+
+        let expected_counts = [
+            LocalConversationCount {
+                id: labels[0],
+                total: 20,
+                unread: 4,
+            },
+            LocalConversationCount {
+                id: labels[1],
+                total: 400,
+                unread: 124,
+            },
+        ];
+
+        tx.create_or_update_conversation_counts(counts.iter())
+            .expect("failed to creat counters");
+        let db_counters = tx
+            .get_conversation_counts()
+            .expect("failed to get counters");
+        assert!(db_counters.contains(&expected_counts[0]));
+        assert!(db_counters.contains(&expected_counts[1]));
+
+        let labels_with_counts = tx
+            .get_local_label_by_type_ordered_with_conversation_count(LabelType::Label)
+            .expect("failed to get label with type");
+        assert_eq!(labels_with_counts.len(), 1);
+        assert_eq!(labels_with_counts[0].id, expected_counts[0].id);
+        assert_eq!(labels_with_counts[0].total_count, expected_counts[0].total);
+        assert_eq!(
+            labels_with_counts[0].unread_count,
+            expected_counts[0].unread
+        );
     });
 }
 

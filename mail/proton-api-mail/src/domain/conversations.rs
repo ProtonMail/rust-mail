@@ -11,6 +11,15 @@ proton_api_core::utils::string_id!(ConversationId);
 
 #[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct ConversationCount {
+    #[serde(rename = "LabelID")]
+    pub label_id: LabelId,
+    pub total: u64,
+    pub unread: u64,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct ConversationMetadata {
     #[serde(rename = "ID")]
     pub id: ConversationId,

@@ -1,4 +1,4 @@
-use crate::domain::{Message, MessageId, MessageMetadata, MessageMetadataFilter};
+use crate::domain::{Message, MessageCount, MessageId, MessageMetadata, MessageMetadataFilter};
 use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize};
 use proton_api_core::http;
@@ -55,4 +55,20 @@ impl<'a> http::RequestDesc for GetMessageRequest<'a> {
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, format!("mail/v4/messages/{}", self.id))
     }
+}
+
+pub struct GetMessageCountsRequest {}
+impl http::RequestDesc for GetMessageCountsRequest {
+    type Output = GetMessageCountsResponse;
+    type Response = JsonResponse<Self::Output>;
+
+    fn build(&self) -> RequestData {
+        RequestData::new(Method::Get, "mail/v4/messages/count")
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct GetMessageCountsResponse {
+    pub counts: Vec<MessageCount>,
 }

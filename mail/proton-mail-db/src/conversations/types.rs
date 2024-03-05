@@ -1,10 +1,24 @@
-use crate::new_u64_type;
+use crate::{new_u64_type, LocalLabelId};
 use proton_api_mail::domain::{
     AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
     MessageMetadata,
 };
 
 new_u64_type!(LocalConversationId);
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct LocalConversationCount {
+    pub id: LocalLabelId,
+    pub total: u64,
+    pub unread: u64,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct LocalMessageCount {
+    pub id: LocalLabelId,
+    pub total: u64,
+    pub unread: u64,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LocalConversation {

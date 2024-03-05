@@ -1,6 +1,6 @@
 use crate::{
-    DBResult, DeletedState, LabelColor, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
-    RemoteLabel,
+    DBResult, DeletedState, LabelColor, LocalLabel, LocalLabelId, LocalLabelWithCount,
+    MailSqliteConnectionImpl, RemoteLabel,
 };
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 pub use proton_api_mail::proton_api_core::exports::serde_json;
@@ -41,6 +41,34 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         mapped_rows_into_vec(
             &mut result,
             stmt.query_map([label_type], LocalLabelSelect::from_row)?,
+        )?;
+        Ok(result)
+    }
+
+    pub fn get_local_label_by_type_ordered_with_conversation_count(
+        &self,
+        label_type: LabelType,
+    ) -> DBResult<Vec<LocalLabelWithCount>> {
+        let mut result = Vec::with_capacity(8);
+        let mut stmt = self
+            .0
+            .prepare(LocalLabelSelectWithCount::query_conversation())?;
+        mapped_rows_into_vec(
+            &mut result,
+            stmt.query_map([label_type], LocalLabelSelectWithCount::from_row)?,
+        )?;
+        Ok(result)
+    }
+
+    pub fn get_local_label_by_type_ordered_with_message_count(
+        &self,
+        label_type: LabelType,
+    ) -> DBResult<Vec<LocalLabelWithCount>> {
+        let mut result = Vec::with_capacity(8);
+        let mut stmt = self.0.prepare(LocalLabelSelectWithCount::query_message())?;
+        mapped_rows_into_vec(
+            &mut result,
+            stmt.query_map([label_type], LocalLabelSelectWithCount::from_row)?,
         )?;
         Ok(result)
     }
@@ -174,6 +202,41 @@ impl LocalLabelSelect {
             notified: r.get(8)?,
             expanded: r.get(9)?,
             sticky: r.get(10)?,
+        })
+    }
+}
+
+struct LocalLabelSelectWithCount {}
+
+impl LocalLabelSelectWithCount {
+    fn query_conversation() -> &'static str {
+        "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
+        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
+        LEFT JOIN label_conversation_count AS lc ON l.id = lc.label_id \
+        WHERE deleted=0 AND type=? ORDER BY `order`"
+    }
+    fn query_message() -> &'static str {
+        "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
+        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
+        LEFT JOIN label_message_count AS lc ON l.id = lc.label_id \
+        WHERE deleted=0 AND type=? ORDER BY `order`"
+    }
+
+    fn from_row(r: &Row) -> DBResult<LocalLabelWithCount> {
+        Ok(LocalLabelWithCount {
+            id: r.get(0)?,
+            rid: r.get(1)?,
+            parent_id: r.get(2)?,
+            label_type: r.get(3)?,
+            order: r.get(4)?,
+            name: r.get(5)?,
+            path: r.get(6)?,
+            color: r.get(7)?,
+            notified: r.get(8)?,
+            expanded: r.get(9)?,
+            sticky: r.get(10)?,
+            total_count: r.get(11)?,
+            unread_count: r.get(12)?,
         })
     }
 }

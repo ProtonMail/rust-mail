@@ -1,4 +1,6 @@
-use crate::domain::{Conversation, ConversationFilter, ConversationId, MessageMetadata};
+use crate::domain::{
+    Conversation, ConversationCount, ConversationFilter, ConversationId, MessageMetadata,
+};
 use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize};
 use proton_api_core::http;
@@ -86,4 +88,20 @@ impl<'a> http::RequestDesc for GetConversationRequest<'a> {
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, format!("mail/v4/conversations/{}", self.id))
     }
+}
+
+pub struct GetConversationCountsRequest {}
+impl http::RequestDesc for GetConversationCountsRequest {
+    type Output = GetConversationCountsResponse;
+    type Response = JsonResponse<Self::Output>;
+
+    fn build(&self) -> RequestData {
+        RequestData::new(Method::Get, "mail/v4/conversations/count")
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct GetConversationCountsResponse {
+    pub counts: Vec<ConversationCount>,
 }

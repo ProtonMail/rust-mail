@@ -4,9 +4,10 @@ use crate::conversations::types::{
 };
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, DeletedState, LocalAttachmentMetadata, LocalLabelId, MailSqliteConnectionImpl,
+    DBResult, DeletedState, LocalAttachmentMetadata, LocalConversationCount, LocalLabelId,
+    MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{Conversation, ConversationId, MessageAddress};
+use proton_api_mail::domain::{Conversation, ConversationCount, ConversationId, MessageAddress};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec,
@@ -250,6 +251,33 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
             stmt.execute((DeletedState::Remote, id))?;
         }
         Ok(())
+    }
+
+    pub fn create_or_update_conversation_counts<'i>(
+        &mut self,
+        counts: impl Iterator<Item = &'i ConversationCount>,
+    ) -> DBResult<()> {
+        let mut stmt = self.0.prepare(
+            "INSERT OR REPLACE INTO label_conversation_count VALUES \
+        ((SELECT id FROM labels WHERE rid=?),?,?)",
+        )?;
+
+        for count in counts {
+            stmt.execute((&count.label_id, count.total, count.unread))?;
+        }
+        Ok(())
+    }
+
+    pub fn get_conversation_counts(&self) -> DBResult<Vec<LocalConversationCount>> {
+        let mut stmt = self.0.prepare("SELECT * FROM label_conversation_count")?;
+        let r = mapped_rows_to_vec(stmt.query_map((), |r| {
+            Ok(LocalConversationCount {
+                id: r.get(0)?,
+                total: r.get(1)?,
+                unread: r.get(2)?,
+            })
+        })?)?;
+        Ok(r)
     }
 }
 

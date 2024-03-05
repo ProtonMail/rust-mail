@@ -1,4 +1,4 @@
-use crate::{LocalLabel, MailSqliteConnectionImpl};
+use crate::{LocalLabel, LocalLabelWithCount, MailSqliteConnectionImpl};
 use proton_api_mail::domain::LabelType;
 use proton_sqlite3::{LiveQuery, ObservableQuery, SqliteConnection};
 
@@ -32,3 +32,35 @@ impl ObservableQuery for LabelsByTypeQuery {
 }
 
 pub type LabelsByTypeLiveQuery = LiveQuery<LabelsByTypeQuery>;
+
+#[derive(Clone)]
+pub struct LabelsByTypeQueryWithConversationCount(LabelType);
+
+impl LabelsByTypeQueryWithConversationCount {
+    pub fn new(label_type: LabelType) -> Self {
+        Self(label_type)
+    }
+}
+
+impl ObservableQuery for LabelsByTypeQueryWithConversationCount {
+    type Output = Vec<LocalLabelWithCount>;
+
+    fn debug_name(&self) -> &'static str {
+        "labels_by_type"
+    }
+
+    fn tables(&self) -> Vec<String> {
+        vec!["labels".to_string(), "label_conversation_count".to_string()]
+    }
+
+    fn execute(
+        &self,
+        connection: &SqliteConnection,
+    ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
+        let conn = MailSqliteConnectionImpl::new(connection);
+        conn.get_local_label_by_type_ordered_with_conversation_count(self.0)
+    }
+}
+
+pub type LabelsByTypeWithConversationCountLiveQuery =
+    LiveQuery<LabelsByTypeQueryWithConversationCount>;
