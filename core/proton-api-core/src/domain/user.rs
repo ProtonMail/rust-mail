@@ -34,7 +34,7 @@ new_integer_enum!(u8, UserMnemonicStatus {
     Unknown = 4,
 });
 
-#[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserProductUsedSpace {
     pub calendar: i64,
@@ -43,7 +43,7 @@ pub struct UserProductUsedSpace {
     pub mail: i64,
     pub pass: i64,
 }
-#[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct UserFlags {
     pub protected: bool,
     #[serde(rename = "onboard-checklist-storage-granted")]
@@ -62,7 +62,7 @@ pub struct UserFlags {
 }
 
 /// Represents an API user
-#[derive(Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct User {
     #[serde(rename = "ID")]
