@@ -24,8 +24,6 @@ pub enum AttachmentError {
     AttachmentDecryptionWrite(std::io::Error),
     #[error("Failed to decrypt encrypted detached signature: {0}")]
     EncryptedSignatureDecryption(Box<dyn std::error::Error>),
-    #[error("Streaming does not support encrypted signatures only")]
-    NotSupportedEncryptedSignature,
 }
 
 string_id![KeyPackets];
