@@ -6,7 +6,7 @@ keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
 
 [dependencies]
-proton-api-core = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git", features = ["sql"]}
+proton-api-core = {workspace=true}
 uniffi = {version = "0.26", optional = true, features = ["tokio"]}
 
 

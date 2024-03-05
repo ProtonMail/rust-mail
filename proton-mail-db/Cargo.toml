@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 proton-api-mail = { path="../proton-api-mail", features = ["sql"]}
-proton-sqlite3 = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-sqlite3 = {workspace=true}
 uuid = {version = "1.7", features = ["v4"]}
 
 [dev-dependencies]
