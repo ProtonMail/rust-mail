@@ -3,7 +3,7 @@ use proton_api_core::Session;
 use proton_core_db::proton_sqlite3::{
     InProcessTrackerService, SqliteConnection, SqliteConnectionPool, TrackingConnection,
 };
-use proton_core_db::{DBMigrationError, DBResult};
+use proton_core_db::{CoreSqliteConnection, DBMigrationError, DBResult};
 use std::fmt::{Debug, Formatter};
 
 mod settings;
@@ -48,8 +48,8 @@ impl UserContext {
         T::from(self.session.clone())
     }
 
-    pub fn new_db_connection(&self) -> DBResult<TrackingConnection> {
-        self.db_tracker.new_connection()
+    pub fn new_db_connection(&self) -> DBResult<CoreSqliteConnection> {
+        self.new_db_connection_as::<CoreSqliteConnection>()
     }
 
     pub fn new_db_connection_as<T: From<TrackingConnection>>(&self) -> DBResult<T> {

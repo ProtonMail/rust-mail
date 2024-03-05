@@ -1,12 +1,11 @@
-use crate::UserContext;
-use proton_api_core::domain::{IsEvent, User, UserProductUsedSpace, UserSettings};
+use proton_api_core::domain::{IsEvent, User, UserId, UserProductUsedSpace, UserSettings};
+use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
 use proton_core_db::{CoreSqliteConnection, DBResult};
 use proton_event_loop::proton_async::async_trait::async_trait;
 use proton_event_loop::SubscriberError;
 
-#[async_trait]
 pub trait CoreEvent: IsEvent {
     fn get_core_event_user(&self) -> Option<&User>;
 
@@ -17,24 +16,30 @@ pub trait CoreEvent: IsEvent {
     fn get_core_event_used_product_space(&self) -> Option<&UserProductUsedSpace>;
 }
 
-pub struct CoreEventSubscriber {
-    user_context: UserContext,
+pub trait CoreEventSubscriberConnectionProvider: Send + Sync {
+    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(UserId, CoreSqliteConnection)>;
+}
+pub struct CoreEventSubscriber<T: CoreEventSubscriberConnectionProvider>(T);
+
+impl<T: CoreEventSubscriberConnectionProvider> CoreEventSubscriber<T> {
+    pub fn new(provider: T) -> Self {
+        Self(provider)
+    }
 }
 
 #[async_trait]
-impl<E: CoreEvent> proton_event_loop::Subscriber<E> for CoreEventSubscriber {
+impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::Subscriber<E>
+    for CoreEventSubscriber<T>
+{
     fn name(&self) -> &str {
         "proton-core-subscriber"
     }
 
     async fn on_events(&mut self, events: &[E]) -> Result<(), SubscriberError> {
-        let mut conn = self
-            .user_context
-            .new_db_connection_as::<CoreSqliteConnection>()
-            .map_err(|e| {
-                error!("Failed to get DB connection :{e}");
-                SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
-            })?;
+        let (user_id, mut conn) = self.0.get_user_id_and_db_connection().map_err(|e| {
+            error!("Failed to get DB connection :{e}");
+            SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
+        })?;
         conn.tx(|tx| -> DBResult<()> {
             for event in events {
                 if let Some(user) = event.get_core_event_user() {
@@ -44,28 +49,25 @@ impl<E: CoreEvent> proton_event_loop::Subscriber<E> for CoreEventSubscriber {
                     })?;
                 }
                 if let Some(settings) = event.get_core_event_user_settings() {
-                    tx.create_or_update_user_settings(self.user_context.user_id(), settings)
+                    tx.create_or_update_user_settings(&user_id, settings)
                         .map_err(|e| {
                             error!("Failed to update user settings:{e}");
                             e
                         })?;
                 }
                 if let Some(used_space) = event.get_core_event_used_space() {
-                    tx.update_user_used_space(self.user_context.user_id(), used_space)
+                    tx.update_user_used_space(&user_id, used_space)
                         .map_err(|e| {
                             error!("Failed to update used space:{e}");
                             e
                         })?;
                 }
                 if let Some(used_product_space) = event.get_core_event_used_product_space() {
-                    tx.update_user_product_used_space(
-                        self.user_context.user_id(),
-                        used_product_space,
-                    )
-                    .map_err(|e| {
-                        error!("Failed to update used product space: {e}");
-                        e
-                    })?;
+                    tx.update_user_product_used_space(&user_id, used_product_space)
+                        .map_err(|e| {
+                            error!("Failed to update used product space: {e}");
+                            e
+                        })?;
                 }
             }
             Ok(())
