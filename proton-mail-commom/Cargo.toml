@@ -10,6 +10,7 @@ proton-core-common = {workspace=true}
 proton-async= {workspace=true}
 proton-mail-db = {path ="../proton-mail-db"}
 proton-api-mail = {path ="../proton-api-mail"}
+proton-event-loop = {workspace=true}
 
 [lints]
 workspace = true

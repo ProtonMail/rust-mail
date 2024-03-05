@@ -20,13 +20,42 @@ fn test_create_message() {
         let conv_id = test_create_message_dependencies(tx);
         let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
         let id = tx
-            .creat_message_from_metadata(&metadata)
+            .create_message_from_metadata(&metadata)
             .expect("failed to create message");
         let db_metadata = tx
             .get_message_metadata(id)
             .expect("failed to get message")
             .expect("must have a value");
         let expected = LocalMessageMetadata::from_message_metadata(id, conv_id, metadata);
+        assert_eq!(db_metadata, expected);
+
+        let message_labels = tx
+            .get_message_labels(id)
+            .expect("failed to get labels")
+            .expect("must have value");
+        assert_eq!(message_labels.len(), 1);
+    });
+}
+
+#[test]
+fn test_update_message() {
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let conv_id = test_create_message_dependencies(tx);
+        let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
+        let mut metadata_updated = test_message_metadata([MY_LABEL_ID2.clone()], []);
+        metadata_updated.order = 20;
+        metadata_updated.unread = ProtonBoolean::True;
+        let id = tx
+            .create_message_from_metadata(&metadata)
+            .expect("failed to create message");
+        tx.update_message_from_metadata(&metadata_updated)
+            .expect("failed to update message");
+        let db_metadata = tx
+            .get_message_metadata(id)
+            .expect("failed to get message")
+            .expect("must have a value");
+        let expected = LocalMessageMetadata::from_message_metadata(id, conv_id, metadata_updated);
         assert_eq!(db_metadata, expected);
 
         let message_labels = tx

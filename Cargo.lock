@@ -208,6 +208,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
 
 [[package]]
+name = "base64"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
+
+[[package]]
 name = "basic-toml"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -781,9 +787,9 @@ dependencies = [
 [[package]]
 name = "gopenpgp-sys"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#b15cd2e1e72690e63310c728609c73055760a7a7"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#44ce1084ea13ef7d76eef0a4eb863de6d33af5e1"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "bindgen",
  "hex",
  "zeroize",
@@ -870,9 +876,9 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8947b1a6fad4393052c7ba1f4cd97bed3e953a95c79c92ad9b051a04611d9fbb"
+checksum = "601cbb57e577e2f5ef5be8e7b83f0f63994f25aa94d673e54a92d5c516d101f1"
 dependencies = [
  "bytes",
  "fnv",
@@ -1025,9 +1031,9 @@ checksum = "b1a46d1a171d865aa5f83f92695765caa047a9b4cbae2cbf37dbd613a793fd4c"
 
 [[package]]
 name = "js-sys"
-version = "0.3.68"
+version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "406cda4b368d531c842222cf9d2600a9a4acce8d29423695379c6868a143a9ee"
+checksum = "29c15563dc2726973df627357ce0c9ddddbea194836909d655df6a75d2cf296d"
 dependencies = [
  "wasm-bindgen",
 ]
@@ -1465,17 +1471,19 @@ dependencies = [
 [[package]]
 name = "proton-api-core"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#497b8dcc08527b10210a7e66dffd65f9a78e065b"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#a0a8643a34a781f5045a4b302156fa212b0673c6"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.22.0",
  "bytes",
  "parking_lot",
+ "proton-async",
  "proton-crypto-account",
  "proton-sqlite3",
  "reqwest",
  "secrecy",
  "serde",
+ "serde-aux",
  "serde_json",
  "serde_repr",
  "thiserror",
@@ -1494,7 +1502,7 @@ dependencies = [
 [[package]]
 name = "proton-async"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#497b8dcc08527b10210a7e66dffd65f9a78e065b"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#a0a8643a34a781f5045a4b302156fa212b0673c6"
 dependencies = [
  "async-trait",
  "flume",
@@ -1507,9 +1515,8 @@ dependencies = [
 [[package]]
 name = "proton-core-common"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#497b8dcc08527b10210a7e66dffd65f9a78e065b"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#a0a8643a34a781f5045a4b302156fa212b0673c6"
 dependencies = [
- "log",
  "proton-api-core",
  "proton-core-db",
  "proton-event-loop",
@@ -1518,7 +1525,7 @@ dependencies = [
 [[package]]
 name = "proton-core-db"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#497b8dcc08527b10210a7e66dffd65f9a78e065b"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#a0a8643a34a781f5045a4b302156fa212b0673c6"
 dependencies = [
  "aes-gcm",
  "proton-api-core",
@@ -1529,7 +1536,7 @@ dependencies = [
 [[package]]
 name = "proton-crypto"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#b15cd2e1e72690e63310c728609c73055760a7a7"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#44ce1084ea13ef7d76eef0a4eb863de6d33af5e1"
 dependencies = [
  "gopenpgp-sys",
 ]
@@ -1537,9 +1544,9 @@ dependencies = [
 [[package]]
 name = "proton-crypto-account"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#b15cd2e1e72690e63310c728609c73055760a7a7"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#44ce1084ea13ef7d76eef0a4eb863de6d33af5e1"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "proton-crypto",
  "serde",
  "thiserror",
@@ -1547,8 +1554,8 @@ dependencies = [
 
 [[package]]
 name = "proton-event-loop"
-version = "0.3.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#497b8dcc08527b10210a7e66dffd65f9a78e065b"
+version = "0.4.0"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#a0a8643a34a781f5045a4b302156fa212b0673c6"
 dependencies = [
  "paste",
  "proton-api-core",
@@ -1562,6 +1569,7 @@ dependencies = [
  "proton-api-mail",
  "proton-async",
  "proton-core-common",
+ "proton-event-loop",
  "proton-mail-db",
 ]
 
@@ -1605,7 +1613,7 @@ dependencies = [
 [[package]]
 name = "proton-sqlite3"
 version = "0.4.1"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#497b8dcc08527b10210a7e66dffd65f9a78e065b"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#a0a8643a34a781f5045a4b302156fa212b0673c6"
 dependencies = [
  "fixedbitset",
  "parking_lot",
@@ -1716,7 +1724,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6920094eb85afde5e4a138be3f2de8bbdf28000f0029e72c45025a56b042251"
 dependencies = [
  "async-compression",
- "base64",
+ "base64 0.21.7",
  "bytes",
  "cookie",
  "cookie_store",
@@ -1831,7 +1839,7 @@ version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
- "base64",
+ "base64 0.21.7",
 ]
 
 [[package]]
@@ -1949,6 +1957,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-aux"
+version = "4.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d2e8bfba469d06512e11e3311d4d051a4a387a5b42d010404fecf3200321c95"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.197"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2016,6 +2035,15 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
+
+[[package]]
+name = "signal-hook-registry"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8229b473baa5980ac72ef434c4415e70c4b5e71b423043adb4ba059f89c99a1"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "siphasher"
@@ -2274,9 +2302,23 @@ dependencies = [
  "libc",
  "mio",
  "num_cpus",
+ "parking_lot",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
+ "tokio-macros",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -2648,9 +2690,9 @@ checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.91"
+version = "0.2.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1e124130aee3fb58c5bdd6b639a0509486b0338acaaae0c84a5124b0f588b7f"
+checksum = "4be2531df63900aeb2bca0daaaddec08491ee64ceecbee5076636a3b026795a8"
 dependencies = [
  "cfg-if",
  "wasm-bindgen-macro",
@@ -2658,9 +2700,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-backend"
-version = "0.2.91"
+version = "0.2.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9e7e1900c352b609c8488ad12639a311045f40a35491fb69ba8c12f758af70b"
+checksum = "614d787b966d3989fa7bb98a654e369c762374fd3213d212cfc0251257e747da"
 dependencies = [
  "bumpalo",
  "log",
@@ -2673,9 +2715,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.41"
+version = "0.4.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877b9c3f61ceea0e56331985743b13f3d25c406a7098d45180fb5f09bc19ed97"
+checksum = "76bc14366121efc8dbb487ab05bcc9d346b3b5ec0eaa76e46594cabbe51762c0"
 dependencies = [
  "cfg-if",
  "js-sys",
@@ -2685,9 +2727,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.91"
+version = "0.2.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b30af9e2d358182b5c7449424f017eba305ed32a7010509ede96cdc4696c46ed"
+checksum = "a1f8823de937b71b9460c0c34e25f3da88250760bec0ebac694b49997550d726"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -2695,9 +2737,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.91"
+version = "0.2.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "642f325be6301eb8107a83d12a8ac6c1e1c54345a7ef1a9261962dfefda09e66"
+checksum = "e94f17b526d0a461a191c78ea52bbce64071ed5c04c9ffe424dcb38f74171bb7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2708,9 +2750,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.91"
+version = "0.2.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f186bd2dcf04330886ce82d6f33dd75a7bfcf69ecf5763b89fcde53b6ac9838"
+checksum = "af190c94f2773fdb3729c55b007a722abb5384da03bc0986df4c289bf5567e96"
 
 [[package]]
 name = "wasm-streams"
@@ -2727,9 +2769,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.68"
+version = "0.3.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96565907687f7aceb35bc5fc03770a8a0471d82e479f25832f54a0e3f4b28446"
+checksum = "77afa9a11836342370f4817622a2f0f418b134426d91a82dfb48f532d2ec13ef"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

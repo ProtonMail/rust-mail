@@ -10,13 +10,21 @@ members = [
 ]
 
 [workspace.dependencies]
-proton-api-core = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git", features = ["sql"]}
-proton-sqlite3 = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
-proton-core-common = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-api-core = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git", features = ["sql"]}
+proton-sqlite3 = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-core-common = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-event-loop = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
 proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
 uniffi = "0.26"
 tracing-subscriber = "0.3"
 lazy_static = "1"
+
+#[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
+#proton-api-core= {path = "../../proton-api-core/proton-api-core"}
+#proton-core-common= {path = "../../proton-api-core/proton-core-common"}
+#proton-sqlite3= {path = "../../proton-api-core/proton-sqlite3"}
+#proton-async= {path = "../../proton-api-core/proton-async"}
+#proton-event-loop = {path = "../../proton-api-core/proton-event-loop"}
 
 [workspace.lints.rust]
 trivial_numeric_casts= "warn"

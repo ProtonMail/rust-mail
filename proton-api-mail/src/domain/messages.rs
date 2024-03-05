@@ -22,7 +22,7 @@ pub struct MessageAddress {
     pub bimi_selector: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MessageMetadata {
@@ -247,6 +247,8 @@ pub struct MessageMetadataFilter {
     end_id: Option<MessageId>,
     desc: ProtonBoolean,
     sort: Option<MessageMetadataSortMode>,
+    #[serde(rename = "ConversationID")]
+    conversation_id: Option<ConversationId>,
     page: usize,
     page_size: usize,
 }
@@ -262,6 +264,7 @@ impl MessageMetadataFilter {
             label_id: None,
             sort: None,
             desc: ProtonBoolean::False,
+            conversation_id: None,
             page_size,
             page: page_number,
         }
@@ -292,6 +295,11 @@ impl MessageMetadataFilterBuilder {
 
     pub fn with_address_id(mut self, id: impl Into<AddressId>) -> Self {
         self.0.address_id = Some(id.into());
+        self
+    }
+
+    pub fn with_conversation_id(mut self, id: impl Into<ConversationId>) -> Self {
+        self.0.conversation_id = Some(id.into());
         self
     }
 
@@ -327,7 +335,7 @@ impl MessageMetadataFilterBuilder {
     }
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct MessageCount {
     #[serde(rename = "LabelID")]

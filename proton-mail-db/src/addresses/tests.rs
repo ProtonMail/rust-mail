@@ -11,7 +11,7 @@ fn test_address_create() {
     let (mut conn, _, _t) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let address = creat_test_address();
-        tx.create_address(&address)
+        tx.create_or_update_address(&address)
             .expect("failed to create address");
         let db_address = tx
             .get_address(&address.id)
@@ -26,10 +26,10 @@ fn test_address_create_duplicate() {
     let (mut conn, _, _t) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let mut address = creat_test_address();
-        tx.create_address(&address)
+        tx.create_or_update_address(&address)
             .expect("failed to create address");
         address.order = 10;
-        tx.create_address(&address)
+        tx.create_or_update_address(&address)
             .expect("failed to create duplicate");
         let db_address = tx
             .get_address(&address.id)
@@ -44,7 +44,7 @@ fn test_address_update() {
     let (mut conn, _, _t) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let address = creat_test_address();
-        tx.create_address(&address)
+        tx.create_or_update_address(&address)
             .expect("failed to create address");
         let address = creat_test_address_updated();
         tx.update_address(&address)
@@ -62,7 +62,7 @@ fn test_address_delete() {
     let (mut conn, _, _t) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let address = creat_test_address();
-        tx.create_address(&address)
+        tx.create_or_update_address(&address)
             .expect("failed to create address");
         tx.delete_address(&address.id)
             .expect("failed to delete address");

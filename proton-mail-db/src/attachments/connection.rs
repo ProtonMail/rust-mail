@@ -6,7 +6,7 @@ use proton_sqlite3::rusqlite::Row;
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub(crate) fn create_attachment_ref_statement(
         &mut self,
-    ) -> DBResult<CreateAttachmentRefStatement<'_>> {
+    ) -> DBResult<CreateAttachmentRefStatement<'c>> {
         // We want to create a new entry if the attachment has not been reference yet and
         // ignore it in case it's already there.
         self.0.prepare("INSERT OR IGNORE INTO attachments (rid, name, size, mime_type, disposition,address_id) VALUES \

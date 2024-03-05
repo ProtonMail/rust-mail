@@ -3,6 +3,7 @@
 mod addresses;
 mod attachments;
 mod conversations;
+mod events;
 mod ids;
 pub mod json;
 mod labels;

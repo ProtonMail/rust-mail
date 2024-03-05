@@ -7,6 +7,7 @@ use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::proton_core_db::EncryptedUserSession;
 use proton_core_common::{CoreContext, CoreContextError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
+use proton_event_loop::EventLoopError;
 use proton_mail_db::DBMigrationError;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -27,6 +28,8 @@ pub enum MailContextError {
     KeyChainHasNoKey,
     #[error("HTTP Error: {0}")]
     Http(#[from] HttpRequestError),
+    #[error("Event Loop: {0}")]
+    EventLoop(#[from] EventLoopError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -41,6 +44,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::DBMigration(err) => MailContextError::DBMigration(err),
             CoreContextError::KeyChainHasNoKey => MailContextError::KeyChainHasNoKey,
             CoreContextError::Other(err) => MailContextError::Other(err),
+            CoreContextError::Http(err) => MailContextError::Http(err),
         }
     }
 }

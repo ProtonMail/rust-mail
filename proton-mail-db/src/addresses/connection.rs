@@ -6,10 +6,10 @@ use proton_sqlite3::rusqlite::{OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::mapped_rows_to_vec;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
-    pub fn create_address(&mut self, address: &Address) -> DBResult<()> {
-        self.create_addresses(std::iter::once(address))
+    pub fn create_or_update_address(&mut self, address: &Address) -> DBResult<()> {
+        self.create_or_update_addresses(std::iter::once(address))
     }
-    pub fn create_addresses<'i>(
+    pub fn create_or_update_addresses<'i>(
         &mut self,
         addresses: impl Iterator<Item = &'i Address>,
     ) -> DBResult<()> {

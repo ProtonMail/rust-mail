@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 proton_api_core::utils::string_id!(ConversationId);
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct ConversationCount {
     #[serde(rename = "LabelID")]
@@ -51,7 +51,7 @@ pub struct ConversationMetadata {
     pub attachment_info: HashMap<String, MessageAttachmentInfo>,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct ConversationLabels {
     #[serde(rename = "ID")]
@@ -63,7 +63,7 @@ pub struct ConversationLabels {
     pub context_num_attachments: u64,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct Conversation {
     #[serde(rename = "ID")]

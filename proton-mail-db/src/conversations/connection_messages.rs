@@ -1,24 +1,24 @@
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, LocalLabelId, LocalMessageCount, LocalMessageId, LocalMessageMetadata,
+    DBResult, DeletedState, LocalLabelId, LocalMessageCount, LocalMessageId, LocalMessageMetadata,
     MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{MessageAddress, MessageCount, MessageMetadata};
+use proton_api_mail::domain::{MessageAddress, MessageCount, MessageId, MessageMetadata};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::{
-    gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec,
+    gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
 
 impl<'c> MailSqliteConnectionImpl<'c> {
-    pub fn creat_message_from_metadata(
+    pub fn create_message_from_metadata(
         &mut self,
         metadata: &MessageMetadata,
     ) -> DBResult<LocalMessageId> {
-        let r = self.creat_messages_from_metadata(std::iter::once(metadata))?;
+        let r = self.create_messages_from_metadata(std::iter::once(metadata))?;
         Ok(r[0])
     }
 
-    pub fn creat_messages_from_metadata<'i>(
+    pub fn create_messages_from_metadata<'i>(
         &mut self,
         metadata: impl ExactSizeIterator<Item = &'i MessageMetadata>,
     ) -> DBResult<Vec<LocalMessageId>> {
@@ -37,7 +37,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         let mut attachment_stmt = self.create_attachment_ref_statement()?;
 
         for metadata in metadata {
-            bind_message_metadata(
+            bind_message_metadata_create(
                 &mut msg_stmt,
                 metadata,
                 &mut to_list_buffer,
@@ -46,8 +46,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             )?;
             let local_id = msg_stmt
                 .raw_query()
-                .next()
-                .unwrap()
+                .next()?
                 .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
                 .and_then(|r| r.get(0))?;
 
@@ -57,14 +56,71 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             }
 
             for attachment in &metadata.attachments_metadata {
-                let attachment_id =
-                    attachment_stmt.insert(Some(&metadata.address_id), attachment)?;
-                message_to_attachment_stmt.execute((local_id, attachment_id))?;
+                if let Some(attachment_id) = attachment_stmt
+                    .insert(Some(&metadata.address_id), attachment)
+                    .optional()?
+                {
+                    message_to_attachment_stmt.execute((local_id, attachment_id))?;
+                }
             }
 
             result.push(local_id);
         }
         Ok(result)
+    }
+
+    pub fn update_message_from_metadata(&mut self, metadata: &MessageMetadata) -> DBResult<()> {
+        self.update_messages_from_metadata(std::iter::once(metadata))
+    }
+
+    pub fn update_messages_from_metadata<'i>(
+        &mut self,
+        metadata: impl ExactSizeIterator<Item = &'i MessageMetadata>,
+    ) -> DBResult<()> {
+        let mut to_list_buffer = JsonWriteBuffer::new();
+        let mut cc_list_buffer = JsonWriteBuffer::new();
+        let mut bcc_list_buffer = JsonWriteBuffer::new();
+
+        let mut label_stmt = self.0.prepare(
+            "INSERT OR IGNORE INTO message_labels VALUES (?, (SELECT id FROM labels WHERE rid=?))",
+        )?;
+        let mut msg_stmt = self.0.prepare(update_message_query())?;
+
+        for metadata in metadata {
+            bind_message_metadata_update(
+                &mut msg_stmt,
+                metadata,
+                &mut to_list_buffer,
+                &mut cc_list_buffer,
+                &mut bcc_list_buffer,
+            )?;
+            let local_id: LocalMessageId = msg_stmt
+                .raw_query()
+                .next()
+                .unwrap()
+                .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
+                .and_then(|r| r.get(0))?;
+
+            if !metadata.label_ids.is_empty() {
+                let mut stmt = self.0.prepare(
+                    &format!("DELETE FROM message_labels WHERE message_id=? AND label_id NOT IN (SELECT id FROM labels WHERE rid IN ({}))", gen_variable_in_argument_list(metadata.label_ids.len())))?;
+                let mut row_alloc = StmtIndexAllocator::new();
+                stmt.raw_bind_parameter(row_alloc.fetch_and_add(), local_id)?;
+                for label_id in &metadata.label_ids {
+                    stmt.raw_bind_parameter(row_alloc.fetch_and_add(), label_id)?;
+                }
+                stmt.raw_execute()?;
+            } else {
+                self.0
+                    .execute("DELETE FROM message_labels WHERE message_id=?", [local_id])?;
+            }
+
+            // TODO: single select query?
+            for label in &metadata.label_ids {
+                label_stmt.execute((local_id, &label))?;
+            }
+        }
+        Ok(())
     }
 
     pub fn get_message_metadata(
@@ -135,6 +191,14 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         })?)?;
         Ok(r)
     }
+
+    pub fn mark_remote_message_as_deleted(&mut self, id: &MessageId) -> DBResult<()> {
+        self.0.execute(
+            "UPDATE messages SET delete=? WHERE rid=?",
+            (DeletedState::Remote, id),
+        )?;
+        Ok(())
+    }
 }
 
 macro_rules! bind_list {
@@ -156,7 +220,7 @@ macro_rules! bind_list_ordered {
 
 fn create_message_query() -> String {
     format!(
-        "INSERT INTO messages (conversation_id, rid, address_id, `order`, subject, unread, \
+        "INSERT OR REPLACE INTO messages (conversation_id, rid, address_id, `order`, subject, unread, \
 sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector, \
 sender_display_image, to_list, cc_list, bcc_list, time, size, expiration_time, \
 is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags) VALUES \
@@ -164,7 +228,60 @@ is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags) V
         gen_variable_in_argument_list(23)
     )
 }
-fn bind_message_metadata(
+
+fn update_message_query() -> &'static str {
+    "UPDATE messages SET conversation_id=(SELECT id FROM conversations WHERE rid=?), \
+rid=?, address_id=?, `order`=?, subject=?, unread=?, \
+sender_address=?, sender_name=?, sender_is_proton=?, sender_is_simple_login=?, sender_bimi_selector=?, \
+sender_display_image=?, to_list=?, cc_list=?, bcc_list=?, time=?, size=?, expiration_time=?, \
+is_replied=?, is_replied_all=?, is_forwarded=?, external_id=?, num_attachments=?, flags=? \
+WHERE rid=? RETURNING id"
+}
+
+fn bind_message_metadata_update(
+    stmt: &mut Statement,
+    m: &MessageMetadata,
+    to_list_buffer: &mut JsonWriteBuffer,
+    cc_list_buffer: &mut JsonWriteBuffer,
+    bcc_list_buffer: &mut JsonWriteBuffer,
+) -> DBResult<()> {
+    let to_list = to_list_buffer.serialize(&m.to_list)?;
+    let cc_list = cc_list_buffer.serialize(&m.cc_list)?;
+    let bcc_list = bcc_list_buffer.serialize(&m.bcc_list)?;
+
+    bind_list! {
+        stmt,
+        &m.conversation_id,
+        &m.id,
+        &m.address_id,
+        m.order,
+        &m.subject,
+        m.unread,
+        &m.sender.address,
+        &m.sender.name,
+        &m.sender.is_proton,
+        &m.sender.is_simple_login,
+        &m.sender.bimi_selector,
+        &m.sender.display_sender_image,
+        to_list,
+        cc_list,
+        bcc_list,
+        m.time,
+        m.size,
+        m.expiration_time,
+        m.is_replied,
+        m.is_replied_all,
+        m.is_forwarded,
+        &m.external_id,
+        m.num_attachments,
+        m.flags,
+        &m.id,
+    }
+
+    Ok(())
+}
+
+fn bind_message_metadata_create(
     stmt: &mut Statement,
     m: &MessageMetadata,
     to_list_buffer: &mut JsonWriteBuffer,
