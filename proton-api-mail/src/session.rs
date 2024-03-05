@@ -1,11 +1,12 @@
 use crate::domain::{
-    Address, ConversationFilter, ConversationId, Label, LabelId, LabelType, MailEvent, Message,
-    MessageId, MessageMetadataFilter,
+    Address, ConversationCount, ConversationFilter, ConversationId, Label, LabelId, LabelType,
+    MailEvent, Message, MessageCount, MessageId, MessageMetadataFilter,
 };
 use crate::requests::{
-    CreateLabelRequest, DeleteLabelRequest, GetAddressesRequest, GetConversationRequest,
-    GetConversationResponse, GetConversationsRequest, GetConversationsResponse, GetLabelsRequest,
-    GetMessageMetadataRequest, GetMessageRequest, MessageMetadataResponse, UpdateLabelRequest,
+    CreateLabelRequest, DeleteLabelRequest, GetAddressesRequest, GetConversationCountsRequest,
+    GetConversationRequest, GetConversationResponse, GetConversationsRequest,
+    GetConversationsResponse, GetLabelsRequest, GetMessageCountsRequest, GetMessageMetadataRequest,
+    GetMessageRequest, MessageMetadataResponse, UpdateLabelRequest,
 };
 use proton_api_core::domain::EventId;
 use proton_api_core::{http, Session};
@@ -94,6 +95,13 @@ impl MailSession {
             .map(|v| v.message)
     }
 
+    pub async fn get_message_counts(&self) -> Result<Vec<MessageCount>, http::HttpRequestError> {
+        self.session
+            .execute_request(GetMessageCountsRequest {})
+            .await
+            .map(|r| r.counts)
+    }
+
     pub async fn get_conversations(
         &self,
         filter: ConversationFilter,
@@ -110,6 +118,15 @@ impl MailSession {
         self.session
             .execute_request(GetConversationRequest::new(id))
             .await
+    }
+
+    pub async fn get_conversation_counts(
+        &self,
+    ) -> Result<Vec<ConversationCount>, http::HttpRequestError> {
+        self.session
+            .execute_request(GetConversationCountsRequest {})
+            .await
+            .map(|r| r.counts)
     }
 }
 

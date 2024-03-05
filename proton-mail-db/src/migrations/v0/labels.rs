@@ -40,14 +40,14 @@ CONSTRAINT constraint_labels_parent_id FOREIGN KEY (parent_id) REFERENCES labels
 
     // Label Conversation Count
     tx.execute(r#"CREATE TABLE label_conversation_count (
-label_id BLOB NOT NULL PRIMARY KEY, total INTEGER NOT NULL, unread INTEGER NOT NULL,
+label_id INTEGER NOT NULL PRIMARY KEY, total INTEGER NOT NULL, unread INTEGER NOT NULL,
 CONSTRAINT constraint_label_conversation_count_label_id FOREIGN KEY (label_id) REFERENCES labels (id) ON DELETE CASCADE
 )"#, ())?;
 
     // Label Message Count
     tx.execute(r#"CREATE TABLE label_message_count (
-label_id BLOB NOT NULL PRIMARY KEY, total INTEGER NOT NULL, unread INTEGER NOT NULL,
-CONSTRAINT constraint_label_message_count_label_id FOREIGN KEY (label_id) REFERENCES remote_labels (id) ON DELETE CASCADE
+label_id INTEGER NOT NULL PRIMARY KEY, total INTEGER NOT NULL, unread INTEGER NOT NULL,
+CONSTRAINT constraint_label_conversation_count_label_id FOREIGN KEY (label_id) REFERENCES labels (id) ON DELETE CASCADE
 )"#, ())?;
 
     const RESOLVE_PARENT_ID_TRIGGER: &str = "(SELECT id FROM labels WHERE rid=NEW.parent_id)";

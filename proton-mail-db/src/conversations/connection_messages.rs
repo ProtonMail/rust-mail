@@ -1,8 +1,9 @@
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, LocalLabelId, LocalMessageId, LocalMessageMetadata, MailSqliteConnectionImpl,
+    DBResult, LocalLabelId, LocalMessageCount, LocalMessageId, LocalMessageMetadata,
+    MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{MessageAddress, MessageMetadata};
+use proton_api_mail::domain::{MessageAddress, MessageCount, MessageMetadata};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec,
@@ -106,6 +107,33 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         }
 
         Ok(None)
+    }
+
+    pub fn create_or_update_message_counts<'i>(
+        &mut self,
+        counts: impl Iterator<Item = &'i MessageCount>,
+    ) -> DBResult<()> {
+        let mut stmt = self.0.prepare(
+            "INSERT OR REPLACE INTO label_message_count VALUES \
+        ((SELECT id FROM labels WHERE rid=?),?,?)",
+        )?;
+
+        for count in counts {
+            stmt.execute((&count.label_id, count.total, count.unread))?;
+        }
+        Ok(())
+    }
+
+    pub fn get_message_counts(&self) -> DBResult<Vec<LocalMessageCount>> {
+        let mut stmt = self.0.prepare("SELECT * FROM label_message_count")?;
+        let r = mapped_rows_to_vec(stmt.query_map((), |r| {
+            Ok(LocalMessageCount {
+                id: r.get(0)?,
+                total: r.get(1)?,
+                unread: r.get(2)?,
+            })
+        })?)?;
+        Ok(r)
     }
 }
 

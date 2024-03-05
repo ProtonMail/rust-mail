@@ -21,6 +21,41 @@ pub struct LocalLabel {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub struct LocalLabelWithCount {
+    pub id: LocalLabelId,
+    pub rid: Option<LabelId>,
+    pub parent_id: Option<LocalLabelId>,
+    pub name: String,
+    pub path: Option<String>,
+    pub color: LabelColor,
+    pub label_type: LabelType,
+    pub order: u32,
+    pub notified: bool,
+    pub expanded: bool,
+    pub sticky: bool,
+    pub total_count: u64,
+    pub unread_count: u64,
+}
+
+impl From<LocalLabelWithCount> for LocalLabel {
+    fn from(value: LocalLabelWithCount) -> Self {
+        Self {
+            id: value.id,
+            rid: value.rid,
+            parent_id: value.parent_id,
+            name: value.name,
+            path: value.path,
+            color: value.color,
+            label_type: value.label_type,
+            order: value.order,
+            notified: value.notified,
+            expanded: value.expanded,
+            sticky: value.sticky,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RemoteLabel {
     pub id: LabelId,
     pub parent_id: Option<LabelId>,

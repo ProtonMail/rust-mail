@@ -3,6 +3,7 @@ use proton_api_mail::domain::LabelType;
 use proton_mail_db::proton_sqlite3::{LiveQuery, LiveQueryBuilder, ObservableQuery};
 use proton_mail_db::{
     ConversationQuery, ConversationsLiveQuery, LabelsByTypeLiveQuery, LabelsByTypeQuery,
+    LabelsByTypeQueryWithConversationCount, LabelsByTypeWithConversationCountLiveQuery,
     LocalLabelId,
 };
 
@@ -19,6 +20,13 @@ impl MailUserContext {
 
     pub fn new_labels_by_type_live_query(&self, label_type: LabelType) -> LabelsByTypeLiveQuery {
         self.new_live_query(LabelsByTypeQuery::new(label_type))
+    }
+
+    pub fn new_labels_by_type_with_conversation_count_live_query(
+        &self,
+        label_type: LabelType,
+    ) -> LabelsByTypeWithConversationCountLiveQuery {
+        self.new_live_query(LabelsByTypeQueryWithConversationCount::new(label_type))
     }
 
     fn new_live_query<Q: ObservableQuery>(&self, q: Q) -> LiveQuery<Q> {

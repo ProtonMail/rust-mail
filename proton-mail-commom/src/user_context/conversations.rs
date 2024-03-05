@@ -30,4 +30,17 @@ impl MailUserContext {
 
         Ok(())
     }
+
+    pub async fn sync_conversation_and_message_counts(&self) -> MailContextResult<()> {
+        let conversation_counts = self.mail_session().get_conversation_counts().await?;
+        let message_counts = self.mail_session().get_message_counts().await?;
+
+        let mut connection = self.new_db_connection()?;
+        connection.tx(|tx| -> DBResult<()> {
+            tx.create_or_update_conversation_counts(conversation_counts.iter())?;
+            tx.create_or_update_message_counts(message_counts.iter())?;
+            Ok(())
+        })?;
+        Ok(())
+    }
 }

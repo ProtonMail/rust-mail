@@ -1,6 +1,6 @@
 use crate::{MailContext, MailContextError, MailUserContext};
 use proton_api_mail::domain::LabelId;
-use proton_api_mail::proton_api_core::exports::tracing::{self, Level};
+use proton_api_mail::proton_api_core::exports::tracing::{self, debug, Level};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MailUserContextLoadingStage {
@@ -36,7 +36,11 @@ impl MailUserContext {
             }
 
             // load conversation counters
+            debug!("Syncing message and conversation counts");
             cb.on_stage(MailUserContextLoadingStage::Counters);
+            if let Err(e) = ctx.sync_conversation_and_message_counts().await {
+                cb.on_stage_err(MailUserContextLoadingStage::Counters, e);
+            }
 
             // load inbox conversations
             cb.on_stage(MailUserContextLoadingStage::Conversation);
