@@ -10,7 +10,7 @@ use crate::{
 use proton_api_mail::domain::{Conversation, ConversationCount, ConversationId, MessageAddress};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
 use proton_sqlite3::utils::{
-    gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec,
+    gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
 
 impl<'c> MailSqliteConnectionImpl<'c> {
@@ -24,6 +24,26 @@ impl<'c> MailSqliteConnectionImpl<'c> {
 
     /// Creates new or updates existing conversations.
     pub fn create_conversations<'i>(
+        &mut self,
+        conversations: impl ExactSizeIterator<Item = &'i Conversation>,
+    ) -> DBResult<Vec<LocalConversationId>> {
+        self.create_or_update_conversations(conversations)
+    }
+
+    pub fn update_conversation(&mut self, conversation: &Conversation) -> DBResult<()> {
+        self.update_conversations(std::iter::once(conversation))
+    }
+    /// Creates new or updates existing conversations.
+    pub fn update_conversations<'i>(
+        &mut self,
+        conversations: impl ExactSizeIterator<Item = &'i Conversation>,
+    ) -> DBResult<()> {
+        self.create_or_update_conversations(conversations)?;
+        Ok(())
+    }
+
+    //TODO: Better update statement.
+    fn create_or_update_conversations<'i>(
         &mut self,
         conversations: impl ExactSizeIterator<Item = &'i Conversation>,
     ) -> DBResult<Vec<LocalConversationId>> {
@@ -81,6 +101,26 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
                 resolve_conv_id_stmt.query_row([&conv.id], |r| r.get(0))?
             };
 
+            // Remove any labels that are no longer associated with this conversation.
+            if !conv.labels.is_empty() {
+                let mut stmt = self.0.prepare(&format!(
+                    "DELETE FROM conversation_labels WHERE conversation_id=? \
+            AND label_id NOT IN (SELECT id FROM labels WHERE rid IN ({}))",
+                    gen_variable_in_argument_list(conv.labels.len())
+                ))?;
+                let mut row_index = StmtIndexAllocator::new();
+                stmt.raw_bind_parameter(row_index.fetch_and_add(), conv_id)?;
+                for label in &conv.labels {
+                    stmt.raw_bind_parameter(row_index.fetch_and_add(), &label.id)?;
+                }
+                stmt.raw_execute()?;
+            } else {
+                self.0.execute(
+                    "DELETE FROM conversation_labels WHERE conversation_id=?",
+                    [conv_id],
+                )?;
+            }
+
             for label in &conv.labels {
                 labels_statement.execute((
                     &label.id,
@@ -93,6 +133,25 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
                 ))?;
             }
 
+            if !conv.attachments_metadata.is_empty() {
+                // Remove any attachments that are no longer associated with this conversation.
+                let mut stmt = self.0.prepare(&format!(
+                    "DELETE FROM conversation_attachments WHERE conversation_id=? \
+            AND attachment_id NOT IN ({})",
+                    gen_variable_in_argument_list(conv.attachments_metadata.len())
+                ))?;
+                let mut row_index = StmtIndexAllocator::new();
+                stmt.raw_bind_parameter(row_index.fetch_and_add(), conv_id)?;
+                for attachment in &conv.attachments_metadata {
+                    stmt.raw_bind_parameter(row_index.fetch_and_add(), &attachment.id)?;
+                }
+                stmt.raw_execute()?;
+            } else {
+                self.0.execute(
+                    "DELETE FROM conversation_attachments WHERE conversation_id=?",
+                    [conv_id],
+                )?;
+            }
             for attachment in &conv.attachments_metadata {
                 if let Some(local_id) = attachments_stmt.insert(None, attachment).optional()? {
                     attachment_to_conv_stmt.execute((conv_id, local_id))?;
@@ -322,9 +381,11 @@ FROM conversations WHERE deleted=0"
     }
 }
 
+const CONVERSATION_SELECTOR_WITH_CONTEXT_ORDER_CLAUSE: &str =
+    " ORDER BY CL.ctx_time DESC, C.`order` DESC";
 struct ConversationSelectorWithContext {}
 impl ConversationSelectorWithContext {
-    fn query() -> &'static str {
+    fn query_base() -> &'static str {
         "SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages,  \
 C.num_unread, C.num_attachments, C.expiration_time, C.size, \
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0), \
@@ -334,15 +395,28 @@ JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=? \
 WHERE C.deleted=0"
     }
 
+    fn query() -> String {
+        format!(
+            "{} {}",
+            Self::query_base(),
+            CONVERSATION_SELECTOR_WITH_CONTEXT_ORDER_CLAUSE
+        )
+    }
+
     fn query_with_id() -> String {
-        format!("{} AND C.id=?", Self::query())
+        format!(
+            "{} AND C.id=? {}",
+            Self::query_base(),
+            CONVERSATION_SELECTOR_WITH_CONTEXT_ORDER_CLAUSE
+        )
     }
 
     fn query_with_id_in(count: usize) -> String {
         format!(
-            "{} AND C.id IN ({})",
-            Self::query(),
-            gen_variable_in_argument_list(count)
+            "{} AND C.id IN ({}) {}",
+            Self::query_base(),
+            gen_variable_in_argument_list(count),
+            CONVERSATION_SELECTOR_WITH_CONTEXT_ORDER_CLAUSE,
         )
     }
 

@@ -1,44 +1,92 @@
+mod addresses;
 mod conversations;
+mod events;
 mod initialization;
 mod labels;
 mod queries;
 
 pub use initialization::*;
+use std::sync::{Arc, Weak};
 
 use crate::MailContextResult;
 use proton_api_mail::proton_api_core::domain::UserId;
 use proton_api_mail::proton_api_core::exports::proton_sqlite3::InProcessTrackerService;
+use proton_api_mail::proton_api_core::Session;
 use proton_api_mail::MailSession;
 use proton_core_common::proton_core_db::DBResult;
 use proton_core_common::UserContext;
+use proton_event_loop::EventLoop;
 use proton_mail_db::MailSqliteConnection;
 
 #[derive(Debug, Clone)]
-pub struct MailUserContext(UserContext);
+pub struct MailUserContext {
+    inner: Arc<MailUserContextInner>,
+}
+
+#[derive(Debug, Clone)]
+pub struct WeakMailUserContext {
+    inner: Weak<MailUserContextInner>,
+}
+
+#[derive(Debug)]
+struct MailUserContextInner {
+    user_context: UserContext,
+    event_loop: EventLoop,
+}
+
+impl WeakMailUserContext {
+    pub(crate) fn new(ctx: &MailUserContext) -> Self {
+        Self {
+            inner: Arc::downgrade(&ctx.inner),
+        }
+    }
+    pub fn upgrade(&self) -> Option<MailUserContext> {
+        self.inner.upgrade().map(|v| MailUserContext { inner: v })
+    }
+}
+
+impl From<MailUserContext> for WeakMailUserContext {
+    fn from(value: MailUserContext) -> Self {
+        Self {
+            inner: Arc::downgrade(&value.inner),
+        }
+    }
+}
 
 impl MailUserContext {
     pub(crate) fn new(user_context: UserContext) -> Self {
-        Self(user_context)
+        Self {
+            inner: Arc::new(MailUserContextInner {
+                user_context,
+                event_loop: EventLoop::new(),
+            }),
+        }
+    }
+
+    pub(crate) fn session(&self) -> &Session {
+        self.inner.user_context.session()
     }
 
     pub(crate) fn mail_session(&self) -> MailSession {
-        self.0.session_as::<MailSession>()
+        self.inner.user_context.session_as::<MailSession>()
     }
 
     pub(crate) fn new_db_connection(&self) -> DBResult<MailSqliteConnection> {
-        self.0.new_db_connection_as::<MailSqliteConnection>()
+        self.inner
+            .user_context
+            .new_db_connection_as::<MailSqliteConnection>()
     }
 
     pub(crate) fn tracker_service(&self) -> &InProcessTrackerService {
-        self.0.tracker_service()
+        self.inner.user_context.tracker_service()
     }
 
     pub fn user_id(&self) -> &UserId {
-        self.0.user_id()
+        self.inner.user_context.user_id()
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {
-        self.0.session().logout().await?;
+        self.inner.user_context.session().logout().await?;
         Ok(())
     }
 }

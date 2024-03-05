@@ -8,14 +8,15 @@ use proton_mail_db::{
 };
 
 impl MailUserContext {
-    pub fn new_inbox_conversations_live_query(&self) -> ConversationsLiveQuery {
-        self.new_live_query(ConversationQuery::new())
+    pub fn new_inbox_conversations_live_query(&self, limit: usize) -> ConversationsLiveQuery {
+        self.new_live_query(ConversationQuery::new(limit))
     }
     pub fn new_conversation_live_query(
         &self,
+        limit: usize,
         local_label_id: LocalLabelId,
     ) -> ConversationsLiveQuery {
-        self.new_live_query(ConversationQuery::with_label(local_label_id))
+        self.new_live_query(ConversationQuery::with_label(limit, local_label_id))
     }
 
     pub fn new_labels_by_type_live_query(&self, label_type: LabelType) -> LabelsByTypeLiveQuery {

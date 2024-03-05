@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 proton_api_core::utils::string_id!(AddressId);
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct Address {
     #[serde(rename = "ID")]
@@ -30,7 +30,7 @@ pub struct Address {
     pub signed_key_list: AddressSignedKeyList,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct AddressSignedKeyList {
     #[serde(rename = "MinEpochID")]

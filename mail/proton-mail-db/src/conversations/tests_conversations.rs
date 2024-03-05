@@ -113,6 +113,66 @@ fn test_conversation_create_with_attachment() {
 }
 
 #[test]
+fn test_conversation_update() {
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let local_label_ids = create_address_and_labels(tx);
+        let conv = test_conversation(
+            [ConversationLabels {
+                id: MY_LABEL_ID2.clone(),
+                context_num_unread: 6,
+                context_num_messages: 7,
+                context_time: 8,
+                context_size: 9,
+                context_num_attachments: 10,
+            }],
+            [AttachmentMetadata {
+                id: AttachmentId::from("ATTACHMENT2"),
+                size: 224515,
+                name: "Attachment.json".to_string(),
+                mime_type: "application/json".to_string(),
+                disposition: Disposition::Attachment,
+            }],
+        );
+
+        let conv_update = test_conversation(
+            [ConversationLabels {
+                id: MY_LABEL_ID1.clone(),
+                context_num_unread: 1,
+                context_num_messages: 2,
+                context_time: 3,
+                context_size: 4,
+                context_num_attachments: 5,
+            }],
+            [AttachmentMetadata {
+                id: MY_ATTACHMENT_ID.clone(),
+                size: 4098,
+                name: "My Attachment.pdf".to_string(),
+                mime_type: "application/pdf".to_string(),
+                disposition: Disposition::Attachment,
+            }],
+        );
+        let id = tx
+            .create_conversation(&conv)
+            .expect("failed to create conversation");
+
+        tx.update_conversation(&conv_update)
+            .expect("failed to update conversation");
+
+        let local_conversation = LocalConversationWithContext::from_conversation_and_label(
+            id,
+            &MY_LABEL_ID1,
+            conv_update.clone(),
+        );
+        let db_conversation = tx
+            .get_conversation_with_context(id, local_label_ids[0])
+            .expect("failed to get conversation")
+            .expect("should have value");
+        assert_eq!(local_conversation, db_conversation,);
+    });
+}
+
+#[test]
 fn test_conversation_delete() {
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
@@ -190,7 +250,7 @@ lazy_static! {
         ConversationId::from("MyConversationID");
 }
 pub(super) fn create_address_and_labels(tx: &mut MailSqliteConnectionMut) -> Vec<LocalLabelId> {
-    tx.create_address(&test_address())
+    tx.create_or_update_address(&test_address())
         .expect("failed to create address");
     let labels = [test_label1(), test_label2()];
     tx.create_remote_labels(labels.iter())

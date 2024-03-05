@@ -38,7 +38,7 @@ CREATE TABLE messages(
         (),
     )?;
     tx.execute(
-        "CREATE UNIQUE INDEX index_messages_cid ON messages (conversation_id)",
+        "CREATE INDEX index_messages_cid ON messages (conversation_id)",
         (),
     )?;
 

@@ -1,5 +1,8 @@
-use crate::domain::{Label, LabelId, Message, MessageId};
-use proton_api_core::domain::EventAction;
+use crate::domain::{
+    Address, Conversation, ConversationId, Label, LabelId, MessageId, MessageMetadata,
+};
+use crate::domain::{ConversationCount, MessageCount};
+use proton_api_core::domain::{EventAction, User, UserProductUsedSpace, UserSettings};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::exports::serde_repr::Deserialize_repr;
 
@@ -12,7 +15,15 @@ pub enum MoreEvents {
 
 proton_api_core::declare_event!(MailEvent, {
     messages: Option<Vec<MessageEvent>>,
-    labels: Option<Vec<LabelEvent>>
+    addresses: Option<Vec<Address>>,
+    labels: Option<Vec<LabelEvent>>,
+    user: Option<User>,
+    used_space: Option<i64>,
+    message_counts:Option<Vec<MessageCount>>,
+    conversation_counts:Option<Vec<ConversationCount>>,
+    product_used_space:Option<UserProductUsedSpace>,
+    conversations: Option<Vec<ConversationEvent>>,
+    user_settings: Option<UserSettings>
 });
 
 /// Event data related to a Message event.
@@ -22,7 +33,7 @@ pub struct MessageEvent {
     #[serde(rename = "ID")]
     pub id: MessageId,
     pub action: EventAction,
-    pub message: Option<Message>,
+    pub message: Option<MessageMetadata>,
 }
 
 /// Event data related to a Label event
@@ -33,4 +44,14 @@ pub struct LabelEvent {
     pub id: LabelId,
     pub action: EventAction,
     pub label: Option<Label>,
+}
+
+/// Event data related to a Conversation event.
+#[derive(Debug, Deserialize, Serialize, Clone, Eq, PartialEq)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct ConversationEvent {
+    #[serde(rename = "ID")]
+    pub id: ConversationId,
+    pub action: EventAction,
+    pub conversation: Option<Conversation>,
 }

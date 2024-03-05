@@ -2,6 +2,7 @@
 mod addresses;
 mod attachments;
 mod conversations;
+mod events;
 mod labels;
 mod messages;
 
@@ -23,6 +24,7 @@ impl proton_sqlite3::Migration for MigrationV0 {
         tracing::debug_span!("conversations")
             .in_scope(|| conversations::create_conversation_tables(tx))?;
         tracing::debug_span!("messages").in_scope(|| messages::create_message_tables(tx))?;
+        tracing::debug_span!("events").in_scope(|| events::create_event_tables(tx))?;
         Ok(())
     }
 }
