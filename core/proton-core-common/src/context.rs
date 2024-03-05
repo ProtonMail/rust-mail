@@ -7,9 +7,10 @@ use proton_api_core::auth::{new_arc_auth_store, ArcAuthStore};
 use proton_api_core::domain::UserId;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::proton_sqlite3::SqliteMode;
-use proton_api_core::exports::tracing::debug;
 use proton_api_core::exports::tracing::Level;
+use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
+use proton_api_core::http::HttpRequestError;
 use proton_api_core::login::LoginFlow;
 use proton_api_core::{http, Session};
 use proton_core_db::proton_sqlite3::SqliteConnectionPool;
@@ -36,6 +37,8 @@ pub enum CoreContextError {
     DBMigration(#[from] proton_core_db::DBMigrationError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
+    #[error("HTTP Error: {0}")]
+    Http(#[from] HttpRequestError),
     #[error("{0}")]
     Other(anyhow::Error),
 }

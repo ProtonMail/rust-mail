@@ -6,6 +6,8 @@ use proton_core_db::proton_sqlite3::{
 use proton_core_db::{DBMigrationError, DBResult};
 use std::fmt::{Debug, Formatter};
 
+mod settings;
+
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
     fn initialize(&self, conn: &mut SqliteConnection) -> Result<(), DBMigrationError>;
