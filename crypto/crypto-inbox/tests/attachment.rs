@@ -98,6 +98,16 @@ fn get_test_attachment_metadata() -> TestAttachmentMetdata {
     }
 }
 
+fn get_test_attachment_metadata_enc_sig_only() -> TestAttachmentMetdata {
+    TestAttachmentMetdata {
+        key_packets: KeyPackets::from(TEST_ATTACHMENT_METADATA_KP),
+        signature: None,
+        enc_signature: Some(AttachmentEncryptedSignature::from(
+            TEST_ATTACHMENT_METADATA_ENC_SIG,
+        )),
+    }
+}
+
 fn get_test_attachment_encrypted_data() -> Vec<u8> {
     let b64 = base64::engine::general_purpose::GeneralPurpose::new(
         &base64::alphabet::STANDARD,
@@ -106,9 +116,7 @@ fn get_test_attachment_encrypted_data() -> Vec<u8> {
     b64.decode(TEST_ATTACHMENT_ENC_DATA).unwrap()
 }
 
-#[test]
-fn test_attachment_decrypt() {
-    let attachment_metadata = get_test_attachment_metadata();
+fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
     let decryption_key = pgp_provider
@@ -144,9 +152,7 @@ fn test_attachment_decrypt() {
     assert!(matches!(verification_status.status, VerificationStatus::Ok));
 }
 
-#[test]
-fn test_attachment_decrypt_stream() {
-    let attachment_metadata = get_test_attachment_metadata();
+fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetdata) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
     let decryption_key = pgp_provider
@@ -178,4 +184,28 @@ fn test_attachment_decrypt_stream() {
 
     let verification_status = verification_reader.get_verification_status();
     assert!(matches!(verification_status.status, VerificationStatus::Ok));
+}
+
+#[test]
+fn test_attachment_decrypt() {
+    let attachment_metadata = get_test_attachment_metadata();
+    test_attachment_decrypt_helper(attachment_metadata);
+}
+
+#[test]
+fn test_attachment_decrypt_encrypted_signature() {
+    let attachment_metadata = get_test_attachment_metadata_enc_sig_only();
+    test_attachment_decrypt_helper(attachment_metadata);
+}
+
+#[test]
+fn test_attachment_decrypt_stream() {
+    let attachment_metadata = get_test_attachment_metadata();
+    test_attachment_decrypt_stream_helper(attachment_metadata);
+}
+
+#[test]
+fn test_attachment_decrypt_stream_encrypted_signature() {
+    let attachment_metadata = get_test_attachment_metadata_enc_sig_only();
+    test_attachment_decrypt_stream_helper(attachment_metadata);
 }

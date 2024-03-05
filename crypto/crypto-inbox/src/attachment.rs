@@ -128,7 +128,7 @@ pub fn decrypt_attachment<T: PGPProviderSync, M: AttachmentMetadataCryptoView>(
 ) -> Result<AttachmentDecrypted<T::VerifiedData>, AttachmentError> {
     let key_packet_bytes = attachment_metadata.get_attachment_key_packets().decode()?;
     let signature_option = attachment_metadata.get_attachment_signature();
-    let enc_signature_option = attachment_metadata.get_attachment_signature();
+    let enc_signature_option = attachment_metadata.get_attachment_encrypted_signature();
     let session_key = pgp_provider
         .new_decryptor()
         .with_decryption_keys(decryption_keys.as_ref())
@@ -139,7 +139,7 @@ pub fn decrypt_attachment<T: PGPProviderSync, M: AttachmentMetadataCryptoView>(
         .with_verification_keys(verification_keys.as_ref())
         .with_session_key_ref(&session_key);
     if let Some(attachment_signature) = signature_option {
-        decryptor = decryptor.with_detached_signature(attachment_signature.as_ref(), true)
+        decryptor = decryptor.with_detached_signature_ref(attachment_signature.as_ref(), true)
     } else if let Some(attachment_signature) = enc_signature_option {
         let result = decrypt_and_verify_with_encrypted_signature(
             pgp_provider,
@@ -180,25 +180,29 @@ pub fn decrypt_attachment_from_reader<
     attachment_data: R,
 ) -> Result<AttachmentDecryptedReader<'a, R, T::Decryptor<'a>>, AttachmentError> {
     let key_packet_bytes = attachment_metadata.get_attachment_key_packets().decode()?;
-    let signature = attachment_metadata.get_attachment_signature();
-    let enc_signature = attachment_metadata.get_attachment_signature();
+    let signature_option = attachment_metadata.get_attachment_signature();
+    let enc_signature_option = attachment_metadata.get_attachment_encrypted_signature();
     let session_key = pgp_provider
         .new_decryptor()
-        .with_decryption_keys(decryption_keys.as_ref())
+        .with_decryption_keys(decryption_keys)
         .decrypt_session_key(key_packet_bytes)
         .map_err(AttachmentError::SessionKeyDecryption)?;
-    let mut decryptor = pgp_provider
-        .new_decryptor()
-        .with_session_key(session_key)
-        .with_verification_keys(verification_keys.as_ref());
-    if let Some(attachment_signature) = &signature {
-        decryptor = decryptor.with_detached_signature(attachment_signature.as_ref(), true)
-    }
-    // TODO: Implement support for encrypted detached signatures.
-    if signature.is_none() && enc_signature.is_some() {
-        return Err(AttachmentError::NotSupportedEncryptedSignature);
+    let mut decryptor = pgp_provider.new_decryptor();
+    if let Some(attachment_signature) = signature_option {
+        decryptor = decryptor.with_detached_signature_ref(attachment_signature.as_ref(), true)
+    } else if let Some(attachment_signature) = enc_signature_option {
+        return decrypt_and_verify_with_encrypted_signature_stream(
+            pgp_provider,
+            attachment_signature.as_ref(),
+            decryption_keys,
+            verification_keys,
+            session_key,
+            attachment_data,
+        );
     }
     decryptor
+        .with_session_key(session_key)
+        .with_verification_keys(verification_keys.as_ref())
         .decrypt_stream(attachment_data, DataEncoding::Bytes)
         .map_err(AttachmentError::AttachmentDecryption)
         .map(AttachmentDecryptedReader)
@@ -214,15 +218,38 @@ fn decrypt_and_verify_with_encrypted_signature<T: PGPProviderSync>(
 ) -> Result<AttachmentDecrypted<T::VerifiedData>, AttachmentError> {
     let detached_signature = pgp_provider
         .new_decryptor()
-        .with_decryption_keys(decryption_keys.as_ref())
+        .with_decryption_keys(decryption_keys)
         .decrypt(enc_signature, DataEncoding::Armor)
         .map_err(AttachmentError::EncryptedSignatureDecryption)?;
     pgp_provider
         .new_decryptor()
         .with_session_key_ref(attachment_session_key)
         .with_verification_keys(verification_keys)
-        .with_detached_signature(detached_signature.as_bytes(), false)
+        .with_detached_signature_ref(detached_signature.as_bytes(), false)
         .decrypt(attachment_data, DataEncoding::Bytes)
         .map_err(AttachmentError::AttachmentDecryption)
         .map(AttachmentDecrypted)
+}
+
+fn decrypt_and_verify_with_encrypted_signature_stream<'a, T: PGPProviderSync, R: io::Read>(
+    pgp_provider: &T,
+    enc_signature: &[u8],
+    decryption_keys: &'a [<T>::PrivateKey],
+    verification_keys: &'a [<T>::PublicKey],
+    attachment_session_key: T::SessionKey,
+    attachment_data: R,
+) -> Result<AttachmentDecryptedReader<'a, R, T::Decryptor<'a>>, AttachmentError> {
+    let detached_signature = pgp_provider
+        .new_decryptor()
+        .with_decryption_keys(decryption_keys)
+        .decrypt(enc_signature, DataEncoding::Armor)
+        .map_err(AttachmentError::EncryptedSignatureDecryption)?;
+    pgp_provider
+        .new_decryptor()
+        .with_session_key(attachment_session_key)
+        .with_verification_keys(verification_keys)
+        .with_detached_signature(detached_signature.to_vec(), false)
+        .decrypt_stream(attachment_data, DataEncoding::Bytes)
+        .map_err(AttachmentError::AttachmentDecryption)
+        .map(AttachmentDecryptedReader)
 }
