@@ -1,7 +1,7 @@
 use crate::keyring::KeyId;
 use base64::Engine;
 use proton_crypto::srp::SRPProvider;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SaltError {
@@ -15,7 +15,7 @@ pub enum SaltError {
     Hash(#[from] crate::Error),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Salt {
     #[serde(rename = "ID")]
     pub id: KeyId,

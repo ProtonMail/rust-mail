@@ -1,7 +1,7 @@
 use crate::keyring::{KeyId, LockedKey};
 use crate::salts::SaltedPassword;
 use proton_crypto::crypto::{DataEncoding, PrivateKey};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub struct PrivateKeyRing<T: PrivateKey>(Vec<T>);
 
@@ -23,7 +23,7 @@ pub enum KeyError {
     MissingTokenOrSignature(KeyId),
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct UserKeys(pub Vec<LockedKey>);
 
 impl AsRef<[LockedKey]> for UserKeys {
@@ -77,7 +77,7 @@ impl UserKeys {
     }
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct AddressKeys(pub Vec<LockedKey>);
 
 impl AsRef<[LockedKey]> for AddressKeys {

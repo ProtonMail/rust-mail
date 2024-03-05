@@ -1,8 +1,8 @@
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::fmt::{Display, Formatter};
 
 /// Represent an user's API key ID.
-#[derive(Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 pub struct KeyId(String);
 
 impl Display for KeyId {
@@ -23,7 +23,7 @@ impl AsRef<str> for KeyId {
     }
 }
 
-#[derive(Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct LockedKey {
     #[serde(rename = "ID")]
