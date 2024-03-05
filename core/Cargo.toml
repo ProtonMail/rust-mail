@@ -7,6 +7,39 @@ members = [ "proton-action-queue",
     "proton-event-loop", "proton-core-db", "proton-core-common",
 ]
 
+[workspace.dependencies]
+proton-crypto-account = {git="https://gitlab.protontech.ch/rust/proton-crypto-rs.git", default-features = false}
+uniffi = {version = "0.26"}
+thiserror = "1"
+serde = {version ="1", features=["derive"]}
+serde_repr = "0.1"
+serde_json = "1"
+base64 = "0.22"
+secrecy = "0.8"
+anyhow = "1.0"
+bytes = "1.4"
+tracing = "0.1"
+parking_lot = "0.12"
+tokio = {version ="1", features = ["full"]}
+tracing-subscriber = { version="0.3", features = ["env-filter"] }
+tokio-util = "0.7"
+async-trait = "0.1"
+flume = "0.11"
+pin-project = "1"
+futures = "0.3"
+aes-gcm = {version="0.10", features = ["zeroize"]}
+zeroize = "1.7.0"
+paste = "1"
+mockall = "0.12"
+rand = "0.8"
+tempdir = "0.3"
+
+[workspace.dependencies.reqwest]
+version = "0.11"
+default-features = false
+features = ["json", "deflate", "stream", "cookies", "multipart", "rustls","rustls-tls", "socks"]
+
+
 [workspace.lints.rust]
 trivial_numeric_casts= "warn"
 unused_extern_crates ="warn"

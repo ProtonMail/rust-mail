@@ -149,19 +149,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-compat"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f68a707c1feb095d8c07f8a65b9f506b117d30af431cab89374357de7c11461b"
-dependencies = [
- "futures-core",
- "futures-io",
- "once_cell",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
 name = "async-compression"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -211,6 +198,12 @@ name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d297deb1925b89f2ccc13d7635fa0714f12c87adce1c75356b39ca9b7178567"
+
+[[package]]
+name = "base64"
+version = "0.22.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9475866fec1451be56a3c2400fd081ff546538961565ccb5b7142cbd22bc7a51"
 
 [[package]]
 name = "basic-toml"
@@ -752,7 +745,7 @@ name = "gopenpgp-sys"
 version = "0.1.0"
 source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#b15cd2e1e72690e63310c728609c73055760a7a7"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "bindgen",
  "hex",
  "zeroize",
@@ -1450,7 +1443,7 @@ name = "proton-api-core"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "base64",
+ "base64 0.22.0",
  "bytes",
  "parking_lot",
  "proton-crypto-account",
@@ -1483,7 +1476,6 @@ dependencies = [
 name = "proton-core-common"
 version = "0.1.0"
 dependencies = [
- "log",
  "proton-api-core",
  "proton-core-db",
  "proton-event-loop",
@@ -1512,7 +1504,7 @@ name = "proton-crypto-account"
 version = "0.1.0"
 source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#b15cd2e1e72690e63310c728609c73055760a7a7"
 dependencies = [
- "base64",
+ "base64 0.21.7",
  "proton-crypto",
  "serde",
  "thiserror",
@@ -1707,7 +1699,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6920094eb85afde5e4a138be3f2de8bbdf28000f0029e72c45025a56b042251"
 dependencies = [
  "async-compression",
- "base64",
+ "base64 0.21.7",
  "bytes",
  "cookie",
  "cookie_store",
@@ -1844,7 +1836,7 @@ version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c74cae0a4cf6ccbbf5f359f08efdf8ee7e1dc532573bf0db71968cb56b1448c"
 dependencies = [
- "base64",
+ "base64 0.21.7",
 ]
 
 [[package]]
@@ -2517,7 +2509,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d6e8db3f4e558faf0e25ac4b5bd775567973a4e18809f1123e74de52a853692"
 dependencies = [
  "anyhow",
- "async-compat",
  "bytes",
  "camino",
  "log",

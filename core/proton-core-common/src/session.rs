@@ -1,9 +1,8 @@
 use crate::os::{session_encryption_key_from_key_chain, KeyChain, KeyChainError};
-use log::debug;
 use proton_api_core::auth::{Auth, AuthScope};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::exports::tracing::error;
+use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_core_db::proton_sqlite3::SqliteConnectionPool;
 use proton_core_db::{

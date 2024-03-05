@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 proton-sqlite3 = {path ="../proton-sqlite3"}
 proton-api-core= {path ="../proton-api-core", features = ["sql"]}
-aes-gcm = {version="0.10", features = ["zeroize"]}
-zeroize = "1.7.0"
+aes-gcm = {workspace=true}
+zeroize = {workspace=true}
 
 [lints]
 workspace = true

@@ -6,12 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1"
-tokio = { version = "1", default-features = false , features = ["net"]}
-tokio-util = { version="0.7"}
-flume = "0.11"
-pin-project = "1"
-futures = "0.3"
+async-trait = {workspace=true}
+tokio = {workspace=true}
+tokio-util = { workspace=true}
+flume = {workspace=true}
+pin-project = {workspace=true}
+futures = {workspace=true}
 
 [lints]
 workspace = true
