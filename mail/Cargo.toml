@@ -9,6 +9,12 @@ members = [
     "proton-mail-commom",
 ]
 
+[workspace.dependencies]
+proton-api-core = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git", features = ["sql"]}
+proton-sqlite3 = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-core-common = {git =  "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+
 [workspace.lints.rust]
 trivial_numeric_casts= "warn"
 unused_extern_crates ="warn"
