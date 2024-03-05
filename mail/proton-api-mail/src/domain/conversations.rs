@@ -117,9 +117,9 @@ impl ConversationFilter {
 }
 
 #[derive(Debug)]
-pub struct ConversationMetadataFilterBuilder(ConversationFilter);
+pub struct ConversationFilterBuilder(ConversationFilter);
 
-impl ConversationMetadataFilterBuilder {
+impl ConversationFilterBuilder {
     pub fn new(page_number: usize, page_size: usize) -> Self {
         Self(ConversationFilter::new(page_number, page_size))
     }

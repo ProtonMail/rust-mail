@@ -1,5 +1,5 @@
 use crate::{MailContextResult, MailUserContext};
-use proton_api_mail::domain::{ConversationMetadataFilterBuilder, LabelId};
+use proton_api_mail::domain::{ConversationFilterBuilder, LabelId};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
 use proton_mail_db::DBResult;
@@ -12,7 +12,7 @@ impl MailUserContext {
         count: usize,
     ) -> MailContextResult<()> {
         let session = self.mail_session();
-        let filter = ConversationMetadataFilterBuilder::new(0, count)
+        let filter = ConversationFilterBuilder::new(0, count)
             .with_label_id(label_id)
             .build();
         let conversations = session.get_conversations(filter).await?;
