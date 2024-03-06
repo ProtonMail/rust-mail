@@ -57,6 +57,13 @@ impl Session {
         self.execute_request(GetEventRequest::new(id)).await
     }
 
+    pub async fn get_event_with_conv_and_msg_counts<T: IsEvent>(
+        &self,
+        id: &EventId,
+    ) -> Result<T, http::HttpRequestError> {
+        self.execute_request(GetEventRequest::with_counts(id)).await
+    }
+
     pub async fn get_user_settings(&self) -> Result<UserSettings, http::HttpRequestError> {
         self.execute_request(UserSettingsRequest {})
             .await

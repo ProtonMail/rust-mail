@@ -4,6 +4,7 @@ pub use base64;
 pub use parking_lot;
 pub use proton_crypto_account as crypto;
 pub use serde;
+pub use serde_aux;
 pub use serde_json;
 pub use serde_repr;
 pub use thiserror;

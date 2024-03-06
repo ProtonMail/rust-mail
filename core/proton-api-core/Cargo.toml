@@ -21,6 +21,7 @@ uniffi = {workspace=true, optional = true}
 proton-sqlite3 = {path = "../proton-sqlite3", optional = true}
 reqwest = {workspace=true}
 proton-async = {path = "../proton-async"}
+serde-aux = {workspace=true}
 
 
 [features]

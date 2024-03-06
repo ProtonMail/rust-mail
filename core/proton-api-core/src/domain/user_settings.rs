@@ -1,6 +1,7 @@
 use crate::domain::ProtonBoolean;
 use crate::requests::FIDOKey;
 use serde::{Deserialize, Serialize};
+use serde_aux::field_attributes::deserialize_default_from_null;
 
 new_integer_enum!(u8,TFAStatus {
     None = 0,
@@ -12,6 +13,7 @@ new_integer_enum!(u8,TFAStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserSettingsEmail {
+    #[serde(deserialize_with = "deserialize_default_from_null")]
     pub value: String,
     pub status: u8,
     pub notify: u8,
@@ -21,6 +23,7 @@ pub struct UserSettingsEmail {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserSettingsPhone {
+    #[serde(deserialize_with = "deserialize_default_from_null")]
     pub value: String,
     pub status: u8,
     pub notify: u8,

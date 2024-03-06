@@ -90,16 +90,16 @@ pub fn mapped_rows_to_hash_set<
     Ok(hash_set)
 }
 
-/// Small utility to allocate row indices for selection queries.
+/// Small utility to allocate column indices for row mapping.
 #[derive(Copy, Clone)]
-pub struct ReadRowIndexAllocator(usize);
+pub struct RowIndexAllocator(usize);
 
-impl Default for ReadRowIndexAllocator {
+impl Default for RowIndexAllocator {
     fn default() -> Self {
         Self::new()
     }
 }
-impl ReadRowIndexAllocator {
+impl RowIndexAllocator {
     pub fn new() -> Self {
         Self(0)
     }
@@ -116,7 +116,7 @@ impl ReadRowIndexAllocator {
     }
 }
 
-/// Small utility to allocate row indices for insertion queries.
+/// Small utility to allocate row indices for statements.
 #[derive(Copy, Clone)]
 pub struct StmtIndexAllocator(usize);
 

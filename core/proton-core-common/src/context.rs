@@ -266,8 +266,11 @@ fn get_user_db_path(path: impl AsRef<Path>, user_id: &UserId) -> PathBuf {
 }
 
 fn new_session(arc_auth_store: ArcAuthStore) -> CoreContextResult<Session> {
-    let client = http::ClientBuilder::new()
-        .app_version("Other")
+    let mut client = http::ClientBuilder::new().app_version("Other");
+    if session_debug_enabled() {
+        client = client.debug();
+    }
+    let client = client
         .build()
         .map_err(|e| CoreContextError::Other(anyhow!("Failed to create client: {e}")))?;
     Ok(Session::new(client, arc_auth_store))
@@ -275,4 +278,8 @@ fn new_session(arc_auth_store: ArcAuthStore) -> CoreContextResult<Session> {
 
 fn db_debug_enabled() -> bool {
     std::env::var("PROTON_CORE_CTX_DB_DEBUG").is_ok()
+}
+
+fn session_debug_enabled() -> bool {
+    std::env::var("PROTON_CORE_CTX_SESSION_DEBUG").is_ok()
 }
