@@ -90,18 +90,44 @@ pub fn mapped_rows_to_hash_set<
     Ok(hash_set)
 }
 
-/// Small utility to allocate row indices.
+/// Small utility to allocate row indices for selection queries.
 #[derive(Copy, Clone)]
-pub struct RowIndexAllocator(usize);
+pub struct ReadRowIndexAllocator(usize);
 
-impl Default for RowIndexAllocator {
+impl Default for ReadRowIndexAllocator {
     fn default() -> Self {
         Self::new()
     }
 }
-impl RowIndexAllocator {
-    pub fn new() -> RowIndexAllocator {
+impl ReadRowIndexAllocator {
+    pub fn new() -> Self {
         Self(0)
+    }
+
+    #[inline(always)]
+    pub fn fetch_and_add(&mut self) -> usize {
+        let index = self.0;
+        self.0 += 1;
+        index
+    }
+
+    pub fn reset(&mut self) {
+        self.0 = 0;
+    }
+}
+
+/// Small utility to allocate row indices for insertion queries.
+#[derive(Copy, Clone)]
+pub struct StmtIndexAllocator(usize);
+
+impl Default for StmtIndexAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+impl StmtIndexAllocator {
+    pub fn new() -> Self {
+        Self(1)
     }
 
     #[inline(always)]
