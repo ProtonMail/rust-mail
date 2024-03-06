@@ -9,10 +9,10 @@
 //! use proton_event_loop::{EventLoop, Provider, Store};
 //!
 //! async fn create_loop_and_poll<T:IsEvent>(store:Box<dyn Store>, provider:Box<dyn Provider<T>>) {
-//!     let mut event_loop = EventLoop::new(store,provider).await.unwrap();
+//!     let mut event_loop = EventLoop::new();
 //!
 //!     loop {
-//!         if let Err(_) = event_loop.poll().await {
+//!         if let Err(_) = event_loop.poll(store.as_ref(), provider.as_ref(),&[]).await {
 //!             //Handle error
 //!         }
 //!     }

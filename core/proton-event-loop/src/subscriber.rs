@@ -31,7 +31,7 @@ pub trait Subscriber<T: IsEvent + Send + Sync>: Send + Sync {
     fn name(&self) -> &str;
 
     /// Handle incoming events.
-    async fn on_events(&mut self, event: &[T]) -> Result<(), SubscriberError>;
+    async fn on_events(&self, event: &[T]) -> Result<(), SubscriberError>;
 }
 
 /// A Subscriber in which all event communication is performed via channels. This may be useful if your subscribe is
@@ -48,7 +48,7 @@ impl<T: IsEvent + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
         &self.name
     }
 
-    async fn on_events(&mut self, event: &[T]) -> Result<(), SubscriberError> {
+    async fn on_events(&self, event: &[T]) -> Result<(), SubscriberError> {
         if self.sender.send_async(Vec::from(event)).await.is_err() {
             return Err(SubscriberError::Send);
         }
@@ -180,7 +180,7 @@ fn test_channeled_subscriber_handle_and_reply() {
     use proton_api_core::domain::EventId;
     let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
     rt.block_on(async {
-        let (mut s, mut h) = ChannelledSubscriber::new("test".into());
+        let (s, mut h) = ChannelledSubscriber::new("test".into());
 
         let task = rt.spawn(async move {
             h.handle_events_async(|events: &[TestEvent]| -> Result<(), SubscriberError> {
@@ -201,7 +201,7 @@ fn test_channeled_subscriber_handle_and_reply() {
 fn test_channeled_subscriber_failed_to_send() {
     let rt = proton_async::runtime::LocalRuntime::new().expect("failed to init runtime");
     rt.block_on(async {
-        let mut s = {
+        let s = {
             let (s, _) = ChannelledSubscriber::new("test".into());
             s
         };
@@ -218,7 +218,7 @@ fn test_channeled_subscriber_failed_to_send() {
 fn test_channeled_subscriber_failed_to_receive() {
     let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
     rt.block_on(async {
-        let (mut s, h) = ChannelledSubscriber::new("test".into());
+        let (s, h) = ChannelledSubscriber::new("test".into());
 
         let task = rt.spawn(async move {
             h.receiver

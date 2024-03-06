@@ -35,7 +35,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
         "proton-core-subscriber"
     }
 
-    async fn on_events(&mut self, events: &[E]) -> Result<(), SubscriberError> {
+    async fn on_events(&self, events: &[E]) -> Result<(), SubscriberError> {
         let (user_id, mut conn) = self.0.get_user_id_and_db_connection().map_err(|e| {
             error!("Failed to get DB connection :{e}");
             SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))

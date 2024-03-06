@@ -63,12 +63,19 @@ impl<T: IsEvent + 'static> BackgroundEventLoop<T> {
         provider: Box<dyn Provider<T>>,
         error_handler: Box<dyn EventLoopErrorHandler>,
     ) -> Result<proton_async::runtime::JoinHandle<()>, EventLoopError> {
-        let event_loop = EventLoop::new(store, provider).await?;
+        let event_loop = EventLoop::new();
+
+        event_loop
+            .initialize(store.as_ref(), provider.as_ref())
+            .await?;
 
         let mut loop_state = BackgroundLoopState {
             shared: self.inner.clone(),
             error_handler,
             event_loop,
+            store,
+            provider,
+            subscribers: Vec::new(),
         };
 
         Ok(proton_async::runtime::spawn(async move {
@@ -133,7 +140,10 @@ struct SharedBackgroundEventLoopState<T: IsEvent> {
 struct BackgroundLoopState<T: IsEvent> {
     error_handler: Box<dyn EventLoopErrorHandler>,
     shared: Arc<SharedBackgroundEventLoopState<T>>,
-    event_loop: EventLoop<T>,
+    event_loop: EventLoop,
+    store: Box<dyn Store>,
+    subscribers: Vec<Box<dyn Subscriber<T>>>,
+    provider: Box<dyn Provider<T>>,
 }
 
 #[doc(hidden)]
@@ -161,11 +171,20 @@ impl<T: IsEvent> BackgroundLoopState<T> {
             for operation in accessor.drain(..) {
                 match operation {
                     SubscriberOperation::Register(s) => {
-                        self.event_loop.add_subscriber(s);
+                        let new_subscriber_name = s.name();
+                        if !self
+                            .subscribers
+                            .iter()
+                            .any(move |v| v.name() == new_subscriber_name)
+                        {
+                            debug!("Registering subscriber {new_subscriber_name}");
+                            self.subscribers.push(s);
+                        }
                     }
 
                     SubscriberOperation::Unregister(s) => {
-                        self.event_loop.remove_subscriber(&s);
+                        debug!("Unregistering subscriber {s}");
+                        self.subscribers.retain(|v| v.name() != s);
                     }
                 }
             }
@@ -175,7 +194,15 @@ impl<T: IsEvent> BackgroundLoopState<T> {
             return;
         }
 
-        if let Err(e) = self.event_loop.poll().await {
+        if let Err(e) = self
+            .event_loop
+            .poll(
+                self.store.as_ref(),
+                self.provider.as_ref(),
+                &self.subscribers,
+            )
+            .await
+        {
             self.on_error(e);
         }
     }

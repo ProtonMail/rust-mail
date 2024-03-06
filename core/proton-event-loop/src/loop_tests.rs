@@ -69,6 +69,15 @@ fn test_loop_event_collection() {
 
         {
             let first_event_id = first_event_id.clone();
+            store
+                .expect_load()
+                .times(1)
+                .in_sequence(&mut sequence)
+                .return_once(move || Ok(Some(first_event_id)));
+        }
+
+        {
+            let first_event_id = first_event_id.clone();
             let event = expected_events[0].clone();
             provider
                 .expect_get_event()
@@ -156,9 +165,9 @@ fn test_error_handler_retry_retries_loop() {
             let first_event_id = first_event_id.clone();
             store
                 .expect_load()
-                .times(1)
+                .times(2)
                 .in_sequence(&mut sequence)
-                .return_once(move || Ok(Some(first_event_id)));
+                .returning(move || Ok(Some(first_event_id.clone())));
         }
 
         {
@@ -195,6 +204,14 @@ fn test_error_handler_retry_retries_loop() {
             .in_sequence(&mut sequence);
 
         // Re-fetch event.
+        {
+            let first_event_id = first_event_id.clone();
+            store
+                .expect_load()
+                .times(1)
+                .in_sequence(&mut sequence)
+                .return_once(move || Ok(Some(first_event_id)));
+        }
         {
             let first_event_id = first_event_id.clone();
             let event = expected_events[0].clone();
@@ -266,9 +283,9 @@ fn test_error_handler_pause_pauses_loop() {
             let first_event_id = first_event_id.clone();
             store
                 .expect_load()
-                .times(1)
+                .times(2)
                 .in_sequence(&mut sequence)
-                .return_once(move || Ok(Some(first_event_id)));
+                .returning(move || Ok(Some(first_event_id.clone())));
         }
 
         {
@@ -337,9 +354,9 @@ fn test_error_handler_abort_causes_loop_exit() {
             let first_event_id = first_event_id.clone();
             store
                 .expect_load()
-                .times(1)
+                .times(2)
                 .in_sequence(&mut sequence)
-                .return_once(move || Ok(Some(first_event_id)));
+                .returning(move || Ok(Some(first_event_id.clone())));
         }
 
         {
