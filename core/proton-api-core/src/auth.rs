@@ -1,5 +1,6 @@
 use crate::domain::{SecretString, Uid, UserId};
-use parking_lot::RwLock;
+use crate::http::HttpRequestError;
+use proton_async::sync::RwLock;
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -58,6 +59,8 @@ pub trait AuthStore: Send + Sync + 'static {
     fn get_auth(&self) -> Option<&Auth>;
     fn set_auth(&mut self, auth: Auth) -> Result<(), Box<dyn std::error::Error>>;
 
+    fn refresh_auth_failed(&self, e: &HttpRequestError);
+
     fn refresh_auth(
         &mut self,
         uid: Uid,
@@ -70,6 +73,10 @@ pub trait AuthStore: Send + Sync + 'static {
         scopes: AuthScope,
     ) -> Result<Option<&Auth>, Box<dyn std::error::Error>>;
     fn clear_auth(&mut self) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+pub trait VersionedAuthStore: AuthStore {
+    fn auth_refresh_version(&self) -> u32;
 }
 
 /// In memory authentication storage.
@@ -121,9 +128,71 @@ impl AuthStore for InMemoryStore {
         self.auth = None;
         Ok(())
     }
+
+    fn refresh_auth_failed(&self, _: &HttpRequestError) {}
 }
-pub type ArcAuthStore = Arc<RwLock<dyn AuthStore>>;
+pub type ArcAuthStore = Arc<RwLock<dyn VersionedAuthStore>>;
 
 pub fn new_arc_auth_store<T: AuthStore>(auth: T) -> ArcAuthStore {
-    Arc::new(RwLock::new(auth))
+    Arc::new(RwLock::new(VersionedAuthStoreWrapper::new(auth)))
+}
+
+pub struct VersionedAuthStoreWrapper<T: AuthStore> {
+    version: u32,
+    auth_store: T,
+}
+
+impl<T: AuthStore> VersionedAuthStoreWrapper<T> {
+    pub fn new(auth_store: T) -> Self {
+        Self {
+            auth_store,
+            version: 0,
+        }
+    }
+}
+
+impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
+    fn get_auth(&self) -> Option<&Auth> {
+        self.auth_store.get_auth()
+    }
+
+    fn set_auth(&mut self, auth: Auth) -> Result<(), Box<dyn std::error::Error>> {
+        self.auth_store.set_auth(auth)?;
+        Ok(())
+    }
+
+    fn refresh_auth_failed(&self, e: &HttpRequestError) {
+        self.auth_store.refresh_auth_failed(e);
+    }
+
+    fn refresh_auth(
+        &mut self,
+        uid: Uid,
+        access_token: SecretString,
+        refresh_token: SecretString,
+        scope: AuthScope,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.auth_store
+            .refresh_auth(uid, access_token, refresh_token, scope)?;
+        self.version = self.version.wrapping_add(1);
+        Ok(())
+    }
+
+    fn set_scopes(
+        &mut self,
+        scopes: AuthScope,
+    ) -> Result<Option<&Auth>, Box<dyn std::error::Error>> {
+        self.auth_store.set_scopes(scopes)
+    }
+
+    fn clear_auth(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        self.auth_store.clear_auth()?;
+        Ok(())
+    }
+}
+
+impl<T: AuthStore> VersionedAuthStore for VersionedAuthStoreWrapper<T> {
+    fn auth_refresh_version(&self) -> u32 {
+        self.version
+    }
 }

@@ -4,6 +4,7 @@ use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
+use proton_api_core::http::HttpRequestError;
 use proton_core_db::proton_sqlite3::SqliteConnectionPool;
 use proton_core_db::{
     DBResult, DecryptedUserSession, EncryptedData, EncryptedUserSession, SessionEncryptionKey,
@@ -16,6 +17,7 @@ use std::sync::Arc;
 pub trait CoreSessionCallback: Send + Sync {
     fn on_session_refresh(&self);
     fn on_session_deleted(&self);
+    fn on_refresh_failed(&self, e: &HttpRequestError);
     fn on_error(&self, err: &CoreSessionError);
 }
 
@@ -134,6 +136,12 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         }
         self.auth = Some(auth);
         Ok(())
+    }
+
+    fn refresh_auth_failed(&self, e: &HttpRequestError) {
+        if let Some(cb) = &self.cb {
+            cb.on_refresh_failed(e);
+        }
     }
 
     #[tracing::instrument(skip(self), fields(uid = ? uid))]

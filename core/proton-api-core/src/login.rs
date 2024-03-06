@@ -107,6 +107,7 @@ impl LoginFlow {
             self.session
                 .auth_store()
                 .write()
+                .await
                 .set_auth(auth)
                 .map_err(|e| {
                     LoginFlowError::Request(http::HttpRequestError::Other(anyhow!(

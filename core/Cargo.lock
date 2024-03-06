@@ -1446,6 +1446,7 @@ dependencies = [
  "base64 0.22.0",
  "bytes",
  "parking_lot",
+ "proton-async",
  "proton-crypto-account",
  "proton-sqlite3",
  "reqwest",

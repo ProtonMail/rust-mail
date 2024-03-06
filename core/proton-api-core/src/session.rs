@@ -41,7 +41,7 @@ impl Session {
 
     pub async fn logout(&self) -> Result<(), http::HttpRequestError> {
         self.execute_request(LogoutRequest {}).await?;
-        self.auth_store.write().clear_auth().map_err(|e| {
+        self.auth_store.write().await.clear_auth().map_err(|e| {
             http::HttpRequestError::Other(anyhow!("Failed to remove auth from store: {e}"))
         })?;
         Ok(())
@@ -93,14 +93,19 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
     r: R,
 ) -> Result<R::Output, http::HttpRequestError> {
     let r = r.build();
-    let data = {
-        let borrow = session.auth_store.read();
-        if let Some(auth) = borrow.get_auth() {
-            r.header(X_PM_UID_HEADER, auth.uid.as_ref())
-                .bearer_token(auth.access_token.expose_secret())
-        } else {
-            r
-        }
+    // Get the current auth version before making this call.
+    let (data, auth_version) = {
+        let borrow = session.auth_store.read().await;
+        let auth_version = borrow.auth_refresh_version();
+        (
+            if let Some(auth) = borrow.get_auth() {
+                r.header(X_PM_UID_HEADER, auth.uid.as_ref())
+                    .bearer_token(auth.access_token.expose_secret())
+            } else {
+                r
+            },
+            auth_version,
+        )
     };
 
     // While we clone headers and url, the body clone is handled efficiently.
@@ -113,40 +118,59 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
             if let http::HttpRequestError::API(api_err) = &e {
                 if api_err.http_code == 401 {
                     tracing::debug!("Account session expired, attempting refresh");
-
-                    let auth_refresh_request = {
-                        let reader = session.auth_store.read();
-                        let Some(auth) = reader.get_auth() else {
-                            return Err(http::HttpRequestError::Other(anyhow!(
-                                "Authentication info missing for refresh"
-                            )));
-                        };
-                        let request =
-                            AuthRefreshRequest::new(&auth.uid, auth.refresh_token.expose_secret())
-                                .to_request();
-                        request
-                    };
-
-                    let auth_refresh_response =
-                        client.execute_request(auth_refresh_request).await?;
                     let data = {
-                        let mut writer = session.auth_store.write();
-                        let data = data
-                            .header(X_PM_UID_HEADER, auth_refresh_response.uid.as_ref())
-                            .bearer_token(auth_refresh_response.access_token.0.expose_secret());
-                        writer
-                            .refresh_auth(
-                                auth_refresh_response.uid,
-                                auth_refresh_response.refresh_token.0,
-                                auth_refresh_response.access_token.0,
-                                auth_refresh_response.scope,
-                            )
-                            .map_err(|e| {
-                                http::HttpRequestError::Other(anyhow!("Failed to store auth: {e}"))
-                            })?;
-                        data
-                    };
+                        let mut refresh_guard = session.auth_store.write().await;
+                        // If the version still matches the auth store version, it means we are the first to attempt refresh.
+                        if auth_version == refresh_guard.auth_refresh_version() {
+                            tracing::debug!("Version still matches, refreshing");
+                            let auth_refresh_request = {
+                                let Some(auth) = refresh_guard.get_auth() else {
+                                    let e =
+                                        anyhow!("Refresh was request but there is no auth token");
+                                    tracing::error!("{e}");
+                                    return Err(http::HttpRequestError::Other(e));
+                                };
+                                let request = AuthRefreshRequest::new(
+                                    &auth.uid,
+                                    auth.refresh_token.expose_secret(),
+                                )
+                                .to_request();
+                                request
+                            };
 
+                            // Refresh the token.
+                            let auth_refresh_response = client
+                                .execute_request(auth_refresh_request)
+                                .await
+                                .map_err(|e| {
+                                    tracing::error!("Failed to refresh token: {e}");
+                                    refresh_guard.refresh_auth_failed(&e);
+                                    e
+                                })?;
+
+                            // Store the new token.
+                            refresh_guard
+                                .refresh_auth(
+                                    auth_refresh_response.uid,
+                                    auth_refresh_response.refresh_token.0,
+                                    auth_refresh_response.access_token.0,
+                                    auth_refresh_response.scope,
+                                )
+                                .map_err(|e| {
+                                    http::HttpRequestError::Other(anyhow!(
+                                        "Failed to store auth: {e}"
+                                    ))
+                                })?;
+                        }
+                        tracing::debug!("Session has already been refreshed");
+                        let Some(auth) = refresh_guard.get_auth() else {
+                            let e = anyhow!("Refresh was request but there is no auth token");
+                            tracing::error!("{e}");
+                            return Err(http::HttpRequestError::Other(e));
+                        };
+                        data.header(X_PM_UID_HEADER, auth.uid.as_ref())
+                            .bearer_token(auth.access_token.expose_secret())
+                    };
                     return client
                         .execute_request(OwnedRequest::<R::Response>::new(data))
                         .await;
