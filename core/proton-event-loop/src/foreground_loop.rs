@@ -24,7 +24,7 @@ impl EventLoop {
         Self {}
     }
 
-    #[tracing::instrument(level=Level::DEBUG, skip(self, store, provider))]
+    #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
     pub async fn initialize<T: IsEvent>(
         &self,
         store: &dyn Store,
@@ -45,7 +45,7 @@ impl EventLoop {
     /// publishing it all the registered subscribers and storing the event id for the next
     /// iteration.
     /// The execution of the loop is aborted on the first error.
-    #[tracing::instrument(level=Level::DEBUG, skip(self, store, provider, subscribers))]
+    #[tracing::instrument(name="event_poll",level=Level::DEBUG, skip(self, store, provider, subscribers))]
     pub async fn poll<T: IsEvent>(
         &self,
         store: &dyn Store,

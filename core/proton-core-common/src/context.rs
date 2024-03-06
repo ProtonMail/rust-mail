@@ -179,7 +179,7 @@ impl CoreContext {
     }
 
     /// Get a user context from an existing session.
-    #[tracing::instrument(level=Level::DEBUG, skip(self,session, cb), fields(user_id=?session.user_id, uid=?session.session_id))]
+    #[tracing::instrument(level=Level::DEBUG, skip(self,session, cb), fields(user_id=?session.user_id))]
     pub fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
