@@ -15,9 +15,15 @@ use std::sync::Arc;
 
 /// Receive notifications when the session has been refreshed or deleted.
 pub trait CoreSessionCallback: Send + Sync {
+    /// Triggered when the session has been refreshed.
     fn on_session_refresh(&self);
+    /// Triggered when the session has been destroyed.
     fn on_session_deleted(&self);
+
+    /// Triggered when the refresh operation fails.
     fn on_refresh_failed(&self, e: &HttpRequestError);
+
+    /// Triggers if any error occurs while persisting the session data.
     fn on_error(&self, err: &CoreSessionError);
 }
 
