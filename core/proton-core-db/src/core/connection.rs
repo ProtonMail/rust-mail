@@ -47,7 +47,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
 
         let mut key_stmt = self
             .0
-            .prepare("INSERT INTO user_keys VALUES (?,?,?,?,?,?,?,?)")?;
+            .prepare("INSERT OR REPLACE INTO user_keys VALUES (?,?,?,?,?,?,?,?)")?;
         for k in &user.keys.0 {
             key_stmt.execute((
                 &user.id,
