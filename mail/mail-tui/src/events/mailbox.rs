@@ -1,14 +1,16 @@
 use crate::state::MailboxStateError;
-use proton_mail_common::proton_mail_db::LocalLabel;
+use proton_mail_common::proton_mail_db::LocalLabelId;
 use proton_mail_common::MailUserContext;
 use std::fmt::Formatter;
 
 pub enum MailboxEvent {
     NewMailboxSession(MailUserContext),
+    NewMailboxSessionInitialized,
     MailboxRefresh,
     LoadLabels(Result<(), MailboxStateError>),
     LoadConversations(Result<(), MailboxStateError>),
-    LoadLabelRequest(LocalLabel),
+    LoadLabelRequest(LocalLabelId),
+    PollEventLoop,
     Logout,
 }
 
@@ -16,8 +18,11 @@ pub enum MailboxEvent {
 impl std::fmt::Debug for MailboxEvent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MailboxEvent::NewMailboxSession(user_context) => {
-                write!(f, "MailboxEvent::NewMailboxSession({:?})", user_context)
+            MailboxEvent::NewMailboxSession(_) => {
+                write!(f, "MailboxEvent::NewMailboxSession")
+            }
+            MailboxEvent::NewMailboxSessionInitialized => {
+                write!(f, "MailboxEvent::NewMailboxSessionInitialized")
             }
             MailboxEvent::MailboxRefresh => {
                 write!(f, "MailboxEvent::NewMailboxRefresh")
@@ -30,6 +35,9 @@ impl std::fmt::Debug for MailboxEvent {
             }
             MailboxEvent::LoadLabelRequest(_) => {
                 write!(f, "MailboxEvent::LoadLabelRequest")
+            }
+            MailboxEvent::PollEventLoop => {
+                write!(f, "MailboxEvent::PollEventLoop")
             }
             MailboxEvent::Logout => {
                 write!(f, "MailboxEvent::Logout")

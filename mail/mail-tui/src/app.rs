@@ -64,7 +64,7 @@ impl<'a, T: 'static + AppEventHandler<T, E>, E: 'static + Send> AppLocalDispatch
         }));
     }
 
-    pub fn background_dispatcher(&mut self) -> AppBackgroundDispatcher<T, E> {
+    pub fn background_dispatcher(&self) -> AppBackgroundDispatcher<T, E> {
         AppBackgroundDispatcher::new(self.1.dispatcher().clone())
     }
 

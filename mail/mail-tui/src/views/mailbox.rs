@@ -5,9 +5,9 @@ use crate::tui_utils::inset_rect;
 use crate::view::View;
 use crate::views::AppViewContext;
 use crate::widgets::{HelpCategory, HelpItem, ScrollableList, ScrollableListState};
-use crossterm::event::{Event, KeyCode, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use proton_mail_common::proton_api_mail::domain::LabelType;
-use proton_mail_common::proton_mail_db::{LocalLabel, LocalLabelId, LocalLabelWithCount};
+use proton_mail_common::proton_mail_db::{LocalLabelId, LocalLabelWithCount};
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::prelude::Text;
 use ratatui::style::{Color, Style, Stylize};
@@ -61,9 +61,9 @@ impl ConversationView {
         frame.render_widget(labels_block, area);
         let internal_area = inset_rect(area, 1);
         let [sys_area, _, folder_area, _, label_area] = Layout::vertical([
-            Constraint::Percentage(20),
+            Constraint::Min(10),
             Constraint::Length(1),
-            Constraint::Percentage(40),
+            Constraint::Min(10),
             Constraint::Length(1),
             Constraint::Min(10),
         ])
@@ -169,7 +169,7 @@ impl ConversationView {
             } else {
                 item
             };
-            if conv.num_unread != 0 {
+            if conv.context_num_unread != 0 {
                 item.bold()
             } else {
                 item
@@ -199,9 +199,9 @@ impl ConversationView {
         );
     }
 
-    fn load_label(&mut self, ctx: &mut AppViewContext, label: LocalLabel) {
+    fn load_label(&mut self, ctx: &mut AppViewContext, label_id: LocalLabelId) {
         ctx.app_local_dispatcher()
-            .queue_event(MailboxEvent::LoadLabelRequest(label));
+            .queue_event(MailboxEvent::LoadLabelRequest(label_id));
     }
 
     fn set_focused_widget(&mut self, state: &MailboxState, f: FocusedWidget) {
@@ -337,6 +337,10 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                         key: "▼",
                         description: "Next Item",
                     },
+                    HelpItem {
+                        key: "P",
+                        description: "Poll Events",
+                    },
                 ],
             },
             HelpCategory {
@@ -389,6 +393,12 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                 return;
             }
 
+            if k.code == KeyCode::Char('p') && k.kind == KeyEventKind::Press {
+                ctx.app_local_dispatcher()
+                    .queue_event(MailboxEvent::PollEventLoop);
+                return;
+            }
+
             match self.focused_widget {
                 FocusedWidget::Labels(label_type) => {
                     let state = self.label_lists_state_mut(label_type);
@@ -437,7 +447,7 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                                         .get(index)
                                         .cloned();
                                     if let Some(label) = label {
-                                        self.load_label(ctx, label.into());
+                                        self.load_label(ctx, label.id);
                                     }
                                 }
                             }

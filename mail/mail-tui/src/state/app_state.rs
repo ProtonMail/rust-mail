@@ -34,6 +34,9 @@ impl AppState {
             .ok_or(anyhow!("Failed to get config dir"))?
             .join(APP_ID);
 
+        std::fs::create_dir_all(&cache_dir)?;
+        std::fs::create_dir_all(&config_dir)?;
+
         let log_file = cache_dir.join("app.log");
         init_log(log_file)?;
 
@@ -60,8 +63,7 @@ impl AppEventHandler<AppState, AppEvent> for AppState {
                     .handle_event(dispatcher, &self.mail_context, event)
             }
             AppEvent::Mailbox(event) => {
-                self.mailbox_state
-                    .handle_event(dispatcher, &self.mail_context, event);
+                self.mailbox_state.handle_event(dispatcher, event);
             }
             AppEvent::Session(event) => {
                 self.session_state
@@ -76,7 +78,8 @@ pub fn app_tracing_env_filter() -> EnvFilter {
         .with_default_directive(LevelFilter::TRACE.into())
         .parse_lossy(
             "info,proton_mail_tui=debug,proton_mail_db=trace,proton_sqlite3=trace,\
-                    proton_core_db=trace,proton_core_common=trace,proton_mail_common=trace",
+                    proton_core_db=trace,proton_core_common=trace,proton_mail_common=trace,\
+                    proton_event_loop=trace,proton_api_core=trace",
         )
 }
 
