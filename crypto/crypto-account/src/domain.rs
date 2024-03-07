@@ -171,7 +171,7 @@ impl AddressKeys {
                 else {
                     return None;
                 };
-                let decryption_result = provider.private_key_import_from_token(
+                let decryption_result = provider.private_key_import_from_token_refs(
                     &locked_key.private_key,
                     user_keys.as_ref(),
                     token,
@@ -215,7 +215,7 @@ impl AddressKeys {
                 else {
                     return None;
                 };
-                Some(provider.private_key_import_from_token_async(
+                Some(provider.private_key_import_from_token_refs_async(
                     &locked_key.private_key,
                     user_keys.as_ref(),
                     token,
