@@ -5,9 +5,7 @@ use crate::{MailContextError, MailUserContext, MailUserContextInitializationCall
 use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
-use proton_mail_db::proton_sqlite3::{
-    InProcessTrackerService, LiveQuery, LiveQueryBuilder, ObservableQuery,
-};
+use proton_mail_db::proton_sqlite3::{InProcessTrackerService, ObservableQuery};
 use proton_mail_db::{LocalLabel, LocalLabelId};
 
 #[derive(Debug, thiserror::Error)]
@@ -29,39 +27,27 @@ pub enum MailboxError {
 /// Abstraction trait to make it easier to integrate mailbox in different target platforms. E.g.:
 /// Some platforms are able to use the [`LiveQuery`] type and other platform may benefit from
 /// a different solution.
-pub trait MailboxObservableQueryBuilder: Send + Sync {
-    type Type<Q: ObservableQuery>;
+pub trait MailboxObservableQueryBuilder<Q: ObservableQuery> {
+    type Output;
 
-    fn build<Q: ObservableQuery>(
-        &self,
-        tracker: InProcessTrackerService,
-        query: Q,
-    ) -> Self::Type<Q>;
+    fn build(self, tracker: InProcessTrackerService, query: Q) -> Self::Output;
 }
 
-/// Implementation of [`MailboxObservableQueryBuilder`] which returns live query objects.
-pub struct MailboxLiveQueryBuilder {}
+impl<Q: ObservableQuery, R, F: FnOnce(InProcessTrackerService, Q) -> R>
+    MailboxObservableQueryBuilder<Q> for F
+{
+    type Output = R;
 
-impl MailboxObservableQueryBuilder for MailboxLiveQueryBuilder {
-    type Type<Q: ObservableQuery> = LiveQuery<Q>;
-
-    fn build<Q: ObservableQuery>(
-        &self,
-        tracker: InProcessTrackerService,
-        query: Q,
-    ) -> Self::Type<Q> {
-        LiveQueryBuilder::new(tracker)
-            .with_background_initializer()
-            .build(query)
+    fn build(self, tracker: InProcessTrackerService, query: Q) -> Self::Output {
+        (self)(tracker, query)
     }
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
 
-pub struct Mailbox<Builder: MailboxObservableQueryBuilder> {
+pub struct Mailbox {
     user_ctx: MailUserContext,
     active_label: LocalLabel,
-    builder: Builder,
 }
 
 pub trait MailboxBackgroundResult<T: Send>: Send + Sync {
@@ -74,8 +60,8 @@ impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> 
     }
 }
 
-impl<Builder: MailboxObservableQueryBuilder> Mailbox<Builder> {
-    pub fn new(user_ctx: MailUserContext, builder: Builder) -> MailboxResult<Self> {
+impl Mailbox {
+    pub fn new(user_ctx: MailUserContext) -> MailboxResult<Self> {
         let inbox_id = LabelId::inbox();
         let Some(label) = user_ctx.get_label_with_remote_id(&inbox_id)? else {
             return Err(MailboxError::RemoteLabelNotFound(inbox_id));
@@ -83,7 +69,6 @@ impl<Builder: MailboxObservableQueryBuilder> Mailbox<Builder> {
 
         Ok(Self {
             user_ctx,
-            builder,
             active_label: label,
         })
     }
