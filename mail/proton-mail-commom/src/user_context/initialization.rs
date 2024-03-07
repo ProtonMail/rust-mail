@@ -1,4 +1,4 @@
-use crate::{MailContext, MailContextError, MailUserContext};
+use crate::{MailContextError, MailUserContext};
 use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::tracing::{self, error, trace, Level};
 
@@ -18,15 +18,14 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 }
 
 impl MailUserContext {
-    #[tracing::instrument(level = Level::DEBUG, skip(self, mail_context,cb), fields(user_id=?self.user_id()))]
+    #[tracing::instrument(level = Level::DEBUG, skip(self, cb), fields(user_id=?self.user_id()))]
     pub fn initialize(
         &self,
-        mail_context: &MailContext,
         label_id: LabelId,
         cb: Box<dyn MailUserContextInitializationCallback>,
     ) {
         let ctx = self.clone();
-        mail_context.async_runtime().spawn(async move {
+        self.mail_context().async_runtime().spawn(async move {
             trace!("Syncing User settings");
             cb.on_stage(MailUserContextLoadingStage::User);
             if let Err(e) = ctx.inner.user_context.sync_user_and_settings().await {

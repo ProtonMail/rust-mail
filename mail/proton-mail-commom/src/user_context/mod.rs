@@ -3,12 +3,11 @@ mod conversations;
 mod events;
 mod initialization;
 mod labels;
-mod queries;
 
 pub use initialization::*;
 use std::sync::{Arc, Weak};
 
-use crate::MailContextResult;
+use crate::{MailContext, MailContextResult};
 use proton_api_mail::proton_api_core::domain::UserId;
 use proton_api_mail::proton_api_core::exports::proton_sqlite3::InProcessTrackerService;
 use proton_api_mail::proton_api_core::Session;
@@ -18,7 +17,7 @@ use proton_core_common::UserContext;
 use proton_event_loop::EventLoop;
 use proton_mail_db::MailSqliteConnection;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct MailUserContext {
     inner: Arc<MailUserContextInner>,
 }
@@ -28,8 +27,8 @@ pub struct WeakMailUserContext {
     inner: Weak<MailUserContextInner>,
 }
 
-#[derive(Debug)]
 struct MailUserContextInner {
+    mail_context: MailContext,
     user_context: UserContext,
     event_loop: EventLoop,
 }
@@ -54,10 +53,11 @@ impl From<MailUserContext> for WeakMailUserContext {
 }
 
 impl MailUserContext {
-    pub(crate) fn new(user_context: UserContext) -> Self {
+    pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Self {
         Self {
             inner: Arc::new(MailUserContextInner {
                 user_context,
+                mail_context,
                 event_loop: EventLoop::new(),
             }),
         }
@@ -79,6 +79,10 @@ impl MailUserContext {
 
     pub(crate) fn tracker_service(&self) -> &InProcessTrackerService {
         self.inner.user_context.tracker_service()
+    }
+
+    pub fn mail_context(&self) -> &MailContext {
+        &self.inner.mail_context
     }
 
     pub fn user_id(&self) -> &UserId {

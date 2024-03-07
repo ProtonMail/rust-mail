@@ -61,6 +61,3 @@ impl ObservableQuery for LabelsByTypeQueryWithConversationCount {
         conn.get_local_label_by_type_ordered_with_conversation_count(self.0)
     }
 }
-
-pub type LabelsByTypeWithConversationCountLiveQuery =
-    LiveQuery<LabelsByTypeQueryWithConversationCount>;
