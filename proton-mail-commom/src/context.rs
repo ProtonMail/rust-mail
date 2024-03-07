@@ -91,7 +91,7 @@ impl MailContext {
         login_flow: &LoginFlow,
     ) -> MailContextResult<MailUserContext> {
         let ctx = self.core_context.user_context_from_login_flow(login_flow)?;
-        Ok(MailUserContext::new(ctx))
+        Ok(MailUserContext::new(self.clone(), ctx))
     }
 
     pub fn user_context_from_session(
@@ -100,7 +100,7 @@ impl MailContext {
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> MailContextResult<MailUserContext> {
         let ctx = self.core_context.user_context_from_session(session, cb)?;
-        Ok(MailUserContext::new(ctx))
+        Ok(MailUserContext::new(self.clone(), ctx))
     }
     pub fn get_sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
         let s = self.core_context.get_sessions()?;

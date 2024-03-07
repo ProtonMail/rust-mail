@@ -1,8 +1,8 @@
 use crate::{MailContextResult, MailUserContext};
-use proton_api_mail::domain::ALL_LABEL_TYPES;
+use proton_api_mail::domain::{LabelId, ALL_LABEL_TYPES};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
-use proton_mail_db::DBResult;
+use proton_mail_db::{DBResult, LocalLabel, LocalLabelId};
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -21,5 +21,28 @@ impl MailUserContext {
         connection.tx(|tx| -> DBResult<()> { tx.create_remote_labels(all_labels.iter()) })?;
 
         Ok(())
+    }
+
+    pub fn get_local_label_id(&self, id: &LabelId) -> MailContextResult<Option<LocalLabelId>> {
+        let conn = self.new_db_connection()?;
+        let id = conn.as_connection_ref().resolve_remote_label_id(id)?;
+        Ok(id)
+    }
+
+    pub fn get_label_with_remote_id(
+        &self,
+        label_id: &LabelId,
+    ) -> MailContextResult<Option<LocalLabel>> {
+        let conn = self.new_db_connection()?;
+        let r = conn
+            .as_connection_ref()
+            .get_local_label_with_remote_id(label_id)?;
+        Ok(r)
+    }
+
+    pub fn get_label(&self, id: LocalLabelId) -> MailContextResult<Option<LocalLabel>> {
+        let conn = self.new_db_connection()?;
+        let r = conn.as_connection_ref().get_local_label(id)?;
+        Ok(r)
     }
 }

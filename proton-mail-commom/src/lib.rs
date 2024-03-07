@@ -1,8 +1,10 @@
 //! Everything Proton Mailbox related.
 mod context;
+mod mailbox;
 mod user_context;
 
 pub use context::*;
+pub use mailbox::*;
 pub use user_context::*;
 
 // re-exports

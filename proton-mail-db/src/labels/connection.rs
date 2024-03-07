@@ -83,6 +83,19 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             .optional()
     }
 
+    pub fn get_local_label_with_remote_id(
+        &self,
+        label_id: &LabelId,
+    ) -> DBResult<Option<LocalLabel>> {
+        self.0
+            .query_row(
+                &LocalLabelSelect::query_with_rid(),
+                [label_id],
+                LocalLabelSelect::from_row,
+            )
+            .optional()
+    }
+
     pub fn create_local_label(
         &mut self,
         label_type: LabelType,
@@ -180,6 +193,10 @@ impl LocalLabelSelect {
 
     fn query_with_id() -> String {
         format!("{} AND id = ?", Self::query_all())
+    }
+
+    fn query_with_rid() -> String {
+        format!("{} AND rid = ?", Self::query_all())
     }
     fn query_in(count: usize) -> String {
         format!(
@@ -338,6 +355,12 @@ expanded=?, notified=?, sticky=? WHERE id=?",
         let query = RemoteLabelSelect::query_with_id();
         self.0
             .query_row(&query, [id], RemoteLabelSelect::from_row)
+            .optional()
+    }
+
+    pub fn resolve_remote_label_id(&self, id: &LabelId) -> DBResult<Option<LocalLabelId>> {
+        self.0
+            .query_row("SELECT id FROM labels WHERE rid=?", [id], |r| r.get(0))
             .optional()
     }
 
