@@ -2,6 +2,7 @@ use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::crypto::domain::AddressKeys;
 use proton_api_core::exports::proton_sqlite3::rusqlite;
 use proton_api_core::exports::serde;
+use proton_api_core::exports::serde_aux::field_attributes::deserialize_default_from_null;
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
 use serde::{Deserialize, Serialize};
 
@@ -27,10 +28,11 @@ pub struct Address {
     pub catch_all: bool,
     #[serde(rename = "ProtonMX")]
     pub proton_mx: bool,
+    #[serde(deserialize_with = "deserialize_default_from_null")]
     pub signed_key_list: AddressSignedKeyList,
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Default)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct AddressSignedKeyList {
     #[serde(rename = "MinEpochID")]
