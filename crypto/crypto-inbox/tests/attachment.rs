@@ -81,9 +81,9 @@ impl<T: PrivateKey> AsRef<T> for TestAddressKey<T> {
         &self.0
     }
 }
-struct TestAddressPubliKey<T: PublicKey>(T);
+struct TestAddressPublicKey<T: PublicKey>(T);
 
-impl<T: PublicKey> AsRef<T> for TestAddressPubliKey<T> {
+impl<T: PublicKey> AsRef<T> for TestAddressPublicKey<T> {
     fn as_ref(&self) -> &T {
         &self.0
     }
@@ -138,11 +138,11 @@ fn get_test_address_keys<T: PGPProviderSync>(
 
 fn get_test_public_address_keys<T: PGPProviderSync>(
     pgp_provider: &T,
-) -> Vec<TestAddressPubliKey<T::PublicKey>> {
+) -> Vec<TestAddressPublicKey<T::PublicKey>> {
     let verification_key = pgp_provider
         .public_key_import(TEST_ATTACHMENT_VERIFICATION_KEY, DataEncoding::Armor)
         .unwrap();
-    vec![TestAddressPubliKey(verification_key)]
+    vec![TestAddressPublicKey(verification_key)]
 }
 
 fn get_test_attachment_encrypted_data() -> Vec<u8> {

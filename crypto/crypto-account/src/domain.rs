@@ -5,18 +5,29 @@ use crate::salts::SaltedPassword;
 use proton_crypto::crypto::{DataEncoding, PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, thiserror::Error)]
+pub enum KeyError {
+    #[error("Could not unlock key {0}:{1}")]
+    Unlock(KeyId, Box<dyn std::error::Error>),
+    #[error("Missing encryption token, signature, or flags for key {0}")]
+    MissingValue(KeyId),
+    #[error("Failed to extract public key from {0}:{1}")]
+    PublicKeyExtraction(KeyId, Box<dyn std::error::Error>),
+}
+
 /// Represents a decrypted user key of a user.
 ///
 /// Contains secret key material that must be protected.
 #[derive(Debug)]
-pub struct DecryptedUserKey<Priv: PrivateKey> {
+pub struct DecryptedUserKey<Priv: PrivateKey, Pub: PublicKey> {
     pub id: KeyId,
-    pub private_keys: Priv,
+    pub private_key: Priv,
+    pub public_key: Pub,
 }
 
-impl<Priv: PrivateKey> AsRef<Priv> for DecryptedUserKey<Priv> {
+impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedUserKey<Priv, Pub> {
     fn as_ref(&self) -> &Priv {
-        &self.private_keys
+        &self.private_key
     }
 }
 
@@ -24,23 +35,24 @@ impl<Priv: PrivateKey> AsRef<Priv> for DecryptedUserKey<Priv> {
 ///
 /// Contains secret key material that must be protected.
 #[derive(Debug)]
-pub struct DecryptedAddressKey<Priv: PrivateKey> {
+pub struct DecryptedAddressKey<Priv: PrivateKey, Pub: PublicKey> {
     pub id: KeyId,
     pub flags: KeyFlag,
     pub primary: bool,
-    pub private_keys: Priv,
+    pub private_key: Priv,
+    pub public_key: Pub,
 }
 
-impl<Priv: PrivateKey> AsRef<Priv> for DecryptedAddressKey<Priv> {
+impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedAddressKey<Priv, Pub> {
     fn as_ref(&self) -> &Priv {
-        &self.private_keys
+        &self.private_key
     }
 }
 
 /// Represents a public address key of another user.
 ///
 /// Public address keys are used to verify signatures or encrypt to addresses of other users.
-/// Only contains public information and not secret key material.
+/// Only contains public information and no secret key material.
 #[derive(Debug)]
 pub struct PublicAddressKey<Pub: PublicKey> {
     pub source: APIPublicKeySource,
@@ -77,27 +89,42 @@ impl UserKeys {
         &self,
         provider: &T,
         salted_password: &SaltedPassword<impl AsRef<[u8]>>,
-    ) -> Vec<DecryptedUserKey<T::PrivateKey>> {
-        let decrypted_user_keys = self
-            .0
-            .iter()
-            .filter(|key| key.active)
-            .filter_map(|key| {
+    ) -> UnlockResult<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
+        let mut failed_keys = Vec::new();
+        let mut decrypted_address_keys: Vec<DecryptedUserKey<_, _>> =
+            Vec::with_capacity(self.0.len());
+        decrypted_address_keys.extend(self.0.iter().filter(|key| key.active).filter_map(
+            |locked_key| {
                 let decryption_result = provider.private_key_import(
-                    &key.private_key,
+                    &locked_key.private_key,
                     salted_password,
                     DataEncoding::Armor,
                 );
-                let Ok(private_key) = decryption_result else {
-                    return None;
+                let private_key = match decryption_result {
+                    Ok(key) => key,
+                    Err(err) => {
+                        failed_keys.push(KeyError::Unlock(locked_key.id.clone(), err));
+                        return None;
+                    }
+                };
+                let public_key = match provider.private_key_to_public_key(&private_key) {
+                    Ok(key) => key,
+                    Err(err) => {
+                        failed_keys.push(KeyError::PublicKeyExtraction(locked_key.id.clone(), err));
+                        return None;
+                    }
                 };
                 Some(DecryptedUserKey {
-                    private_keys: private_key,
-                    id: key.id.clone(),
+                    private_key,
+                    public_key,
+                    id: locked_key.id.clone(),
                 })
-            })
-            .collect();
-        decrypted_user_keys
+            },
+        ));
+        UnlockResult {
+            unlocked_keys: decrypted_address_keys,
+            failed: failed_keys,
+        }
     }
 
     /// Unlocks/decrypts the locked keys with the salted_password.
@@ -108,33 +135,58 @@ impl UserKeys {
         &self,
         provider: &T,
         salted_password: &SaltedPassword<impl AsRef<[u8]>>,
-    ) -> Vec<DecryptedUserKey<T::PrivateKey>> {
-        let decrypted_user_keys_futures: Vec<_> = self
-            .0
-            .iter()
-            .map(|key| {
-                provider.private_key_import_async(
-                    &key.private_key,
-                    salted_password,
-                    DataEncoding::Armor,
-                )
-            })
-            .collect();
-        let decrypted_keys_result: Vec<_> = join_all(decrypted_user_keys_futures).await;
-        let decrypted_user_keys: Vec<_> = decrypted_keys_result
-            .into_iter()
-            .zip(&self.0)
-            .filter_map(|(decryption_result, key)| {
-                let Ok(private_key) = decryption_result else {
-                    return None;
-                };
-                Some(DecryptedUserKey {
-                    private_keys: private_key,
-                    id: key.id.clone(),
+    ) -> UnlockResult<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
+        let mut failed_keys = Vec::new();
+        let mut decrypted_user_keys: Vec<DecryptedUserKey<T::PrivateKey, T::PublicKey>> =
+            Vec::with_capacity(self.0.len());
+        let mut decrypted_user_key_futures: Vec<_> = Vec::with_capacity(self.0.len());
+        for locked_key in &self.0 {
+            decrypted_user_key_futures.push(async {
+                let decryption_result = provider
+                    .private_key_import_async(
+                        &locked_key.private_key,
+                        salted_password,
+                        DataEncoding::Armor,
+                    )
+                    .await;
+                let private_key = decryption_result
+                    .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+                let public_key = provider
+                    .private_key_to_public_key_async(&private_key)
+                    .await
+                    .map_err(|err| KeyError::PublicKeyExtraction(locked_key.id.clone(), err))?;
+                Ok(DecryptedUserKey {
+                    private_key,
+                    public_key,
+                    id: locked_key.id.clone(),
                 })
-            })
-            .collect();
-        decrypted_user_keys
+            });
+        }
+        let decrypted_user_key_results: Vec<_> = join_all(decrypted_user_key_futures).await;
+        decrypted_user_keys.extend(decrypted_user_key_results.into_iter().filter_map(
+            |decrypted_user_key_result| match decrypted_user_key_result {
+                Ok(decrypted_user_key) => Some(decrypted_user_key),
+                Err(err) => {
+                    failed_keys.push(err);
+                    None
+                }
+            },
+        ));
+        UnlockResult {
+            unlocked_keys: decrypted_user_keys,
+            failed: failed_keys,
+        }
+    }
+}
+
+pub struct UnlockResult<T> {
+    pub unlocked_keys: Vec<T>,
+    pub failed: Vec<KeyError>,
+}
+
+impl<T> From<UnlockResult<T>> for Vec<T> {
+    fn from(value: UnlockResult<T>) -> Self {
+        value.unlocked_keys
     }
 }
 
@@ -159,16 +211,17 @@ impl AddressKeys {
     pub fn unlock<T: proton_crypto::crypto::PGPProviderSync>(
         &self,
         provider: &T,
-        user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey>]>,
-    ) -> DecryptedAddressKeys<T::PrivateKey> {
-        let decrypted_address_keys = self
-            .0
-            .iter()
-            .filter(|key| key.active)
-            .filter_map(|locked_key| {
+        user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey, T::PublicKey>]>,
+    ) -> UnlockResult<DecryptedAddressKey<T::PrivateKey, T::PublicKey>> {
+        let mut failed_keys = Vec::new();
+        let mut decrypted_address_keys: Vec<DecryptedAddressKey<_, _>> =
+            Vec::with_capacity(self.0.len());
+        decrypted_address_keys.extend(self.0.iter().filter(|key| key.active).filter_map(
+            |locked_key| {
                 let (Some(token), Some(signature), Some(flags)) =
                     (&locked_key.token, &locked_key.signature, &locked_key.flags)
                 else {
+                    failed_keys.push(KeyError::MissingValue(locked_key.id.clone()));
                     return None;
                 };
                 let decryption_result = provider.private_key_import_from_token_refs(
@@ -177,18 +230,33 @@ impl AddressKeys {
                     token,
                     signature,
                 );
-                let Ok(private_key) = decryption_result else {
-                    return None;
+                let private_key = match decryption_result {
+                    Ok(key) => key,
+                    Err(err) => {
+                        failed_keys.push(KeyError::Unlock(locked_key.id.clone(), err));
+                        return None;
+                    }
+                };
+                let public_key = match provider.private_key_to_public_key(&private_key) {
+                    Ok(key) => key,
+                    Err(err) => {
+                        failed_keys.push(KeyError::PublicKeyExtraction(locked_key.id.clone(), err));
+                        return None;
+                    }
                 };
                 Some(DecryptedAddressKey {
-                    private_keys: private_key,
+                    private_key,
+                    public_key,
                     id: locked_key.id.clone(),
                     flags: KeyFlag::from(*flags),
                     primary: locked_key.primary,
                 })
-            })
-            .collect();
-        DecryptedAddressKeys(decrypted_address_keys)
+            },
+        ));
+        UnlockResult {
+            unlocked_keys: decrypted_address_keys,
+            failed: failed_keys,
+        }
     }
     /// Decrypts the address keys with the provided user keys asynchronously.
     ///
@@ -197,59 +265,57 @@ impl AddressKeys {
     pub async fn unlock_async<T: proton_crypto::crypto::PGPProviderAsync>(
         &self,
         provider: &T,
-        user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey>]>,
-    ) -> DecryptedAddressKeys<T::PrivateKey> {
-        let valid_keys: Vec<_> = self
-            .0
-            .iter()
-            .filter(|locked_key| {
-                locked_key.token.is_some()
-                    && locked_key.signature.is_some()
-                    && locked_key.flags.is_some()
-            })
-            .collect();
-        let decrypted_address_keys_futures: Vec<_> = valid_keys
-            .iter()
-            .filter_map(|locked_key| {
-                let (Some(token), Some(signature)) = (&locked_key.token, &locked_key.signature)
+        user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey, T::PublicKey>]>,
+    ) -> UnlockResult<DecryptedAddressKey<T::PrivateKey, T::PublicKey>> {
+        let mut failed_keys = Vec::new();
+        let mut decrypted_address_keys: Vec<DecryptedAddressKey<_, _>> =
+            Vec::with_capacity(self.0.len());
+        let mut decrypted_address_key_futures: Vec<_> = Vec::with_capacity(self.0.len());
+        for locked_key in &self.0 {
+            decrypted_address_key_futures.push(async {
+                let (Some(token), Some(signature), Some(flags)) =
+                    (&locked_key.token, &locked_key.signature, &locked_key.flags)
                 else {
-                    return None;
+                    return Err(KeyError::MissingValue(locked_key.id.clone()));
                 };
-                Some(provider.private_key_import_from_token_refs_async(
-                    &locked_key.private_key,
-                    user_keys.as_ref(),
-                    token,
-                    signature,
-                ))
-            })
-            .collect();
-        let decrypted_keys_result: Vec<_> = join_all(decrypted_address_keys_futures).await;
-        let decrypted_address_keys: Vec<_> = decrypted_keys_result
-            .into_iter()
-            .zip(&valid_keys)
-            .filter_map(|(decryption_result, locked_key)| {
-                let Ok(private_key) = decryption_result else {
-                    return None;
-                };
-                Some(DecryptedAddressKey {
-                    private_keys: private_key,
+                let decryption_result = provider
+                    .private_key_import_from_token_refs_async(
+                        &locked_key.private_key,
+                        user_keys.as_ref(),
+                        token,
+                        signature,
+                    )
+                    .await;
+                let private_key = decryption_result
+                    .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+                let public_key = provider
+                    .private_key_to_public_key_async(&private_key)
+                    .await
+                    .map_err(|err| KeyError::PublicKeyExtraction(locked_key.id.clone(), err))?;
+
+                Ok(DecryptedAddressKey {
+                    private_key,
+                    public_key,
                     id: locked_key.id.clone(),
-                    flags: KeyFlag::from(locked_key.flags.unwrap()),
+                    flags: KeyFlag::from(*flags),
                     primary: locked_key.primary,
                 })
-            })
-            .collect();
-        DecryptedAddressKeys(decrypted_address_keys)
-    }
-}
-
-/// Represents unlocked address keys of a user retrieved from the API.
-#[derive(Debug)]
-pub struct DecryptedAddressKeys<T: PrivateKey>(pub Vec<DecryptedAddressKey<T>>);
-
-impl<T: PrivateKey> AsRef<[DecryptedAddressKey<T>]> for DecryptedAddressKeys<T> {
-    fn as_ref(&self) -> &[DecryptedAddressKey<T>] {
-        self.0.as_slice()
+            });
+        }
+        let decrypted_address_key_results: Vec<_> = join_all(decrypted_address_key_futures).await;
+        decrypted_address_keys.extend(decrypted_address_key_results.into_iter().filter_map(
+            |decrypted_user_key_result| match decrypted_user_key_result {
+                Ok(decrypted_user_key) => Some(decrypted_user_key),
+                Err(err) => {
+                    failed_keys.push(err);
+                    None
+                }
+            },
+        ));
+        UnlockResult {
+            unlocked_keys: decrypted_address_keys,
+            failed: failed_keys,
+        }
     }
 }
 
