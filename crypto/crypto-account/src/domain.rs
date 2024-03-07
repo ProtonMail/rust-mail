@@ -160,7 +160,7 @@ impl AddressKeys {
         &self,
         provider: &T,
         user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey>]>,
-    ) -> Vec<DecryptedAddressKey<T::PrivateKey>> {
+    ) -> DecryptedAddressKeys<T::PrivateKey> {
         let decrypted_address_keys = self
             .0
             .iter()
@@ -188,7 +188,7 @@ impl AddressKeys {
                 })
             })
             .collect();
-        decrypted_address_keys
+        DecryptedAddressKeys(decrypted_address_keys)
     }
     /// Decrypts the address keys with the provided user keys asynchronously.
     ///
@@ -198,7 +198,7 @@ impl AddressKeys {
         &self,
         provider: &T,
         user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey>]>,
-    ) -> Vec<DecryptedAddressKey<T::PrivateKey>> {
+    ) -> DecryptedAddressKeys<T::PrivateKey> {
         let valid_keys: Vec<_> = self
             .0
             .iter()
@@ -239,7 +239,17 @@ impl AddressKeys {
                 })
             })
             .collect();
-        decrypted_address_keys
+        DecryptedAddressKeys(decrypted_address_keys)
+    }
+}
+
+/// Represents unlocked address keys of a user retrieved from the API.
+#[derive(Debug)]
+pub struct DecryptedAddressKeys<T: PrivateKey>(pub Vec<DecryptedAddressKey<T>>);
+
+impl<T: PrivateKey> AsRef<[DecryptedAddressKey<T>]> for DecryptedAddressKeys<T> {
+    fn as_ref(&self) -> &[DecryptedAddressKey<T>] {
+        self.0.as_slice()
     }
 }
 
@@ -261,8 +271,9 @@ impl APIPublicAddressKeys {
     pub fn import<T: proton_crypto::crypto::PGPProviderSync>(
         &self,
         provider: &T,
-    ) -> Vec<PublicAddressKey<T::PublicKey>> {
-        self.0
+    ) -> PublicAddressKeys<T::PublicKey> {
+        let public_address_keys = self
+            .0
             .iter()
             .filter_map(|api_public_key| {
                 let imported_public_key = provider
@@ -276,7 +287,8 @@ impl APIPublicAddressKeys {
                     public_keys: public_key,
                 })
             })
-            .collect()
+            .collect();
+        PublicAddressKeys(public_address_keys)
     }
     /// Imports the public keys by decoding the pgp public keys with the PGP provider.
     ///
@@ -285,7 +297,7 @@ impl APIPublicAddressKeys {
     pub async fn import_async<T: proton_crypto::crypto::PGPProviderAsync>(
         &self,
         provider: &T,
-    ) -> Vec<PublicAddressKey<T::PublicKey>> {
+    ) -> PublicAddressKeys<T::PublicKey> {
         let imported_keys_futures: Vec<_> = self
             .0
             .iter()
@@ -297,7 +309,7 @@ impl APIPublicAddressKeys {
             })
             .collect();
         let imported_keys: Vec<_> = join_all(imported_keys_futures).await;
-        imported_keys
+        let public_address_keys = imported_keys
             .into_iter()
             .zip(&self.0)
             .filter_map(|(imported_key_result, api_public_key)| {
@@ -310,6 +322,17 @@ impl APIPublicAddressKeys {
                     public_keys: imported_key,
                 })
             })
-            .collect()
+            .collect();
+        PublicAddressKeys(public_address_keys)
+    }
+}
+
+/// Represents imported address public keys retrieved from the API.
+#[derive(Debug)]
+pub struct PublicAddressKeys<T: PublicKey>(pub Vec<PublicAddressKey<T>>);
+
+impl<T: PublicKey> AsRef<[PublicAddressKey<T>]> for PublicAddressKeys<T> {
+    fn as_ref(&self) -> &[PublicAddressKey<T>] {
+        self.0.as_slice()
     }
 }
