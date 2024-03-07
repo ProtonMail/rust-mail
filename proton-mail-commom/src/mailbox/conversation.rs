@@ -3,7 +3,7 @@ use crate::{
 };
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_mail_db::{ConversationQuery, LocalLabelId};
-impl<Builder: MailboxObservableQueryBuilder> Mailbox<Builder> {
+impl Mailbox {
     pub fn switch_label(
         &mut self,
         label_id: LocalLabelId,
@@ -40,8 +40,12 @@ impl<Builder: MailboxObservableQueryBuilder> Mailbox<Builder> {
         Ok(())
     }
 
-    pub fn new_conversation_query(&self, limit: usize) -> Builder::Type<ConversationQuery> {
-        self.builder.build(
+    pub fn new_conversation_query<Builder: MailboxObservableQueryBuilder<ConversationQuery>>(
+        &self,
+        builder: Builder,
+        limit: usize,
+    ) -> Builder::Output {
+        builder.build(
             self.user_ctx.tracker_service().clone(),
             ConversationQuery::new(self.active_label.id, limit),
         )
