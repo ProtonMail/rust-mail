@@ -2,7 +2,7 @@ use futures::future::join_all;
 
 use crate::keys::{APIPublicKey, APIPublicKeySource, KeyFlag, KeyId, LockedKey};
 use crate::salts::SaltedPassword;
-use proton_crypto::crypto::{DataEncoding, PrivateKey, PublicKey};
+use proton_crypto::crypto::{AsPublicKeyRef, DataEncoding, PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]
@@ -31,6 +31,12 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedUserKey<Priv, Pu
     }
 }
 
+impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedUserKey<Priv, Pub> {
+    fn as_public_key_ref(&self) -> &Pub {
+        &self.public_key
+    }
+}
+
 /// Represents a decrypted address key of a user.
 ///
 /// Contains secret key material that must be protected.
@@ -46,6 +52,12 @@ pub struct DecryptedAddressKey<Priv: PrivateKey, Pub: PublicKey> {
 impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedAddressKey<Priv, Pub> {
     fn as_ref(&self) -> &Priv {
         &self.private_key
+    }
+}
+
+impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedAddressKey<Priv, Pub> {
+    fn as_public_key_ref(&self) -> &Pub {
+        &self.public_key
     }
 }
 

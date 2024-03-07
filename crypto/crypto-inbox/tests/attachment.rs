@@ -1,7 +1,7 @@
 use std::io;
 
 use base64::Engine;
-use proton_crypto::crypto::{PrivateKey, PublicKey, VerificationStatus};
+use proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey, VerificationStatus};
 use proton_crypto_inbox::attachment::{
     self, AttachmentEncryptedSignature, AttachmentMetadataCryptoView, AttachmentSignature,
     KeyPackets,
@@ -83,8 +83,8 @@ impl<T: PrivateKey> AsRef<T> for TestAddressKey<T> {
 }
 struct TestAddressPublicKey<T: PublicKey>(T);
 
-impl<T: PublicKey> AsRef<T> for TestAddressPublicKey<T> {
-    fn as_ref(&self) -> &T {
+impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
+    fn as_public_key_ref(&self) -> &T {
         &self.0
     }
 }

@@ -6,8 +6,8 @@ use std::{
 };
 
 use proton_crypto::crypto::{
-    DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationStatus, VerifiedData,
-    VerifiedDataReader,
+    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationStatus,
+    VerifiedData, VerifiedDataReader,
 };
 
 use crate::string_id;
@@ -121,7 +121,7 @@ pub fn decrypt_attachment<T: PGPProviderSync, M: AttachmentMetadataCryptoView>(
     pgp_provider: &T,
     attachment_metadata: &M,
     decryption_keys: &[impl AsRef<T::PrivateKey>],
-    verification_keys: &[impl AsRef<T::PublicKey>],
+    verification_keys: &[impl AsPublicKeyRef<T::PublicKey>],
     attachment_data: impl AsRef<[u8]>,
 ) -> Result<AttachmentDecrypted<T::VerifiedData>, AttachmentError> {
     let key_packet_bytes = attachment_metadata.get_attachment_key_packets().decode()?;
@@ -174,7 +174,7 @@ pub fn decrypt_attachment_from_reader<
     pgp_provider: &T,
     attachment_metadata: &'a M,
     decryption_keys: &'a [impl AsRef<T::PrivateKey>],
-    verification_keys: &'a [impl AsRef<T::PublicKey>],
+    verification_keys: &'a [impl AsPublicKeyRef<T::PublicKey>],
     attachment_data: R,
 ) -> Result<AttachmentDecryptedReader<'a, R, T::Decryptor<'a>>, AttachmentError> {
     let key_packet_bytes = attachment_metadata.get_attachment_key_packets().decode()?;
@@ -210,7 +210,7 @@ fn decrypt_and_verify_with_encrypted_signature<T: PGPProviderSync>(
     pgp_provider: &T,
     enc_signature: &[u8],
     decryption_keys: &[impl AsRef<T::PrivateKey>],
-    verification_keys: &[impl AsRef<T::PublicKey>],
+    verification_keys: &[impl AsPublicKeyRef<T::PublicKey>],
     attachment_session_key: &T::SessionKey,
     attachment_data: &[u8],
 ) -> Result<AttachmentDecrypted<T::VerifiedData>, AttachmentError> {
@@ -233,7 +233,7 @@ fn decrypt_and_verify_with_encrypted_signature_stream<'a, T: PGPProviderSync, R:
     pgp_provider: &T,
     enc_signature: &[u8],
     decryption_keys: &'a [impl AsRef<T::PrivateKey>],
-    verification_keys: &'a [impl AsRef<T::PublicKey>],
+    verification_keys: &'a [impl AsPublicKeyRef<T::PublicKey>],
     attachment_session_key: T::SessionKey,
     attachment_data: R,
 ) -> Result<AttachmentDecryptedReader<'a, R, T::Decryptor<'a>>, AttachmentError> {
