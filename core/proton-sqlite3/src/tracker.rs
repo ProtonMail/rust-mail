@@ -11,7 +11,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::Arc;
-use tracing::error;
+use tracing::{error, Level};
 
 /// Observer for changes made in the database.
 #[cfg_attr(test, mockall::automock)]
@@ -184,8 +184,10 @@ impl LocalTrackerState {
             return Ok(());
         };
 
+        tracing::trace!("Syncing tables from observer");
         let Some((new_tracker_state, tracker_changes)) = self.calculate_sync_changes(service)
         else {
+            tracing::trace!("No changes");
             return Ok(());
         };
         (apply_fn)(&tracker_changes)?;
@@ -201,6 +203,7 @@ impl LocalTrackerState {
         for (version, id) in table_versions.into_iter() {
             if self.table_versions[id] < version {
                 self.table_versions[id] = version;
+                tracing::trace!("Table {} has been modified", id);
                 modified_tables.set(id, true);
             }
         }
@@ -230,15 +233,18 @@ impl LocalTracker {
         Ok(())
     }
 
+    #[tracing::instrument(level=Level::TRACE, skip(self, connection))]
     fn sync(&mut self, connection: &mut SqliteConnection) -> rusqlite::Result<()> {
         self.state.sync(&self.service.inner, |tracker_changes| {
             connection.tx(|tx| -> rusqlite::Result<()> {
                 for change in tracker_changes {
                     match change {
                         ObservedTableOp::Add(table_name, id) => {
+                            tracing::trace!("Add watcher for table {table_name} id={id}");
                             Self::create_triggers(tx, table_name, *id)?;
                         }
                         ObservedTableOp::Remove(table_name) => {
+                            tracing::trace!("Remove watcher for table {table_name}");
                             Self::drop_triggers(tx, table_name)?;
                         }
                     }
@@ -250,6 +256,7 @@ impl LocalTracker {
         Ok(())
     }
 
+    #[tracing::instrument(level=Level::TRACE, skip(self, connection))]
     fn check_for_changes(&mut self, connection: &SqliteConnection) -> rusqlite::Result<()> {
         let changes = self.check_tables(connection)?;
         self.service.publish_changes(changes);
@@ -528,6 +535,7 @@ impl TrackedResultRecorder {
 }
 
 impl TrackerServiceInner {
+    #[tracing::instrument(name="TrackerService", level= Level::TRACE, skip(receiver, service, pool))]
     fn background_loop(
         receiver: Receiver<TrackerResult>,
         service: Arc<TrackerServiceInner>,
@@ -569,6 +577,7 @@ impl TrackerServiceInner {
             // resolve tree names;
             recorder.resolve_table_names(&service);
 
+            tracing::trace!("Changes detected on tables: {:?}", recorder.tables);
             // publish changes;
             {
                 let accessor = service.observers.read();

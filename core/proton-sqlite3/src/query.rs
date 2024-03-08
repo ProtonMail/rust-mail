@@ -78,6 +78,7 @@ impl<Q: ObservableQuery> TrackerObserver for QueryTrackerObserver<Q> {
     }
 
     fn on_tables_changed(&self, _: &BTreeSet<String>, pool: &SqliteConnectionPool) {
+        tracing::debug!("Observable Query {} updated", self.query.debug_name());
         let r = match run_query(&self.query, pool) {
             Ok(r) => r,
             Err(e) => {
