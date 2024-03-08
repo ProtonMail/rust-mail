@@ -66,7 +66,7 @@ impl<T: VerifiedData> AttachmentDecrypted<T> {
     pub fn get_verification_status(&self) -> AttachmentVerification {
         let status = self
             .0
-            .get_verification_status()
+            .verification_status()
             .unwrap_or(VerificationStatus::NotSigned(
                 "No signature provided".into(),
             ));
@@ -93,7 +93,7 @@ impl<'a, R: io::Read + 'a, T: Decryptor<'a>> AttachmentDecryptedReader<'a, R, T>
     pub fn get_verification_status(&self) -> AttachmentVerification {
         let status = self
             .0
-            .get_verification_status()
+            .verification_status()
             .unwrap_or(VerificationStatus::NotSigned(
                 "No valid signature provided".into(),
             ));

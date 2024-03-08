@@ -175,7 +175,10 @@ fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
     );
 
     let verification_status = decrypted_attachment.get_verification_status();
-    assert!(matches!(verification_status.status, VerificationStatus::Ok));
+    assert!(matches!(
+        verification_status.status,
+        VerificationStatus::Ok(_)
+    ));
 }
 
 fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetdata) {
@@ -199,7 +202,10 @@ fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetd
     assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
 
     let verification_status = verification_reader.get_verification_status();
-    assert!(matches!(verification_status.status, VerificationStatus::Ok));
+    assert!(matches!(
+        verification_status.status,
+        VerificationStatus::Ok(_)
+    ));
 }
 
 #[test]
