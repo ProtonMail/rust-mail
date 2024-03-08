@@ -32,7 +32,7 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedUserKey<Priv, Pu
 }
 
 impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedUserKey<Priv, Pub> {
-    fn as_public_key_ref(&self) -> &Pub {
+    fn as_public_key(&self) -> &Pub {
         &self.public_key
     }
 }
@@ -56,7 +56,7 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedAddressKey<Priv,
 }
 
 impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedAddressKey<Priv, Pub> {
-    fn as_public_key_ref(&self) -> &Pub {
+    fn as_public_key(&self) -> &Pub {
         &self.public_key
     }
 }

@@ -84,7 +84,7 @@ impl<T: PrivateKey> AsRef<T> for TestAddressKey<T> {
 struct TestAddressPublicKey<T: PublicKey>(T);
 
 impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
-    fn as_public_key_ref(&self) -> &T {
+    fn as_public_key(&self) -> &T {
         &self.0
     }
 }
