@@ -1,3 +1,7 @@
+[bindings.swift]
+module_name="proton_mail"
+
 [bindings.kotlin]
+package_name="com.proton.mail"
 android=true
 android_cleaner=true
