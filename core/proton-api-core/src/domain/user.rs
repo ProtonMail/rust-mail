@@ -1,7 +1,7 @@
 use crate::domain::ProtonBoolean;
-use proton_crypto_account::domain::{KeyError, PrivateKeyRing, UserKeys};
-use proton_crypto_account::keyring::LockedKey;
-use proton_crypto_account::proton_crypto::crypto::{PGPProvider, PGPProviderSync};
+use proton_crypto_account::domain::{DecryptedUserKey, KeyError, UnlockResult, UserKeys};
+use proton_crypto_account::keys::LockedKey;
+use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{SaltError, SaltedPassword, Salts};
 use serde;
@@ -139,7 +139,7 @@ impl User {
         &self,
         provider: &PGP,
         salted_password: &SaltedPassword<<SRP as SRPProvider>::HashedPassword>,
-    ) -> Result<PrivateKeyRing<<PGP as PGPProvider>::PrivateKey>, KeyError> {
+    ) -> UnlockResult<DecryptedUserKey<<PGP>::PrivateKey, <PGP>::PublicKey>> {
         self.keys.unlock(provider, salted_password)
     }
 }

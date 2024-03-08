@@ -6,7 +6,7 @@ use proton_api_core::domain::{
     UserSettingsTimeFormat, UserSettingsWeekStart,
 };
 use proton_api_core::exports::crypto::domain::UserKeys;
-use proton_api_core::exports::crypto::keyring::{KeyId, LockedKey};
+use proton_api_core::exports::crypto::keys::{KeyId, LockedKey};
 
 #[cfg(test)]
 fn new_core_test_connection() -> crate::CoreSqliteConnection {
@@ -166,6 +166,7 @@ fn new_test_user() -> User {
             flags: None,
             recovery_secret: Some("recovery_secret".to_string()),
             recovery_secret_signature: Some("recovery_signature".to_string()),
+            address_forwarding_id: None,
         }]),
         product_used_space: UserProductUsedSpace {
             calendar: 23,

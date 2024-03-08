@@ -5,7 +5,7 @@ use proton_api_core::domain::{
     UserSettingsPhone, UserSettingsReferral,
 };
 use proton_api_core::exports::crypto::domain::UserKeys;
-use proton_api_core::exports::crypto::keyring::{KeyId, LockedKey};
+use proton_api_core::exports::crypto::keys::{KeyId, LockedKey};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
 use proton_sqlite3::utils::{gen_variable_in_argument_list, mapped_rows_to_vec, RowIndexAllocator};
 use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
@@ -238,6 +238,7 @@ impl UserKeySelector {
             flags: None,
             recovery_secret: r.get(5)?,
             recovery_secret_signature: r.get(6)?,
+            address_forwarding_id: None,
         })
     }
 }
