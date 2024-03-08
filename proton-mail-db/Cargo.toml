@@ -9,6 +9,7 @@ edition = "2021"
 proton-api-mail = { path="../proton-api-mail", features = ["sql"]}
 proton-sqlite3 = {workspace=true}
 uuid = {version = "1.7", features = ["v4"]}
+uniffi = {workspace=true, optional = true}
 
 [dev-dependencies]
 tracing-subscriber = {workspace=true}
@@ -16,3 +17,6 @@ lazy_static = {workspace=true}
 
 [lints]
 workspace = true
+
+[features]
+uniffi= ["dep:uniffi", "proton-api-mail/uniffi"]

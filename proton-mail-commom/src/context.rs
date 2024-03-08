@@ -12,6 +12,7 @@ use proton_mail_db::DBMigrationError;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
 pub enum MailContextError {
     #[error("Database Error: {0}")]

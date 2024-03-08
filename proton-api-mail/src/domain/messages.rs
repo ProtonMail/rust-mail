@@ -80,6 +80,7 @@ pub enum MimeType {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(crate = "self::serde", rename_all = "snake_case")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Disposition {
     Inline,
     Attachment,
@@ -175,6 +176,7 @@ pub struct Attachment {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AttachmentMetadata {
     #[serde(rename = "ID")]
     pub id: AttachmentId,

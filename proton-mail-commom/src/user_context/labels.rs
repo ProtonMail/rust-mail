@@ -1,8 +1,8 @@
 use crate::{MailContextResult, MailUserContext};
-use proton_api_mail::domain::{LabelId, ALL_LABEL_TYPES};
+use proton_api_mail::domain::{LabelId, LabelType, ALL_LABEL_TYPES};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
-use proton_mail_db::{DBResult, LocalLabel, LocalLabelId};
+use proton_mail_db::{DBResult, LocalLabel, LocalLabelId, LocalLabelWithCount};
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -43,6 +43,17 @@ impl MailUserContext {
     pub fn get_label(&self, id: LocalLabelId) -> MailContextResult<Option<LocalLabel>> {
         let conn = self.new_db_connection()?;
         let r = conn.as_connection_ref().get_local_label(id)?;
+        Ok(r)
+    }
+
+    pub fn get_labels_by_type(
+        &self,
+        label_type: LabelType,
+    ) -> MailContextResult<Vec<LocalLabelWithCount>> {
+        let conn = self.new_db_connection()?;
+        let r = conn
+            .as_connection_ref()
+            .get_local_label_by_type_ordered_with_conversation_count(label_type)?;
         Ok(r)
     }
 }

@@ -2,9 +2,9 @@ use crate::{new_test_connection, with_tx};
 use proton_api_mail::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType,
 };
+use proton_api_mail::exports::crypto::keys::{KeyId, LockedKey};
 use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
-use proton_api_mail::proton_api_core::exports::crypto::keyring::{KeyId, LockedKey};
 
 #[test]
 fn test_address_create() {
@@ -95,6 +95,7 @@ fn creat_test_address() -> Address {
             flags: None,
             recovery_secret: None,
             recovery_secret_signature: None,
+            address_forwarding_id: None,
         }]),
         catch_all: false,
         proton_mx: false,
@@ -134,6 +135,7 @@ fn creat_test_address_updated() -> Address {
             flags: None,
             recovery_secret: None,
             recovery_secret_signature: None,
+            address_forwarding_id: None,
         }]),
         catch_all: false,
         proton_mx: false,

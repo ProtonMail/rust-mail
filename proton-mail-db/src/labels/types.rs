@@ -6,6 +6,7 @@ use crate::ids::new_u64_type;
 
 new_u64_type!(LocalLabelId);
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalLabel {
     pub id: LocalLabelId,
     pub rid: Option<LabelId>,
@@ -21,6 +22,7 @@ pub struct LocalLabel {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalLabelWithCount {
     pub id: LocalLabelId,
     pub rid: Option<LabelId>,
@@ -87,6 +89,9 @@ impl From<Label> for RemoteLabel {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LabelColor(String);
+
+#[cfg(feature = "uniffi")]
+uniffi::custom_newtype!(LabelColor, String);
 
 impl LabelColor {
     pub fn purple() -> Self {

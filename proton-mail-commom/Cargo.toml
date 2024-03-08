@@ -11,6 +11,10 @@ proton-async= {workspace=true}
 proton-mail-db = {path ="../proton-mail-db"}
 proton-api-mail = {path ="../proton-api-mail"}
 proton-event-loop = {workspace=true}
+uniffi = {optional = true, workspace=true}
 
 [lints]
 workspace = true
+
+[features]
+uniffi=["dep:uniffi", "proton-api-mail/uniffi", "proton-event-loop/uniffi", "proton-core-common/uniffi", "proton-mail-db/uniffi"]

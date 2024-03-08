@@ -24,7 +24,7 @@ pub enum MailboxError {
     ),
 }
 
-/// Abstraction trait to make it easier to integrate mailbox in different target platforms. E.g.:
+/// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:
 /// Some platforms are able to use the [`LiveQuery`] type and other platform may benefit from
 /// a different solution.
 pub trait MailboxObservableQueryBuilder<Q: ObservableQuery> {
@@ -51,11 +51,11 @@ pub struct Mailbox {
 }
 
 pub trait MailboxBackgroundResult<T: Send>: Send + Sync {
-    fn on_background_error(&self, result: MailboxResult<T>);
+    fn on_background_result(&self, result: MailboxResult<T>);
 }
 
 impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> for F {
-    fn on_background_error(&self, result: MailboxResult<T>) {
+    fn on_background_result(&self, result: MailboxResult<T>) {
         (self)(result);
     }
 }
@@ -98,7 +98,7 @@ impl Mailbox {
             .async_runtime()
             .spawn(async move {
                 let result = ctx.logout().await;
-                cb.on_background_error(result.map_err(|e| e.into()));
+                cb.on_background_result(result.map_err(|e| e.into()));
             });
     }
 }
