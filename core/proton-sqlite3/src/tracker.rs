@@ -226,7 +226,7 @@ impl LocalTracker {
     fn init(&mut self, connection: &mut SqliteConnection) -> rusqlite::Result<()> {
         // create tracking table and cleanup previous data if re-used from a connection pool.
         connection.tx(|tx| {
-            tx.execute(&format!("CREATE TEMP TABLE IF NOT EXISTS {TRACKER_TABLE_NAME} (version INTEGER PRIMARY KEY AUTOINCREMENT, t INTEGER)"),())?;
+            tx.execute(&format!("CREATE TEMP TABLE IF NOT EXISTS {TRACKER_TABLE_NAME} (version INTEGER PRIMARY KEY AUTOINCREMENT, t INTEGER UNIQUE)"),())?;
             tx.execute(&format!("DELETE FROM {TRACKER_TABLE_NAME}"),())
         })?;
 
