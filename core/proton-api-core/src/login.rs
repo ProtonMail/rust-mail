@@ -99,8 +99,8 @@ impl LoginFlow {
                 email: username.to_string(),
                 user_id: auth_response.user_id,
                 uid: auth_response.uid,
-                refresh_token: auth_response.refresh_token.0,
-                access_token: auth_response.access_token.0,
+                refresh_token: auth_response.refresh_token,
+                access_token: auth_response.access_token,
                 scope: auth_response.scope,
             };
 

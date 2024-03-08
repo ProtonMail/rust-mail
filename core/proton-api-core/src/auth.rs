@@ -1,41 +1,18 @@
 use crate::domain::{SecretString, Uid, UserId};
 use crate::http::HttpRequestError;
 use proton_async::sync::RwLock;
+use secrecy::ExposeSecret;
 use serde::Deserialize;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 pub struct AuthScope(String);
 
-impl AsRef<str> for AuthScope {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
+#[derive(Deserialize, Debug, Clone)]
+pub struct RefreshToken(SecretString);
 
-impl<T: Into<String>> From<T> for AuthScope {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-#[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::ToSql for AuthScope {
-    fn to_sql(
-        &self,
-    ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
-        self.0.to_sql()
-    }
-}
-
-#[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::FromSql for AuthScope {
-    fn column_result(
-        value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
-    ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
-        String::column_result(value).map(Self)
-    }
-}
+#[derive(Deserialize, Debug, Clone)]
+pub struct AccessToken(SecretString);
 
 /// Session Authentication Data.
 #[derive(Clone)]
@@ -47,9 +24,9 @@ pub struct Auth {
     /// Session UID.
     pub uid: Uid,
     /// Refresh Token
-    pub refresh_token: SecretString,
+    pub refresh_token: RefreshToken,
     /// Auth token
-    pub access_token: SecretString,
+    pub access_token: AccessToken,
     /// Access scopes
     pub scope: AuthScope,
 }
@@ -64,8 +41,8 @@ pub trait AuthStore: Send + Sync + 'static {
     fn refresh_auth(
         &mut self,
         uid: Uid,
-        access_token: SecretString,
-        refresh_token: SecretString,
+        access_token: AccessToken,
+        refresh_token: RefreshToken,
         scope: AuthScope,
     ) -> Result<(), Box<dyn std::error::Error>>;
     fn set_scopes(
@@ -111,8 +88,8 @@ impl AuthStore for InMemoryStore {
     fn refresh_auth(
         &mut self,
         uid: Uid,
-        access_token: SecretString,
-        refresh_token: SecretString,
+        access_token: AccessToken,
+        refresh_token: RefreshToken,
         scope: AuthScope,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(auth) = &mut self.auth {
@@ -168,8 +145,8 @@ impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
     fn refresh_auth(
         &mut self,
         uid: Uid,
-        access_token: SecretString,
-        refresh_token: SecretString,
+        access_token: AccessToken,
+        refresh_token: RefreshToken,
         scope: AuthScope,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.auth_store
@@ -194,5 +171,58 @@ impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
 impl<T: AuthStore> VersionedAuthStore for VersionedAuthStoreWrapper<T> {
     fn auth_refresh_version(&self) -> u32 {
         self.version
+    }
+}
+
+impl AccessToken {
+    pub fn expose_secret(&self) -> &str {
+        self.0.expose_secret()
+    }
+}
+
+impl RefreshToken {
+    pub fn expose_secret(&self) -> &str {
+        self.0.expose_secret()
+    }
+}
+impl<T: Into<String>> From<T> for AccessToken {
+    fn from(value: T) -> Self {
+        Self(SecretString::new(value.into()))
+    }
+}
+
+impl<T: Into<String>> From<T> for RefreshToken {
+    fn from(value: T) -> Self {
+        Self(SecretString::new(value.into()))
+    }
+}
+
+impl AsRef<str> for AuthScope {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl<T: Into<String>> From<T> for AuthScope {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+#[cfg(feature = "sql")]
+impl proton_sqlite3::rusqlite::types::ToSql for AuthScope {
+    fn to_sql(
+        &self,
+    ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl proton_sqlite3::rusqlite::types::FromSql for AuthScope {
+    fn column_result(
+        value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
+    ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        String::column_result(value).map(Self)
     }
 }

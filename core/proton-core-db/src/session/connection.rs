@@ -1,5 +1,8 @@
 use crate::session::types::EncryptedUserSession;
-use crate::{DBResult, EncryptedData, SessionSqliteConnectionImpl};
+use crate::{
+    DBResult, EncryptedAccessToken, EncryptedData, EncryptedRefreshToken,
+    SessionSqliteConnectionImpl,
+};
 use proton_api_core::auth::AuthScope;
 use proton_api_core::domain::{Uid, UserId};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
@@ -14,8 +17,8 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
                 &session.user_id,
                 &session.email,
                 &session.name,
-                &session.access_token,
-                &session.refresh_token,
+                session.access_token.as_ref(),
+                &session.refresh_token.as_ref(),
                 &session.scopes,
             ),
         )?;
@@ -26,13 +29,13 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
         &mut self,
         user_id: &UserId,
         session_id: &Uid,
-        access_token: &EncryptedData,
-        refresh_token: &EncryptedData,
+        access_token: &EncryptedAccessToken,
+        refresh_token: &EncryptedRefreshToken,
         scopes: &AuthScope,
     ) -> DBResult<()> {
         self.0.execute(
             "UPDATE core_sessions SET access_token=?, refresh_token=?, scopes=?,id=? WHERE user_id=?",
-            (access_token, refresh_token, scopes, session_id, user_id),
+            (access_token.as_ref(), refresh_token.as_ref(), scopes, session_id, user_id),
         )?;
         Ok(())
     }
@@ -95,8 +98,10 @@ impl EncryptedUserSessionSelector {
             user_id: r.get(1)?,
             email: r.get(2)?,
             name: r.get(3)?,
-            access_token: r.get(4)?,
-            refresh_token: r.get(5)?,
+            access_token: r.get::<usize, EncryptedData>(4).map(EncryptedAccessToken)?,
+            refresh_token: r
+                .get::<usize, EncryptedData>(5)
+                .map(EncryptedRefreshToken)?,
             scopes: r.get(6)?,
         })
     }

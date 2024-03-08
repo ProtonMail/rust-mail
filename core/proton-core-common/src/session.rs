@@ -1,14 +1,14 @@
 use crate::os::{session_encryption_key_from_key_chain, KeyChain, KeyChainError};
-use proton_api_core::auth::{Auth, AuthScope};
-use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
+use proton_api_core::auth::{AccessToken, Auth, AuthScope, RefreshToken};
+use proton_api_core::domain::Uid;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_api_core::http::HttpRequestError;
 use proton_core_db::proton_sqlite3::SqliteConnectionPool;
 use proton_core_db::{
-    DBResult, DecryptedUserSession, EncryptedData, EncryptedUserSession, SessionEncryptionKey,
-    SessionSqliteConnection,
+    DBResult, DecryptedUserSession, EncryptedAccessToken, EncryptedRefreshToken,
+    EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
 };
 use std::error::Error;
 use std::sync::Arc;
@@ -79,16 +79,14 @@ impl CoreSession {
 
     fn encrypt_tokens(
         &self,
-        key: SessionEncryptionKey,
-        access: &SecretString,
-        refresh: &SecretString,
-    ) -> Result<(EncryptedData, EncryptedData), CoreSessionError> {
-        let access = key
-            .encrypt(access.expose_secret().as_bytes())
-            .map_err(|_| CoreSessionError::Crypto)?;
-        let refresh = key
-            .encrypt(refresh.expose_secret().as_bytes())
-            .map_err(|_| CoreSessionError::Crypto)?;
+        key: &SessionEncryptionKey,
+        access: &AccessToken,
+        refresh: &RefreshToken,
+    ) -> Result<(EncryptedAccessToken, EncryptedRefreshToken), CoreSessionError> {
+        let access =
+            EncryptedAccessToken::new(access, key).map_err(|_| CoreSessionError::Crypto)?;
+        let refresh =
+            EncryptedRefreshToken::new(refresh, key).map_err(|_| CoreSessionError::Crypto)?;
         Ok((access, refresh))
     }
     fn on_error(&self, error: &CoreSessionError) {
@@ -112,7 +110,7 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         })?;
 
         let (encrypted_access_token, encrypted_refresh_token) = self
-            .encrypt_tokens(session_key, &auth.access_token, &auth.refresh_token)
+            .encrypt_tokens(&session_key, &auth.access_token, &auth.refresh_token)
             .map_err(|e| {
                 error!("Failed to encrypt tokens");
                 self.on_error(&e);
@@ -154,8 +152,8 @@ impl proton_api_core::auth::AuthStore for CoreSession {
     fn refresh_auth(
         &mut self,
         uid: Uid,
-        access_token: SecretString,
-        refresh_token: SecretString,
+        access_token: AccessToken,
+        refresh_token: RefreshToken,
         scope: AuthScope,
     ) -> Result<(), Box<dyn Error>> {
         let user_id = {
@@ -173,7 +171,7 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         })?;
 
         let (encrypted_access_token, encrypted_refresh_token) = self
-            .encrypt_tokens(session_key, &access_token, &refresh_token)
+            .encrypt_tokens(&session_key, &access_token, &refresh_token)
             .map_err(|e| {
                 error!("Failed to encrypt tokens");
                 self.on_error(&e);
@@ -257,8 +255,8 @@ fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
 
 fn auth_to_encrypted_session(
     auth: Auth,
-    encrypted_access_token: EncryptedData,
-    encrypted_refresh_token: EncryptedData,
+    encrypted_access_token: EncryptedAccessToken,
+    encrypted_refresh_token: EncryptedRefreshToken,
 ) -> EncryptedUserSession {
     EncryptedUserSession {
         session_id: auth.uid,

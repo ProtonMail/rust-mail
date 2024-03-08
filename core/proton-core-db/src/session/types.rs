@@ -5,8 +5,8 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, AesGcm, Key, KeySizeUser,
 };
-use proton_api_core::auth::AuthScope;
-use proton_api_core::domain::{ExposeSecret, SecretString, Uid, UserId};
+use proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
+use proton_api_core::domain::{Uid, UserId};
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::string::FromUtf8Error;
@@ -17,8 +17,8 @@ pub struct DecryptedUserSession {
     pub user_id: UserId,
     pub name: Option<String>,
     pub email: String,
-    pub refresh_token: SecretString,
-    pub access_token: SecretString,
+    pub refresh_token: RefreshToken,
+    pub access_token: AccessToken,
     pub scopes: AuthScope,
 }
 
@@ -27,8 +27,12 @@ impl DecryptedUserSession {
         &self,
         key: &SessionEncryptionKey,
     ) -> Result<EncryptedUserSession, aes_gcm::Error> {
-        let encrypted_access_token = key.encrypt(self.access_token.expose_secret().as_bytes())?;
-        let encrypted_refresh_token = key.encrypt(self.refresh_token.expose_secret().as_bytes())?;
+        let encrypted_access_token = key
+            .encrypt(self.access_token.expose_secret().as_bytes())
+            .map(EncryptedAccessToken)?;
+        let encrypted_refresh_token = key
+            .encrypt(self.refresh_token.expose_secret().as_bytes())
+            .map(EncryptedRefreshToken)?;
 
         Ok(EncryptedUserSession {
             session_id: self.session_id.clone(),
@@ -48,8 +52,8 @@ pub struct EncryptedUserSession {
     pub user_id: UserId,
     pub name: Option<String>,
     pub email: String,
-    pub refresh_token: EncryptedData,
-    pub access_token: EncryptedData,
+    pub refresh_token: EncryptedRefreshToken,
+    pub access_token: EncryptedAccessToken,
     pub scopes: AuthScope,
 }
 
@@ -59,15 +63,15 @@ impl EncryptedUserSession {
         key: &SessionEncryptionKey,
     ) -> Result<DecryptedUserSession, DecryptionError> {
         let decrypted_access_token = key
-            .decrypt(&self.access_token)
+            .decrypt(&self.access_token.0)
             .map_err(|_| DecryptionError::Decryption)?;
-        let decrypted_access_token = SecretString::new(String::from_utf8(decrypted_access_token)?);
+        let decrypted_access_token = AccessToken::from(String::from_utf8(decrypted_access_token)?);
 
         let decrypted_refresh_token = key
-            .decrypt(&self.refresh_token)
+            .decrypt(&self.refresh_token.0)
             .map_err(|_| DecryptionError::Decryption)?;
         let decrypted_refresh_token =
-            SecretString::new(String::from_utf8(decrypted_refresh_token)?);
+            RefreshToken::from(String::from_utf8(decrypted_refresh_token)?);
 
         Ok(DecryptedUserSession {
             session_id: self.session_id.clone(),
@@ -92,6 +96,33 @@ pub enum DecryptionError {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EncryptedData {
     ciphertext_nonce: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct EncryptedAccessToken(pub(crate) EncryptedData);
+
+impl EncryptedAccessToken {
+    pub fn new(token: &AccessToken, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(token.expose_secret().as_bytes()).map(Self)
+    }
+}
+impl AsRef<[u8]> for EncryptedAccessToken {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct EncryptedRefreshToken(pub(crate) EncryptedData);
+
+impl EncryptedRefreshToken {
+    pub fn new(token: &RefreshToken, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(token.expose_secret().as_bytes()).map(Self)
+    }
+}
+impl AsRef<[u8]> for EncryptedRefreshToken {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
 }
 
 impl AsRef<[u8]> for EncryptedData {

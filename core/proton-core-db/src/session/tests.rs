@@ -1,5 +1,5 @@
 use crate::{DBResult, SessionEncryptionKey};
-use proton_api_core::auth::AuthScope;
+use proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
 
 #[test]
 fn test_encryption() {
@@ -22,14 +22,14 @@ fn new_test_connection() -> crate::SessionSqliteConnection {
 #[test]
 fn test_session_store_load() {
     use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{ExposeSecret, SecretString, Uid, UserId};
+    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),
         user_id: UserId::from("user_id"),
         name: Some("foobar".to_string()),
         email: "foo@bar.com".to_string(),
-        refresh_token: SecretString::new("token".to_string()),
-        access_token: SecretString::new("access".to_string()),
+        refresh_token: RefreshToken::from("token".to_string()),
+        access_token: AccessToken::from("access".to_string()),
         scopes: AuthScope::from("Scope"),
     };
 
@@ -69,14 +69,14 @@ fn test_session_store_load() {
 #[test]
 fn test_session_update() {
     use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{ExposeSecret, SecretString, Uid, UserId};
+    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),
         user_id: UserId::from("user_id"),
         name: Some("foobar".to_string()),
         email: "foo@bar.com".to_string(),
-        refresh_token: SecretString::new("token".to_string()),
-        access_token: SecretString::new("access".to_string()),
+        refresh_token: RefreshToken::from("token".to_string()),
+        access_token: AccessToken::from("access".to_string()),
         scopes: AuthScope::from("Scope"),
     };
 
@@ -85,8 +85,8 @@ fn test_session_update() {
         user_id: UserId::from("user_id"),
         name: Some("foobar".to_string()),
         email: "foo@bar.com".to_string(),
-        refresh_token: SecretString::new("refreshed".to_string()),
-        access_token: SecretString::new("another token".to_string()),
+        refresh_token: RefreshToken::from("refreshed".to_string()),
+        access_token: AccessToken::from("another token".to_string()),
         scopes: AuthScope::from("Scope Scope2"),
     };
 
@@ -138,14 +138,14 @@ fn test_session_update() {
 #[test]
 fn test_session_delete_user_id() {
     use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{SecretString, Uid, UserId};
+    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),
         user_id: UserId::from("user_id"),
         name: Some("foobar".to_string()),
         email: "foo@bar.com".to_string(),
-        refresh_token: SecretString::new("token".to_string()),
-        access_token: SecretString::new("access".to_string()),
+        refresh_token: RefreshToken::from("token".to_string()),
+        access_token: AccessToken::from("access".to_string()),
         scopes: AuthScope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
@@ -170,14 +170,14 @@ fn test_session_delete_user_id() {
 #[test]
 fn test_session_delete_session_id() {
     use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{SecretString, Uid, UserId};
+    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),
         user_id: UserId::from("user_id"),
         name: Some("foobar".to_string()),
         email: "foo@bar.com".to_string(),
-        refresh_token: SecretString::new("token".to_string()),
-        access_token: SecretString::new("access".to_string()),
+        refresh_token: RefreshToken::from("token".to_string()),
+        access_token: AccessToken::from("access".to_string()),
         scopes: AuthScope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();

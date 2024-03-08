@@ -1,8 +1,8 @@
-use crate::auth::AuthScope;
-use crate::domain::{HumanVerificationLoginData, SecretString, TFAStatus, Uid, UserId};
+use crate::auth::{AccessToken, AuthScope, RefreshToken};
+use crate::domain::{HumanVerificationLoginData, TFAStatus, Uid, UserId};
 use crate::http;
 use crate::http::{RequestData, X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 
 #[doc(hidden)]
@@ -73,8 +73,8 @@ pub struct AuthResponse {
     #[serde(rename = "UID")]
     pub uid: Uid,
     pub token_type: Option<String>,
-    pub access_token: DeserializableSecretString,
-    pub refresh_token: DeserializableSecretString,
+    pub access_token: AccessToken,
+    pub refresh_token: RefreshToken,
     pub server_proof: String,
     pub scope: AuthScope,
     #[serde(rename = "2FA")]
@@ -192,8 +192,8 @@ pub struct AuthRefreshResponse {
     #[serde(rename = "UID")]
     pub uid: Uid,
     pub token_type: Option<String>,
-    pub access_token: DeserializableSecretString,
-    pub refresh_token: DeserializableSecretString,
+    pub access_token: AccessToken,
+    pub refresh_token: RefreshToken,
     pub scope: AuthScope,
 }
 
@@ -256,18 +256,5 @@ impl<'a> http::RequestDesc for CaptchaRequest<'a> {
         }
 
         data.query("Token", self.token)
-    }
-}
-
-#[derive(Debug)]
-pub struct DeserializableSecretString(pub SecretString);
-
-impl<'de> Deserialize<'de> for DeserializableSecretString {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let string = String::deserialize(deserializer)?;
-        Ok(Self(SecretString::new(string)))
     }
 }

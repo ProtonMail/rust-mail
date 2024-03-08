@@ -8,7 +8,6 @@ use crate::requests::{
 };
 use anyhow::anyhow;
 use proton_crypto_account::salts::Salts;
-use secrecy::ExposeSecret;
 
 /// Authenticated Session from which one can access data/functionality restricted to authenticated
 /// users.
@@ -159,8 +158,8 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
                             refresh_guard
                                 .refresh_auth(
                                     auth_refresh_response.uid,
-                                    auth_refresh_response.refresh_token.0,
-                                    auth_refresh_response.access_token.0,
+                                    auth_refresh_response.access_token,
+                                    auth_refresh_response.refresh_token,
                                     auth_refresh_response.scope,
                                 )
                                 .map_err(|e| {
