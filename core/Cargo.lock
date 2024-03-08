@@ -1478,6 +1478,7 @@ dependencies = [
 name = "proton-core-common"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.0",
  "proton-api-core",
  "proton-core-db",
  "proton-event-loop",

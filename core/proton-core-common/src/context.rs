@@ -4,7 +4,7 @@ use crate::session::CoreSession;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
 use crate::CoreSessionCallback;
 use proton_api_core::auth::{new_arc_auth_store, ArcAuthStore};
-use proton_api_core::domain::UserId;
+use proton_api_core::domain::{ExposeSecret, SecretString, UserId};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::proton_sqlite3::SqliteMode;
 use proton_api_core::exports::tracing::Level;
@@ -231,11 +231,8 @@ impl CoreContext {
         else {
             return Err(CoreContextError::KeyChainHasNoKey);
         };
-
-        SessionEncryptionKey::with_bytes(key).map_err(|mut v| {
-            v.fill(0);
-            CoreContextError::Crypto
-        })
+        let key = SecretString::new(key);
+        SessionEncryptionKey::from_base64(key.expose_secret()).ok_or(CoreContextError::Crypto)
     }
 
     fn new_user_db_pool(&self, user_id: &UserId) -> CoreContextResult<SqliteConnectionPool> {

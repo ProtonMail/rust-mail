@@ -7,6 +7,8 @@ use aes_gcm::{
 };
 use proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
 use proton_api_core::domain::{Uid, UserId};
+use proton_api_core::exports::base64::prelude::BASE64_STANDARD;
+use proton_api_core::exports::base64::Engine;
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::string::FromUtf8Error;
@@ -150,12 +152,6 @@ pub struct SessionEncryptionKey {
     key: Key<Aes256Gcm>,
 }
 
-impl SessionEncryptionKey {
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.key.to_vec()
-    }
-}
-
 impl Drop for SessionEncryptionKey {
     fn drop(&mut self) {
         self.key.zeroize();
@@ -208,5 +204,25 @@ impl SessionEncryptionKey {
         let ciphertext = &data.ciphertext_nonce[0..cipher_text_size];
         let plain_text = cipher.decrypt(nonce, ciphertext)?;
         Ok(plain_text)
+    }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.key.to_vec()
+    }
+
+    pub fn to_base64(&self) -> String {
+        BASE64_STANDARD.encode(self.key)
+    }
+
+    pub fn from_base64(value: &str) -> Option<Self> {
+        let Ok(bytes) = BASE64_STANDARD.decode(value) else {
+            return None;
+        };
+
+        let Ok(key) = Self::with_bytes(bytes) else {
+            return None;
+        };
+
+        Some(key)
     }
 }

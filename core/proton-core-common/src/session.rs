@@ -1,6 +1,6 @@
-use crate::os::{session_encryption_key_from_key_chain, KeyChain, KeyChainError};
+use crate::os::{KeyChain, KeyChainError};
 use proton_api_core::auth::{AccessToken, Auth, AuthScope, RefreshToken};
-use proton_api_core::domain::Uid;
+use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
@@ -70,11 +70,12 @@ impl CoreSession {
     }
 
     fn get_encryption_key(&self) -> Result<SessionEncryptionKey, CoreSessionError> {
-        let bytes = self
-            .keychain
-            .get()?
-            .ok_or(CoreSessionError::KeyChainHasNoKey)?;
-        session_encryption_key_from_key_chain(bytes)
+        let string = SecretString::new(
+            self.keychain
+                .get()?
+                .ok_or(CoreSessionError::KeyChainHasNoKey)?,
+        );
+        SessionEncryptionKey::from_base64(string.expose_secret()).ok_or(CoreSessionError::Crypto)
     }
 
     fn encrypt_tokens(
