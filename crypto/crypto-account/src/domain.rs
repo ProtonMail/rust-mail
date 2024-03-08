@@ -105,34 +105,32 @@ impl UserKeys {
         let mut failed_keys = Vec::new();
         let mut decrypted_address_keys: Vec<DecryptedUserKey<_, _>> =
             Vec::with_capacity(self.0.len());
-        decrypted_address_keys.extend(self.0.iter().filter(|key| key.active).filter_map(
-            |locked_key| {
-                let decryption_result = provider.private_key_import(
-                    &locked_key.private_key,
-                    salted_password,
-                    DataEncoding::Armor,
-                );
-                let private_key = match decryption_result {
-                    Ok(key) => key,
-                    Err(err) => {
-                        failed_keys.push(KeyError::Unlock(locked_key.id.clone(), err));
-                        return None;
-                    }
-                };
-                let public_key = match provider.private_key_to_public_key(&private_key) {
-                    Ok(key) => key,
-                    Err(err) => {
-                        failed_keys.push(KeyError::PublicKeyExtraction(locked_key.id.clone(), err));
-                        return None;
-                    }
-                };
-                Some(DecryptedUserKey {
-                    private_key,
-                    public_key,
-                    id: locked_key.id.clone(),
-                })
-            },
-        ));
+        decrypted_address_keys.extend(self.0.iter().filter_map(|locked_key| {
+            let decryption_result = provider.private_key_import(
+                &locked_key.private_key,
+                salted_password,
+                DataEncoding::Armor,
+            );
+            let private_key = match decryption_result {
+                Ok(key) => key,
+                Err(err) => {
+                    failed_keys.push(KeyError::Unlock(locked_key.id.clone(), err));
+                    return None;
+                }
+            };
+            let public_key = match provider.private_key_to_public_key(&private_key) {
+                Ok(key) => key,
+                Err(err) => {
+                    failed_keys.push(KeyError::PublicKeyExtraction(locked_key.id.clone(), err));
+                    return None;
+                }
+            };
+            Some(DecryptedUserKey {
+                private_key,
+                public_key,
+                id: locked_key.id.clone(),
+            })
+        }));
         UnlockResult {
             unlocked_keys: decrypted_address_keys,
             failed: failed_keys,
@@ -228,43 +226,41 @@ impl AddressKeys {
         let mut failed_keys = Vec::new();
         let mut decrypted_address_keys: Vec<DecryptedAddressKey<_, _>> =
             Vec::with_capacity(self.0.len());
-        decrypted_address_keys.extend(self.0.iter().filter(|key| key.active).filter_map(
-            |locked_key| {
-                let (Some(token), Some(signature), Some(flags)) =
-                    (&locked_key.token, &locked_key.signature, &locked_key.flags)
-                else {
-                    failed_keys.push(KeyError::MissingValue(locked_key.id.clone()));
+        decrypted_address_keys.extend(self.0.iter().filter_map(|locked_key| {
+            let (Some(token), Some(signature), Some(flags)) =
+                (&locked_key.token, &locked_key.signature, &locked_key.flags)
+            else {
+                failed_keys.push(KeyError::MissingValue(locked_key.id.clone()));
+                return None;
+            };
+            let decryption_result = provider.private_key_import_from_token_refs(
+                &locked_key.private_key,
+                user_keys.as_ref(),
+                token,
+                signature,
+            );
+            let private_key = match decryption_result {
+                Ok(key) => key,
+                Err(err) => {
+                    failed_keys.push(KeyError::Unlock(locked_key.id.clone(), err));
                     return None;
-                };
-                let decryption_result = provider.private_key_import_from_token_refs(
-                    &locked_key.private_key,
-                    user_keys.as_ref(),
-                    token,
-                    signature,
-                );
-                let private_key = match decryption_result {
-                    Ok(key) => key,
-                    Err(err) => {
-                        failed_keys.push(KeyError::Unlock(locked_key.id.clone(), err));
-                        return None;
-                    }
-                };
-                let public_key = match provider.private_key_to_public_key(&private_key) {
-                    Ok(key) => key,
-                    Err(err) => {
-                        failed_keys.push(KeyError::PublicKeyExtraction(locked_key.id.clone(), err));
-                        return None;
-                    }
-                };
-                Some(DecryptedAddressKey {
-                    private_key,
-                    public_key,
-                    id: locked_key.id.clone(),
-                    flags: KeyFlag::from(*flags),
-                    primary: locked_key.primary,
-                })
-            },
-        ));
+                }
+            };
+            let public_key = match provider.private_key_to_public_key(&private_key) {
+                Ok(key) => key,
+                Err(err) => {
+                    failed_keys.push(KeyError::PublicKeyExtraction(locked_key.id.clone(), err));
+                    return None;
+                }
+            };
+            Some(DecryptedAddressKey {
+                private_key,
+                public_key,
+                id: locked_key.id.clone(),
+                flags: KeyFlag::from(*flags),
+                primary: locked_key.primary,
+            })
+        }));
         UnlockResult {
             unlocked_keys: decrypted_address_keys,
             failed: failed_keys,
