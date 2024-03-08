@@ -787,7 +787,7 @@ dependencies = [
 [[package]]
 name = "gopenpgp-sys"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#09dca6c3223b6e01add4988e93d4302301f965e7"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#bf44bb916b70cc40291ce359dcfd78eb76639c64"
 dependencies = [
  "base64 0.21.7",
  "bindgen",
@@ -1117,6 +1117,15 @@ dependencies = [
  "string_cache",
  "string_cache_codegen",
  "tendril",
+]
+
+[[package]]
+name = "matchers"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
+dependencies = [
+ "regex-automata 0.1.10",
 ]
 
 [[package]]
@@ -1471,7 +1480,7 @@ dependencies = [
 [[package]]
 name = "proton-api-core"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#515828ca80723eed931678d8a1b35c2e0a3a8370"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ca30c23a9edbf9291d34c731ee2ba391eb9ae93d"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
@@ -1502,7 +1511,7 @@ dependencies = [
 [[package]]
 name = "proton-async"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#515828ca80723eed931678d8a1b35c2e0a3a8370"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ca30c23a9edbf9291d34c731ee2ba391eb9ae93d"
 dependencies = [
  "async-trait",
  "flume",
@@ -1515,28 +1524,31 @@ dependencies = [
 [[package]]
 name = "proton-core-common"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#515828ca80723eed931678d8a1b35c2e0a3a8370"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ca30c23a9edbf9291d34c731ee2ba391eb9ae93d"
 dependencies = [
+ "base64 0.22.0",
  "proton-api-core",
  "proton-core-db",
  "proton-event-loop",
+ "uniffi",
 ]
 
 [[package]]
 name = "proton-core-db"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#515828ca80723eed931678d8a1b35c2e0a3a8370"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ca30c23a9edbf9291d34c731ee2ba391eb9ae93d"
 dependencies = [
  "aes-gcm",
  "proton-api-core",
  "proton-sqlite3",
+ "uniffi",
  "zeroize",
 ]
 
 [[package]]
 name = "proton-crypto"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#09dca6c3223b6e01add4988e93d4302301f965e7"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#bf44bb916b70cc40291ce359dcfd78eb76639c64"
 dependencies = [
  "gopenpgp-sys",
 ]
@@ -1544,22 +1556,25 @@ dependencies = [
 [[package]]
 name = "proton-crypto-account"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#09dca6c3223b6e01add4988e93d4302301f965e7"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#bf44bb916b70cc40291ce359dcfd78eb76639c64"
 dependencies = [
  "base64 0.21.7",
+ "futures",
  "proton-crypto",
  "serde",
+ "serde_repr",
  "thiserror",
 ]
 
 [[package]]
 name = "proton-event-loop"
 version = "0.4.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#515828ca80723eed931678d8a1b35c2e0a3a8370"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ca30c23a9edbf9291d34c731ee2ba391eb9ae93d"
 dependencies = [
  "paste",
  "proton-api-core",
  "proton-async",
+ "uniffi",
 ]
 
 [[package]]
@@ -1571,6 +1586,7 @@ dependencies = [
  "proton-core-common",
  "proton-event-loop",
  "proton-mail-db",
+ "uniffi",
 ]
 
 [[package]]
@@ -1581,6 +1597,7 @@ dependencies = [
  "proton-api-mail",
  "proton-sqlite3",
  "tracing-subscriber",
+ "uniffi",
  "uuid",
 ]
 
@@ -1597,7 +1614,10 @@ dependencies = [
 name = "proton-mail-uniffi"
 version = "0.1.0"
 dependencies = [
+ "proton-async",
+ "proton-mail-common",
  "proton-mail-message-detector",
+ "tracing-subscriber",
  "uniffi",
 ]
 
@@ -1613,7 +1633,7 @@ dependencies = [
 [[package]]
 name = "proton-sqlite3"
 version = "0.4.2"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#515828ca80723eed931678d8a1b35c2e0a3a8370"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ca30c23a9edbf9291d34c731ee2ba391eb9ae93d"
 dependencies = [
  "fixedbitset",
  "parking_lot",
@@ -1696,8 +1716,17 @@ checksum = "b62dbe01f0b06f9d8dc7d49e05a0785f153b00b2c227856282f671e0318c9b15"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-automata",
- "regex-syntax",
+ "regex-automata 0.4.6",
+ "regex-syntax 0.8.2",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
+dependencies = [
+ "regex-syntax 0.6.29",
 ]
 
 [[package]]
@@ -1708,8 +1737,14 @@ checksum = "86b83b8b9847f9bf95ef68afb0b8e6cdb80f498442f5179a29fad448fcc1eaea"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-syntax",
+ "regex-syntax 0.8.2",
 ]
+
+[[package]]
+name = "regex-syntax"
+version = "0.6.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f162c6dd7b008981e4d40210aca20b4bd0f9b60ca9271061b07f78537722f2e1"
 
 [[package]]
 name = "regex-syntax"
@@ -2422,10 +2457,14 @@ version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ad0f048c97dbd9faa9b7df56362b8ebcaa52adb06b498c050d2f4e32f90a7a8b"
 dependencies = [
+ "matchers",
  "nu-ansi-term",
+ "once_cell",
+ "regex",
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "tracing",
  "tracing-core",
  "tracing-log",
 ]

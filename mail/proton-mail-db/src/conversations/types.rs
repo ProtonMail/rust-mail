@@ -54,6 +54,7 @@ impl LocalConversation {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalConversationWithContext {
     pub id: LocalConversationId,
     pub remote_id: Option<ConversationId>,

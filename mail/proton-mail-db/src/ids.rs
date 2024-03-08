@@ -91,6 +91,9 @@ macro_rules! new_u64_type {
                 self.0.to_sql()
             }
         }
+
+        #[cfg(feature = "uniffi")]
+        uniffi::custom_newtype!($name, u64);
     };
 }
 

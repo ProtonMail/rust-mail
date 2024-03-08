@@ -85,3 +85,29 @@ pub(crate) fn with_tx(conn: &mut MailSqliteConnection, f: impl Fn(&mut MailSqlit
     })
     .expect("failed transaction");
 }
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
+
+#[cfg(feature = "uniffi")]
+mod type_forwarding {
+    // Required due to https://github.com/mozilla/uniffi-rs/issues/1988.
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::domain::ConversationId,
+        proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::domain::LabelId,
+        proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::domain::MessageId,
+        proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+}

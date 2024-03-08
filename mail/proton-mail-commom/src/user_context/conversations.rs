@@ -4,7 +4,7 @@ use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, error, Level};
 use proton_async::runtime::JoinHandle;
-use proton_mail_db::DBResult;
+use proton_mail_db::{DBResult, LocalConversationWithContext, LocalLabelId};
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -99,5 +99,17 @@ impl MailUserContext {
             Ok(())
         })?;
         Ok(())
+    }
+
+    pub fn conversations_with_context_for_label(
+        &self,
+        local_label_id: LocalLabelId,
+        count: usize,
+    ) -> MailContextResult<Vec<LocalConversationWithContext>> {
+        let connection = self.new_db_connection()?;
+        let v = connection
+            .as_connection_ref()
+            .get_conversations_with_context(local_label_id, count)?;
+        Ok(v)
     }
 }

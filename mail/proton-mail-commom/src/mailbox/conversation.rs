@@ -2,7 +2,7 @@ use crate::{
     Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
 use proton_api_mail::proton_api_core::exports::tracing;
-use proton_mail_db::{ConversationQuery, LocalLabelId};
+use proton_mail_db::{ConversationQuery, LocalConversationWithContext, LocalLabelId};
 impl Mailbox {
     pub fn switch_label(
         &mut self,
@@ -31,7 +31,7 @@ impl Mailbox {
                             e.into()
                         });
                     if let Some(cb) = cb {
-                        cb.on_background_error(r)
+                        cb.on_background_result(r)
                     }
                 });
         } else {
@@ -49,5 +49,12 @@ impl Mailbox {
             self.user_ctx.tracker_service().clone(),
             ConversationQuery::new(self.active_label.id, limit),
         )
+    }
+
+    pub fn conversations(&self, count: usize) -> MailboxResult<Vec<LocalConversationWithContext>> {
+        let v = self
+            .user_ctx
+            .conversations_with_context_for_label(self.active_label.id, count)?;
+        Ok(v)
     }
 }
