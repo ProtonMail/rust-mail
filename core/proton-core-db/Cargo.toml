@@ -10,6 +10,10 @@ proton-sqlite3 = {path ="../proton-sqlite3"}
 proton-api-core= {path ="../proton-api-core", features = ["sql"]}
 aes-gcm = {workspace=true}
 zeroize = {workspace=true}
+uniffi = {workspace=true, optional = true}
 
 [lints]
 workspace = true
+
+[features]
+uniffi = ["dep:uniffi", "proton-api-core/uniffi"]

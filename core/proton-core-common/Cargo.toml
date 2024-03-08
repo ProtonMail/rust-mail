@@ -9,6 +9,10 @@ edition = "2021"
 proton-api-core = {path = "../proton-api-core"}
 proton-core-db = {path = '../proton-core-db'}
 proton-event-loop = {path = "../proton-event-loop"}
+uniffi= {workspace =true, optional = true}
 
 [lints]
 workspace = true
+
+[features]
+uniffi=["proton-api-core/uniffi", "dep:uniffi", "proton-core-db/uniffi", "proton-event-loop/uniffi"]

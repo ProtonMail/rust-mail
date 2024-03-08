@@ -150,6 +150,12 @@ pub struct SessionEncryptionKey {
     key: Key<Aes256Gcm>,
 }
 
+impl SessionEncryptionKey {
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.key.to_vec()
+    }
+}
+
 impl Drop for SessionEncryptionKey {
     fn drop(&mut self) {
         self.key.zeroize();

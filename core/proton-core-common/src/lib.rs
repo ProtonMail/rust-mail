@@ -11,3 +11,6 @@ pub use user_context::*;
 
 pub use event_subscriber::*;
 pub use proton_core_db;
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();

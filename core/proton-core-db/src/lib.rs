@@ -21,3 +21,6 @@ pub type DBMigrationError = MigratorError;
 
 new_tracked_connection_wrapper!(CoreSqliteConnection);
 new_connection_wrapper!(SessionSqliteConnection);
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();

@@ -1481,6 +1481,7 @@ dependencies = [
  "proton-api-core",
  "proton-core-db",
  "proton-event-loop",
+ "uniffi",
 ]
 
 [[package]]
@@ -1490,6 +1491,7 @@ dependencies = [
  "aes-gcm",
  "proton-api-core",
  "proton-sqlite3",
+ "uniffi",
  "zeroize",
 ]
 
