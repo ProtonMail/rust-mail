@@ -23,7 +23,7 @@ impl Mailbox {
     ) -> Builder::Output {
         builder.build(
             self.user_ctx.tracker_service().clone(),
-            LabelsByTypeQueryWithConversationCount::new(LabelType::System),
+            LabelsByTypeQueryWithConversationCount::new(LabelType::Folder),
         )
     }
 
@@ -35,7 +35,7 @@ impl Mailbox {
     ) -> Builder::Output {
         builder.build(
             self.user_ctx.tracker_service().clone(),
-            LabelsByTypeQueryWithConversationCount::new(LabelType::System),
+            LabelsByTypeQueryWithConversationCount::new(LabelType::Label),
         )
     }
 
