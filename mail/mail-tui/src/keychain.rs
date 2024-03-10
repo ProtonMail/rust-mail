@@ -1,6 +1,5 @@
 use crate::state::APP_ID;
 use anyhow::anyhow;
-use hex::FromHexError;
 use proton_mail_common::proton_core_common::os::{KeyChain, KeyChainError};
 use proton_mail_common::proton_core_common::proton_core_db::SessionEncryptionKey;
 use secrecy::{ExposeSecret, SecretString};
@@ -23,17 +22,17 @@ impl AppKeyChain {
         let v = self.get()?;
         if v.is_none() {
             let key = SessionEncryptionKey::random();
-            self.store(key.as_ref())?;
+            self.store(key.to_base64())?;
         }
         Ok(())
     }
 }
 
 impl KeyChain for AppKeyChain {
-    fn store(&self, key: &[u8]) -> Result<(), KeyChainError> {
-        let hex_str = bytes_to_hex(key);
+    fn store(&self, key: String) -> Result<(), KeyChainError> {
+        let key = SecretString::new(key);
         self.entry
-            .set_password(&hex_str)
+            .set_password(key.expose_secret())
             .map_err(|e| KeyChainError::from(anyhow!(e)))?;
         Ok(())
     }
@@ -47,27 +46,13 @@ impl KeyChain for AppKeyChain {
         Ok(())
     }
 
-    fn get(&self) -> Result<Option<Vec<u8>>, KeyChainError> {
+    fn get(&self) -> Result<Option<String>, KeyChainError> {
         match self.entry.get_password() {
-            Ok(hex_str) => {
-                let hex_str = SecretString::new(hex_str);
-                Ok(Some(
-                    hex_str_to_bytes(hex_str.expose_secret().as_str())
-                        .map_err(|e| KeyChainError::from(anyhow!(e)))?,
-                ))
-            }
+            Ok(str) => Ok(Some(str)),
             Err(e) => match e {
                 keyring::Error::NoEntry => Ok(None),
                 _ => Err(KeyChainError::from(anyhow!(e))),
             },
         }
     }
-}
-
-fn bytes_to_hex(b: &[u8]) -> String {
-    hex::encode(b)
-}
-
-fn hex_str_to_bytes(str: &str) -> Result<Vec<u8>, FromHexError> {
-    hex::decode(str)
 }

@@ -1,5 +1,4 @@
-use crate::tui_utils::inset_rect;
-use ratatui::layout::{Constraint, Flex, Layout, Rect};
+use ratatui::layout::{Constraint, Flex, Layout, Margin, Rect};
 use ratatui::style::Stylize;
 use ratatui::text::Text;
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph, Wrap};
@@ -31,7 +30,7 @@ impl ErrorDialog {
             Constraint::Length(2),
         ])
         .flex(Flex::Center)
-        .areas(inset_rect(area, 2));
+        .areas(area.inner(&Margin::new(2, 2)));
         frame.render_widget(block.white().on_red(), area);
         frame.render_widget(
             Paragraph::new(self.text.as_str())

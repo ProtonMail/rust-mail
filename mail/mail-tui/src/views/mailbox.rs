@@ -1,17 +1,19 @@
 use crate::events::mailbox::MailboxEvent;
 use crate::events::AppEvent;
 use crate::state::{LoadingState, MailboxState, MailboxUserContextState};
-use crate::tui_utils::inset_rect;
 use crate::view::View;
 use crate::views::AppViewContext;
-use crate::widgets::{HelpCategory, HelpItem, ScrollableList, ScrollableListState};
+use crate::widgets::{
+    ConversationWidget, HelpCategory, HelpItem, LabelWidget, ScrollableList, ScrollableListState,
+    WidgetList, WidgetListItem,
+};
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use proton_mail_common::proton_api_mail::domain::LabelType;
 use proton_mail_common::proton_mail_db::{LocalLabelId, LocalLabelWithCount};
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
 use ratatui::prelude::Text;
 use ratatui::style::{Color, Style, Stylize};
-use ratatui::widgets::{Block, Borders, HighlightSpacing, List, ListItem};
+use ratatui::widgets::{Block, Borders, HighlightSpacing};
 use ratatui::Frame;
 use std::ops::Deref;
 
@@ -32,7 +34,7 @@ pub struct ConversationView {
 impl ConversationView {
     pub fn new() -> Self {
         let mut r = Self {
-            conversation_list_state: ScrollableListState::new(2, Some(0)),
+            conversation_list_state: ScrollableListState::new(3, Some(0)),
             system_labels_list_state: ScrollableListState::new(1, Some(0)),
             folder_list_state: ScrollableListState::new(1, None),
             labels_list_state: ScrollableListState::new(1, None),
@@ -57,9 +59,6 @@ impl ConversationView {
             return;
         };
 
-        let labels_block = Block::new().borders(Borders::RIGHT);
-        frame.render_widget(labels_block, area);
-        let internal_area = inset_rect(area, 1);
         let [sys_area, _, folder_area, _, label_area] = Layout::vertical([
             Constraint::Min(10),
             Constraint::Length(1),
@@ -67,25 +66,18 @@ impl ConversationView {
             Constraint::Length(1),
             Constraint::Min(10),
         ])
-        .areas(internal_area);
+        .areas(area);
 
         fn list_from_labels<'a>(
             labels: &'a [LocalLabelWithCount],
             desc: &'static str,
-        ) -> ScrollableList<'a> {
+        ) -> ScrollableList<'a, LabelWidget<'a>> {
             let labels = labels
                 .iter()
-                .map(|l| {
-                    let name = if let Some(path) = &l.path {
-                        path.as_str()
-                    } else {
-                        l.name.as_str()
-                    };
-                    ListItem::new(Text::from(format!("[{}] {name}", l.unread_count)).not_bold())
-                })
+                .map(|l| WidgetListItem::new(LabelWidget::new(l)))
                 .collect::<Vec<_>>();
-            let block = Block::new().borders(Borders::TOP).title(desc).bold();
-            ScrollableList::new(List::new(labels).block(block))
+            let block = Block::new().borders(Borders::TOP).title(desc);
+            ScrollableList::new(WidgetList::new(labels).block(block))
         }
 
         // system labels
@@ -143,42 +135,27 @@ impl ConversationView {
         let conversations = mailbox_context.conversations.value();
         let conversations = conversations.deref();
         self.conversation_list_state.set_len(conversations.len());
-        let list_items = conversations.iter().enumerate().map(|(idx, conv)| {
-            let senders = {
-                if conv.senders.len() == 1 {
-                    conv.senders[0].name.clone()
+        let list_items = conversations
+            .iter()
+            .enumerate()
+            .map(|(idx, c)| {
+                let item = WidgetListItem::new(ConversationWidget::new(c));
+                let item = if c.context_num_unread != 0 {
+                    item.bold()
                 } else {
-                    conv.senders
-                        .iter()
-                        .map(|s| s.name.clone())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                }
-            };
-            let line = Text::from(vec![
-                if conv.num_messages > 1 {
-                    format!("[{}] {}", conv.num_messages, senders).into()
-                } else {
-                    senders.into()
-                },
-                conv.subject.clone().into(),
-            ]);
-            let item = ListItem::new(line);
-            let item = if idx % 2 == 0 {
-                item.on_light_magenta()
-            } else {
-                item
-            };
-            if conv.context_num_unread != 0 {
-                item.bold()
-            } else {
-                item
-            }
-        });
+                    item
+                };
 
+                if idx % 2 == 0 {
+                    item.style(Style::default().bg(Color::LightMagenta))
+                } else {
+                    item
+                }
+            })
+            .collect::<Vec<_>>();
         frame.render_stateful_widget(
             ScrollableList::new(
-                List::new(list_items)
+                WidgetList::new(list_items)
                     .highlight_symbol(">> ")
                     .highlight_spacing(HighlightSpacing::Always)
                     .highlight_style(Style {

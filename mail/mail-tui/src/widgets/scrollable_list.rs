@@ -1,14 +1,15 @@
 use crate::style::list_highlight_style;
+use crate::widgets::widget_list::{ListableWidget, WidgetList, WidgetListState};
 use ratatui::buffer::Buffer;
 use ratatui::layout::Constraint::Length;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::StatefulWidget;
 use ratatui::symbols::scrollbar;
 use ratatui::widgets::ScrollbarOrientation::VerticalRight;
-use ratatui::widgets::{HighlightSpacing, List, ListState, Scrollbar, ScrollbarState};
+use ratatui::widgets::{HighlightSpacing, Scrollbar, ScrollbarState};
 
 pub struct ScrollableListState {
-    list_state: ListState,
+    list_state: WidgetListState,
     scroll_state: ScrollbarState,
     element_size: u16,
     element_len: usize,
@@ -20,7 +21,7 @@ pub struct ScrollableListState {
 impl ScrollableListState {
     pub fn new(element_size: u16, selected: Option<usize>) -> Self {
         Self {
-            list_state: ListState::default().with_selected(selected),
+            list_state: WidgetListState::default().with_selected(selected),
             scroll_state: ScrollbarState::default(),
             element_size,
             element_len: 0,
@@ -81,15 +82,15 @@ impl ScrollableListState {
     }
 }
 
-pub struct ScrollableList<'a>(List<'a>);
+pub struct ScrollableList<'a, T: ListableWidget>(WidgetList<'a, T>);
 
-impl<'a> ScrollableList<'a> {
-    pub fn new(list: impl Into<List<'a>>) -> Self {
-        Self(list.into())
+impl<'a, T: ListableWidget> ScrollableList<'a, T> {
+    pub fn new(list: WidgetList<'a, T>) -> Self {
+        Self(list)
     }
 }
 
-impl<'a> StatefulWidget for ScrollableList<'a> {
+impl<'a, T: ListableWidget> StatefulWidget for ScrollableList<'a, T> {
     type State = ScrollableListState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {

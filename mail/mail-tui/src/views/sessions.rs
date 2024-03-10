@@ -2,12 +2,14 @@ use crate::events::session::SessionEvent;
 use crate::events::AppEvent;
 use crate::view::View;
 use crate::views::AppViewContext;
-use crate::widgets::{HelpCategory, HelpItem, ScrollableList, ScrollableListState};
+use crate::widgets::{
+    HelpCategory, HelpItem, ScrollableList, ScrollableListState, SessionWidget, WidgetList,
+    WidgetListItem,
+};
 use crossterm::event::{Event, KeyCode};
 use ratatui::layout::{Constraint, Flex, Margin, Rect};
-use ratatui::prelude::{Layout, Stylize};
-use ratatui::text::Text;
-use ratatui::widgets::{Block, Borders, List, ListItem};
+use ratatui::prelude::Layout;
+use ratatui::widgets::{Block, Borders};
 use ratatui::Frame;
 
 pub struct SessionsView {
@@ -46,19 +48,13 @@ impl View<AppViewContext, AppEvent> for SessionsView {
 
         let list_sessions = sessions
             .iter()
-            .map(|session| {
-                let name = session.name.as_ref().unwrap_or(&session.email);
-                ListItem::new(Text::from(vec![
-                    name.clone().bold().into(),
-                    session.email.clone().into(),
-                ]))
-            })
+            .map(|session| WidgetListItem::new(SessionWidget::new(session)))
             .collect::<Vec<_>>();
         self.session_list_state.set_len(sessions.len());
 
         frame.render_stateful_widget(
             ScrollableList::new(
-                List::new(list_sessions)
+                WidgetList::new(list_sessions)
                     .block(Block::new().title("Sessions").borders(Borders::all())),
             ),
             area,

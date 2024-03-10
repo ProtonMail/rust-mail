@@ -4,7 +4,6 @@ mod keychain;
 mod queue;
 mod state;
 mod style;
-mod tui_utils;
 mod view;
 mod views;
 mod widgets;

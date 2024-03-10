@@ -327,7 +327,7 @@ impl<T: Sized + 'static + AppEventHandler<T, E>, E: Send + 'static> App<T, E> {
             }
             frame.render_widget(
                 Text::from(Line::from(vec![
-                    "Ctrl+Alt+Q ".bold(),
+                    "Ctrl+C ".bold(),
                     "Quit".into(),
                     "|".into(),
                     "F1 ".bold(),
@@ -348,8 +348,8 @@ impl<T: Sized + 'static + AppEventHandler<T, E>, E: Send + 'static> App<T, E> {
 
             if let event::Event::Key(key) = &event {
                 if key.kind == KeyEventKind::Press
-                    && key.code == KeyCode::Char('q')
-                    && key.modifiers == KeyModifiers::ALT | KeyModifiers::CONTROL
+                    && key.code == KeyCode::Char('c')
+                    && key.modifiers == KeyModifiers::CONTROL
                 {
                     self.quit();
                 }
