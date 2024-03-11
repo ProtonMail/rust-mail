@@ -1,7 +1,9 @@
 use crate::mail::MailContextError;
 use proton_mail_common as pmc;
-use proton_mail_common::exports::proton_event_loop::EventLoopError;
+use proton_mail_common::exports::proton_event_loop::{EventLoopError as ELError, SubscriberError};
+use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::domain::LabelId;
+use proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError;
 use std::sync::Arc;
 
 #[derive(uniffi::Object)]
@@ -18,6 +20,33 @@ pub enum MailUserContextInitializationStage {
     Counters,
     Conversation,
     Finished,
+}
+
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi(flat_error)]
+pub enum EventLoopError {
+    #[error("Failed to read from store: {0}")]
+    StoreRead(anyhow::Error),
+    #[error("Failed to write store: {0}")]
+    StoreWrite(anyhow::Error),
+    #[error("Failed to retrieve event: {0}")]
+    Provider(HttpRequestError),
+    #[error("Subscriber ({0}) failed to apply event: {1}")]
+    Subscriber(String, SubscriberError),
+    #[error("Other: {0}")]
+    Other(String),
+}
+
+impl From<ELError> for EventLoopError {
+    fn from(value: ELError) -> Self {
+        match value {
+            ELError::StoreRead(e) => EventLoopError::StoreRead(e),
+            ELError::StoreWrite(e) => EventLoopError::StoreWrite(e),
+            ELError::Provider(e) => EventLoopError::Provider(e),
+            ELError::Subscriber(s, e) => EventLoopError::Subscriber(s, e),
+            ELError::Other(s) => EventLoopError::Other(s),
+        }
+    }
 }
 
 /// Callback for initialization progress.
@@ -50,10 +79,10 @@ impl MailUserContext {
     /// Poll Event loop and apply events.
     /// **NOTE**: This method should not be run on the main thread.
     pub fn poll_events(&self) -> Result<(), EventLoopError> {
-        self.ctx
-            .mail_context()
-            .async_runtime()
-            .block_on(async { self.ctx.poll_event_loop().await })
+        self.ctx.mail_context().async_runtime().block_on(async {
+            self.ctx.poll_event_loop().await?;
+            Ok(())
+        })
     }
 }
 impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserContextInitializationStage {
