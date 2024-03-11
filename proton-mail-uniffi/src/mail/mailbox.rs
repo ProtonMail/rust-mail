@@ -1,12 +1,16 @@
 use crate::mail::{MailContextError, MailUserContext};
 use proton_mail_common::exports::parking_lot::RwLock;
-use proton_mail_common::exports::proton_sqlite3::{InProcessTrackerService, ObservedQuery};
+use proton_mail_common::exports::proton_sqlite3::{
+    InProcessTrackerService, LiveQueryUpdated, ObservableQuery, SharedLiveQueryBuilder,
+};
 use proton_mail_common::exports::thiserror;
 use proton_mail_common::proton_api_mail::domain::{LabelId, LabelType};
+use proton_mail_common::proton_mail_db::proton_sqlite3::{SharedLiveQuery, SharedLiveQueryUpdated};
 use proton_mail_common::proton_mail_db::{
     ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalConversationWithContext,
     LocalLabel, LocalLabelId, LocalLabelWithCount,
 };
+use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -39,27 +43,61 @@ pub trait MailboxBackgroundResult: Send + Sync {
     fn on_background_result(&self, error: Option<MailboxError>);
 }
 
-/// Callback for a conversation view data change.
-#[uniffi::export(callback_interface)]
-pub trait MailboxConversationsUpdatedCallback: Send + Sync {
-    fn on_updated(&self, data: Vec<LocalConversationWithContext>);
-}
-
 /// Callback for a labels view data change.
 #[uniffi::export(callback_interface)]
-pub trait MailboxLabelsUpdatedCallback: Send + Sync {
-    fn on_updated(&self, data: Vec<LocalLabelWithCount>);
+pub trait MailboxLiveQueryUpdatedCallback: Send + Sync {
+    fn on_updated(&self);
 }
 
-/// Handle for an observed Query
-#[derive(uniffi::Object)]
-pub struct MailboxObservedQuery(ObservedQuery);
-
-impl MailboxObservedQuery {
-    fn new(query: ObservedQuery) -> Arc<Self> {
-        Arc::new(Self(query))
+impl LiveQueryUpdated for Box<dyn MailboxLiveQueryUpdatedCallback> {
+    fn on_live_query_updated(&self) {
+        self.on_updated()
     }
 }
+
+impl SharedLiveQueryUpdated for Box<dyn MailboxLiveQueryUpdatedCallback> {}
+
+macro_rules! new_live_query {
+    ($name:ident, $query:ident) => {
+        /// Observable query.
+        #[derive(uniffi::Object)]
+        pub struct $name(SharedLiveQuery<$query>);
+
+        #[uniffi::export]
+        impl $name {
+            /// Get the latest value for this Query.
+            pub fn value(&self) -> <$query as ObservableQuery>::Output {
+                self.0.value().clone()
+            }
+
+            /// Terminate the observer for this query and stop receiving updates.
+            pub fn disconnect(&self) {
+                self.0.disconnect();
+            }
+        }
+
+        impl $name {
+            fn new(
+                tracker: InProcessTrackerService,
+                query: $query,
+                cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+            ) -> Arc<Self> {
+                Arc::new(Self(
+                    SharedLiveQueryBuilder::new(tracker)
+                        .with_background_initializer()
+                        .with_callback(cb)
+                        .build(query),
+                ))
+            }
+        }
+    };
+}
+
+new_live_query!(MailboxConversationLiveQuery, ConversationQuery);
+new_live_query!(
+    MailboxLabelsLiveQuery,
+    LabelsByTypeQueryWithConversationCount
+);
 
 const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
@@ -101,8 +139,8 @@ impl Mailbox {
     pub fn new_conversation_observed_query(
         &self,
         limit: i64,
-        cb: Box<dyn MailboxConversationsUpdatedCallback>,
-    ) -> Arc<MailboxObservedQuery> {
+        cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+    ) -> Arc<MailboxConversationLiveQuery> {
         let builder = FFIObservableConversationsQueryBuilder(cb);
         self.mbox.read().new_conversation_query(
             builder,
@@ -128,8 +166,8 @@ impl Mailbox {
     /// Create a query observer on labels of type System.
     pub fn new_system_labels_observed_query(
         &self,
-        cb: Box<dyn MailboxLabelsUpdatedCallback>,
-    ) -> Arc<MailboxObservedQuery> {
+        cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+    ) -> Arc<MailboxLabelsLiveQuery> {
         let builder = FFIObservableLabelsQueryBuilder(cb);
         self.mbox.read().new_system_labels_live_query(builder)
     }
@@ -137,8 +175,8 @@ impl Mailbox {
     /// Create a query observer on labels of type Folder.
     pub fn new_folder_labels_observed_query(
         &self,
-        cb: Box<dyn MailboxLabelsUpdatedCallback>,
-    ) -> Arc<MailboxObservedQuery> {
+        cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+    ) -> Arc<MailboxLabelsLiveQuery> {
         let builder = FFIObservableLabelsQueryBuilder(cb);
         self.mbox.read().new_folder_labels_live_query(builder)
     }
@@ -146,8 +184,8 @@ impl Mailbox {
     /// Create a query observer on labels of type Label.
     pub fn new_label_labels_observed_query(
         &self,
-        cb: Box<dyn MailboxLabelsUpdatedCallback>,
-    ) -> Arc<MailboxObservedQuery> {
+        cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+    ) -> Arc<MailboxLabelsLiveQuery> {
         let builder = FFIObservableLabelsQueryBuilder(cb);
         self.mbox.read().new_label_labels_live_query(builder)
     }
@@ -193,32 +231,26 @@ impl proton_mail_common::MailboxBackgroundResult<()> for FFIMailboxBackgroundVoi
     }
 }
 
-struct FFIObservableConversationsQueryBuilder(Box<dyn MailboxConversationsUpdatedCallback>);
-impl proton_mail_common::MailboxObservableQueryBuilder<ConversationQuery>
-    for FFIObservableConversationsQueryBuilder
-{
-    type Output = Arc<MailboxObservedQuery>;
+struct FFIObservableConversationsQueryBuilder(Box<dyn MailboxLiveQueryUpdatedCallback>);
+impl MailboxObservableQueryBuilder<ConversationQuery> for FFIObservableConversationsQueryBuilder {
+    type Output = Arc<MailboxConversationLiveQuery>;
 
     fn build(self, tracker: InProcessTrackerService, query: ConversationQuery) -> Self::Output {
-        MailboxObservedQuery::new(ObservedQuery::new(tracker, query, move |v| {
-            self.0.on_updated(v)
-        }))
+        MailboxConversationLiveQuery::new(tracker, query, self.0)
     }
 }
 
-struct FFIObservableLabelsQueryBuilder(Box<dyn MailboxLabelsUpdatedCallback>);
-impl proton_mail_common::MailboxObservableQueryBuilder<LabelsByTypeQueryWithConversationCount>
+struct FFIObservableLabelsQueryBuilder(Box<dyn MailboxLiveQueryUpdatedCallback>);
+impl MailboxObservableQueryBuilder<LabelsByTypeQueryWithConversationCount>
     for FFIObservableLabelsQueryBuilder
 {
-    type Output = Arc<MailboxObservedQuery>;
+    type Output = Arc<MailboxLabelsLiveQuery>;
 
     fn build(
         self,
         tracker: InProcessTrackerService,
         query: LabelsByTypeQueryWithConversationCount,
     ) -> Self::Output {
-        MailboxObservedQuery::new(ObservedQuery::new(tracker, query, move |v| {
-            self.0.on_updated(v)
-        }))
+        MailboxLabelsLiveQuery::new(tracker, query, self.0)
     }
 }
