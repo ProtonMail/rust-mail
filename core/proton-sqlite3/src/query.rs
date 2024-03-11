@@ -3,6 +3,7 @@ use crate::{
     TrackerObserver,
 };
 use parking_lot::lock_api::Mutex;
+use parking_lot::RwLock;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::ops::Deref;
@@ -172,6 +173,15 @@ impl LiveQueryBuilder {
         };
         LiveQuery::new(self.service, query, self.callback, initializer)
     }
+
+    pub fn build_shared<Q: ObservableQuery>(self, query: Q) -> SharedLiveQuery<Q> {
+        let initializer: &dyn LiveQueryInitializer<Q> = match self.initialization_mode {
+            InitializationMode::None => &DefaultLiveQueryInitializer {},
+            InitializationMode::Foreground => &ForegroundLiveQueryInitializer {},
+            InitializationMode::Background => &BackgroundLiveQueryInitializer {},
+        };
+        SharedLiveQuery::new(self.service, query, self.callback, initializer)
+    }
 }
 
 /// Automatically keep the output of the given [`ObservableQuery`] up to date with the latest value
@@ -207,13 +217,59 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
     /// Get the latest value or the last updated value.
     pub fn value(&self) -> impl Deref<Target = Q::Output> + '_ {
         if let Some(new_value) = self.shared.take() {
-            *self.last_value.borrow_mut() = new_value;
+            {
+                *self.last_value.borrow_mut() = new_value;
+            }
             if let Some(cb) = &self.update_cb {
                 cb.on_live_query_updated();
             }
         }
 
         self.last_value.borrow()
+    }
+}
+
+/// Same as [`LiveQuery`], but can be accessed from multiple threads.
+pub struct SharedLiveQuery<Q: ObservableQuery> {
+    _query: ObservedQuery,
+    last_value: RwLock<Q::Output>,
+    shared: Arc<SharedValue<Q::Output>>,
+    update_cb: Option<Box<dyn LiveQueryUpdated>>,
+}
+
+impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
+    fn new(
+        service: InProcessTrackerService,
+        query: Q,
+        cb: Option<Box<dyn LiveQueryUpdated>>,
+        initializer: &dyn LiveQueryInitializer<Q>,
+    ) -> Self {
+        let shared = Arc::new(SharedValue::new());
+        let value = initializer.initialize(&query, service.db_pool(), &shared);
+        let shared_cloned = shared.clone();
+        let query = ObservedQuery::new(service, query, move |new_value| {
+            shared_cloned.store(new_value);
+        });
+        Self {
+            last_value: RwLock::new(value),
+            _query: query,
+            shared,
+            update_cb: cb,
+        }
+    }
+
+    /// Get the latest value or the last updated value.
+    pub fn value(&self) -> impl Deref<Target = Q::Output> + '_ {
+        if let Some(new_value) = self.shared.take() {
+            {
+                *self.last_value.write() = new_value;
+            }
+            if let Some(cb) = &self.update_cb {
+                cb.on_live_query_updated();
+            }
+        }
+
+        self.last_value.read()
     }
 }
 
