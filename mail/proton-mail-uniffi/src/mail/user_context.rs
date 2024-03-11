@@ -1,5 +1,6 @@
 use crate::mail::MailContextError;
 use proton_mail_common as pmc;
+use proton_mail_common::exports::proton_event_loop::EventLoopError;
 use proton_mail_common::proton_api_mail::domain::LabelId;
 use std::sync::Arc;
 
@@ -44,6 +45,15 @@ impl MailUserContext {
     pub fn initialize(&self, cb: Box<dyn MailUserContextInitializationCallback>) {
         let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
         self.ctx.initialize(LabelId::inbox(), cb);
+    }
+
+    /// Poll Event loop and apply events.
+    /// **NOTE**: This method should not be run on the main thread.
+    pub fn poll_events(&self) -> Result<(), EventLoopError> {
+        self.ctx
+            .mail_context()
+            .async_runtime()
+            .block_on(async { self.ctx.poll_event_loop().await })
     }
 }
 impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserContextInitializationStage {
