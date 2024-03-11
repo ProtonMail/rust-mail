@@ -131,6 +131,9 @@ pub trait LiveQueryUpdated {
     fn on_live_query_updated(&self);
 }
 
+/// Called every time the value on the live query has changed.
+pub trait SharedLiveQueryUpdated: LiveQueryUpdated + Send + Sync {}
+
 /// Builder for [`LiveQuery`].
 pub struct LiveQueryBuilder {
     initialization_mode: InitializationMode,
@@ -172,15 +175,6 @@ impl LiveQueryBuilder {
             InitializationMode::Background => &BackgroundLiveQueryInitializer {},
         };
         LiveQuery::new(self.service, query, self.callback, initializer)
-    }
-
-    pub fn build_shared<Q: ObservableQuery>(self, query: Q) -> SharedLiveQuery<Q> {
-        let initializer: &dyn LiveQueryInitializer<Q> = match self.initialization_mode {
-            InitializationMode::None => &DefaultLiveQueryInitializer {},
-            InitializationMode::Foreground => &ForegroundLiveQueryInitializer {},
-            InitializationMode::Background => &BackgroundLiveQueryInitializer {},
-        };
-        SharedLiveQuery::new(self.service, query, self.callback, initializer)
     }
 }
 
@@ -234,19 +228,62 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
     }
 }
 
+/// Builder for [`SharedLiveQuery`].
+pub struct SharedLiveQueryBuilder {
+    initialization_mode: InitializationMode,
+    callback: Option<Box<dyn SharedLiveQueryUpdated>>,
+    service: InProcessTrackerService,
+}
+
+impl SharedLiveQueryBuilder {
+    pub fn new(service: InProcessTrackerService) -> Self {
+        Self {
+            initialization_mode: InitializationMode::None,
+            callback: None,
+            service,
+        }
+    }
+
+    /// Initialize the first value on the current executing thread.
+    pub fn with_foreground_initializer(mut self) -> Self {
+        self.initialization_mode = InitializationMode::Foreground;
+        self
+    }
+
+    /// Initialize the first value on a background thread.
+    pub fn with_background_initializer(mut self) -> Self {
+        self.initialization_mode = InitializationMode::Background;
+        self
+    }
+
+    /// Callback to be called each time a new value is available.
+    pub fn with_callback(mut self, callback: impl SharedLiveQueryUpdated + 'static) -> Self {
+        self.callback = Some(Box::new(callback));
+        self
+    }
+    pub fn build<Q: ObservableQuery>(self, query: Q) -> SharedLiveQuery<Q> {
+        let initializer: &dyn LiveQueryInitializer<Q> = match self.initialization_mode {
+            InitializationMode::None => &DefaultLiveQueryInitializer {},
+            InitializationMode::Foreground => &ForegroundLiveQueryInitializer {},
+            InitializationMode::Background => &BackgroundLiveQueryInitializer {},
+        };
+        SharedLiveQuery::new(self.service, query, self.callback, initializer)
+    }
+}
+
 /// Same as [`LiveQuery`], but can be accessed from multiple threads.
 pub struct SharedLiveQuery<Q: ObservableQuery> {
     observed_query: parking_lot::Mutex<Option<ObservedQuery>>,
     last_value: RwLock<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
-    update_cb: Option<Box<dyn LiveQueryUpdated>>,
+    update_cb: Option<Box<dyn SharedLiveQueryUpdated>>,
 }
 
 impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
     fn new(
         service: InProcessTrackerService,
         query: Q,
-        cb: Option<Box<dyn LiveQueryUpdated>>,
+        cb: Option<Box<dyn SharedLiveQueryUpdated>>,
         initializer: &dyn LiveQueryInitializer<Q>,
     ) -> Self {
         let shared = Arc::new(SharedValue::new());
