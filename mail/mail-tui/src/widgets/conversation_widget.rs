@@ -5,6 +5,7 @@ use proton_mail_common::proton_mail_db::LocalConversationWithContext;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Text;
+use ratatui::style::Stylize;
 use ratatui::widgets::Widget;
 
 pub struct ConversationWidget<'c> {
@@ -23,7 +24,7 @@ impl ListableWidget for ConversationWidget<'_> {
     }
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let [sender_area, conv_area, _label_area] = Layout::vertical([
+        let [sender_area, conv_area, label_area] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -86,6 +87,16 @@ impl ListableWidget for ConversationWidget<'_> {
         }
 
         // Labels
-        //TODO: List of labels
+        if let Some(labels) = &self.conv.labels {
+            Text::from(
+                labels
+                    .iter()
+                    .map(|l| l.name.clone())
+                    .collect::<Vec<_>>()
+                    .join(" | "),
+            )
+            .italic()
+            .render(label_area, buf)
+        }
     }
 }

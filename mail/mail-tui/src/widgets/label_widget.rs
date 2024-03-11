@@ -23,10 +23,11 @@ impl<'a> ListableWidget for LabelWidget<'a> {
     }
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let [text_area, _, unread_area] = Layout::horizontal([
+        let [text_area, _, unread_area, _] = Layout::horizontal([
             Constraint::Min(15),
             Constraint::Length(1),
             Constraint::Length(2),
+            Constraint::Length(1),
         ])
         .areas(area);
 
