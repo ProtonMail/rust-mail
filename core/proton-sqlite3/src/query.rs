@@ -187,7 +187,7 @@ impl LiveQueryBuilder {
 /// Automatically keep the output of the given [`ObservableQuery`] up to date with the latest value
 /// when changes are made to the database.
 pub struct LiveQuery<Q: ObservableQuery> {
-    _query: ObservedQuery,
+    observed_query: Option<ObservedQuery>,
     last_value: RefCell<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
     update_cb: Option<Box<dyn LiveQueryUpdated>>,
@@ -208,7 +208,7 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
         });
         Self {
             last_value: RefCell::new(value),
-            _query: query,
+            observed_query: Some(query),
             shared,
             update_cb: cb,
         }
@@ -227,11 +227,16 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
 
         self.last_value.borrow()
     }
+
+    /// Terminate the observer for this query and stop receiving updates.
+    pub fn disconnect(&mut self) {
+        self.observed_query = None;
+    }
 }
 
 /// Same as [`LiveQuery`], but can be accessed from multiple threads.
 pub struct SharedLiveQuery<Q: ObservableQuery> {
-    _query: ObservedQuery,
+    observed_query: parking_lot::Mutex<Option<ObservedQuery>>,
     last_value: RwLock<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
     update_cb: Option<Box<dyn LiveQueryUpdated>>,
@@ -252,7 +257,7 @@ impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
         });
         Self {
             last_value: RwLock::new(value),
-            _query: query,
+            observed_query: parking_lot::Mutex::new(Some(query)),
             shared,
             update_cb: cb,
         }
@@ -270,6 +275,11 @@ impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
         }
 
         self.last_value.read()
+    }
+
+    /// Terminate the observer for this query and stop receiving updates.
+    pub fn disconnect(&self) {
+        *self.observed_query.lock() = None;
     }
 }
 
