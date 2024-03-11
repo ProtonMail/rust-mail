@@ -46,3 +46,12 @@ mut_mut="warn"
 print_stdout = "warn"
 unseparated_literal_suffix ="warn"
 wrong_self_convention ="warn"
+
+
+#TODO: Cargo build override rather than profile config(https://users.rust-lang.org/t/how-to-modify-profile-release-only-for-a-target/48811/3)
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+opt-level = "z"  # Optimize for size.
