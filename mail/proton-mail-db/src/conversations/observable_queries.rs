@@ -26,6 +26,7 @@ impl ObservableQuery for ConversationQuery {
         vec![
             "conversations".to_string(),
             "conversation_labels".to_string(),
+            "labels".to_string(),
         ]
     }
 

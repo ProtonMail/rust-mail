@@ -1,8 +1,8 @@
 use crate::conversations::types::LocalConversation;
 use crate::conversations::LocalConversationWithContext;
 use crate::{
-    new_test_connection, with_tx, DeletedState, LocalAttachmentMetadata, LocalConversationCount,
-    LocalLabelId, MailSqliteConnectionMut,
+    new_test_connection, with_tx, DeletedState, LabelColor, LocalAttachmentMetadata,
+    LocalConversationCount, LocalConversationLabel, LocalLabelId, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
@@ -66,8 +66,20 @@ fn test_conversation_create_with_labels() {
             .iter()
             .enumerate()
         {
-            let local_conversation =
-                LocalConversationWithContext::from_conversation_and_label(id, label, conv.clone());
+            let local_conversation = LocalConversationWithContext::from_conversation_and_label(
+                id,
+                label,
+                conv.clone(),
+                if idx == 0 {
+                    Some(vec![LocalConversationLabel {
+                        id: local_label_ids[0],
+                        name: "MyLabel".to_string(),
+                        color: LabelColor::black(),
+                    }])
+                } else {
+                    None
+                },
+            );
             let db_conversation = tx
                 .get_conversation_with_context(id, local_label_ids[idx])
                 .expect("failed to get conversation")
@@ -163,6 +175,11 @@ fn test_conversation_update() {
             id,
             &MY_LABEL_ID1,
             conv_update.clone(),
+            Some(vec![LocalConversationLabel {
+                id: local_label_ids[0],
+                name: "MyLabel".to_string(),
+                color: LabelColor::black(),
+            }]),
         );
         let db_conversation = tx
             .get_conversation_with_context(id, local_label_ids[0])
@@ -295,7 +312,7 @@ pub(super) fn test_label1() -> Label {
         parent_id: None,
         name: "MyLabel".to_string(),
         path: None,
-        color: "#0000".to_string(),
+        color: "#000000".to_string(),
         label_type: LabelType::Label,
         notify: Default::default(),
         display: Default::default(),
