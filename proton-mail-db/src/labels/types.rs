@@ -102,6 +102,12 @@ impl LabelColor {
         Self("#000000".into())
     }
 }
+
+impl<T: Into<String>> From<T> for LabelColor {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
 impl AsRef<str> for LabelColor {
     fn as_ref(&self) -> &str {
         &self.0

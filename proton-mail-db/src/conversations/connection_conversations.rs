@@ -4,14 +4,16 @@ use crate::conversations::types::{
 };
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, DeletedState, LocalAttachmentMetadata, LocalConversationCount, LocalLabelId,
-    MailSqliteConnectionImpl,
+    DBResult, DeletedState, LabelColor, LocalAttachmentMetadata, LocalConversationCount,
+    LocalConversationLabel, LocalLabelId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{Conversation, ConversationCount, ConversationId, MessageAddress};
+use proton_sqlite3::rusqlite::types::FromSqlError;
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
+use std::str::FromStr;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn create_conversation(
@@ -389,9 +391,11 @@ impl ConversationSelectorWithContext {
         "SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages,  \
 C.num_unread, C.num_attachments, C.expiration_time, C.size, \
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0), \
-ifnull(CL.ctx_num_attachments,0)
+ifnull(CL.ctx_num_attachments,0), \
+GROUP_CONCAT(L.id || ',' || L.name || ',' || L.color, ';')\
 FROM conversations AS C \
 JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=? \
+LEFT JOIN labels AS L ON L.id = CL.label_id AND L.id IN (SELECT id FROM labels WHERE type=1) \
 WHERE C.deleted=0"
     }
 
@@ -442,6 +446,45 @@ WHERE C.deleted=0"
             context_num_messages: r.get(13)?,
             context_num_unread: r.get(14)?,
             context_num_attachments: r.get(15)?,
+            labels: conversation_label_from_row(r, 16)?,
         })
     }
+}
+
+fn conversation_label_from_row(
+    r: &Row,
+    index: usize,
+) -> DBResult<Option<Vec<LocalConversationLabel>>> {
+    let Some(value) = r.get_ref(index)?.as_str_or_null()? else {
+        return Ok(None);
+    };
+
+    let mut labels = Vec::new();
+    for split in value.split(';') {
+        let mut split = split.split(',');
+        let Some(split_id) = split.next() else {
+            return Err(FromSqlError::InvalidType.into());
+        };
+        let Ok(label_id) = u64::from_str(split_id) else {
+            return Err(FromSqlError::InvalidType.into());
+        };
+
+        let Some(name) = split.next() else {
+            return Err(FromSqlError::InvalidType.into());
+        };
+        let label_name = name.to_string();
+
+        let Some(color) = split.next() else {
+            return Err(FromSqlError::InvalidType.into());
+        };
+
+        let label_color = LabelColor::from(color);
+        labels.push(LocalConversationLabel {
+            id: LocalLabelId::from(label_id),
+            name: label_name,
+            color: label_color,
+        })
+    }
+
+    Ok(Some(labels))
 }

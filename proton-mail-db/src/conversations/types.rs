@@ -1,4 +1,4 @@
-use crate::{new_u64_type, LocalLabelId};
+use crate::{new_u64_type, LabelColor, LocalLabelId};
 use proton_api_mail::domain::{
     AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
     MessageMetadata,
@@ -55,6 +55,14 @@ impl LocalConversation {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct LocalConversationLabel {
+    pub id: LocalLabelId,
+    pub name: String,
+    pub color: LabelColor,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalConversationWithContext {
     pub id: LocalConversationId,
     pub remote_id: Option<ConversationId>,
@@ -72,12 +80,14 @@ pub struct LocalConversationWithContext {
     pub context_time: u64,
     pub context_size: u64,
     pub context_num_attachments: u64,
+    pub labels: Option<Vec<LocalConversationLabel>>,
 }
 impl LocalConversationWithContext {
     pub fn from_conversation_and_label(
         id: LocalConversationId,
         label_id: &LabelId,
         conversation: Conversation,
+        labels: Option<Vec<LocalConversationLabel>>,
     ) -> Self {
         let mut result = Self {
             id,
@@ -96,6 +106,7 @@ impl LocalConversationWithContext {
             context_time: 0,
             context_size: conversation.size,
             context_num_attachments: conversation.num_attachments,
+            labels,
         };
 
         if let Some(l) = conversation.labels.iter().find(|l| l.id == *label_id) {
