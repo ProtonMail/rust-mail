@@ -70,15 +70,11 @@ fn test_conversation_create_with_labels() {
                 id,
                 label,
                 conv.clone(),
-                if idx == 0 {
-                    Some(vec![LocalConversationLabel {
-                        id: local_label_ids[0],
-                        name: "MyLabel".to_string(),
-                        color: LabelColor::black(),
-                    }])
-                } else {
-                    None
-                },
+                Some(vec![LocalConversationLabel {
+                    id: local_label_ids[0],
+                    name: "MyLabel".to_string(),
+                    color: LabelColor::black(),
+                }]),
             );
             let db_conversation = tx
                 .get_conversation_with_context(id, local_label_ids[idx])

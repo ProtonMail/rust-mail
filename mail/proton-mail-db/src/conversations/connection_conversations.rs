@@ -4,16 +4,15 @@ use crate::conversations::types::{
 };
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, DeletedState, LabelColor, LocalAttachmentMetadata, LocalConversationCount,
+    DBResult, DeletedState, LocalAttachmentMetadata, LocalConversationCount,
     LocalConversationLabel, LocalLabelId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{Conversation, ConversationCount, ConversationId, MessageAddress};
-use proton_sqlite3::rusqlite::types::FromSqlError;
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
-use std::str::FromStr;
+use std::collections::BTreeMap;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn create_conversation(
@@ -193,13 +192,19 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
         id: LocalConversationId,
         label_id: LocalLabelId,
     ) -> DBResult<Option<LocalConversationWithContext>> {
-        self.0
+        let mut r = self
+            .0
             .query_row(
                 &ConversationSelectorWithContext::query_with_id(),
                 (label_id, id),
                 ConversationSelectorWithContext::from_row,
             )
-            .optional()
+            .optional()?;
+
+        if let Some(conv) = &mut r {
+            self.get_conversation_labels(std::slice::from_mut(conv))?;
+        }
+        Ok(r)
     }
 
     pub fn get_conversation_count_with_context(&self, label_id: LocalLabelId) -> DBResult<usize> {
@@ -230,7 +235,9 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
             .0
             .prepare(&ConversationSelectorWithContext::query_with_limit())?;
         let r = stmt.query_map((label_id, limit), ConversationSelectorWithContext::from_row)?;
-        mapped_rows_to_vec(r)
+        let mut conversations = mapped_rows_to_vec(r)?;
+        self.get_conversation_labels(&mut conversations)?;
+        Ok(conversations)
     }
 
     pub fn get_conversations_with_ids_and_context(
@@ -252,7 +259,9 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
         let r = stmt
             .raw_query()
             .mapped(ConversationSelectorWithContext::from_row);
-        mapped_rows_to_vec(r)
+        let mut conversations = mapped_rows_to_vec(r)?;
+        self.get_conversation_labels(&mut conversations)?;
+        Ok(conversations)
     }
 
     pub fn get_conversation_attachments(
@@ -340,6 +349,45 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         })?)?;
         Ok(r)
     }
+
+    fn get_conversation_labels(
+        &self,
+        conversations: &mut [LocalConversationWithContext],
+    ) -> DBResult<()> {
+        let id_map =
+            BTreeMap::from_iter(conversations.iter().enumerate().map(|(idx, c)| (c.id, idx)));
+        let mut stmt = self.0.prepare(&format!(
+"SELECT conversation_labels.conversation_id, labels.id, labels.name, labels.color FROM labels \
+JOIN conversation_labels ON conversation_labels.label_id=labels.id AND conversation_labels.conversation_id IN ({}) \
+WHERE labels.type=1", gen_variable_in_argument_list(conversations.len())))?;
+
+        struct Tmp {
+            id: LocalConversationId,
+            label: LocalConversationLabel,
+        }
+
+        for r in stmt.query_map(params_from_iter(conversations.iter().map(|c| c.id)), |r| {
+            Ok(Tmp {
+                id: r.get(0)?,
+                label: LocalConversationLabel {
+                    id: r.get(1)?,
+                    name: r.get(2)?,
+                    color: r.get(3)?,
+                },
+            })
+        })? {
+            let r = r?;
+            if let Some(idx) = id_map.get(&r.id) {
+                if let Some(labels) = &mut conversations[*idx].labels {
+                    labels.push(r.label)
+                } else {
+                    conversations[*idx].labels = Some(vec![r.label]);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 const RESOLVE_LABEL_ID_STATEMENT: &str = "SELECT id FROM labels WHERE rid = ?";
@@ -391,11 +439,9 @@ impl ConversationSelectorWithContext {
         "SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages,  \
 C.num_unread, C.num_attachments, C.expiration_time, C.size, \
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0), \
-ifnull(CL.ctx_num_attachments,0), \
-GROUP_CONCAT(L.id || ',' || L.name || ',' || L.color, ';')\
+ifnull(CL.ctx_num_attachments,0) \
 FROM conversations AS C \
 JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=? \
-LEFT JOIN labels AS L ON L.id = CL.label_id AND L.id IN (SELECT id FROM labels WHERE type=1) \
 WHERE C.deleted=0"
     }
 
@@ -446,45 +492,7 @@ WHERE C.deleted=0"
             context_num_messages: r.get(13)?,
             context_num_unread: r.get(14)?,
             context_num_attachments: r.get(15)?,
-            labels: conversation_label_from_row(r, 16)?,
+            labels: None,
         })
     }
-}
-
-fn conversation_label_from_row(
-    r: &Row,
-    index: usize,
-) -> DBResult<Option<Vec<LocalConversationLabel>>> {
-    let Some(value) = r.get_ref(index)?.as_str_or_null()? else {
-        return Ok(None);
-    };
-
-    let mut labels = Vec::new();
-    for split in value.split(';') {
-        let mut split = split.split(',');
-        let Some(split_id) = split.next() else {
-            return Err(FromSqlError::InvalidType.into());
-        };
-        let Ok(label_id) = u64::from_str(split_id) else {
-            return Err(FromSqlError::InvalidType.into());
-        };
-
-        let Some(name) = split.next() else {
-            return Err(FromSqlError::InvalidType.into());
-        };
-        let label_name = name.to_string();
-
-        let Some(color) = split.next() else {
-            return Err(FromSqlError::InvalidType.into());
-        };
-
-        let label_color = LabelColor::from(color);
-        labels.push(LocalConversationLabel {
-            id: LocalLabelId::from(label_id),
-            name: label_name,
-            color: label_color,
-        })
-    }
-
-    Ok(Some(labels))
 }
