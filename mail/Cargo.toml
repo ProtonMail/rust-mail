@@ -1,5 +1,5 @@
 [workspace]
-resolver ="2"
+resolver = "2"
 members = [
     "proton-mail-message-detector",
     "proton-api-mail",
@@ -7,17 +7,21 @@ members = [
     "proton-mail-uniffi",
     "proton-mail-db",
     "proton-mail-commom",
+    "proton-mail-utm-stripper",
 ]
 
 [workspace.dependencies]
-proton-api-core = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git", features = ["sql"]}
-proton-sqlite3 = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
-proton-core-common = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
-proton-event-loop = {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
-proton-async= {git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+proton-api-core = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git", features = [
+    "sql",
+] }
+proton-sqlite3 = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
+proton-core-common = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
+proton-event-loop = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
+proton-async = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
 uniffi = "0.26"
 tracing-subscriber = "0.3"
 lazy_static = "1"
+url = "2.5.0"
 
 #[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
 #proton-api-core= {path = "../../proton-api-core/proton-api-core"}
@@ -27,25 +31,25 @@ lazy_static = "1"
 #proton-event-loop = {path = "../../proton-api-core/proton-event-loop"}
 
 [workspace.lints.rust]
-trivial_numeric_casts= "warn"
-unused_extern_crates ="warn"
-unused_import_braces="warn"
-trivial_casts="warn"
-unused_qualifications="warn"
+trivial_numeric_casts = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+trivial_casts = "warn"
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-cast_possible_truncation="warn"
-cast_possible_wrap="warn"
-cast_precision_loss ="warn"
-cast_sign_loss ="warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_precision_loss = "warn"
+cast_sign_loss = "warn"
 # Useful to track missing comments on private items/code.
 # missing_docs_in_private_items ="warn"
-mut_mut="warn"
+mut_mut = "warn"
 #Disallow `println!`. Use `debug!` for debug output
 # (which is provided by the `log` crate).
 print_stdout = "warn"
-unseparated_literal_suffix ="warn"
-wrong_self_convention ="warn"
+unseparated_literal_suffix = "warn"
+wrong_self_convention = "warn"
 
 
 #TODO: Cargo build override rather than profile config(https://users.rust-lang.org/t/how-to-modify-profile-release-only-for-a-target/48811/3)
@@ -53,4 +57,4 @@ wrong_self_convention ="warn"
 lto = true
 codegen-units = 1
 panic = "abort"
-opt-level = "z"  # Optimize for size.
+opt-level = "z"   # Optimize for size.
