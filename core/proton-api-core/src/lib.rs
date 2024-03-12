@@ -15,3 +15,14 @@ pub use session::*;
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
+
+#[cfg(feature = "uniffi")]
+mod hidden {
+    // At least one export with the custom types needs to happen or they will not be resolved
+    // in the generated code.
+    #[derive(uniffi::Record)]
+    struct Dummy {
+        pub user_id: crate::domain::UserId,
+        pub uid: crate::domain::Uid,
+    }
+}

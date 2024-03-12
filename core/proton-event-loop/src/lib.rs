@@ -48,8 +48,6 @@ mod store;
 mod subscriber;
 
 mod foreground_loop;
-#[cfg(feature = "uniffi")]
-pub mod uniffi_bindings;
 
 pub use background_loop::*;
 pub use foreground_loop::*;
@@ -63,8 +61,6 @@ use proton_api_core::exports::{anyhow, thiserror};
 use proton_api_core::http::HttpRequestError;
 
 #[derive(Debug, thiserror::Error)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
-#[cfg_attr(feature = "uniffi", uniffi(flat_error))]
 pub enum EventLoopError {
     #[error("Failed to read from store: {0}")]
     StoreRead(anyhow::Error),
@@ -77,6 +73,3 @@ pub enum EventLoopError {
     #[error("Other: {0}")]
     Other(String),
 }
-
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();

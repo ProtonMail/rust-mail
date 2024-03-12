@@ -7,7 +7,6 @@ edition = "2021"
 [dependencies]
 proton-api-core = {path="../proton-api-core"}
 proton-async= {path="../proton-async"}
-uniffi = { optional = true, workspace=true}
 paste = {workspace=true}
 
 [dev-dependencies]
@@ -15,7 +14,7 @@ mockall = {workspace=true}
 
 [features]
 default=[]
-uniffi=["proton-api-core/uniffi", "dep:uniffi"]
+uniffi=["proton-api-core/uniffi"]
 
 [lints]
 workspace = true

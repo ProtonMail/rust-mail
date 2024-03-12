@@ -9,8 +9,6 @@ use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use std::fmt::Formatter;
 
 #[derive(Debug, thiserror::Error)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
-#[cfg_attr(feature = "uniffi", uniffi(flat_error))]
 pub enum LoginFlowError {
     #[error("{0}")]
     Request(#[source] http::HttpRequestError),

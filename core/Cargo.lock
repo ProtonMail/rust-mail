@@ -1525,7 +1525,6 @@ dependencies = [
  "paste",
  "proton-api-core",
  "proton-async",
- "uniffi",
 ]
 
 [[package]]
