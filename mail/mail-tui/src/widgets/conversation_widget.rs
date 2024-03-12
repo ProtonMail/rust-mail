@@ -22,8 +22,10 @@ impl ListableWidget for ConversationWidget<'_> {
     fn height(&self) -> u16 {
         3
     }
+}
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+impl Widget for ConversationWidget<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
         let [sender_area, conv_area, label_area] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(1),

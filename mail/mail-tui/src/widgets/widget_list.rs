@@ -1,3 +1,4 @@
+#![allow(unused)]
 /// Patched from Ratatui List
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
@@ -10,10 +11,8 @@ use ratatui::{
     widgets::{Block, HighlightSpacing},
 };
 
-pub trait ListableWidget {
+pub trait ListableWidget: Widget {
     fn height(&self) -> u16;
-
-    fn render_ref(&self, area: Rect, buf: &mut Buffer);
 }
 #[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct WidgetListState {
@@ -22,11 +21,14 @@ pub struct WidgetListState {
 }
 
 impl WidgetListState {
+    #[allow(unused)]
     #[must_use = "method moves the value of self and returns the modified value"]
     pub fn with_offset(mut self, offset: usize) -> Self {
         self.offset = offset;
         self
     }
+
+    #[allow(unused)]
     #[must_use = "method moves the value of self and returns the modified value"]
     pub fn with_selected(mut self, selected: Option<usize>) -> Self {
         self.selected = selected;
@@ -261,14 +263,6 @@ impl<T: ListableWidget> StatefulWidget for WidgetList<'_, T> {
     }
 }
 
-// Note: remove this when StatefulWidgetRef is stabilized and replace with the blanket impl
-impl<T: ListableWidget> StatefulWidget for &WidgetList<'_, T> {
-    type State = WidgetListState;
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_ref(area, buf, state)
-    }
-}
-
 fn should_add(hls: &HighlightSpacing, has_selection: bool) -> bool {
     match hls {
         HighlightSpacing::Always => true,
@@ -278,7 +272,7 @@ fn should_add(hls: &HighlightSpacing, has_selection: bool) -> bool {
 }
 
 impl<'a, T: ListableWidget> WidgetList<'a, T> {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut WidgetListState) {
+    fn render_ref(self, area: Rect, buf: &mut Buffer, state: &mut WidgetListState) {
         buf.set_style(area, self.style);
         self.block.render(area, buf);
         let list_area = self.block.inner_if_some(area);
@@ -303,7 +297,7 @@ impl<'a, T: ListableWidget> WidgetList<'a, T> {
         let selection_spacing = should_add(&self.highlight_spacing, state.selected.is_some());
         for (i, item) in self
             .items
-            .iter()
+            .into_iter()
             .enumerate()
             .skip(state.offset)
             .take(last_visible_index - first_visible_index)
@@ -340,11 +334,13 @@ impl<'a, T: ListableWidget> WidgetList<'a, T> {
             } else {
                 row_area
             };
-            item.content.render_ref(item_area, buf);
 
-            for j in 0..item.content.height() {
+            let item_height = item.content.height();
+            item.content.render(item_area, buf);
+
+            for j in 0..item_height {
                 // if the item is selected, we need to display the highlight symbol:
-                // - either for the first line of the item only,
+                // - either for the first line of the item only, 
                 // - or for each line of the item if the appropriate option is set
                 let symbol = if is_selected && (j == 0 || self.repeat_highlight_symbol) {
                     highlight_symbol

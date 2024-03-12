@@ -19,8 +19,10 @@ impl ListableWidget for SessionWidget<'_> {
     fn height(&self) -> u16 {
         2
     }
+}
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+impl Widget for SessionWidget<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
         let name = self.session.name.as_ref().unwrap_or(&self.session.email);
         Text::from(vec![
             name.clone().bold().into(),

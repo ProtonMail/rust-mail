@@ -21,8 +21,10 @@ impl<'a> ListableWidget for LabelWidget<'a> {
     fn height(&self) -> u16 {
         1
     }
+}
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+impl<'a> Widget for LabelWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
         let [text_area, _, unread_area, _] = Layout::horizontal([
             Constraint::Min(15),
             Constraint::Length(1),
