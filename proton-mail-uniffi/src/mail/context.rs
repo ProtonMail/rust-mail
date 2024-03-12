@@ -46,28 +46,29 @@ pub type MailContextResult<T> = Result<T, MailContextError>;
 #[uniffi::export]
 impl MailContext {
     /// Create a new mail context:
-    /// * `session_path`: Directory where the session db should be stored.
-    /// * `user_path`: Directory where the user db should be stored.
-    /// * `log_path:`: Directory where the log file should be stored.
+    /// * `session_dir`: Directory where the session db should be stored.
+    /// * `user_dri`: Directory where the user db should be stored.
+    /// * `log_dir:`: Directory where the log file should be stored.
     /// * `log_debug`: Whether to enable debug and trace logs
     /// * `key_chain`: KeyChain implementation
     /// * `network_callback`: Optional network status changed callback
     #[uniffi::constructor]
     pub fn new(
-        session_path: String,
-        user_path: String,
-        log_path: String,
+        session_dir: String,
+        user_dir: String,
+        log_dir: String,
         log_debug: bool,
         key_chain: Box<dyn OSKeyChain>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> MailContextResult<Self> {
-        let log_path = PathBuf::from(log_path);
+        let mut log_path = PathBuf::from(log_dir);
         std::fs::create_dir_all(&log_path)?;
+        log_path.push("proton-mail-uniffi.log");
 
         init_log(&log_path, log_debug)?;
 
-        let session_path = PathBuf::from(session_path);
-        let user_path = PathBuf::from(user_path);
+        let session_path = PathBuf::from(session_dir);
+        let user_path = PathBuf::from(user_dir);
 
         // create directories.
         tracing::debug!("Creating directories");
