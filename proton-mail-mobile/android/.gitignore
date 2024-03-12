@@ -13,4 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+private.properties
 *.so
