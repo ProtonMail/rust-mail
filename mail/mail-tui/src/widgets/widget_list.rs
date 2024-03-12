@@ -340,7 +340,7 @@ impl<'a, T: ListableWidget> WidgetList<'a, T> {
 
             for j in 0..item_height {
                 // if the item is selected, we need to display the highlight symbol:
-                // - either for the first line of the item only, 
+                // - either for the first line of the item only,
                 // - or for each line of the item if the appropriate option is set
                 let symbol = if is_selected && (j == 0 || self.repeat_highlight_symbol) {
                     highlight_symbol
