@@ -1624,6 +1624,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-mail-utm-stripper"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "url",
+]
+
+[[package]]
 name = "proton-mail-wasm"
 version = "0.1.0"
 dependencies = [
