@@ -88,7 +88,7 @@ impl LoginFlow {
     pub fn is_awaiting_2fa(&self) -> bool {
         self.ctx
             .async_runtime()
-            .block_on(async { self.flow.lock().await.is_logged_in() })
+            .block_on(async { self.flow.lock().await.is_awaiting_2fa() })
     }
 
     /// When the flow is considered logged in, transform it into a MailUserContext.
