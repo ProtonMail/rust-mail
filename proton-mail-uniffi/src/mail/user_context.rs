@@ -1,5 +1,6 @@
-use crate::mail::MailContextError;
+use crate::mail::{MailContextError, MailContextResult};
 use proton_mail_common as pmc;
+use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_event_loop::{EventLoopError as ELError, SubscriberError};
 use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::domain::LabelId;
@@ -34,7 +35,7 @@ pub enum EventLoopError {
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
     #[error("Other: {0}")]
-    Other(String),
+    Other(anyhow::Error),
 }
 
 impl From<ELError> for EventLoopError {
@@ -44,7 +45,7 @@ impl From<ELError> for EventLoopError {
             ELError::StoreWrite(e) => EventLoopError::StoreWrite(e),
             ELError::Provider(e) => EventLoopError::Provider(e),
             ELError::Subscriber(s, e) => EventLoopError::Subscriber(s, e),
-            ELError::Other(s) => EventLoopError::Other(s),
+            ELError::Other(s) => EventLoopError::Other(anyhow!(s)),
         }
     }
 }
@@ -54,9 +55,6 @@ impl From<ELError> for EventLoopError {
 pub trait MailUserContextInitializationCallback: Send + Sync {
     /// Called when a given initialization stage is entered.
     fn on_stage(&self, stage: MailUserContextInitializationStage);
-
-    /// Called when a given initialization stage produces an error
-    fn on_stage_err(&self, stage: MailUserContextInitializationStage, err: MailContextError);
 }
 
 impl MailUserContext {
@@ -71,18 +69,35 @@ impl MailUserContext {
 #[uniffi::export]
 impl MailUserContext {
     /// Initialize the user context. Should be called at least once.
-    pub fn initialize(&self, cb: Box<dyn MailUserContextInitializationCallback>) {
+    pub async fn initialize(
+        &self,
+        cb: Box<dyn MailUserContextInitializationCallback>,
+    ) -> MailContextResult<()> {
+        let ctx = self.ctx.clone();
         let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
-        self.ctx.initialize(LabelId::inbox(), cb);
+        let h = self.ctx.mail_context().async_runtime().spawn(async move {
+            let cb_ref = cb.as_ref();
+            ctx.initialize_async(LabelId::inbox(), cb_ref).await
+        });
+        if let Err((_, err)) = h
+            .await
+            .map_err(|e| MailContextError::Other(anyhow!("Failed to join task: {e}")))?
+        {
+            return Err(err.into());
+        }
+        Ok(())
     }
 
     /// Poll Event loop and apply events.
-    /// **NOTE**: This method should not be run on the main thread.
-    pub fn poll_events(&self) -> Result<(), EventLoopError> {
-        self.ctx.mail_context().async_runtime().block_on(async {
-            self.ctx.poll_event_loop().await?;
+    pub async fn poll_events(&self) -> Result<(), EventLoopError> {
+        let ctx = self.ctx.clone();
+        let handle = self.ctx.mail_context().async_runtime().spawn(async move {
+            ctx.poll_event_loop().await?;
             Ok(())
-        })
+        });
+        handle
+            .await
+            .map_err(|e| EventLoopError::Other(anyhow::anyhow!("Failed to join task: {e}")))?
     }
 }
 impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserContextInitializationStage {
@@ -115,9 +130,9 @@ impl proton_mail_common::MailUserContextInitializationCallback
 
     fn on_stage_err(
         &self,
-        stage: proton_mail_common::MailUserContextLoadingStage,
-        err: proton_mail_common::MailContextError,
+        _: proton_mail_common::MailUserContextLoadingStage,
+        _: proton_mail_common::MailContextError,
     ) {
-        self.0.on_stage_err(stage.into(), err.into())
+        unreachable!()
     }
 }

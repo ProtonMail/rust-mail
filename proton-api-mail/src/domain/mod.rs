@@ -5,6 +5,7 @@ mod conversations;
 mod event;
 mod labels;
 mod messages;
+mod settings;
 
 pub use addresses::*;
 pub use conversations::*;
