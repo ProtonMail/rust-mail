@@ -174,8 +174,8 @@ fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
         TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
     );
 
-    let verification_status = decrypted_attachment.get_verification_status();
-    assert!(verification_status.is_ok());
+    let verification_result = decrypted_attachment.verification_result();
+    assert!(verification_result.is_ok());
 }
 
 fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetdata) {
@@ -198,8 +198,8 @@ fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetd
     io::copy(&mut verification_reader, &mut output_buffer).unwrap();
     assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
 
-    let verification_status = verification_reader.get_verification_status();
-    assert!(verification_status.is_ok());
+    let verification_result = verification_reader.verification_result();
+    assert!(verification_result.is_ok());
 }
 
 #[test]

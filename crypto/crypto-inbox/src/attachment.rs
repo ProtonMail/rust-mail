@@ -63,8 +63,8 @@ impl<T: VerifiedData> AsRef<[u8]> for AttachmentDecrypted<T> {
 }
 
 impl<T: VerifiedData> AttachmentDecrypted<T> {
-    pub fn get_verification_status(&self) -> VerificationResult {
-        self.0.verification_status()
+    pub fn verification_result(&self) -> VerificationResult {
+        self.0.verification_result()
     }
 }
 
@@ -79,8 +79,8 @@ impl<'a, R: io::Read + 'a, T: Decryptor<'a>> io::Read for AttachmentDecryptedRea
 }
 
 impl<'a, R: io::Read + 'a, T: Decryptor<'a>> AttachmentDecryptedReader<'a, R, T> {
-    pub fn get_verification_status(&self) -> VerificationResult {
-        self.0.verification_status()
+    pub fn verification_result(&self) -> VerificationResult {
+        self.0.verification_result()
     }
 }
 
