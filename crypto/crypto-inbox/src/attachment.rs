@@ -6,7 +6,7 @@ use std::{
 };
 
 use proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationStatus,
+    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationResult,
     VerifiedData, VerifiedDataReader,
 };
 
@@ -63,20 +63,9 @@ impl<T: VerifiedData> AsRef<[u8]> for AttachmentDecrypted<T> {
 }
 
 impl<T: VerifiedData> AttachmentDecrypted<T> {
-    pub fn get_verification_status(&self) -> AttachmentVerification {
-        let status = self
-            .0
-            .verification_status()
-            .unwrap_or(VerificationStatus::NotSigned(
-                "No signature provided".into(),
-            ));
-        AttachmentVerification { status }
+    pub fn get_verification_status(&self) -> VerificationResult {
+        self.0.verification_status()
     }
-}
-
-pub struct AttachmentVerification {
-    // TODO: Add more info here
-    pub status: VerificationStatus,
 }
 
 pub struct AttachmentDecryptedReader<'a, R: io::Read + 'a, T: Decryptor<'a>>(
@@ -90,14 +79,8 @@ impl<'a, R: io::Read + 'a, T: Decryptor<'a>> io::Read for AttachmentDecryptedRea
 }
 
 impl<'a, R: io::Read + 'a, T: Decryptor<'a>> AttachmentDecryptedReader<'a, R, T> {
-    pub fn get_verification_status(&self) -> AttachmentVerification {
-        let status = self
-            .0
-            .verification_status()
-            .unwrap_or(VerificationStatus::NotSigned(
-                "No valid signature provided".into(),
-            ));
-        AttachmentVerification { status }
+    pub fn get_verification_status(&self) -> VerificationResult {
+        self.0.verification_status()
     }
 }
 
