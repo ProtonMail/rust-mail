@@ -118,7 +118,7 @@ impl Mailbox {
     /// Switch the mailbox to another label.
     pub fn switch_label(
         &self,
-        label_id: LocalLabelId,
+        label_id: u64,
         message_count: i64,
         cb: Option<Box<dyn MailboxBackgroundResult>>,
     ) -> MailboxResult<()> {
@@ -127,7 +127,7 @@ impl Mailbox {
         let cb = cb.map(|cb| FFIMailboxBackgroundVoidResult::from(cb).boxed());
 
         guard.switch_label(
-            label_id,
+            LocalLabelId::from(label_id),
             usize::try_from(message_count).unwrap_or(DEFAULT_CONVERSATION_COUNT),
             cb,
         )?;

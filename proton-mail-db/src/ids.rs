@@ -53,6 +53,7 @@ macro_rules! new_uuid_type {
 macro_rules! new_u64_type {
     ($name:ident) => {
         #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        #[repr(transparent)]
         pub struct $name(u64);
 
         impl $name {
