@@ -79,6 +79,7 @@ build-ios:
   script:
     - !reference [.script-config-git, script]
     - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./tmp/ios-framework
+    - cd ./tmp/ios-framework/package && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration=Release build
 
   artifacts:
     name: proton-mail-ios
