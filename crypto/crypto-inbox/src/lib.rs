@@ -1,3 +1,5 @@
+//! Provides cryptography utility for Proton inbox.
+
 pub mod attachment;
 mod utils;
 

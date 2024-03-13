@@ -1,4 +1,4 @@
-//! Wrapper library around cryptography primitives
+//! Provides cryptography utility for Proton account.
 
 mod constants;
 use constants::*;
