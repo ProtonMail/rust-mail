@@ -1,7 +1,7 @@
-use proton_api_mail::domain::MailSettings;
 use crate::exports::tracing;
 use crate::exports::tracing::{debug, Level};
 use crate::{MailContextResult, MailUserContext};
+use proton_api_mail::domain::MailSettings;
 use proton_mail_db::DBResult;
 
 impl MailUserContext {
