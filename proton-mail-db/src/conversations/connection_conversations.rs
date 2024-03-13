@@ -48,9 +48,9 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ) -> DBResult<Vec<LocalConversationId>> {
         let mut stmt = self.0.prepare(
             "INSERT INTO conversations (rid, `order`, subject, senders, recipients, num_messages, \
-num_unread, num_attachments, expiration_time, size) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rid) DO UPDATE SET \
+num_unread, num_attachments, expiration_time, size, flagged) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rid) DO UPDATE SET \
 num_messages=excluded.num_messages, num_attachments=excluded.num_attachments, \
-expiration_time=excluded.expiration_time, size=excluded.size RETURNING id",
+expiration_time=excluded.expiration_time, size=excluded.size, flagged=excluded.flagged RETURNING id",
         )?;
 
         let mut resolve_conv_id_stmt =
@@ -77,6 +77,7 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
             let senders = senders_buffer.serialize(&conv.senders)?;
             let recipients = receives_buffers.serialize(&conv.recipients)?;
 
+            let is_starred = conv.is_starred();
             let conv_id: LocalConversationId = if let Some(id) = stmt
                 .query_row(
                     (
@@ -90,6 +91,7 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
                         conv.num_attachments,
                         conv.expiration_time,
                         conv.size,
+                        is_starred,
                     ),
                     |r| r.get(0),
                 )
@@ -391,7 +393,7 @@ struct ConversationSelector {}
 impl ConversationSelector {
     fn query() -> &'static str {
         "SELECT id, rid, `order`, subject, senders, recipients, num_messages, \
-num_unread, num_attachments, expiration_time, size \
+num_unread, num_attachments, expiration_time, size, flagged \
 FROM conversations WHERE deleted=0"
     }
 
@@ -421,7 +423,7 @@ FROM conversations WHERE deleted=0"
                 num_attachments: r.get(8)?,
                 expiration_time: r.get(9)?,
                 size: r.get(10)?,
-                flagged: false,
+                starred: r.get(11)?,
                 labels: None,
                 time: 0,
             }
@@ -436,7 +438,7 @@ impl ConversationSelectorWithContext {
     fn query_base() -> &'static str {
         "SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time, \
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0), \
-ifnull(CL.ctx_num_attachments,0) \
+ifnull(CL.ctx_num_attachments,0), C.flagged \
 FROM conversations AS C \
 JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=? \
 WHERE C.deleted=0"
@@ -486,7 +488,7 @@ WHERE C.deleted=0"
             num_unread: r.get(10)?,
             num_attachments: r.get(11)?,
             labels: None,
-            flagged: false,
+            starred: r.get(12)?,
         })
     }
 }

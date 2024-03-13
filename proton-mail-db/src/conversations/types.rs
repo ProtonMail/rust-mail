@@ -36,7 +36,7 @@ pub struct LocalConversation {
     pub size: u64,
     pub time: u64,
     pub labels: Option<Vec<LocalConversationLabel>>,
-    pub flagged: bool,
+    pub starred: bool,
 }
 
 impl LocalConversation {
@@ -47,6 +47,7 @@ impl LocalConversation {
     ) -> Self {
         Self {
             id,
+            starred: conversation.is_starred(),
             remote_id: Some(conversation.id),
             order: conversation.order,
             subject: conversation.subject,
@@ -59,7 +60,6 @@ impl LocalConversation {
             size: conversation.size,
             time: 0,
             labels,
-            flagged: false,
         }
     }
 
@@ -71,6 +71,7 @@ impl LocalConversation {
     ) -> Self {
         let mut result = Self {
             id,
+            starred: conversation.is_starred(),
             remote_id: Some(conversation.id),
             order: conversation.order,
             subject: conversation.subject,
@@ -83,7 +84,6 @@ impl LocalConversation {
             size: conversation.size,
             labels,
             time: 0,
-            flagged: false,
         };
 
         if let Some(l) = conversation.labels.iter().find(|l| l.id == *label_id) {
@@ -130,6 +130,7 @@ pub struct LocalMessageMetadata {
     pub external_id: Option<ExternalId>,
     pub num_attachments: u32,
     pub flags: u64,
+    pub starred: bool,
 }
 
 impl LocalMessageMetadata {
@@ -159,6 +160,7 @@ impl LocalMessageMetadata {
             external_id: message.external_id,
             num_attachments: message.num_attachments,
             flags: message.flags,
+            starred: message.label_ids.contains(LabelId::starred()),
         }
     }
 }

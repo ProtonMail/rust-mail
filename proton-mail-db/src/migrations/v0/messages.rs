@@ -29,6 +29,7 @@ CREATE TABLE messages(
     num_attachments INTEGER NOT NULL,
     flags INTEGER NOT NULL,
     deleted INTEGER NOT NULL DEFAULT 0,
+    flagged INTEGER NOT NULL DEFAULT 0,
     CONSTRAINT messages_address_id FOREIGN KEY (address_id) REFERENCES addresses (id),
     CONSTRAINT messageS_conversation_id FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE
 )"#, ())?;

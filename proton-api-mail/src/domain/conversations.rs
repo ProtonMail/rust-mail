@@ -88,6 +88,13 @@ pub struct Conversation {
     #[serde(default)]
     pub attachment_info: HashMap<String, MessageAttachmentInfo>,
 }
+
+impl Conversation {
+    #[inline]
+    pub fn is_starred(&self) -> bool {
+        self.labels.iter().any(|l| l.id == *LabelId::starred())
+    }
+}
 #[derive(Debug, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct ConversationFilter {

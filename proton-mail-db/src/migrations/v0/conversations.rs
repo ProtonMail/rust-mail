@@ -15,6 +15,7 @@ CREATE TABLE conversations (
     num_attachments INTEGER NOT NULL,
     expiration_time INTEGER NOT NULL,
     size INTEGER NOT NULL,
+    flagged INTEGER NOT NULL,
     deleted INTEGER NOT NULL DEFAULT 0
  )"#,
         (),

@@ -8,6 +8,7 @@ categories = ["api-bindings"]
 [dependencies]
 proton-api-core = {workspace=true}
 uniffi = {version = "0.26", optional = true, features = ["tokio"]}
+lazy_static = "1"
 
 
 [dev-dependencies]

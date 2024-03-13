@@ -63,8 +63,8 @@ impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> 
 impl Mailbox {
     pub fn new(user_ctx: MailUserContext) -> MailboxResult<Self> {
         let inbox_id = LabelId::inbox();
-        let Some(label) = user_ctx.get_label_with_remote_id(&inbox_id)? else {
-            return Err(MailboxError::RemoteLabelNotFound(inbox_id));
+        let Some(label) = user_ctx.get_label_with_remote_id(inbox_id)? else {
+            return Err(MailboxError::RemoteLabelNotFound(inbox_id.clone()));
         };
 
         Ok(Self {

@@ -32,6 +32,76 @@ fn test_conversation_create_no_labels() {
 }
 
 #[test]
+fn test_conversation_create_starred() {
+    let conv_label = ConversationLabels {
+        id: LabelId::starred().clone(),
+        context_num_unread: 0,
+        context_num_messages: 0,
+        context_time: 0,
+        context_size: 0,
+        context_num_attachments: 0,
+    };
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        create_address_and_labels(tx);
+        tx.create_remote_label(&test_starred_label()).unwrap();
+
+        // Add starred label, should gain starred attribute.
+        let conv = test_conversation([conv_label.clone()], []);
+        let id = tx
+            .create_conversation(&conv)
+            .expect("failed to create conversation");
+
+        {
+            let local_conversation = LocalConversation::from_conversation(id, conv.clone(), None);
+            let db_conversation = tx
+                .get_conversation(id)
+                .expect("failed to get conversation")
+                .expect("should have value");
+            assert_eq!(local_conversation, db_conversation);
+            assert!(local_conversation.starred);
+            assert!(db_conversation.starred);
+        }
+        {
+            let local_conversation = LocalConversation::from_conversation_and_label(
+                id,
+                LabelId::starred(),
+                conv.clone(),
+                None,
+            );
+            let db_conversation = tx
+                .get_conversation_with_context(
+                    id,
+                    tx.resolve_remote_label_id(LabelId::starred())
+                        .unwrap()
+                        .unwrap(),
+                )
+                .expect("failed to get conversation")
+                .expect("should have value");
+            assert_eq!(local_conversation, db_conversation);
+            assert!(local_conversation.starred);
+            assert!(db_conversation.starred);
+        }
+
+        // Remove starred label, should lose starred attribute.
+        let conv = test_conversation([], []);
+        let id = tx
+            .create_conversation(&conv)
+            .expect("failed to create conversation");
+        {
+            let local_conversation = LocalConversation::from_conversation(id, conv.clone(), None);
+            let db_conversation = tx
+                .get_conversation(id)
+                .expect("failed to get conversation")
+                .expect("should have value");
+            assert_eq!(local_conversation, db_conversation);
+            assert!(!local_conversation.starred);
+            assert!(!db_conversation.starred);
+        }
+    });
+}
+
+#[test]
 fn test_conversation_create_with_labels() {
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
@@ -330,6 +400,22 @@ pub(super) fn test_label2() -> Label {
         sticky: Default::default(),
         expanded: ProtonBoolean::True,
         order: 1,
+    }
+}
+
+pub(super) fn test_starred_label() -> Label {
+    Label {
+        id: LabelId::starred().clone(),
+        parent_id: None,
+        name: "Starred".to_string(),
+        path: Some("Starred".to_string()),
+        color: "#0000".to_string(),
+        label_type: LabelType::System,
+        notify: ProtonBoolean::False,
+        display: Default::default(),
+        sticky: Default::default(),
+        expanded: ProtonBoolean::False,
+        order: 2,
     }
 }
 
