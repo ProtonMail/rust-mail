@@ -21,6 +21,7 @@ pub struct LocalMessageCount {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalConversation {
     pub id: LocalConversationId,
     pub remote_id: Option<ConversationId>,
@@ -33,10 +34,17 @@ pub struct LocalConversation {
     pub num_attachments: u64,
     pub expiration_time: u64,
     pub size: u64,
+    pub time: u64,
+    pub labels: Option<Vec<LocalConversationLabel>>,
+    pub flagged: bool,
 }
 
 impl LocalConversation {
-    pub fn from_conversation(id: LocalConversationId, conversation: Conversation) -> Self {
+    pub fn from_conversation(
+        id: LocalConversationId,
+        conversation: Conversation,
+        labels: Option<Vec<LocalConversationLabel>>,
+    ) -> Self {
         Self {
             id,
             remote_id: Some(conversation.id),
@@ -49,40 +57,12 @@ impl LocalConversation {
             num_attachments: conversation.num_attachments,
             expiration_time: conversation.expiration_time,
             size: conversation.size,
+            time: 0,
+            labels,
+            flagged: false,
         }
     }
-}
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct LocalConversationLabel {
-    pub id: LocalLabelId,
-    pub name: String,
-    pub color: LabelColor,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct LocalConversationWithContext {
-    pub id: LocalConversationId,
-    pub remote_id: Option<ConversationId>,
-    pub order: u64,
-    pub subject: String,
-    pub senders: Vec<MessageAddress>,
-    pub recipients: Vec<MessageAddress>,
-    pub num_messages: u64,
-    pub num_unread: u64,
-    pub num_attachments: u64,
-    pub expiration_time: u64,
-    pub size: u64,
-    pub context_num_unread: u64,
-    pub context_num_messages: u64,
-    pub context_time: u64,
-    pub context_size: u64,
-    pub context_num_attachments: u64,
-    pub labels: Option<Vec<LocalConversationLabel>>,
-}
-impl LocalConversationWithContext {
     pub fn from_conversation_and_label(
         id: LocalConversationId,
         label_id: &LabelId,
@@ -101,24 +81,29 @@ impl LocalConversationWithContext {
             num_attachments: conversation.num_attachments,
             expiration_time: conversation.expiration_time,
             size: conversation.size,
-            context_num_unread: conversation.num_unread,
-            context_num_messages: conversation.num_messages,
-            context_time: 0,
-            context_size: conversation.size,
-            context_num_attachments: conversation.num_attachments,
             labels,
+            time: 0,
+            flagged: false,
         };
 
         if let Some(l) = conversation.labels.iter().find(|l| l.id == *label_id) {
-            result.context_num_unread = l.context_num_unread;
-            result.context_num_messages = l.context_num_messages;
-            result.context_size = l.context_size;
-            result.context_time = l.context_time;
-            result.context_num_attachments = l.context_num_attachments;
+            result.num_unread = l.context_num_unread;
+            result.num_messages = l.context_num_messages;
+            result.size = l.context_size;
+            result.time = l.context_time;
+            result.num_attachments = l.context_num_attachments;
         }
 
         result
     }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct LocalConversationLabel {
+    pub id: LocalLabelId,
+    pub name: String,
+    pub color: LabelColor,
 }
 
 new_u64_type!(LocalMessageId);

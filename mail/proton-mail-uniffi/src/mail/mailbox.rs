@@ -7,8 +7,8 @@ use proton_mail_common::exports::thiserror;
 use proton_mail_common::proton_api_mail::domain::{LabelId, LabelType};
 use proton_mail_common::proton_mail_db::proton_sqlite3::{SharedLiveQuery, SharedLiveQueryUpdated};
 use proton_mail_common::proton_mail_db::{
-    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalConversationWithContext,
-    LocalLabel, LocalLabelId, LocalLabelWithCount,
+    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalConversation, LocalLabel,
+    LocalLabelId, LocalLabelWithCount,
 };
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
@@ -149,7 +149,7 @@ impl Mailbox {
     }
 
     /// Get conversations for the current selected label.
-    pub fn conversations(&self, count: i64) -> MailboxResult<Vec<LocalConversationWithContext>> {
+    pub fn conversations(&self, count: i64) -> MailboxResult<Vec<LocalConversation>> {
         let v = self
             .mbox
             .read()
