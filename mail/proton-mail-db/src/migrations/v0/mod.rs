@@ -5,6 +5,7 @@ mod conversations;
 mod events;
 mod labels;
 mod messages;
+mod settings;
 
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_sqlite3::rusqlite::Transaction;
@@ -25,6 +26,7 @@ impl proton_sqlite3::Migration for MigrationV0 {
             .in_scope(|| conversations::create_conversation_tables(tx))?;
         tracing::debug_span!("messages").in_scope(|| messages::create_message_tables(tx))?;
         tracing::debug_span!("events").in_scope(|| events::create_event_tables(tx))?;
+        tracing::debug_span!("settings").in_scope(|| settings::create_settings_table(tx))?;
         Ok(())
     }
 }

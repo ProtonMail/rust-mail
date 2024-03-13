@@ -7,7 +7,7 @@ use proton_sqlite3::rusqlite::{Row, ToSql};
 use std::ops::Deref;
 use std::str;
 
-fn serde_json_err_to_sql_err(v: serde_json::Error) -> proton_sqlite3::rusqlite::Error {
+pub fn serde_json_err_to_sql_err(v: serde_json::Error) -> proton_sqlite3::rusqlite::Error {
     proton_sqlite3::rusqlite::Error::ToSqlConversionFailure(Box::new(v))
 }
 
