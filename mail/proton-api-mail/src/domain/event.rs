@@ -1,5 +1,5 @@
 use crate::domain::{
-    Address, Conversation, ConversationId, Label, LabelId, MessageId, MessageMetadata,
+    Address, Conversation, ConversationId, Label, LabelId, MailSettings, MessageId, MessageMetadata,
 };
 use crate::domain::{ConversationCount, MessageCount};
 use proton_api_core::domain::{EventAction, User, UserProductUsedSpace, UserSettings};
@@ -23,7 +23,8 @@ proton_api_core::declare_event!(MailEvent, {
     conversation_counts:Option<Vec<ConversationCount>>,
     product_used_space:Option<UserProductUsedSpace>,
     conversations: Option<Vec<ConversationEvent>>,
-    user_settings: Option<UserSettings>
+    user_settings: Option<UserSettings>,
+    mail_settings: Option<MailSettings>
 });
 
 /// Event data related to a Message event.

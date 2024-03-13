@@ -5,6 +5,7 @@ use proton_api_core::new_integer_enum;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MailSettings {
     pub display_name: String,
     pub signature: String,
@@ -228,6 +229,7 @@ new_integer_enum!(u8, MailSettingsSpamAction {
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MailSettingsMobileSetting {
     pub is_custom: bool,
     #[serde(default)]
@@ -236,6 +238,7 @@ pub struct MailSettingsMobileSetting {
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MailSettingsMobileSettings {
     pub message_toolbar: MailSettingsMobileSetting,
     pub conversation_toolbar: MailSettingsMobileSetting,

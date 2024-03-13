@@ -3,6 +3,7 @@ mod conversations;
 mod events;
 mod initialization;
 mod labels;
+mod settings;
 
 pub use initialization::*;
 use std::sync::{Arc, Weak};

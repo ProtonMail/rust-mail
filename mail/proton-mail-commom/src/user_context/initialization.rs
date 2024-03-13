@@ -5,6 +5,7 @@ use proton_api_mail::proton_api_core::exports::tracing::{self, error, trace, Lev
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MailUserContextLoadingStage {
     User,
+    MailSettings,
     Addresses,
     Events,
     Labels,
@@ -39,6 +40,14 @@ impl MailUserContext {
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
         let ctx = self;
+
+        trace!("Syncing event id");
+        cb.on_stage(MailUserContextLoadingStage::Events);
+        if let Err(e) = ctx.inner.event_loop.initialize(ctx, ctx).await {
+            error!("Failed to sync event id:{e}");
+            return Err((MailUserContextLoadingStage::Events, e.into()));
+        }
+
         trace!("Syncing User settings");
         cb.on_stage(MailUserContextLoadingStage::User);
         if let Err(e) = ctx.inner.user_context.sync_user_and_settings().await {
@@ -46,11 +55,11 @@ impl MailUserContext {
             return Err((MailUserContextLoadingStage::User, e.into()));
         }
 
-        trace!("Syncing event id");
-        cb.on_stage(MailUserContextLoadingStage::Events);
-        if let Err(e) = ctx.inner.event_loop.initialize(ctx, ctx).await {
-            error!("Failed to sync event id:{e}");
-            return Err((MailUserContextLoadingStage::Events, e.into()));
+        trace!("Syncing Mail settings");
+        cb.on_stage(MailUserContextLoadingStage::MailSettings);
+        if let Err(e) = ctx.sync_mail_settings().await {
+            error!("Failed to sync user settings: {e}");
+            return Err((MailUserContextLoadingStage::MailSettings, e));
         }
 
         trace!("Syncing Addresses");
