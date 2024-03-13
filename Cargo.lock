@@ -1505,6 +1505,8 @@ name = "proton-api-mail"
 version = "0.1.0"
 dependencies = [
  "proton-api-core",
+ "proton-async",
+ "tracing-subscriber",
  "uniffi",
 ]
 

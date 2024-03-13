@@ -1,12 +1,12 @@
 use crate::domain::{
     Address, ConversationCount, ConversationFilter, ConversationId, Label, LabelId, LabelType,
-    MailEvent, Message, MessageCount, MessageId, MessageMetadataFilter,
+    MailEvent, MailSettings, Message, MessageCount, MessageId, MessageMetadataFilter,
 };
 use crate::requests::{
     CreateLabelRequest, DeleteLabelRequest, GetAddressesRequest, GetConversationCountsRequest,
     GetConversationRequest, GetConversationResponse, GetConversationsRequest,
-    GetConversationsResponse, GetLabelsRequest, GetMessageCountsRequest, GetMessageMetadataRequest,
-    GetMessageRequest, MessageMetadataResponse, UpdateLabelRequest,
+    GetConversationsResponse, GetLabelsRequest, GetMailSettingsRequest, GetMessageCountsRequest,
+    GetMessageMetadataRequest, GetMessageRequest, MessageMetadataResponse, UpdateLabelRequest,
 };
 use proton_api_core::domain::EventId;
 use proton_api_core::{http, Session};
@@ -127,6 +127,13 @@ impl MailSession {
             .execute_request(GetConversationCountsRequest {})
             .await
             .map(|r| r.counts)
+    }
+
+    pub async fn mail_settings(&self) -> Result<MailSettings, http::HttpRequestError> {
+        self.session
+            .execute_request(GetMailSettingsRequest {})
+            .await
+            .map(|r| r.mail_settings)
     }
 }
 
