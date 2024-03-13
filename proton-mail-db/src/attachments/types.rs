@@ -1,6 +1,6 @@
 use crate::new_u64_type;
 use proton_api_mail::domain::{AttachmentId, AttachmentMetadata, Disposition};
-
+use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 new_u64_type!(LocalAttachmentId);
 
 #[derive(Debug, Clone, Eq, PartialEq)]

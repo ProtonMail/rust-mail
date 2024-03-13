@@ -88,3 +88,15 @@ pub fn deserialize_json_from_row<T: DeserializeOwned>(r: &Row, index: usize) -> 
     let str = value_ref.as_str()?;
     deserialize_json(str)
 }
+
+#[inline(always)]
+pub fn deserialize_optional_json_from_row<T: DeserializeOwned>(
+    r: &Row,
+    index: usize,
+) -> DBResult<Option<T>> {
+    let value_ref = r.get_ref(index)?;
+    let Some(str) = value_ref.as_str_or_null()? else {
+        return Ok(None);
+    };
+    Ok(Some(deserialize_json(str)?))
+}
