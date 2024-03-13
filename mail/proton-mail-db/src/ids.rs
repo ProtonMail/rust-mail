@@ -52,7 +52,10 @@ macro_rules! new_uuid_type {
 #[macro_export]
 macro_rules! new_u64_type {
     ($name:ident) => {
-        #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
+        #[derive(
+            Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize,
+        )]
+        #[serde(crate = "self::serde")]
         #[repr(transparent)]
         pub struct $name(u64);
 

@@ -3,6 +3,7 @@ use proton_api_mail::domain::{
     AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
     MessageMetadata,
 };
+use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 
 new_u64_type!(LocalConversationId);
 
@@ -98,8 +99,9 @@ impl LocalConversation {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[serde(crate = "self::serde")]
 pub struct LocalConversationLabel {
     pub id: LocalLabelId,
     pub name: String,
