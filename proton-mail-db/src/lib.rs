@@ -8,6 +8,7 @@ mod ids;
 pub mod json;
 mod labels;
 pub mod migrations;
+mod settings;
 mod state;
 
 pub use attachments::*;
