@@ -1,5 +1,5 @@
-use proton_mail_common::proton_api_mail::domain::MailSettings;
 use crate::mail::{MailContextResult, MailUserContext};
+use proton_mail_common::proton_api_mail::domain::MailSettings;
 
 #[uniffi::export]
 impl MailUserContext {
