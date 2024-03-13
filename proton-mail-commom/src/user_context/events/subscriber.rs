@@ -69,6 +69,11 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                     debug!("Handling message counts");
                     tx.create_or_update_message_counts(message_counts.iter())?;
                 }
+
+                if let Some(mail_settings) = &event.mail_settings {
+                    debug!("Handling mail settings");
+                    tx.create_or_update_mail_settings(mail_settings)?;
+                }
             }
             Ok(())
         })
