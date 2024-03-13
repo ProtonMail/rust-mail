@@ -145,11 +145,13 @@ publish-android:
     - xlarge-k8s
   rules:
     - if: $CI_COMMIT_BRANCH =~ /^android-lib-publishing/ # To be changed to $CI_DEFAULT_BRANCH
-      when: manual
+      when: always
       allow_failure: true
   script:
     - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
     - cd proton-mail-mobile/android/
+    - export JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=$( echo ${http_proxy##http://} | cut -d':' -f1 ) -Dhttp.proxyPort=$( echo ${http_proxy##http://} | cut -d':' -f2 ) -Dhttps.proxyHost=$( echo ${https_proxy##http://} | cut -d':' -f1 ) -Dhttps.proxyPort=$( echo ${https_proxy##http://} | cut -d':' -f2 ) -Dhttp.nonProxyHosts=\"$( echo $no_proxy | tr ',' '|' )\" -Dhttp.socketTimeout=600000 -Dhttp.connectionTimeout=600000 -Dhttps.socketTimeout=600000 -Dhttps.connectionTimeout=600000"
+    - export GRADLE_USER_HOME=`pwd`/.gradle
     - ./gradlew :lib:assembleRelease
     - ./gradlew publishAllPublicationsToMavenCentralRepository
   dependencies:
@@ -159,7 +161,7 @@ publish-android:
   artifacts:
     name: proton-mail-android-lib
     paths:
-      - ./proton-mail-mobile/android/lib/build
+      - ./proton-mail-mobile/android/lib/build/outputs/
     when: always
     expire_in: 4 hrs
 
