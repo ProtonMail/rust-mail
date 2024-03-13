@@ -12,3 +12,4 @@ pub use conversations::*;
 pub use event::*;
 pub use labels::*;
 pub use messages::*;
+pub use settings::*;
