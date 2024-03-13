@@ -1,6 +1,6 @@
 use crate::conversations::tests_conversations::{
-    create_address_and_labels, test_conversation, MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1,
-    MY_LABEL_ID2,
+    create_address_and_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
+    MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
 use crate::{
     new_test_connection, with_tx, LocalConversationId, LocalMessageCount, LocalMessageMetadata,
@@ -42,10 +42,13 @@ fn test_update_message() {
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let conv_id = test_create_message_dependencies(tx);
+        tx.create_remote_label(&test_starred_label()).unwrap();
         let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
-        let mut metadata_updated = test_message_metadata([MY_LABEL_ID2.clone()], []);
+        let mut metadata_updated =
+            test_message_metadata([MY_LABEL_ID2.clone(), LabelId::starred().clone()], []);
         metadata_updated.order = 20;
         metadata_updated.unread = ProtonBoolean::True;
+        metadata_updated.label_ids.push(LabelId::starred().clone());
         let id = tx
             .create_message_from_metadata(&metadata)
             .expect("failed to create message");
@@ -57,12 +60,13 @@ fn test_update_message() {
             .expect("must have a value");
         let expected = LocalMessageMetadata::from_message_metadata(id, conv_id, metadata_updated);
         assert_eq!(db_metadata, expected);
+        assert!(db_metadata.starred);
 
         let message_labels = tx
             .get_message_labels(id)
             .expect("failed to get labels")
             .expect("must have value");
-        assert_eq!(message_labels.len(), 1);
+        assert_eq!(message_labels.len(), 2);
     });
 }
 

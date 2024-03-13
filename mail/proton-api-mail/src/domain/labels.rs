@@ -1,6 +1,8 @@
+use lazy_static::lazy_static;
 use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
+use std::convert::Into;
 
 proton_api_core::utils::string_id!(LabelId);
 
@@ -87,53 +89,68 @@ impl SysLabelId {
     pub const ALL_SCHEDULED: SysLabelId = SysLabelId("12");
 }
 
+lazy_static! {
+    static ref LABEL_ID_INBOX: LabelId = SysLabelId::INBOX.into();
+    static ref LABEL_ID_ALL_DRAFTS: LabelId = SysLabelId::ALL_DRAFTS.into();
+    static ref LABEL_ID_ALL_SENT: LabelId = SysLabelId::ALL_SENT.into();
+    static ref LABEL_ID_TRASH: LabelId = SysLabelId::TRASH.into();
+    static ref LABEL_ID_SPAM: LabelId = SysLabelId::SPAM.into();
+    static ref LABEL_ID_ALL_MAIL: LabelId = SysLabelId::ALL_MAIL.into();
+    static ref LABEL_ID_ARCHIVE: LabelId = SysLabelId::ARCHIVE.into();
+    static ref LABEL_ID_SENT: LabelId = SysLabelId::SENT.into();
+    static ref LABEL_ID_DRAFTS: LabelId = SysLabelId::DRAFTS.into();
+    static ref LABEL_ID_OUTBOX: LabelId = SysLabelId::OUTBOX.into();
+    static ref LABEL_ID_STARRED: LabelId = SysLabelId::STARRED.into();
+    static ref LABEL_ID_ALL_SCHEDULED: LabelId = SysLabelId::ALL_SCHEDULED.into();
+}
+
 impl LabelId {
-    pub fn inbox() -> Self {
-        SysLabelId::INBOX.into()
+    pub fn inbox() -> &'static Self {
+        &LABEL_ID_INBOX
     }
 
-    pub fn all_drafts() -> Self {
-        SysLabelId::ALL_DRAFTS.into()
+    pub fn all_drafts() -> &'static Self {
+        &LABEL_ID_ALL_DRAFTS
     }
 
-    pub fn all_sent() -> Self {
-        SysLabelId::ALL_SENT.into()
+    pub fn all_sent() -> &'static Self {
+        &LABEL_ID_ALL_SENT
     }
 
-    pub fn trash() -> Self {
-        SysLabelId::TRASH.into()
+    pub fn trash() -> &'static Self {
+        &LABEL_ID_TRASH
     }
 
-    pub fn spam() -> Self {
-        SysLabelId::SPAM.into()
+    pub fn spam() -> &'static Self {
+        &LABEL_ID_SPAM
     }
 
-    pub fn all_mail() -> Self {
-        SysLabelId::ALL_MAIL.into()
+    pub fn all_mail() -> &'static Self {
+        &LABEL_ID_ALL_MAIL
     }
 
-    pub fn archive() -> Self {
-        SysLabelId::ARCHIVE.into()
+    pub fn archive() -> &'static Self {
+        &LABEL_ID_ARCHIVE
     }
 
-    pub fn sent() -> Self {
-        SysLabelId::SENT.into()
+    pub fn sent() -> &'static Self {
+        &LABEL_ID_SENT
     }
 
-    pub fn drafts() -> Self {
-        SysLabelId::DRAFTS.into()
+    pub fn drafts() -> &'static Self {
+        &LABEL_ID_DRAFTS
     }
 
-    pub fn outbox() -> Self {
-        SysLabelId::OUTBOX.into()
+    pub fn outbox() -> &'static Self {
+        &LABEL_ID_OUTBOX
     }
 
-    pub fn starred() -> Self {
-        SysLabelId::STARRED.into()
+    pub fn starred() -> &'static Self {
+        &LABEL_ID_STARRED
     }
 
-    pub fn all_scheduled() -> Self {
-        SysLabelId::ALL_SCHEDULED.into()
+    pub fn all_scheduled() -> &'static Self {
+        &LABEL_ID_ALL_SCHEDULED
     }
 }
 

@@ -3,7 +3,7 @@ use crate::{
     DBResult, DeletedState, LocalLabelId, LocalMessageCount, LocalMessageId, LocalMessageMetadata,
     MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{MessageAddress, MessageCount, MessageId, MessageMetadata};
+use proton_api_mail::domain::{LabelId, MessageAddress, MessageCount, MessageId, MessageMetadata};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
@@ -223,9 +223,9 @@ fn create_message_query() -> String {
         "INSERT OR REPLACE INTO messages (conversation_id, rid, address_id, `order`, subject, unread, \
 sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector, \
 sender_display_image, to_list, cc_list, bcc_list, time, size, expiration_time, \
-is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags) VALUES \
+is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, flagged) VALUES \
 ((SELECT id FROM conversations WHERE rid=?),{}) RETURNING id",
-        gen_variable_in_argument_list(23)
+        gen_variable_in_argument_list(24)
     )
 }
 
@@ -234,7 +234,7 @@ fn update_message_query() -> &'static str {
 rid=?, address_id=?, `order`=?, subject=?, unread=?, \
 sender_address=?, sender_name=?, sender_is_proton=?, sender_is_simple_login=?, sender_bimi_selector=?, \
 sender_display_image=?, to_list=?, cc_list=?, bcc_list=?, time=?, size=?, expiration_time=?, \
-is_replied=?, is_replied_all=?, is_forwarded=?, external_id=?, num_attachments=?, flags=? \
+is_replied=?, is_replied_all=?, is_forwarded=?, external_id=?, num_attachments=?, flags=?, flagged=? \
 WHERE rid=? RETURNING id"
 }
 
@@ -275,6 +275,7 @@ fn bind_message_metadata_update(
         &m.external_id,
         m.num_attachments,
         m.flags,
+        m.label_ids.contains(LabelId::starred()),
         &m.id,
     }
 
@@ -318,6 +319,7 @@ fn bind_message_metadata_create(
         &m.external_id,
         m.num_attachments,
         m.flags,
+        m.label_ids.contains(LabelId::starred()),
     }
 
     Ok(())
@@ -329,7 +331,7 @@ impl LocalMessageMetadataSelector {
         "SELECT id, rid, address_id, conversation_id, `order`, subject, unread, \
 sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector, sender_display_image, \
 to_list, cc_list, bcc_list, time, size, expiration_time, \
-is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags FROM messages WHERE deleted=0"
+is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, flagged FROM messages WHERE deleted=0"
     }
 
     fn query_with_id() -> String {
@@ -373,6 +375,7 @@ is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags FR
             external_id: r.get(22)?,
             num_attachments: r.get(23)?,
             flags: r.get(24)?,
+            starred: r.get(25)?,
         })
     }
 }

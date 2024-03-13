@@ -13,7 +13,7 @@ impl MailUserContext {
         let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
         let h = self.ctx.mail_context().async_runtime().spawn(async move {
             let cb_ref = cb.as_ref();
-            ctx.initialize_async(LabelId::inbox(), cb_ref).await
+            ctx.initialize_async(LabelId::inbox().clone(), cb_ref).await
         });
         if let Err((_, err)) = h
             .await
