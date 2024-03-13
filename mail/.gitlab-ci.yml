@@ -141,6 +141,8 @@ pages:
 
 publish-android:
   stage: publish
+  tags:
+    - xlarge-k8s
   rules:
     - if: $CI_COMMIT_BRANCH =~ /^android-lib-publishing/ # To be changed to $CI_DEFAULT_BRANCH
       when: manual
