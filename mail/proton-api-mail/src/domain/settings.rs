@@ -1,7 +1,7 @@
 use crate::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::domain::ProtonBoolean;
-use proton_api_core::new_integer_enum;
 use proton_api_core::exports::proton_sqlite3;
+use proton_api_core::new_integer_enum;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
