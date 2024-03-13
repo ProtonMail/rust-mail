@@ -1,5 +1,4 @@
 use crate::conversations::types::LocalConversation;
-use crate::conversations::LocalConversationWithContext;
 use crate::{
     new_test_connection, with_tx, DeletedState, LabelColor, LocalAttachmentMetadata,
     LocalConversationCount, LocalConversationLabel, LocalLabelId, MailSqliteConnectionMut,
@@ -23,7 +22,7 @@ fn test_conversation_create_no_labels() {
             .create_conversation(&conv)
             .expect("failed to create conversation");
 
-        let local_conversation = LocalConversation::from_conversation(id, conv.clone());
+        let local_conversation = LocalConversation::from_conversation(id, conv.clone(), None);
         let db_conversation = tx
             .get_conversation(id)
             .expect("failed to get conversation")
@@ -66,7 +65,7 @@ fn test_conversation_create_with_labels() {
             .iter()
             .enumerate()
         {
-            let local_conversation = LocalConversationWithContext::from_conversation_and_label(
+            let local_conversation = LocalConversation::from_conversation_and_label(
                 id,
                 label,
                 conv.clone(),
@@ -167,7 +166,7 @@ fn test_conversation_update() {
         tx.update_conversation(&conv_update)
             .expect("failed to update conversation");
 
-        let local_conversation = LocalConversationWithContext::from_conversation_and_label(
+        let local_conversation = LocalConversation::from_conversation_and_label(
             id,
             &MY_LABEL_ID1,
             conv_update.clone(),

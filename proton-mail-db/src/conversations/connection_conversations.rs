@@ -1,7 +1,5 @@
 use crate::attachments::LocalAttachmentMetadataSelector;
-use crate::conversations::types::{
-    LocalConversation, LocalConversationId, LocalConversationWithContext,
-};
+use crate::conversations::types::{LocalConversation, LocalConversationId};
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
     DBResult, DeletedState, LocalAttachmentMetadata, LocalConversationCount,
@@ -191,7 +189,7 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
         &self,
         id: LocalConversationId,
         label_id: LocalLabelId,
-    ) -> DBResult<Option<LocalConversationWithContext>> {
+    ) -> DBResult<Option<LocalConversation>> {
         let mut r = self
             .0
             .query_row(
@@ -230,7 +228,7 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
         &self,
         label_id: LocalLabelId,
         limit: usize,
-    ) -> DBResult<Vec<LocalConversationWithContext>> {
+    ) -> DBResult<Vec<LocalConversation>> {
         let mut stmt = self
             .0
             .prepare(&ConversationSelectorWithContext::query_with_limit())?;
@@ -244,7 +242,7 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
         &self,
         label_id: LocalLabelId,
         ids: impl ExactSizeIterator<Item = LocalConversationId>,
-    ) -> DBResult<Vec<LocalConversationWithContext>> {
+    ) -> DBResult<Vec<LocalConversation>> {
         let mut stmt = self
             .0
             .prepare(&ConversationSelectorWithContext::query_with_id_in(
@@ -350,10 +348,7 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         Ok(r)
     }
 
-    fn get_conversation_labels(
-        &self,
-        conversations: &mut [LocalConversationWithContext],
-    ) -> DBResult<()> {
+    fn get_conversation_labels(&self, conversations: &mut [LocalConversation]) -> DBResult<()> {
         let id_map =
             BTreeMap::from_iter(conversations.iter().enumerate().map(|(idx, c)| (c.id, idx)));
         let mut stmt = self.0.prepare(&format!(
@@ -426,6 +421,9 @@ FROM conversations WHERE deleted=0"
                 num_attachments: r.get(8)?,
                 expiration_time: r.get(9)?,
                 size: r.get(10)?,
+                flagged: false,
+                labels: None,
+                time: 0,
             }
         })
     }
@@ -436,8 +434,7 @@ const CONVERSATION_SELECTOR_WITH_CONTEXT_ORDER_CLAUSE: &str =
 struct ConversationSelectorWithContext {}
 impl ConversationSelectorWithContext {
     fn query_base() -> &'static str {
-        "SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages,  \
-C.num_unread, C.num_attachments, C.expiration_time, C.size, \
+        "SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time, \
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0), \
 ifnull(CL.ctx_num_attachments,0) \
 FROM conversations AS C \
@@ -474,25 +471,22 @@ WHERE C.deleted=0"
         format!("{} LIMIT ?", Self::query())
     }
 
-    fn from_row(r: &Row) -> DBResult<LocalConversationWithContext> {
-        Ok(LocalConversationWithContext {
+    fn from_row(r: &Row) -> DBResult<LocalConversation> {
+        Ok(LocalConversation {
             id: r.get(0)?,
             remote_id: r.get(1)?,
             order: r.get(2)?,
             subject: r.get(3)?,
             senders: deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?,
             recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
-            num_messages: r.get(6)?,
-            num_unread: r.get(7)?,
-            num_attachments: r.get(8)?,
-            expiration_time: r.get(9)?,
-            size: r.get(10)?,
-            context_time: r.get(11)?,
-            context_size: r.get(12)?,
-            context_num_messages: r.get(13)?,
-            context_num_unread: r.get(14)?,
-            context_num_attachments: r.get(15)?,
+            expiration_time: r.get(6)?,
+            time: r.get(7)?,
+            size: r.get(8)?,
+            num_messages: r.get(9)?,
+            num_unread: r.get(10)?,
+            num_attachments: r.get(11)?,
             labels: None,
+            flagged: false,
         })
     }
 }

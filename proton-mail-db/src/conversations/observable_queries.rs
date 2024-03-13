@@ -1,4 +1,4 @@
-use crate::{LocalConversationWithContext, LocalLabelId, MailSqliteConnectionImpl};
+use crate::{LocalConversation, LocalLabelId, MailSqliteConnectionImpl};
 use proton_sqlite3::{ObservableQuery, SqliteConnection};
 use std::ops::Deref;
 
@@ -16,7 +16,7 @@ impl ConversationQuery {
 }
 
 impl ObservableQuery for ConversationQuery {
-    type Output = Vec<LocalConversationWithContext>;
+    type Output = Vec<LocalConversation>;
 
     fn debug_name(&self) -> &'static str {
         "MailboxViewQuery"
