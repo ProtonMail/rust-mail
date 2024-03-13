@@ -1,4 +1,4 @@
-use crate::mail::{MailContextError, MailContextResult};
+use crate::mail::{map_task_join_error, MailContextError, MailContextResult};
 use proton_mail_common as pmc;
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_event_loop::{EventLoopError as ELError, SubscriberError};
@@ -98,6 +98,18 @@ impl MailUserContext {
         handle
             .await
             .map_err(|e| EventLoopError::Other(anyhow::anyhow!("Failed to join task: {e}")))?
+    }
+
+    /// Log out a session.
+    pub async fn logout(&self) -> Result<(), MailContextError> {
+        let ctx = self.ctx().clone();
+        let handle = self
+            .ctx
+            .mail_context()
+            .async_runtime()
+            .spawn(async move { ctx.logout().await });
+        handle.await.map_err(map_task_join_error)??;
+        Ok(())
     }
 }
 impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserContextInitializationStage {
