@@ -1,4 +1,4 @@
-use crate::exports::serde::{self, Deserialize, Serialize};
+use crate::exports::serde::{self, Deserialize, Deserializer, Serialize};
 use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::proton_sqlite3;
 use proton_api_core::new_integer_enum;
@@ -35,7 +35,7 @@ pub struct MailSettings {
     #[serde(default = "default_proto_bool_true")]
     pub shortcuts: ProtonBoolean,
     #[serde(rename = "PMSignature", default)]
-    pub pm_signature: ProtonBoolean,
+    pub pm_signature: MailSettingsPMSignature,
     #[serde(rename = "PMSignatureReferralLink", default)]
     pub pm_signature_referral_link: ProtonBoolean,
     #[serde(default)]
@@ -227,6 +227,18 @@ new_integer_enum!(u8, MailSettingsSpamAction {
     UnsubscribeWithOneClick = 1,
 });
 
+new_integer_enum!(u8, MailSettingsPMSignature {
+    Disabled = 0,
+    Enabled=1,
+    EnabledLocked=2,
+});
+
+impl Default for MailSettingsPMSignature {
+    fn default() -> Self {
+        Self::Disabled
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
@@ -253,4 +265,12 @@ fn default_proto_bool_true() -> ProtonBoolean {
 #[inline]
 fn default_delay_seconds() -> u32 {
     10
+}
+
+pub fn deserialize_pm_signature<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = u32::deserialize(deserializer)?;
+    Ok(v > 0)
 }
