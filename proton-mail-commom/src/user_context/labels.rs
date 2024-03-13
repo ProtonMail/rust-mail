@@ -12,7 +12,7 @@ impl MailUserContext {
         let mut all_labels = Vec::with_capacity(64);
         for category in ALL_LABEL_TYPES {
             debug!("Fetching labels ({:?})", category);
-            let labels = session.get_labels(category).await?;
+            let labels = session.labels(category).await?;
             all_labels.extend(labels);
         }
 

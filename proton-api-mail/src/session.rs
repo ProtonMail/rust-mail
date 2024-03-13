@@ -26,11 +26,11 @@ impl MailSession {
         &self.session
     }
 
-    pub async fn get_event(&self, id: &EventId) -> Result<MailEvent, http::HttpRequestError> {
+    pub async fn event(&self, id: &EventId) -> Result<MailEvent, http::HttpRequestError> {
         self.session.get_event::<MailEvent>(id).await
     }
 
-    pub async fn get_labels(
+    pub async fn labels(
         &self,
         label_type: LabelType,
     ) -> Result<Vec<Label>, http::HttpRequestError> {
@@ -72,7 +72,7 @@ impl MailSession {
             .await
     }
 
-    pub async fn get_message_metadata(
+    pub async fn message_metadata(
         &self,
         filter: MessageMetadataFilter,
     ) -> Result<MessageMetadataResponse, http::HttpRequestError> {
@@ -81,28 +81,28 @@ impl MailSession {
             .await
     }
 
-    pub async fn get_addresses(&self) -> Result<Vec<Address>, http::HttpRequestError> {
+    pub async fn addresses(&self) -> Result<Vec<Address>, http::HttpRequestError> {
         self.session
             .execute_request(GetAddressesRequest {})
             .await
             .map(|v| v.addresses)
     }
 
-    pub async fn get_message(&self, id: &MessageId) -> Result<Message, http::HttpRequestError> {
+    pub async fn message(&self, id: &MessageId) -> Result<Message, http::HttpRequestError> {
         self.session
             .execute_request(GetMessageRequest::new(id))
             .await
             .map(|v| v.message)
     }
 
-    pub async fn get_message_counts(&self) -> Result<Vec<MessageCount>, http::HttpRequestError> {
+    pub async fn message_counts(&self) -> Result<Vec<MessageCount>, http::HttpRequestError> {
         self.session
             .execute_request(GetMessageCountsRequest {})
             .await
             .map(|r| r.counts)
     }
 
-    pub async fn get_conversations(
+    pub async fn conversations(
         &self,
         filter: ConversationFilter,
     ) -> Result<GetConversationsResponse, http::HttpRequestError> {
@@ -111,7 +111,7 @@ impl MailSession {
             .await
     }
 
-    pub async fn get_conversation(
+    pub async fn conversation(
         &self,
         id: &ConversationId,
     ) -> Result<GetConversationResponse, http::HttpRequestError> {
@@ -120,7 +120,7 @@ impl MailSession {
             .await
     }
 
-    pub async fn get_conversation_counts(
+    pub async fn conversation_counts(
         &self,
     ) -> Result<Vec<ConversationCount>, http::HttpRequestError> {
         self.session

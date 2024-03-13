@@ -18,7 +18,7 @@ impl MailUserContext {
             .with_label_id(label_id)
             .descending()
             .build();
-        let response = session.get_conversations(filter).await?;
+        let response = session.conversations(filter).await?;
 
         {
             let mut connection = self.new_db_connection()?;
@@ -56,7 +56,7 @@ impl MailUserContext {
                         let filter = MessageMetadataFilterBuilder::new(0, count)
                             .with_conversation_id(id)
                             .build();
-                        let messages_response = session.get_message_metadata(filter).await?;
+                        let messages_response = session.message_metadata(filter).await?;
                         messages.extend_from_slice(&messages_response.messages);
                     }
 
@@ -89,8 +89,8 @@ impl MailUserContext {
     }
 
     pub async fn sync_conversation_and_message_counts(&self) -> MailContextResult<()> {
-        let conversation_counts = self.mail_session().get_conversation_counts().await?;
-        let message_counts = self.mail_session().get_message_counts().await?;
+        let conversation_counts = self.mail_session().conversation_counts().await?;
+        let message_counts = self.mail_session().message_counts().await?;
 
         let mut connection = self.new_db_connection()?;
         connection.tx(|tx| -> DBResult<()> {

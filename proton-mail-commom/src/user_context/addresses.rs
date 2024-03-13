@@ -7,7 +7,7 @@ impl MailUserContext {
     pub async fn sync_addresses(&self) -> MailContextResult<()> {
         let session = self.mail_session();
 
-        let addresses = session.get_addresses().await?;
+        let addresses = session.addresses().await?;
 
         let mut connection = self.new_db_connection()?;
         debug!("Storing labels into database");
