@@ -16,7 +16,7 @@ pub struct LocalLabel {
     pub color: LabelColor,
     pub label_type: LabelType,
     pub order: u32,
-    pub notified: bool,
+    pub notify: bool,
     pub expanded: bool,
     pub sticky: bool,
 }
@@ -39,6 +39,24 @@ pub struct LocalLabelWithCount {
     pub unread_count: u64,
 }
 
+impl LocalLabel {
+    pub fn from_label(id: LocalLabelId, parent_id: Option<LocalLabelId>, label: Label) -> Self {
+        Self {
+            id,
+            rid: Some(label.id),
+            parent_id,
+            name: label.name,
+            path: label.path,
+            color: LabelColor::from(label.color),
+            label_type: label.label_type,
+            order: label.order,
+            notify: label.notify.into(),
+            expanded: label.expanded.into(),
+            sticky: label.sticky.into(),
+        }
+    }
+}
+
 impl From<LocalLabelWithCount> for LocalLabel {
     fn from(value: LocalLabelWithCount) -> Self {
         Self {
@@ -50,39 +68,9 @@ impl From<LocalLabelWithCount> for LocalLabel {
             color: value.color,
             label_type: value.label_type,
             order: value.order,
-            notified: value.notified,
+            notify: value.notified,
             expanded: value.expanded,
             sticky: value.sticky,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct RemoteLabel {
-    pub id: LabelId,
-    pub parent_id: Option<LabelId>,
-    pub name: String,
-    pub path: Option<String>,
-    pub label_type: LabelType,
-    pub color: LabelColor,
-    pub order: u32,
-    pub notified: bool,
-    pub expanded: bool,
-    pub sticky: bool,
-}
-impl From<Label> for RemoteLabel {
-    fn from(value: Label) -> Self {
-        Self {
-            id: value.id,
-            parent_id: value.parent_id,
-            name: value.name,
-            path: value.path,
-            label_type: value.label_type,
-            color: LabelColor(value.color),
-            order: value.order,
-            notified: value.notify.into(),
-            expanded: value.expanded.into(),
-            sticky: value.sticky.into(),
         }
     }
 }

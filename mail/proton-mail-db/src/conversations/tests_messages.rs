@@ -108,7 +108,7 @@ fn test_message_counts() {
         assert!(db_counters.contains(&expected_counts[1]));
 
         let labels_with_counts = tx
-            .get_local_label_by_type_ordered_with_message_count(LabelType::Label)
+            .label_by_type_ordered_with_message_count(LabelType::Label)
             .expect("failed to get label with type");
         assert_eq!(labels_with_counts.len(), 1);
         assert_eq!(labels_with_counts[0].id, expected_counts[0].id);
