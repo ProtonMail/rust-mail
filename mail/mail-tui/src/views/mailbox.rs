@@ -140,10 +140,13 @@ impl ConversationView {
             .enumerate()
             .map(|(idx, c)| {
                 let item = WidgetListItem::new(ConversationWidget::new(c));
-                let item = if c.num_unread != 0 { item.bold() } else { item };
-
-                if idx % 2 == 0 {
+                let item = if idx % 2 == 0 {
                     item.style(Style::default().bg(Color::LightMagenta))
+                } else {
+                    item
+                };
+                if c.num_unread != 0 {
+                    item.bold()
                 } else {
                     item
                 }
