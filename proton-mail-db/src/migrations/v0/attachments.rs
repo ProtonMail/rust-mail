@@ -14,7 +14,7 @@ CREATE TABLE attachments (
     key_patckets TEXT DEFAULT NULL,
     signature TEXT DEFAULT NULL,
     enc_signature TEXT DEFAULT NULL,
-    disposition INTEGER NOT NULL,
+    disposition TEXT NOT NULL,
     CONSTRAINT attachments_address_id FOREIGN KEY (address_id) REFERENCES addresses (id)
 )"#,
         (),

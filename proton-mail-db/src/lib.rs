@@ -101,6 +101,12 @@ mod type_forwarding {
     );
 
     uniffi::ffi_converter_forward!(
+        proton_api_mail::domain::AttachmentId,
+        proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+
+    uniffi::ffi_converter_forward!(
         proton_api_mail::domain::LabelId,
         proton_api_mail::UniFfiTag,
         crate::UniFfiTag
