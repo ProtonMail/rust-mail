@@ -31,6 +31,11 @@ stages:
      - !reference [.script-config-git, script]
      - cargo clippy -- -D warnings
 
+.do_proton_mail_uniffi_version:
+  script:
+    - cd proton_mail_uniffi
+
+
 format:
   stage: lint
   script:
@@ -63,7 +68,8 @@ build-wasm:
   script:
     - !reference [.script-config-git, script]
     - cd proton-mail-wasm
-    - wasm-pack build -d ./web_pkg
+    - CRATE_VERSION=$(cargo pkgid | cut -d "#" -f2)
+    - wasm-pack build -d "./web_pkg/$CRATE_VERSION"
   artifacts:
     name: proton-mail-wasm
     paths:
@@ -78,8 +84,9 @@ build-ios:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./tmp/ios-framework
-    - cd ./tmp/ios-framework/package && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration=Release build
+    - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
+    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework/$CRATE_VERSION"
+    - cd "./tmp/ios-framework/$CRATE_VERSION/package" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
 
   artifacts:
     name: proton-mail-ios
@@ -92,7 +99,8 @@ build-android:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - rust-build/build_android.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./tmp/android
+    - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
+    - rust-build/build_android.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/android/$CRATE_VERSION"
 
   artifacts:
     name: proton-mail-android
