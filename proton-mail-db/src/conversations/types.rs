@@ -31,6 +31,7 @@ pub struct LocalConversation {
     pub senders: Vec<MessageAddress>,
     pub recipients: Vec<MessageAddress>,
     pub num_messages: u64,
+    pub num_messages_ctx: u64,
     pub num_unread: u64,
     pub num_attachments: u64,
     pub expiration_time: u64,
@@ -56,6 +57,7 @@ impl LocalConversation {
             senders: conversation.senders,
             recipients: conversation.recipients,
             num_messages: conversation.num_messages,
+            num_messages_ctx: 0,
             num_unread: conversation.num_unread,
             num_attachments: conversation.num_attachments,
             expiration_time: conversation.expiration_time,
@@ -81,6 +83,7 @@ impl LocalConversation {
             senders: conversation.senders,
             recipients: conversation.recipients,
             num_messages: conversation.num_messages,
+            num_messages_ctx: 0,
             num_unread: conversation.num_unread,
             num_attachments: conversation.num_attachments,
             expiration_time: conversation.expiration_time,
@@ -92,7 +95,7 @@ impl LocalConversation {
 
         if let Some(l) = conversation.labels.iter().find(|l| l.id == *label_id) {
             result.num_unread = l.context_num_unread;
-            result.num_messages = l.context_num_messages;
+            result.num_messages_ctx = l.context_num_messages;
             result.size = l.context_size;
             result.time = l.context_time;
             result.num_attachments = l.context_num_attachments;

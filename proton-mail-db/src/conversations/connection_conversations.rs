@@ -390,6 +390,7 @@ WHERE deleted=0"
                 senders: deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?,
                 recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
                 num_messages: r.get(6)?,
+                num_messages_ctx: 0,
                 num_unread: r.get(7)?,
                 num_attachments: r.get(8)?,
                 expiration_time: r.get(9)?,
@@ -426,7 +427,7 @@ json_conv_attachments AS (
 
 SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time,
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0),
-ifnull(CL.ctx_num_attachments,0), C.flagged, CLJ.labels, CA.json_attachments
+ifnull(CL.ctx_num_attachments,0), C.flagged, CLJ.labels, CA.json_attachments, C.num_messages
 FROM conversations AS C
 INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=?
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
@@ -474,12 +475,13 @@ WHERE C.deleted=0"
             expiration_time: r.get(6)?,
             time: r.get(7)?,
             size: r.get(8)?,
-            num_messages: r.get(9)?,
+            num_messages_ctx: r.get(9)?,
             num_unread: r.get(10)?,
             num_attachments: r.get(11)?,
             starred: r.get(12)?,
             labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 13)?,
             attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 14)?,
+            num_messages: r.get(15)?,
         })
     }
 }
