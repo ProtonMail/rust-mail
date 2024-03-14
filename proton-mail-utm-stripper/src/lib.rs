@@ -38,7 +38,7 @@ pub fn remove_utm_parameters_from_url(entry_url: &Url) -> Url {
 
 /// Removes UTM parameters from a string.
 pub fn remove_utm_parameters_from_string(entry_url: &str) -> Result<Url, url::ParseError> {
-    let url = Url::parse(&entry_url)?;
+    let url = Url::parse(entry_url)?;
     Ok(remove_utm_parameters_from_url(&url))
 }
 
