@@ -106,12 +106,12 @@ build-android:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - rust-build/build_android.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./proton-mail-mobile/android/lib/src/main/
+    - rust-build/build_android.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./proton-mail-uniffi/android/lib/src/main/
 
   artifacts:
     name: proton-mail-android
     paths:
-      - ./proton-mail-mobile/android/lib/src/main
+      - ./proton-mail-uniffi/android/lib/src/main
     when: always
     expire_in: 4 hrs
 
@@ -149,8 +149,8 @@ publish-android:
       allow_failure: true
   script:
     - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
-    - sed -i "s%    version = .*%    version = \"$CRATE_VERSION\"%g" "proton-mail-mobile/android/lib/build.gradle.kts"
-    - cd proton-mail-mobile/android/
+    - sed -i "s%    version = .*%    version = \"$CRATE_VERSION\"%g" "proton-mail-uniffi/android/lib/build.gradle.kts"
+    - cd proton-mail-uniffi/android/
     - export JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=$( echo ${http_proxy##http://} | cut -d':' -f1 ) -Dhttp.proxyPort=$( echo ${http_proxy##http://} | cut -d':' -f2 ) -Dhttps.proxyHost=$( echo ${https_proxy##http://} | cut -d':' -f1 ) -Dhttps.proxyPort=$( echo ${https_proxy##http://} | cut -d':' -f2 ) -Dhttp.nonProxyHosts=\"$( echo $no_proxy | tr ',' '|' )\" -Dhttp.socketTimeout=600000 -Dhttp.connectionTimeout=600000 -Dhttps.socketTimeout=600000 -Dhttps.connectionTimeout=600000"
     - export GRADLE_USER_HOME=`pwd`/.gradle
     - ./gradlew :lib:assembleRelease
@@ -162,7 +162,7 @@ publish-android:
   artifacts:
     name: proton-mail-android-lib
     paths:
-      - ./proton-mail-mobile/android/lib/build/outputs/
+      - ./proton-mail-uniffi/android/lib/build/outputs/
     when: always
     expire_in: 4 hrs
 
