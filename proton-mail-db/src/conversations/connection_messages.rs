@@ -22,51 +22,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         &mut self,
         metadata: impl ExactSizeIterator<Item = &'i MessageMetadata>,
     ) -> DBResult<Vec<LocalMessageId>> {
-        let mut to_list_buffer = JsonWriteBuffer::new();
-        let mut cc_list_buffer = JsonWriteBuffer::new();
-        let mut bcc_list_buffer = JsonWriteBuffer::new();
-
-        let mut result = Vec::with_capacity(metadata.len());
-        let mut label_stmt = self.0.prepare(
-            "INSERT OR IGNORE INTO message_labels VALUES (?, (SELECT id FROM labels WHERE rid=?))",
-        )?;
-        let mut message_to_attachment_stmt = self
-            .0
-            .prepare("INSERT OR IGNORE into message_attachments VALUES (?,?)")?;
-        let mut msg_stmt = self.0.prepare(&create_message_query())?;
-        let mut attachment_stmt = self.create_attachment_ref_statement()?;
-
-        for metadata in metadata {
-            bind_message_metadata_create(
-                &mut msg_stmt,
-                metadata,
-                &mut to_list_buffer,
-                &mut cc_list_buffer,
-                &mut bcc_list_buffer,
-            )?;
-            let local_id = msg_stmt
-                .raw_query()
-                .next()?
-                .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
-                .and_then(|r| r.get(0))?;
-
-            // TODO: single select query?
-            for label in &metadata.label_ids {
-                label_stmt.execute((local_id, &label))?;
-            }
-
-            for attachment in &metadata.attachments_metadata {
-                if let Some(attachment_id) = attachment_stmt
-                    .insert(Some(&metadata.address_id), attachment)
-                    .optional()?
-                {
-                    message_to_attachment_stmt.execute((local_id, attachment_id))?;
-                }
-            }
-
-            result.push(local_id);
-        }
-        Ok(result)
+        self.create_or_update_messages_from_metadata(metadata)
     }
 
     pub fn update_message_from_metadata(&mut self, metadata: &MessageMetadata) -> DBResult<()> {
@@ -77,17 +33,31 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         &mut self,
         metadata: impl ExactSizeIterator<Item = &'i MessageMetadata>,
     ) -> DBResult<()> {
+        self.create_or_update_messages_from_metadata(metadata)?;
+        Ok(())
+    }
+
+    fn create_or_update_messages_from_metadata<'i>(
+        &mut self,
+        metadata: impl ExactSizeIterator<Item = &'i MessageMetadata>,
+    ) -> DBResult<Vec<LocalMessageId>> {
         let mut to_list_buffer = JsonWriteBuffer::new();
         let mut cc_list_buffer = JsonWriteBuffer::new();
         let mut bcc_list_buffer = JsonWriteBuffer::new();
 
+        let mut result = Vec::with_capacity(metadata.len());
+
         let mut label_stmt = self.0.prepare(
             "INSERT OR IGNORE INTO message_labels VALUES (?, (SELECT id FROM labels WHERE rid=?))",
         )?;
-        let mut msg_stmt = self.0.prepare(update_message_query())?;
+        let mut msg_stmt = self.0.prepare(&create_or_update_message_query())?;
+        let mut message_to_attachment_stmt = self
+            .0
+            .prepare("INSERT OR IGNORE into message_attachments VALUES (?,?)")?;
+        let mut attachment_stmt = self.create_attachment_ref_statement()?;
 
         for metadata in metadata {
-            bind_message_metadata_update(
+            bind_message_metadata_create(
                 &mut msg_stmt,
                 metadata,
                 &mut to_list_buffer,
@@ -119,8 +89,39 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             for label in &metadata.label_ids {
                 label_stmt.execute((local_id, &label))?;
             }
+
+            if !metadata.attachments_metadata.is_empty() {
+                // Remove any attachments that are no longer associated with this conversation.
+                let mut stmt = self.0.prepare(&format!(
+                    "DELETE FROM message_attachments WHERE message_id=? \
+            AND attachment_id NOT IN ({})",
+                    gen_variable_in_argument_list(metadata.attachments_metadata.len())
+                ))?;
+                let mut row_index = StmtIndexAllocator::new();
+                stmt.raw_bind_parameter(row_index.fetch_and_add(), &metadata.id)?;
+                for attachment in &metadata.attachments_metadata {
+                    stmt.raw_bind_parameter(row_index.fetch_and_add(), &attachment.id)?;
+                }
+                stmt.raw_execute()?;
+            } else {
+                self.0.execute(
+                    "DELETE FROM message_attachments WHERE message_id=?",
+                    [local_id],
+                )?;
+            }
+
+            for attachment in &metadata.attachments_metadata {
+                if let Some(attachment_id) = attachment_stmt
+                    .insert(Some(&metadata.address_id), attachment)
+                    .optional()?
+                {
+                    message_to_attachment_stmt.execute((local_id, attachment_id))?;
+                }
+            }
+
+            result.push(local_id);
         }
-        Ok(())
+        Ok(result)
     }
 
     pub fn get_message_metadata(
@@ -218,68 +219,42 @@ macro_rules! bind_list_ordered {
     };
 }
 
-fn create_message_query() -> String {
+fn create_or_update_message_query() -> String {
     format!(
-        "INSERT OR REPLACE INTO messages (conversation_id, rid, address_id, `order`, subject, unread, \
-sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector, \
-sender_display_image, to_list, cc_list, bcc_list, time, size, expiration_time, \
-is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, flagged) VALUES \
-((SELECT id FROM conversations WHERE rid=?),{}) RETURNING id",
+        r"INSERT INTO messages (
+    conversation_id, rid, address_id, `order`, subject, unread,
+    sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector,
+    sender_display_image, to_list, cc_list, bcc_list, time, size, expiration_time,
+    is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, flagged
+) VALUES  ((SELECT id FROM conversations WHERE rid=?),{})
+ON CONFLICT(rid) DO UPDATE SET
+    conversation_id = excluded.conversation_id,
+    address_id=excluded.address_id,
+    `order`=excluded.`order`,
+    subject=excluded.subject,
+    unread=excluded.unread,
+    sender_address=excluded.sender_address,
+    sender_name=excluded.sender_name,
+    sender_is_proton=excluded.sender_is_proton,
+    sender_is_simple_login=excluded.sender_is_simple_login,
+    sender_bimi_selector=excluded.sender_bimi_selector,
+    sender_display_image=excluded.sender_display_image,
+    to_list=excluded.to_list,
+    cc_list=excluded.cc_list,
+    bcc_list=excluded.bcc_list,
+    time=excluded.time,
+    size=excluded.size,
+    expiration_time=excluded.expiration_time,
+    is_replied=excluded.is_replied,
+    is_replied_all=excluded.is_replied_all,
+    is_forwarded=excluded.is_forwarded,
+    external_id=excluded.external_id,
+    num_attachments=excluded.num_attachments,
+    flags=excluded.flags,
+    flagged=excluded.flagged
+RETURNING id",
         gen_variable_in_argument_list(24)
     )
-}
-
-fn update_message_query() -> &'static str {
-    "UPDATE messages SET conversation_id=(SELECT id FROM conversations WHERE rid=?), \
-rid=?, address_id=?, `order`=?, subject=?, unread=?, \
-sender_address=?, sender_name=?, sender_is_proton=?, sender_is_simple_login=?, sender_bimi_selector=?, \
-sender_display_image=?, to_list=?, cc_list=?, bcc_list=?, time=?, size=?, expiration_time=?, \
-is_replied=?, is_replied_all=?, is_forwarded=?, external_id=?, num_attachments=?, flags=?, flagged=? \
-WHERE rid=? RETURNING id"
-}
-
-fn bind_message_metadata_update(
-    stmt: &mut Statement,
-    m: &MessageMetadata,
-    to_list_buffer: &mut JsonWriteBuffer,
-    cc_list_buffer: &mut JsonWriteBuffer,
-    bcc_list_buffer: &mut JsonWriteBuffer,
-) -> DBResult<()> {
-    let to_list = to_list_buffer.serialize(&m.to_list)?;
-    let cc_list = cc_list_buffer.serialize(&m.cc_list)?;
-    let bcc_list = bcc_list_buffer.serialize(&m.bcc_list)?;
-
-    bind_list! {
-        stmt,
-        &m.conversation_id,
-        &m.id,
-        &m.address_id,
-        m.order,
-        &m.subject,
-        m.unread,
-        &m.sender.address,
-        &m.sender.name,
-        &m.sender.is_proton,
-        &m.sender.is_simple_login,
-        &m.sender.bimi_selector,
-        &m.sender.display_sender_image,
-        to_list,
-        cc_list,
-        bcc_list,
-        m.time,
-        m.size,
-        m.expiration_time,
-        m.is_replied,
-        m.is_replied_all,
-        m.is_forwarded,
-        &m.external_id,
-        m.num_attachments,
-        m.flags,
-        m.label_ids.contains(LabelId::starred()),
-        &m.id,
-    }
-
-    Ok(())
 }
 
 fn bind_message_metadata_create(
