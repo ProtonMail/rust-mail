@@ -6,12 +6,10 @@ use crate::{
     LocalConversationLabel, LocalLabelId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{Conversation, ConversationCount, ConversationId, MessageAddress};
-use proton_api_mail::exports::tracing::debug;
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
-
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn create_conversation(
         &mut self,
@@ -348,16 +346,25 @@ const RESOLVE_LABEL_ID_STATEMENT: &str = "SELECT id FROM labels WHERE rid = ?";
 struct ConversationSelector {}
 impl ConversationSelector {
     fn query() -> &'static str {
-        "WITH json_conversation_labels AS (
+        r"WITH json_conversation_labels AS (
     SELECT C.conversation_id as cid, json_group_array(json_object('id', L.id, 'name', L.name, 'color', L.color)) as labels
     FROM conversation_labels C
     INNER JOIN labels AS L ON C.label_id = L.id AND L.type=1
     GROUP BY C.conversation_id
-) \
-        SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages, \
-C.num_unread, C.num_attachments, C.expiration_time, C.size, C.flagged, CLJ.labels \
-FROM conversations AS C \
-LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id \
+),
+json_conv_attachments AS (
+    SELECT C.conversation_id as cid, json_group_array(json_object('id', A.id, 'rid', A.rid, 'name', A.name,
+    'mime_type', A.mime_type, 'disposition', A.disposition, 'size', A.size)) as json_attachments
+    FROM conversation_attachments as C
+    INNER JOIN attachments AS A ON C.attachment_id = A.id
+    GROUP BY C.conversation_id
+)
+
+SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages,
+C.num_unread, C.num_attachments, C.expiration_time, C.size, C.flagged, CLJ.labels, CA.json_attachments
+FROM conversations AS C
+LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
+LEFT JOIN json_conv_attachments AS CA ON CA.cid = C.id
 WHERE deleted=0"
     }
 
@@ -390,6 +397,9 @@ WHERE deleted=0"
                 starred: r.get(11)?,
                 labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 12)?,
                 time: 0,
+                attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(
+                    r, 13,
+                )?,
             }
         })
     }
@@ -400,18 +410,27 @@ const CONVERSATION_SELECTOR_WITH_CONTEXT_ORDER_CLAUSE: &str =
 struct ConversationSelectorWithContext {}
 impl ConversationSelectorWithContext {
     fn query_base() -> &'static str {
-        "WITH json_conversation_labels AS (
-    SELECT C.conversation_id as id, json_group_array(json_object('id', id, 'name', name, 'color', color)) as labels
+        r"WITH json_conversation_labels AS (
+    SELECT C.conversation_id as cid, json_group_array(json_object('id', L.id, 'name', L.name, 'color', L.color)) as labels
     FROM conversation_labels C
     INNER JOIN labels AS L ON C.label_id = L.id AND L.type=1
     GROUP BY C.conversation_id
-) \
-SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time, \
-ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0), \
-ifnull(CL.ctx_num_attachments,0), C.flagged, CLJ.labels \
-FROM conversations AS C \
-INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=? \
-LEFT JOIN json_conversation_labels AS CLJ ON CLJ.id = C.id \
+),
+json_conv_attachments AS (
+    SELECT C.conversation_id as cid, json_group_array(json_object('id', A.id, 'rid', A.rid, 'name', A.name,
+    'mime_type', A.mime_type, 'disposition', A.disposition, 'size', A.size)) as json_attachments
+    FROM conversation_attachments as C
+    INNER JOIN attachments AS A ON C.attachment_id = A.id
+    GROUP BY C.conversation_id
+)
+
+SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time,
+ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0),
+ifnull(CL.ctx_num_attachments,0), C.flagged, CLJ.labels, CA.json_attachments
+FROM conversations AS C
+INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=?
+LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
+LEFT JOIN json_conv_attachments AS CA ON CA.cid = C.id
 WHERE C.deleted=0"
     }
 
@@ -445,7 +464,6 @@ WHERE C.deleted=0"
     }
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
-        debug!("{:?}", r);
         Ok(LocalConversation {
             id: r.get(0)?,
             remote_id: r.get(1)?,
@@ -461,6 +479,7 @@ WHERE C.deleted=0"
             num_attachments: r.get(11)?,
             starred: r.get(12)?,
             labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 13)?,
+            attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 14)?,
         })
     }
 }

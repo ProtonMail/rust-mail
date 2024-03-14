@@ -92,10 +92,12 @@ use proton_api_core::exports::proton_sqlite3::rusqlite;
 #[cfg(feature = "sql")]
 impl rusqlite::types::FromSql for Disposition {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            1 => Ok(Disposition::Inline),
-            2 => Ok(Disposition::Attachment),
-            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+        match value.as_str()? {
+            "inline" => Ok(Disposition::Inline),
+            "attachment" => Ok(Disposition::Attachment),
+            _ => Err(rusqlite::types::FromSqlError::Other(
+                "Invalid enum value".into(),
+            )),
         }
     }
 }
@@ -103,10 +105,10 @@ impl rusqlite::types::FromSql for Disposition {
 #[cfg(feature = "sql")]
 impl rusqlite::types::ToSql for Disposition {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Owned(
-            rusqlite::types::Value::Integer(match self {
-                Disposition::Inline => 1_i64,
-                Disposition::Attachment => 2_i64,
+        Ok(rusqlite::types::ToSqlOutput::Borrowed(
+            rusqlite::types::ValueRef::Text(match self {
+                Disposition::Inline => "inline".as_bytes(),
+                Disposition::Attachment => "attachment".as_bytes(),
             }),
         ))
     }

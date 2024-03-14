@@ -1,4 +1,4 @@
-use crate::{new_u64_type, LabelColor, LocalLabelId};
+use crate::{new_u64_type, LabelColor, LocalAttachmentMetadata, LocalLabelId};
 use proton_api_mail::domain::{
     AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
     MessageMetadata,
@@ -38,6 +38,7 @@ pub struct LocalConversation {
     pub time: u64,
     pub labels: Option<Vec<LocalConversationLabel>>,
     pub starred: bool,
+    pub attachments: Option<Vec<LocalAttachmentMetadata>>,
 }
 
 impl LocalConversation {
@@ -61,6 +62,7 @@ impl LocalConversation {
             size: conversation.size,
             time: 0,
             labels,
+            attachments: None,
         }
     }
 
@@ -85,6 +87,7 @@ impl LocalConversation {
             size: conversation.size,
             labels,
             time: 0,
+            attachments: None,
         };
 
         if let Some(l) = conversation.labels.iter().find(|l| l.id == *label_id) {
