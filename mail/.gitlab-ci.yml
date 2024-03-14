@@ -19,6 +19,7 @@ default:
 stages:
   - lint
   - build
+  - doc
 
 
 .do_fmt_check:
@@ -108,3 +109,24 @@ build-android:
       - ./tmp/android
     when: always
     expire_in: 4 hrs
+
+pages:
+  stage: doc
+  script:
+    - echo "CI_PAGES_URL = ${CI_PAGES_URL}"
+    - !reference [.script-config-git, script]
+    - cargo doc --workspace --all-features --no-deps
+    - rm -rf public
+    - mv target/doc public
+    - echo "<meta http-equiv=\"refresh\" content=\"0; url=$CI_PAGES_URL/proton_mail_uniffi/index.html\">" > public/index.html
+  artifacts:
+    paths:
+      # The folder that contains the files to be exposed at the Page URL
+      - public
+  rules:
+    # This ensures that only pushes to the default branch will trigger a pages deploy
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+    # allow to test pages in a MR
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
