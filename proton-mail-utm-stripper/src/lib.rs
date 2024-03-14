@@ -28,7 +28,7 @@ pub fn remove_utm_parameters_from_url(entry_url: &Url) -> Url {
     url.set_query(None);
 
     for (key, value) in entry_url.query_pairs() {
-        if !GLOBAL_RULES.contains(&key.as_ref()) {
+        if !GLOBAL_RULES.contains(&key.to_lowercase().as_ref()) {
             url.query_pairs_mut().append_pair(&key, &value);
         }
     }
@@ -36,15 +36,9 @@ pub fn remove_utm_parameters_from_url(entry_url: &Url) -> Url {
     url
 }
 
-/// Cleans the URL by removing trailing and leading whitespaces and converting it to lowercase.
-fn clean_entry_url(entry_url: &str) -> String {
-    entry_url.trim().to_lowercase()
-}
-
 /// Removes UTM parameters from a string.
 pub fn remove_utm_parameters_from_string(entry_url: &str) -> Result<Url, url::ParseError> {
-    let cleaned_entry = clean_entry_url(entry_url);
-    let url = Url::parse(&cleaned_entry)?;
+    let url = Url::parse(&entry_url)?;
     Ok(remove_utm_parameters_from_url(&url))
 }
 
@@ -184,9 +178,9 @@ mod tests {
     fn test_remove_utm_parameters() {
         use crate::remove_utm_parameters_from_string;
 
-        let url = "https://example.com/?UTM_SOURCE=example&utm_medium=example&utm_campaign=example";
+        let url = "https://example.com/?UTM_SOURCE=example&utm_medium=example&utm_campaign=example&UserID=123";
         let new_url = remove_utm_parameters_from_string(url).unwrap();
-        assert_eq!(new_url.as_str(), "https://example.com/");
+        assert_eq!(new_url.as_str(), "https://example.com/?UserID=123");
 
         let url = "panda"; // Invalid URL
         let new_url = remove_utm_parameters_from_string(url);
