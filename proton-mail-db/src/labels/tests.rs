@@ -1,6 +1,5 @@
 use crate::{
     new_test_connection, with_tx, LabelColor, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
-    RemoteLabel,
 };
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 use proton_api_mail::proton_api_core::domain::ProtonBoolean;
@@ -10,11 +9,8 @@ fn test_remote_label_add() {
     let (mut conn, _, _guard) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let labels = test_labels();
-        let remote_labels = labels.iter().cloned().map(|l| l.into()).collect::<Vec<_>>();
         tx.create_remote_labels(labels.iter()).unwrap();
-
-        compare_remote_labels(&tx, &labels, &remote_labels);
-        compare_remote_labels_with_local(&tx, remote_labels.iter());
+        compare_remote_labels_with_local(tx, labels.iter());
     })
 }
 
@@ -36,12 +32,11 @@ fn test_remote_label_add_duplicate() {
             order: 0,
         };
 
-        let remote_label: [RemoteLabel; 1] = [label.clone().into()];
-        tx.create_remote_label(&label).unwrap();
-        tx.create_remote_label(&label).unwrap();
-
-        compare_remote_labels(&tx, &[label], &remote_label);
-        compare_remote_labels_with_local(&tx, remote_label.iter());
+        let local_id = tx.create_remote_label(&label).unwrap();
+        let new_local_id = tx.create_remote_label(&label).unwrap();
+        assert_eq!(local_id, new_local_id);
+        let db_label = tx.label_with_id(local_id).unwrap().unwrap();
+        assert_eq!(LocalLabel::from_label(local_id, None, label), db_label);
     });
 }
 
@@ -67,12 +62,10 @@ fn test_remote_label_update() {
         labels[3].path = None;
         labels[3].order = 2;
 
-        let remote_labels = labels.iter().cloned().map(|l| l.into()).collect::<Vec<_>>();
-
         tx.update_remote_labels(labels.iter())
             .expect("failed to update labels");
 
-        compare_remote_labels_with_local(&tx, remote_labels.iter());
+        compare_remote_labels_with_local(&tx, labels.iter());
     });
 }
 
@@ -93,7 +86,7 @@ fn test_delete_remote() {
             .map(|l| l.into())
             .collect::<Vec<_>>();
 
-        assert_eq!(tx.get_all_local_labels().unwrap().len(), 3);
+        assert_eq!(tx.labels().unwrap().len(), 3);
 
         compare_remote_labels_with_local(&tx, remote_labels.iter());
     });
@@ -110,7 +103,7 @@ fn create_local_label() {
             LabelType::ContactGroup,
         ] {
             let new_label = tx
-                .create_local_label(
+                .create_label(
                     LabelType::Folder,
                     format!("Label-{:?}", t),
                     None,
@@ -119,7 +112,7 @@ fn create_local_label() {
                 )
                 .expect("failed to create label");
             let db_label = tx
-                .get_local_label(new_label.id)
+                .label_with_id(new_label.id)
                 .expect("failed to load label")
                 .expect("should have a value");
             assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
@@ -138,7 +131,7 @@ fn create_local_label_has_ascending_order_per_type() {
             LabelType::ContactGroup,
         ] {
             let new_label1 = tx
-                .create_local_label(
+                .create_label(
                     LabelType::Folder,
                     format!("Label-{:?}-01", t),
                     None,
@@ -147,7 +140,7 @@ fn create_local_label_has_ascending_order_per_type() {
                 )
                 .expect("failed to create label");
             let new_label2 = tx
-                .create_local_label(
+                .create_label(
                     LabelType::Folder,
                     format!("Label-{:?}-02", t),
                     None,
@@ -170,7 +163,7 @@ fn update_local_label() {
     let (mut conn, _, _guard) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let new_label = tx
-            .create_local_label(
+            .create_label(
                 LabelType::Folder,
                 "MyLabel".into(),
                 None,
@@ -179,7 +172,7 @@ fn update_local_label() {
             )
             .expect("failed to create label");
         let new_label2 = tx
-            .create_local_label(
+            .create_label(
                 LabelType::Folder,
                 "MyOtherLabel".into(),
                 None,
@@ -194,7 +187,7 @@ fn update_local_label() {
             f: impl FnOnce(&LocalLabel),
         ) {
             let db_label = conn_ref
-                .get_local_label(id)
+                .label_with_id(id)
                 .expect("failed to get label")
                 .expect("must have value");
             (f)(&db_label);
@@ -223,9 +216,9 @@ fn update_local_label() {
 
 fn compare_remote_labels_with_local<'i>(
     conn_ref: &MailSqliteConnectionImpl,
-    remote_labels: impl Iterator<Item = &'i RemoteLabel>,
+    remote_labels: impl Iterator<Item = &'i Label>,
 ) {
-    let local_labels = conn_ref.get_all_local_labels().unwrap();
+    let local_labels = conn_ref.labels().unwrap();
 
     let find_label = |id: &LabelId| -> &LocalLabel {
         local_labels
@@ -238,30 +231,6 @@ fn compare_remote_labels_with_local<'i>(
     for remote_label in remote_labels {
         let local = find_label(&remote_label.id);
         compare_local_to_remote(&conn_ref, local, &remote_label);
-    }
-}
-
-fn compare_remote_labels(
-    conn_ref: &MailSqliteConnectionImpl,
-    labels: &[Label],
-    remote_labels: &[RemoteLabel],
-) {
-    let stored_labels = conn_ref
-        .get_remote_labels(
-            labels
-                .iter()
-                .map(|l| l.id.clone())
-                .collect::<Vec<_>>()
-                .iter(),
-        )
-        .unwrap();
-
-    for remote_label in remote_labels {
-        assert!(
-            stored_labels.contains(remote_label),
-            "label {:?} does not match",
-            remote_label
-        );
     }
 }
 
@@ -322,11 +291,7 @@ fn test_labels() -> Vec<Label> {
     ]
 }
 
-fn compare_local_to_remote(
-    conn: &MailSqliteConnectionImpl,
-    local: &LocalLabel,
-    remote: &RemoteLabel,
-) {
+fn compare_local_to_remote(conn: &MailSqliteConnectionImpl, local: &LocalLabel, remote: &Label) {
     assert_eq!(
         local.rid.as_ref(),
         Some(&remote.id),
@@ -350,7 +315,8 @@ fn compare_local_to_remote(
         remote.id
     );
     assert_eq!(
-        local.color, remote.color,
+        local.color.as_ref(),
+        remote.color,
         "color does not match for {}",
         remote.id
     );
@@ -364,25 +330,29 @@ fn compare_local_to_remote(
         "order does not match for {}",
         remote.id
     );
+    let sticky: bool = remote.sticky.into();
     assert_eq!(
-        local.sticky, remote.sticky,
+        local.sticky, sticky,
         "sticky does not match for {}",
         remote.id
     );
+
+    let expanded: bool = remote.expanded.into();
     assert_eq!(
-        local.expanded, remote.expanded,
+        local.expanded, expanded,
         "expanded does not match for {}",
         remote.id
     );
+    let notify: bool = remote.notify.into();
     assert_eq!(
-        local.notified, remote.notified,
+        local.notify, notify,
         "notified does not match for {}",
         remote.id
     );
 
     if let Some(local_parent_id) = local.parent_id {
         let parent_label = conn
-            .get_local_label(local_parent_id)
+            .label_with_id(local_parent_id)
             .expect("failed to find parent label")
             .expect("Parent label should exist");
         assert_eq!(

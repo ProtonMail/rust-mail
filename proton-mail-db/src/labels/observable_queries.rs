@@ -27,7 +27,7 @@ impl ObservableQuery for LabelsByTypeQuery {
         connection: &SqliteConnection,
     ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
         let conn = MailSqliteConnectionImpl::new(connection);
-        conn.get_local_label_by_type_ordered(self.0)
+        conn.label_by_type_ordered(self.0)
     }
 }
 
@@ -58,6 +58,6 @@ impl ObservableQuery for LabelsByTypeQueryWithConversationCount {
         connection: &SqliteConnection,
     ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
         let conn = MailSqliteConnectionImpl::new(connection);
-        conn.get_local_label_by_type_ordered_with_conversation_count(self.0)
+        conn.label_by_type_ordered_with_conversation_count(self.0)
     }
 }

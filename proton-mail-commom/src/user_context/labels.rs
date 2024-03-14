@@ -18,7 +18,10 @@ impl MailUserContext {
 
         let mut connection = self.new_db_connection()?;
         debug!("Storing labels into database");
-        connection.tx(|tx| -> DBResult<()> { tx.create_remote_labels(all_labels.iter()) })?;
+        connection.tx(|tx| -> DBResult<()> {
+            tx.create_remote_labels(all_labels.iter())?;
+            Ok(())
+        })?;
 
         Ok(())
     }
@@ -34,15 +37,13 @@ impl MailUserContext {
         label_id: &LabelId,
     ) -> MailContextResult<Option<LocalLabel>> {
         let conn = self.new_db_connection()?;
-        let r = conn
-            .as_connection_ref()
-            .get_local_label_with_remote_id(label_id)?;
+        let r = conn.as_connection_ref().label_with_remote_id(label_id)?;
         Ok(r)
     }
 
     pub fn get_label(&self, id: LocalLabelId) -> MailContextResult<Option<LocalLabel>> {
         let conn = self.new_db_connection()?;
-        let r = conn.as_connection_ref().get_local_label(id)?;
+        let r = conn.as_connection_ref().label_with_id(id)?;
         Ok(r)
     }
 
@@ -53,7 +54,7 @@ impl MailUserContext {
         let conn = self.new_db_connection()?;
         let r = conn
             .as_connection_ref()
-            .get_local_label_by_type_ordered_with_conversation_count(label_type)?;
+            .label_by_type_ordered_with_conversation_count(label_type)?;
         Ok(r)
     }
 }
