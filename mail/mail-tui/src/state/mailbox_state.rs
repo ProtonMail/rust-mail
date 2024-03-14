@@ -182,7 +182,7 @@ impl MailboxState {
         self.labels_loading_state = LoadingState::Loading;
         self.conversation_loading_state = LoadingState::Loading;
         user_context.initialize(
-            LabelId::inbox(),
+            LabelId::inbox().clone(),
             Box::new(MailboxInitCallback::for_init(
                 app_dispatcher.background_dispatcher(),
             )),

@@ -1,7 +1,7 @@
 use crate::widgets::widget_list::ListableWidget;
 use chrono::DateTime;
 use proton_mail_common::proton_api_mail::domain::MessageAddress;
-use proton_mail_common::proton_mail_db::LocalConversationWithContext;
+use proton_mail_common::proton_mail_db::LocalConversation;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Text;
@@ -9,11 +9,11 @@ use ratatui::style::Stylize;
 use ratatui::widgets::Widget;
 
 pub struct ConversationWidget<'c> {
-    conv: &'c LocalConversationWithContext,
+    conv: &'c LocalConversation,
 }
 
 impl<'c> ConversationWidget<'c> {
-    pub fn new(conv: &'c LocalConversationWithContext) -> Self {
+    pub fn new(conv: &'c LocalConversation) -> Self {
         Self { conv }
     }
 }
@@ -69,23 +69,35 @@ impl Widget for ConversationWidget<'_> {
         ]);
         line.render(sender_area, buf);
 
-        let date = DateTime::<chrono::Utc>::from_timestamp(
-            i64::try_from(self.conv.context_time).unwrap(),
-            0,
-        )
-        .unwrap();
+        let date =
+            DateTime::<chrono::Utc>::from_timestamp(i64::try_from(self.conv.time).unwrap(), 0)
+                .unwrap();
         let date = DateTime::<chrono::Local>::from(date);
         let date_str = date.format("%d/%m/%Y %H:%M");
         Text::from(date_str.to_string())
             .right_aligned()
             .render(date_area, buf);
         // Title
-        let [conv_area, _, icon_area] =
-            Layout::horizontal([Constraint::Min(30), Constraint::Fill(1), Constraint::Min(6)])
-                .areas(conv_area);
+        let [conv_area, _, icon_area] = Layout::horizontal([
+            Constraint::Min(30),
+            Constraint::Fill(1),
+            Constraint::Length(6),
+        ])
+        .areas(conv_area);
         Text::from(self.conv.subject.as_str()).render(conv_area, buf);
-        if self.conv.context_num_attachments != 0 {
-            Text::from("[A]").right_aligned().render(icon_area, buf);
+        let mut icons = String::new();
+        if self.conv.num_attachments != 0 {
+            icons.push_str("[A]");
+        }
+
+        if self.conv.starred {
+            icons.push_str(" ★ ");
+        }
+
+        if !icons.is_empty() {
+            Text::from(icons.as_str())
+                .right_aligned()
+                .render(icon_area, buf);
         }
 
         // Labels
