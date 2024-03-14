@@ -144,8 +144,8 @@ publish-android:
   tags:
     - xlarge-k8s
   rules:
-    - if: $CI_COMMIT_BRANCH =~ /^android-lib-publishing/ # To be changed to $CI_DEFAULT_BRANCH
-      when: always
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
       allow_failure: true
   script:
     - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
