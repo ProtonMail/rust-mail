@@ -149,6 +149,7 @@ publish-android:
       allow_failure: true
   script:
     - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
+    - sed -i "s%    version = .*%    version = \"$CRATE_VERSION\"%g" "proton-mail-mobile/android/lib/build.gradle.kts"
     - cd proton-mail-mobile/android/
     - export JAVA_TOOL_OPTIONS="-Dhttp.proxyHost=$( echo ${http_proxy##http://} | cut -d':' -f1 ) -Dhttp.proxyPort=$( echo ${http_proxy##http://} | cut -d':' -f2 ) -Dhttps.proxyHost=$( echo ${https_proxy##http://} | cut -d':' -f1 ) -Dhttps.proxyPort=$( echo ${https_proxy##http://} | cut -d':' -f2 ) -Dhttp.nonProxyHosts=\"$( echo $no_proxy | tr ',' '|' )\" -Dhttp.socketTimeout=600000 -Dhttp.connectionTimeout=600000 -Dhttps.socketTimeout=600000 -Dhttps.connectionTimeout=600000"
     - export GRADLE_USER_HOME=`pwd`/.gradle
