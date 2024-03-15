@@ -152,9 +152,8 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
                 )?;
             }
             for attachment in &conv.attachments_metadata {
-                if let Some(local_id) = attachments_stmt.insert(None, attachment).optional()? {
-                    attachment_to_conv_stmt.execute((conv_id, local_id))?;
-                }
+                let attachment_id = attachments_stmt.insert(None, attachment)?;
+                attachment_to_conv_stmt.execute((conv_id, attachment_id))?;
             }
 
             ids.push(conv_id);
@@ -318,8 +317,9 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         counts: impl Iterator<Item = &'i ConversationCount>,
     ) -> DBResult<()> {
         let mut stmt = self.0.prepare(
-            "INSERT OR REPLACE INTO label_conversation_count VALUES \
-        ((SELECT id FROM labels WHERE rid=?),?,?)",
+            "INSERT INTO label_conversation_count VALUES \
+            ((SELECT id FROM labels WHERE rid=?),?,?) ON CONFLICT (label_id) DO UPDATE SET \
+        total=excluded.total, unread=excluded.unread",
         )?;
 
         for count in counts {
