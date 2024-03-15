@@ -1,4 +1,4 @@
-use crate::keys::KeyId;
+use crate::domain::KeyId;
 use base64::Engine;
 use proton_crypto::srp::SRPProvider;
 use serde::{Deserialize, Serialize};

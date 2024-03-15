@@ -1,4 +1,5 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use super::bool_from_integer;
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -13,36 +14,13 @@ pub enum APIPublicKeySource {
     KOO = 3,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum KeyError {
-    #[error("Could not decode source of the api public key: {0}")]
-    SourceDecode(u32),
+crate::string_id! {
+    /// Represent a user's API key ID.
+    KeyId
 }
 
-/// Represent a user's API key ID.
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
-pub struct KeyId(String);
-
-impl Display for KeyId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl<T: Into<String>> From<T> for KeyId {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
-
-impl AsRef<str> for KeyId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-/// Represent key flags
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Copy)]
+/// Represent a flag of a key containing a bit map.
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Copy, Default)]
 pub struct KeyFlag(u32);
 
 impl Display for KeyFlag {
@@ -88,24 +66,42 @@ impl KeyFlag {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+crate::string_id! {
+    ///
+    KeyTokenSignature
+}
+
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
 #[serde(rename_all = "PascalCase")]
+/// Represents a locked jey retrieved from the API.
 pub struct LockedKey {
     #[serde(rename = "ID")]
+    /// Proton ID of the key.
     pub id: KeyId,
+    /// Proton version of the key.
     pub version: u32,
+    /// OpenPGP private key armored.
     pub private_key: String,
+    /// Token to decrypt a key via another key (e.g., user key).
     pub token: Option<String>,
+    /// OpenPGP Signature to verify the token.
     pub signature: Option<String>, // Only available for address keys
+    /// (Deprecated) Migrated accounts do not have the activation field set.
     pub activation: Option<String>,
     #[serde(deserialize_with = "bool_from_integer")]
+    /// Is the key the primary key to use.
     pub primary: bool,
     #[serde(deserialize_with = "bool_from_integer")]
+    /// The key is active and should be decryptable.
     pub active: bool,
-    pub flags: Option<u32>,              // Only available for address keys
+    /// Key flags encoded in a bitmap.
+    pub flags: Option<KeyFlag>, // Only available for address keys
+    /// Secret for key recovery of a local file.
     pub recovery_secret: Option<String>, // Only available for user keys
+    /// Signature for the recovery secret.
     pub recovery_secret_signature: Option<String>, // Only available for user keys
     #[serde(rename = "AddressForwardingID")]
+    /// Represents a valid associated Address Forwarding instance, if not None.
     pub address_forwarding_id: Option<String>, // Only available for address keys
 }
 
@@ -116,19 +112,10 @@ pub struct LockedKey {
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct APIPublicKey {
+    /// Origin of the public key.
     pub source: APIPublicKeySource,
+    /// Key flags encoded in a bitmap.
     pub flags: KeyFlag,
+    /// OpenPGP armored public key.
     pub public_key: String,
-}
-
-/// Deserialize bool from integer
-fn bool_from_integer<'de, D>(deserializer: D) -> Result<bool, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    if i64::deserialize(deserializer)? == 0_i64 {
-        Ok(false)
-    } else {
-        Ok(true)
-    }
 }
