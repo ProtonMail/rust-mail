@@ -9,8 +9,8 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ) -> DBResult<CreateAttachmentRefStatement<'c>> {
         // We want to create a new entry if the attachment has not been reference yet and
         // ignore it in case it's already there.
-        self.0.prepare("INSERT OR IGNORE INTO attachments (rid, name, size, mime_type, disposition,address_id) VALUES \
-(?,?,?,?,?,?) ON CONFLICT (rid) DO NOTHING RETURNING id").map(CreateAttachmentRefStatement)
+        self.0.prepare("INSERT INTO attachments (rid, name, size, mime_type, disposition,address_id) VALUES \
+(?,?,?,?,?,?) ON CONFLICT (rid) DO UPDATE SET id=id RETURNING id").map(CreateAttachmentRefStatement)
     }
 }
 

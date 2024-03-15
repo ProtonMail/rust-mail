@@ -111,12 +111,9 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             }
 
             for attachment in &metadata.attachments_metadata {
-                if let Some(attachment_id) = attachment_stmt
-                    .insert(Some(&metadata.address_id), attachment)
-                    .optional()?
-                {
-                    message_to_attachment_stmt.execute((local_id, attachment_id))?;
-                }
+                let attachment_id =
+                    attachment_stmt.insert(Some(&metadata.address_id), attachment)?;
+                message_to_attachment_stmt.execute((local_id, attachment_id))?;
             }
 
             result.push(local_id);
@@ -171,8 +168,9 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         counts: impl Iterator<Item = &'i MessageCount>,
     ) -> DBResult<()> {
         let mut stmt = self.0.prepare(
-            "INSERT OR REPLACE INTO label_message_count VALUES \
-        ((SELECT id FROM labels WHERE rid=?),?,?)",
+            "INSERT INTO label_message_count VALUES \
+        ((SELECT id FROM labels WHERE rid=?),?,?) ON CONFLICT (label_id) DO UPDATE SET \
+        total=excluded.total, unread=excluded.unread",
         )?;
 
         for count in counts {
