@@ -3,7 +3,6 @@ use crate::{
     TrackerObserver,
 };
 use parking_lot::lock_api::Mutex;
-use parking_lot::RwLock;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::ops::Deref;
@@ -98,20 +97,27 @@ impl<Q: ObservableQuery> TrackerObserver for QueryTrackerObserver<Q> {
 struct SharedValue<Q: Send + Sized> {
     has_new_value: AtomicBool,
     value: parking_lot::Mutex<Option<Q>>,
+    update_cb: Option<Box<dyn LiveQueryUpdated>>,
 }
 
 impl<Q: Send + Sized> SharedValue<Q> {
-    fn new() -> Self {
+    fn new(cb: Option<Box<dyn LiveQueryUpdated>>) -> Self {
         Self {
             has_new_value: AtomicBool::new(false),
             value: Mutex::new(None),
+            update_cb: cb,
         }
     }
 
     fn store(&self, value: Q) {
-        let mut guard = self.value.lock();
-        *guard = Some(value);
-        self.has_new_value.store(true, Ordering::Release);
+        {
+            let mut guard = self.value.lock();
+            *guard = Some(value);
+            self.has_new_value.store(true, Ordering::Release);
+        }
+        if let Some(cb) = &self.update_cb {
+            cb.on_live_query_updated()
+        }
     }
 
     fn take(&self) -> Option<Q> {
@@ -127,12 +133,9 @@ impl<Q: Send + Sized> SharedValue<Q> {
 }
 
 /// Called every time the value on the live query has changed.
-pub trait LiveQueryUpdated {
+pub trait LiveQueryUpdated: Send + Sync {
     fn on_live_query_updated(&self);
 }
-
-/// Called every time the value on the live query has changed.
-pub trait SharedLiveQueryUpdated: LiveQueryUpdated + Send + Sync {}
 
 /// Builder for [`LiveQuery`].
 pub struct LiveQueryBuilder {
@@ -184,7 +187,6 @@ pub struct LiveQuery<Q: ObservableQuery> {
     observed_query: Option<ObservedQuery>,
     last_value: RefCell<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
-    update_cb: Option<Box<dyn LiveQueryUpdated>>,
 }
 
 impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
@@ -194,7 +196,7 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
         cb: Option<Box<dyn LiveQueryUpdated>>,
         initializer: &dyn LiveQueryInitializer<Q>,
     ) -> Self {
-        let shared = Arc::new(SharedValue::new());
+        let shared = Arc::new(SharedValue::new(cb));
         let value = initializer.initialize(&query, service.db_pool(), &shared);
         let shared_cloned = shared.clone();
         let query = ObservedQuery::new(service, query, move |new_value| {
@@ -204,7 +206,6 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
             last_value: RefCell::new(value),
             observed_query: Some(query),
             shared,
-            update_cb: cb,
         }
     }
 
@@ -213,9 +214,6 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
         if let Some(new_value) = self.shared.take() {
             {
                 *self.last_value.borrow_mut() = new_value;
-            }
-            if let Some(cb) = &self.update_cb {
-                cb.on_live_query_updated();
             }
         }
 
@@ -231,7 +229,7 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
 /// Builder for [`SharedLiveQuery`].
 pub struct SharedLiveQueryBuilder {
     initialization_mode: InitializationMode,
-    callback: Option<Box<dyn SharedLiveQueryUpdated>>,
+    callback: Option<Box<dyn LiveQueryUpdated>>,
     service: InProcessTrackerService,
 }
 
@@ -257,7 +255,7 @@ impl SharedLiveQueryBuilder {
     }
 
     /// Callback to be called each time a new value is available.
-    pub fn with_callback(mut self, callback: impl SharedLiveQueryUpdated + 'static) -> Self {
+    pub fn with_callback(mut self, callback: impl LiveQueryUpdated + 'static) -> Self {
         self.callback = Some(Box::new(callback));
         self
     }
@@ -274,44 +272,37 @@ impl SharedLiveQueryBuilder {
 /// Same as [`LiveQuery`], but can be accessed from multiple threads.
 pub struct SharedLiveQuery<Q: ObservableQuery> {
     observed_query: parking_lot::Mutex<Option<ObservedQuery>>,
-    last_value: RwLock<Q::Output>,
+    last_value: parking_lot::Mutex<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
-    update_cb: Option<Box<dyn SharedLiveQueryUpdated>>,
 }
 
 impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
     fn new(
         service: InProcessTrackerService,
         query: Q,
-        cb: Option<Box<dyn SharedLiveQueryUpdated>>,
+        cb: Option<Box<dyn LiveQueryUpdated>>,
         initializer: &dyn LiveQueryInitializer<Q>,
     ) -> Self {
-        let shared = Arc::new(SharedValue::new());
+        let shared = Arc::new(SharedValue::new(cb));
         let value = initializer.initialize(&query, service.db_pool(), &shared);
         let shared_cloned = shared.clone();
         let query = ObservedQuery::new(service, query, move |new_value| {
             shared_cloned.store(new_value);
         });
         Self {
-            last_value: RwLock::new(value),
+            last_value: parking_lot::Mutex::new(value),
             observed_query: parking_lot::Mutex::new(Some(query)),
             shared,
-            update_cb: cb,
         }
     }
 
     /// Get the latest value or the last updated value.
     pub fn value(&self) -> impl Deref<Target = Q::Output> + '_ {
+        let mut accessor = self.last_value.lock();
         if let Some(new_value) = self.shared.take() {
-            {
-                *self.last_value.write() = new_value;
-            }
-            if let Some(cb) = &self.update_cb {
-                cb.on_live_query_updated();
-            }
+            *accessor = new_value;
         }
-
-        self.last_value.read()
+        accessor
     }
 
     /// Terminate the observer for this query and stop receiving updates.
