@@ -1529,7 +1529,7 @@ dependencies = [
 
 [[package]]
 name = "proton-sqlite3"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "fixedbitset",
  "mockall",

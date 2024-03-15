@@ -1,13 +1,10 @@
-use crate::utils::mapped_rows_into_vec;
 use crate::{SqliteConnection, SqliteConnectionPool};
 use fixedbitset::FixedBitSet;
-use fmt::Write;
 use parking_lot::RwLock;
 use rusqlite::Transaction;
 use slotmap::{new_key_type, SlotMap};
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::Arc;
@@ -56,7 +53,7 @@ impl TrackingConnection {
     ) -> Result<T, E> {
         self.tracker.sync(&mut self.connection)?;
         let r = self.connection.tx(closure)?;
-        self.tracker.check_for_changes(&self.connection)?;
+        self.tracker.check_for_changes(&mut self.connection)?;
         Ok(r)
     }
 }
@@ -123,7 +120,6 @@ struct TrackerResult {
 
 struct LocalTrackerState {
     tracked_tables: FixedBitSet,
-    table_versions: Vec<i64>,
     last_sync_version: u64,
 }
 
@@ -131,7 +127,6 @@ impl LocalTrackerState {
     fn with_capacity(capacity: usize) -> Self {
         Self {
             tracked_tables: FixedBitSet::with_capacity(capacity),
-            table_versions: Vec::with_capacity(capacity),
             last_sync_version: 0,
         }
     }
@@ -170,7 +165,6 @@ impl LocalTrackerState {
 
     fn commit_sync_changes(&mut self, new_tracker_state: FixedBitSet, new_version: u64) {
         // Update local tracker bitset
-        self.table_versions.resize(new_tracker_state.len(), 0);
         self.tracked_tables = new_tracker_state;
         self.last_sync_version = new_version;
     }
@@ -194,24 +188,6 @@ impl LocalTrackerState {
         self.commit_sync_changes(new_tracker_state, new_version);
         Ok(())
     }
-
-    fn check_table_versions(
-        &mut self,
-        table_versions: impl IntoIterator<Item = (i64, usize)>,
-    ) -> TrackerResult {
-        let mut modified_tables = FixedBitSet::with_capacity(self.tracked_tables.len());
-        for (version, id) in table_versions.into_iter() {
-            if self.table_versions[id] < version {
-                self.table_versions[id] = version;
-                tracing::trace!("Table {} has been modified", id);
-                modified_tables.set(id, true);
-            }
-        }
-
-        TrackerResult {
-            table_ids: modified_tables,
-        }
-    }
 }
 
 const TRACKER_TABLE_NAME: &str = "proton_sqlite_tracker";
@@ -226,7 +202,7 @@ impl LocalTracker {
     fn init(&mut self, connection: &mut SqliteConnection) -> rusqlite::Result<()> {
         // create tracking table and cleanup previous data if re-used from a connection pool.
         connection.tx(|tx| {
-            tx.execute(&format!("CREATE TEMP TABLE IF NOT EXISTS {TRACKER_TABLE_NAME} (version INTEGER PRIMARY KEY AUTOINCREMENT, t INTEGER UNIQUE)"),())?;
+            tx.execute(&format!("CREATE TEMP TABLE IF NOT EXISTS {TRACKER_TABLE_NAME} (table_id INTEGER PRIMARY KEY, updated INTEGER)"),())?;
             tx.execute(&format!("DELETE FROM {TRACKER_TABLE_NAME}"),())
         })?;
 
@@ -243,9 +219,9 @@ impl LocalTracker {
                             tracing::trace!("Add watcher for table {table_name} id={id}");
                             Self::create_triggers(tx, table_name, *id)?;
                         }
-                        ObservedTableOp::Remove(table_name) => {
+                        ObservedTableOp::Remove(table_name, id) => {
                             tracing::trace!("Remove watcher for table {table_name}");
-                            Self::drop_triggers(tx, table_name)?;
+                            Self::drop_triggers(tx, table_name, *id)?;
                         }
                     }
                 }
@@ -257,28 +233,44 @@ impl LocalTracker {
     }
 
     #[tracing::instrument(level=Level::TRACE, skip(self, connection))]
-    fn check_for_changes(&mut self, connection: &SqliteConnection) -> rusqlite::Result<()> {
+    fn check_for_changes(&mut self, connection: &mut SqliteConnection) -> rusqlite::Result<()> {
         let changes = self.check_tables(connection)?;
         self.service.publish_changes(changes);
         Ok(())
     }
-    fn check_tables(&mut self, connection: &SqliteConnection) -> rusqlite::Result<TrackerResult> {
-        let query = format!("SELECT version, t  FROM {TRACKER_TABLE_NAME}");
-        let mut stmt = connection.prepare(&query)?;
+    fn check_tables(
+        &mut self,
+        connection: &mut SqliteConnection,
+    ) -> rusqlite::Result<TrackerResult> {
+        let query = format!("SELECT table_id  FROM {TRACKER_TABLE_NAME} WHERE updated=1");
+        let mut modified_tables = FixedBitSet::with_capacity(self.state.tracked_tables.len());
 
-        // Read all rows first to catch any issue before modifying table versions;
-        let mut table_versions = Vec::with_capacity(self.state.table_versions.len());
-        mapped_rows_into_vec(
-            &mut table_versions,
-            stmt.query_map((), |r| -> rusqlite::Result<(i64, usize)> {
-                Ok((r.get(0)?, r.get(1)?))
-            })?,
-        )?;
+        {
+            let mut stmt = connection.prepare(&query)?;
+            for row in stmt.query_map((), |r| r.get(0))? {
+                let id = row?;
+                tracing::trace!("Table {} has been modified", id);
+                modified_tables.set(id, true);
+            }
+        }
 
-        Ok(self.state.check_table_versions(table_versions))
+        if !modified_tables.is_clear() {
+            // Reset updated values.
+            connection.tx(|tx| -> rusqlite::Result<usize> {
+                tx.execute(
+                    &format!("UPDATE {TRACKER_TABLE_NAME} SET updated=0 WHERE updated=1"),
+                    (),
+                )
+            })?;
+        }
+
+        Ok(TrackerResult {
+            table_ids: modified_tables,
+        })
     }
 
     fn create_triggers(tx: &mut Transaction, table: &str, id: usize) -> rusqlite::Result<()> {
+        use std::fmt::Write;
         let mut query = String::with_capacity(64);
         for (trigger, name) in TRIGGER_LIST {
             query.clear();
@@ -287,19 +279,23 @@ impl LocalTracker {
                 r#"
 CREATE TEMP TRIGGER IF NOT EXISTS trigger_{table}_{name} AFTER {trigger} ON {table}
 BEGIN
-    INSERT OR REPLACE INTO {TRACKER_TABLE_NAME} VALUES (null, {id});
+    UPDATE  {TRACKER_TABLE_NAME} SET updated=1 WHERE table_id={id};
 END
             "#
             )
             .expect("should not fail");
-
             tx.execute(&query, ())?;
         }
 
+        query.clear();
+        write!(&mut query, "INSERT INTO {TRACKER_TABLE_NAME} VALUES (?,0)")
+            .expect("Should not fail");
+        tx.execute(&query, [id])?;
         Ok(())
     }
 
-    fn drop_triggers(tx: &mut Transaction, table: &str) -> rusqlite::Result<()> {
+    fn drop_triggers(tx: &mut Transaction, table: &str, id: usize) -> rusqlite::Result<()> {
+        use std::fmt::Write;
         let mut query = String::with_capacity(64);
         for (_, name) in TRIGGER_LIST {
             query.clear();
@@ -307,6 +303,13 @@ END
                 .expect("should not fail");
             tx.execute(&query, ())?;
         }
+        query.clear();
+        write!(
+            &mut query,
+            "DELETE FROM {TRACKER_TABLE_NAME} WHERE table_id=?"
+        )
+        .expect("Should not fail");
+        tx.execute(&query, [id])?;
         Ok(())
     }
 }
@@ -320,7 +323,7 @@ const TRIGGER_LIST: [(&str, &str); 3] = [
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ObservedTableOp {
     Add(String, usize),
-    Remove(String),
+    Remove(String, usize),
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -392,7 +395,7 @@ impl ObservedTables {
             let num_observers = self.num_observers[i];
 
             if is_tracking && num_observers == 0 {
-                changes.push(ObservedTableOp::Remove(self.tables[i].clone()));
+                changes.push(ObservedTableOp::Remove(self.tables[i].clone(), i));
                 result.set(i, false);
             } else if !is_tracking && num_observers != 0 {
                 changes.push(ObservedTableOp::Add(self.tables[i].clone(), i));
@@ -727,8 +730,6 @@ fn test_local_tracker_state() {
         );
 
         local_state.commit_sync_changes(tracker, new_version);
-        assert_eq!(local_state.table_versions[bar_table_id], 0);
-        assert_eq!(local_state.table_versions[foo_table_id], 0);
     }
 
     let observer_id_2 = service.add_observer(observer_2);
@@ -753,9 +754,6 @@ fn test_local_tracker_state() {
         );
 
         local_state.commit_sync_changes(tracker, new_version);
-        assert_eq!(local_state.table_versions[bar_table_id], 0);
-        assert_eq!(local_state.table_versions[foo_table_id], 0);
-        assert_eq!(local_state.table_versions[omega_table_id], 0);
     }
 
     service.remove_observer(observer_id_2);
@@ -773,12 +771,12 @@ fn test_local_tracker_state() {
         assert!(tracker[bar_table_id]);
         assert!(!tracker[omega_table_id]);
         assert_eq!(ops.len(), 1);
-        assert_eq!(ops[0], ObservedTableOp::Remove("omega".to_string()));
+        assert_eq!(
+            ops[0],
+            ObservedTableOp::Remove("omega".to_string(), omega_table_id)
+        );
 
         local_state.commit_sync_changes(tracker, new_version);
-        assert_eq!(local_state.table_versions[bar_table_id], 0);
-        assert_eq!(local_state.table_versions[foo_table_id], 0);
-        assert_eq!(local_state.table_versions[omega_table_id], 0);
     }
 
     service.remove_observer(observer_id_1);
@@ -793,13 +791,16 @@ fn test_local_tracker_state() {
         assert!(!tracker[bar_table_id]);
         assert!(!tracker[omega_table_id]);
         assert_eq!(ops.len(), 2);
-        assert_eq!(ops[0], ObservedTableOp::Remove("bar".to_string()));
-        assert_eq!(ops[1], ObservedTableOp::Remove("foo".to_string()));
+        assert_eq!(
+            ops[0],
+            ObservedTableOp::Remove("bar".to_string(), bar_table_id)
+        );
+        assert_eq!(
+            ops[1],
+            ObservedTableOp::Remove("foo".to_string(), foo_table_id)
+        );
 
         local_state.commit_sync_changes(tracker, new_version);
-        assert_eq!(local_state.table_versions[bar_table_id], 0);
-        assert_eq!(local_state.table_versions[foo_table_id], 0);
-        assert_eq!(local_state.table_versions[omega_table_id], 0);
     }
 }
 
