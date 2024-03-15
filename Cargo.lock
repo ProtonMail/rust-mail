@@ -1480,7 +1480,7 @@ dependencies = [
 [[package]]
 name = "proton-api-core"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ce615e9ec9bd79cc4e65fc33a17da19fd4ae3451"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
@@ -1514,7 +1514,7 @@ dependencies = [
 [[package]]
 name = "proton-async"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ce615e9ec9bd79cc4e65fc33a17da19fd4ae3451"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
 dependencies = [
  "async-trait",
  "flume",
@@ -1527,7 +1527,7 @@ dependencies = [
 [[package]]
 name = "proton-core-common"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ce615e9ec9bd79cc4e65fc33a17da19fd4ae3451"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
 dependencies = [
  "base64 0.22.0",
  "proton-api-core",
@@ -1539,7 +1539,7 @@ dependencies = [
 [[package]]
 name = "proton-core-db"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ce615e9ec9bd79cc4e65fc33a17da19fd4ae3451"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
 dependencies = [
  "aes-gcm",
  "proton-api-core",
@@ -1574,7 +1574,7 @@ dependencies = [
 [[package]]
 name = "proton-event-loop"
 version = "0.4.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ce615e9ec9bd79cc4e65fc33a17da19fd4ae3451"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
 dependencies = [
  "paste",
  "proton-api-core",
@@ -1616,7 +1616,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proton-async",
  "proton-mail-common",
@@ -1644,8 +1644,8 @@ dependencies = [
 
 [[package]]
 name = "proton-sqlite3"
-version = "0.4.2"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#ce615e9ec9bd79cc4e65fc33a17da19fd4ae3451"
+version = "0.4.3"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
 dependencies = [
  "fixedbitset",
  "parking_lot",
