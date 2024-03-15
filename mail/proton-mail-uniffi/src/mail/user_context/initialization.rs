@@ -5,6 +5,9 @@ use proton_mail_common::proton_api_mail::domain::LabelId;
 #[uniffi::export]
 impl MailUserContext {
     /// Initialize the user context. Should be called at least once.
+    ///
+    /// *NOTE*: You should not create any [`crate::mail::Mailbox`] types until this initialization has
+    /// completed.
     pub async fn initialize(
         &self,
         cb: Box<dyn MailUserContextInitializationCallback>,
@@ -25,6 +28,7 @@ impl MailUserContext {
     }
 }
 
+/// Stage of the initialization that is currently being handled.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum MailUserContextInitializationStage {
     User,

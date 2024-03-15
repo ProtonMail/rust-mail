@@ -7,6 +7,8 @@ use proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError
 #[uniffi::export]
 impl MailUserContext {
     /// Poll Event loop and apply events.
+    ///
+    /// *NOTE*: do not call this function concurrently.
     pub async fn poll_events(&self) -> Result<(), EventLoopError> {
         let ctx = self.ctx.clone();
         let handle = self.ctx.mail_context().async_runtime().spawn(async move {

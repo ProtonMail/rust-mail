@@ -2,21 +2,18 @@ use crate::{
     Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
 use proton_api_mail::proton_api_core::exports::tracing;
-use proton_mail_db::{ConversationQuery, LocalConversation, LocalLabelId};
+use proton_mail_db::{ConversationQuery, LocalConversation};
 impl Mailbox {
-    pub fn switch_label(
-        &mut self,
-        label_id: LocalLabelId,
+    pub fn sync(
+        &self,
         conversation_count: usize,
         cb: Option<Box<dyn MailboxBackgroundResult<()>>>,
     ) -> MailboxResult<()> {
-        let Some(label) = self.user_ctx.get_label(label_id)? else {
-            return Err(MailboxError::LabelNotFound(label_id));
+        let Some(label) = self.user_ctx.get_label(self.label_id)? else {
+            return Err(MailboxError::LabelNotFound(self.label_id));
         };
-
-        self.active_label = label;
-        if let Some(remote_id) = self.active_label.rid.clone() {
-            tracing::debug!("Selecting label {}({})", self.active_label.id, remote_id);
+        if let Some(remote_id) = label.rid.clone() {
+            tracing::debug!("Syncing {}({})", self.label_id, remote_id);
             let ctx = self.user_ctx.clone();
             self.user_ctx
                 .mail_context()
@@ -35,7 +32,7 @@ impl Mailbox {
                     }
                 });
         } else {
-            tracing::warn!("Local label {} has no remote id", self.active_label.id);
+            tracing::warn!("Local label {} has no remote id", self.label_id);
         }
         Ok(())
     }
@@ -47,14 +44,14 @@ impl Mailbox {
     ) -> Builder::Output {
         builder.build(
             self.user_ctx.tracker_service().clone(),
-            ConversationQuery::new(self.active_label.id, limit),
+            ConversationQuery::new(self.label_id, limit),
         )
     }
 
     pub fn conversations(&self, count: usize) -> MailboxResult<Vec<LocalConversation>> {
         let v = self
             .user_ctx
-            .conversations_with_context_for_label(self.active_label.id, count)?;
+            .conversations_with_context_for_label(self.label_id, count)?;
         Ok(v)
     }
 }

@@ -10,6 +10,21 @@ use std::sync::Arc;
 use uniffi::deps::anyhow::anyhow;
 
 /// Flow through the required steps to authenticate and login a user.
+///
+/// The first stage of the login is the submission of the user credentials with [`LoginFlow::login`].
+/// If this stage succeeds, you can check if the user needs to submit a 2FA token with
+/// [`LoginFlow::is_awaiting_2fa`].
+///
+/// If the flow is awaiting a 2FA token, call [`LoginFlow::submit_totp`] with respective code.
+///
+/// Finally, when the user is logged in, [`LoginFlow::is_logged_in`] will return true and
+/// the flow can be converted into a user session with [`LoginFlow::to_user_context`].
+///
+/// # Human Verification
+/// If at any stage during the login human verification is requested, the requests will fail with
+/// the [`LoginFlowError::HumanVerificationRequired`] error. If this happens, the process should
+/// be repeated.
+///
 #[derive(uniffi::Object)]
 pub struct LoginFlow {
     flow: Arc<proton_async::sync::Mutex<CoreLoginFlow>>,
