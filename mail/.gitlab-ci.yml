@@ -1,5 +1,10 @@
 image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust
 
+workflow:
+  rules:
+    - if: $CI_DEFAULT_BRANCH == $CI_COMMIT_BRANCH
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
 # sccache location to speed up compilation.
 default:
   tags:
@@ -126,3 +131,6 @@ pages:
   rules:
     # This ensures that only pushes to the default branch will trigger a pages deploy
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
