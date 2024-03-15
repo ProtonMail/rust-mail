@@ -29,7 +29,7 @@ pub use proton_sqlite3;
 new_tracked_connection_wrapper!(MailSqliteConnection);
 
 /// Convenience wrapper around [`InProcessTrackerService`] which always creates [`MailSqliteConnection`]
-/// rather than the default [`SqliteConnection`].
+/// rather than the default [`proton_sqlite3::SqliteConnection`].
 #[derive(Clone)]
 pub struct MailSqliteConnectionPool(InProcessTrackerService);
 
@@ -44,7 +44,7 @@ impl MailSqliteConnectionPool {
         &self.0
     }
 
-    /// Same as [`SqliteConnectionPool::acquire`].
+    /// Same as [`proton_sqlite3::SqliteConnectionPool::acquire`].
     pub fn acquire(&self) -> DBResult<MailSqliteConnection> {
         let conn = self.0.db_pool().acquire()?;
         let conn = TrackingConnection::new(conn, self.0.clone())?;

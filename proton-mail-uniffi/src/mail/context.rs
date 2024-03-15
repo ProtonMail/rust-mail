@@ -13,7 +13,12 @@ use proton_mail_common::proton_core_common::CoreSessionCallback;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-/// Mail context is the entry point for the application.
+/// Mail context is the entry point for the application. It contains important state such as
+/// database connection pools and the async runtime for rust.
+///
+/// # Lifetime
+/// This object needs to be kept alive for the entire duration of the application.
+///
 #[derive(uniffi::Object)]
 pub struct MailContext {
     ctx: pmc::MailContext,

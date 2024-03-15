@@ -7,6 +7,7 @@ mod user_context;
 
 pub use context::*;
 pub use login::*;
+pub use mailbox::*;
 use proton_mail_common::exports::anyhow::anyhow;
 pub use user_context::*;
 

@@ -1,8 +1,10 @@
-use crate::{MailContextResult, MailUserContext};
+use crate::{MailContextResult, MailUserContext, MailboxObservableQueryBuilder};
 use proton_api_mail::domain::{LabelId, LabelType, ALL_LABEL_TYPES};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
-use proton_mail_db::{DBResult, LocalLabel, LocalLabelId, LocalLabelWithCount};
+use proton_mail_db::{
+    DBResult, LabelsByTypeQueryWithConversationCount, LocalLabel, LocalLabelId, LocalLabelWithCount,
+};
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -56,5 +58,41 @@ impl MailUserContext {
             .as_connection_ref()
             .label_by_type_ordered_with_conversation_count(label_type)?;
         Ok(r)
+    }
+
+    pub fn new_system_labels_live_query<
+        Builder: MailboxObservableQueryBuilder<LabelsByTypeQueryWithConversationCount>,
+    >(
+        &self,
+        builder: Builder,
+    ) -> Builder::Output {
+        builder.build(
+            self.tracker_service().clone(),
+            LabelsByTypeQueryWithConversationCount::new(LabelType::System),
+        )
+    }
+
+    pub fn new_folder_labels_live_query<
+        Builder: MailboxObservableQueryBuilder<LabelsByTypeQueryWithConversationCount>,
+    >(
+        &self,
+        builder: Builder,
+    ) -> Builder::Output {
+        builder.build(
+            self.tracker_service().clone(),
+            LabelsByTypeQueryWithConversationCount::new(LabelType::Folder),
+        )
+    }
+
+    pub fn new_label_labels_live_query<
+        Builder: MailboxObservableQueryBuilder<LabelsByTypeQueryWithConversationCount>,
+    >(
+        &self,
+        builder: Builder,
+    ) -> Builder::Output {
+        builder.build(
+            self.tracker_service().clone(),
+            LabelsByTypeQueryWithConversationCount::new(LabelType::Label),
+        )
     }
 }
