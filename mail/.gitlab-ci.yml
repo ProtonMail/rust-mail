@@ -107,11 +107,13 @@ build-android:
   script:
     - !reference [.script-config-git, script]
     - rust-build/build_android.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./proton-mail-uniffi/android/lib/src/main/
+    - ./proton-mail-uniffi/android/build-android-archive.sh
 
   artifacts:
     name: proton-mail-android
     paths:
       - ./proton-mail-uniffi/android/lib/src/main
+      - ./proton-mail-uniffi/android/lib/build/
     when: always
     expire_in: 4 hrs
 
@@ -148,8 +150,7 @@ publish-android:
       when: manual
       allow_failure: true
   script:
-    - cd proton-mail-uniffi/android/
-    - ./publish.sh
+    - ./proton-mail-uniffi/android/publish.sh
   dependencies:
     - build-android
   needs:
