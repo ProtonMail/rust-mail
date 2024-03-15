@@ -5,7 +5,7 @@ use proton_mail_common::exports::proton_sqlite3::{
 };
 use proton_mail_common::exports::thiserror;
 use proton_mail_common::proton_api_mail::domain::{LabelId, LabelType};
-use proton_mail_common::proton_mail_db::proton_sqlite3::{SharedLiveQuery, SharedLiveQueryUpdated};
+use proton_mail_common::proton_mail_db::proton_sqlite3::SharedLiveQuery;
 use proton_mail_common::proton_mail_db::{
     ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalConversation, LocalLabel,
     LocalLabelId, LocalLabelWithCount,
@@ -54,8 +54,6 @@ impl LiveQueryUpdated for Box<dyn MailboxLiveQueryUpdatedCallback> {
         self.on_updated()
     }
 }
-
-impl SharedLiveQueryUpdated for Box<dyn MailboxLiveQueryUpdatedCallback> {}
 
 macro_rules! new_live_query {
     ($name:ident, $query:ident) => {
