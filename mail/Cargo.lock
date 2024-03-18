@@ -125,7 +125,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -171,13 +171,13 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.77"
+version = "0.1.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c980ee35e870bd1a4d2c8294d4c04d0499e67bca1e4b5cefcc693c2fa00caea9"
+checksum = "461abc97219de0eaaf81fe3ef974a540158f3d079c2ab200f891f1a2ef201e85"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -250,7 +250,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.52",
+ "syn 2.0.53",
  "which",
 ]
 
@@ -463,7 +463,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13b588ba4ac1a99f7f2964d24b3d896ddc6bf847ee3855dbd4366f058cfcd331"
 dependencies = [
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -561,9 +561,9 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fixedbitset"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b51ee430d5ff16df7998870eb0b4775383ac5bc450f5a2ed547394fe2d617131"
+checksum = "104fab1343cee1c44ff0ebadb6a1b669ef8c429356dc958ce00cec96e4a433ca"
 
 [[package]]
 name = "flate2"
@@ -677,7 +677,7 @@ checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -787,7 +787,7 @@ dependencies = [
 [[package]]
 name = "gopenpgp-sys"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#3c9b3b53622b7068825f2aed586c4f2e59070140"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#5566242093c5962f46b65eb6d35d2031fbf0dda7"
 dependencies = [
  "base64 0.21.7",
  "bindgen",
@@ -797,9 +797,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.24"
+version = "0.3.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb2c4422095b67ee78da96fbb51a4cc413b3b25883c7717ff7ca1ab31022c9c9"
+checksum = "4fbd2820c5e49886948654ab546d0688ff24530286bdcf8fca3cefb16d4618eb"
 dependencies = [
  "bytes",
  "fnv",
@@ -1187,9 +1187,9 @@ dependencies = [
 
 [[package]]
 name = "new_debug_unreachable"
-version = "1.0.4"
+version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
+checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nom"
@@ -1363,7 +1363,7 @@ dependencies = [
  "phf_shared 0.11.2",
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -1401,7 +1401,7 @@ checksum = "2f38a4412a78282e09a2cf38d195ea5420d15ba0602cb375210efbc877243965"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -1465,7 +1465,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a41cf62165e97c7f814d2221421dbb9afcbcdb0a88068e5ea206e19951c2cbb5"
 dependencies = [
  "proc-macro2",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -1480,7 +1480,7 @@ dependencies = [
 [[package]]
 name = "proton-api-core"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#971c3c9b9d5fd623617875b63e81ff0b8d5a28ef"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
@@ -1514,7 +1514,7 @@ dependencies = [
 [[package]]
 name = "proton-async"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#971c3c9b9d5fd623617875b63e81ff0b8d5a28ef"
 dependencies = [
  "async-trait",
  "flume",
@@ -1527,7 +1527,7 @@ dependencies = [
 [[package]]
 name = "proton-core-common"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#971c3c9b9d5fd623617875b63e81ff0b8d5a28ef"
 dependencies = [
  "base64 0.22.0",
  "proton-api-core",
@@ -1539,7 +1539,7 @@ dependencies = [
 [[package]]
 name = "proton-core-db"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#971c3c9b9d5fd623617875b63e81ff0b8d5a28ef"
 dependencies = [
  "aes-gcm",
  "proton-api-core",
@@ -1551,7 +1551,7 @@ dependencies = [
 [[package]]
 name = "proton-crypto"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#3c9b3b53622b7068825f2aed586c4f2e59070140"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#5566242093c5962f46b65eb6d35d2031fbf0dda7"
 dependencies = [
  "gopenpgp-sys",
  "hex",
@@ -1561,7 +1561,7 @@ dependencies = [
 [[package]]
 name = "proton-crypto-account"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#3c9b3b53622b7068825f2aed586c4f2e59070140"
+source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#5566242093c5962f46b65eb6d35d2031fbf0dda7"
 dependencies = [
  "base64 0.21.7",
  "futures",
@@ -1574,7 +1574,7 @@ dependencies = [
 [[package]]
 name = "proton-event-loop"
 version = "0.4.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#971c3c9b9d5fd623617875b63e81ff0b8d5a28ef"
 dependencies = [
  "paste",
  "proton-api-core",
@@ -1645,7 +1645,7 @@ dependencies = [
 [[package]]
 name = "proton-sqlite3"
 version = "0.4.3"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#85b0cf26d8e5ce61d566ffae40903c5eb874f8ad"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#971c3c9b9d5fd623617875b63e81ff0b8d5a28ef"
 dependencies = [
  "fixedbitset",
  "parking_lot",
@@ -1944,7 +1944,7 @@ checksum = "7f81c2fde025af7e69b1d1420531c8a8811ca898919db177141a85313b1cb932"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2023,7 +2023,7 @@ checksum = "7eb0b34b42edc17f6b7cac84a52a1c5f0e1bb2227e997ca9011ea3dd34e8610b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2045,7 +2045,7 @@ checksum = "0b2e6b945e9d3df726b65d6ee24060aff8e3533d431f677a9695db04eff9dfdb"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2205,9 +2205,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.52"
+version = "2.0.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b699d15b36d1f02c3e7c69f8ffef53de37aefae075d8488d4ba1a7788d574a07"
+checksum = "7383cd0e49fff4b6b90ca5670bfd3e9d6a733b3f90c686605aa7eec8c4996032"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2280,7 +2280,7 @@ checksum = "c61f3ba182994efc43764a46c018c347bc492c79f024e705f46567b418f6d4f7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2366,7 +2366,7 @@ checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2439,7 +2439,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2588,7 +2588,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72775b3afa6adb30e0c92b3107858d2fcb0ff1a417ac242db1f648b0e2dd0ef2"
 dependencies = [
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2621,7 +2621,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "syn 2.0.52",
+ "syn 2.0.53",
  "toml",
  "uniffi_build",
  "uniffi_meta",
@@ -2761,7 +2761,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
  "wasm-bindgen-shared",
 ]
 
@@ -2795,7 +2795,7 @@ checksum = "e94f17b526d0a461a191c78ea52bbce64071ed5c04c9ffe424dcb38f74171bb7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -3046,7 +3046,7 @@ checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.52",
+ "syn 2.0.53",
 ]
 
 [[package]]
