@@ -3,8 +3,7 @@ use std::io;
 use base64::Engine;
 use proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
 use proton_crypto_inbox::attachment::{
-    self, AttachmentEncryptedSignature, AttachmentMetadataCryptoView, AttachmentSignature,
-    KeyPackets,
+    AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
 
@@ -89,16 +88,16 @@ impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
     }
 }
 
-impl AttachmentMetadataCryptoView for TestAttachmentMetdata {
-    fn get_attachment_key_packets(&self) -> &KeyPackets {
+impl AttachmentDecryption for TestAttachmentMetdata {
+    fn attachment_key_packets(&self) -> &KeyPackets {
         &self.key_packets
     }
 
-    fn get_attachment_signature(&self) -> &Option<AttachmentSignature> {
+    fn attachment_signature(&self) -> &Option<AttachmentSignature> {
         &self.signature
     }
 
-    fn get_attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature> {
+    fn attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature> {
         &self.enc_signature
     }
 }
@@ -160,14 +159,14 @@ fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
     let verification_keys = get_test_public_address_keys(&pgp_provider);
 
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
-    let decrypted_attachment = attachment::decrypt_attachment(
-        &pgp_provider,
-        &attachment_metadata,
-        &decryption_keys,
-        &verification_keys,
-        enc_data,
-    )
-    .unwrap();
+    let decrypted_attachment = attachment_metadata
+        .decrypt_attachment(
+            &pgp_provider,
+            &decryption_keys,
+            &verification_keys,
+            enc_data,
+        )
+        .unwrap();
 
     assert_eq!(
         decrypted_attachment.as_ref(),
@@ -187,14 +186,14 @@ fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetd
     let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
     let mut output_buffer = Vec::new();
     let enc_data_reader: &[u8] = enc_data.as_ref();
-    let mut verification_reader = attachment::decrypt_attachment_from_reader(
-        &pgp_provider,
-        &attachment_metadata,
-        &decryption_keys,
-        &verification_keys,
-        enc_data_reader,
-    )
-    .unwrap();
+    let mut verification_reader = attachment_metadata
+        .decrypt_attachment_from_reader(
+            &pgp_provider,
+            &decryption_keys,
+            &verification_keys,
+            enc_data_reader,
+        )
+        .unwrap();
     io::copy(&mut verification_reader, &mut output_buffer).unwrap();
     assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
 
