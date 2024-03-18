@@ -1,7 +1,7 @@
 use crate::store::PendingAction;
 use crate::{
     Action, ActionError, ActionFactory, ActionFactoryError, ActionLocalValidationResult,
-    ActionPriority, ActionStore, SessionProvider, StoredActionId,
+    ActionStore, SessionProvider, StoredActionId,
 };
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::{rusqlite, MigratorError};
@@ -42,17 +42,13 @@ impl ActionQueue {
         })
     }
 
-    pub fn queue_action<T: Action>(
-        &mut self,
-        action: &T,
-        priority: ActionPriority,
-    ) -> ActionQueueResult<StoredActionId> {
+    pub fn queue_action<T: Action>(&mut self, action: &T) -> ActionQueueResult<StoredActionId> {
         let mut store = ActionStore::new(&mut self.connection)?;
         let span = tracing::span!(Level::DEBUG, "Queue Action", action = ?action, action_id=action.action_id().to_string());
 
         span.in_scope(|| -> ActionQueueResult<StoredActionId> {
             let pending_action =
-                PendingAction::from_action(action, priority).map_err(ActionError::Serialization)?;
+                PendingAction::from_action(action).map_err(ActionError::Serialization)?;
 
             // Write action to store
             let id = store.store_action(pending_action)?;

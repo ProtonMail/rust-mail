@@ -119,6 +119,7 @@ pub trait Action: Any + Serialize + DeserializeOwned + Debug {
     /// Return the ActionId, generate one with the
     const ID: ActionId;
     const VERSION: u32;
+    const PRIORITY: ActionPriority = ActionPriority::Normal;
     fn action_version(&self) -> u32 {
         Self::VERSION
     }
@@ -129,6 +130,10 @@ pub trait Action: Any + Serialize + DeserializeOwned + Debug {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn priority(&self) -> ActionPriority {
+        Self::PRIORITY
     }
 }
 

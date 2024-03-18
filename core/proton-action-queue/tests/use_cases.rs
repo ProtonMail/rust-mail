@@ -2,7 +2,6 @@ use crate::common::{
     new_mock_remote, DeleteMessageAction, MockRemoteSource, MoveMessageAction, TestCtx,
 };
 use mockall::*;
-use proton_action_queue::ActionPriority;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::http::HttpRequestError;
 use std::sync::Arc;
@@ -44,22 +43,21 @@ fn successive_message_move_but_fails_on_first_remote_action() {
     let mut queue = ctx.new_action_queue(Arc::new(remote));
 
     queue
-        .queue_action(
-            &MoveMessageAction::new(inbox_id, folder1_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
         .expect("failed to add action");
     queue
-        .queue_action(
-            &MoveMessageAction::new(folder1_id, folder2_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(
+            folder1_id,
+            folder2_id,
+            [message_id],
+        ))
         .expect("failed to add action");
     queue
-        .queue_action(
-            &MoveMessageAction::new(folder2_id, folder3_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(
+            folder2_id,
+            folder3_id,
+            [message_id],
+        ))
         .expect("failed to add action");
 
     queue.consume_pending().expect("failed to consume actions");
@@ -103,10 +101,7 @@ fn move_message_to_folder_remote_exec_fails() {
     let mut queue = ctx.new_action_queue(remote);
 
     queue
-        .queue_action(
-            &MoveMessageAction::new(inbox_id, folder1_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
         .expect("failed to add action");
 
     queue.consume_pending().expect("failed to consume actions");
@@ -156,22 +151,21 @@ fn successive_message_move_and_succeeds() {
     let mut queue = ctx.new_action_queue(remote);
 
     queue
-        .queue_action(
-            &MoveMessageAction::new(inbox_id, folder1_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
         .expect("failed to add action");
     queue
-        .queue_action(
-            &MoveMessageAction::new(folder1_id, folder2_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(
+            folder1_id,
+            folder2_id,
+            [message_id],
+        ))
         .expect("failed to add action");
     queue
-        .queue_action(
-            &MoveMessageAction::new(folder2_id, folder3_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(
+            folder2_id,
+            folder3_id,
+            [message_id],
+        ))
         .expect("failed to add action");
 
     queue.consume_pending().expect("failed to consume actions");
@@ -212,10 +206,7 @@ fn move_message_to_folder_but_remote_action_occurred_before_execution() {
     let mut queue = ctx.new_action_queue(remote);
 
     queue
-        .queue_action(
-            &MoveMessageAction::new(inbox_id, folder1_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
         .expect("failed to add action");
 
     ctx.tx(|mut tx| {
@@ -266,16 +257,14 @@ fn move_message_to_folder_two_actions_interleaved_with_remote_change() {
     let mut queue = ctx.new_action_queue(remote);
 
     queue
-        .queue_action(
-            &MoveMessageAction::new(inbox_id, folder1_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
         .expect("failed to add action");
     queue
-        .queue_action(
-            &MoveMessageAction::new(folder1_id, folder2_id, [message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&MoveMessageAction::new(
+            folder1_id,
+            folder2_id,
+            [message_id],
+        ))
         .expect("failed to add action");
 
     // consume first action
@@ -333,10 +322,7 @@ fn delete_message_queued_action_executed_after_local_change() {
     let mut queue = ctx.new_action_queue(remote);
 
     queue
-        .queue_action(
-            &DeleteMessageAction::new([message_id]),
-            ActionPriority::Normal,
-        )
+        .queue_action(&DeleteMessageAction::new([message_id]))
         .expect("failed to add action");
 
     // Simulate a remote change applied locally

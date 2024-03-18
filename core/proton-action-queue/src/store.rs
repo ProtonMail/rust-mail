@@ -53,16 +53,28 @@ impl StoredAction {
 }
 
 impl PendingAction {
-    pub(crate) fn from_action<T: Action>(
+    pub(crate) fn from_action<T: Action>(action: &T) -> Result<Self, rmp_serde::encode::Error> {
+        let data = rmp_serde::to_vec(action)?;
+
+        Ok(Self {
+            action_id: action.action_id().clone(),
+            version: action.action_version(),
+            priority: action.priority(),
+            data,
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_action_and_priority<T: Action>(
         action: &T,
-        priority: ActionPriority,
+        action_priority: ActionPriority,
     ) -> Result<Self, rmp_serde::encode::Error> {
         let data = rmp_serde::to_vec(action)?;
 
         Ok(Self {
             action_id: action.action_id().clone(),
             version: action.action_version(),
-            priority,
+            priority: action_priority,
             data,
         })
     }
@@ -270,10 +282,10 @@ mod tests {
         let mut queue = new_queue();
         let mut store = queue.get_store();
 
-        let pending1 = PendingAction::from_action(&action1, ActionPriority::Normal)
-            .expect("failed to create pending action");
-        let pending2 = PendingAction::from_action(&action2, ActionPriority::Normal)
-            .expect("failed to create pending action");
+        let pending1 =
+            PendingAction::from_action(&action1).expect("failed to create pending action");
+        let pending2 =
+            PendingAction::from_action(&action2).expect("failed to create pending action");
         let stored_ids = store
             .store_actions(&[pending1, pending2])
             .expect("failed to store action");
@@ -328,13 +340,13 @@ mod tests {
         let mut queue = new_queue();
         let mut store = queue.get_store();
 
-        let pending1 = PendingAction::from_action(&action1, ActionPriority::Low)
+        let pending1 = PendingAction::from_action_and_priority(&action1, ActionPriority::Low)
             .expect("failed to create pending action");
-        let pending2 = PendingAction::from_action(&action2, ActionPriority::Highest)
+        let pending2 = PendingAction::from_action_and_priority(&action2, ActionPriority::Highest)
             .expect("failed to create pending action");
-        let pending3 = PendingAction::from_action(&action3, ActionPriority::Normal)
+        let pending3 = PendingAction::from_action_and_priority(&action3, ActionPriority::Normal)
             .expect("failed to create pending action");
-        let pending4 = PendingAction::from_action(&action4, ActionPriority::Low)
+        let pending4 = PendingAction::from_action_and_priority(&action4, ActionPriority::Low)
             .expect("failed to create pending action");
         let stored_ids = store
             .store_actions(&[pending1, pending2, pending3, pending4])
