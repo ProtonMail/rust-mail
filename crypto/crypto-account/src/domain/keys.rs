@@ -71,7 +71,7 @@ crate::string_id! {
     KeyTokenSignature
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
 /// Represents a locked jey retrieved from the API.
 pub struct LockedKey {

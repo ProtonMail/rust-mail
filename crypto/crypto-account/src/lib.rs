@@ -18,7 +18,7 @@ macro_rules! string_id {
         $(#[$meta:meta])*
         $name:ident
     ) => {
-        #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
+        #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
         $(#[$meta])*
         pub struct $name(pub String);
 

@@ -15,7 +15,7 @@ pub enum KeyError {
 #[derive(Debug, thiserror::Error)]
 pub enum AccountCryptoError {
     #[error("Failed to verify signature for token {0}")]
-    TokenVerification(VerificationError),
+    TokenVerification(#[from] VerificationError),
     #[error("Failed to decrypt token {0}")]
     TokenDecryption(crate::Error),
     #[error("Failed to import key {0}")]
@@ -29,7 +29,7 @@ pub enum SKLError {
     #[error("Failed to parse the SKL data: {0}")]
     ParseError(Box<dyn std::error::Error>),
     #[error("Failed to verify SKL signature: {0}")]
-    SignatureVerificationError(VerificationError),
+    SignatureVerificationError(#[from] VerificationError),
     #[error("No SKL data present")]
     NoSKLData,
 }

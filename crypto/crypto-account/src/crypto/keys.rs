@@ -28,9 +28,7 @@ pub fn decrypt_key_token<Prov: PGPProviderSync>(
     let verified_data = decryptor
         .decrypt(token.as_bytes(), DataEncoding::Armor)
         .map_err(AccountCryptoError::TokenDecryption)?;
-    verified_data
-        .verification_result()
-        .map_err(AccountCryptoError::TokenVerification)?;
+    verified_data.verification_result()?;
     Ok(verified_data.into_vec())
 }
 
@@ -85,9 +83,7 @@ pub async fn decrypt_key_token_async<Prov: PGPProviderAsync>(
         .decrypt_async(token.as_bytes(), DataEncoding::Armor)
         .await
         .map_err(AccountCryptoError::TokenDecryption)?;
-    verified_data
-        .verification_result()
-        .map_err(AccountCryptoError::TokenVerification)?;
+    verified_data.verification_result()?;
     Ok(verified_data.into_vec())
 }
 
