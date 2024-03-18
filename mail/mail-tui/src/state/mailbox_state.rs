@@ -7,11 +7,11 @@ use proton_async::sync::mpsc::Sender;
 use proton_core_common::proton_core_db::proton_sqlite3::{
     InProcessTrackerService, LiveQuery, LiveQueryBuilder,
 };
-use proton_mail_common::proton_api_mail::domain::{LabelId, LabelType};
+use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::{debug, error};
 use proton_mail_common::proton_mail_db::proton_sqlite3::ObservableQuery;
 use proton_mail_common::proton_mail_db::{
-    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalLabel, LocalLabelId,
+    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalLabelId,
 };
 use proton_mail_common::{
     MailContextError, MailUserContext, MailUserContextInitializationCallback,
@@ -64,9 +64,15 @@ impl MailboxUserContextState {
     pub fn new(mailbox: Mailbox, event_loop_poller: Sender<()>) -> Self {
         Self {
             conversations: mailbox.new_conversation_query(new_live_query, CONVERSATION_COUNT),
-            system_labels: mailbox.new_system_labels_live_query(new_live_query),
-            folders: mailbox.new_folder_labels_live_query(new_live_query),
-            labels: mailbox.new_label_labels_live_query(new_live_query),
+            system_labels: mailbox
+                .user_context()
+                .new_system_labels_live_query(new_live_query),
+            folders: mailbox
+                .user_context()
+                .new_folder_labels_live_query(new_live_query),
+            labels: mailbox
+                .user_context()
+                .new_label_labels_live_query(new_live_query),
             mailbox,
             event_loop_poller,
         }
@@ -91,22 +97,8 @@ impl MailboxState {
         self.conversation_loading_state
     }
 
-    pub fn active_label(&self) -> Option<&LocalLabel> {
-        self.user_context.as_ref().map(|c| c.mailbox.active_label())
-    }
-
-    pub fn active_label_type(&self) -> LabelType {
-        self.active_label()
-            .map(|l| l.label_type)
-            .unwrap_or(LabelType::System)
-    }
-
-    pub fn active_label_name(&self) -> &str {
-        if let Some(label) = self.active_label() {
-            label.path.as_deref().unwrap_or(label.name.as_str())
-        } else {
-            "Inbox"
-        }
+    pub fn active_label(&self) -> Option<LocalLabelId> {
+        self.user_context.as_ref().map(|c| c.mailbox.label_id())
     }
 
     pub fn mailbox_context(&self) -> Option<&MailboxUserContextState> {
@@ -144,7 +136,7 @@ impl MailboxState {
 
         self.conversation_loading_state = LoadingState::Done;
 
-        let mailbox = match Mailbox::new(user_context) {
+        let mailbox = match Mailbox::with_remote_id(user_context, LabelId::inbox()) {
             Ok(m) => m,
             Err(e) => {
                 app_dispatcher.set_error("Failed to Open Mailbox", e);
@@ -200,8 +192,9 @@ impl MailboxState {
         };
 
         let background_dispatcher = dispatcher.background_dispatcher();
-        if let Err(e) = mailbox_context.mailbox.switch_label(
-            label_id,
+        mailbox_context.mailbox =
+            Mailbox::with_id(mailbox_context.mailbox.user_context().clone(), label_id);
+        if let Err(e) = mailbox_context.mailbox.sync(
             CONVERSATION_COUNT,
             Some(Box::new(move |r: MailboxResult<()>| {
                 background_dispatcher
@@ -265,10 +258,14 @@ impl MailboxState {
             MailboxEvent::Logout => {
                 if let Some(mailbox_context) = self.user_context.take() {
                     let bg_dispatcher = dispatcher.background_dispatcher();
+                    let ctx = mailbox_context.mailbox.user_context().clone();
                     mailbox_context
                         .mailbox
-                        .logout(Box::new(move |r: MailboxResult<()>| {
-                            if let Err(e) = r {
+                        .user_context()
+                        .mail_context()
+                        .async_runtime()
+                        .spawn(async move {
+                            if let Err(e) = ctx.logout().await {
                                 bg_dispatcher.set_error("Failed to Logout", e);
                                 return;
                             }
@@ -276,7 +273,7 @@ impl MailboxState {
                                 app.pop_all_views();
                                 app.push_view(SessionsView::new());
                             });
-                        }));
+                        });
                 }
             }
             MailboxEvent::PollEventLoop => {

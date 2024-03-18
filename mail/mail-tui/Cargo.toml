@@ -24,13 +24,14 @@ hex = "0.4"
 tui-logger = { version = "0.11", features = ["tracing-support"] }
 unicode-width = "0.1"
 chrono = { version = "0.4" }
+
 #[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
 #proton-api-core = { path = "../../proton-api-core/proton-api-core" }
 #proton-core-common = { path = "../../proton-api-core/proton-core-common" }
 #proton-sqlite3 = { path = "../../proton-api-core/proton-sqlite3" }
 #proton-async = { path = "../../proton-api-core/proton-async" }
 #proton-event-loop = { path = "../../proton-api-core/proton-event-loop" }
-#
+
 #[patch."https://gitlab.protontech.ch/rust/inbox/mail.git"]
 #proton-mail-common = { path = "../mail/proton-mail-commom" }
 

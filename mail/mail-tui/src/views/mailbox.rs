@@ -120,7 +120,6 @@ impl ConversationView {
         let Some(mailbox_context) = state.mailbox_context() else {
             return;
         };
-        let active_label_name = state.active_label_name();
 
         if state.conversation_loading_state() == LoadingState::Loading {
             let chunks = Layout::default()
@@ -164,11 +163,7 @@ impl ConversationView {
                         add_modifier: Default::default(),
                         sub_modifier: Default::default(),
                     })
-                    .block(
-                        Block::new()
-                            .title(format!(" {} ", active_label_name))
-                            .borders(Borders::all()),
-                    ),
+                    .block(Block::new().borders(Borders::all())),
             ),
             area,
             &mut self.conversation_list_state,
@@ -184,21 +179,20 @@ impl ConversationView {
         let Some(mailbox_context) = state.mailbox_context() else {
             return;
         };
-        let (current_label_type, current_label_id) = if let Some(label) = state.active_label() {
-            (label.label_type, label.id)
+        let current_label_id = if let Some(label) = state.active_label() {
+            label
         } else {
-            (LabelType::System, LocalLabelId::new(u64::MAX))
+            LocalLabelId::new(u64::MAX)
         };
+
+        let (current_label_type, label_index) =
+            find_label_index_mailbox(mailbox_context, current_label_id);
 
         // Correct for focus lost;
         {
-            let selection_index = Some(find_label_index(
-                labels_for_type(mailbox_context, current_label_type).deref(),
-                current_label_id,
-            ));
             let cur_label_state = self.label_lists_state_mut(current_label_type);
             if cur_label_state.is_focused() {
-                cur_label_state.select(selection_index);
+                cur_label_state.select(Some(label_index));
             }
         }
 
@@ -207,15 +201,6 @@ impl ConversationView {
         self.system_labels_list_state.set_focus_lost();
         self.folder_list_state.set_focus_lost();
         self.conversation_list_state.set_focus_lost();
-
-        fn find_label_index(labels: &[LocalLabelWithCount], id: LocalLabelId) -> usize {
-            for (idx, l) in labels.iter().enumerate() {
-                if l.id == id {
-                    return idx;
-                }
-            }
-            0
-        }
 
         match current_label_type {
             LabelType::Label => {
@@ -265,6 +250,43 @@ impl ConversationView {
             }
         }
     }
+}
+
+fn find_label_index_mailbox(
+    mbox: &MailboxUserContextState,
+    id: LocalLabelId,
+) -> (LabelType, usize) {
+    let find_fn = |labels: &[LocalLabelWithCount]| -> Option<usize> {
+        for (idx, l) in labels.iter().enumerate() {
+            if l.id == id {
+                return Some(idx);
+            }
+        }
+        None
+    };
+
+    if let Some(idx) = find_fn(mbox.system_labels.value().deref()) {
+        return (LabelType::System, idx);
+    }
+
+    if let Some(idx) = find_fn(mbox.folders.value().deref()) {
+        return (LabelType::Folder, idx);
+    }
+
+    if let Some(idx) = find_fn(mbox.labels.value().deref()) {
+        return (LabelType::Label, idx);
+    }
+
+    (LabelType::System, 0)
+}
+
+fn find_label_index(labels: &[LocalLabelWithCount], id: LocalLabelId) -> usize {
+    for (idx, l) in labels.iter().enumerate() {
+        if l.id == id {
+            return idx;
+        }
+    }
+    0
 }
 
 fn labels_for_type(
@@ -442,7 +464,7 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                         let mailbox_state = &ctx.state().mailbox_state;
                         self.set_focused_widget(
                             mailbox_state,
-                            FocusedWidget::Labels(mailbox_state.active_label_type()),
+                            FocusedWidget::Labels(LabelType::System),
                         );
                     }
                     _ => {}
