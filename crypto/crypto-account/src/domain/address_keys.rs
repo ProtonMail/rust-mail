@@ -59,7 +59,7 @@ impl AddressKeys {
                 public_key,
                 id: locked_key.id.clone(),
                 flags: *flags,
-                primary: locked_key.primary,
+                primary: locked_key.primary.into(),
             })
         }));
         UnlockResult {
@@ -104,7 +104,7 @@ impl AddressKeys {
                     public_key,
                     id: locked_key.id.clone(),
                     flags: *flags,
-                    primary: locked_key.primary,
+                    primary: locked_key.primary.into(),
                 })
             });
         }

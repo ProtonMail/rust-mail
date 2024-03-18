@@ -1,9 +1,10 @@
-use super::bool_from_integer;
+use super::ProtonBoolean;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
+use super::SignedKeyList;
 use crate::{FLAG_EMAIL_NO_ENCRYPT, FLAG_EMAIL_NO_SIGN, FLAG_NOT_COMPROMISED, FLAG_NOT_OBSOLETE};
 
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Hash, Clone, Copy)]
@@ -62,6 +63,10 @@ impl KeyFlag {
     pub fn is_compromised(&self) -> bool {
         (self.0 & FLAG_NOT_COMPROMISED) == 0
     }
+    /// Indicates whether the key supports mail.
+    pub fn supports_mail(&self) -> bool {
+        !self.is_email_no_encryption()
+    }
 }
 
 crate::string_id! {
@@ -86,12 +91,10 @@ pub struct LockedKey {
     pub signature: Option<String>, // Only available for address keys
     /// (Deprecated) Migrated accounts do not have the activation field set.
     pub activation: Option<String>,
-    #[serde(deserialize_with = "bool_from_integer")]
     /// Is the key the primary key to use.
-    pub primary: bool,
-    #[serde(deserialize_with = "bool_from_integer")]
+    pub primary: ProtonBoolean,
     /// The key is active and should be decryptable.
-    pub active: bool,
+    pub active: ProtonBoolean,
     /// Key flags encoded in a bitmap.
     pub flags: Option<KeyFlag>, // Only available for address keys
     /// Secret for key recovery of a local file.
@@ -116,4 +119,38 @@ pub struct APIPublicKey {
     pub flags: KeyFlag,
     /// OpenPGP armored public key.
     pub public_key: String,
+}
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct APIPublicAddressKeyGroup {
+    pub keys: Vec<APIPublicKey>,
+    pub signed_key_list: Option<SignedKeyList>,
+}
+
+impl AsRef<[APIPublicKey]> for APIPublicAddressKeyGroup {
+    fn as_ref(&self) -> &[APIPublicKey] {
+        &self.keys
+    }
+}
+
+/// Represents the public keys returned from the `keys/all` route.
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct APIPublicAddressKeys {
+    /// Information about the internal address itself, if it exists. Since the SKL is mandatory, this will never be nullable.
+    #[serde(rename = "Address")]
+    pub address_keys: APIPublicAddressKeyGroup,
+    /// Information about the catch all address itself, if it exists. This can be null if the address keys are valid
+    #[serde(rename = "CatchAll")]
+    pub catch_all_keys: Option<APIPublicAddressKeyGroup>,
+    /// Any other key that cannot be verified, such as Proton legacy keys or WKD.
+    #[serde(rename = "Unverified")]
+    pub unverified_keys: Option<APIPublicAddressKeyGroup>,
+    /// List of warnings to show to the user related to phishing and message routing.
+    pub warnings: Vec<String>,
+    /// True when domain has valid proton MX.
+    #[serde(rename = "ProtonMX")]
+    pub proton_mx: bool,
+    /// Tells whether this is an official Proton address.
+    pub is_proton: ProtonBoolean,
 }

@@ -1,18 +1,14 @@
 use futures::future::join_all;
 
-use super::{APIPublicKey, APIPublicKeySource, KeyFlag};
-use proton_crypto::crypto::{AsPublicKeyRef, DataEncoding, PublicKey};
-use serde::Deserialize;
+use crate::errors::AccountCryptoError;
 
-/// Represents public address keys retrieved from the API.
-#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
-pub struct APIPublicAddressKeys(pub Vec<APIPublicKey>);
-
-impl AsRef<[APIPublicKey]> for APIPublicAddressKeys {
-    fn as_ref(&self) -> &[APIPublicKey] {
-        &self.0
-    }
-}
+use super::{
+    APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKeySource, KeyFlag, SignedKeyList,
+};
+use proton_crypto::{
+    crypto::{AsPublicKeyRef, DataEncoding, PublicKey},
+    keytransparency::{KTVerificationResult, KT_UNVERIFIED},
+};
 
 /// Represents a public address key of another user.
 ///
@@ -35,22 +31,26 @@ impl<Pub: PublicKey> AsPublicKeyRef<Pub> for PublicAddressKey<Pub> {
 }
 
 /// Represents imported address public keys retrieved from the API.
-#[derive(Debug)]
-pub struct PublicAddressKeys<T: PublicKey>(pub Vec<PublicAddressKey<T>>);
+#[derive(Debug, Clone)]
+pub struct PublicAddressKeyGroup<T: PublicKey> {
+    pub keys: Vec<PublicAddressKey<T>>,
+    pub signed_key_list: Option<SignedKeyList>,
+    pub kt_verification: KTVerificationResult,
+}
 
-impl<T: PublicKey> PublicAddressKeys<T> {
+impl<T: PublicKey> PublicAddressKeyGroup<T> {
     pub fn as_slice(&self) -> &[PublicAddressKey<T>] {
-        self.0.as_slice()
+        self.keys.as_slice()
     }
 }
 
-impl<T: PublicKey> AsRef<[PublicAddressKey<T>]> for PublicAddressKeys<T> {
+impl<T: PublicKey> AsRef<[PublicAddressKey<T>]> for PublicAddressKeyGroup<T> {
     fn as_ref(&self) -> &[PublicAddressKey<T>] {
         self.as_slice()
     }
 }
 
-impl APIPublicAddressKeys {
+impl APIPublicAddressKeyGroup {
     /// Imports the public keys by decoding the pgp public keys with the PGP provider.
     ///
     /// Returns the successfully imported public keys.
@@ -58,24 +58,31 @@ impl APIPublicAddressKeys {
     pub fn import<T: proton_crypto::crypto::PGPProviderSync>(
         &self,
         provider: &T,
-    ) -> PublicAddressKeys<T::PublicKey> {
-        let public_address_keys = self
-            .0
-            .iter()
-            .filter_map(|api_public_key| {
-                let imported_public_key = provider
-                    .public_key_import(api_public_key.public_key.as_bytes(), DataEncoding::Armor);
-                let Ok(public_key) = imported_public_key else {
-                    return None;
-                };
-                Some(PublicAddressKey {
-                    source: api_public_key.source,
-                    flags: api_public_key.flags,
-                    public_keys: public_key,
+    ) -> Result<PublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
+        let mut public_address_keys = Vec::with_capacity(self.keys.len());
+        public_address_keys.extend(
+            self.keys
+                .iter()
+                .map(|api_public_key| {
+                    provider
+                        .public_key_import(
+                            api_public_key.public_key.as_bytes(),
+                            DataEncoding::Armor,
+                        )
+                        .map_err(AccountCryptoError::KeyImport)
+                        .map(|public_key| PublicAddressKey {
+                            source: api_public_key.source,
+                            flags: api_public_key.flags,
+                            public_keys: public_key,
+                        })
                 })
-            })
-            .collect();
-        PublicAddressKeys(public_address_keys)
+                .collect::<Result<Vec<_>, AccountCryptoError>>()?,
+        );
+        Ok(PublicAddressKeyGroup {
+            keys: public_address_keys,
+            signed_key_list: self.signed_key_list.clone(),
+            kt_verification: KT_UNVERIFIED,
+        })
     }
     /// Imports the public keys by decoding the pgp public keys with the PGP provider.
     ///
@@ -84,9 +91,9 @@ impl APIPublicAddressKeys {
     pub async fn import_async<T: proton_crypto::crypto::PGPProviderAsync>(
         &self,
         provider: &T,
-    ) -> PublicAddressKeys<T::PublicKey> {
+    ) -> Result<PublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
         let imported_keys_futures: Vec<_> = self
-            .0
+            .keys
             .iter()
             .map(|api_public_key| {
                 provider.public_key_import_async(
@@ -98,18 +105,87 @@ impl APIPublicAddressKeys {
         let imported_keys: Vec<_> = join_all(imported_keys_futures).await;
         let public_address_keys = imported_keys
             .into_iter()
-            .zip(&self.0)
-            .filter_map(|(imported_key_result, api_public_key)| {
-                let Ok(imported_key) = imported_key_result else {
-                    return None;
-                };
-                Some(PublicAddressKey {
-                    source: api_public_key.source,
-                    flags: api_public_key.flags,
-                    public_keys: imported_key,
-                })
+            .zip(&self.keys)
+            .map(|(imported_key_result, api_public_key)| {
+                imported_key_result
+                    .map_err(AccountCryptoError::KeyImport)
+                    .map(|public_key| PublicAddressKey {
+                        source: api_public_key.source,
+                        flags: api_public_key.flags,
+                        public_keys: public_key,
+                    })
             })
-            .collect();
-        PublicAddressKeys(public_address_keys)
+            .collect::<Result<Vec<_>, AccountCryptoError>>()?;
+        Ok(PublicAddressKeyGroup {
+            keys: public_address_keys,
+            signed_key_list: self.signed_key_list.clone(),
+            kt_verification: KT_UNVERIFIED,
+        })
+    }
+}
+
+/// Represents imported public keys derived from [APIPublicAddressKeys](super::APIPublicAddressKeys).
+#[derive(Debug, Clone)]
+pub struct PublicAddressKeys<T: PublicKey> {
+    /// Information about the internal address itself, if it exists. Since the SKL is mandatory, this will never be nullable.
+    pub address: PublicAddressKeyGroup<T>,
+    /// Information about the catch all address itself, if it exists. This can be null if the address keys are valid
+    pub catch_all: Option<PublicAddressKeyGroup<T>>,
+    /// Any other key that cannot be verified, such as Proton legacy keys or WKD.
+    pub unverified: Option<PublicAddressKeyGroup<T>>,
+    /// List of warnings to show to the user related to phishing and message routing.
+    pub warnings: Vec<String>,
+    /// True when domain has valid proton MX.
+    pub proton_mx: bool,
+    /// Tells whether this is an official Proton address.
+    pub is_proton: bool,
+}
+
+impl APIPublicAddressKeys {
+    /// Imports all keys with the PGP provider.
+    pub fn import<T: proton_crypto::crypto::PGPProviderSync>(
+        &self,
+        provider: &T,
+    ) -> Result<PublicAddressKeys<T::PublicKey>, AccountCryptoError> {
+        let address_keys = self.address_keys.import(provider)?;
+        let catch_all_keys = self
+            .catch_all_keys
+            .as_ref()
+            .map_or(Ok(None), |key| key.import(provider).map(Some))?;
+        let unverified_keys = self
+            .unverified_keys
+            .as_ref()
+            .map_or(Ok(None), |key| key.import(provider).map(Some))?;
+        Ok(PublicAddressKeys {
+            address: address_keys,
+            catch_all: catch_all_keys,
+            unverified: unverified_keys,
+            warnings: self.warnings.clone(),
+            proton_mx: self.proton_mx,
+            is_proton: self.is_proton.into(),
+        })
+    }
+    /// Imports all keys with the PGP provider asynchronously.
+    pub async fn import_async<T: proton_crypto::crypto::PGPProviderAsync>(
+        &self,
+        provider: &T,
+    ) -> Result<PublicAddressKeys<T::PublicKey>, AccountCryptoError> {
+        let address_keys = self.address_keys.import_async(provider).await?;
+        let catch_all_keys = match &self.catch_all_keys {
+            Some(catch_all_keys) => Some(catch_all_keys.import_async(provider).await?),
+            None => None,
+        };
+        let unverified_keys = match &self.unverified_keys {
+            Some(unverified_keys) => Some(unverified_keys.import_async(provider).await?),
+            None => None,
+        };
+        Ok(PublicAddressKeys {
+            address: address_keys,
+            catch_all: catch_all_keys,
+            unverified: unverified_keys,
+            warnings: self.warnings.clone(),
+            proton_mx: self.proton_mx,
+            is_proton: self.is_proton.into(),
+        })
     }
 }

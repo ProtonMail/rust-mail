@@ -2,14 +2,13 @@ use std::fmt::{Display, Formatter};
 
 use crate::errors::SKLError;
 
-use super::bool_from_integer;
 use proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, OpenPGPFingerprint, PGPProviderAsync, PGPProviderSync,
     SHA256Fingerprint, UnixTimestamp, Verifier, VerifierAsync, VerifierSync,
 };
 use serde::{Deserialize, Serialize};
 
-use super::KeyFlag;
+use super::{KeyFlag, ProtonBoolean};
 
 pub const KT_SKL_VERIFICATION_CONTEXT_VALUE: &str = "key-transparency.key-list";
 
@@ -29,7 +28,7 @@ crate::string_id! {
     ObsolescenceToken
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
 #[serde(rename_all = "PascalCase")]
 /// The key `data` of singed key list.
 pub struct SignedKeyListData {
@@ -37,11 +36,10 @@ pub struct SignedKeyListData {
     #[serde(rename = "SHA256Fingerprints")]
     pub sha265_fingerprints: Vec<SHA256Fingerprint>,
     pub flags: KeyFlag,
-    #[serde(deserialize_with = "bool_from_integer")]
-    pub primary: bool,
+    pub primary: ProtonBoolean,
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
 #[serde(rename_all = "PascalCase")]
 /// Represents a signed key list fetched from the API.
 pub struct SignedKeyList {
