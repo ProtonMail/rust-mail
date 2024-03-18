@@ -1,13 +1,14 @@
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, DeletedState, LocalLabelId, LocalMessageCount, LocalMessageId, LocalMessageMetadata,
-    MailSqliteConnectionImpl,
+    DBResult, DeletedState, LocalConversationId, LocalLabelId, LocalMessageCount, LocalMessageId,
+    LocalMessageMetadata, MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{LabelId, MessageAddress, MessageCount, MessageId, MessageMetadata};
+use proton_api_mail::domain::{MessageAddress, MessageCount, MessageId, MessageMetadata};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
+use std::collections::BTreeSet;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn create_message_from_metadata(
@@ -198,6 +199,164 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         )?;
         Ok(())
     }
+
+    pub fn mark_local_message_as_deleted(&mut self, id: LocalMessageId) -> DBResult<()> {
+        self.mark_local_messages_as_deleted(std::iter::once(id))
+    }
+
+    pub fn mark_local_messages_as_deleted(
+        &mut self,
+        ids: impl ExactSizeIterator<Item = LocalMessageId>,
+    ) -> DBResult<()> {
+        let args = gen_variable_in_argument_list(ids.len());
+
+        // mark messages as deleted -> conversation ids (?)
+        let mut stmt = self.0.prepare(&format!(
+            "UPDATE messages SET deleted=1 WHERE id IN ({}) AND deleted=0 RETURNING id",
+            args
+        ))?;
+
+        // Only run the logic on messages that were not already deleted.
+        let ids = mapped_rows_to_vec(stmt.query_map(params_from_iter(ids), |r| r.get(0))?)?;
+
+        // Update conversation counters
+        self.remove_messages_from_conversation_labels(&ids)?;
+
+        // Update message counter
+        self.update_message_counters_after_delete_local(&ids)?;
+        Ok(())
+    }
+
+    fn remove_messages_from_conversation_labels(&mut self, ids: &[LocalMessageId]) -> DBResult<()> {
+        let message_id_args = gen_variable_in_argument_list(ids.len());
+
+        //TODO: Expiration time in in this query, but it's not recorded in the labels table.
+        let query = format!(
+            r"
+WITH
+deleted_messages AS (
+    SELECT id, conversation_id, size, unread, num_attachments FROM messages WHERE messages.id IN ({message_id_args})
+),
+deleted_message_labels AS (
+    SELECT message_labels.label_id, message_labels.message_id FROM message_labels
+        JOIN deleted_messages ON message_id=deleted_messages.id
+),
+conv_messages AS (
+    SELECT l.label_id, MAX(m.time) as time, MAX(m.expiration_time) as expiration_time
+    FROM messages AS m JOIN deleted_messages AS dm ON dm.conversation_id=m.conversation_id
+    JOIN message_labels AS l ON l.message_id=m.id
+    WHERE m.deleted=0
+    GROUP BY l.label_id
+),
+label_modifiers AS (
+    SELECT cm.conversation_id, ml.label_id, COUNT(cm.id) as num_messages, SUM(cm.unread) as num_unread,
+           IFNULL(mt.time,0) as time, SUM(cm.num_attachments) as num_attachments, SUM(size) as size
+    FROM deleted_messages AS cm
+    JOIN deleted_message_labels AS ml ON cm.id = ml.message_id
+    LEFT JOIN conv_messages AS mt on mt.label_id = ml.label_id
+    GROUP BY cm.conversation_id, ml.label_id
+)
+UPDATE conversation_labels SET
+   ctx_num_attachments=ctx_num_attachments-label_modifiers.num_attachments,
+   ctx_num_messages=ctx_num_messages-label_modifiers.num_messages,
+   ctx_num_unread=ctx_num_unread-label_modifiers.num_unread,
+   ctx_time=label_modifiers.time,
+   ctx_size=ctx_size-label_modifiers.size
+FROM label_modifiers WHERE label_modifiers.conversation_id=conversation_labels.conversation_id AND
+conversation_labels.label_id=label_modifiers.label_id
+RETURNING label_id"
+        );
+        // Execute update and get updates
+        let label_ids: BTreeSet<LocalLabelId> = {
+            let mut label_ids = BTreeSet::new();
+            let mut stmt = self.0.prepare(&query)?;
+            let rows = stmt.query_map(params_from_iter(ids), |r| r.get(0))?;
+            for row in rows {
+                let label_id = row?;
+                label_ids.insert(label_id);
+            }
+            label_ids
+        };
+
+        // Recalculate label conversation unread count.
+        let query = format!(
+            r"
+UPDATE label_conversation_count SET unread=delta.num_unread, total=delta.num_messages
+FROM(
+    SELECT cl.label_id, SUM(cl.ctx_num_messages <> 0) AS num_messages, SUM(cl.ctx_num_unread <> 0) AS num_unread
+    FROM  conversation_labels AS cl
+    WHERE cl.label_id IN ({})
+    GROUP BY cl.label_id
+) AS delta
+WHERE label_conversation_count.label_id=delta.label_id
+            ",
+            gen_variable_in_argument_list(label_ids.len())
+        );
+        self.0.execute(&query, params_from_iter(label_ids.iter()))?;
+
+        // Update conversation non-context count
+        let query = format!(
+            r"
+UPDATE conversations SET num_messages=num_messages-deltas.count_delta,
+num_unread=num_unread-deltas.unread_delta
+FROM(
+    SELECT conversation_id, COUNT(id) As count_delta, SUM(unread) AS unread_delta
+    FROM messages WHERE id IN ({message_id_args})
+    GROUP BY conversation_id
+) AS deltas
+WHERE deltas.conversation_id=conversations.id
+"
+        );
+        self.0.execute(&query, params_from_iter(ids))?;
+
+        // if conversation has no messages, mark it as deleted
+        self.0.execute(
+            "UPDATE conversations SET deleted=1 WHERE num_messages=0 AND deleted=0",
+            (),
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_local_messages_as_deleted_with_conversation_ids(
+        &mut self,
+        conversation_ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let args = gen_variable_in_argument_list(conversation_ids.len());
+        let mut msg_ids: Vec<LocalMessageId> = Vec::with_capacity(conversation_ids.len());
+        let mut update_stmt = self.0.prepare(&format!(
+            "UPDATE messages SET deleted=1 WHERE conversation_id IN ({}) AND deleted = 0 RETURNING id",
+            args
+        ))?;
+        mapped_rows_into_vec(
+            &mut msg_ids,
+            update_stmt.query_map(params_from_iter(conversation_ids), |r| r.get(0))?,
+        )?;
+
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        self.update_message_counters_after_delete_local(&msg_ids)?;
+        Ok(())
+    }
+
+    fn update_message_counters_after_delete_local(
+        &mut self,
+        ids: &[LocalMessageId],
+    ) -> DBResult<()> {
+        let mut stmt = self
+            .0
+            .prepare(&format!(
+                r"UPDATE label_message_count AS lmc SET total=total-dm.num_messages, unread=unread-dm.num_unread FROM (
+    SELECT ml.label_id, SUM(m.unread) AS `num_unread`, COUNT(m.id) AS `num_messages` FROM messages AS m
+    JOIN message_labels AS ml ON ml.message_id = m.id
+    WHERE m.id IN ({})
+    GROUP BY ml.label_id
+) AS dm WHERE lmc.label_id = dm.label_id
+",gen_variable_in_argument_list(ids.len())))?;
+        stmt.execute(params_from_iter(ids))?;
+        Ok(())
+    }
 }
 
 macro_rules! bind_list {
@@ -262,6 +421,8 @@ fn bind_message_metadata_create(
     cc_list_buffer: &mut JsonWriteBuffer,
     bcc_list_buffer: &mut JsonWriteBuffer,
 ) -> DBResult<()> {
+    use proton_api_mail::domain::LabelId;
+
     let to_list = to_list_buffer.serialize(&m.to_list)?;
     let cc_list = cc_list_buffer.serialize(&m.cc_list)?;
     let bcc_list = bcc_list_buffer.serialize(&m.bcc_list)?;
