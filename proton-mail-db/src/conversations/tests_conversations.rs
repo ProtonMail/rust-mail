@@ -1,7 +1,12 @@
+use crate::conversations::test_db_states::new_test_delete_db_state;
+use crate::conversations::test_utils::{
+    conv_counts_as_map, message_counts_for_conversation,
+    msg_counts_as_map, prepare_and_patch_db_state,
+};
 use crate::conversations::types::LocalConversation;
 use crate::{
-    new_test_connection, with_tx, DeletedState, LabelColor, LocalAttachmentMetadata,
-    LocalConversationCount, LocalConversationLabel, LocalLabelId, MailSqliteConnectionMut,
+    new_test_connection, with_tx, LabelColor, LocalAttachmentMetadata, LocalConversationCount,
+    LocalConversationLabel, LocalLabelId, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
@@ -325,16 +330,109 @@ fn test_conversation_update() {
 fn test_conversation_delete() {
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        create_address_and_labels(tx);
-        let conv = test_conversation([], []);
-        let id = tx
-            .create_conversation(&conv)
-            .expect("failed to create conversation");
-        tx.mark_conversation_as_deleted(id, DeletedState::Local)
+        let state = new_test_delete_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        // Deleting a conversation must
+        // * Update conversation counters
+        // * Update message counters
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+        tx.mark_conversation_as_deleted(local_conv_id)
             .expect("failed to mark as deleted");
 
-        let db_conversation = tx.get_conversation(id).expect("failed to get conversation");
+        let db_conversation = tx
+            .get_conversation(local_conv_id)
+            .expect("failed to get conversation");
         assert!(db_conversation.is_none());
+
+        // Check conversation counts
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            // Check conversation label1 values
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - 1,);
+                assert_eq!(label_counts.total, start_label_counts.total - 1,);
+            }
+            // Check conversation label2 values
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread,);
+                assert_eq!(label_counts.total, start_label_counts.total - 1);
+            }
+        }
+
+        // Check message counts
+        {
+            let message_counts = msg_counts_as_map(tx);
+
+            // Check label1
+            {
+                let (unread, total) = message_counts_for_conversation(
+                    &state.messages,
+                    &state.conversations[0].id,
+                    &MY_LABEL_ID1,
+                );
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - unread);
+                assert_eq!(label_counts.total, start_label_counts.total - total);
+            }
+            // Check label2
+            {
+                let (unread, total) = message_counts_for_conversation(
+                    &state.messages,
+                    &state.conversations[0].id,
+                    &MY_LABEL_ID2,
+                );
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = message_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - unread);
+                assert_eq!(label_counts.total, start_label_counts.total - total);
+            }
+        }
+
+        // Deleting conv2 should reset all counters to 0.
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[1].id)
+            .unwrap();
+        tx.mark_conversation_as_deleted(local_conv_id)
+            .expect("failed to mark conv as deleted");
+
+        for count in tx.get_message_counts().unwrap() {
+            assert_eq!(
+                count.total, 0,
+                "Label {:?} does not have 0 total count",
+                count.id
+            );
+            assert_eq!(
+                count.unread, 0,
+                "Label {:?} does not have 0 unread count",
+                count.id
+            );
+        }
+
+        for count in tx.get_conversation_counts().unwrap() {
+            assert_eq!(
+                count.total, 0,
+                "Label {:?} does not have 0 total count",
+                count.id
+            );
+            assert_eq!(
+                count.unread, 0,
+                "Label {:?} does not have 0 unread count",
+                count.id
+            );
+        }
     });
 }
 

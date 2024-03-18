@@ -273,25 +273,36 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         Ok(Some(mapped_rows_to_vec(rows)?))
     }
 
-    pub fn mark_conversation_as_deleted(
-        &mut self,
-        id: LocalConversationId,
-        deleted: DeletedState,
-    ) -> DBResult<()> {
-        self.mark_conversations_as_deleted(deleted, std::iter::once(id))
+    pub fn mark_conversation_as_deleted(&mut self, id: LocalConversationId) -> DBResult<()> {
+        self.mark_conversations_as_deleted(std::iter::once(id))
     }
 
     pub fn mark_conversations_as_deleted(
         &mut self,
-        deleted_state: DeletedState,
-        ids: impl Iterator<Item = LocalConversationId>,
+        ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {
-        let mut stmt = self
-            .0
-            .prepare("UPDATE conversations SET deleted=? WHERE id=?")?;
-        for id in ids {
-            stmt.execute((deleted_state, id))?;
-        }
+        let ids = Vec::from_iter(ids);
+        let arg_list = gen_variable_in_argument_list(ids.len());
+        self.0.execute(
+            &format!(
+                "UPDATE conversations SET deleted=1 WHERE id IN ({})",
+                arg_list
+            ),
+            params_from_iter(&ids),
+        )?;
+        // Remove from labels.
+        self.remove_conversations_from_labels(&ids)?;
+        // Update message counters
+        self.mark_local_messages_as_deleted_with_conversation_ids(ids.iter().cloned())?;
+        Ok(())
+    }
+
+    fn remove_conversations_from_labels(&mut self, ids: &[LocalConversationId]) -> DBResult<()> {
+        self.0.execute(&format!(r"UPDATE label_conversation_count AS lcc SET total=total-dm.num_messages, unread=unread-dm.num_unread FROM (
+            SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
+            GROUP BY cl.label_id
+        ) AS dm WHERE lcc.label_id=dm.label_id
+        ",gen_variable_in_argument_list(ids.len())), params_from_iter(ids.iter()))?;
         Ok(())
     }
 
