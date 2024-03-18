@@ -6,7 +6,7 @@ members = [
     "proton-mail-wasm",
     "proton-mail-uniffi",
     "proton-mail-db",
-    "proton-mail-commom",
+    "proton-mail-common",
     "proton-mail-utm-stripper",
 ]
 
