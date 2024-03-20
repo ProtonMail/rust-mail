@@ -220,7 +220,7 @@ fn execute_address_key_with_create_or_update_statement(
         &key.signature,
         key.primary,
         key.active,
-        key.flags.map(|v| *v.as_ref()),
+        key.flags.map(|v| v.to_u32()),
         None::<AddressId>,
     ))
 }

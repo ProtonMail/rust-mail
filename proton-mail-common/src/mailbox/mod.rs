@@ -22,6 +22,8 @@ pub enum MailboxError {
         #[source]
         MailContextError,
     ),
+    #[error("Action Queue: {0}")]
+    ActionQueue(#[from] proton_action_queue::QueueError),
 }
 
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:

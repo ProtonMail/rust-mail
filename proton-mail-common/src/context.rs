@@ -31,6 +31,8 @@ pub enum MailContextError {
     Http(#[from] HttpRequestError),
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
+    #[error("Action Queue: {0}")]
+    ActionQueue(#[from] proton_action_queue::QueueError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -128,6 +130,7 @@ impl UserDatabaseInitializer for MailUserDatabaseInitializer {
         conn: &mut proton_mail_db::proton_sqlite3::SqliteConnection,
     ) -> Result<(), DBMigrationError> {
         proton_mail_db::migrations::migrate_db(conn)?;
+        proton_action_queue::ActionStore::init_tables(conn)?;
         Ok(())
     }
 }

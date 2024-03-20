@@ -43,6 +43,8 @@ pub enum MailContextError {
     Http(#[from] HttpRequestError),
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
+    #[error("Action Queue: {0}")]
+    ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -174,6 +176,7 @@ impl From<pmc::MailContextError> for MailContextError {
             pmc::MailContextError::Http(err) => MailContextError::Http(err),
             pmc::MailContextError::EventLoop(err) => MailContextError::EventLoop(err),
             pmc::MailContextError::Other(err) => MailContextError::Other(err),
+            pmc::MailContextError::ActionQueue(e) => Self::ActionQueue(e),
         }
     }
 }

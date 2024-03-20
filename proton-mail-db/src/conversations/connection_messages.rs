@@ -194,7 +194,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
 
     pub fn mark_remote_message_as_deleted(&mut self, id: &MessageId) -> DBResult<()> {
         self.0.execute(
-            "UPDATE messages SET delete=? WHERE rid=?",
+            "UPDATE messages SET deleted=? WHERE rid=?",
             (DeletedState::Remote, id),
         )?;
         Ok(())

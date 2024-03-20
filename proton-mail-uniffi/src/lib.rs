@@ -18,6 +18,14 @@
 //! [MailContext]: mail::MailContext
 //! [MailBox]: mail::Mailbox
 //! [MailUserContext]: mail::MailUserContext
+//!
+//! # Actions
+//!
+//! Mutable changes to the domain will all generate actions that are queue for execution a time that
+//! makes sense for the client.
+//! To execute any pending actions call [`mail::MailUserContext::execute_pending_action`] to execute one action
+//! or [`mail::MailUserContext::execute_pending_actions`] to execute all pending actions.
+//!
 
 pub mod core;
 mod macros;
