@@ -5,7 +5,7 @@ use thiserror::Error;
 
 const HUMAN_VERIFICATION_REQUESTED: u32 = 9001;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct APIErrorDesc {
     pub code: u32,
