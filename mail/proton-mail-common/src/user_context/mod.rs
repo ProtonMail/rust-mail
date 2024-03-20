@@ -1,3 +1,4 @@
+mod action_queue;
 mod addresses;
 mod conversations;
 mod events;
@@ -6,8 +7,10 @@ mod labels;
 mod settings;
 
 pub use initialization::*;
+use proton_action_queue::ActionQueue;
 use std::sync::{Arc, Weak};
 
+use crate::user_context::action_queue::new_action_queue;
 use crate::{MailContext, MailContextResult};
 use proton_api_mail::proton_api_core::domain::UserId;
 use proton_api_mail::proton_api_core::exports::proton_sqlite3::InProcessTrackerService;
@@ -32,6 +35,7 @@ struct MailUserContextInner {
     mail_context: MailContext,
     user_context: UserContext,
     event_loop: EventLoop,
+    action_queue: ActionQueue,
 }
 
 impl WeakMailUserContext {
@@ -56,10 +60,13 @@ impl From<MailUserContext> for WeakMailUserContext {
 impl MailUserContext {
     pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Self {
         Self {
-            inner: Arc::new(MailUserContextInner {
+            inner: Arc::new_cyclic(|weak| MailUserContextInner {
                 user_context,
                 mail_context,
                 event_loop: EventLoop::new(),
+                action_queue: new_action_queue(WeakMailUserContext {
+                    inner: weak.clone(),
+                }),
             }),
         }
     }

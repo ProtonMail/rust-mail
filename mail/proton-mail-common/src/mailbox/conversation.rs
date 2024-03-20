@@ -1,8 +1,10 @@
+use crate::actions::DeleteConversationsAction;
 use crate::{
     Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
 use proton_api_mail::proton_api_core::exports::tracing;
-use proton_mail_db::{ConversationQuery, LocalConversation};
+use proton_mail_db::{ConversationQuery, LocalConversation, LocalConversationId};
+
 impl Mailbox {
     pub fn sync(
         &self,
@@ -53,5 +55,14 @@ impl Mailbox {
             .user_ctx
             .conversations_with_context_for_label(self.label_id, count)?;
         Ok(v)
+    }
+
+    pub fn delete_conversations(
+        &self,
+        ids: impl Iterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        self.user_ctx
+            .queue_action(DeleteConversationsAction::new(self.label_id, ids))?;
+        Ok(())
     }
 }

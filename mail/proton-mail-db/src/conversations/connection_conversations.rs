@@ -387,6 +387,42 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         })?)?;
         Ok(r)
     }
+
+    pub fn local_to_remote_conversation_ids(
+        &self,
+        ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<Vec<ConversationId>> {
+        assert!(ids.len() < 512);
+        let mut stmt = self.0.prepare(&format!(
+            "SELECT rid FROM conversations WHERE id IN ({})",
+            gen_variable_in_argument_list(ids.len())
+        ))?;
+
+        let mut result = Vec::with_capacity(ids.len());
+        mapped_rows_into_vec(
+            &mut result,
+            stmt.query_map(params_from_iter(ids), |r| r.get(0))?,
+        )?;
+        Ok(result)
+    }
+
+    pub fn remote_to_local_conversation_ids<'i>(
+        &self,
+        ids: impl ExactSizeIterator<Item = &'i ConversationId>,
+    ) -> DBResult<Vec<LocalConversationId>> {
+        assert!(ids.len() < 512);
+        let mut stmt = self.0.prepare(&format!(
+            "SELECT id FROM conversations WHERE rid IN ({})",
+            gen_variable_in_argument_list(ids.len())
+        ))?;
+
+        let mut result = Vec::with_capacity(ids.len());
+        mapped_rows_into_vec(
+            &mut result,
+            stmt.query_map(params_from_iter(ids), |r| r.get(0))?,
+        )?;
+        Ok(result)
+    }
 }
 
 const RESOLVE_LABEL_ID_STATEMENT: &str = "SELECT id FROM labels WHERE rid = ?";

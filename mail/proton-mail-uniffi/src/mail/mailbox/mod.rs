@@ -1,3 +1,5 @@
+mod conversations;
+
 use crate::mail::{MailContextError, MailUserContext};
 use crate::new_live_query;
 use proton_mail_common::exports::proton_sqlite3::{
@@ -26,6 +28,8 @@ pub enum MailboxError {
         #[source]
         MailContextError,
     ),
+    #[error("Action Queue: {0}")]
+    ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
@@ -78,22 +82,6 @@ impl Mailbox {
             mbox: proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), LabelId::inbox())?,
         })
     }
-
-    /// Create a live query for conversations for the currently selected label. If you
-    /// change the mailbox label with `switch_label` you need to create a new instance.
-    pub fn new_conversation_live_query(
-        &self,
-        limit: i64,
-        cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
-    ) -> Arc<MailboxConversationLiveQuery> {
-        //TODO: Improve this.
-        let limit = usize::try_from(limit).unwrap_or(DEFAULT_CONVERSATION_COUNT);
-        if let Err(e) = self.mbox.sync(limit, None) {
-            error!("Could not sync mailbox: {e}");
-        }
-        let builder = FFIObservableConversationsQueryBuilder(cb);
-        self.mbox.new_conversation_query(builder, limit)
-    }
 }
 
 impl From<proton_mail_common::MailboxError> for MailboxError {
@@ -107,6 +95,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
                 Self::LabelDoesNotHaveRemoteId(e)
             }
             proton_mail_common::MailboxError::Context(e) => Self::Context(e.into()),
+            proton_mail_common::MailboxError::ActionQueue(e) => Self::ActionQueue(e),
         }
     }
 }

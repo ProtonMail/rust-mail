@@ -11,7 +11,9 @@ proton-async= {workspace=true}
 proton-mail-db = {path ="../proton-mail-db"}
 proton-api-mail = {path ="../proton-api-mail"}
 proton-event-loop = {workspace=true}
+proton-action-queue = {workspace=true}
 uniffi = {optional = true, workspace=true}
+uuid = { version= "1" , features = ["v4"] }
 
 [lints]
 workspace = true

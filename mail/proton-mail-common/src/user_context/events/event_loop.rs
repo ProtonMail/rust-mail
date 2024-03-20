@@ -1,5 +1,6 @@
+use crate::actions::EventLoopAction;
 use crate::user_context::events::subscriber::MailEventSubscriber;
-use crate::{MailUserContext, WeakMailUserContext};
+use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
 use proton_api_mail::proton_api_core;
 use proton_api_mail::proton_api_core::domain::{
     EventId, IsEvent, User, UserProductUsedSpace, UserSettings,
@@ -90,6 +91,10 @@ impl proton_event_loop::Provider<MailEvent> for MailUserContext {
 }
 
 impl MailUserContext {
+    pub fn queue_event_loop_poll(&self) -> MailContextResult<()> {
+        self.queue_action(EventLoopAction {})
+    }
+
     pub async fn poll_event_loop(&self) -> Result<(), EventLoopError> {
         let weak_ctx = WeakMailUserContext::new(self);
         let core_subscriber = CoreEventSubscriber::new(weak_ctx.clone());

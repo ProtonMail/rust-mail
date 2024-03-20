@@ -1,4 +1,5 @@
 //! Everything Proton Mailbox related.
+mod actions;
 mod context;
 mod mailbox;
 mod user_context;
@@ -13,6 +14,7 @@ pub use proton_core_common;
 pub use proton_mail_db;
 
 pub mod exports {
+    pub use proton_action_queue;
     pub use proton_api_mail;
     pub use proton_api_mail::exports::*;
     pub use proton_core_common;
