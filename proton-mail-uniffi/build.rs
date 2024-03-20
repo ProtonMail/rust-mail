@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 fn main() {
     setup_x86_64_android_workaround();
@@ -21,26 +21,40 @@ fn setup_x86_64_android_workaround() {
             ),
         };
 
-        const DEFAULT_CLANG_VERSION: &str = "14.0.7";
-        let clang_version =
-            std::env::var("NDK_CLANG_VERSION").unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
+        let mut ndk_path = PathBuf::new();
+        ndk_path.push(android_ndk_home.clone());
+        ndk_path.push("toolchains");
+        ndk_path.push("llvm");
+        ndk_path.push("prebuilt");
+        ndk_path.push(format!("{build_os}-x86_64"));
 
-        let ndk25_clang_path = format!("toolchains/llvm/prebuilt/{build_os}-x86_64/lib64/clang");
-        let ndk26_clang_path = format!("toolchains/llvm/prebuilt/{build_os}-x86_64/lib/clang");
+        let mut ndk_25_path = ndk_path.join("lib64");
+        ndk_25_path.push("clang");
+        let mut ndk_26_path = ndk_path.join("lib");
+        ndk_26_path.push("clang");
 
-        let linux_x86_64_lib_dir = if Path::new(&ndk25_clang_path).exists() {
-            format!(
-                "toolchains/llvm/prebuilt/{build_os}-x86_64/lib64/clang/{clang_version}/lib/linux/"
-            )
-        } else if Path::new(&ndk26_clang_path).exists() {
-            format!(
-                "toolchains/llvm/prebuilt/{build_os}-x86_64/lib/clang/{clang_version}/lib/linux/"
-            )
+        let linux_x86_64_lib_dir = if ndk_25_path.exists() {
+            const DEFAULT_CLANG_VERSION: &str = "14.0.7";
+            let clang_version = std::env::var("NDK_CLANG_VERSION")
+                .unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
+
+            ndk_25_path.push(&clang_version);
+            ndk_25_path.push("lib");
+            ndk_25_path.push("linux");
+            ndk_25_path.to_str().expect("Invalid path")
+        } else if ndk_26_path.exists() {
+            const DEFAULT_CLANG_VERSION: &str = "17";
+            let clang_version = std::env::var("NDK_CLANG_VERSION")
+                .unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
+            ndk_26_path.push(&clang_version);
+            ndk_26_path.push("lib");
+            ndk_26_path.push("linux");
+            ndk_26_path.to_str().expect("Invalid path")
         } else {
             panic!("clang path not known! Is the ndk version 25 or 26?")
         };
 
-        println!("cargo:rustc-link-search={android_ndk_home}/{linux_x86_64_lib_dir}");
+        println!("cargo:rustc-link-search={linux_x86_64_lib_dir}");
         println!("cargo:rustc-link-lib=static=clang_rt.builtins-x86_64-android");
     }
 }
