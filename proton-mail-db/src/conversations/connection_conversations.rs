@@ -281,19 +281,21 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         &mut self,
         ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {
-        let ids = Vec::from_iter(ids);
-        let arg_list = gen_variable_in_argument_list(ids.len());
-        self.0.execute(
-            &format!(
-                "UPDATE conversations SET deleted=1 WHERE id IN ({})",
-                arg_list
-            ),
-            params_from_iter(&ids),
+        let mut stmt = self.0.prepare(&format!(
+            "UPDATE conversations SET deleted=1 WHERE id IN ({}) AND deleted=0 RETURNING id",
+            gen_variable_in_argument_list(ids.len())
+        ))?;
+
+        let mut filtered_ids = Vec::with_capacity(ids.len());
+        mapped_rows_into_vec(
+            &mut filtered_ids,
+            stmt.query_map(params_from_iter(ids), |r| r.get(0))?,
         )?;
+
         // Remove from labels.
-        self.remove_conversations_from_labels(&ids)?;
+        self.remove_conversations_from_labels(&filtered_ids)?;
         // Update message counters
-        self.mark_local_messages_as_deleted_with_conversation_ids(ids.iter().cloned())?;
+        self.mark_local_messages_as_deleted_with_conversation_ids(filtered_ids.into_iter())?;
         Ok(())
     }
 
