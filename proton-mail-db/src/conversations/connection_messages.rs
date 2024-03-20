@@ -227,10 +227,49 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    pub fn unmark_local_message_as_deleted(&mut self, id: LocalMessageId) -> DBResult<()> {
+        self.unmark_local_messages_as_deleted(std::iter::once(id))
+    }
+    pub fn unmark_local_messages_as_deleted(
+        &mut self,
+        ids: impl ExactSizeIterator<Item = LocalMessageId>,
+    ) -> DBResult<()> {
+        let args = gen_variable_in_argument_list(ids.len());
+
+        // mark messages as deleted -> conversation ids (?)
+        let mut stmt = self.0.prepare(&format!(
+            "UPDATE messages SET deleted=0 WHERE id IN ({}) AND deleted=1 RETURNING id",
+            args
+        ))?;
+
+        // Only run the logic on messages that were not already deleted.
+        let ids = mapped_rows_to_vec(stmt.query_map(params_from_iter(ids), |r| r.get(0))?)?;
+
+        // Update conversation counters
+        self.add_messages_to_conversation_labels(&ids)?;
+
+        // Update message counter
+        self.update_message_counters_after_undelete_local(&ids)?;
+        Ok(())
+    }
+
     fn remove_messages_from_conversation_labels(&mut self, ids: &[LocalMessageId]) -> DBResult<()> {
+        self.remove_or_add_messages_from_conversation_labels(ids, true)
+    }
+
+    fn add_messages_to_conversation_labels(&mut self, ids: &[LocalMessageId]) -> DBResult<()> {
+        self.remove_or_add_messages_from_conversation_labels(ids, false)
+    }
+
+    fn remove_or_add_messages_from_conversation_labels(
+        &mut self,
+        ids: &[LocalMessageId],
+        delete: bool,
+    ) -> DBResult<()> {
         let message_id_args = gen_variable_in_argument_list(ids.len());
 
         //TODO: Expiration time in in this query, but it's not recorded in the labels table.
+        let arithmetic = if delete { '-' } else { '+' };
         let query = format!(
             r"
 WITH
@@ -257,15 +296,16 @@ label_modifiers AS (
     GROUP BY cm.conversation_id, ml.label_id
 )
 UPDATE conversation_labels SET
-   ctx_num_attachments=ctx_num_attachments-label_modifiers.num_attachments,
-   ctx_num_messages=ctx_num_messages-label_modifiers.num_messages,
-   ctx_num_unread=ctx_num_unread-label_modifiers.num_unread,
+   ctx_num_attachments=ctx_num_attachments{arithmetic}label_modifiers.num_attachments,
+   ctx_num_messages=ctx_num_messages{arithmetic}label_modifiers.num_messages,
+   ctx_num_unread=ctx_num_unread{arithmetic}label_modifiers.num_unread,
    ctx_time=label_modifiers.time,
-   ctx_size=ctx_size-label_modifiers.size
+   ctx_size=ctx_size{arithmetic}label_modifiers.size
 FROM label_modifiers WHERE label_modifiers.conversation_id=conversation_labels.conversation_id AND
 conversation_labels.label_id=label_modifiers.label_id
 RETURNING label_id"
         );
+
         // Execute update and get updates
         let label_ids: BTreeSet<LocalLabelId> = {
             let mut label_ids = BTreeSet::new();
@@ -297,8 +337,8 @@ WHERE label_conversation_count.label_id=delta.label_id
         // Update conversation non-context count
         let query = format!(
             r"
-UPDATE conversations SET num_messages=num_messages-deltas.count_delta,
-num_unread=num_unread-deltas.unread_delta
+UPDATE conversations SET num_messages=num_messages{arithmetic}deltas.count_delta,
+num_unread=num_unread{arithmetic}deltas.unread_delta
 FROM(
     SELECT conversation_id, COUNT(id) As count_delta, SUM(unread) AS unread_delta
     FROM messages WHERE id IN ({message_id_args})
@@ -309,15 +349,23 @@ WHERE deltas.conversation_id=conversations.id
         );
         self.0.execute(&query, params_from_iter(ids))?;
 
-        // if conversation has no messages, mark it as deleted
-        self.0.execute(
-            "UPDATE conversations SET deleted=1 WHERE num_messages=0 AND deleted=0",
-            (),
-        )?;
+        if delete {
+            // if conversation has no messages, mark it as deleted
+            self.0.execute(
+                "UPDATE conversations SET deleted=1 WHERE num_messages=0 AND deleted=0",
+                (),
+            )?;
+        } else {
+            // if conversation has messages, mark undelete it if it was deleted
+            self.0.execute(
+                "UPDATE conversations SET deleted=0 WHERE num_messages<>0 AND deleted=1",
+                (),
+            )?;
+        }
         Ok(())
     }
 
-    pub fn mark_local_messages_as_deleted_with_conversation_ids(
+    pub(super) fn mark_local_messages_as_deleted_with_conversation_ids(
         &mut self,
         conversation_ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {
@@ -340,6 +388,29 @@ WHERE deltas.conversation_id=conversations.id
         Ok(())
     }
 
+    pub(super) fn unmark_local_messages_as_deleted_with_conversation_ids(
+        &mut self,
+        conversation_ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let args = gen_variable_in_argument_list(conversation_ids.len());
+        let mut msg_ids: Vec<LocalMessageId> = Vec::with_capacity(conversation_ids.len());
+        let mut update_stmt = self.0.prepare(&format!(
+            "UPDATE messages SET deleted=0 WHERE conversation_id IN ({}) AND deleted = 1 RETURNING id",
+            args
+        ))?;
+        mapped_rows_into_vec(
+            &mut msg_ids,
+            update_stmt.query_map(params_from_iter(conversation_ids), |r| r.get(0))?,
+        )?;
+
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        self.update_message_counters_after_undelete_local(&msg_ids)?;
+        Ok(())
+    }
+
     fn update_message_counters_after_delete_local(
         &mut self,
         ids: &[LocalMessageId],
@@ -348,6 +419,24 @@ WHERE deltas.conversation_id=conversations.id
             .0
             .prepare(&format!(
                 r"UPDATE label_message_count AS lmc SET total=total-dm.num_messages, unread=unread-dm.num_unread FROM (
+    SELECT ml.label_id, SUM(m.unread) AS `num_unread`, COUNT(m.id) AS `num_messages` FROM messages AS m
+    JOIN message_labels AS ml ON ml.message_id = m.id
+    WHERE m.id IN ({})
+    GROUP BY ml.label_id
+) AS dm WHERE lmc.label_id = dm.label_id
+",gen_variable_in_argument_list(ids.len())))?;
+        stmt.execute(params_from_iter(ids))?;
+        Ok(())
+    }
+
+    fn update_message_counters_after_undelete_local(
+        &mut self,
+        ids: &[LocalMessageId],
+    ) -> DBResult<()> {
+        let mut stmt = self
+            .0
+            .prepare(&format!(
+                r"UPDATE label_message_count AS lmc SET total=total+dm.num_messages, unread=unread+dm.num_unread FROM (
     SELECT ml.label_id, SUM(m.unread) AS `num_unread`, COUNT(m.id) AS `num_messages` FROM messages AS m
     JOIN message_labels AS ml ON ml.message_id = m.id
     WHERE m.id IN ({})
