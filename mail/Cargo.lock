@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-db"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "lazy_static",
  "proton-api-mail",
