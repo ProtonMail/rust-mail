@@ -139,7 +139,7 @@ impl<T: Action> TestActionFactoryInstance<T> {
     }
 }
 
-impl<T: Action + 'static> ActionFactoryInstance for TestActionFactoryInstance<T>
+impl<T: Action + 'static + Send + Sync> ActionFactoryInstance for TestActionFactoryInstance<T>
 where
     for<'a, 'b> TestRemoteActionHandler<'a, 'b, T>: RemoteActionHandler,
     for<'a, 'b> TestLocalActionHandler<'a, 'b, T>: LocalActionHandler,

@@ -188,7 +188,7 @@ pub enum ActionFactoryInstanceError {
 /// A factory for the creation of [`LocationActionHandler`] and [`RemoteActionHandler`] for an action.
 /// It's recommended to store any mocking/interface/wrappers in the factory and then share them
 /// with each of the handlers in order to keep the actions themselves as simple as possible.
-pub trait ActionFactoryInstance: Debug {
+pub trait ActionFactoryInstance: Debug + Send + Sync {
     /// Action id for this handler.
     fn action_id(&self) -> &'static ActionId;
 

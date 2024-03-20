@@ -1,10 +1,11 @@
 use crate::store::PendingAction;
 use crate::{
     Action, ActionError, ActionFactory, ActionFactoryError, ActionLocalValidationResult,
-    ActionStore, SessionProvider, StoredActionId,
+    ActionStore, SessionProvider, SqlConnectionProvider, SqliteConnectionProviderError,
+    StoredActionId,
 };
 use proton_api_core::exports::thiserror;
-use proton_sqlite3::{rusqlite, MigratorError};
+use proton_sqlite3::rusqlite;
 use tracing::{debug, error, warn, Level};
 
 /// Errors which can occur while operating on the queue.
@@ -16,30 +17,11 @@ pub enum QueueError {
     Store(#[from] rusqlite::Error),
     #[error("Factory: {0}")]
     Factory(#[from] ActionFactoryError),
-    #[error("DB Migration: {0}")]
-    Migration(#[from] MigratorError),
+    #[error("DB Connection: {0}")]
+    SqlConnectionProvider(#[from] SqliteConnectionProviderError),
 }
 
 pub type ActionQueueResult<T> = Result<T, QueueError>;
-
-/// Provider of SQL connections.
-pub trait SqlConnectionProvider: Send + Sync {
-    fn new_connection(&self) -> rusqlite::Result<proton_sqlite3::TrackingConnection>;
-}
-
-/// Default provider which directly interacts with [`proton_sqlite3::InProcessTrackerService`].
-pub struct DefaultSqlConnectionProvider(proton_sqlite3::InProcessTrackerService);
-impl DefaultSqlConnectionProvider {
-    pub fn new(tracker: proton_sqlite3::InProcessTrackerService) -> Self {
-        Self(tracker)
-    }
-}
-
-impl SqlConnectionProvider for DefaultSqlConnectionProvider {
-    fn new_connection(&self) -> rusqlite::Result<proton_sqlite3::TrackingConnection> {
-        self.0.new_connection()
-    }
-}
 
 pub struct ActionQueue {
     connection_provider: Box<dyn SqlConnectionProvider>,
@@ -52,12 +34,12 @@ impl ActionQueue {
         connection_provider: Box<dyn SqlConnectionProvider>,
         session_provider: Box<dyn SessionProvider>,
         action_factory: ActionFactory,
-    ) -> ActionQueueResult<Self> {
-        Ok(Self {
-            connection_provider,
+    ) -> Self{
+        Self {
+           connection_provider,
             session_provider,
             action_factory,
-        })
+        }
     }
 
     pub fn queue_action<T: Action>(&mut self, action: &T) -> ActionQueueResult<StoredActionId> {

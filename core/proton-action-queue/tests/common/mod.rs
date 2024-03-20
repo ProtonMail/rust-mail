@@ -77,7 +77,6 @@ impl TestCtx {
             Box::new(PanicSessionProvider {}),
             factory,
         )
-        .expect("failed to build queue")
     }
 }
 

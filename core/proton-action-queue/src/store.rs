@@ -413,6 +413,5 @@ mod tests {
             Box::new(crate::AlwaysErrorSessionProvider {}),
             factory,
         )
-        .expect("failed to init queue")
     }
 }

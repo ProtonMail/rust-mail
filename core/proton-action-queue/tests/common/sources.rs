@@ -42,7 +42,7 @@ impl TestLocalSource {
 }
 
 #[mockall::automock]
-pub trait RemoteSource {
+pub trait RemoteSource: Send + Sync {
     fn get_messages(&self) -> Result<Vec<Message>, proton_api_core::http::HttpRequestError>;
 
     fn get_message(
