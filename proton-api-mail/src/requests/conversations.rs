@@ -142,6 +142,6 @@ impl<'c> http::RequestDesc for DeleteConversationsRequest<'c> {
     type Response = JsonResponse<Self::Output>;
 
     fn build(&self) -> RequestData {
-        RequestData::new(Method::Put, "mail/v4/conversations/delete")
+        RequestData::new(Method::Put, "mail/v4/conversations/delete").json(self)
     }
 }
