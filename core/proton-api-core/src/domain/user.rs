@@ -1,6 +1,5 @@
 use crate::domain::ProtonBoolean;
-use proton_crypto_account::domain::{DecryptedUserKey, KeyError, UnlockResult, UserKeys};
-use proton_crypto_account::keys::LockedKey;
+use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{SaltError, SaltedPassword, Salts};
@@ -98,7 +97,7 @@ pub enum UserSaltError {
     Key(
         #[source]
         #[from]
-        KeyError,
+        proton_crypto_account::errors::KeyError,
     ),
     #[error("{0}")]
     Salt(
@@ -109,7 +108,7 @@ pub enum UserSaltError {
 }
 
 impl User {
-    pub fn get_primary_key(&self) -> Option<&LockedKey> {
+    pub fn get_primary_key(&self) -> Option<&proton_crypto_account::domain::LockedKey> {
         self.keys.0.iter().find(|&k| k.primary)
     }
 

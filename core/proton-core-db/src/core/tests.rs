@@ -5,8 +5,7 @@ use proton_api_core::domain::{
     UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword, UserSettingsPhone,
     UserSettingsTimeFormat, UserSettingsWeekStart,
 };
-use proton_api_core::exports::crypto::domain::UserKeys;
-use proton_api_core::exports::crypto::keys::{KeyId, LockedKey};
+use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
 
 #[cfg(test)]
 fn new_core_test_connection() -> crate::CoreSqliteConnection {

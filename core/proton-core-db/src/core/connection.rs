@@ -4,8 +4,7 @@ use proton_api_core::domain::{
     UserSettingsEmail, UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword,
     UserSettingsPhone, UserSettingsReferral,
 };
-use proton_api_core::exports::crypto::domain::UserKeys;
-use proton_api_core::exports::crypto::keys::{KeyId, LockedKey};
+use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
 use proton_sqlite3::utils::{gen_variable_in_argument_list, mapped_rows_to_vec, RowIndexAllocator};
 use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
