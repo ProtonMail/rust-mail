@@ -34,9 +34,9 @@ impl ActionQueue {
         connection_provider: Box<dyn SqlConnectionProvider>,
         session_provider: Box<dyn SessionProvider>,
         action_factory: ActionFactory,
-    ) -> Self{
+    ) -> Self {
         Self {
-           connection_provider,
+            connection_provider,
             session_provider,
             action_factory,
         }
