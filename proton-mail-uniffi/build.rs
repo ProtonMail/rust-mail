@@ -41,7 +41,7 @@ fn setup_x86_64_android_workaround() {
             ndk_25_path.push(&clang_version);
             ndk_25_path.push("lib");
             ndk_25_path.push("linux");
-            ndk_25_path.to_str().expect("Invalid path")
+            ndk_25_path
         } else if ndk_26_path.exists() {
             const DEFAULT_CLANG_VERSION: &str = "17";
             let clang_version = std::env::var("NDK_CLANG_VERSION")
@@ -49,12 +49,15 @@ fn setup_x86_64_android_workaround() {
             ndk_26_path.push(&clang_version);
             ndk_26_path.push("lib");
             ndk_26_path.push("linux");
-            ndk_26_path.to_str().expect("Invalid path")
+            ndk_26_path
         } else {
             panic!("clang path not known! Is the ndk version 25 or 26?")
         };
 
-        println!("cargo:rustc-link-search={linux_x86_64_lib_dir}");
+        println!(
+            "cargo:rustc-link-search={}",
+            linux_x86_64_lib_dir.to_string_lossy()
+        );
         println!("cargo:rustc-link-lib=static=clang_rt.builtins-x86_64-android");
     }
 }
