@@ -5,7 +5,9 @@ use proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
 use proton_crypto_inbox::attachment::{
     AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
-use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
+
+mod common;
+use common::{get_test_address_keys, get_test_public_address_keys};
 
 const TEST_ATTACHMENT_METADATA_KP: &str = "wV4Di5gBfuEszfESAQdAUGm56qPuhgLjuStIEcL07fKh10ptOYc0UnB2kTwqqhMw2ivOpsuDSOM17OPsxG35znCodjKBxM1O+DeFuYhel8TsuJjNxKltBgv/jVs48LGw";
 
@@ -30,37 +32,6 @@ P/VM6YWaNGugaPzvZcchQQC5tRhxogVmbDrSUirJYnNa9z/qEF6FcBpOXc59
 EiWuw4/+aNQICAeabHV26Mtsp/DI6AZ7DtjMdNxDOFFeQ5Col6Ofu8E=
 =pQ9a
 -----END PGP MESSAGE-----";
-
-const TEST_ATTACHMENT_DECRYPTION_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
-
-xYYEZWRmVhYJKwYBBAHaRw8BAQdA5Y8bUHq5hTJBWZEa/mxOKJkOOd4h9CVo
-2vISFQLcccD+CQMIjfpijTBBdLZgAAAAAAAAAAAAAAAAAAAAADVVVCD463al
-FCG7D19/mw35yvsW48YAc3YgmfyK23GC9aptruPrkpjqqxeC6sRve0FxDzA7
-Xs0pbHVidXg0QHByb3Rvbi5ibGFjayA8bHVidXg0QHByb3Rvbi5ibGFjaz7C
-jAQQFgoAPgWCZWRmVgQLCQcICZDvQqbsF76qjAMVCAoEFgACAQIZAQKbAwIe
-ARYhBKcQ8sEYupYe38hwRu9CpuwXvqqMAAB5OQD/XyIK1r+JOFT3cYiBcaFx
-iox1yFrsr4uTg8kL1fQPyuoBAIG92J1MoimhMPuYvvTmIvNrvWPZvutw+BF2
-hJvRYDYCx4sEZWRmVhIKKwYBBAGXVQEFAQEHQIaaQMB4FXy/xC3qgmlhtnvR
-WceanT3nlzFjIrS96RUmAwEIB/4JAwionksZv9YLIGAAAAAAAAAAAAAAAAAA
-AAAAGKNKSqywbz5XuXX0Y/zrqKPNIvKBIT/+9dSKlTofYIoP7jtxqdz7UBMb
-KkA00FuCKspj/lxrwngEGBYIACoFgmVkZlYJkO9CpuwXvqqMApsMFiEEpxDy
-wRi6lh7fyHBG70Km7Be+qowAAHeFAP91gCl/VD/zHEvYIpWEK672jkPUPDpP
-Ll+erDsL2C10mgEA5fbBK09OVIjtYUJxiId1YYfn/4/ym92WNEAT20prLww=
------END PGP PRIVATE KEY BLOCK-----";
-
-const TEST_ATTACHMENT_VERIFICATION_KEY: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
-
-xjMEZSfovhYJKwYBBAHaRw8BAQdA6gS5mfVImh6ONhKgZGSVrLH4cdZaS9IW
-6FhqYGWe2wrNJ2x1YnV4QHByb3Rvbi5ibGFjayA8bHVidXhAcHJvdG9uLmJs
-YWNrPsKMBBAWCgA+BYJlJ+i+BAsJBwgJkFX2DKhfS5UBAxUICgQWAAIBAhkB
-ApsDAh4BFiEESUD3387U/LDImeGNVfYMqF9LlQEAACDjAPsFKRBgJvErAzLf
-7bmk0mK1fwwbFM02LRW86AZE/nTi0QEA72eGf2FJ+5l+9b9Kl1U3xmOaC52P
-PFrqPXcklJ7PJAfOOARlJ+i+EgorBgEEAZdVAQUBAQdA87xA21TU/FoSMYoz
-1RhyhkNWN7PWcNYut55JEp6S8zcDAQgHwngEGBYIACoFgmUn6L4JkFX2DKhf
-S5UBApsMFiEESUD3387U/LDImeGNVfYMqF9LlQEAABKpAQDiqKyJHwQcLpLv
-8SxSFLa66KfW1jQpDSPWOauT4cdC6AD+KfaU8KI7/pF1ItedtecaP7uU/rn6
-qsxcdv6aoFF1awA=
------END PGP PUBLIC KEY BLOCK-----";
 
 const TEST_ATTACHMENT_ENC_DATA: &str =
     "0kABGVu3HPPyl7wHJhXxg7+E69aHqqYR2cPcDn5Fai0jb2K/1fC8rqzo5jKxF4yca3CK5PRmLz4F9S2GobFvgmtv";
@@ -120,28 +91,6 @@ fn get_test_attachment_metadata_enc_sig_only() -> TestAttachmentMetdata {
             TEST_ATTACHMENT_METADATA_ENC_SIG,
         )),
     }
-}
-
-fn get_test_address_keys<T: PGPProviderSync>(
-    pgp_provider: &T,
-) -> Vec<TestAddressKey<T::PrivateKey>> {
-    let decryption_key = pgp_provider
-        .private_key_import(
-            TEST_ATTACHMENT_DECRYPTION_KEY,
-            "password",
-            DataEncoding::Armor,
-        )
-        .unwrap();
-    vec![TestAddressKey(decryption_key)]
-}
-
-fn get_test_public_address_keys<T: PGPProviderSync>(
-    pgp_provider: &T,
-) -> Vec<TestAddressPublicKey<T::PublicKey>> {
-    let verification_key = pgp_provider
-        .public_key_import(TEST_ATTACHMENT_VERIFICATION_KEY, DataEncoding::Armor)
-        .unwrap();
-    vec![TestAddressPublicKey(verification_key)]
 }
 
 fn get_test_attachment_encrypted_data() -> Vec<u8> {
