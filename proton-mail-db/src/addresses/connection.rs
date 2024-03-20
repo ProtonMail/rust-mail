@@ -1,6 +1,6 @@
 use crate::{DBResult, MailSqliteConnectionImpl};
 use proton_api_mail::domain::{Address, AddressId, AddressSignedKeyList};
-use proton_api_mail::exports::crypto::keys::{KeyId, LockedKey};
+use proton_api_mail::exports::crypto::domain::{KeyFlag, KeyId, LockedKey};
 use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
 use proton_sqlite3::rusqlite::{OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::mapped_rows_to_vec;
@@ -170,7 +170,7 @@ impl AddressKeySelector {
             activation: None,
             primary: r.get(4)?,
             active: r.get(5)?,
-            flags: r.get(6)?,
+            flags: r.get::<usize, Option<u32>>(6)?.map(KeyFlag::from),
             recovery_secret: None,
             recovery_secret_signature: None,
             address_forwarding_id: None,
@@ -220,7 +220,7 @@ fn execute_address_key_with_create_or_update_statement(
         &key.signature,
         key.primary,
         key.active,
-        key.flags,
+        key.flags.map(|v| *v.as_ref()),
         None::<AddressId>,
     ))
 }

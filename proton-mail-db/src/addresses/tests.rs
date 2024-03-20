@@ -2,7 +2,7 @@ use crate::{new_test_connection, with_tx};
 use proton_api_mail::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType,
 };
-use proton_api_mail::exports::crypto::keys::{KeyId, LockedKey};
+use proton_api_mail::exports::crypto::domain::{KeyId, LockedKey};
 use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
 
