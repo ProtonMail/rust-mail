@@ -35,13 +35,11 @@ impl<T: Into<u32>> From<T> for KeyFlag {
     }
 }
 
-impl AsRef<u32> for KeyFlag {
-    fn as_ref(&self) -> &u32 {
-        &self.0
-    }
-}
-
 impl KeyFlag {
+    /// Returns the key flag bitmap as u32.
+    pub fn to_u32(&self) -> u32 {
+        self.0
+    }
     /// Returns true if the flag indicates no email signing.
     pub fn is_email_no_sign(&self) -> bool {
         (self.0 & FLAG_EMAIL_NO_SIGN) > 0
