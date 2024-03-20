@@ -1,26 +1,24 @@
 #![allow(unused)]
 use crate::common::{FolderId, LabelId, Message, MessageId};
 use proton_api_core::exports::anyhow;
-use proton_sqlite3::rusqlite;
+use proton_sqlite3::{rusqlite, InProcessTrackerService};
 use rusqlite::{params_from_iter, OptionalExtension};
 use std::str::FromStr;
 
 pub struct TestLocalSource {
-    conn: proton_sqlite3::SqliteConnection,
+    conn: proton_sqlite3::TrackingConnection,
 }
 
 impl TestLocalSource {
-    pub fn new(
-        connection_pool: &proton_sqlite3::SqliteConnectionPool,
-    ) -> Result<Self, rusqlite::Error> {
-        let conn = connection_pool.acquire()?;
+    pub fn new(connection_pool: &InProcessTrackerService) -> Result<Self, rusqlite::Error> {
+        let conn = connection_pool.new_connection()?;
         Ok(Self { conn })
     }
 
     pub fn new_with_init(
-        connection_pool: &proton_sqlite3::SqliteConnectionPool,
+        connection_pool: &InProcessTrackerService,
     ) -> Result<Self, rusqlite::Error> {
-        let mut conn = connection_pool.acquire()?;
+        let mut conn = connection_pool.new_connection()?;
         conn.tx(|tx| -> rusqlite::Result<()> {
             let mut source = TestLocalSourceTransaction::new(tx);
 
@@ -31,22 +29,15 @@ impl TestLocalSource {
         Ok(Self { conn })
     }
 
-    pub fn tx<
-        R,
-        E: From<rusqlite::Error>,
-        F: FnOnce(TestLocalSourceTransaction) -> Result<R, E>,
-    >(
+    pub fn tx<R, E: From<rusqlite::Error>, F: Fn(TestLocalSourceTransaction) -> Result<R, E>>(
         &mut self,
         f: F,
     ) -> Result<R, E> {
-        let mut tx = self.conn.transaction()?;
-        let r = {
-            let ttx = TestLocalSourceTransaction::new(&mut tx);
+        self.conn.tx(move |tx| {
+            let ttx = TestLocalSourceTransaction::new(tx);
             let r = (f)(ttx)?;
-            r
-        };
-        tx.commit()?;
-        Ok(r)
+            Ok(r)
+        })
     }
 }
 

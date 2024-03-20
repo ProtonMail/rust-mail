@@ -31,6 +31,12 @@ impl AsRef<SqliteConnection> for TrackingConnection {
     }
 }
 
+impl AsMut<SqliteConnection> for TrackingConnection {
+    fn as_mut(&mut self) -> &mut SqliteConnection {
+        &mut self.connection
+    }
+}
+
 impl TrackingConnection {
     /// Create a new tracking connection with a given service.
     pub fn new(

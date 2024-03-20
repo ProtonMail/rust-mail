@@ -22,55 +22,79 @@ pub enum QueueError {
 
 pub type ActionQueueResult<T> = Result<T, QueueError>;
 
+/// Provider of SQL connections.
+pub trait SqlConnectionProvider: Send + Sync {
+    fn new_connection(&self) -> rusqlite::Result<proton_sqlite3::TrackingConnection>;
+}
+
+/// Default provider which directly interacts with [`proton_sqlite3::InProcessTrackerService`].
+pub struct DefaultSqlConnectionProvider(proton_sqlite3::InProcessTrackerService);
+impl DefaultSqlConnectionProvider {
+    pub fn new(tracker: proton_sqlite3::InProcessTrackerService) -> Self {
+        Self(tracker)
+    }
+}
+
+impl SqlConnectionProvider for DefaultSqlConnectionProvider {
+    fn new_connection(&self) -> rusqlite::Result<proton_sqlite3::TrackingConnection> {
+        self.0.new_connection()
+    }
+}
+
 pub struct ActionQueue {
-    connection: proton_sqlite3::SqliteConnection,
+    connection_provider: Box<dyn SqlConnectionProvider>,
     session_provider: Box<dyn SessionProvider>,
     action_factory: ActionFactory,
 }
 
 impl ActionQueue {
     pub fn new(
-        mut connection: proton_sqlite3::SqliteConnection,
+        connection_provider: Box<dyn SqlConnectionProvider>,
         session_provider: Box<dyn SessionProvider>,
         action_factory: ActionFactory,
     ) -> ActionQueueResult<Self> {
-        ActionStore::init_tables(&mut connection)?;
         Ok(Self {
-            connection,
+            connection_provider,
             session_provider,
             action_factory,
         })
     }
 
     pub fn queue_action<T: Action>(&mut self, action: &T) -> ActionQueueResult<StoredActionId> {
-        let mut store = ActionStore::new(&mut self.connection)?;
         let span = tracing::span!(Level::DEBUG, "Queue Action", action = ?action, action_id=action.action_id().to_string());
-
         span.in_scope(|| -> ActionQueueResult<StoredActionId> {
-            let pending_action =
-                PendingAction::from_action(action).map_err(ActionError::Serialization)?;
+            let mut connection = self.connection_provider.new_connection().map_err(|e| {
+                error!("Failed to retrieve connection: {e}");
+                e
+            })?;
+            connection
+                .tx(|tx| -> ActionQueueResult<StoredActionId> {
+                    let mut store = ActionStore::new(tx);
+                    let pending_action =
+                        PendingAction::from_action(action).map_err(ActionError::Serialization)?;
 
-            // Write action to store
-            let id = store.store_action(pending_action)?;
+                    // Write action to store
+                    let id = store.store_action(pending_action)?;
 
-            {
-                let mut handler = self.action_factory.local_handler(action, store.tx())?;
+                    {
+                        let mut handler = self.action_factory.local_handler(action, store.tx())?;
 
-                // Apply locally
-                if let Err(e) = handler.apply_local() {
-                    error!("Failed to apply local changes: {e}");
-                    return Err(e.into());
-                }
-            }
-
-            if let Err(e) = store.commit() {
-                error!("Failed to commit changes: {e}");
-                return Err(e.into());
-            }
-
-            // Done
-            debug!("action stored id={id}");
-            Ok(id)
+                        // Apply locally
+                        if let Err(e) = handler.apply_local() {
+                            error!("Failed to apply local changes: {e}");
+                            return Err(e.into());
+                        }
+                    }
+                    // Done
+                    debug!("action stored id={id}");
+                    Ok(id)
+                })
+                .map_err(|e| {
+                    if let QueueError::Store(e) = &e {
+                        error!("Failed to commit changes: {e}");
+                    }
+                    e
+                })
         })
     }
     pub fn consume_pending(&mut self) -> ActionQueueResult<()> {
@@ -89,63 +113,85 @@ impl ActionQueue {
     }
 
     fn consume_pending_impl(&mut self) -> ActionQueueResult<bool> {
-        let mut store = ActionStore::new(&mut self.connection)?;
         let span = tracing::span!(Level::DEBUG, "consume_pending");
-        span.in_scope(|| -> ActionQueueResult<bool> {
-            // Load pending actions from store
-            let Some(pending) = store.get_next_action()? else {
-                debug!("No actions to consume");
-                return Ok(false);
-            };
+        span.in_scope(move || -> ActionQueueResult<bool> {
+            let mut connection = self.connection_provider.new_connection().map_err(|e| {
+                error!("Failed to retrieve connection: {e}");
+                e
+            })?;
+            connection
+                .tx(|tx| -> ActionQueueResult<bool> {
+                    let mut store = ActionStore::new(tx);
+                    // Load pending actions from store
+                    let Some(pending) = store.get_next_action()? else {
+                        debug!("No actions to consume");
+                        return Ok(false);
+                    };
 
-            let action_span =
-                tracing::span!(Level::DEBUG, "action", stored_id = pending.id.to_string());
-            action_span.in_scope(|| -> ActionQueueResult<()> {
-                let mut handler = self
-                    .action_factory
-                    .remote_handler(&pending, store.tx(), self.session_provider.as_ref())
-                    .map_err(|e| {
-                        error!("Failed to create handler: {e}");
-                        e
+                    let action_span =
+                        tracing::span!(Level::DEBUG, "action", stored_id = pending.id.to_string());
+                    action_span.in_scope(|| -> ActionQueueResult<()> {
+                        let mut handler = self
+                            .action_factory
+                            .remote_handler(&pending, store.tx(), self.session_provider.as_ref())
+                            .map_err(|e| {
+                                error!("Failed to create handler: {e}");
+                                e
+                            })?;
+
+                        // Check if state is still correct
+                        if handler.validate_local()? == ActionLocalValidationResult::Invalid {
+                            warn!("action state is no longer valid skipping");
+                        } else {
+                            // If yes, apply remote
+                            if let Err(e) = handler.apply_remote() {
+                                error!("Failed to apply action remotely: {e}");
+                                // If remote fails revert
+                                if let Err(e) = handler.revert_local() {
+                                    // Log revert local change. Things are unstable.
+                                    error!("Failed to revert action locally:{e}");
+                                    return Err(e.into());
+                                }
+                                debug!("Action reverted");
+                            }
+                        }
+                        Ok(())
                     })?;
 
-                // Check if state is still correct
-                if handler.validate_local()? == ActionLocalValidationResult::Invalid {
-                    warn!("action state is no longer valid skipping");
-                } else {
-                    // If yes, apply remote
-                    if let Err(e) = handler.apply_remote() {
-                        error!("Failed to apply action remotely: {e}");
-                        // If remote fails revert
-                        if let Err(e) = handler.revert_local() {
-                            // Log revert local change. Things are unstable.
-                            error!("Failed to revert action locally:{e}");
-                            return Err(e.into());
-                        }
-                        debug!("Action reverted");
+                    if let Err(e) = store.erase_actions(&[pending.id]) {
+                        error!("Failed to remove action: {e}");
+                        return Err(e.into());
                     }
-                }
-                Ok(())
-            })?;
 
-            if let Err(e) = store.erase_actions(&[pending.id]) {
-                error!("Failed to remove action: {e}");
-                return Err(e.into());
-            }
+                    debug!("Erased pending action");
 
-            debug!("Erased pending action");
-
-            if let Err(e) = store.commit() {
-                error!("Failed to commit changes: {e}");
-                return Err(e.into());
-            }
-
-            Ok(true)
+                    Ok(true)
+                })
+                .map_err(|e| {
+                    if let QueueError::Store(e) = &e {
+                        error!("Failed to commit changes: {e}");
+                    }
+                    e
+                })
         })
     }
 
     #[cfg(test)]
-    pub fn get_store(&mut self) -> ActionStore<'_> {
-        ActionStore::new(&mut self.connection).expect("failed to get action store")
+    pub fn with_store(&mut self, f: impl Fn(&mut ActionStore)) {
+        let mut connection = self
+            .connection_provider
+            .new_connection()
+            .map_err(|e| {
+                error!("Failed to retrieve connection: {e}");
+                e
+            })
+            .unwrap();
+        connection
+            .tx(move |tx| -> rusqlite::Result<()> {
+                let mut store = ActionStore::new(tx);
+                (f)(&mut store);
+                Ok(())
+            })
+            .expect("transaction failed");
     }
 }

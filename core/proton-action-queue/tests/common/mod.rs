@@ -4,9 +4,12 @@ mod sources;
 
 pub use actions::*;
 pub use domain::*;
-use proton_action_queue::{ActionFactory, ActionQueue, SessionProvider, SessionProviderError};
+use proton_action_queue::{
+    ActionFactory, ActionQueue, ActionStore, DefaultSqlConnectionProvider, SessionProvider,
+    SessionProviderError,
+};
 use proton_api_core::Session;
-use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
+use proton_sqlite3::{InProcessTrackerService, SqliteConnectionPool, SqliteMode};
 pub use sources::*;
 use std::sync::Arc;
 
@@ -19,7 +22,7 @@ impl SessionProvider for PanicSessionProvider {
 }
 
 pub struct TestCtx {
-    pool: SqliteConnectionPool,
+    tracker: InProcessTrackerService,
     _file: tempfile::NamedTempFile,
     _tracing_guard: tracing::dispatcher::DefaultGuard,
 }
@@ -39,17 +42,24 @@ impl TestCtx {
         tracing::info!("DB crated at {:?}", tmp_file.path());
 
         let pool = SqliteConnectionPool::new(SqliteMode::File(tmp_file.path().to_path_buf()), true);
+        let tracker = InProcessTrackerService::new(pool).expect("failed to create tracker");
 
-        let _ = TestLocalSource::new_with_init(&pool).expect("failed to crease local source");
+        {
+            let mut conn = tracker.new_connection().unwrap();
+            ActionStore::init_tables(conn.as_mut()).expect("failed to init store tables");
+        }
+
+        let _ = TestLocalSource::new_with_init(&tracker).expect("failed to crease local source");
         TestCtx {
-            pool,
+            tracker,
             _file: tmp_file,
             _tracing_guard: guard,
         }
     }
 
-    pub fn tx<R, F: FnOnce(TestLocalSourceTransaction) -> R>(&mut self, f: F) -> R {
-        let mut source = TestLocalSource::new(&self.pool).expect("failed to create local source");
+    pub fn tx<R, F: Fn(TestLocalSourceTransaction) -> R>(&mut self, f: F) -> R {
+        let mut source =
+            TestLocalSource::new(&self.tracker).expect("failed to create local source");
         let r = source
             .tx(move |tx| -> Result<R, proton_sqlite3::rusqlite::Error> { Ok((f)(tx)) })
             .expect("failed to execute");
@@ -61,11 +71,13 @@ impl TestCtx {
         // trigger the mock check before the failure is printed.
         let _remote = remote.clone();
 
-        let con = self.pool.acquire().expect("failed to acquire connection");
-
         let factory = build_factory(remote);
-        ActionQueue::new(con, Box::new(PanicSessionProvider {}), factory)
-            .expect("failed to build queue")
+        ActionQueue::new(
+            Box::new(DefaultSqlConnectionProvider::new(self.tracker.clone())),
+            Box::new(PanicSessionProvider {}),
+            factory,
+        )
+        .expect("failed to build queue")
     }
 }
 
