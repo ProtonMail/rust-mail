@@ -1,10 +1,10 @@
-use crate::conversations::test_db_states::new_test_delete_db_state;
-use crate::conversations::test_utils::{
-    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
-};
-use crate::conversations::tests_conversations::{
+use crate::conversations::tests::conversations::{
     create_address_and_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
     MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
+};
+use crate::conversations::tests::db_states::new_test_delete_db_state;
+use crate::conversations::tests::utils::{
+    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
 };
 use crate::{
     new_test_connection, with_tx, LocalConversationId, LocalMessageCount, LocalMessageMetadata,

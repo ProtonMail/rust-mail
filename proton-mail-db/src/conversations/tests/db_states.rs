@@ -1,7 +1,7 @@
-use crate::conversations::test_utils::TestDBState;
-use crate::conversations::tests_conversations::{
+use crate::conversations::tests::conversations::{
     test_address, test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
+use crate::conversations::tests::utils::TestDBState;
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
     AttachmentId, AttachmentMetadata, Conversation, ConversationId, ConversationLabels,
@@ -14,10 +14,10 @@ lazy_static! {
     pub(super) static ref DELETE_DB_CONV2: ConversationId = ConversationId::from("MyConvId2");
 }
 
-pub(super) fn new_message_id(num: usize) -> MessageId {
+pub(in crate::conversations) fn new_message_id(num: usize) -> MessageId {
     MessageId::from(format!("MessageId{num}"))
 }
-pub(super) fn new_test_delete_db_state() -> TestDBState {
+pub(in crate::conversations) fn new_test_delete_db_state() -> TestDBState {
     // Conversation 1 has 3 messages, split between 2 labels, 1 is unread  + 1 Attachment(s)
     // Conversation 2 has 2 message in one label, 1 is unread + 0 Attachment(s)
     let conv_id1 = DELETE_DB_CONV1.clone();

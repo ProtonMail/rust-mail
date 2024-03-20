@@ -10,7 +10,7 @@ use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default)]
-pub(super) struct TestDBState {
+pub(in crate::conversations) struct TestDBState {
     pub addresses: Vec<Address>,
     pub labels: Vec<Label>,
     pub conversations: Vec<Conversation>,
@@ -18,7 +18,7 @@ pub(super) struct TestDBState {
 }
 
 #[derive(Default)]
-pub(super) struct TestDBStateMap {
+pub(in crate::conversations) struct TestDBStateMap {
     pub labels: HashMap<LabelId, LocalLabelId>,
     pub conversations: HashMap<ConversationId, LocalConversationId>,
     pub messages: HashMap<MessageId, LocalMessageId>,
@@ -26,7 +26,7 @@ pub(super) struct TestDBStateMap {
     pub message_counts: HashMap<LabelId, MessageCount>,
 }
 
-pub(super) fn prepare_and_patch_db_state(
+pub(in crate::conversations) fn prepare_and_patch_db_state(
     tx: &mut MailSqliteConnectionMut,
     mut env: TestDBState,
 ) -> (TestDBState, TestDBStateMap) {
@@ -180,7 +180,7 @@ pub(super) fn prepare_and_patch_db_state(
     (env, result)
 }
 
-pub(super) fn find_conversation_label<'a>(
+pub(in crate::conversations) fn find_conversation_label<'a>(
     conv: &'a Conversation,
     id: &LabelId,
 ) -> &'a ConversationLabels {
@@ -190,7 +190,7 @@ pub(super) fn find_conversation_label<'a>(
         .expect("Failed to find conversation label")
 }
 
-pub(super) fn message_counts_for_conversation(
+pub(in crate::conversations) fn message_counts_for_conversation(
     messages: &[MessageMetadata],
     conversation_id: &ConversationId,
     label_id: &LabelId,
@@ -216,7 +216,7 @@ pub(super) fn message_counts_for_conversation(
     return (unread, total);
 }
 
-pub(super) fn conv_counts_as_map(
+pub(in crate::conversations) fn conv_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
 ) -> BTreeMap<LocalLabelId, LocalConversationCount> {
     BTreeMap::from_iter(
@@ -227,7 +227,7 @@ pub(super) fn conv_counts_as_map(
     )
 }
 
-pub(super) fn msg_counts_as_map(
+pub(in crate::conversations) fn msg_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
 ) -> BTreeMap<LocalLabelId, LocalMessageCount> {
     BTreeMap::from_iter(

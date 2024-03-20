@@ -1,7 +1,7 @@
-use crate::conversations::test_db_states::new_test_delete_db_state;
-use crate::conversations::test_utils::{
-    conv_counts_as_map, message_counts_for_conversation,
-    msg_counts_as_map, prepare_and_patch_db_state,
+use crate::conversations::tests::db_states::new_test_delete_db_state;
+use crate::conversations::tests::utils::{
+    conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
+    prepare_and_patch_db_state,
 };
 use crate::conversations::types::LocalConversation;
 use crate::{
@@ -496,7 +496,9 @@ lazy_static! {
     pub(super) static ref MY_CONVERSATION_ID: ConversationId =
         ConversationId::from("MyConversationID");
 }
-pub(super) fn create_address_and_labels(tx: &mut MailSqliteConnectionMut) -> Vec<LocalLabelId> {
+pub(in crate::conversations) fn create_address_and_labels(
+    tx: &mut MailSqliteConnectionMut,
+) -> Vec<LocalLabelId> {
     tx.create_or_update_address(&test_address())
         .expect("failed to create address");
     let labels = [test_label1(), test_label2()];
@@ -509,7 +511,7 @@ pub(super) fn create_address_and_labels(tx: &mut MailSqliteConnectionMut) -> Vec
     assert_eq!(r.len(), 2);
     r
 }
-pub(super) fn test_address() -> Address {
+pub(in crate::conversations) fn test_address() -> Address {
     Address {
         id: MY_ADDRESS_ID.clone(),
         email: "hello@world".to_string(),
@@ -536,7 +538,7 @@ pub(super) fn test_address() -> Address {
     }
 }
 
-pub(super) fn test_label1() -> Label {
+pub(in crate::conversations) fn test_label1() -> Label {
     Label {
         id: MY_LABEL_ID1.clone(),
         parent_id: None,
@@ -552,7 +554,7 @@ pub(super) fn test_label1() -> Label {
     }
 }
 
-pub(super) fn test_label2() -> Label {
+pub(in crate::conversations) fn test_label2() -> Label {
     Label {
         id: MY_LABEL_ID2.clone(),
         parent_id: None,
@@ -568,7 +570,7 @@ pub(super) fn test_label2() -> Label {
     }
 }
 
-pub(super) fn test_starred_label() -> Label {
+pub(in crate::conversations) fn test_starred_label() -> Label {
     Label {
         id: LabelId::starred().clone(),
         parent_id: None,
@@ -584,7 +586,7 @@ pub(super) fn test_starred_label() -> Label {
     }
 }
 
-pub(super) fn test_conversation(
+pub(in crate::conversations) fn test_conversation(
     labels: impl IntoIterator<Item = ConversationLabels>,
     attachments: impl IntoIterator<Item = AttachmentMetadata>,
 ) -> Conversation {
