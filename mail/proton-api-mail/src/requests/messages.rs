@@ -1,4 +1,7 @@
-use crate::domain::{Message, MessageCount, MessageId, MessageMetadata, MessageMetadataFilter};
+use crate::domain::{
+    LabelId, Message, MessageCount, MessageId, MessageMetadata, MessageMetadataFilter,
+};
+use crate::exports::serde::Serialize;
 use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize};
 use proton_api_core::http;
@@ -71,4 +74,44 @@ impl http::RequestDesc for GetMessageCountsRequest {
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetMessageCountsResponse {
     pub counts: Vec<MessageCount>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(crate = "self::serde")]
+pub struct DeleteMessagesRequest<'a> {
+    #[serde(rename = "IDs")]
+    pub ids: &'a [MessageId],
+    #[serde(rename = "CurrentLabelID")]
+    pub label_id: Option<&'a LabelId>,
+}
+
+impl<'a> DeleteMessagesRequest<'a> {
+    pub fn new(label_id: Option<&'a LabelId>, ids: &'a [MessageId]) -> Self {
+        Self { ids, label_id }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(crate = "self::serde")]
+pub struct DeleteMessagesResponse {
+    #[serde(rename = "Responses")]
+    pub responses: Vec<DeleteMessagesResponseObject>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(crate = "self::serde")]
+pub struct DeleteMessagesResponseObject {
+    #[serde(rename = "ID")]
+    pub id: MessageId,
+    #[serde(rename = "Response")]
+    pub response: proton_api_core::APIErrorDesc,
+}
+
+impl<'c> http::RequestDesc for DeleteMessagesRequest<'c> {
+    type Output = DeleteMessagesResponse;
+    type Response = JsonResponse<Self::Output>;
+
+    fn build(&self) -> RequestData {
+        RequestData::new(Method::Put, "mail/v4/conversations/delete").json(self)
+    }
 }
