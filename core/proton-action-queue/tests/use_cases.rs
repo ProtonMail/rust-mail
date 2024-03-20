@@ -40,7 +40,7 @@ fn successive_message_move_but_fails_on_first_remote_action() {
         .returning(|_, _| Err(HttpRequestError::Other(anyhow!("failed to move"))))
         .times(1);
 
-    let mut queue = ctx.new_action_queue(Arc::new(remote));
+    let queue = ctx.new_action_queue(Arc::new(remote));
 
     queue
         .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
@@ -98,7 +98,7 @@ fn move_message_to_folder_remote_exec_fails() {
             .times(1);
     });
 
-    let mut queue = ctx.new_action_queue(remote);
+    let queue = ctx.new_action_queue(remote);
 
     queue
         .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
@@ -148,7 +148,7 @@ fn successive_message_move_and_succeeds() {
             .times(1);
     });
 
-    let mut queue = ctx.new_action_queue(remote);
+    let queue = ctx.new_action_queue(remote);
 
     queue
         .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
@@ -203,7 +203,7 @@ fn move_message_to_folder_but_remote_action_occurred_before_execution() {
     // remote expectations - nothing
     let remote = new_mock_remote(|_| {});
 
-    let mut queue = ctx.new_action_queue(remote);
+    let queue = ctx.new_action_queue(remote);
 
     queue
         .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
@@ -254,7 +254,7 @@ fn move_message_to_folder_two_actions_interleaved_with_remote_change() {
     // remote expectations - nothing, remote action superseeds everything.
     let remote = new_mock_remote(|_| {});
 
-    let mut queue = ctx.new_action_queue(remote);
+    let queue = ctx.new_action_queue(remote);
 
     queue
         .queue_action(&MoveMessageAction::new(inbox_id, folder1_id, [message_id]))
@@ -319,7 +319,7 @@ fn delete_message_queued_action_executed_after_local_change() {
             .returning(|_| Err(HttpRequestError::Other(anyhow!("failed to delete"))));
     });
 
-    let mut queue = ctx.new_action_queue(remote);
+    let queue = ctx.new_action_queue(remote);
 
     queue
         .queue_action(&DeleteMessageAction::new([message_id]))

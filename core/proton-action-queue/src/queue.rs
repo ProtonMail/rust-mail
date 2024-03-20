@@ -42,7 +42,7 @@ impl ActionQueue {
         }
     }
 
-    pub fn queue_action<T: Action>(&mut self, action: &T) -> ActionQueueResult<StoredActionId> {
+    pub fn queue_action<T: Action>(&self, action: &T) -> ActionQueueResult<StoredActionId> {
         let span = tracing::span!(Level::DEBUG, "Queue Action", action = ?action, action_id=action.action_id().to_string());
         span.in_scope(|| -> ActionQueueResult<StoredActionId> {
             let mut connection = self.connection_provider.new_connection().map_err(|e| {
@@ -79,12 +79,12 @@ impl ActionQueue {
                 })
         })
     }
-    pub fn consume_pending(&mut self) -> ActionQueueResult<()> {
+    pub fn consume_pending(&self) -> ActionQueueResult<()> {
         while self.consume_pending_impl()? {}
         Ok(())
     }
 
-    pub fn consume_pending_with_limit(&mut self, limit: usize) -> ActionQueueResult<()> {
+    pub fn consume_pending_with_limit(&self, limit: usize) -> ActionQueueResult<()> {
         for _ in 0..limit {
             if !self.consume_pending_impl()? {
                 return Ok(());
@@ -94,7 +94,7 @@ impl ActionQueue {
         Ok(())
     }
 
-    fn consume_pending_impl(&mut self) -> ActionQueueResult<bool> {
+    fn consume_pending_impl(&self) -> ActionQueueResult<bool> {
         let span = tracing::span!(Level::DEBUG, "consume_pending");
         span.in_scope(move || -> ActionQueueResult<bool> {
             let mut connection = self.connection_provider.new_connection().map_err(|e| {
@@ -159,7 +159,7 @@ impl ActionQueue {
     }
 
     #[cfg(test)]
-    pub fn with_store(&mut self, f: impl Fn(&mut ActionStore)) {
+    pub fn with_store(&self, f: impl Fn(&mut ActionStore)) {
         let mut connection = self
             .connection_provider
             .new_connection()

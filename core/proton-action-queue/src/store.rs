@@ -276,7 +276,7 @@ mod tests {
             value: "hello_world!".into(),
         };
 
-        let mut queue = new_queue();
+        let queue = new_queue();
         queue.with_store(|store| {
             let pending1 =
                 PendingAction::from_action(&action1).expect("failed to create pending action");
@@ -334,7 +334,7 @@ mod tests {
 
         let action4 = TestAction { value: 0 };
 
-        let mut queue = new_queue();
+        let queue = new_queue();
         queue.with_store(|store| {
             let pending1 = PendingAction::from_action_and_priority(&action1, ActionPriority::Low)
                 .expect("failed to create pending action");
