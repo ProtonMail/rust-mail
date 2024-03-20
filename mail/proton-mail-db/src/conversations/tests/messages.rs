@@ -267,6 +267,115 @@ pub fn test_delete_local_message_does_not_change_conv_unread_count() {
     });
 }
 
+#[test]
+pub fn test_undelete_local_message() {
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        // Same as test_delete_local_message, but undo the operations
+
+        let state = new_test_delete_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        {
+            // Delete 3rd message from 1st conversation.
+            let message = &state.messages[2];
+            let local_id = *state_map.messages.get(&message.id).unwrap();
+            tx.mark_local_message_as_deleted(local_id)
+                .expect("failed to mark local message as deleted");
+
+            tx.unmark_local_message_as_deleted(local_id)
+                .expect("failed to undelete message");
+
+            let conv_counts = conv_counts_as_map(tx);
+            let msg_counts = msg_counts_as_map(tx);
+
+            for label in &message.label_ids {
+                let local_label_id = *state_map
+                    .labels
+                    .get(label)
+                    .expect("Failed to resolve label");
+                let conv_count = conv_counts.get(&local_label_id).unwrap();
+                let start_conv_count = state_map.conversation_counts.get(label).unwrap();
+                let start_msg_count = state_map.message_counts.get(label).unwrap();
+
+                let local_conv = tx
+                    .get_conversation_with_context(local_conv_id, local_label_id)
+                    .unwrap()
+                    .unwrap();
+                let remote_conversation_label =
+                    find_conversation_label(&state.conversations[0], label);
+
+                assert_eq!(
+                    local_conv.num_messages_ctx,
+                    remote_conversation_label.context_num_messages,
+                );
+                assert_eq!(
+                    local_conv.num_unread,
+                    remote_conversation_label.context_num_unread,
+                );
+                assert_eq!(local_conv.time, state.messages[3].time);
+                assert_eq!(local_conv.size, remote_conversation_label.context_size,);
+                assert_eq!(
+                    local_conv.num_attachments,
+                    remote_conversation_label.context_num_attachments,
+                );
+                assert_eq!(local_conv.num_messages, state.conversations[0].num_messages,);
+
+                let local_conv = tx.get_conversation(local_conv_id).unwrap().unwrap();
+
+                assert_eq!(local_conv.num_messages, state.conversations[0].num_messages,);
+                assert_eq!(local_conv.num_unread, state.conversations[0].num_unread);
+
+                let msg_count = msg_counts.get(&local_label_id).unwrap();
+                assert_eq!(msg_count.total, start_msg_count.total);
+                assert_eq!(msg_count.unread, start_msg_count.unread);
+
+                assert_eq!(conv_count.total, start_conv_count.total);
+                assert_eq!(conv_count.unread, start_conv_count.unread);
+            }
+        }
+
+        {
+            // Delete all messages from first conversation and restore
+            let ids = state
+                .messages
+                .iter()
+                .filter(|m| m.conversation_id == state.conversations[0].id)
+                .map(|m| *state_map.messages.get(&m.id).unwrap())
+                .collect::<Vec<_>>();
+            tx.mark_local_messages_as_deleted(ids.iter().cloned())
+                .expect("failed to delete messages");
+            tx.unmark_local_messages_as_deleted(ids.into_iter())
+                .expect("failed to delete messages");
+
+            let conv_counts = conv_counts_as_map(tx);
+            let msg_counts = msg_counts_as_map(tx);
+
+            for label in &state.conversations[0].labels {
+                let local_label_id = *state_map
+                    .labels
+                    .get(&label.id)
+                    .expect("Failed to resolve label");
+                let conv_count = conv_counts.get(&local_label_id).unwrap();
+                let msg_count = msg_counts.get(&local_label_id).unwrap();
+                let start_conv_count = state_map.conversation_counts.get(&label.id).unwrap();
+                let start_msg_count = state_map.message_counts.get(&label.id).unwrap();
+
+                // Conversation should no longer exist
+                assert_eq!(conv_count.total, start_conv_count.total);
+                assert_eq!(msg_count.total, start_msg_count.total);
+            }
+
+            // Conversation should be deleted
+            assert!(tx.get_conversation(local_conv_id).unwrap().is_some());
+        }
+    });
+}
+
 lazy_static! {
     pub(super) static ref MY_MESSAGE_ID: MessageId = MessageId::from("MyMessageId");
 }

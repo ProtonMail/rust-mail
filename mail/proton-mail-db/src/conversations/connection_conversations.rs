@@ -299,8 +299,43 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         Ok(())
     }
 
+    pub fn unmark_conversation_as_deleted(&mut self, id: LocalConversationId) -> DBResult<()> {
+        self.mark_conversations_as_deleted(std::iter::once(id))
+    }
+
+    pub fn unmark_conversations_as_deleted(
+        &mut self,
+        ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let mut stmt = self.0.prepare(&format!(
+            "UPDATE conversations SET deleted=0 WHERE id IN ({}) AND deleted=1 RETURNING id",
+            gen_variable_in_argument_list(ids.len())
+        ))?;
+
+        let mut filtered_ids = Vec::with_capacity(ids.len());
+        mapped_rows_into_vec(
+            &mut filtered_ids,
+            stmt.query_map(params_from_iter(ids), |r| r.get(0))?,
+        )?;
+
+        // Remove from labels.
+        self.add_conversations_to_labels(&filtered_ids)?;
+        // Update message counters
+        self.unmark_local_messages_as_deleted_with_conversation_ids(filtered_ids.into_iter())?;
+        Ok(())
+    }
+
     fn remove_conversations_from_labels(&mut self, ids: &[LocalConversationId]) -> DBResult<()> {
         self.0.execute(&format!(r"UPDATE label_conversation_count AS lcc SET total=total-dm.num_messages, unread=unread-dm.num_unread FROM (
+            SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
+            GROUP BY cl.label_id
+        ) AS dm WHERE lcc.label_id=dm.label_id
+        ",gen_variable_in_argument_list(ids.len())), params_from_iter(ids.iter()))?;
+        Ok(())
+    }
+
+    fn add_conversations_to_labels(&mut self, ids: &[LocalConversationId]) -> DBResult<()> {
+        self.0.execute(&format!(r"UPDATE label_conversation_count AS lcc SET total=total+dm.num_messages, unread=unread+dm.num_unread FROM (
             SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
             GROUP BY cl.label_id
         ) AS dm WHERE lcc.label_id=dm.label_id

@@ -327,6 +327,72 @@ fn test_conversation_update() {
 }
 
 #[test]
+fn test_conversation_undelete() {
+    // Same as test_conversation_delete, but undoing the deletions should restore all the state
+    // back to the initial values.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_delete_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        let local_conv_id1 = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_conv_id2 = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+        tx.mark_conversations_as_deleted([local_conv_id1, local_conv_id2].into_iter())
+            .expect("failed to mark as deleted");
+
+        tx.unmark_conversations_as_deleted([local_conv_id1, local_conv_id2].into_iter())
+            .expect("failed to mark conversations as undeleted");
+
+        // Check conversation counts
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            // Check conversation label1 values
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+            // Check conversation label2 values
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+        }
+
+        // Check message counts
+        {
+            let message_counts = msg_counts_as_map(tx);
+
+            // Check label1
+            {
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+            // Check label2
+            {
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = message_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+        }
+    });
+}
+
+#[test]
 fn test_conversation_delete() {
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
