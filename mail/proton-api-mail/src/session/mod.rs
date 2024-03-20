@@ -1,15 +1,16 @@
 use crate::domain::{
-    Address, ConversationCount, ConversationFilter, ConversationId, Label, LabelId, LabelType,
-    MailEvent, MailSettings, Message, MessageCount, MessageId, MessageMetadataFilter,
+    Address, Label, LabelId, LabelType, MailEvent, MailSettings, Message, MessageCount, MessageId,
+    MessageMetadataFilter,
 };
 use crate::requests::{
-    CreateLabelRequest, DeleteLabelRequest, GetAddressesRequest, GetConversationCountsRequest,
-    GetConversationRequest, GetConversationResponse, GetConversationsRequest,
-    GetConversationsResponse, GetLabelsRequest, GetMailSettingsRequest, GetMessageCountsRequest,
-    GetMessageMetadataRequest, GetMessageRequest, MessageMetadataResponse, UpdateLabelRequest,
+    CreateLabelRequest, DeleteLabelRequest, GetAddressesRequest, GetLabelsRequest,
+    GetMailSettingsRequest, GetMessageCountsRequest, GetMessageMetadataRequest, GetMessageRequest,
+    MessageMetadataResponse, UpdateLabelRequest,
 };
 use proton_api_core::domain::EventId;
 use proton_api_core::{http, Session};
+
+mod conversations;
 
 /// Authenticated Session from which one can access mail related functionality
 #[derive(Clone)]
@@ -98,33 +99,6 @@ impl MailSession {
     pub async fn message_counts(&self) -> Result<Vec<MessageCount>, http::HttpRequestError> {
         self.session
             .execute_request(GetMessageCountsRequest {})
-            .await
-            .map(|r| r.counts)
-    }
-
-    pub async fn conversations(
-        &self,
-        filter: ConversationFilter,
-    ) -> Result<GetConversationsResponse, http::HttpRequestError> {
-        self.session
-            .execute_request(GetConversationsRequest::new(filter))
-            .await
-    }
-
-    pub async fn conversation(
-        &self,
-        id: &ConversationId,
-    ) -> Result<GetConversationResponse, http::HttpRequestError> {
-        self.session
-            .execute_request(GetConversationRequest::new(id))
-            .await
-    }
-
-    pub async fn conversation_counts(
-        &self,
-    ) -> Result<Vec<ConversationCount>, http::HttpRequestError> {
-        self.session
-            .execute_request(GetConversationCountsRequest {})
             .await
             .map(|r| r.counts)
     }
