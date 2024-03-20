@@ -1,4 +1,7 @@
-use proton_crypto::crypto::PublicKey;
+use proton_crypto::{
+    crypto::PublicKey,
+    keytransparency::{KTVerificationResult, KT_UNVERIFIED},
+};
 use proton_crypto_account::domain::{APIPublicKeySource, PublicAddressKey, PublicAddressKeys};
 
 /// Recipient type is either `External` or `Internal`.
@@ -34,6 +37,10 @@ pub struct InboxPublicKeys<Pub: PublicKey> {
     pub is_internal_with_disabled_e2ee: bool,
     /// List of warnings to show to the user related to phishing and message routing.
     pub warnings: Vec<String>,
+    /// The key transparency verification result.
+    ///
+    /// Contains an unverified error if no verification was performed.
+    pub key_transparency_verification: KTVerificationResult,
 }
 
 impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
@@ -53,6 +60,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
             let internal_address_keys = imported_api_keys.address.keys;
             if let Some(mut inbox_key) = handle_address_keys(
                 internal_address_keys,
+                imported_api_keys.address.kt_verification,
                 include_internal_keys_with_e2ee_disabled,
                 valid_proton_mx,
             ) {
@@ -83,6 +91,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
                     address_type: AddressType::Normal, // unused, could also be set to undefined
                     warnings: imported_api_keys.warnings,
                     is_internal_with_disabled_e2ee: false,
+                    key_transparency_verification: KT_UNVERIFIED, // TODO: might want to return failure if one verification address/catch-all failed
                 };
             }
         }
@@ -101,6 +110,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
                     address_type: AddressType::CatchAll,
                     warnings: imported_api_keys.warnings,
                     is_internal_with_disabled_e2ee: false,
+                    key_transparency_verification: catch_all_keys_group.kt_verification,
                 };
             }
         }
@@ -114,6 +124,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
                     address_type: AddressType::Normal,
                     warnings: imported_api_keys.warnings,
                     is_internal_with_disabled_e2ee: false,
+                    key_transparency_verification: KT_UNVERIFIED, // TODO: might want to return failure if one verification address/catch-all failed
                 };
             }
         }
@@ -124,12 +135,14 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
             address_type: AddressType::Normal,
             warnings: imported_api_keys.warnings,
             is_internal_with_disabled_e2ee: false,
+            key_transparency_verification: KT_UNVERIFIED, // TODO: might want to return failure if one verification address/catch-all failed
         }
     }
 }
 
 fn handle_address_keys<T: PublicKey>(
     internal_address_keys: Vec<PublicAddressKey<T>>,
+    kt_result: KTVerificationResult,
     include_internal_keys_with_e2ee_disabled: bool,
     valid_proton_mx: bool,
 ) -> Option<InboxPublicKeys<T>> {
@@ -150,6 +163,7 @@ fn handle_address_keys<T: PublicKey>(
             address_type: AddressType::Normal,
             warnings: Vec::new(),
             is_internal_with_disabled_e2ee: false,
+            key_transparency_verification: kt_result,
         });
     }
 
@@ -161,6 +175,7 @@ fn handle_address_keys<T: PublicKey>(
             address_type: AddressType::Normal,
             warnings: Vec::new(),
             is_internal_with_disabled_e2ee: true,
+            key_transparency_verification: kt_result,
         });
     }
 
@@ -171,6 +186,7 @@ fn handle_address_keys<T: PublicKey>(
             address_type: AddressType::Normal,       // unused, could also be set to undefined
             warnings: Vec::new(),
             is_internal_with_disabled_e2ee: !has_mail_enc_keys,
+            key_transparency_verification: kt_result,
         });
     }
 

@@ -30,7 +30,7 @@ impl<Pub: PublicKey> AsPublicKeyRef<Pub> for PublicAddressKey<Pub> {
     }
 }
 
-/// Represents imported address public keys retrieved from the API.
+/// Represents imported address public keys that might have been verified with key transparency.
 #[derive(Debug, Clone)]
 pub struct PublicAddressKeyGroup<T: PublicKey> {
     pub keys: Vec<PublicAddressKey<T>>,
