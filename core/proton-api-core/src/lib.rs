@@ -13,6 +13,8 @@ mod session;
 
 pub use session::*;
 
+pub use requests::APIErrorDesc;
+
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
 
