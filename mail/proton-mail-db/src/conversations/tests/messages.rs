@@ -126,8 +126,6 @@ fn test_message_counts() {
 
 #[test]
 pub fn test_delete_local_message() {
-    //TODO: deleting an unread message should not cause unread counter to change
-    //TODO: deleting all messages from a conversation should delete conversation
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
         // Deleting a message must
@@ -246,6 +244,26 @@ pub fn test_delete_local_message() {
             // Conversation should be deleted
             assert!(tx.get_conversation(local_conv_id).unwrap().is_none());
         }
+    });
+}
+
+#[test]
+pub fn test_delete_local_message_does_not_change_conv_unread_count() {
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_delete_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        // Delete 2nd message from 1st conversation.
+        let message = &state.messages[0];
+        let local_id = *state_map.messages.get(&message.id).unwrap();
+        tx.mark_local_message_as_deleted(local_id)
+            .expect("failed to mark local message as deleted");
+        let local_label_id = state_map.labels.get(&MY_LABEL_ID1).unwrap();
+
+        let conv_counts = conv_counts_as_map(tx);
+        let label_conv_counts = conv_counts.get(&local_label_id).unwrap();
+        assert_eq!(label_conv_counts.unread, 1);
     });
 }
 
