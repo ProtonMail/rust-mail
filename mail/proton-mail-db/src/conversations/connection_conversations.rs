@@ -5,11 +5,14 @@ use crate::{
     DBResult, DeletedState, LocalAttachmentMetadata, LocalConversationCount,
     LocalConversationLabel, LocalLabelId, MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{Conversation, ConversationCount, ConversationId, MessageAddress};
+use proton_api_mail::domain::{
+    Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
+};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
+
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn create_conversation(
         &mut self,
@@ -273,11 +276,185 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         Ok(Some(mapped_rows_to_vec(rows)?))
     }
 
-    pub fn mark_conversation_as_deleted(&mut self, id: LocalConversationId) -> DBResult<()> {
-        self.mark_conversations_as_deleted(std::iter::once(id))
+    pub fn mark_conversation_as_deleted(
+        &mut self,
+        label_id: LocalLabelId,
+        id: LocalConversationId,
+    ) -> DBResult<()> {
+        self.mark_conversations_as_deleted(label_id, std::iter::once(id))
     }
 
     pub fn mark_conversations_as_deleted(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let mut conv_ids = Vec::with_capacity(ids.len());
+        conv_ids.extend(ids);
+
+        // Update message counters
+        self.mark_local_messages_as_deleted_with_conversation_ids(
+            label_id,
+            conv_ids.iter().cloned(),
+        )?;
+
+        // Remove from labels.
+        self.remove_conversations_from_label(label_id, &conv_ids)?;
+
+        Ok(())
+    }
+
+    pub fn unmark_conversation_as_deleted(
+        &mut self,
+        label_id: LocalLabelId,
+        id: LocalConversationId,
+    ) -> DBResult<()> {
+        self.unmark_conversations_as_deleted(label_id, std::iter::once(id))
+    }
+
+    pub fn unmark_conversations_as_deleted(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let mut conv_ids = Vec::with_capacity(ids.len());
+        conv_ids.extend(ids);
+
+        // Update message counters
+        self.unmark_local_messages_as_deleted_with_conversation_ids(
+            label_id,
+            conv_ids.iter().cloned(),
+        )?;
+
+        // Add to label.
+        self.add_conversations_to_label(label_id, &conv_ids)?;
+
+        Ok(())
+    }
+
+    fn remove_conversations_from_label(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: &[LocalConversationId],
+    ) -> DBResult<()> {
+        self.add_or_remove_conversations_from_label(label_id, ids, true)
+    }
+
+    fn add_conversations_to_label(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: &[LocalConversationId],
+    ) -> DBResult<()> {
+        self.add_or_remove_conversations_from_label(label_id, ids, false)
+    }
+
+    fn add_or_remove_conversations_from_label(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: &[LocalConversationId],
+        delete: bool,
+    ) -> DBResult<()> {
+        // If the label is all mail we need to delete all the messages. However, since it is possible that some
+        // conversations do not have all the message synced, we have to use a different path.
+        if let Some(all_mail_label_id) = self.resolve_remote_label_id(LabelId::all_mail())? {
+            if label_id == all_mail_label_id {
+                return if delete {
+                    self.mark_conversations_as_deleted_all_mail(ids.iter().cloned())
+                } else {
+                    self.unmark_conversations_as_deleted_all_mail(ids.iter().cloned())
+                };
+            }
+        }
+
+        assert!(ids.len() < 512);
+        let operator = if delete { '-' } else { '+' };
+
+        let conv_args = gen_variable_in_argument_list(ids.len());
+
+        // recreate conversation label if it does not exist
+        if !delete {
+            let mut stmt = self.0.prepare(&format!(
+                //TODO: Expiration time
+                r"
+WITH conv_messages AS (
+    SELECT m.conversation_id, MAX(m.time) AS time, MAX(m.expiration_time) AS expiration_time,
+    COUNT(m.id) AS `count`, SUM(m.unread) AS unread, SUM(m.num_attachments) AS attachments,
+    SUM(m.size) AS size
+    FROM messages AS m
+    JOIN message_labels AS l ON l.message_id=m.id AND l.label_id=?1
+    WHERE m.deleted=0 AND m.conversation_id IN ({})
+    GROUP BY m.conversation_id
+)
+UPDATE conversation_labels SET
+ctx_time=cm.time, ctx_size=cm.size, ctx_num_messages=cm.count, ctx_num_unread=cm.unread,
+ctx_num_attachments=cm.attachments
+FROM conv_messages AS cm
+WHERE conversation_labels.label_id=?1 AND conversation_labels.conversation_id=cm.conversation_id
+    ",
+                conv_args
+            ))?;
+            let mut alloc = StmtIndexAllocator::new();
+            stmt.raw_bind_parameter(alloc.fetch_and_add(), label_id)?;
+            for id in ids {
+                stmt.raw_bind_parameter(alloc.fetch_and_add(), id)?;
+            }
+            stmt.raw_execute()?;
+        }
+
+        // Update conversation counts
+        let mut stmt = self.0.prepare(&format!(r"
+UPDATE label_conversation_count AS lcc SET total=total{operator}dm.num_messages, unread=unread{operator}dm.num_unread FROM (
+    SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages
+    FROM conversation_labels AS cl
+    WHERE cl.label_id=? AND cl.conversation_id IN ({})
+    GROUP BY cl.label_id
+) AS dm WHERE lcc.label_id=dm.label_id
+        ",conv_args))?;
+
+        let mut alloc = StmtIndexAllocator::new();
+        stmt.raw_bind_parameter(alloc.fetch_and_add(), label_id)?;
+        for id in ids {
+            stmt.raw_bind_parameter(alloc.fetch_and_add(), id)?;
+        }
+        stmt.raw_execute()?;
+
+        // conversation label context can be removed now
+        if delete {
+            let mut stmt = self.0.prepare(&format!(
+r"UPDATE conversation_labels SET ctx_time=0, ctx_size=0, ctx_num_messages=0, ctx_num_unread=0, ctx_num_attachments=0
+WHERE label_id=? AND conversation_id IN ({})",
+                conv_args
+            ))?;
+            let mut alloc = StmtIndexAllocator::new();
+            stmt.raw_bind_parameter(alloc.fetch_and_add(), label_id)?;
+            for id in ids {
+                stmt.raw_bind_parameter(alloc.fetch_and_add(), id)?;
+            }
+            stmt.raw_execute()?;
+        }
+
+        // Finally if all conversation_labels are deleted mark message as deleted or
+        self.0.execute(
+            &format!(
+                r"
+UPDATE conversations SET deleted=diff.deleted, num_messages=diff.`count`, num_unread=diff.unread,
+size=diff.size, num_attachments=diff.num_attachments
+FROM (
+    SELECT cl.conversation_id, 0==SUM(cl.ctx_num_messages) AS deleted,
+    SUM(cl.ctx_num_messages) AS `count`, SUM(cl.ctx_num_unread) AS unread,
+    SUM(cl.ctx_size) AS size, SUM(cl.ctx_num_attachments) AS num_attachments
+    FROM conversation_labels as cl
+    WHERE cl.conversation_id IN ({})
+    GROUP BY cl.conversation_id
+) as diff WHERE id = diff.conversation_id",
+                conv_args
+            ),
+            params_from_iter(ids),
+        )?;
+        Ok(())
+    }
+
+    fn mark_conversations_as_deleted_all_mail(
         &mut self,
         ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {
@@ -293,17 +470,15 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         )?;
 
         // Remove from labels.
-        self.remove_conversations_from_labels(&filtered_ids)?;
+        self.remove_conversations_from_all_labels(&filtered_ids)?;
         // Update message counters
-        self.mark_local_messages_as_deleted_with_conversation_ids(filtered_ids.into_iter())?;
+        self.mark_local_messages_as_deleted_with_conversation_ids_all_mail(
+            filtered_ids.into_iter(),
+        )?;
         Ok(())
     }
 
-    pub fn unmark_conversation_as_deleted(&mut self, id: LocalConversationId) -> DBResult<()> {
-        self.mark_conversations_as_deleted(std::iter::once(id))
-    }
-
-    pub fn unmark_conversations_as_deleted(
+    fn unmark_conversations_as_deleted_all_mail(
         &mut self,
         ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {
@@ -319,13 +494,17 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         )?;
 
         // Remove from labels.
-        self.add_conversations_to_labels(&filtered_ids)?;
+        self.add_conversations_to_all_labels(&filtered_ids)?;
         // Update message counters
-        self.unmark_local_messages_as_deleted_with_conversation_ids(filtered_ids.into_iter())?;
+        self.unmark_local_messages_as_deleted_with_conversation_ids_all_mail(
+            filtered_ids.into_iter(),
+        )?;
         Ok(())
     }
-
-    fn remove_conversations_from_labels(&mut self, ids: &[LocalConversationId]) -> DBResult<()> {
+    fn remove_conversations_from_all_labels(
+        &mut self,
+        ids: &[LocalConversationId],
+    ) -> DBResult<()> {
         self.0.execute(&format!(r"UPDATE label_conversation_count AS lcc SET total=total-dm.num_messages, unread=unread-dm.num_unread FROM (
             SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
             GROUP BY cl.label_id
@@ -334,7 +513,7 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         Ok(())
     }
 
-    fn add_conversations_to_labels(&mut self, ids: &[LocalConversationId]) -> DBResult<()> {
+    fn add_conversations_to_all_labels(&mut self, ids: &[LocalConversationId]) -> DBResult<()> {
         self.0.execute(&format!(r"UPDATE label_conversation_count AS lcc SET total=total+dm.num_messages, unread=unread+dm.num_unread FROM (
             SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
             GROUP BY cl.label_id

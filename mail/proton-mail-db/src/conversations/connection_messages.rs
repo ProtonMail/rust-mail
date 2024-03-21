@@ -367,6 +367,64 @@ WHERE deltas.conversation_id=conversations.id
 
     pub(super) fn mark_local_messages_as_deleted_with_conversation_ids(
         &mut self,
+        label_id: LocalLabelId,
+        conversation_ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let args = gen_variable_in_argument_list(conversation_ids.len());
+        let mut msg_ids: Vec<LocalMessageId> = Vec::with_capacity(conversation_ids.len());
+        let mut update_stmt = self.0.prepare(&format!(
+            "UPDATE messages SET deleted=1 WHERE conversation_id IN ({}) AND deleted = 0 \
+AND id IN (SELECT message_id FROM message_labels WHERE label_id=?) RETURNING id",
+            args
+        ))?;
+
+        let mut alloc = StmtIndexAllocator::new();
+        for id in conversation_ids {
+            update_stmt.raw_bind_parameter(alloc.fetch_and_add(), id)?;
+        }
+        update_stmt.raw_bind_parameter(alloc.fetch_and_add(), label_id)?;
+
+        mapped_rows_into_vec(&mut msg_ids, update_stmt.raw_query().mapped(|r| r.get(0)))?;
+
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        self.update_message_counters_after_delete_local(&msg_ids)?;
+        Ok(())
+    }
+
+    pub(super) fn unmark_local_messages_as_deleted_with_conversation_ids(
+        &mut self,
+        label_id: LocalLabelId,
+        conversation_ids: impl ExactSizeIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let args = gen_variable_in_argument_list(conversation_ids.len());
+        let mut msg_ids: Vec<LocalMessageId> = Vec::with_capacity(conversation_ids.len());
+        let mut update_stmt = self.0.prepare(&format!(
+            "UPDATE messages SET deleted=0 WHERE conversation_id IN ({}) AND deleted = 1 \
+AND id IN (SELECT message_id FROM message_labels WHERE label_id=?) RETURNING id",
+            args
+        ))?;
+
+        let mut alloc = StmtIndexAllocator::new();
+        for id in conversation_ids {
+            update_stmt.raw_bind_parameter(alloc.fetch_and_add(), id)?;
+        }
+        update_stmt.raw_bind_parameter(alloc.fetch_and_add(), label_id)?;
+
+        mapped_rows_into_vec(&mut msg_ids, update_stmt.raw_query().mapped(|r| r.get(0)))?;
+
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        self.update_message_counters_after_undelete_local(&msg_ids)?;
+        Ok(())
+    }
+
+    pub(super) fn mark_local_messages_as_deleted_with_conversation_ids_all_mail(
+        &mut self,
         conversation_ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {
         let args = gen_variable_in_argument_list(conversation_ids.len());
@@ -388,7 +446,7 @@ WHERE deltas.conversation_id=conversations.id
         Ok(())
     }
 
-    pub(super) fn unmark_local_messages_as_deleted_with_conversation_ids(
+    pub(super) fn unmark_local_messages_as_deleted_with_conversation_ids_all_mail(
         &mut self,
         conversation_ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {

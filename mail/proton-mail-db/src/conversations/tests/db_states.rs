@@ -5,7 +5,7 @@ use crate::conversations::tests::utils::TestDBState;
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
     AttachmentId, AttachmentMetadata, Conversation, ConversationId, ConversationLabels,
-    Disposition, MessageAddress, MessageId, MessageMetadata,
+    Disposition, Label, LabelId, LabelType, MessageAddress, MessageId, MessageMetadata,
 };
 use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 
@@ -24,7 +24,23 @@ pub(in crate::conversations) fn new_test_delete_db_state() -> TestDBState {
     let conv_id2 = DELETE_DB_CONV2.clone();
     TestDBState {
         addresses: vec![test_address()],
-        labels: vec![test_label1(), test_label2()],
+        labels: vec![
+            test_label1(),
+            test_label2(),
+            Label {
+                id: LabelId::all_mail().clone(),
+                parent_id: None,
+                name: "All Mail".to_string(),
+                path: None,
+                color: "".to_string(),
+                label_type: LabelType::System,
+                notify: Default::default(),
+                display: Default::default(),
+                sticky: Default::default(),
+                expanded: Default::default(),
+                order: 5,
+            },
+        ],
         conversations: vec![
             Conversation {
                 id: conv_id1.clone(),

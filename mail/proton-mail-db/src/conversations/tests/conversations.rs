@@ -327,13 +327,17 @@ fn test_conversation_update() {
 }
 
 #[test]
-fn test_conversation_undelete() {
+fn test_conversation_undelete_all_mail() {
     // Same as test_conversation_delete, but undoing the deletions should restore all the state
     // back to the initial values.
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let state = new_test_delete_db_state();
         let (state, state_map) = prepare_and_patch_db_state(tx, state);
+        let all_mail_label = tx
+            .resolve_remote_label_id(LabelId::all_mail())
+            .unwrap()
+            .unwrap();
 
         let local_conv_id1 = *state_map
             .conversations
@@ -345,11 +349,17 @@ fn test_conversation_undelete() {
             .unwrap();
         let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
         let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
-        tx.mark_conversations_as_deleted([local_conv_id1, local_conv_id2].into_iter())
-            .expect("failed to mark as deleted");
+        tx.mark_conversations_as_deleted(
+            all_mail_label,
+            [local_conv_id1, local_conv_id2].into_iter(),
+        )
+        .expect("failed to mark as deleted");
 
-        tx.unmark_conversations_as_deleted([local_conv_id1, local_conv_id2].into_iter())
-            .expect("failed to mark conversations as undeleted");
+        tx.unmark_conversations_as_deleted(
+            all_mail_label,
+            [local_conv_id1, local_conv_id2].into_iter(),
+        )
+        .expect("failed to mark conversations as undeleted");
 
         // Check conversation counts
         {
@@ -393,11 +403,17 @@ fn test_conversation_undelete() {
 }
 
 #[test]
-fn test_conversation_delete() {
+fn test_conversation_delete_all_mail() {
+    // Simulate conversation delete from all mail, all messages for the conversation a
+    // are deleted.
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let state = new_test_delete_db_state();
         let (state, state_map) = prepare_and_patch_db_state(tx, state);
+        let all_mail_label = tx
+            .resolve_remote_label_id(LabelId::all_mail())
+            .unwrap()
+            .unwrap();
 
         // Deleting a conversation must
         // * Update conversation counters
@@ -409,7 +425,7 @@ fn test_conversation_delete() {
             .unwrap();
         let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
         let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
-        tx.mark_conversation_as_deleted(local_conv_id)
+        tx.mark_conversation_as_deleted(all_mail_label, local_conv_id)
             .expect("failed to mark as deleted");
 
         let db_conversation = tx
@@ -471,7 +487,7 @@ fn test_conversation_delete() {
             .conversations
             .get(&state.conversations[1].id)
             .unwrap();
-        tx.mark_conversation_as_deleted(local_conv_id)
+        tx.mark_conversation_as_deleted(all_mail_label, local_conv_id)
             .expect("failed to mark conv as deleted");
 
         for count in tx.get_message_counts().unwrap() {
@@ -498,6 +514,220 @@ fn test_conversation_delete() {
                 "Label {:?} does not have 0 unread count",
                 count.id
             );
+        }
+    });
+}
+
+#[test]
+fn test_conversation_delete() {
+    // Simulate conversation according to API expectations, only delete conversations in that label.
+    // If conversation has messages in other labels, it must still exist.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_delete_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        // Deleting a conversation must
+        // * Update conversation counters
+        // * Update message counters
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+        tx.mark_conversation_as_deleted(local_label_id1, local_conv_id)
+            .expect("failed to mark as deleted");
+
+        let db_conversation = tx
+            .get_conversation(local_conv_id)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // No more unread messages
+        assert_eq!(db_conversation.num_unread, 0);
+        // Should only have one message in other label
+        assert_eq!(db_conversation.num_messages, 1);
+        assert_eq!(db_conversation.size, state.messages[1].size);
+        assert_eq!(
+            db_conversation.num_attachments,
+            state.messages[1].num_attachments as u64
+        );
+
+        // Check conversation counts
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            // Check conversation label1 values, conversation should have been removed.
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - 1);
+                assert_eq!(label_counts.total, start_label_counts.total - 1);
+            }
+            // Check conversation label2 values - should be unchanged.
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+        }
+
+        // Check message counts
+        {
+            let message_counts = msg_counts_as_map(tx);
+
+            // Check label1
+            {
+                let (unread, total) = message_counts_for_conversation(
+                    &state.messages,
+                    &state.conversations[0].id,
+                    &MY_LABEL_ID1,
+                );
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - unread);
+                assert_eq!(label_counts.total, start_label_counts.total - total);
+            }
+            // Check label2 - should be unchanged.
+            {
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = message_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+        }
+
+        // Deleting conv1 in label 2  should remove all traces of the  conversation
+        tx.mark_conversation_as_deleted(local_label_id2, local_conv_id)
+            .expect("failed to mark conv as deleted");
+
+        {
+            let db_conv = tx
+                .get_conversation(local_conv_id)
+                .expect("failed to get conversation");
+            assert!(db_conv.is_none());
+        }
+
+        // Check conversation counts
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            // Check conversation label1 values, should be empty
+            {
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 0);
+            }
+            // Check conversation label2 values, should be missing one conversation.
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total - 1);
+            }
+        }
+
+        // Check message counts
+        {
+            let message_counts = msg_counts_as_map(tx);
+
+            // Check label1
+            {
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 0);
+            }
+            // Check label2 - should be missing one message.
+            {
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = message_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total - 1);
+            }
+        }
+    });
+}
+
+#[test]
+fn test_conversation_undelete() {
+    // Same as test_conversation_delete, but checks for reverse operations.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_delete_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        // Deleting a conversation must
+        // * Update conversation counters
+        // * Update message counters
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+        tx.mark_conversation_as_deleted(local_label_id1, local_conv_id)
+            .expect("failed to mark as deleted");
+        tx.mark_conversation_as_deleted(local_label_id2, local_conv_id)
+            .expect("failed to mark as deleted");
+
+        tx.unmark_conversation_as_deleted(local_label_id2, local_conv_id)
+            .expect("Failed to mark as undeleted");
+        tx.unmark_conversation_as_deleted(local_label_id1, local_conv_id)
+            .expect("Failed to mark as undeleted");
+
+        let db_conversation = tx
+            .get_conversation(local_conv_id)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // Conversation should match original values.
+        {
+            let original = &state.conversations[0];
+            assert_eq!(db_conversation.num_unread, original.num_unread);
+            assert_eq!(db_conversation.num_messages, original.num_messages);
+            assert_eq!(db_conversation.size, original.size);
+            assert_eq!(db_conversation.num_attachments, original.num_attachments);
+        }
+
+        // Check conversation counts
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            // Check conversation label1 values, should match original state.
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+            // Check conversation label2 values - should be unchanged.
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+        }
+
+        // Check message counts
+        {
+            let message_counts = msg_counts_as_map(tx);
+
+            // Check label1 - should match original state.
+            {
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+            // Check label2 - should be unchanged.
+            {
+                let start_label_counts = state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = message_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
         }
     });
 }
