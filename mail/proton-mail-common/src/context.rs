@@ -1,6 +1,6 @@
 use crate::MailUserContext;
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
-use proton_api_mail::proton_api_core::http::HttpRequestError;
+use proton_api_mail::proton_api_core::http::{Client, HttpRequestError};
 use proton_api_mail::proton_api_core::login::LoginFlow;
 use proton_async::runtime::MTRuntime;
 use proton_core_common::os::{KeyChain, KeyChainError};
@@ -65,6 +65,7 @@ impl MailContext {
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
+        client: Client,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> Result<Self, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
@@ -75,6 +76,7 @@ impl MailContext {
             user_db_path,
             key_chain,
             initializers,
+            client,
             network_callback,
         )?;
 
