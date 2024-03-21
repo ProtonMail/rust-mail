@@ -99,6 +99,8 @@ impl MTRuntime {
         #[cfg(feature = "tokio-runtime")]
         Ok(Self(tokio_runtime::new_multi_thread_runtime(max_workers)?))
     }
+
+    /// Spawn a new async task.
     pub fn spawn<R: Send + 'static, F: Future<Output = R> + Send + 'static>(
         &self,
         f: F,
@@ -107,10 +109,25 @@ impl MTRuntime {
         RuntimeJoinHandle::new(self.0.spawn(f))
     }
 
+    /// Execute future and block on current thread until completion.
     pub fn block_on<R, F: Future<Output = R>>(&self, f: F) -> R {
         #[cfg(feature = "tokio-runtime")]
         self.0.block_on(f)
     }
+
+    /// Spawn a new blocking task on different thread pool.
+    pub fn spawn_blocking<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(
+        &self,
+        f: F,
+    ) -> JoinHandle<R> {
+        #[cfg(feature = "tokio-runtime")]
+        RuntimeJoinHandle::new(self.0.spawn_blocking(f))
+    }
+}
+
+pub fn spawn<R: Send + 'static, F: Future<Output = R> + Send + 'static>(f: F) -> JoinHandle<R> {
+    #[cfg(feature = "tokio-runtime")]
+    JoinHandle::new(tokio::spawn(f))
 }
 
 #[test]
@@ -141,9 +158,4 @@ fn test_mt_runtime() {
     runtime
         .block_on(async move { h.await })
         .expect("failed to wait");
-}
-
-pub fn spawn<R: Send + 'static, F: Future<Output = R> + Send + 'static>(f: F) -> JoinHandle<R> {
-    #[cfg(feature = "tokio-runtime")]
-    JoinHandle::new(tokio::spawn(f))
 }
