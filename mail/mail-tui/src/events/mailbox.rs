@@ -1,5 +1,5 @@
 use crate::state::MailboxStateError;
-use proton_mail_common::proton_mail_db::LocalLabelId;
+use proton_mail_common::proton_mail_db::{LocalConversationId, LocalLabelId};
 use proton_mail_common::MailUserContext;
 use std::fmt::Formatter;
 
@@ -11,7 +11,11 @@ pub enum MailboxEvent {
     LoadConversations(Result<(), MailboxStateError>),
     LoadLabelRequest(LocalLabelId),
     PollEventLoop,
+    ExecQueue,
     Logout,
+    DeleteConversation(LocalConversationId),
+    MarkConversationRead(LocalConversationId),
+    MarkConversationUnread(LocalConversationId),
 }
 
 // Custom debug formatter so that log doesn't implode with all the metadata.
@@ -39,8 +43,20 @@ impl std::fmt::Debug for MailboxEvent {
             MailboxEvent::PollEventLoop => {
                 write!(f, "MailboxEvent::PollEventLoop")
             }
+            MailboxEvent::ExecQueue => {
+                write!(f, "MailboxEvent::ExecQueue")
+            }
             MailboxEvent::Logout => {
                 write!(f, "MailboxEvent::Logout")
+            }
+            MailboxEvent::DeleteConversation(id) => {
+                write!(f, "MailboxEvent::DeleteConversation({id})")
+            }
+            MailboxEvent::MarkConversationRead(id) => {
+                write!(f, "MailboxEvent::MarkConversationRead({id})")
+            }
+            MailboxEvent::MarkConversationUnread(id) => {
+                write!(f, "MailboxEvent::MarkConversationUnread({id})")
             }
         }
     }

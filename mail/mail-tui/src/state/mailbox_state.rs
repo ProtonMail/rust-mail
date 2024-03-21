@@ -7,6 +7,7 @@ use proton_async::sync::mpsc::Sender;
 use proton_core_common::proton_core_db::proton_sqlite3::{
     InProcessTrackerService, LiveQuery, LiveQueryBuilder,
 };
+use proton_mail_common::exports::tracing::warn;
 use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::{debug, error};
 use proton_mail_common::proton_mail_db::proton_sqlite3::ObservableQuery;
@@ -44,6 +45,11 @@ pub enum MailboxStateError {
     NoContext,
 }
 
+enum BackgroundTask {
+    EventPoll,
+    FlushQueue,
+}
+
 pub struct MailboxState {
     user_context: Option<MailboxUserContextState>,
     labels_loading_state: LoadingState,
@@ -57,22 +63,20 @@ pub struct MailboxUserContextState {
     pub system_labels: LiveQuery<LabelsByTypeQueryWithConversationCount>,
     pub folders: LiveQuery<LabelsByTypeQueryWithConversationCount>,
     pub labels: LiveQuery<LabelsByTypeQueryWithConversationCount>,
-    event_loop_poller: Sender<()>,
+    event_loop_poller: Sender<BackgroundTask>,
 }
 
 impl MailboxUserContextState {
-    pub fn new(mailbox: Mailbox, event_loop_poller: Sender<()>) -> Self {
+    fn new(
+        mailbox: Mailbox,
+        mail_user_context: &MailUserContext,
+        event_loop_poller: Sender<BackgroundTask>,
+    ) -> Self {
         Self {
             conversations: mailbox.new_conversation_query(new_live_query, CONVERSATION_COUNT),
-            system_labels: mailbox
-                .user_context()
-                .new_system_labels_live_query(new_live_query),
-            folders: mailbox
-                .user_context()
-                .new_folder_labels_live_query(new_live_query),
-            labels: mailbox
-                .user_context()
-                .new_label_labels_live_query(new_live_query),
+            system_labels: mail_user_context.new_system_labels_live_query(new_live_query),
+            folders: mail_user_context.new_folder_labels_live_query(new_live_query),
+            labels: mail_user_context.new_label_labels_live_query(new_live_query),
             mailbox,
             event_loop_poller,
         }
@@ -147,23 +151,35 @@ impl MailboxState {
         let ctx = mailbox.user_context().clone();
         let dispatcher = app_dispatcher.background_dispatcher();
         let (s, r) = proton_async::sync::mpsc::unbounded();
+        let ctx_cloned = ctx.clone();
 
-        mailbox
-            .user_context()
-            .mail_context()
-            .async_runtime()
-            .spawn(async move {
-                loop {
-                    if r.recv_async().await.is_err() {
-                        return;
-                    }
-                    debug!("Polling Event Loop");
-                    if let Err(e) = ctx.poll_event_loop().await {
-                        dispatcher.set_error("Event Loop", e);
+        std::thread::spawn(move || loop {
+            let Ok(task) = r.recv() else {
+                return;
+            };
+            match task {
+                BackgroundTask::FlushQueue => {
+                    debug!("Executing Queue");
+                    if let Err(e) = ctx.execute_pending_actions() {
+                        dispatcher.set_error("Queue Error", e);
                     }
                 }
-            });
-        self.user_context = Some(MailboxUserContextState::new(mailbox, s));
+
+                BackgroundTask::EventPoll => {
+                    debug!("Polling Events");
+                    let ctx_cloned = ctx.clone();
+                    if let Err(e) = ctx
+                        .mail_context()
+                        .async_runtime()
+                        .block_on(async { ctx_cloned.poll_event_loop().await })
+                    {
+                        dispatcher.set_error("Event Loop Error", e);
+                    }
+                }
+            }
+        });
+
+        self.user_context = Some(MailboxUserContextState::new(mailbox, &ctx_cloned, s));
     }
 
     fn on_mailbox_open(
@@ -211,11 +227,30 @@ impl MailboxState {
     }
 
     pub fn poll_event_loop(&mut self) {
+        debug!("Submitting event loop poll");
         let Some(ctx) = &mut self.user_context else {
             return;
         };
-        if ctx.event_loop_poller.send(()).is_err() {
-            error!("Could not send poll request")
+        if ctx
+            .event_loop_poller
+            .send(BackgroundTask::EventPoll)
+            .is_err()
+        {
+            error!("Could not event poll request")
+        }
+    }
+
+    pub fn exec_queue(&mut self) {
+        debug!("Submitting queue exec");
+        let Some(ctx) = &mut self.user_context else {
+            return;
+        };
+        if ctx
+            .event_loop_poller
+            .send(BackgroundTask::FlushQueue)
+            .is_err()
+        {
+            error!("Could not queue exec request")
         }
     }
 
@@ -278,6 +313,45 @@ impl MailboxState {
             }
             MailboxEvent::PollEventLoop => {
                 self.poll_event_loop();
+            }
+            MailboxEvent::ExecQueue => {
+                self.exec_queue();
+            }
+            MailboxEvent::DeleteConversation(id) => {
+                if let Some(mailbox_context) = &self.user_context {
+                    if let Err(e) = mailbox_context
+                        .mailbox
+                        .delete_conversations(std::iter::once(id))
+                    {
+                        dispatcher.set_error("Failed to delete conversation", e);
+                    }
+                } else {
+                    warn!("No user context for delete conversation")
+                }
+            }
+            MailboxEvent::MarkConversationRead(id) => {
+                if let Some(mailbox_context) = &self.user_context {
+                    if let Err(e) = mailbox_context
+                        .mailbox
+                        .mark_conversations_read(std::iter::once(id))
+                    {
+                        dispatcher.set_error("Failed to mark conversation read", e);
+                    }
+                } else {
+                    warn!("No user context for mark conversation read")
+                }
+            }
+            MailboxEvent::MarkConversationUnread(id) => {
+                if let Some(mailbox_context) = &self.user_context {
+                    if let Err(e) = mailbox_context
+                        .mailbox
+                        .mark_conversations_unread(std::iter::once(id))
+                    {
+                        dispatcher.set_error("Failed to mark conversation unread", e);
+                    }
+                } else {
+                    warn!("No user context for mark conversation unread")
+                }
             }
         }
     }

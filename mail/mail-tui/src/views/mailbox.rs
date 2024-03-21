@@ -8,6 +8,7 @@ use crate::widgets::{
     WidgetList, WidgetListItem,
 };
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use proton_mail_common::exports::tracing::warn;
 use proton_mail_common::proton_api_mail::domain::LabelType;
 use proton_mail_common::proton_mail_db::{LocalLabelId, LocalLabelWithCount};
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
@@ -339,6 +340,10 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                         key: "P",
                         description: "Poll Events",
                     },
+                    HelpItem {
+                        key: "Ctrl+P",
+                        description: "Flush Queue",
+                    },
                 ],
             },
             HelpCategory {
@@ -356,6 +361,10 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                         key: "►",
                         description: "Go To Conversations",
                     },
+                    HelpItem {
+                        key: "d",
+                        description: "Delete selected label",
+                    },
                 ],
             },
             HelpCategory {
@@ -372,6 +381,18 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                     HelpItem {
                         key: "◄",
                         description: "Go to Labels",
+                    },
+                    HelpItem {
+                        key: "d",
+                        description: "Delete selected conversation",
+                    },
+                    HelpItem {
+                        key: "u",
+                        description: "Mark selected conversation unread",
+                    },
+                    HelpItem {
+                        key: "r",
+                        description: "Mark selected conversation read",
                     },
                 ],
             },
@@ -392,8 +413,13 @@ impl View<AppViewContext, AppEvent> for ConversationView {
             }
 
             if k.code == KeyCode::Char('p') && k.kind == KeyEventKind::Press {
-                ctx.app_local_dispatcher()
-                    .queue_event(MailboxEvent::PollEventLoop);
+                if k.modifiers == KeyModifiers::CONTROL {
+                    ctx.app_local_dispatcher()
+                        .queue_event(MailboxEvent::ExecQueue);
+                } else {
+                    ctx.app_local_dispatcher()
+                        .queue_event(MailboxEvent::PollEventLoop);
+                }
                 return;
             }
 
@@ -466,6 +492,69 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                             mailbox_state,
                             FocusedWidget::Labels(LabelType::System),
                         );
+                    }
+                    KeyCode::Char('d') => {
+                        if let Some(index) = self.conversation_list_state.selected() {
+                            if let Some(id) = if let Some(user_ctx) =
+                                ctx.state().mailbox_state.mailbox_context()
+                            {
+                                user_ctx
+                                    .conversations
+                                    .value()
+                                    .deref()
+                                    .get(index)
+                                    .map(|c| c.id)
+                            } else {
+                                None
+                            } {
+                                ctx.app_local_dispatcher()
+                                    .queue_event(MailboxEvent::DeleteConversation(id))
+                            }
+                        } else {
+                            warn!("No selected conversation")
+                        }
+                    }
+                    KeyCode::Char('u') => {
+                        if let Some(index) = self.conversation_list_state.selected() {
+                            if let Some(id) = if let Some(user_ctx) =
+                                ctx.state().mailbox_state.mailbox_context()
+                            {
+                                user_ctx
+                                    .conversations
+                                    .value()
+                                    .deref()
+                                    .get(index)
+                                    .map(|c| c.id)
+                            } else {
+                                None
+                            } {
+                                ctx.app_local_dispatcher()
+                                    .queue_event(MailboxEvent::MarkConversationUnread(id))
+                            }
+                        } else {
+                            warn!("No selected conversation")
+                        }
+                    }
+                    KeyCode::Char('r') => {
+                        if let Some(index) = self.conversation_list_state.selected() {
+                            if let Some(id) = if let Some(user_ctx) =
+                                ctx.state().mailbox_state.mailbox_context()
+                            {
+                                user_ctx
+                                    .conversations
+                                    .value()
+                                    .deref()
+                                    .get(index)
+                                    .map(|c| c.id)
+                            } else {
+                                None
+                            } {
+                                ctx.app_local_dispatcher()
+                                    .queue_event(MailboxEvent::MarkConversationRead(id))
+                            }
+                        } else {
+                            warn!("No selected conversation")
+                        }
                     }
                     _ => {}
                 },
