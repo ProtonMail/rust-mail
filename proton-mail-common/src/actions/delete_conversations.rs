@@ -49,7 +49,7 @@ impl<'c, 't: 'c> LocalActionHandler for DeleteConversationLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
         let conn = (*self.tx).deref();
         let mut tx = MailSqliteConnectionImpl::from(conn);
-        tx.mark_conversations_as_deleted(self.action.ids.iter().cloned())
+        tx.mark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
@@ -66,7 +66,7 @@ impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't>
     fn revert_local(&mut self) -> ActionResult<()> {
         let conn = (*self.tx).deref();
         let mut tx = MailSqliteConnectionImpl::from(conn);
-        tx.unmark_conversations_as_deleted(self.action.ids.iter().cloned())
+        tx.unmark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
@@ -109,7 +109,7 @@ impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't>
             let local_ids = tx
                 .remote_to_local_conversation_ids(failed_messages.iter())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
-            tx.unmark_conversations_as_deleted(local_ids.into_iter())
+            tx.unmark_conversations_as_deleted(self.action.label_id, local_ids.into_iter())
                 .map_err(|e| {
                     error!("Failed to rollback failed conversations: {e}");
                     ActionError::Local(anyhow!(e))
