@@ -18,7 +18,8 @@ pub fn avatar_initials(name: &str) -> String {
         .next()
         .map(|c| c.to_lowercase().to_string())
         .unwrap_or_default();
-    format!("{}{}", first, second);
+
+    format!("{}{}", first, second)
 }
 
 #[cfg(test)]
