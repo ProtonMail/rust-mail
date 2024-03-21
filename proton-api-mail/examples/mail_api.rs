@@ -1,5 +1,6 @@
 use proton_api_core::auth::{new_arc_auth_store, InMemoryStore};
 use proton_api_core::exports::tracing::level_filters::LevelFilter;
+use proton_api_core::http::APIEnvConfig;
 use proton_api_core::login::LoginFlow;
 use proton_api_core::{http, Session};
 use proton_api_mail::MailSession;
@@ -23,9 +24,10 @@ fn main() {
     tracing_subscriber::registry().with(file_subscriber).init();
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
+    let api_env_config = APIEnvConfig::default();
 
     let client = http::ClientBuilder::new()
-        .app_version("Other")
+        .api_env_config(api_env_config)
         .debug()
         .build()
         .unwrap();

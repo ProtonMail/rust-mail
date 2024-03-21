@@ -4,11 +4,13 @@ use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use pmc::exports::proton_event_loop::EventLoopError;
 use pmc::exports::{anyhow, thiserror, tracing};
-use pmc::proton_api_mail::proton_api_core::http::HttpRequestError;
+use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, HttpRequestError};
 use pmc::proton_core_common::proton_core_db::SessionEncryptionKey;
 use pmc::proton_mail_db;
 use pmc::proton_mail_db::DBMigrationError;
 use proton_mail_common as pmc;
+use proton_mail_common::exports::anyhow::anyhow;
+use proton_mail_common::proton_api_mail::proton_api_core::http;
 use proton_mail_common::proton_core_common::CoreSessionCallback;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -57,6 +59,7 @@ impl MailSession {
     /// * `user_dri`: Directory where the user db should be stored.
     /// * `log_dir:`: Directory where the log file should be stored.
     /// * `log_debug`: Whether to enable debug and trace logs
+    /// * `api_env_config`: The API environment configuration.
     /// * `key_chain`: KeyChain implementation
     /// * `network_callback`: Optional network status changed callback
     #[uniffi::constructor]
@@ -66,6 +69,7 @@ impl MailSession {
         log_dir: String,
         log_debug: bool,
         key_chain: Box<dyn OSKeyChain>,
+        api_env_config: Option<APIEnvConfig>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> MailSessionResult<Self> {
         let mut log_path = PathBuf::from(log_dir);
@@ -102,12 +106,31 @@ impl MailSession {
             MailSessionError::Other(anyhow::anyhow!("Failed to init async runtime: {e}"))
         })?;
 
+        // Creating client.
+        let api_env_config = match api_env_config {
+            Some(config) => config,
+            None => APIEnvConfig::default(),
+        };
+
+        let mut client = http::ClientBuilder::new().api_env_config(api_env_config);
+
+        if session_debug_enabled() {
+            client = client.debug();
+        }
+
+        let client = client.build().map_err(|e| {
+            MailSessionError::Http(HttpRequestError::Other(anyhow!(
+                "Failed to create client: {e}"
+            )))
+        })?;
+
         tracing::debug!("Creating Context");
         let mail_ctx = pmc::MailContext::new(
             runtime,
             session_path,
             user_path,
             Arc::from(FFIKeyChain::from(key_chain)),
+            client,
             network_callback.map(
                 |v| -> Box<dyn proton_mail_common::proton_core_common::NetworkStatusChanged> {
                     Box::new(FFINetworkStatusChanged::from(v))
@@ -179,4 +202,8 @@ impl From<pmc::MailContextError> for MailSessionError {
             pmc::MailContextError::ActionQueue(e) => Self::ActionQueue(e),
         }
     }
+}
+
+fn session_debug_enabled() -> bool {
+    std::env::var("PROTON_CORE_CTX_SESSION_DEBUG").is_ok()
 }
