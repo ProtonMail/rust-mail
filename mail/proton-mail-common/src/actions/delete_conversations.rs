@@ -5,7 +5,6 @@ use proton_action_queue::{
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
     SessionProvider, StoredAction,
 };
-use proton_api_mail::domain::LabelId;
 use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
@@ -76,9 +75,26 @@ impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't>
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        //TODO: need local label
         let conn = (*self.tx).deref();
         let mut tx = MailSqliteConnectionImpl::from(conn);
+
+        let Some(label) = tx
+            .label_with_id(self.action.label_id)
+            .map_err(|e| ActionError::Local(anyhow!(e)))?
+        else {
+            return Err(ActionError::Local(anyhow!(
+                "Could not resolve label with id {}",
+                self.action.label_id
+            )));
+        };
+
+        let Some(label_id) = label.rid else {
+            return Err(ActionError::Local(anyhow!(
+                "Label {} has no remote id",
+                self.action.label_id
+            )));
+        };
+
         let conv_ids = tx
             .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
             .map_err(|e| {
@@ -91,7 +107,7 @@ impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't>
             .async_runtime()
             .block_on(async {
                 self.session
-                    .delete_conversations(LabelId::all_mail(), &conv_ids)
+                    .delete_conversations(&label_id, &conv_ids)
                     .await
             })
             .map_err(|e| {
