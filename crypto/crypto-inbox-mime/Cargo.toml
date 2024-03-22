@@ -1,0 +1,18 @@
+[package]
+name = "proton-crypto-inbox-mime"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+mail-parser = "0.9.2"
+thiserror = "1"
+hex = "0.4.3"
+rand = "0.8.5"
+
+[dev-dependencies]
+proton-crypto = {path = "../proton-crypto", version = "0.2.0"}
+
+[lints]
+workspace = true
