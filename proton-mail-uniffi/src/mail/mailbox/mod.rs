@@ -1,6 +1,6 @@
 mod conversations;
 
-use crate::mail::{MailContextError, MailUserContext};
+use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, LiveQueryUpdated, ObservableQuery, SharedLiveQueryBuilder,
@@ -26,7 +26,7 @@ pub enum MailboxError {
     Context(
         #[from]
         #[source]
-        MailContextError,
+        MailSessionError,
     ),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
@@ -66,7 +66,7 @@ const DEFAULT_CONVERSATION_COUNT: usize = 50;
 impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub fn new(ctx: &MailUserContext, label_id: u64) -> Self {
+    pub fn new(ctx: &MailUserSession, label_id: u64) -> Self {
         Self {
             mbox: proton_mail_common::Mailbox::with_id(
                 ctx.ctx().clone(),
@@ -77,7 +77,7 @@ impl Mailbox {
 
     /// Create a new mailbox for Inbox.
     #[uniffi::constructor]
-    pub fn inbox(ctx: &MailUserContext) -> MailboxResult<Self> {
+    pub fn inbox(ctx: &MailUserSession) -> MailboxResult<Self> {
         Ok(Self {
             mbox: proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), LabelId::inbox())?,
         })

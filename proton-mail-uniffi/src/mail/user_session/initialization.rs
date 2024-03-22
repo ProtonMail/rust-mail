@@ -1,17 +1,17 @@
-use crate::mail::{MailContextError, MailContextResult, MailUserContext};
+use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::proton_api_mail::domain::LabelId;
 
 #[uniffi::export]
-impl MailUserContext {
+impl MailUserSession {
     /// Initialize the user context. Should be called at least once.
     ///
     /// *NOTE*: You should not create any [`crate::mail::Mailbox`] types until this initialization has
     /// completed.
     pub async fn initialize(
         &self,
-        cb: Box<dyn MailUserContextInitializationCallback>,
-    ) -> MailContextResult<()> {
+        cb: Box<dyn MailUserSessionInitializationCallback>,
+    ) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
         let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
         let h = self.ctx.mail_context().async_runtime().spawn(async move {
@@ -20,7 +20,7 @@ impl MailUserContext {
         });
         if let Err((_, err)) = h
             .await
-            .map_err(|e| MailContextError::Other(anyhow!("Failed to join task: {e}")))?
+            .map_err(|e| MailSessionError::Other(anyhow!("Failed to join task: {e}")))?
         {
             return Err(err.into());
         }
@@ -30,7 +30,7 @@ impl MailUserContext {
 
 /// Stage of the initialization that is currently being handled.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, uniffi::Enum)]
-pub enum MailUserContextInitializationStage {
+pub enum MailUserSessionInitializationStage {
     User,
     MailSettings,
     Addresses,
@@ -43,11 +43,11 @@ pub enum MailUserContextInitializationStage {
 
 /// Callback for initialization progress.
 #[uniffi::export(callback_interface)]
-pub trait MailUserContextInitializationCallback: Send + Sync {
+pub trait MailUserSessionInitializationCallback: Send + Sync {
     /// Called when a given initialization stage is entered.
-    fn on_stage(&self, stage: MailUserContextInitializationStage);
+    fn on_stage(&self, stage: MailUserSessionInitializationStage);
 }
-impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserContextInitializationStage {
+impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserSessionInitializationStage {
     fn from(value: proton_mail_common::MailUserContextLoadingStage) -> Self {
         match value {
             proton_mail_common::MailUserContextLoadingStage::User => Self::User,
@@ -62,9 +62,9 @@ impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserContextIn
     }
 }
 
-struct FFIMailUserInitializationCallback(Box<dyn MailUserContextInitializationCallback>);
-impl From<Box<dyn MailUserContextInitializationCallback>> for FFIMailUserInitializationCallback {
-    fn from(value: Box<dyn MailUserContextInitializationCallback>) -> Self {
+struct FFIMailUserInitializationCallback(Box<dyn MailUserSessionInitializationCallback>);
+impl From<Box<dyn MailUserSessionInitializationCallback>> for FFIMailUserInitializationCallback {
+    fn from(value: Box<dyn MailUserSessionInitializationCallback>) -> Self {
         Self(value)
     }
 }

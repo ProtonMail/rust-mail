@@ -1,4 +1,4 @@
-use crate::mail::{MailContextResult, MailUserContext};
+use crate::mail::{MailSessionResult, MailUserSession};
 use proton_mail_common as pmc;
 use proton_mail_common::exports::thiserror;
 use proton_mail_common::proton_api_mail::proton_api_core::domain::{
@@ -107,11 +107,11 @@ impl LoginFlow {
     }
 
     /// When the flow is considered logged in, transform it into a MailUserContext.
-    pub fn to_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
+    pub fn to_user_context(&self) -> MailSessionResult<Arc<MailUserSession>> {
         self.ctx.async_runtime().block_on(async {
             let guard = self.flow.lock().await;
             let user_ctx = self.ctx.user_context_from_login_flow(&guard)?;
-            Ok(MailUserContext::new(user_ctx))
+            Ok(MailUserSession::new(user_ctx))
         })
     }
 }

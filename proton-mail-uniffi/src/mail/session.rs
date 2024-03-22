@@ -1,7 +1,7 @@
 use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged};
 use crate::core::{FFISessionCallback, OSKeyChain, SessionCallback, StoredSession};
 use crate::mail::logging::init_log;
-use crate::mail::{LoginFlow, MailUserContext};
+use crate::mail::{LoginFlow, MailUserSession};
 use pmc::exports::proton_event_loop::EventLoopError;
 use pmc::exports::{anyhow, thiserror, tracing};
 use pmc::proton_api_mail::proton_api_core::http::HttpRequestError;
@@ -20,13 +20,13 @@ use std::sync::Arc;
 /// This object needs to be kept alive for the entire duration of the application.
 ///
 #[derive(uniffi::Object)]
-pub struct MailContext {
+pub struct MailSession {
     ctx: pmc::MailContext,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
-pub enum MailContextError {
+pub enum MailSessionError {
     #[error("Database Error: {0}")]
     DB(#[from] proton_mail_db::DBError),
     #[error("A Cryptography error occurred")]
@@ -48,10 +48,10 @@ pub enum MailContextError {
     #[error("{0}")]
     Other(anyhow::Error),
 }
-pub type MailContextResult<T> = Result<T, MailContextError>;
+pub type MailSessionResult<T> = Result<T, MailSessionError>;
 
 #[uniffi::export]
-impl MailContext {
+impl MailSession {
     /// Create a new mail context:
     /// * `session_dir`: Directory where the session db should be stored.
     /// * `user_dri`: Directory where the user db should be stored.
@@ -67,7 +67,7 @@ impl MailContext {
         log_debug: bool,
         key_chain: Box<dyn OSKeyChain>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
-    ) -> MailContextResult<Self> {
+    ) -> MailSessionResult<Self> {
         let mut log_path = PathBuf::from(log_dir);
         std::fs::create_dir_all(&log_path)?;
         log_path.push("proton-mail-uniffi.log");
@@ -86,20 +86,20 @@ impl MailContext {
         tracing::debug!("Checking keychain");
         if key_chain
             .get()
-            .map_err(|e| MailContextError::KeyChain(e.to_string()))?
+            .map_err(|e| MailSessionError::KeyChain(e.to_string()))?
             .is_none()
         {
             tracing::debug!("Key chain has no key, generating");
             let key = SessionEncryptionKey::random();
             key_chain.store(key.to_base64()).map_err(|e| {
                 tracing::error!("Failed to store key in keychain");
-                MailContextError::KeyChain(e.to_string())
+                MailSessionError::KeyChain(e.to_string())
             })?;
         }
 
         // Creating runtime.
         let runtime = proton_async::runtime::MTRuntime::new(4).map_err(|e| {
-            MailContextError::Other(anyhow::anyhow!("Failed to init async runtime: {e}"))
+            MailSessionError::Other(anyhow::anyhow!("Failed to init async runtime: {e}"))
         })?;
 
         tracing::debug!("Creating Context");
@@ -121,7 +121,7 @@ impl MailContext {
     pub fn new_login_flow(
         &self,
         cb: Option<Box<dyn SessionCallback>>,
-    ) -> MailContextResult<Arc<LoginFlow>> {
+    ) -> MailSessionResult<Arc<LoginFlow>> {
         let flow = self
             .ctx
             .new_login_flow(cb.map(|cb| -> Box<dyn CoreSessionCallback> {
@@ -131,7 +131,7 @@ impl MailContext {
     }
 
     /// Retrieve the currently stored sessions.
-    pub fn stored_sessions(&self) -> MailContextResult<Vec<Arc<StoredSession>>> {
+    pub fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
         let sessions = self.ctx.get_sessions()?;
         Ok(sessions
             .into_iter()
@@ -144,13 +144,13 @@ impl MailContext {
         &self,
         session: &StoredSession,
         cb: Option<Box<dyn SessionCallback>>,
-    ) -> MailContextResult<Arc<MailUserContext>> {
+    ) -> MailSessionResult<Arc<MailUserSession>> {
         let cb =
             cb.map(|cb| -> Box<dyn CoreSessionCallback> { Box::new(FFISessionCallback::from(cb)) });
         let ctx = self
             .ctx
             .user_context_from_session(session.encrypted_session(), cb)?;
-        Ok(MailUserContext::new(ctx))
+        Ok(MailUserSession::new(ctx))
     }
 
     /// Check whether the network is connected/online.
@@ -164,18 +164,18 @@ impl MailContext {
     }
 }
 
-impl From<pmc::MailContextError> for MailContextError {
+impl From<pmc::MailContextError> for MailSessionError {
     fn from(value: proton_mail_common::MailContextError) -> Self {
         match value {
-            pmc::MailContextError::DB(v) => MailContextError::DB(v),
-            pmc::MailContextError::Crypto => MailContextError::Crypto,
-            pmc::MailContextError::KeyChain(k) => MailContextError::KeyChain(k.to_string()),
-            pmc::MailContextError::IO(io) => MailContextError::IO(io),
-            pmc::MailContextError::DBMigration(err) => MailContextError::DBMigration(err),
-            pmc::MailContextError::KeyChainHasNoKey => MailContextError::KeyChainHasNoKey,
-            pmc::MailContextError::Http(err) => MailContextError::Http(err),
-            pmc::MailContextError::EventLoop(err) => MailContextError::EventLoop(err),
-            pmc::MailContextError::Other(err) => MailContextError::Other(err),
+            pmc::MailContextError::DB(v) => MailSessionError::DB(v),
+            pmc::MailContextError::Crypto => MailSessionError::Crypto,
+            pmc::MailContextError::KeyChain(k) => MailSessionError::KeyChain(k.to_string()),
+            pmc::MailContextError::IO(io) => MailSessionError::IO(io),
+            pmc::MailContextError::DBMigration(err) => MailSessionError::DBMigration(err),
+            pmc::MailContextError::KeyChainHasNoKey => MailSessionError::KeyChainHasNoKey,
+            pmc::MailContextError::Http(err) => MailSessionError::Http(err),
+            pmc::MailContextError::EventLoop(err) => MailSessionError::EventLoop(err),
+            pmc::MailContextError::Other(err) => MailSessionError::Other(err),
             pmc::MailContextError::ActionQueue(e) => Self::ActionQueue(e),
         }
     }
