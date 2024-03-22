@@ -1,4 +1,4 @@
-use super::ProtonBoolean;
+use super::{bool_from_integer, bool_to_integer};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -92,9 +92,17 @@ pub struct LockedKey {
     /// (Deprecated) Migrated accounts do not have the activation field set.
     pub activation: Option<String>,
     /// Is the key the primary key to use.
-    pub primary: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub primary: bool,
     /// The key is active and should be decryptable.
-    pub active: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub active: bool,
     /// Key flags encoded in a bitmap.
     pub flags: Option<KeyFlag>, // Only available for address keys
     /// Secret for key recovery of a local file.
@@ -152,5 +160,9 @@ pub struct APIPublicAddressKeys {
     #[serde(rename = "ProtonMX")]
     pub proton_mx: bool,
     /// Tells whether this is an official Proton address.
-    pub is_proton: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_proton: bool,
 }

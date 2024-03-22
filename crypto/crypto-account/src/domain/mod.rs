@@ -1,6 +1,5 @@
 //! Proton key domain types.
 mod keys;
-use std::fmt::{Display, Formatter};
 
 pub use keys::*;
 mod address_keys;
@@ -8,7 +7,7 @@ pub use address_keys::*;
 mod public_address_keys;
 pub use public_address_keys::*;
 mod user_keys;
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde::{Deserialize, Deserializer, Serializer};
 pub use user_keys::*;
 mod signed_key_list;
 pub use signed_key_list::*;
@@ -34,44 +33,21 @@ impl<T> From<UnlockResult<T>> for Vec<T> {
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize_repr, Deserialize_repr, Eq, PartialEq, Hash)]
-#[repr(u8)]
-pub enum ProtonBoolean {
-    False = 0,
-    True = 1,
-}
-
-impl Default for ProtonBoolean {
-    fn default() -> Self {
-        Self::False
+/// Deserialize bool from integer
+pub(crate) fn bool_from_integer<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    if i64::deserialize(deserializer)? == 0_i64 {
+        Ok(false)
+    } else {
+        Ok(true)
     }
 }
 
-impl From<ProtonBoolean> for bool {
-    fn from(value: ProtonBoolean) -> Self {
-        value == ProtonBoolean::True
-    }
-}
-
-impl From<bool> for ProtonBoolean {
-    fn from(v: bool) -> Self {
-        if v {
-            ProtonBoolean::True
-        } else {
-            ProtonBoolean::False
-        }
-    }
-}
-
-impl Display for ProtonBoolean {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProtonBoolean::False => {
-                write!(f, "0")
-            }
-            ProtonBoolean::True => {
-                write!(f, "1")
-            }
-        }
-    }
+pub(crate) fn bool_to_integer<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_u8(if *value { 1 } else { 0 })
 }

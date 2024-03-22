@@ -1,7 +1,7 @@
 use proton_crypto::{crypto::PGPProviderSync, new_pgp_provider};
 use proton_crypto_account::domain::{
     APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKey, APIPublicKeySource, KeyFlag,
-    ProtonBoolean, SKLSignature, SignedKeyList,
+    SKLSignature, SignedKeyList,
 };
 use proton_crypto_inbox::keys::{AddressType, InboxImportedPublicKeys, RecipientType};
 
@@ -30,7 +30,7 @@ fn get_test_public_key<T: PGPProviderSync>(provider: &T) -> InboxImportedPublicK
         unverified_keys: None,
         warnings: vec![String::from("this is a warning")],
         proton_mx: true,
-        is_proton: ProtonBoolean::False,
+        is_proton: false,
     };
     api_keys
         .import(provider)

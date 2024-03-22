@@ -8,7 +8,7 @@ use proton_crypto::crypto::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::{KeyFlag, ProtonBoolean};
+use super::{bool_from_integer, bool_to_integer, KeyFlag};
 
 pub const KT_SKL_VERIFICATION_CONTEXT_VALUE: &str = "key-transparency.key-list";
 
@@ -36,7 +36,11 @@ pub struct SignedKeyListData {
     #[serde(rename = "SHA256Fingerprints")]
     pub sha265_fingerprints: Vec<SHA256Fingerprint>,
     pub flags: KeyFlag,
-    pub primary: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub primary: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]

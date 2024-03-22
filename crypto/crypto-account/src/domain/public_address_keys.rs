@@ -162,7 +162,7 @@ impl APIPublicAddressKeys {
             unverified: unverified_keys,
             warnings: self.warnings.clone(),
             proton_mx: self.proton_mx,
-            is_proton: self.is_proton.into(),
+            is_proton: self.is_proton,
         })
     }
     /// Imports all keys with the PGP provider asynchronously.
@@ -185,7 +185,7 @@ impl APIPublicAddressKeys {
             unverified: unverified_keys,
             warnings: self.warnings.clone(),
             proton_mx: self.proton_mx,
-            is_proton: self.is_proton.into(),
+            is_proton: self.is_proton,
         })
     }
 }
