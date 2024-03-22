@@ -30,4 +30,18 @@ impl Mailbox {
             .delete_conversations(ids.into_iter().map(LocalConversationId::from))?;
         Ok(())
     }
+
+    /// Mark the given conversations as read.
+    pub fn mark_conversations_read(&self, ids: Vec<u64>) -> Result<(), MailboxError> {
+        self.mbox
+            .mark_conversations_read(ids.into_iter().map(LocalConversationId::from))?;
+        Ok(())
+    }
+
+    /// Mark the given conversations as unread.
+    pub fn mark_conversations_unread(&self, ids: Vec<u64>) -> Result<(), MailboxError> {
+        self.mbox
+            .mark_conversations_unread(ids.into_iter().map(LocalConversationId::from))?;
+        Ok(())
+    }
 }

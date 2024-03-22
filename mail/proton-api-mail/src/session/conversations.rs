@@ -1,9 +1,9 @@
 use super::MailSession;
 use crate::domain::{ConversationCount, ConversationFilter, ConversationId, LabelId};
 use crate::requests::{
-    DeleteConversationsRequest, DeleteConversationsResponseObject, GetConversationCountsRequest,
+    ConversationsResponseObject, DeleteConversationsRequest, GetConversationCountsRequest,
     GetConversationRequest, GetConversationResponse, GetConversationsRequest,
-    GetConversationsResponse,
+    GetConversationsResponse, MarkConversationsReadRequest, MarkConversationsUnreadRequest,
 };
 use proton_api_core::http;
 
@@ -39,9 +39,29 @@ impl MailSession {
         &self,
         label_id: &LabelId,
         ids: &[ConversationId],
-    ) -> Result<Vec<DeleteConversationsResponseObject>, http::HttpRequestError> {
+    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
         self.session
             .execute_request(DeleteConversationsRequest::new(label_id, ids))
+            .await
+            .map(|r| r.responses)
+    }
+
+    pub async fn mark_conversations_read(
+        &self,
+        ids: &[ConversationId],
+    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+        self.session
+            .execute_request(MarkConversationsReadRequest::new(ids))
+            .await
+            .map(|r| r.responses)
+    }
+
+    pub async fn mark_conversations_unread(
+        &self,
+        ids: &[ConversationId],
+    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+        self.session
+            .execute_request(MarkConversationsUnreadRequest::new(ids))
             .await
             .map(|r| r.responses)
     }

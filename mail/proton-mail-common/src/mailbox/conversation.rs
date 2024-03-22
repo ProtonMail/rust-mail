@@ -1,4 +1,6 @@
-use crate::actions::DeleteConversationsAction;
+use crate::actions::{
+    DeleteConversationsAction, MarkConversationsReadAction, MarkConversationsUnreadAction,
+};
 use crate::{
     Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
@@ -59,10 +61,28 @@ impl Mailbox {
 
     pub fn delete_conversations(
         &self,
-        ids: impl Iterator<Item = LocalConversationId>,
+        ids: impl IntoIterator<Item = LocalConversationId>,
     ) -> MailboxResult<()> {
         self.user_ctx
             .queue_action(DeleteConversationsAction::new(self.label_id, ids))?;
+        Ok(())
+    }
+
+    pub fn mark_conversations_read(
+        &self,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        self.user_ctx
+            .queue_action(MarkConversationsReadAction::new(ids))?;
+        Ok(())
+    }
+
+    pub fn mark_conversations_unread(
+        &self,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        self.user_ctx
+            .queue_action(MarkConversationsUnreadAction::new(ids))?;
         Ok(())
     }
 }

@@ -125,12 +125,12 @@ impl<'a> DeleteConversationsRequest<'a> {
 #[serde(crate = "self::serde")]
 pub struct DeleteConversationsResponse {
     #[serde(rename = "Responses")]
-    pub responses: Vec<DeleteConversationsResponseObject>,
+    pub responses: Vec<ConversationsResponseObject>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(crate = "self::serde")]
-pub struct DeleteConversationsResponseObject {
+pub struct ConversationsResponseObject {
     #[serde(rename = "ID")]
     pub id: ConversationId,
     #[serde(rename = "Response")]
@@ -143,5 +143,63 @@ impl<'c> http::RequestDesc for DeleteConversationsRequest<'c> {
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Put, "mail/v4/conversations/delete").json(self)
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(crate = "self::serde")]
+pub struct MarkConversationsReadRequest<'a> {
+    #[serde(rename = "IDs")]
+    pub ids: &'a [ConversationId],
+}
+
+impl<'a> MarkConversationsReadRequest<'a> {
+    pub fn new(ids: &'a [ConversationId]) -> Self {
+        Self { ids }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(crate = "self::serde")]
+pub struct MarkConversationsReadResponse {
+    #[serde(rename = "Responses")]
+    pub responses: Vec<ConversationsResponseObject>,
+}
+
+impl<'c> http::RequestDesc for MarkConversationsReadRequest<'c> {
+    type Output = MarkConversationsReadResponse;
+    type Response = JsonResponse<Self::Output>;
+
+    fn build(&self) -> RequestData {
+        RequestData::new(Method::Put, "mail/v4/conversations/read").json(self)
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(crate = "self::serde")]
+pub struct MarkConversationsUnreadRequest<'a> {
+    #[serde(rename = "IDs")]
+    pub ids: &'a [ConversationId],
+}
+
+impl<'a> MarkConversationsUnreadRequest<'a> {
+    pub fn new(ids: &'a [ConversationId]) -> Self {
+        Self { ids }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(crate = "self::serde")]
+pub struct MarkConversationsUnreadResponse {
+    #[serde(rename = "Responses")]
+    pub responses: Vec<ConversationsResponseObject>,
+}
+
+impl<'c> http::RequestDesc for MarkConversationsUnreadRequest<'c> {
+    type Output = MarkConversationsUnreadResponse;
+    type Response = JsonResponse<Self::Output>;
+
+    fn build(&self) -> RequestData {
+        RequestData::new(Method::Put, "mail/v4/conversations/unread").json(self)
     }
 }
