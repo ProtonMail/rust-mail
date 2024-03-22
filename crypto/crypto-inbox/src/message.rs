@@ -8,34 +8,62 @@ use proton_crypto::crypto::{
 #[derive(Debug, thiserror::Error)]
 pub enum MessageError {
     #[error("Failed to decrypt the message body: {0}")]
-    MessageDecryption(Box<dyn std::error::Error>),
+    Decryption(Box<dyn std::error::Error>),
     #[error("Failed to decode message body to utf-8 string: {0}")]
-    MessageBodyDecode(#[from] FromUtf8Error),
+    BodyDecode(#[from] FromUtf8Error),
     #[error("Mime is currently not supported")]
     NotSupportedMime,
 }
 
-/// A decrypted e-mail message body that contains signatures for lacy verification.
-pub struct DecryptedMessageBody {
+/// A decrypted message body that either contains a plain body or a decrypted `mime` body.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum DecryptedBody {
+    Plain(String),
+    Mime(DecryptedMimeBody),
+}
+
+/// A decrypted message body of a encrypted mime message.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct DecryptedMimeBody {
+    body: String, // TODO: For mime more information is included here such as attachments, decrypted subject etc.
+}
+
+impl AsRef<str> for DecryptedBody {
+    fn as_ref(&self) -> &str {
+        match self {
+            DecryptedBody::Plain(body) => body,
+            DecryptedBody::Mime(mime_body) => &mime_body.body,
+        }
+    }
+}
+
+impl DecryptedBody {
+    /// Returns a reference to the decrypted message body.
+    pub fn body(&self) -> &str {
+        self.as_ref()
+    }
+    /// Consumes the type and returns the body of the message.
+    pub fn into_string(self) -> String {
+        match self {
+            DecryptedBody::Plain(body) => body,
+            DecryptedBody::Mime(mime_body) => mime_body.body,
+        }
+    }
+    /// Returns whether this decryption result is from an encrypted mime message.
+    pub fn is_mime(&self) -> bool {
+        matches!(self, DecryptedBody::Mime(_))
+    }
+}
+
+/// Allows for lazy message body signature verification.
+#[derive(Debug, Clone)]
+pub struct VerifiableBody {
     is_decrypted_mime: bool,
-    decrypted_body: String,
-    // Used for lacy signature verification
     decrypted_raw: Vec<u8>,
     signatures: Vec<u8>,
 }
 
-impl AsRef<str> for DecryptedMessageBody {
-    fn as_ref(&self) -> &str {
-        &self.decrypted_body
-    }
-}
-
-impl DecryptedMessageBody {
-    /// Consumes the type and returns the body of the message.
-    pub fn into_string(self) -> String {
-        self.decrypted_body
-    }
-
+impl VerifiableBody {
     /// Allows to verify the signatures of the message after decryption.
     ///
     /// The signatures verification is separate because the fetch/verification
@@ -64,7 +92,7 @@ impl DecryptedMessageBody {
     }
 }
 
-pub trait MessageDecryption {
+pub trait DecryptableMessage {
     /// Indicates wether the message is mime.
     ///
     /// If it returns true mime decryption is triggered.
@@ -80,43 +108,33 @@ pub trait MessageDecryption {
         &self,
         pgp_provider: &T,
         decryption_keys: &[impl AsRef<T::PrivateKey>],
-    ) -> Result<DecryptedMessageBody, MessageError> {
+    ) -> Result<(DecryptedBody, VerifiableBody), MessageError> {
         if self.message_is_mime() {
             decrypt_mime(pgp_provider)
         } else {
             decrypt_normal(pgp_provider, decryption_keys, self.message_encrypted_body())
         }
     }
-    /// Decrypts the body of the message with a password (EO encrypt once feature).
-    fn decrypt_eo<T: PGPProviderSync>(
+    /// Decrypts the body of the message with a password (EO encrypt-once feature).
+    fn decrypt_encrypt_once<T: PGPProviderSync>(
         &self,
         pgp_provider: &T,
         passphrase: impl AsRef<str>,
-    ) -> Result<DecryptedMessageBody, MessageError> {
-        if self.message_is_mime() {
-            decrypt_mime(pgp_provider)
-        } else {
-            let decrypted_message = pgp_provider
-                .new_decryptor()
-                .with_passphrase(passphrase.as_ref())
-                .decrypt(self.message_encrypted_body(), DataEncoding::Armor)
-                .map_err(MessageError::MessageDecryption)?;
-            // We have to sanitize outside of encryption for lacy signature verification.
-            let (decrypted_raw, decrypted_body) =
-                to_sanitized_string(decrypted_message.into_vec())?;
-            Ok(DecryptedMessageBody {
-                is_decrypted_mime: false,
-                decrypted_body,
-                decrypted_raw,
-                signatures: Vec::new(),
-            })
-        }
+    ) -> Result<DecryptedBody, MessageError> {
+        let decrypted_message = pgp_provider
+            .new_decryptor()
+            .with_passphrase(passphrase.as_ref())
+            .with_ut8_sanitization()
+            .decrypt(self.message_encrypted_body(), DataEncoding::Armor)
+            .map_err(MessageError::Decryption)?;
+        let decoded_message = String::from_utf8(decrypted_message.into_vec())?;
+        Ok(DecryptedBody::Plain(decoded_message))
     }
 }
 
 fn decrypt_mime<T: PGPProviderSync>(
     _pgp_provider: &T,
-) -> Result<DecryptedMessageBody, MessageError> {
+) -> Result<(DecryptedBody, VerifiableBody), MessageError> {
     Err(MessageError::NotSupportedMime)
 }
 
@@ -124,21 +142,22 @@ fn decrypt_normal<T: PGPProviderSync>(
     pgp_provider: &T,
     decryption_keys: &[impl AsRef<T::PrivateKey>],
     data: &[u8],
-) -> Result<DecryptedMessageBody, MessageError> {
+) -> Result<(DecryptedBody, VerifiableBody), MessageError> {
     let decrypted_message = pgp_provider
         .new_decryptor()
         .with_decryption_key_refs(decryption_keys)
         .decrypt(data, DataEncoding::Armor)
-        .map_err(MessageError::MessageDecryption)?;
+        .map_err(MessageError::Decryption)?;
     let signatures = decrypted_message.signatures().unwrap_or_default();
-    // We have to sanitize outside of encryption for lacy signature verification.
+    // We have to sanitize outside of encryption for lazy signature verification.
     let (decrypted_raw, decrypted_body) = to_sanitized_string(decrypted_message.into_vec())?;
-    Ok(DecryptedMessageBody {
+    let decrypted_body = DecryptedBody::Plain(decrypted_body);
+    let verifier = VerifiableBody {
         is_decrypted_mime: false,
-        decrypted_body,
         decrypted_raw,
         signatures,
-    })
+    };
+    Ok((decrypted_body, verifier))
 }
 
 fn to_sanitized_string(data: Vec<u8>) -> Result<(Vec<u8>, String), MessageError> {

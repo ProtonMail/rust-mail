@@ -1,5 +1,5 @@
 use proton_crypto::crypto::VerificationError;
-use proton_crypto_inbox::message::MessageDecryption;
+use proton_crypto_inbox::message::DecryptableMessage;
 
 mod common;
 use common::{get_test_address_keys, get_test_public_address_keys};
@@ -10,7 +10,7 @@ const TEST_EXPECTED_BODY: &str = r#"<div style="font-family: Arial, sans-serif; 
 
 struct TestMessage(pub String);
 
-impl MessageDecryption for TestMessage {
+impl DecryptableMessage for TestMessage {
     fn message_is_mime(&self) -> bool {
         false
     }
@@ -26,15 +26,15 @@ fn test_message_decrypt_and_verify() {
     let decryption_keys = get_test_address_keys(&pgp_provider);
     let mut verification_keys = get_test_public_address_keys(&pgp_provider);
     let test_message = TestMessage(TEST_MESSAGE_BODY.into());
-    let decrypted_message = test_message
+    let (decrypted_message, verifier) = test_message
         .decrypt(&pgp_provider, &decryption_keys)
         .unwrap();
     assert_eq!(decrypted_message.as_ref(), TEST_EXPECTED_BODY);
-    let verification_result = decrypted_message.verify_signature(&pgp_provider, &verification_keys);
+    let verification_result = verifier.verify_signature(&pgp_provider, &verification_keys);
     assert!(verification_result.is_ok());
     verification_keys.remove(0);
     let verification_result_no_verifier =
-        decrypted_message.verify_signature(&pgp_provider, &verification_keys);
+        verifier.verify_signature(&pgp_provider, &verification_keys);
     assert!(matches!(
         verification_result_no_verifier.unwrap_err(),
         VerificationError::NoVerifier(_)
