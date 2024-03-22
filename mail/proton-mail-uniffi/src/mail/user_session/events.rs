@@ -1,11 +1,11 @@
-use crate::mail::MailUserContext;
+use crate::mail::MailUserSession;
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_event_loop::{EventLoopError as ELError, SubscriberError};
 use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError;
 
 #[uniffi::export]
-impl MailUserContext {
+impl MailUserSession {
     /// Poll Event loop and apply events.
     ///
     /// *NOTE*: do not call this function concurrently.

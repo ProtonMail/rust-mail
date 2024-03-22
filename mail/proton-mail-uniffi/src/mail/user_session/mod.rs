@@ -4,27 +4,27 @@ mod initialization;
 mod labels;
 mod settings;
 
-use crate::mail::{map_task_join_error, MailContextError};
+use crate::mail::{map_task_join_error, MailSessionError};
 use proton_mail_common as pmc;
 use std::sync::Arc;
 
-/// [`MailUserContext`] contains all the relevant information for an active user session, you
+/// [`MailUserSession`] contains all the relevant information for an active user session, you
 /// obtain one by completing the [`crate::mail::LoginFlow`] or restoring an existing session
-/// with [`crate::mail::MailContext::user_context_from_session`].
+/// with [`crate::mail::MailSession::user_context_from_session`].
 ///
 /// # Initialization
-/// [`MailUserContext`] *needs to be initialized ([`MailUserContext::initialize`]) once after a
+/// [`MailUserSession`] *needs to be initialized ([`MailUserSession::initialize`]) once after a
 /// new session is created*. This is required in order pre-load all the relevant user state.
 /// No [`crate::mail::Mailbox`] instances should be created until then.
 ///
 /// # Lifetime
 /// This object needs to be kept alive for the duration of an active user session.
 #[derive(uniffi::Object)]
-pub struct MailUserContext {
+pub struct MailUserSession {
     ctx: pmc::MailUserContext,
 }
 
-impl MailUserContext {
+impl MailUserSession {
     pub(crate) fn new(ctx: pmc::MailUserContext) -> Arc<Self> {
         Arc::new(Self { ctx })
     }
@@ -34,9 +34,9 @@ impl MailUserContext {
 }
 
 #[uniffi::export]
-impl MailUserContext {
+impl MailUserSession {
     /// Log out a session.
-    pub async fn logout(&self) -> Result<(), MailContextError> {
+    pub async fn logout(&self) -> Result<(), MailSessionError> {
         let ctx = self.ctx().clone();
         let handle = self
             .ctx

@@ -1,5 +1,5 @@
 use crate::mail::mailbox::MailboxLiveQueryUpdatedCallback;
-use crate::mail::MailUserContext;
+use crate::mail::MailUserSession;
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, ObservableQuery, SharedLiveQuery, SharedLiveQueryBuilder,
 };
@@ -8,7 +8,7 @@ use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
 
 #[uniffi::export]
-impl MailUserContext {
+impl MailUserSession {
     /// Create a query observer on labels of type System.
     pub fn new_system_labels_observed_query(
         &self,
