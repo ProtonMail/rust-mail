@@ -3,7 +3,7 @@ use crate::conversations::types::{LocalConversation, LocalConversationId};
 use crate::json::{deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer};
 use crate::{
     DBResult, DeletedState, LocalAttachmentMetadata, LocalConversationCount,
-    LocalConversationLabel, LocalLabelId, MailSqliteConnectionImpl,
+    LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -601,6 +601,194 @@ FROM (
             stmt.query_map(params_from_iter(ids), |r| r.get(0))?,
         )?;
         Ok(result)
+    }
+
+    pub fn mark_conversation_read(&mut self, id: LocalConversationId) -> DBResult<()> {
+        self.mark_conversations_read(std::iter::once(id))
+    }
+
+    pub fn mark_conversations_read(
+        &mut self,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let mut ids = Vec::from_iter(ids);
+        assert!(ids.len() < 512);
+        let conv_args = gen_variable_in_argument_list(ids.len());
+        // filter all conversations which are unread
+
+        let mut filter_stmt = self.0.prepare(&format!(
+            "UPDATE conversations SET num_unread=0 WHERE id IN ({}) AND num_unread<>0 RETURNING ID",
+            conv_args
+        ))?;
+
+        let row = filter_stmt.query_map(params_from_iter(&ids), |r| r.get(0))?;
+        ids.clear();
+        mapped_rows_into_vec(&mut ids, row)?;
+
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        let conv_args = gen_variable_in_argument_list(ids.len());
+
+        // Update unread conversation count
+        self.0.execute(
+            &format!(
+                r"
+WITH conv_labels AS (
+    SELECT label_id, SUM(ctx_num_unread<>0) AS num_unread
+    FROM conversation_labels WHERE conversation_id IN ({})
+    GROUP BY label_id
+)
+UPDATE label_conversation_count SET unread=unread-conv_labels.num_unread
+FROM conv_labels
+WHERE label_conversation_count.label_id = conv_labels.label_id",
+                conv_args
+            ),
+            params_from_iter(&ids),
+        )?;
+
+        // Set all conversation label contexts ctx_num_read to 0
+        self.0.execute(
+            &format!(
+                "UPDATE conversation_labels SET ctx_num_unread=0 WHERE conversation_id IN ({})",
+                conv_args
+            ),
+            params_from_iter(&ids),
+        )?;
+
+        // Mark all messages with conversation as read
+        let mut msg_ids: Vec<LocalMessageId> = Vec::with_capacity(ids.len());
+        {
+            let mut msg_stmt = self.0.prepare(&format!("UPDATE messages SET unread=0 WHERE conversation_id IN ({}) AND unread<>0 RETURNING id", conv_args))?;
+            mapped_rows_into_vec(
+                &mut msg_ids,
+                msg_stmt.query_map(params_from_iter(&ids), |r| r.get(0))?,
+            )?;
+        }
+
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        // Update message counts
+        self.0.execute(
+            &format!(
+                r"
+WITH msg_labels AS (
+    SELECT label_id, COUNT(message_id) AS diff_unread
+    FROM message_labels
+    WHERE message_id IN ({})
+    GROUP BY label_id
+)
+
+UPDATE label_message_count SET unread=unread-msg_labels.diff_unread
+FROM msg_labels
+WHERE label_message_count.label_id = msg_labels.label_id
+        ",
+                gen_variable_in_argument_list(msg_ids.len())
+            ),
+            params_from_iter(msg_ids),
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_conversation_unread(&mut self, id: LocalConversationId) -> DBResult<()> {
+        self.mark_conversations_unread(std::iter::once(id))
+    }
+
+    pub fn mark_conversations_unread(
+        &mut self,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let ids = ids.into_iter();
+        let size_hint = ids.size_hint().1.unwrap_or(0);
+        assert!(size_hint > 0);
+
+        // Get message and conversation ids
+        let mut msg_update_stmt = self.0.prepare(&format!(
+            r"
+WITH conv_msgs AS (
+    SELECT id, MAX(time)
+    FROM messages
+    WHERE unread=0 AND conversation_id IN ({})
+)
+UPDATE messages SET unread=1
+FROM conv_msgs
+WHERE messages.id = conv_msgs.id
+RETURNING id, conversation_id
+",
+            gen_variable_in_argument_list(size_hint)
+        ))?;
+
+        let mut msg_pairs: Vec<(LocalMessageId, LocalConversationId)> =
+            Vec::with_capacity(size_hint);
+        mapped_rows_into_vec(
+            &mut msg_pairs,
+            msg_update_stmt.query_map(params_from_iter(ids), |r| Ok((r.get(0)?, r.get(1)?)))?,
+        )?;
+
+        if msg_pairs.is_empty() {
+            return Ok(());
+        }
+
+        let args = gen_variable_in_argument_list(msg_pairs.len());
+
+        // Update unread conversation count
+        self.0.execute(
+            &format!(
+                r"
+WITH msg_labels AS (
+    SELECT label_id, COUNT(message_id) AS num_unread
+    FROM message_labels WHERE message_id IN ({})
+    GROUP BY label_id
+)
+UPDATE label_conversation_count SET unread=unread+msg_labels.num_unread
+FROM msg_labels
+WHERE label_conversation_count.label_id = msg_labels.label_id",
+                args,
+            ),
+            params_from_iter(msg_pairs.iter().map(|(id, _)| id)),
+        )?;
+
+        // Update conversation
+        self.0.execute(
+            &format!(
+                "UPDATE conversations SET num_unread=num_unread+1 WHERE id IN ({})",
+                args
+            ),
+            params_from_iter(msg_pairs.iter().map(|(_, id)| id)),
+        )?;
+
+        // Update conversation labels
+        self.0.execute(
+            &format!(
+                "UPDATE conversation_labels SET ctx_num_unread=ctx_num_unread+1 WHERE conversation_id IN ({})",
+                args,
+            ),
+            params_from_iter(msg_pairs.iter().map(|(_,id)| id)),
+        )?;
+
+        // Update message counts
+        self.0.execute(
+            &format!(
+                r"
+WITH msg_labels AS (
+    SELECT label_id, COUNT(message_id) AS diff_unread
+    FROM message_labels
+    WHERE message_id IN ({})
+    GROUP BY label_id
+)
+
+UPDATE label_message_count SET unread=unread+msg_labels.diff_unread
+FROM msg_labels
+WHERE label_message_count.label_id = msg_labels.label_id
+        ",
+                args
+            ),
+            params_from_iter(msg_pairs.iter().map(|(id, _)| id)),
+        )?;
+        Ok(())
     }
 }
 
