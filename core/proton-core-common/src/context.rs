@@ -3,16 +3,16 @@ use crate::os::{KeyChain, KeyChainError};
 use crate::session::CoreSession;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
 use crate::CoreSessionCallback;
-use proton_api_core::auth::{new_arc_auth_store, ArcAuthStore};
+use proton_api_core::auth::new_arc_auth_store;
 use proton_api_core::domain::{ExposeSecret, SecretString, UserId};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::proton_sqlite3::SqliteMode;
 use proton_api_core::exports::tracing::Level;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
-use proton_api_core::http::HttpRequestError;
+use proton_api_core::http::{Client, HttpRequestError};
 use proton_api_core::login::LoginFlow;
-use proton_api_core::{http, Session};
+use proton_api_core::Session;
 use proton_core_db::proton_sqlite3::SqliteConnectionPool;
 use proton_core_db::{
     migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey,
@@ -64,6 +64,7 @@ struct CoreContextInner {
     session_db: SqliteConnectionPool,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
+    client: Client,
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
 }
 
@@ -77,6 +78,7 @@ impl CoreContext {
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
+        client: Client,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Self> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
@@ -88,6 +90,7 @@ impl CoreContext {
             user_db_path,
             key_chain,
             initializers,
+            client,
             network_callback,
         )
     }
@@ -97,6 +100,7 @@ impl CoreContext {
         user_db_path: PathBuf,
         key_chain: Arc<dyn KeyChain>,
         initializers: Vec<Box<dyn UserDatabaseInitializer>>,
+        client: Client,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Self> {
         // create path.
@@ -121,6 +125,7 @@ impl CoreContext {
                 key_chain,
                 session_db: pool,
                 user_db_initializers: initializers,
+                client,
                 network_callback,
             }),
         })
@@ -151,7 +156,7 @@ impl CoreContext {
             cb,
         ));
 
-        let session = new_session(core_session)?;
+        let session = Session::new(self.inner.client.clone(), core_session);
         Ok(LoginFlow::new(session))
     }
 
@@ -199,7 +204,7 @@ impl CoreContext {
             cb,
         ));
         debug!("Creating session");
-        let session = new_session(core_session)?;
+        let session = Session::new(self.inner.client.clone(), core_session);
         let ctx = UserContext::new(session, db, user_id)?;
         Ok(ctx)
     }
@@ -262,21 +267,6 @@ fn get_user_db_path(path: impl AsRef<Path>, user_id: &UserId) -> PathBuf {
     path.as_ref().join(user_id.to_string()).with_extension("db")
 }
 
-fn new_session(arc_auth_store: ArcAuthStore) -> CoreContextResult<Session> {
-    let mut client = http::ClientBuilder::new().app_version("Other");
-    if session_debug_enabled() {
-        client = client.debug();
-    }
-    let client = client
-        .build()
-        .map_err(|e| CoreContextError::Other(anyhow!("Failed to create client: {e}")))?;
-    Ok(Session::new(client, arc_auth_store))
-}
-
 fn db_debug_enabled() -> bool {
     std::env::var("PROTON_CORE_CTX_DB_DEBUG").is_ok()
-}
-
-fn session_debug_enabled() -> bool {
-    std::env::var("PROTON_CORE_CTX_SESSION_DEBUG").is_ok()
 }
