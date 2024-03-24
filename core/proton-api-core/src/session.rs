@@ -1,6 +1,6 @@
 use crate::auth::ArcAuthStore;
 use crate::domain::{EventId, IsEvent, User, UserSettings};
-use crate::http;
+use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
     AuthRefreshRequest, CaptchaRequest, GetEventRequest, GetLatestEventRequest,
@@ -24,6 +24,10 @@ impl Session {
 
     pub fn auth_store(&self) -> &ArcAuthStore {
         &self.auth_store
+    }
+
+    pub fn api_env_config(&self) -> &APIEnvConfig {
+        &self.client.api_env_config
     }
 
     pub async fn get_user(&self) -> Result<User, http::HttpRequestError> {

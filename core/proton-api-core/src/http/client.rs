@@ -1,56 +1,38 @@
-use crate::http::{Proxy, RequestData, Result, DEFAULT_APP_VERSION, DEFAULT_HOST_URL};
+use crate::http::{Proxy, RequestData, Result};
 use std::time::Duration;
+
+use super::APIEnvConfig;
 
 /// Builder for an http client
 #[derive(Debug, Clone)]
 pub struct ClientBuilder {
-    pub(super) app_version: String,
-    pub(super) base_url: String,
+    pub(super) api_env_config: APIEnvConfig,
     pub(super) request_timeout: Option<Duration>,
     pub(super) connect_timeout: Option<Duration>,
-    pub(super) user_agent: String,
     pub(super) proxy_url: Option<Proxy>,
     pub(super) debug: bool,
-    pub(super) allow_http: bool,
 }
 
 impl Default for ClientBuilder {
     fn default() -> Self {
-        Self::new()
+        Self::new(None)
     }
 }
 
 impl ClientBuilder {
-    pub fn new() -> Self {
+    pub fn new(api_env_config: Option<APIEnvConfig>) -> Self {
+        let api_env_config = match api_env_config {
+            Some(config) => config,
+            None => APIEnvConfig::default(),
+        };
+
         Self {
-            app_version: DEFAULT_APP_VERSION.to_string(),
-            user_agent: "NoClient/0.1.0".to_string(),
-            base_url: DEFAULT_HOST_URL.to_string(),
+            api_env_config,
+            proxy_url: None,
             request_timeout: None,
             connect_timeout: None,
-            proxy_url: None,
             debug: false,
-            allow_http: false,
         }
-    }
-
-    /// Set the app version for this client e.g.: my-client@1.4.0+beta.
-    /// Note: The default app version is not guaranteed to be accepted by the proton servers.
-    pub fn app_version(mut self, version: &str) -> Self {
-        self.app_version = version.to_string();
-        self
-    }
-
-    /// Set the user agent to be submitted with every request.
-    pub fn user_agent(mut self, agent: &str) -> Self {
-        self.user_agent = agent.to_string();
-        self
-    }
-
-    /// Set server's base url. By default the proton API server url is used.
-    pub fn base_url(mut self, url: &str) -> Self {
-        self.base_url = url.to_string();
-        self
     }
 
     /// Set the full request timeout. By default there is no timeout.
@@ -68,12 +50,6 @@ impl ClientBuilder {
     /// Specify proxy URL for the builder.
     pub fn with_proxy(mut self, proxy: Proxy) -> Self {
         self.proxy_url = Some(proxy);
-        self
-    }
-
-    /// Allow http request
-    pub fn allow_http(mut self) -> Self {
-        self.allow_http = true;
         self
     }
 

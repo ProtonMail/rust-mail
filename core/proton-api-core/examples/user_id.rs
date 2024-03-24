@@ -1,4 +1,5 @@
 use proton_api_core::auth::{new_arc_auth_store, InMemoryStore};
+use proton_api_core::http::APIEnvConfig;
 use proton_api_core::login::LoginFlow;
 use proton_api_core::{http, Session};
 pub use tokio;
@@ -26,8 +27,12 @@ async fn main() {
     let user_password = std::env::var("PAPI_USER_PASSWORD").unwrap();
     let app_version = std::env::var("PAPI_APP_VERSION").unwrap();
 
-    let client = http::ClientBuilder::new()
-        .app_version(&app_version)
+    let api_env_config = APIEnvConfig {
+        app_version: app_version,
+        ..Default::default()
+    };
+
+    let client = http::ClientBuilder::new(Some(api_env_config))
         .debug()
         .build()
         .unwrap();

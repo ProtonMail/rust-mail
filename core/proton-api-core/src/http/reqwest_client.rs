@@ -1,3 +1,4 @@
+use super::APIEnvConfig;
 use crate::http::{
     ClientBuilder, ClientRequest, ClientRequestBuilder, FromResponse, HttpRequestError, Method,
     Request, RequestData, X_PM_APP_VERSION_HEADER,
@@ -7,8 +8,8 @@ use reqwest;
 
 #[derive(Debug, Clone)]
 pub struct ReqwestClient {
+    pub(crate) api_env_config: APIEnvConfig,
     client: reqwest::Client,
-    base_url: String,
     debug: bool,
 }
 
@@ -19,7 +20,7 @@ impl TryFrom<ClientBuilder> for ReqwestClient {
         let mut header_map = reqwest::header::HeaderMap::new();
         header_map.insert(
             X_PM_APP_VERSION_HEADER,
-            reqwest::header::HeaderValue::from_str(&value.app_version)
+            reqwest::header::HeaderValue::from_str(&value.api_env_config.app_version)
                 .map_err(|e| anyhow::anyhow!(e))?,
         );
 
@@ -47,13 +48,13 @@ impl TryFrom<ClientBuilder> for ReqwestClient {
             builder = builder
                 .min_tls_version(Version::TLS_1_2)
                 .cookie_store(true)
-                .user_agent(value.user_agent)
-                .https_only(!value.allow_http);
+                .user_agent(&value.api_env_config.user_agent)
+                .https_only(!value.api_env_config.allow_http);
         }
 
         Ok(Self {
+            api_env_config: value.api_env_config,
             client: builder.build()?,
-            base_url: value.base_url,
             debug: value.debug,
         })
     }
@@ -102,7 +103,7 @@ impl ClientRequestBuilder for ReqwestClient {
     type Request = ReqwestRequest;
 
     fn new_request(&self, data: &RequestData) -> Self::Request {
-        let final_url = format!("{}/{}", self.base_url, data.url);
+        let final_url = format!("{}/{}", self.api_env_config.base_url, data.url);
 
         let mut request = match data.method {
             Method::Delete => self.client.delete(&final_url),

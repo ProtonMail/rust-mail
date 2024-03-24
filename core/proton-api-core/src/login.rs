@@ -85,7 +85,8 @@ impl LoginFlow {
             .await
             .map_err(map_human_verification_err)?;
 
-        if proof.expected_server_proof != auth_response.server_proof {
+        let skip_srp_proof_validation = self.session.api_env_config().skip_srp_proof_validation;
+        if !skip_srp_proof_validation && proof.expected_server_proof != auth_response.server_proof {
             return Err(LoginFlowError::ServerProof(
                 "Server Proof does not match".to_string(),
             ));
