@@ -555,6 +555,15 @@ fn test_conversation_delete() {
             state.messages[1].num_attachments as u64
         );
 
+        assert!(tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .unwrap()
+            .is_none());
+        assert!(tx
+            .get_conversation_with_context(local_conv_id, local_label_id2)
+            .unwrap()
+            .is_some());
+
         // Check conversation counts
         {
             let conv_counts = conv_counts_as_map(tx);
@@ -602,6 +611,11 @@ fn test_conversation_delete() {
         // Deleting conv1 in label 2  should remove all traces of the  conversation
         tx.mark_conversation_as_deleted(local_label_id2, local_conv_id)
             .expect("failed to mark conv as deleted");
+
+        assert!(tx
+            .get_conversation_with_context(local_conv_id, local_label_id2)
+            .unwrap()
+            .is_none());
 
         {
             let db_conv = tx
@@ -676,6 +690,15 @@ fn test_conversation_undelete() {
             .expect("Failed to mark as undeleted");
         tx.unmark_conversation_as_deleted(local_label_id1, local_conv_id)
             .expect("Failed to mark as undeleted");
+
+        assert!(tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .is_some());
+        assert!(tx
+            .get_conversation_with_context(local_conv_id, local_label_id2)
+            .expect("failed to get conversation")
+            .is_some());
 
         let db_conversation = tx
             .get_conversation(local_conv_id)
