@@ -10,7 +10,7 @@ pub fn handle_conversation_events(
     for conversation_event in conversation_events {
         match conversation_event.action {
             EventAction::Delete => {
-                tx.mark_remote_conversation_as_deleted(&conversation_event.id)?;
+                tx.delete_remote_conversation(&conversation_event.id)?;
             }
             EventAction::Create => {
                 if let Some(conversation) = &conversation_event.conversation {

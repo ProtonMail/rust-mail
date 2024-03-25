@@ -2,8 +2,8 @@ use crate::attachments::LocalAttachmentMetadataSelector;
 use crate::conversations::types::{LocalConversation, LocalConversationId};
 use crate::json::{deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, DeletedState, LocalAttachmentMetadata, LocalConversationCount,
-    LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
+    DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalConversationLabel,
+    LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -522,19 +522,17 @@ FROM (
         Ok(())
     }
 
-    pub fn mark_remote_conversation_as_deleted(&mut self, id: &ConversationId) -> DBResult<()> {
-        self.mark_remote_conversations_as_deleted(std::iter::once(id))
+    pub fn delete_remote_conversation(&mut self, id: &ConversationId) -> DBResult<()> {
+        self.delete_remote_conversations(std::iter::once(id))
     }
 
-    pub fn mark_remote_conversations_as_deleted<'i>(
+    pub fn delete_remote_conversations<'i>(
         &mut self,
         ids: impl Iterator<Item = &'i ConversationId>,
     ) -> DBResult<()> {
-        let mut stmt = self
-            .0
-            .prepare("UPDATE conversations SET deleted=? WHERE rid=?")?;
+        let mut stmt = self.0.prepare("DELETE FROM conversations WHERE rid=?")?;
         for id in ids {
-            stmt.execute((DeletedState::Remote, id))?;
+            stmt.execute([id])?;
         }
         Ok(())
     }
