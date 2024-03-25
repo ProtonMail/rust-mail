@@ -371,7 +371,7 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
 
         let conv_args = gen_variable_in_argument_list(ids.len());
 
-        // recreate conversation label if it does not exist
+        // Update conversation label.
         if !delete {
             let mut stmt = self.0.prepare(&format!(
                 //TODO: Expiration time
@@ -385,12 +385,8 @@ WITH conv_messages AS (
     WHERE m.deleted=0 AND m.conversation_id IN ({})
     GROUP BY m.conversation_id
 )
-UPDATE conversation_labels SET
-ctx_time=cm.time, ctx_size=cm.size, ctx_num_messages=cm.count, ctx_num_unread=cm.unread,
-ctx_num_attachments=cm.attachments
-FROM conv_messages AS cm
-WHERE conversation_labels.label_id=?1 AND conversation_labels.conversation_id=cm.conversation_id
-    ",
+INSERT OR REPLACE INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size, ctx_num_messages, ctx_num_unread, ctx_num_attachments)
+SELECT ?1, conversation_id, time, size, count, unread, attachments FROM conv_messages",
                 conv_args
             ))?;
             let mut alloc = StmtIndexAllocator::new();
@@ -418,11 +414,11 @@ UPDATE label_conversation_count AS lcc SET total=total{operator}dm.num_messages,
         }
         stmt.raw_execute()?;
 
-        // conversation label context can be removed now
+        // Update conversation label. Can't be deleted since it's necessary for the
+        // update conversation count at the moment.
         if delete {
             let mut stmt = self.0.prepare(&format!(
-r"UPDATE conversation_labels SET ctx_time=0, ctx_size=0, ctx_num_messages=0, ctx_num_unread=0, ctx_num_attachments=0
-WHERE label_id=? AND conversation_id IN ({})",
+                r"DELETE FROM conversation_labels WHERE label_id=? AND conversation_id IN ({})",
                 conv_args
             ))?;
             let mut alloc = StmtIndexAllocator::new();
@@ -437,17 +433,29 @@ WHERE label_id=? AND conversation_id IN ({})",
         self.0.execute(
             &format!(
                 r"
+WITH conv_ids AS (SELECT * FROM (VALUES {})),
+cte AS (
+    SELECT cl.conversation_id, 0==SUM(cl.ctx_num_messages) AS `deleted`,
+           SUM(cl.ctx_num_messages) AS `count`, SUM(cl.ctx_num_unread) AS unread,
+           SUM(cl.ctx_size) AS size, SUM(cl.ctx_num_attachments) AS num_attachments
+    FROM conversation_labels as cl
+    JOIN conv_ids ON cl.conversation_id=conv_ids.column1
+    GROUP BY cl.conversation_id
+)
 UPDATE conversations SET deleted=diff.deleted, num_messages=diff.`count`, num_unread=diff.unread,
 size=diff.size, num_attachments=diff.num_attachments
 FROM (
-    SELECT cl.conversation_id, 0==SUM(cl.ctx_num_messages) AS deleted,
-    SUM(cl.ctx_num_messages) AS `count`, SUM(cl.ctx_num_unread) AS unread,
-    SUM(cl.ctx_size) AS size, SUM(cl.ctx_num_attachments) AS num_attachments
-    FROM conversation_labels as cl
-    WHERE cl.conversation_id IN ({})
-    GROUP BY cl.conversation_id
+    SELECT df.column1 AS `conversation_id`,
+       IFNULL(cte.deleted, 1) AS `deleted`, IFNULL(cte.count,0) AS `count`,
+       IFNULL(cte.unread, 0) AS `unread`, IFNULL(cte.size, 0) AS `size`,
+       IFNULL(cte.num_attachments, 0) as `num_attachments`
+    FROM conv_ids as df
+    LEFT JOIN cte ON df.column1=cte.conversation_id
 ) as diff WHERE id = diff.conversation_id",
-                conv_args
+                std::iter::repeat("(?)")
+                    .take(ids.len())
+                    .collect::<Vec<_>>()
+                    .join(",")
             ),
             params_from_iter(ids),
         )?;
