@@ -6,17 +6,20 @@ use thiserror::Error;
 
 pub mod reqwest_client;
 
+mod api_env_config;
 mod client;
 mod proxy;
 mod request;
 mod response;
+
+pub use api_env_config::*;
 pub use client::*;
 pub use proxy::*;
 pub use request::*;
 pub use response::*;
 
 pub(crate) const DEFAULT_HOST_URL: &str = "https://mail.proton.me/api";
-pub(crate) const DEFAULT_APP_VERSION: &str = "proton-api-core";
+pub(crate) const DEFAULT_APP_VERSION: &str = "Other";
 #[allow(unused)] // it is used by the http implementations
 pub(crate) const X_PM_APP_VERSION_HEADER: &str = "X-Pm-Appversion";
 pub(crate) const X_PM_UID_HEADER: &str = "X-Pm-Uid";
