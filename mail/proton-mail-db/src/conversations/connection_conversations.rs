@@ -12,6 +12,7 @@ use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
+use std::collections::BTreeSet;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn create_conversation(
@@ -42,7 +43,6 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(())
     }
 
-    //TODO: Better update statement.
     fn create_or_update_conversations<'i>(
         &mut self,
         conversations: impl ExactSizeIterator<Item = &'i Conversation>,
@@ -50,7 +50,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         let mut stmt = self.0.prepare(
             "INSERT INTO conversations (rid, `order`, subject, senders, recipients, num_messages, \
 num_unread, num_attachments, expiration_time, size, flagged) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rid) DO UPDATE SET \
-num_messages=excluded.num_messages, num_attachments=excluded.num_attachments, \
+num_messages=excluded.num_messages, num_attachments=excluded.num_attachments, num_unread=excluded.num_unread, \
 expiration_time=excluded.expiration_time, size=excluded.size, flagged=excluded.flagged RETURNING id",
         )?;
 
@@ -693,17 +693,20 @@ WHERE label_message_count.label_id = msg_labels.label_id
         Ok(())
     }
 
-    pub fn mark_conversation_unread(&mut self, id: LocalConversationId) -> DBResult<()> {
-        self.mark_conversations_unread(std::iter::once(id))
+    pub fn mark_conversation_unread(
+        &mut self,
+        active_label_id: LocalLabelId,
+        id: LocalConversationId,
+    ) -> DBResult<()> {
+        self.mark_conversations_unread(active_label_id, std::iter::once(id))
     }
 
     pub fn mark_conversations_unread(
         &mut self,
+        active_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
     ) -> DBResult<()> {
-        let ids = ids.into_iter();
-        let size_hint = ids.size_hint().1.unwrap_or(0);
-        assert!(size_hint > 0);
+        let mut ids = BTreeSet::from_iter(ids);
 
         // Get message and conversation ids
         let mut msg_update_stmt = self.0.prepare(&format!(
@@ -718,15 +721,47 @@ FROM conv_msgs
 WHERE messages.id = conv_msgs.id
 RETURNING id, conversation_id
 ",
-            gen_variable_in_argument_list(size_hint)
+            gen_variable_in_argument_list(ids.len())
         ))?;
 
         let mut msg_pairs: Vec<(LocalMessageId, LocalConversationId)> =
-            Vec::with_capacity(size_hint);
+            Vec::with_capacity(ids.len());
         mapped_rows_into_vec(
             &mut msg_pairs,
-            msg_update_stmt.query_map(params_from_iter(ids), |r| Ok((r.get(0)?, r.get(1)?)))?,
+            msg_update_stmt.query_map(params_from_iter(&ids), |r| Ok((r.get(0)?, r.get(1)?)))?,
         )?;
+
+        for (_, id) in &msg_pairs {
+            ids.remove(id);
+        }
+
+        // These conversations where asked to b marked as read, but had no messages. Either the
+        // messages were already mark as read or there was no metadata. For these we need
+        // to set the unread count to 1 and update the current label count. We let the event loop
+        // take care of the rest.
+        if !ids.is_empty() {
+            let args = gen_variable_in_argument_list(ids.len());
+            self.0.execute(
+                &format!(
+                    "UPDATE conversations SET num_unread=num_unread+1 WHERE id IN ({})",
+                    args
+                ),
+                params_from_iter(&ids),
+            )?;
+            {
+                let mut alloc = StmtIndexAllocator::new();
+                let mut stmt = self.0.prepare(&format!("UPDATE conversation_labels SET ctx_num_unread=ctx_num_unread+1 WHERE label_id=? AND conversation_id IN ({})", args))?;
+                stmt.raw_bind_parameter(alloc.fetch_and_add(), active_label_id)?;
+                for id in &ids {
+                    stmt.raw_bind_parameter(alloc.fetch_and_add(), id)?;
+                }
+                stmt.raw_execute()?;
+            }
+            self.0.execute(
+                "UPDATE label_conversation_count SET unread=unread+? WHERE label_id=?",
+                (ids.len(), active_label_id),
+            )?;
+        }
 
         if msg_pairs.is_empty() {
             return Ok(());

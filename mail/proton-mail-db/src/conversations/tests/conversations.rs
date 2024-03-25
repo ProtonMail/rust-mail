@@ -1,7 +1,7 @@
 use crate::conversations::tests::db_states::{new_test_delete_db_state, new_test_unread_db_state};
 use crate::conversations::tests::utils::{
     conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
-    prepare_and_patch_db_state,
+    prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip,
 };
 use crate::conversations::types::LocalConversation;
 use crate::{
@@ -783,6 +783,52 @@ fn test_conversation_counts() {
         );
     });
 }
+#[test]
+fn test_conversation_mark_read_no_message_metadata() {
+    // Mark conversation as read without message metadata.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_unread_db_state();
+        let (state, state_map) = prepare_and_patch_db_state_and_skip(tx, state, true);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+        tx.mark_conversation_read(local_conv_id)
+            .expect("failed to mark as read");
+
+        let db_conversation = tx
+            .get_conversation(local_conv_id)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // No more unread messages
+        assert_eq!(db_conversation.num_unread, 0);
+        assert_eq!(db_conversation.num_messages, 4);
+
+        // Check conversation counts
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            // Check conversation label1 values, conversation should have been removed.
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - 1);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+            // Check conversation label2 values - should be unchanged.
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - 1);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+        }
+    });
+}
 
 #[test]
 fn test_conversation_mark_read() {
@@ -857,6 +903,55 @@ fn test_conversation_mark_read() {
 }
 
 #[test]
+fn test_conversation_mark_unread_no_metadata() {
+    // Mark conversation as read and then mark it unread, since we don't have message
+    // metadata we should mark the current conversation label only as unread.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_unread_db_state();
+        let (state, state_map) = prepare_and_patch_db_state_and_skip(tx, state, true);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+        tx.mark_conversation_read(local_conv_id)
+            .expect("failed to mark as read");
+        tx.mark_conversation_unread(local_label_id1, local_conv_id)
+            .expect("failed to mark as unread");
+
+        let db_conversation = tx
+            .get_conversation(local_conv_id)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // There should be 1 unread message.
+        assert_eq!(db_conversation.num_unread, 1);
+        assert_eq!(db_conversation.num_messages, 4);
+
+        // Check conversation counts match original values.
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            {
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+            {
+                // Label2 should have no unread messages since the message in conv 1 is not the latest.
+                let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                assert_eq!(label_counts.unread, start_label_counts.unread - 1);
+                assert_eq!(label_counts.total, start_label_counts.total);
+            }
+        }
+    });
+}
+
+#[test]
 fn test_conversation_mark_unread() {
     // Mark conversation as read and then mark it unread, only the LATEST message in the
     // conversation should be marked read.
@@ -873,7 +968,7 @@ fn test_conversation_mark_unread() {
         let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
         tx.mark_conversation_read(local_conv_id)
             .expect("failed to mark as read");
-        tx.mark_conversation_unread(local_conv_id)
+        tx.mark_conversation_unread(local_label_id1, local_conv_id)
             .expect("failed to mark as unread");
 
         let db_conversation = tx

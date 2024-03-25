@@ -9,7 +9,7 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use proton_mail_db::{LocalConversationId, MailSqliteConnectionImpl};
+use proton_mail_db::{LocalConversationId, LocalLabelId, MailSqliteConnectionImpl};
 use std::any::Any;
 use std::ops::Deref;
 
@@ -21,12 +21,17 @@ define_action_id!(
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "self::serde")]
 pub struct MarkConversationsReadAction {
+    active_label_id: LocalLabelId,
     ids: Vec<LocalConversationId>,
 }
 
 impl MarkConversationsReadAction {
-    pub fn new(ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
+    pub fn new(
+        active_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> Self {
         Self {
+            active_label_id,
             ids: Vec::from_iter(ids),
         }
     }
@@ -104,7 +109,7 @@ impl<'c, 't: 'c> RemoteActionHandler for MarkConversationReadRemoteHandler<'c, '
             let local_ids = tx
                 .remote_to_local_conversation_ids(failed_messages.iter())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
-            tx.mark_conversations_unread(local_ids.into_iter())
+            tx.mark_conversations_unread(self.action.active_label_id, local_ids.into_iter())
                 .map_err(|e| {
                     error!("Failed to rollback failed for conversations: {e}");
                     ActionError::Local(anyhow!(e))

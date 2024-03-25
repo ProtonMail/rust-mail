@@ -9,7 +9,7 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use proton_mail_db::{LocalConversationId, MailSqliteConnectionImpl};
+use proton_mail_db::{LocalConversationId, LocalLabelId, MailSqliteConnectionImpl};
 use std::any::Any;
 use std::ops::Deref;
 
@@ -21,12 +21,17 @@ define_action_id!(
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(crate = "self::serde")]
 pub struct MarkConversationsUnreadAction {
+    active_label_id: LocalLabelId,
     ids: Vec<LocalConversationId>,
 }
 
 impl MarkConversationsUnreadAction {
-    pub fn new(ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
+    pub fn new(
+        active_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> Self {
         Self {
+            active_label_id,
             ids: Vec::from_iter(ids),
         }
     }
@@ -46,7 +51,7 @@ impl<'c, 't: 'c> LocalActionHandler for MarkConversationUnreadLocalHandler<'c, '
     fn apply_local(&mut self) -> ActionResult<()> {
         let conn = (*self.tx).deref();
         let mut tx = MailSqliteConnectionImpl::from(conn);
-        tx.mark_conversations_unread(self.action.ids.iter().cloned())
+        tx.mark_conversations_unread(self.action.active_label_id, self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }

@@ -28,7 +28,15 @@ pub(in crate::conversations) struct TestDBStateMap {
 
 pub(in crate::conversations) fn prepare_and_patch_db_state(
     tx: &mut MailSqliteConnectionMut,
+    env: TestDBState,
+) -> (TestDBState, TestDBStateMap) {
+    prepare_and_patch_db_state_and_skip(tx, env, false)
+}
+
+pub(in crate::conversations) fn prepare_and_patch_db_state_and_skip(
+    tx: &mut MailSqliteConnectionMut,
     mut env: TestDBState,
+    skip_messages: bool,
 ) -> (TestDBState, TestDBStateMap) {
     let mut result = TestDBStateMap {
         ..Default::default()
@@ -154,28 +162,32 @@ pub(in crate::conversations) fn prepare_and_patch_db_state(
     }
 
     // create messages
-    let local_message_ids = tx
-        .create_messages_from_metadata(env.messages.iter())
-        .expect("failed to create conversations");
-    for (idx, message) in env.messages.iter().enumerate() {
-        result
-            .messages
-            .insert(message.id.clone(), local_message_ids[idx]);
+    if !skip_messages {
+        let local_message_ids = tx
+            .create_messages_from_metadata(env.messages.iter())
+            .expect("failed to create conversations");
+        for (idx, message) in env.messages.iter().enumerate() {
+            result
+                .messages
+                .insert(message.id.clone(), local_message_ids[idx]);
 
-        for label_id in &message.label_ids {
-            let counts = result.message_counts.get_mut(label_id).unwrap();
-            if message.unread == ProtonBoolean::True {
-                counts.unread += 1
+            for label_id in &message.label_ids {
+                let counts = result.message_counts.get_mut(label_id).unwrap();
+                if message.unread == ProtonBoolean::True {
+                    counts.unread += 1
+                }
+                counts.total += 1
             }
-            counts.total += 1
         }
     }
 
     // create conversation_counts
     tx.create_or_update_conversation_counts(result.conversation_counts.values())
         .expect("failed to create conversation counts");
-    tx.create_or_update_message_counts(result.message_counts.values())
-        .expect("failed to create message counts");
+    if !skip_messages {
+        tx.create_or_update_message_counts(result.message_counts.values())
+            .expect("failed to create message counts");
+    }
 
     (env, result)
 }
