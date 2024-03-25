@@ -1,4 +1,6 @@
-use crate::conversations::tests::db_states::{new_test_delete_db_state, new_test_unread_db_state};
+use crate::conversations::tests::db_states::{
+    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+};
 use crate::conversations::tests::utils::{
     conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
     prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip,
@@ -1044,6 +1046,357 @@ fn test_conversation_mark_unread() {
                 assert_eq!(label_counts.unread, 0);
                 assert_eq!(label_counts.total, start_label_counts.total);
             }
+        }
+    });
+}
+
+#[test]
+fn test_conversation_label_with_message_metadata() {
+    // Label conversation with a label that was never assigned to the conversation.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_label_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+
+        let db_conversation = tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // There should be 1 unread message.
+        assert_eq!(db_conversation.num_unread, 1);
+        assert_eq!(db_conversation.num_messages_ctx, 3);
+        assert_eq!(db_conversation.num_attachments, 1);
+        assert_eq!(
+            db_conversation.size,
+            state.messages.iter().fold(0, |x, m| x + m.size)
+        );
+        assert_eq!(
+            db_conversation.time,
+            state.messages.iter().fold(0, |x, m| x.max(m.time))
+        );
+        assert_eq!(
+            db_conversation.expiration_time,
+            state
+                .messages
+                .iter()
+                .fold(0, |x, m| x.max(m.expiration_time))
+        );
+
+        // Check conversation counts have the new conversation.
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            let label_counts = conv_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 1);
+            assert_eq!(label_counts.total, 1);
+        }
+
+        // Check message counts, only one message should be unread
+        {
+            let message_counts = msg_counts_as_map(tx);
+            let label_counts = message_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 1);
+            assert_eq!(label_counts.total, 3);
+        }
+    });
+}
+#[test]
+fn test_conversation_double_label_with_message_metadata() {
+    // Label conversation with a label that was never assigned to the conversation twice and check
+    // the changes are not duplicated.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_label_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+
+        let db_conversation = tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // There should be 1 unread message.
+        assert_eq!(db_conversation.num_unread, 1);
+        assert_eq!(db_conversation.num_messages_ctx, 3);
+        assert_eq!(db_conversation.num_attachments, 1);
+        assert_eq!(
+            db_conversation.size,
+            state.messages.iter().fold(0, |x, m| x + m.size)
+        );
+        assert_eq!(
+            db_conversation.time,
+            state.messages.iter().fold(0, |x, m| x.max(m.time))
+        );
+        assert_eq!(
+            db_conversation.expiration_time,
+            state
+                .messages
+                .iter()
+                .fold(0, |x, m| x.max(m.expiration_time))
+        );
+
+        // Check conversation counts have the new conversation.
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            let label_counts = conv_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 1);
+            assert_eq!(label_counts.total, 1);
+        }
+
+        // Check message counts, only one message should be unread
+        {
+            let message_counts = msg_counts_as_map(tx);
+            let label_counts = message_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 1);
+            assert_eq!(label_counts.total, 3);
+        }
+    });
+}
+
+#[test]
+fn test_conversation_label_partially() {
+    // Label conversation with a label where one of the messages already has been labeled
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let mut state = new_test_label_db_state();
+        state.messages[1].label_ids.push(MY_LABEL_ID1.clone());
+        state.conversations[0].labels.push(ConversationLabels {
+            id: MY_LABEL_ID1.clone(),
+            context_num_unread: 0,
+            context_num_messages: 0,
+            context_time: 0,
+            context_size: 0,
+            context_num_attachments: 0,
+            context_expiration_time: 0,
+        });
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+
+        let db_conversation = tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // There should be 1 unread message.
+        assert_eq!(db_conversation.num_unread, 1);
+        assert_eq!(db_conversation.num_messages_ctx, 3);
+        assert_eq!(db_conversation.num_attachments, 1);
+        assert_eq!(
+            db_conversation.size,
+            state.messages.iter().fold(0, |x, m| x + m.size)
+        );
+        assert_eq!(
+            db_conversation.time,
+            state.messages.iter().fold(0, |x, m| x.max(m.time))
+        );
+        assert_eq!(
+            db_conversation.expiration_time,
+            state
+                .messages
+                .iter()
+                .fold(0, |x, m| x.max(m.expiration_time))
+        );
+
+        // Check conversation counts have the new conversation.
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            let label_counts = conv_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 1);
+            assert_eq!(label_counts.total, 1);
+        }
+
+        // Check message counts, only one message should be unread
+        {
+            let message_counts = msg_counts_as_map(tx);
+            let label_counts = message_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 1);
+            assert_eq!(label_counts.total, 3);
+        }
+    });
+}
+#[test]
+fn test_conversation_label_without_message_metadata() {
+    // Label a conversation with a label that was never assigned without having any message metadata
+    // present.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_label_db_state();
+        let (state, state_map) = prepare_and_patch_db_state_and_skip(tx, state, true);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+
+        let db_conversation = tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // Because we have no message metadata, all these values should be empty
+        assert_eq!(db_conversation.num_unread, 0);
+        assert_eq!(db_conversation.num_messages_ctx, 0);
+        assert_eq!(db_conversation.num_attachments, 0);
+        assert_eq!(db_conversation.size, 0,);
+        assert_eq!(db_conversation.time, 0,);
+        assert_eq!(db_conversation.time, 0,);
+        assert_eq!(db_conversation.expiration_time, 0,);
+
+        // Check conversation counts have the new conversation.
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            {
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                // unread is 0 due to lack of messages.
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 1);
+            }
+        }
+    });
+}
+
+#[test]
+fn test_conversation_double_label_without_message_metadata() {
+    // Label a conversation with a label that was never assigned without having any message metadata
+    // present 2 times and check the data is not duplicated.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_label_db_state();
+        let (state, state_map) = prepare_and_patch_db_state_and_skip(tx, state, true);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+
+        let db_conversation = tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // Because we have no message metadata, all these values should be empty
+        assert_eq!(db_conversation.num_unread, 0);
+        assert_eq!(db_conversation.num_messages_ctx, 0);
+        assert_eq!(db_conversation.num_attachments, 0);
+        assert_eq!(db_conversation.size, 0);
+        assert_eq!(db_conversation.time, 0);
+        assert_eq!(db_conversation.expiration_time, 0);
+
+        // Check conversation counts have the new conversation.
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            {
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                // unread is 0 due to lack of messages.
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 1);
+            }
+        }
+    });
+}
+
+#[test]
+fn test_conversation_unlabel_with_message_metadata() {
+    // Label conversation with a label that was never assigned to the conversation.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_label_db_state();
+        let (state, state_map) = prepare_and_patch_db_state(tx, state);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+        tx.unlabel_conversation(local_label_id1, local_conv_id)
+            .expect("failed to unlabel");
+
+        assert!(tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .is_none());
+
+        // Check conversation counts should be 0
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            let label_counts = conv_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 0);
+        }
+
+        // Check message counts should be 0
+        {
+            let message_counts = msg_counts_as_map(tx);
+            let label_counts = message_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 0);
+        }
+    });
+}
+#[test]
+fn test_conversation_unlabel_without_message_metadata() {
+    // Label and then unlabel a conversation with a label that was never assigned without having any message metadata
+    // present.
+    let (mut conn, _, _d) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_label_db_state();
+        let (state, state_map) = prepare_and_patch_db_state_and_skip(tx, state, true);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+        tx.unlabel_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+
+        assert!(tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .is_none());
+
+        // Check conversation counts should be 0
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            let label_counts = conv_counts.get(&local_label_id1).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 0);
         }
     });
 }
