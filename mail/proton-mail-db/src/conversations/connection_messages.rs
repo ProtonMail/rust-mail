@@ -1,6 +1,6 @@
 use crate::json::{deserialize_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, DeletedState, LocalConversationId, LocalLabelId, LocalMessageCount, LocalMessageId,
+    DBResult, LocalConversationId, LocalLabelId, LocalMessageCount, LocalMessageId,
     LocalMessageMetadata, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{MessageAddress, MessageCount, MessageId, MessageMetadata};
@@ -192,11 +192,8 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(r)
     }
 
-    pub fn mark_remote_message_as_deleted(&mut self, id: &MessageId) -> DBResult<()> {
-        self.0.execute(
-            "UPDATE messages SET deleted=? WHERE rid=?",
-            (DeletedState::Remote, id),
-        )?;
+    pub fn delete_remote_message(&mut self, id: &MessageId) -> DBResult<()> {
+        self.0.execute("DELETE FROM messages WHERE rid=?", [id])?;
         Ok(())
     }
 

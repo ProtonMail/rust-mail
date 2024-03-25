@@ -9,12 +9,10 @@ pub mod json;
 mod labels;
 pub mod migrations;
 mod settings;
-mod state;
 
 pub use attachments::*;
 pub use conversations::*;
 pub use labels::*;
-pub use state::*;
 
 use proton_sqlite3::{
     new_tracked_connection_wrapper, InProcessTrackerService, MigratorError, TrackingConnection,

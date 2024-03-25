@@ -1,6 +1,5 @@
 use crate::{
-    DBResult, DeletedState, LabelColor, LocalLabel, LocalLabelId, LocalLabelWithCount,
-    MailSqliteConnectionImpl,
+    DBResult, LabelColor, LocalLabel, LocalLabelId, LocalLabelWithCount, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 pub use proton_api_mail::proton_api_core::exports::serde_json;
@@ -153,24 +152,20 @@ impl<'c> MailSqliteConnectionImpl<'c> {
 
     pub fn mark_labels_as_deleted(
         &mut self,
-        deleted_state: DeletedState,
+        deleted: bool,
         ids: impl Iterator<Item = LocalLabelId>,
     ) -> DBResult<()> {
         let mut stmt = self
             .0
             .prepare("UPDATE labels SET deleted =? WHERE id = ?")?;
         for id in ids {
-            stmt.execute((deleted_state, id))?;
+            stmt.execute((deleted, id))?;
         }
         Ok(())
     }
 
-    pub fn mark_label_as_deleted(
-        &mut self,
-        deleted_state: DeletedState,
-        id: LocalLabelId,
-    ) -> DBResult<()> {
-        self.mark_labels_as_deleted(deleted_state, std::iter::once(id))
+    pub fn mark_label_as_deleted(&mut self, deleted: bool, id: LocalLabelId) -> DBResult<()> {
+        self.mark_labels_as_deleted(deleted, std::iter::once(id))
     }
 }
 
@@ -331,9 +326,9 @@ expanded=?, notified=?, sticky=? WHERE rid=?",
         &mut self,
         ids: impl Iterator<Item = &'i LabelId>,
     ) -> DBResult<()> {
-        let mut stmt = self.0.prepare("UPDATE labels SET deleted=? WHERE rid=?")?;
+        let mut stmt = self.0.prepare("DELETE FROM labels WHERE rid=?")?;
         for id in ids {
-            stmt.execute((DeletedState::Remote, id))?;
+            stmt.execute([id])?;
         }
         Ok(())
     }
