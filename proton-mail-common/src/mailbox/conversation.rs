@@ -73,7 +73,7 @@ impl Mailbox {
         ids: impl IntoIterator<Item = LocalConversationId>,
     ) -> MailboxResult<()> {
         self.user_ctx
-            .queue_action(MarkConversationsReadAction::new(ids))?;
+            .queue_action(MarkConversationsReadAction::new(self.label_id, ids))?;
         Ok(())
     }
 
@@ -82,7 +82,7 @@ impl Mailbox {
         ids: impl IntoIterator<Item = LocalConversationId>,
     ) -> MailboxResult<()> {
         self.user_ctx
-            .queue_action(MarkConversationsUnreadAction::new(ids))?;
+            .queue_action(MarkConversationsUnreadAction::new(self.label_id, ids))?;
         Ok(())
     }
 }
