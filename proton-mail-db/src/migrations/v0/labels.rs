@@ -1,3 +1,4 @@
+use proton_api_mail::domain::LabelId;
 use proton_sqlite3::rusqlite::Transaction;
 
 type RResult<T> = proton_sqlite3::rusqlite::Result<T>;
@@ -7,9 +8,9 @@ pub fn create_labels_tables(tx: &mut Transaction) -> RResult<()> {
     tx.execute(
         r#"CREATE TABLE labels (
 id INTEGER PRIMARY KEY AUTOINCREMENT, rid TEXT UNIQUE, type INTEGER NOT NULL,
-`order` INTEGER NOT NULL, name TEXT NOT NULL, path TEXT,
+`order` INTEGER NOT NULL, name TEXT NOT NULL, path TEXT DEFAULT NULL,
 parent_id BLOB DEFAUTL NULL, color TEXT NOT NULL, deleted INTEGER NOT NULL DEFAULT 0,
-notified INTERGER NOT NULL, expanded INTEGER NOT NULL, sticky INTEGER NOT NULL DEFAULT 0,
+notified INTERGER NOT NULL DEFAULT 0, expanded INTEGER NOT NULL DEFAULT 0, sticky INTEGER NOT NULL DEFAULT 0,
 CONSTRAINT constraint_labels_parent_id FOREIGN KEY (parent_id) REFERENCES labels (id) ON DELETE SET NULL
 )"#,
         (),
@@ -33,5 +34,24 @@ label_id INTEGER NOT NULL PRIMARY KEY, total INTEGER NOT NULL, unread INTEGER NO
 CONSTRAINT constraint_label_conversation_count_label_id FOREIGN KEY (label_id) REFERENCES labels (id) ON DELETE CASCADE
 )"#, ())?;
 
+    // Insert default known system
+    let mut stmt = tx.prepare(
+        r"
+INSERT INTO labels (rid, type, name, color, `order`) VALUES (?,4,?,'#000000',?)
+    ",
+    )?;
+    let labels = [
+        (LabelId::inbox(), "Inbox"),
+        (LabelId::starred(), "Starred"),
+        (LabelId::drafts(), "Drafts"),
+        (LabelId::sent(), "Sent"),
+        (LabelId::archive(), "Archive"),
+        (LabelId::spam(), "Spam"),
+        (LabelId::trash(), "Trash"),
+        (LabelId::all_mail(), "All Mail"),
+    ];
+    for (index, (id, name)) in labels.iter().enumerate() {
+        stmt.execute((id, name, index))?;
+    }
     Ok(())
 }
