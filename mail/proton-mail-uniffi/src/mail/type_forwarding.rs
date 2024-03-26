@@ -20,3 +20,9 @@ uniffi::ffi_converter_forward!(
     papi_mail::UniFfiTag,
     crate::UniFfiTag
 );
+
+uniffi::ffi_converter_forward!(
+    papi_mail::domain::LabelId,
+    papi_mail::UniFfiTag,
+    crate::UniFfiTag
+);
