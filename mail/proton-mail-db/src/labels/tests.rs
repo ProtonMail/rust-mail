@@ -86,7 +86,7 @@ fn test_delete_remote() {
             .map(|l| l.into())
             .collect::<Vec<_>>();
 
-        assert_eq!(tx.labels().unwrap().len(), 3);
+        assert_eq!(tx.labels().unwrap().len(), 11);
 
         compare_remote_labels_with_local(&tx, remote_labels.iter());
     });
@@ -250,9 +250,9 @@ fn test_labels() -> Vec<Label> {
             order: 0,
         },
         Label {
-            id: LabelId::from("0"),
+            id: LabelId::from("50"),
             parent_id: None,
-            name: "Inbox".to_string(),
+            name: "Inbox2".to_string(),
             path: None,
             color: "#ffffff".to_string(),
             label_type: LabelType::System,
