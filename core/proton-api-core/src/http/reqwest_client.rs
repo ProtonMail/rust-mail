@@ -1,4 +1,6 @@
-use super::APIEnvConfig;
+use std::sync::Arc;
+
+use super::ClientInfo;
 use crate::http::{
     ClientBuilder, ClientRequest, ClientRequestBuilder, FromResponse, HttpRequestError, Method,
     Request, RequestData, X_PM_APP_VERSION_HEADER,
@@ -8,9 +10,14 @@ use reqwest;
 
 #[derive(Debug, Clone)]
 pub struct ReqwestClient {
-    pub(crate) api_env_config: APIEnvConfig,
     client: reqwest::Client,
-    debug: bool,
+    info: Arc<ClientInfo>,
+}
+
+impl ReqwestClient {
+    pub fn info(&self) -> &ClientInfo {
+        &self.info
+    }
 }
 
 impl TryFrom<ClientBuilder> for ReqwestClient {
@@ -52,10 +59,14 @@ impl TryFrom<ClientBuilder> for ReqwestClient {
                 .https_only(!value.api_env_config.allow_http);
         }
 
-        Ok(Self {
-            api_env_config: value.api_env_config,
-            client: builder.build()?,
+        let client_info = ClientInfo {
+            env_config: value.api_env_config,
             debug: value.debug,
+        };
+
+        Ok(Self {
+            client: builder.build()?,
+            info: client_info.into(),
         })
     }
 }
@@ -103,7 +114,7 @@ impl ClientRequestBuilder for ReqwestClient {
     type Request = ReqwestRequest;
 
     fn new_request(&self, data: &RequestData) -> Self::Request {
-        let final_url = format!("{}/{}", self.api_env_config.base_url, data.url);
+        let final_url = format!("{}/{}", self.info.env_config.base_url, data.url);
 
         let mut request = match data.method {
             Method::Delete => self.client.delete(&final_url),
@@ -152,12 +163,12 @@ impl ReqwestClient {
         }
 
         if !R::NEEDS_BODY {
-            return R::from_response([], self.debug);
+            return R::from_response([], self.info.debug);
         }
 
         let bytes = response.bytes().await?;
 
-        R::from_response(bytes, self.debug)
+        R::from_response(bytes, self.info.debug)
     }
 }
 

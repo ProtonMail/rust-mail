@@ -8,12 +8,14 @@ pub mod reqwest_client;
 
 mod api_env_config;
 mod client;
+mod client_info;
 mod proxy;
 mod request;
 mod response;
 
 pub use api_env_config::*;
 pub use client::*;
+pub use client_info::*;
 pub use proxy::*;
 pub use request::*;
 pub use response::*;

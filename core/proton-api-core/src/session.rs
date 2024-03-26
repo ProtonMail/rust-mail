@@ -27,7 +27,7 @@ impl Session {
     }
 
     pub fn api_env_config(&self) -> &APIEnvConfig {
-        &self.client.api_env_config
+        &self.client.info().env_config
     }
 
     pub async fn get_user(&self) -> Result<User, http::HttpRequestError> {
