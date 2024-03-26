@@ -21,17 +21,17 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn app_tracing_env_filter_debug() -> EnvFilter {
+pub fn app_tracing_env_filter_default() -> EnvFilter {
     EnvFilter::builder()
         .with_default_directive(LevelFilter::INFO.into())
         .parse_lossy("info")
 }
 
-pub fn app_tracing_env_filter_default() -> EnvFilter {
+pub fn app_tracing_env_filter_debug() -> EnvFilter {
     EnvFilter::builder()
         .with_default_directive(LevelFilter::TRACE.into())
         .parse_lossy(
-            "info,proton_mail_tui=debug,proton_mail_db=trace,proton_sqlite3=trace,\
+            "info,proton_mail_uniffi=debug,proton_mail_db=trace,proton_sqlite3=trace,\
                     proton_core_db=trace,proton_core_common=trace,proton_mail_common=trace,\
                     proton_event_loop=trace,proton_api_core=trace",
         )
