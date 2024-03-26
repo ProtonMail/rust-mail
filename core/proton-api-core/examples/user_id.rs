@@ -32,7 +32,8 @@ async fn main() {
         ..Default::default()
     };
 
-    let client = http::ClientBuilder::new(Some(api_env_config))
+    let client = http::ClientBuilder::new()
+        .api_env_config(api_env_config)
         .debug()
         .build()
         .unwrap();

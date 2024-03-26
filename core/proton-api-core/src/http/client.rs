@@ -15,24 +15,24 @@ pub struct ClientBuilder {
 
 impl Default for ClientBuilder {
     fn default() -> Self {
-        Self::new(None)
+        Self::new()
     }
 }
 
 impl ClientBuilder {
-    pub fn new(api_env_config: Option<APIEnvConfig>) -> Self {
-        let api_env_config = match api_env_config {
-            Some(config) => config,
-            None => APIEnvConfig::default(),
-        };
-
+    pub fn new() -> Self {
         Self {
-            api_env_config,
+            api_env_config: APIEnvConfig::default(),
             proxy_url: None,
             request_timeout: None,
             connect_timeout: None,
             debug: false,
         }
+    }
+
+    pub fn api_env_config(mut self, api_env_config: APIEnvConfig) -> Self {
+        self.api_env_config = api_env_config;
+        self
     }
 
     /// Set the full request timeout. By default there is no timeout.
