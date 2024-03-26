@@ -75,6 +75,14 @@ impl Mailbox {
         }
     }
 
+    /// Create a new mailbox for a given remote id.
+    #[uniffi::constructor]
+    pub fn with_remote_id(ctx: &MailUserSession, label_id: LabelId) -> MailboxResult<Self> {
+        Ok(Self {
+            mbox: proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), &label_id)?,
+        })
+    }
+
     /// Create a new mailbox for Inbox.
     #[uniffi::constructor]
     pub fn inbox(ctx: &MailUserSession) -> MailboxResult<Self> {
