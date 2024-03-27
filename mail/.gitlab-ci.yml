@@ -1,4 +1,4 @@
-image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.76.0
 
 workflow:
   rules:
