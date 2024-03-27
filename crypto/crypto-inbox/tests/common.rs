@@ -50,8 +50,15 @@ impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
 pub fn get_test_address_keys<T: PGPProviderSync>(
     pgp_provider: &T,
 ) -> Vec<TestAddressKey<T::PrivateKey>> {
+    get_test_address_key_source(pgp_provider, TEST_DECRYPTION_KEY)
+}
+
+pub fn get_test_address_key_source<T: PGPProviderSync>(
+    pgp_provider: &T,
+    source: &str,
+) -> Vec<TestAddressKey<T::PrivateKey>> {
     let decryption_key = pgp_provider
-        .private_key_import(TEST_DECRYPTION_KEY, "password", DataEncoding::Armor)
+        .private_key_import(source, "password", DataEncoding::Armor)
         .unwrap();
     vec![TestAddressKey(decryption_key)]
 }
@@ -59,8 +66,15 @@ pub fn get_test_address_keys<T: PGPProviderSync>(
 pub fn get_test_public_address_keys<T: PGPProviderSync>(
     pgp_provider: &T,
 ) -> Vec<TestAddressPublicKey<T::PublicKey>> {
+    get_test_public_address_key_source(pgp_provider, TEST_VERIFICATION_KEY)
+}
+
+pub fn get_test_public_address_key_source<T: PGPProviderSync>(
+    pgp_provider: &T,
+    source: &str,
+) -> Vec<TestAddressPublicKey<T::PublicKey>> {
     let verification_key = pgp_provider
-        .public_key_import(TEST_VERIFICATION_KEY, DataEncoding::Armor)
+        .public_key_import(source, DataEncoding::Armor)
         .unwrap();
     vec![TestAddressPublicKey(verification_key)]
 }

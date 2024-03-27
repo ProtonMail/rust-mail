@@ -251,6 +251,7 @@ fn select_body(
                         body.push_str(SPLIT_HTML);
                     }
                 });
+            body = body.replace("\r\n", "\n");
             return Ok((body, ProcessedBodyType::Html));
         }
     }
@@ -280,6 +281,7 @@ fn select_body(
                         body.push_str(SPLIT_TEXT);
                     }
                 });
+            body = body.replace("\r\n", "\n");
             return Ok((body, ProcessedBodyType::Text));
         }
     }
