@@ -1,6 +1,6 @@
 use std::string::FromUtf8Error;
 
-use proton_crypto::crypto::{
+use proton_crypto_account::proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationError,
     VerificationResult, VerifiedData, Verifier, VerifierSync,
 };

@@ -1,9 +1,9 @@
-use proton_crypto::{crypto::PGPProviderSync, new_pgp_provider};
 use proton_crypto_account::domain::{
     APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKey, APIPublicKeySource, KeyFlag,
     SKLSignature, SignedKeyList,
 };
 use proton_crypto_inbox::keys::{AddressType, InboxImportedPublicKeys, RecipientType};
+use proton_crypto_inbox::proton_crypto::{crypto::PGPProviderSync, new_pgp_provider};
 
 fn get_test_public_key<T: PGPProviderSync>(provider: &T) -> InboxImportedPublicKeys<T::PublicKey> {
     let address_keys = vec![APIPublicKey {

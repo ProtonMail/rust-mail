@@ -1,8 +1,8 @@
-use proton_crypto::{
+use proton_crypto_account::domain::{APIPublicKeySource, PublicAddressKey, PublicAddressKeys};
+use proton_crypto_account::proton_crypto::{
     crypto::PublicKey,
     keytransparency::{KTVerificationResult, KT_UNVERIFIED},
 };
-use proton_crypto_account::domain::{APIPublicKeySource, PublicAddressKey, PublicAddressKeys};
 
 /// Recipient type is either `External` or `Internal`.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]

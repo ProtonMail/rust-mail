@@ -5,7 +5,7 @@ use std::{
     io::{self},
 };
 
-use proton_crypto::crypto::{
+use proton_crypto_account::proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationResult,
     VerifiedData, VerifiedDataReader,
 };

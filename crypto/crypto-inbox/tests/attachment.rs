@@ -1,7 +1,7 @@
 use std::io;
 
 use base64::Engine;
-use proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
+use proton_crypto_account::proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
 use proton_crypto_inbox::attachment::{
     AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
