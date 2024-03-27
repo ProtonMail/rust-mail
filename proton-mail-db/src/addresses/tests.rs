@@ -3,7 +3,6 @@ use proton_api_mail::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType,
 };
 use proton_api_mail::exports::crypto::domain::{KeyId, LockedKey};
-use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
 
 #[test]
@@ -75,8 +74,8 @@ fn creat_test_address() -> Address {
     Address {
         id: AddressId::from("address_id"),
         email: "hello@mail.com".into(),
-        send: ProtonBoolean::True,
-        receive: ProtonBoolean::False,
+        send: true,
+        receive: false,
         status: AddressStatus::Enabled,
         domain_id: Some("id".into()),
         address_type: AddressType::Original,
@@ -115,8 +114,8 @@ fn creat_test_address_updated() -> Address {
     Address {
         id: AddressId::from("address_id"),
         email: "hello_bar@mail.com".into(),
-        send: ProtonBoolean::False,
-        receive: ProtonBoolean::True,
+        send: false,
+        receive: true,
         status: AddressStatus::Enabled,
         domain_id: Some("SOME OTHER ID".into()),
         address_type: AddressType::Original,

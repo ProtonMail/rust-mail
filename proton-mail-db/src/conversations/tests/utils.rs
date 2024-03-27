@@ -6,7 +6,6 @@ use proton_api_mail::domain::{
     Address, Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId,
     MessageAddress, MessageCount, MessageId, MessageMetadata,
 };
-use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default)]
@@ -118,7 +117,7 @@ pub(in crate::conversations) fn prepare_and_patch_db_state_and_skip(
         conv.num_attachments += message.num_attachments as u64;
         conv.size += message.size;
         conv.num_messages += 1;
-        if message.unread == ProtonBoolean::True {
+        if message.unread == true {
             conv.num_unread += 1;
         }
         extend_addresses(&mut conv.senders, std::iter::once(&message.sender));
@@ -131,7 +130,7 @@ pub(in crate::conversations) fn prepare_and_patch_db_state_and_skip(
             conv_label.context_size += message.size;
             conv_label.context_num_attachments += message.num_attachments as u64;
             conv_label.context_time = conv_label.context_time.max(message.time);
-            if message.unread == ProtonBoolean::True {
+            if message.unread == true {
                 conv_label.context_num_unread += 1;
             }
         }
@@ -173,7 +172,7 @@ pub(in crate::conversations) fn prepare_and_patch_db_state_and_skip(
 
             for label_id in &message.label_ids {
                 let counts = result.message_counts.get_mut(label_id).unwrap();
-                if message.unread == ProtonBoolean::True {
+                if message.unread == true {
                     counts.unread += 1
                 }
                 counts.total += 1
@@ -220,7 +219,7 @@ pub(in crate::conversations) fn message_counts_for_conversation(
         }
 
         total += 1;
-        if m.unread == ProtonBoolean::True {
+        if m.unread == true {
             unread += 1;
         }
     }

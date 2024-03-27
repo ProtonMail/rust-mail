@@ -1,7 +1,9 @@
 use crate::exports::serde::{self, Deserialize, Deserializer, Serialize};
-use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::proton_sqlite3;
 use proton_api_core::new_integer_enum;
+use proton_api_core::utils::{
+    bool_from_integer, bool_to_integer, opt_bool_from_integer, opt_bool_to_integer,
+};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
@@ -10,8 +12,12 @@ pub struct MailSettings {
     pub display_name: String,
     pub signature: String,
     pub theme: String,
-    #[serde(default = "default_proto_bool_true")]
-    pub auto_save_contacts: ProtonBoolean,
+    #[serde(
+        default = "default_proto_bool_true",
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub auto_save_contacts: bool,
     #[serde(default)]
     pub composer_mode: MailSettingsComposerMode,
     #[serde(default)]
@@ -32,12 +38,16 @@ pub struct MailSettings {
     pub swipe_left: MailSettingsSwipeAction,
     #[serde(default)]
     pub swipe_right: MailSettingsSwipeAction,
-    #[serde(default = "default_proto_bool_true")]
-    pub shortcuts: ProtonBoolean,
+    #[serde(
+        default = "default_proto_bool_true",
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub shortcuts: bool,
     #[serde(rename = "PMSignature", default)]
     pub pm_signature: MailSettingsPMSignature,
     #[serde(rename = "PMSignatureReferralLink", default)]
-    pub pm_signature_referral_link: ProtonBoolean,
+    pub pm_signature_referral_link: bool,
     #[serde(default)]
     pub image_proxy: u32,
     pub num_message_per_page: u32,
@@ -47,36 +57,81 @@ pub struct MailSettings {
     pub receive_mime_type: String,
     #[serde(rename = "ShowMIMEType")]
     pub show_mime_type: String,
-    #[serde(default)]
-    pub enable_folder_color: ProtonBoolean,
-    #[serde(default = "default_proto_bool_true")]
-    pub inherit_parent_folder_color: ProtonBoolean,
-    #[serde(default)]
-    pub submission_access: ProtonBoolean,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub enable_folder_color: bool,
+    #[serde(
+        default = "default_proto_bool_true",
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub inherit_parent_folder_color: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub submission_access: bool,
     #[serde(default)]
     pub right_to_left: MailSettingsComposerDirection,
-    #[serde(default)]
-    pub attach_public_key: ProtonBoolean,
-    #[serde(default)]
-    pub sign: ProtonBoolean,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub attach_public_key: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub sign: bool,
     #[serde(default, rename = "PGPScheme")]
     pub pgp_scheme: MailSettingsPGPScheme,
-    #[serde(default)]
-    pub prompt_pin: ProtonBoolean,
-    #[serde(default)]
-    pub sticky_labels: ProtonBoolean,
-    #[serde(default)]
-    pub confirm_link: ProtonBoolean,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub prompt_pin: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub sticky_labels: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub confirm_link: bool,
     #[serde(default = "default_delay_seconds")]
     pub delay_send_seconds: u32,
     pub font_face: Option<String>,
     pub spam_action: Option<MailSettingsSpamAction>,
-    pub block_sender_confirmation: Option<ProtonBoolean>,
+    #[serde(
+        default,
+        deserialize_with = "opt_bool_from_integer",
+        serialize_with = "opt_bool_to_integer"
+    )]
+    pub block_sender_confirmation: Option<bool>,
     pub mobile_settings: Option<MailSettingsMobileSettings>,
-    #[serde(default)]
-    pub hide_remote_images: ProtonBoolean,
-    #[serde(default)]
-    pub hide_sender_images: ProtonBoolean,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub hide_remote_images: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub hide_sender_images: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -258,8 +313,8 @@ pub struct MailSettingsMobileSettings {
 }
 
 #[inline]
-fn default_proto_bool_true() -> ProtonBoolean {
-    ProtonBoolean::True
+fn default_proto_bool_true() -> bool {
+    true
 }
 
 #[inline]

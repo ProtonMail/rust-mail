@@ -14,7 +14,6 @@ use proton_api_mail::domain::{
     AttachmentMetadata, Conversation, ConversationCount, ConversationId, ConversationLabels,
     Disposition, Label, LabelId, LabelType, MessageAddress,
 };
-use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
 
 #[test]
@@ -1117,10 +1116,10 @@ pub(in crate::conversations) fn test_label2() -> Label {
         path: None,
         color: "#0000".to_string(),
         label_type: LabelType::Folder,
-        notify: ProtonBoolean::True,
+        notify: true,
         display: Default::default(),
         sticky: Default::default(),
-        expanded: ProtonBoolean::True,
+        expanded: true,
         order: 1,
     }
 }
@@ -1133,10 +1132,10 @@ pub(in crate::conversations) fn test_starred_label() -> Label {
         path: Some("Starred".to_string()),
         color: "#0000".to_string(),
         label_type: LabelType::System,
-        notify: ProtonBoolean::False,
+        notify: false,
         display: Default::default(),
         sticky: Default::default(),
-        expanded: ProtonBoolean::False,
+        expanded: false,
         order: 2,
     }
 }

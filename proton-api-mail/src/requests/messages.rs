@@ -2,10 +2,10 @@ use crate::domain::{
     LabelId, Message, MessageCount, MessageId, MessageMetadata, MessageMetadataFilter,
 };
 use crate::exports::serde::Serialize;
-use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
+use proton_api_core::utils::bool_from_integer;
 
 pub struct GetMessageMetadataRequest {
     filter: MessageMetadataFilter,
@@ -15,7 +15,8 @@ pub struct GetMessageMetadataRequest {
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct MessageMetadataResponse {
     pub messages: Vec<MessageMetadata>,
-    pub stale: ProtonBoolean,
+    #[serde(default, deserialize_with = "bool_from_integer")]
+    pub stale: bool,
     pub total: u64,
 }
 

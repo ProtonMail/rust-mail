@@ -2,9 +2,9 @@ use crate::domain::{
     AddressId, AttachmentMetadata, ExternalId, LabelId, MessageAddress, MessageAttachmentInfo,
     MessageMetadataSortMode,
 };
-use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::serde::{Deserialize, Serialize};
+use proton_api_core::utils::bool_to_integer;
 use std::collections::HashMap;
 
 proton_api_core::utils::string_id!(ConversationId);
@@ -109,7 +109,11 @@ pub struct ConversationFilter {
     pub external_id: Option<ExternalId>,
     #[serde(rename = "EndID")]
     pub end_id: Option<ConversationId>,
-    pub desc: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub desc: bool,
     pub sort: Option<MessageMetadataSortMode>,
     pub page: usize,
     pub page_size: usize,
@@ -125,7 +129,7 @@ impl ConversationFilter {
             end_id: None,
             label_id: None,
             sort: None,
-            desc: ProtonBoolean::False,
+            desc: false,
             page_size,
             page: page_number,
         }
@@ -177,7 +181,7 @@ impl ConversationFilterBuilder {
     }
 
     pub fn descending(mut self) -> Self {
-        self.0.desc = ProtonBoolean::True;
+        self.0.desc = true;
         self
     }
 

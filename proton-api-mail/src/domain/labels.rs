@@ -1,7 +1,7 @@
 use lazy_static::lazy_static;
-use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
+use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 use std::convert::Into;
 
 proton_api_core::utils::string_id!(LabelId);
@@ -36,14 +36,30 @@ pub struct Label {
     pub color: String,
     #[serde(rename = "Type")]
     pub label_type: LabelType,
-    #[serde(default)]
-    pub notify: ProtonBoolean,
-    #[serde(default)]
-    pub display: ProtonBoolean,
-    #[serde(default)]
-    pub sticky: ProtonBoolean,
-    #[serde(default)]
-    pub expanded: ProtonBoolean,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub notify: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub display: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub sticky: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub expanded: bool,
     #[serde(default = "default_label_order")]
     pub order: u32,
 }

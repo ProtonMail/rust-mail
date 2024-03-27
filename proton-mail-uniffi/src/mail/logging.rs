@@ -33,6 +33,6 @@ pub fn app_tracing_env_filter_debug() -> EnvFilter {
         .parse_lossy(
             "info,proton_mail_uniffi=debug,proton_mail_db=trace,proton_sqlite3=trace,\
                     proton_core_db=trace,proton_core_common=trace,proton_mail_common=trace,\
-                    proton_event_loop=trace,proton_api_core=trace",
+                    proton_event_loop=trace,proton_api_core=trace,proton_action_queue=trace",
         )
 }

@@ -263,9 +263,9 @@ ON CONFLICT (rid) DO UPDATE SET `order`=excluded.`order`, name=excluded.name, pa
 color=excluded.color, parent_id=excluded.parent_id RETURNING id",
         )?;
         for label in labels {
-            let sticky: bool = label.sticky.into();
-            let expanded: bool = label.expanded.into();
-            let notify: bool = label.notify.into();
+            let sticky: bool = label.sticky;
+            let expanded: bool = label.expanded;
+            let notify: bool = label.notify;
             let local_id = stmt_remote.query_row(
                 (
                     &label.id,
@@ -300,9 +300,9 @@ color=excluded.color, parent_id=excluded.parent_id RETURNING id",
 expanded=?, notified=?, sticky=? WHERE rid=?",
         )?;
         for label in labels {
-            let sticky: bool = label.sticky.into();
-            let expanded: bool = label.expanded.into();
-            let notify: bool = label.notify.into();
+            let sticky: bool = label.sticky;
+            let expanded: bool = label.expanded;
+            let notify: bool = label.notify;
             stmt.execute((
                 &label.parent_id,
                 label.order,

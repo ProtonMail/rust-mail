@@ -1,9 +1,9 @@
-use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::crypto::domain::AddressKeys;
 use proton_api_core::exports::proton_sqlite3::rusqlite;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::serde_aux::field_attributes::deserialize_default_from_null;
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
+use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 use serde::{Deserialize, Serialize};
 
 proton_api_core::utils::string_id!(AddressId);
@@ -14,8 +14,16 @@ pub struct Address {
     #[serde(rename = "ID")]
     pub id: AddressId,
     pub email: String,
-    pub send: ProtonBoolean,
-    pub receive: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub send: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub receive: bool,
     pub status: AddressStatus,
     #[serde(rename = "DomainID")]
     pub domain_id: Option<String>,
