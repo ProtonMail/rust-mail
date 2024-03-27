@@ -1,4 +1,4 @@
-use proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
+use proton_crypto_account::proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
 
 pub const TEST_DECRYPTION_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -50,15 +50,16 @@ impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
 pub fn get_test_address_keys<T: PGPProviderSync>(
     pgp_provider: &T,
 ) -> Vec<TestAddressKey<T::PrivateKey>> {
-    get_test_address_key_source(pgp_provider, TEST_DECRYPTION_KEY)
+    get_test_address_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
 }
 
 pub fn get_test_address_key_source<T: PGPProviderSync>(
     pgp_provider: &T,
     source: &str,
+    passphrase: &str,
 ) -> Vec<TestAddressKey<T::PrivateKey>> {
     let decryption_key = pgp_provider
-        .private_key_import(source, "password", DataEncoding::Armor)
+        .private_key_import(source, passphrase, DataEncoding::Armor)
         .unwrap();
     vec![TestAddressKey(decryption_key)]
 }
