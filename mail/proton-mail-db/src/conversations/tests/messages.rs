@@ -15,7 +15,6 @@ use proton_api_mail::domain::{
     AttachmentMetadata, ConversationLabels, LabelId, LabelType, MessageAddress, MessageCount,
     MessageId, MessageMetadata,
 };
-use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 
 #[test]
 fn test_create_message() {
@@ -51,7 +50,7 @@ fn test_update_message() {
         let mut metadata_updated =
             test_message_metadata([MY_LABEL_ID2.clone(), LabelId::starred().clone()], []);
         metadata_updated.order = 20;
-        metadata_updated.unread = ProtonBoolean::True;
+        metadata_updated.unread = true;
         metadata_updated.label_ids.push(LabelId::starred().clone());
         let id = tx
             .create_message_from_metadata(&metadata)
@@ -425,9 +424,9 @@ fn test_message_metadata(
         time: 100,
         size: 1024,
         unread: Default::default(),
-        is_replied: ProtonBoolean::True,
+        is_replied: true,
         is_replied_all: Default::default(),
-        is_forwarded: ProtonBoolean::True,
+        is_forwarded: true,
         expiration_time: 10000,
         num_attachments: 24,
         attachments_metadata: attachments.into_iter().collect(),

@@ -50,9 +50,9 @@ impl LocalLabel {
             color: LabelColor::from(label.color),
             label_type: label.label_type,
             order: label.order,
-            notify: label.notify.into(),
-            expanded: label.expanded.into(),
-            sticky: label.sticky.into(),
+            notify: label.notify,
+            expanded: label.expanded,
+            sticky: label.sticky,
         }
     }
 }

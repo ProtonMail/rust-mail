@@ -2,7 +2,6 @@ use crate::{
     new_test_connection, with_tx, LabelColor, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{Label, LabelId, LabelType};
-use proton_api_mail::proton_api_core::domain::ProtonBoolean;
 
 #[test]
 fn test_remote_label_add() {
@@ -25,10 +24,10 @@ fn test_remote_label_add_duplicate() {
             path: None,
             color: "#ffffff".to_string(),
             label_type: LabelType::Label,
-            notify: ProtonBoolean::False,
-            display: ProtonBoolean::True,
-            sticky: ProtonBoolean::False,
-            expanded: ProtonBoolean::True,
+            notify: false,
+            display: true,
+            sticky: false,
+            expanded: true,
             order: 0,
         };
 
@@ -50,10 +49,10 @@ fn test_remote_label_update() {
         // Perform Some Updates
         labels[0].color = "#xxxxx".into();
         labels[0].name = "FooBar".into();
-        labels[1].sticky = ProtonBoolean::True;
-        labels[1].expanded = ProtonBoolean::True;
-        labels[1].notify = ProtonBoolean::True;
-        labels[1].display = ProtonBoolean::True;
+        labels[1].sticky = true;
+        labels[1].expanded = true;
+        labels[1].notify = true;
+        labels[1].display = true;
         // Switch parents
         labels[2].parent_id = Some(labels[3].id.clone());
         labels[2].order = 3;
@@ -243,10 +242,10 @@ fn test_labels() -> Vec<Label> {
             path: None,
             color: "#ffffff".to_string(),
             label_type: LabelType::Label,
-            notify: ProtonBoolean::False,
-            display: ProtonBoolean::True,
-            sticky: ProtonBoolean::False,
-            expanded: ProtonBoolean::True,
+            notify: false,
+            display: true,
+            sticky: false,
+            expanded: true,
             order: 0,
         },
         Label {
@@ -256,10 +255,10 @@ fn test_labels() -> Vec<Label> {
             path: None,
             color: "#ffffff".to_string(),
             label_type: LabelType::System,
-            notify: ProtonBoolean::True,
-            display: ProtonBoolean::False,
-            sticky: ProtonBoolean::True,
-            expanded: ProtonBoolean::False,
+            notify: true,
+            display: false,
+            sticky: true,
+            expanded: false,
             order: 0,
         },
         Label {
@@ -269,10 +268,10 @@ fn test_labels() -> Vec<Label> {
             path: None,
             color: "#ffffff".to_string(),
             label_type: LabelType::Folder,
-            notify: ProtonBoolean::True,
-            display: ProtonBoolean::True,
-            sticky: ProtonBoolean::False,
-            expanded: ProtonBoolean::False,
+            notify: true,
+            display: true,
+            sticky: false,
+            expanded: false,
             order: 2,
         },
         Label {
@@ -282,10 +281,10 @@ fn test_labels() -> Vec<Label> {
             path: Some("Folder1/Folder2".to_string()),
             color: "#ffffff".to_string(),
             label_type: LabelType::Folder,
-            notify: ProtonBoolean::False,
-            display: ProtonBoolean::False,
-            sticky: ProtonBoolean::True,
-            expanded: ProtonBoolean::True,
+            notify: false,
+            display: false,
+            sticky: true,
+            expanded: true,
             order: 3,
         },
     ]

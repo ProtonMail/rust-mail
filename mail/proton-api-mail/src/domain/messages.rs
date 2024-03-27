@@ -1,6 +1,6 @@
 use crate::domain::{AddressId, ConversationId, LabelId};
-use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
+use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
@@ -13,12 +13,24 @@ pub struct MessageAddress {
     //TODO: Proper email parsing
     pub address: String,
     pub name: String,
-    #[serde(default)]
-    pub is_proton: ProtonBoolean,
-    #[serde(default)]
-    pub display_sender_image: ProtonBoolean,
-    #[serde(default)]
-    pub is_simple_login: ProtonBoolean,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_proton: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub display_sender_image: bool,
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_simple_login: bool,
     pub bimi_selector: Option<String>,
 }
 
@@ -53,10 +65,26 @@ pub struct MessageMetadata {
     pub flags: u64,
     pub time: u64,
     pub size: u64,
-    pub unread: ProtonBoolean,
-    pub is_replied: ProtonBoolean,
-    pub is_replied_all: ProtonBoolean,
-    pub is_forwarded: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub unread: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_replied: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_replied_all: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_forwarded: bool,
     pub expiration_time: u64,
     pub num_attachments: u32,
     #[serde(default)]
@@ -145,10 +173,26 @@ pub struct Message {
     pub flags: u64,
     pub time: u64,
     pub size: u64,
-    pub unread: ProtonBoolean,
-    pub is_replied: ProtonBoolean,
-    pub is_replied_all: ProtonBoolean,
-    pub is_forwarded: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub unread: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_replied: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_replied_all: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_forwarded: bool,
 
     pub num_attachments: u32,
 
@@ -249,7 +293,11 @@ pub struct MessageMetadataFilter {
     external_id: Option<ExternalId>,
     #[serde(rename = "EndID")]
     end_id: Option<MessageId>,
-    desc: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    desc: bool,
     sort: Option<MessageMetadataSortMode>,
     #[serde(rename = "ConversationID")]
     conversation_id: Option<ConversationId>,
@@ -267,7 +315,7 @@ impl MessageMetadataFilter {
             end_id: None,
             label_id: None,
             sort: None,
-            desc: ProtonBoolean::False,
+            desc: false,
             conversation_id: None,
             page_size,
             page: page_number,
@@ -325,7 +373,7 @@ impl MessageMetadataFilterBuilder {
     }
 
     pub fn descending(mut self) -> Self {
-        self.0.desc = ProtonBoolean::True;
+        self.0.desc = true;
         self
     }
 

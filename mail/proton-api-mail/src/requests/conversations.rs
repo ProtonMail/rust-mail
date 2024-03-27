@@ -1,10 +1,10 @@
 use crate::domain::{
     Conversation, ConversationCount, ConversationFilter, ConversationId, LabelId, MessageMetadata,
 };
-use proton_api_core::domain::ProtonBoolean;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
+use proton_api_core::utils::bool_from_integer;
 
 pub struct GetConversationsRequest {
     filter: ConversationFilter,
@@ -20,7 +20,8 @@ impl GetConversationsRequest {
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetConversationsResponse {
     pub conversations: Vec<Conversation>,
-    pub stale: ProtonBoolean,
+    #[serde(default, deserialize_with = "bool_from_integer")]
+    pub stale: bool,
     pub total: u64,
 }
 
