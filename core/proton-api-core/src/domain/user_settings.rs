@@ -1,5 +1,5 @@
-use crate::domain::ProtonBoolean;
 use crate::requests::FIDOKey;
+use crate::utils::{bool_from_integer, bool_to_integer};
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_default_from_null;
 
@@ -79,8 +79,16 @@ new_integer_enum!(u8, UserSettingsEarlyAccess {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserSettingsFlags {
-    pub welcomed: ProtonBoolean,
-    pub in_app_promos_hidden: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub welcomed: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub in_app_promos_hidden: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -93,8 +101,16 @@ pub struct UserSettingsReferral {
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserSettingsHighSecurity {
-    pub eligible: ProtonBoolean,
-    pub value: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub eligible: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub value: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -119,14 +135,42 @@ pub struct UserSettings {
     pub week_start: UserSettingsWeekStart,
     pub date_format: UserSettingsDateFormat,
     pub time_format: UserSettingsTimeFormat,
-    pub welcome: ProtonBoolean,
-    pub early_access: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub welcome: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub early_access: bool,
     pub flags: UserSettingsFlags,
     pub referral: Option<UserSettingsReferral>,
-    pub device_recovery: ProtonBoolean,
-    pub telemetry: ProtonBoolean,
-    pub crash_reports: ProtonBoolean,
-    pub hide_side_panel: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub device_recovery: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub telemetry: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub crash_reports: bool,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub hide_side_panel: bool,
     pub high_security: UserSettingsHighSecurity,
-    pub session_account_recovery: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub session_account_recovery: bool,
 }

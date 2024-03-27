@@ -1,7 +1,7 @@
 use crate::DBResult;
 use proton_api_core::domain::{
-    ProtonBoolean, TFAStatus, User, UserFlags, UserId, UserLogAuth, UserProductUsedSpace,
-    UserSettings, UserSettings2FA, UserSettingsDateFormat, UserSettingsDensity, UserSettingsEmail,
+    TFAStatus, User, UserFlags, UserId, UserLogAuth, UserProductUsedSpace, UserSettings,
+    UserSettings2FA, UserSettingsDateFormat, UserSettingsDensity, UserSettingsEmail,
     UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword, UserSettingsPhone,
     UserSettingsTimeFormat, UserSettingsWeekStart,
 };
@@ -112,19 +112,19 @@ fn test_core_store_and_load_user_settings() {
         welcome: Default::default(),
         early_access: Default::default(),
         flags: UserSettingsFlags {
-            welcomed: ProtonBoolean::True,
+            welcomed: true,
             in_app_promos_hidden: Default::default(),
         },
         referral: None,
         device_recovery: Default::default(),
-        telemetry: ProtonBoolean::True,
+        telemetry: true,
         crash_reports: Default::default(),
-        hide_side_panel: ProtonBoolean::True,
+        hide_side_panel: true,
         high_security: UserSettingsHighSecurity {
             eligible: Default::default(),
-            value: ProtonBoolean::True,
+            value: true,
         },
-        session_account_recovery: ProtonBoolean::True,
+        session_account_recovery: true,
     };
 
     conn.tx(|tx| -> DBResult<()> {

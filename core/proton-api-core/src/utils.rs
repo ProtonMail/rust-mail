@@ -52,6 +52,7 @@ macro_rules! string_id {
     };
 }
 
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub use string_id;
 
 /// Generate all the boilerplate for an enum that is backed by a certain an integer representation.
@@ -104,3 +105,40 @@ macro_rules! new_integer_enum {
 }
 
 pub use new_integer_enum;
+
+/// Deserialize bool from integer
+pub fn bool_from_integer<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    if u8::deserialize(deserializer)? == 0 {
+        Ok(false)
+    } else {
+        Ok(true)
+    }
+}
+
+/// Serialize bool from integer
+pub fn bool_to_integer<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_u8(if *value { 1 } else { 0 })
+}
+
+/// Deserialize Option<bool> from integer
+pub fn opt_bool_from_integer<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let v = Option::<u8>::deserialize(deserializer)?;
+    Ok(v.map(|v| v != 0))
+}
+
+/// Serialize Option<bool> to integer
+pub fn opt_bool_to_integer<S>(value: &Option<bool>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    value.map(|v| if v { 1 } else { 0 }).serialize(serializer)
+}

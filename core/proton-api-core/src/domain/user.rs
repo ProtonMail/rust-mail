@@ -1,4 +1,4 @@
-use crate::domain::ProtonBoolean;
+use crate::utils::{bool_from_integer, bool_to_integer};
 use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
@@ -79,7 +79,11 @@ pub struct User {
     pub currency: String,
     pub keys: UserKeys,
     pub product_used_space: UserProductUsedSpace,
-    pub to_migrate: ProtonBoolean,
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub to_migrate: bool,
     pub mnemonic_status: UserMnemonicStatus,
     pub role: u32,
     pub private: u32,
