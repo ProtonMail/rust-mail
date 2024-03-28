@@ -296,6 +296,9 @@ fn to_sanitized_string(data: Vec<u8>) -> Result<(Vec<u8>, String), MessageError>
 fn to_canonicalized_verify_string(data: &[u8]) -> Result<String, MessageError> {
     let data = String::from_utf8(data.to_vec())?
         .replace("\r\n", "\n")
-        .replace('\n', "\r\n"); //TODO Improve inefficient transformation.
+        .split('\n')
+        .map(|value| value.trim_end())
+        .collect::<Vec<_>>()
+        .join("\r\n"); //TODO Improve inefficient transformation.
     Ok(data)
 }

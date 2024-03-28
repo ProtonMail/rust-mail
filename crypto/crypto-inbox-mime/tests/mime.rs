@@ -392,13 +392,12 @@ fn test_mime_process_message() {
     let expected_attachment_names = [
         "Screenshot from 2018-02-06 17-13-21.png",
         "publickey - kaykeytest3@protonmail.com - 0xE1DADAE3.asc",
-        "signature.asc",
     ];
-    let expected_attachment_id_contains = ["46098e9b@protonmail.com", "@pmcrypto>", "@pmcrypto>"];
+    let expected_attachment_id_contains = ["46098e9b@protonmail.com", "@pmcrypto>"];
     let (processed_message, _signatures) =
         MimeProcessor::process_mime(MESSAGE_ID, TEST_GO_MIME.as_bytes()).unwrap();
     assert_eq!(&processed_message.body, TEST_GO_MIME_EXPECTED);
-    assert_eq!(processed_message.attachments.len(), 3);
+    assert_eq!(processed_message.attachments.len(), 2);
     for (attachment, expected_name) in processed_message
         .attachments
         .iter()

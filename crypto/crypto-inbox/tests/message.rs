@@ -3,6 +3,7 @@ use proton_crypto_inbox::proton_crypto::crypto::VerificationError;
 
 mod common;
 use common::{get_test_address_keys, get_test_public_address_keys};
+use proton_crypto_inbox_mime::ProcessedBodyType;
 
 use crate::common::{get_test_address_key_source, get_test_public_address_key_source};
 
@@ -289,7 +290,25 @@ OQTmvM6R
 -----END PGP PUBLIC KEY BLOCK-----
 ";
 
-const TEST_EXPECTED_BODY_MIME_GO: &str = r#"<html><body>Pak<br/><br/>> On Aug 13, 2018, at 4:15 PM, Telekja &lt;telekja@protonmail.com> wrote:<br/>> <br/>> Encrypted & Signed PGP part<br/>> ssdaadsdasads<br/>> <br/>> <br/>> Sent with ProtonMail Secure Email.<br/>> <br/>> ‐‐‐‐‐‐‐ Original Message ‐‐‐‐‐‐‐<br/>> On August 13, 2018 4:12 PM, PGP Test &lt;pmpgptest@gmail.com> wrote:<br/>> <br/>>> Test 123<br/>>> BOBOHRI<br/>> <br/>> <br/><br/></body></html>"#;
+const TEST_EXPECTED_BODY_MIME_GO: &str = r#"Pak
+
+> On Aug 13, 2018, at 4:15 PM, Telekja <telekja@protonmail.com> wrote:
+> 
+> Encrypted & Signed PGP part
+> ssdaadsdasads
+> 
+> 
+> Sent with ProtonMail Secure Email.
+> 
+> ‐‐‐‐‐‐‐ Original Message ‐‐‐‐‐‐‐
+> On August 13, 2018 4:12 PM, PGP Test <pmpgptest@gmail.com> wrote:
+> 
+>> Test 123
+>> BOBOHRI
+> 
+> 
+
+"#;
 
 struct TestMessage(pub bool, pub String);
 
@@ -340,7 +359,6 @@ fn test_message_decrypt_and_verify_mime() {
     let (decrypted_message, verifier) = test_message
         .decrypt(&pgp_provider, &decryption_keys)
         .unwrap();
-
     assert_eq!(decrypted_message.body(), TEST_EXPECTED_BODY_MIME);
     let verification_result = verifier.verify_signature(&pgp_provider, &verification_keys);
     assert!(verification_result.is_ok());
@@ -390,8 +408,10 @@ fn test_message_decrypt_and_verify_mime_go() {
         panic!("Must be a mime body");
     };
 
-    assert_eq!(processed_messsage.attachments.len(), 1);
-    let attachment = processed_messsage.attachments.first().unwrap();
-    assert_eq!(attachment.name, "signature.asc");
-    assert_eq!(attachment.mime_type, "application/pgp-signature");
+    assert!(processed_messsage.attachments.is_empty());
+    assert!(matches!(
+        processed_messsage.mime_body_type,
+        ProcessedBodyType::Text
+    ));
+    assert!(processed_messsage.encrypted_subject.is_none());
 }

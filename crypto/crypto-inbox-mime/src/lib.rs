@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ops::Range;
@@ -130,7 +131,7 @@ fn process_attachments(message_id: &str, parsed_message: &Message<'_>) -> Vec<Pr
     let mut processed_attachments = Vec::with_capacity(parsed_message.attachment_count());
     // Filename to counter map  for duplicate file names.
     let mut attachment_name_counter: HashMap<String, u32> = HashMap::new();
-    processed_attachments.extend(parsed_message.attachments().enumerate().map(
+    processed_attachments.extend(parsed_message.attachments().enumerate().filter_map(
         |(idx, attachment)| {
             // Normalize each attachment
             let file_name_option = attachment.attachment_name();
@@ -142,6 +143,12 @@ fn process_attachments(message_id: &str, parsed_message: &Message<'_>) -> Vec<Pr
                 }
                 base_content_type
             });
+            // Filter out signature attachments.
+            if let Some(content_type) = &content_type_option {
+                if content_type == "application/pgp-signature" {
+                    return None;
+                }
+            }
             // Generate a unique file name.
             let mut generated_filename =
                 generate_file_name(file_name_option, content_type_option.as_ref());
@@ -160,14 +167,14 @@ fn process_attachments(message_id: &str, parsed_message: &Message<'_>) -> Vec<Pr
                 .map_or_else(random_content_id, |v| v.to_string());
             let data = attachment.contents().to_vec();
 
-            ProcessedAttachment {
+            Some(ProcessedAttachment {
                 id: mime_attachment_id(message_id, &content_id, idx),
                 content_id,
                 name: generated_filename,
                 size: data.len(),
                 mime_type: content_type_option.unwrap_or(String::default()),
                 data,
-            }
+            })
         },
     ));
     processed_attachments
@@ -222,6 +229,24 @@ fn process_signatures(parsed_message: &Message<'_>) -> Vec<MimeSignatureVerifier
         .collect()
 }
 
+fn html_body_filter<'a>(parsed_message: &'a Message<'_>, idx: usize) -> Option<Cow<'a, str>> {
+    let part = parsed_message.html_part(idx)?;
+    let subtype = extract_matched_content_subtype(part.headers(), "text")?;
+    if subtype != "html" {
+        return None;
+    }
+    parsed_message.body_html(idx)
+}
+
+fn text_body_filter<'a>(parsed_message: &'a Message<'_>, idx: usize) -> Option<Cow<'a, str>> {
+    let part = parsed_message.text_part(idx)?;
+    let subtype = extract_matched_content_subtype(part.headers(), "text")?;
+    if subtype != "plain" {
+        return None;
+    }
+    parsed_message.body_text(idx)
+}
+
 fn select_body(
     parsed_message: &Message<'_>,
 ) -> Result<(String, ProcessedBodyType), ProcessMimeError> {
@@ -232,7 +257,7 @@ fn select_body(
         let mut total_body_size: usize = 0;
         let mut num_considered_bodies: usize = 0;
         (0..parsed_message.html_body_count())
-            .filter_map(|idx| parsed_message.body_html(idx))
+            .filter_map(|idx| html_body_filter(parsed_message, idx))
             .for_each(|body_str| {
                 total_body_size += body_str.len();
                 num_considered_bodies += 1;
@@ -243,7 +268,7 @@ fn select_body(
                 total_body_size + (num_considered_bodies - 1) * SPLIT_HTML.len(),
             );
             (0..parsed_message.html_body_count())
-                .filter_map(|idx| parsed_message.body_html(idx))
+                .filter_map(|idx| html_body_filter(parsed_message, idx))
                 .enumerate()
                 .for_each(|(idx, data)| {
                     body.push_str(&data);
@@ -262,7 +287,7 @@ fn select_body(
         let mut total_body_size: usize = 0;
         let mut num_considered_bodies: usize = 0;
         (0..parsed_message.text_body_count())
-            .filter_map(|idx| parsed_message.body_text(idx))
+            .filter_map(|idx| text_body_filter(parsed_message, idx))
             .for_each(|body_str| {
                 total_body_size += body_str.len();
                 num_considered_bodies += 1;
@@ -273,7 +298,7 @@ fn select_body(
                 total_body_size + (num_considered_bodies - 1) * SPLIT_TEXT.len(),
             );
             (0..parsed_message.text_body_count())
-                .filter_map(|idx| parsed_message.body_text(idx))
+                .filter_map(|idx| text_body_filter(parsed_message, idx))
                 .enumerate()
                 .for_each(|(idx, data)| {
                     body.push_str(&data);
