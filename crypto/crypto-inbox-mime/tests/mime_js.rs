@@ -260,38 +260,6 @@ Content-Transfer-Encoding: 7bit
 
 --------------P7E1gxp6rCvfn0to5n3PZ2h0--"#;
 
-pub const MESSAGE_WITH_EMPTY_SIGNATURE: &str = r#"Content-Type: multipart/signed; protocol="application/pgp-signature";
-micalg="pgp-sha256"; boundary="===============9034558267015095129=="
-MIME-Version: 1.0
-
---===============9034558267015095129==
-MIME-Version: 1.0
-Content-Type: multipart/alternative; boundary="--==_mimepart_64c6b73c4dd6d_2292b028ca3c6b8191503f"; charset=UTF-8
-Content-Transfer-Encoding: 7bit
-
-This is a multi-part message in MIME format.
-----==_mimepart_64c6b73c4dd6d_2292b028ca3c6b8191503f
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: quoted-printable
-
-Hello
-
-----==_mimepart_64c6b73c4dd6d_2292b028ca3c6b8191503f
-Content-Type: text/html; charset=UTF-8
-Content-Transfer-Encoding: quoted-printable
-
-<div>Hello</div>
-
-----==_mimepart_64c6b73c4dd6d_2292b028ca3c6b8191503f--
-
---===============9034558267015095129==
-Content-Type: application/pgp-signature; name="signature.asc"
-MIME-Version: 1.0
-Content-Disposition: attachment; filename="signature.asc"
-
-
---===============9034558267015095129==--"#;
-
 const MULTIPART_MESSAGE_WITH_SPECIAL_CHARACTER: &str = r#"From: Jon Smith <jon@example.com>
 To: Jon Smith <jon@example.com>
 Mime-Version: 1.0
@@ -422,16 +390,6 @@ fn test_can_parse_message_with_empty_body() {
 
     assert_eq!(processed_message.body, "");
 }
-
-/*#[test]
-fn test_can_parse_message_with_empty_signature() {
-    let (processed_message, signatures) =
-        MimeProcessor::process_mime("message_id", MESSAGE_WITH_EMPTY_SIGNATURE.as_bytes()).unwrap();
-
-    assert!(signatures.is_empty());
-    assert_eq!(&processed_message.body, "<div>Hello</div>\n");
-    assert_eq!(processed_message.attachments.len(), 1);
-}*/
 
 #[test]
 fn test_can_parse_message_with_text_attachment() {
