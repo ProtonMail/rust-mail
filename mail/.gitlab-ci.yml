@@ -1,4 +1,4 @@
-image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.76.0
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
 
 workflow:
   rules:
@@ -63,7 +63,7 @@ build:
 build-macos:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.76.0"
+  image: "inbox-rust:1.77.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
@@ -87,7 +87,7 @@ build-wasm:
 build-ios:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.76.0"
+  image: "inbox-rust:1.77.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
