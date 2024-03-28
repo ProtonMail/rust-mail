@@ -84,7 +84,9 @@ signing {
 dependencies {
     val COROUTINES = "1.6.4"
     val JNA = "5.13.0"
+    val ANNOTATION = "1.7.1"
 
+    implementation("androidx.annotation:annotation:${ANNOTATION}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${COROUTINES}")
     implementation("net.java.dev.jna:jna:${JNA}@aar")
 }
