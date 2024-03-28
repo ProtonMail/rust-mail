@@ -1,4 +1,4 @@
-use crate::{new_u64_type, LabelColor, LocalAttachmentMetadata, LocalLabelId};
+use crate::{new_u64_type, LabelColor, LocalAttachmentMetadata, LocalLabelId, conversations::proton_color, conversations::initials};
 use proton_api_mail::domain::{
     AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
     MessageMetadata,
@@ -21,6 +21,25 @@ pub struct LocalMessageCount {
     pub unread: u64,
 }
 
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ConversationAvatarInformation {
+    pub initials: String,
+    pub colour: String,
+    pub sender_image_url: String,
+}
+
+impl ConversationAvatarInformation {
+    pub fn build(display_name: &str) -> ConversationAvatarInformation{
+        ConversationAvatarInformation{
+            initials: initials::avatar_initials(display_name),
+            colour: proton_color::proton_color(display_name).to_string(),
+            sender_image_url: "".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalConversation {
@@ -40,6 +59,7 @@ pub struct LocalConversation {
     pub labels: Option<Vec<LocalConversationLabel>>,
     pub starred: bool,
     pub attachments: Option<Vec<LocalAttachmentMetadata>>,
+    pub avatar_information: ConversationAvatarInformation,
 }
 
 impl LocalConversation {
@@ -65,6 +85,7 @@ impl LocalConversation {
             time: 0,
             labels,
             attachments: None,
+            avatar_information: ConversationAvatarInformation::build("John Smith"),
         }
     }
 
@@ -91,6 +112,7 @@ impl LocalConversation {
             labels,
             time: 0,
             attachments: None,
+            avatar_information: ConversationAvatarInformation::build("John Smith"),
         };
 
         if let Some(l) = conversation.labels.iter().find(|l| l.id == *label_id) {
