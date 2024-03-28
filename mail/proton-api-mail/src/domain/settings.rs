@@ -46,7 +46,12 @@ pub struct MailSettings {
     pub shortcuts: bool,
     #[serde(rename = "PMSignature", default)]
     pub pm_signature: MailSettingsPMSignature,
-    #[serde(rename = "PMSignatureReferralLink", default)]
+    #[serde(
+        rename = "PMSignatureReferralLink",
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
     pub pm_signature_referral_link: bool,
     #[serde(default)]
     pub image_proxy: u32,
