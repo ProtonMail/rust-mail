@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 proton-crypto-account = {path = "../proton-crypto-account", version = "0.1.0"}
 proton-crypto-inbox-mime = {path = "../proton-crypto-inbox-mime", version = "0.1.0"}
-thiserror = "1"
+thiserror = { workspace = true }
 serde = { version="1", features = ["derive"]}
 base64 = "0.21"
 

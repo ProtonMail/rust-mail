@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 proton-crypto = {path = "../proton-crypto", version = "0.2.0"}
-thiserror = "1"
+thiserror = { workspace = true }
 serde = { version="1", features = ["derive"]}
 serde_repr = "0.1"
 serde_json = "1"
