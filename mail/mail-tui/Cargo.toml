@@ -32,8 +32,8 @@ chrono = { version = "0.4" }
 #proton-async = { path = "../../proton-api-core/proton-async" }
 #proton-event-loop = { path = "../../proton-api-core/proton-event-loop" }
 
-#[patch."https://gitlab.protontech.ch/rust/inbox/mail.git"]
-#proton-mail-common = { path = "../mail/proton-mail-common" }
+[patch."https://gitlab.protontech.ch/rust/inbox/mail.git"]
+proton-mail-common = { path = "../mail/proton-mail-common" }
 
 [lints.rust]
 trivial_numeric_casts = "warn"
