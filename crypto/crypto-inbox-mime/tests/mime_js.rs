@@ -309,19 +309,30 @@ Import HTML cöntäct//Subjεέςτ//
     assert_eq!(&processed_message.body, "Import HTML cöntäct//Subjεέςτ//\n");
 }
 
+pub fn to_canonicalized_trimmed_string(data: &[u8]) -> String {
+    let data_as_str = std::str::from_utf8(data).unwrap();
+    let mut data_sanitized = String::with_capacity(data_as_str.len());
+    let mut line_idx = 0;
+    for (idx, c) in data_as_str.chars().enumerate() {
+        if c == '\n' {
+            data_sanitized.push_str(data_as_str[line_idx..idx].trim_end());
+            data_sanitized.push_str("\r\n");
+            line_idx = idx + 1;
+        }
+    }
+    if line_idx < data_as_str.len() {
+        data_sanitized.push_str(data_as_str[line_idx..data_as_str.len()].trim_end());
+    }
+    data_sanitized
+}
+
 fn verify_signature(raw_input: &str, signatures: Vec<MimeSignatureVerifier>) -> VerificationResult {
     let provider = new_pgp_provider();
     let pk = provider
         .public_key_import(KEY, DataEncoding::Armor)
         .unwrap();
     let sig = signatures.first().unwrap();
-    let body = String::from_utf8(sig.data_to_verify(raw_input.as_bytes()).to_vec())
-        .unwrap()
-        .replace("\r\n", "\n")
-        .split('\n')
-        .map(|value| value.trim_end())
-        .collect::<Vec<_>>()
-        .join("\r\n");
+    let body = to_canonicalized_trimmed_string(sig.data_to_verify(raw_input.as_bytes()));
     provider
         .new_verifier()
         .with_verification_key(&pk)

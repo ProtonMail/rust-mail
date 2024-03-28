@@ -1,4 +1,4 @@
-use std::string::FromUtf8Error;
+use std::str::Utf8Error;
 
 use proton_crypto_account::proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationError,
@@ -13,7 +13,7 @@ pub enum MessageError {
     #[error("Failed to decrypt the message body: {0}")]
     Decryption(Box<dyn std::error::Error>),
     #[error("Failed to decode message body to utf-8 string: {0}")]
-    BodyDecode(#[from] FromUtf8Error),
+    BodyDecode(#[from] Utf8Error),
     #[error("Failed to decode mime message body: {0}")]
     MimeBodyDecode(#[from] ProcessMimeError),
     #[error("Mime is currently not supported")]
@@ -135,8 +135,8 @@ pub trait DecryptableMessage {
             .with_ut8_sanitization()
             .decrypt(self.message_encrypted_body(), DataEncoding::Armor)
             .map_err(MessageError::Decryption)?;
-        let decoded_message = String::from_utf8(decrypted_message.into_vec())?;
-        Ok(DecryptedBody::Plain(decoded_message))
+        let decoded_message = std::str::from_utf8(decrypted_message.as_bytes())?;
+        Ok(DecryptedBody::Plain(decoded_message.to_string()))
     }
 }
 
@@ -177,11 +177,11 @@ fn decrypt_normal<T: PGPProviderSync>(
         .map_err(MessageError::Decryption)?;
     let signatures = decrypted_message.signatures().unwrap_or_default();
     // We have to sanitize outside of encryption for lazy signature verification.
-    let (decrypted_raw, decrypted_body) = to_sanitized_string(decrypted_message.into_vec())?;
+    let decrypted_body = to_sanitized_string(decrypted_message.as_bytes())?;
     let decrypted_body = DecryptedBody::Plain(decrypted_body);
     let verifier = VerifiableBody {
         is_decrypted_mime: false,
-        decrypted_raw,
+        decrypted_raw: decrypted_message.into_vec(),
         signatures,
         mime_signatures: Vec::new(),
     };
@@ -265,7 +265,7 @@ fn verify_mime_signature<T: PGPProviderSync>(
     verifier: &MimeSignatureVerifier,
 ) -> VerificationResult {
     let data_to_verify = verifier.data_to_verify(data);
-    if let Ok(data_to_verify_sanitized) = to_canonicalized_verify_string(data_to_verify) {
+    if let Ok(data_to_verify_sanitized) = to_canonicalized_trimmed_string(data_to_verify) {
         pgp_provider
             .new_verifier()
             .with_verification_key_refs(verification_keys)
@@ -287,18 +287,25 @@ fn verify_mime_signature<T: PGPProviderSync>(
     }
 }
 
-fn to_sanitized_string(data: Vec<u8>) -> Result<(Vec<u8>, String), MessageError> {
-    let data_as_string = String::from_utf8(data)?;
+fn to_sanitized_string(data: &[u8]) -> Result<String, MessageError> {
+    let data_as_string = std::str::from_utf8(data)?;
     let sanitized_body = data_as_string.replace("\r\n", "\n");
-    Ok((data_as_string.into_bytes(), sanitized_body))
+    Ok(sanitized_body)
 }
 
-fn to_canonicalized_verify_string(data: &[u8]) -> Result<String, MessageError> {
-    let data = String::from_utf8(data.to_vec())?
-        .replace("\r\n", "\n")
-        .split('\n')
-        .map(|value| value.trim_end())
-        .collect::<Vec<_>>()
-        .join("\r\n"); //TODO Improve inefficient transformation.
-    Ok(data)
+fn to_canonicalized_trimmed_string(data: &[u8]) -> Result<String, MessageError> {
+    let data_as_str = std::str::from_utf8(data)?;
+    let mut data_sanitized = String::with_capacity(data_as_str.len());
+    let mut line_idx = 0;
+    for (idx, c) in data_as_str.chars().enumerate() {
+        if c == '\n' {
+            data_sanitized.push_str(data_as_str[line_idx..idx].trim_end());
+            data_sanitized.push_str("\r\n");
+            line_idx = idx + 1;
+        }
+    }
+    if line_idx < data_as_str.len() {
+        data_sanitized.push_str(data_as_str[line_idx..data_as_str.len()].trim_end());
+    }
+    Ok(data_sanitized)
 }
