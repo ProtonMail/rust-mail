@@ -62,7 +62,7 @@ impl http::RequestDesc for GetConversationsRequest {
             data = data.query("Sort", sort);
         }
 
-        data.query("Desc", self.filter.desc)
+        data.query("Desc", if self.filter.desc { 1 } else { 0 })
     }
 }
 
