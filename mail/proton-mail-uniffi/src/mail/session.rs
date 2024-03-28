@@ -63,7 +63,7 @@ impl MailSession {
     /// * `key_chain`: KeyChain implementation
     /// * `network_callback`: Optional network status changed callback
     #[uniffi::constructor]
-    pub fn new(
+    pub fn create(
         session_dir: String,
         user_dir: String,
         log_dir: String,
