@@ -1,10 +1,3 @@
-pub fn initials(name: &str) -> String {
-    name.split_whitespace()
-        .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()))
-        .collect::<String>()
-        .to_uppercase()
-}
-
 pub fn avatar_initials(name: &str) -> String {
     let initials = initials(name);
     if initials.is_empty() {
@@ -14,6 +7,13 @@ pub fn avatar_initials(name: &str) -> String {
     let first = chars.next().unwrap();
     let second = chars.next().unwrap_or(first).to_lowercase().next().unwrap();
     format!("{}{}", first, second)
+}
+
+fn initials(name: &str) -> String {
+    name.split_whitespace()
+        .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()))
+        .collect::<String>()
+        .to_uppercase()
 }
 
 #[cfg(test)]

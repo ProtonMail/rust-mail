@@ -2,8 +2,7 @@ use crate::attachments::LocalAttachmentMetadataSelector;
 use crate::conversations::types::{LocalConversation, LocalConversationId};
 use crate::json::{deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalConversationLabel,
-    LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
+    ConversationAvatarInformation, DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -1042,13 +1041,21 @@ WHERE deleted=0"
     }
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
+        let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
+        let first_sender = senders.first();
+        let display_name = match first_sender {
+            Some(first_sender) => String::clone(&first_sender.name),
+            None => String::new(),
+        };
+        let avatar_information = ConversationAvatarInformation::build(&display_name);
+
         Ok({
             LocalConversation {
                 id: r.get(0)?,
                 remote_id: r.get(1)?,
                 order: r.get(2)?,
                 subject: r.get(3)?,
-                senders: deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?,
+                senders,
                 recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
                 num_messages: r.get(6)?,
                 num_messages_ctx: 0,
@@ -1062,6 +1069,7 @@ WHERE deleted=0"
                 attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(
                     r, 13,
                 )?,
+                avatar_information,
             }
         })
     }
@@ -1126,12 +1134,20 @@ WHERE C.deleted=0"
     }
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
+        let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
+        let first_sender = senders.first();
+        let display_name = match first_sender {
+            Some(first_sender) => String::clone(&first_sender.name),
+            None => String::new(),
+        };
+        let avatar_information = ConversationAvatarInformation::build(&display_name);
+
         Ok(LocalConversation {
             id: r.get(0)?,
             remote_id: r.get(1)?,
             order: r.get(2)?,
             subject: r.get(3)?,
-            senders: deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?,
+            senders,
             recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
             expiration_time: r.get(16)?,
             time: r.get(7)?,
@@ -1143,6 +1159,9 @@ WHERE C.deleted=0"
             labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 13)?,
             attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 14)?,
             num_messages: r.get(15)?,
+            avatar_information,
         })
+
+        //TODO: initials and colour?
     }
 }
