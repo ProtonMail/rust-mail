@@ -10,7 +10,6 @@ pub struct UserSettingsResponse {
     pub user_settings: UserSettings,
 }
 impl RequestDesc for UserSettingsRequest {
-    type Output = UserSettingsResponse;
     type Response = JsonResponse<UserSettingsResponse>;
 
     fn build(&self) -> RequestData {

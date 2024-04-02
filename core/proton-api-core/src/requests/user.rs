@@ -13,8 +13,7 @@ pub struct UserInfoResponse {
 pub struct UserInfoRequest {}
 
 impl http::RequestDesc for UserInfoRequest {
-    type Output = UserInfoResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<UserInfoResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Get, "core/v4/users")
@@ -30,8 +29,7 @@ pub struct UserSaltsResponse {
 pub struct GetUserSaltsRequest {}
 
 impl http::RequestDesc for GetUserSaltsRequest {
-    type Output = UserSaltsResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<UserSaltsResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Get, "core/v4/keys/salts")

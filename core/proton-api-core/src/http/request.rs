@@ -71,8 +71,7 @@ impl RequestData {
 }
 
 pub trait RequestDesc {
-    type Output: Sized;
-    type Response: FromResponse<Output = Self::Output>;
+    type Response: FromResponse;
 
     fn build(&self) -> RequestData;
     fn to_request(&self) -> OwnedRequest<Self::Response> {

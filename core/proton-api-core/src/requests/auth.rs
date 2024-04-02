@@ -13,8 +13,7 @@ pub struct AuthInfoRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for AuthInfoRequest<'a> {
-    type Output = AuthInfoResponse;
-    type Response = http::JsonResponse<Self::Output>;
+    type Response = http::JsonResponse<AuthInfoResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Post, "auth/v4/info").json(self)
@@ -47,8 +46,7 @@ pub struct AuthRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for AuthRequest<'a> {
-    type Output = AuthResponse;
-    type Response = http::JsonResponse<Self::Output>;
+    type Response = http::JsonResponse<AuthResponse>;
 
     fn build(&self) -> RequestData {
         let mut request = RequestData::new(http::Method::Post, "auth/v4").json(self);
@@ -161,7 +159,6 @@ impl<'a> TOTPRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for TOTPRequest<'a> {
-    type Output = ();
     type Response = http::NoResponse;
 
     fn build(&self) -> RequestData {
@@ -209,8 +206,7 @@ impl<'a> AuthRefreshRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for AuthRefreshRequest<'a> {
-    type Output = AuthRefreshResponse;
-    type Response = http::JsonResponse<Self::Output>;
+    type Response = http::JsonResponse<AuthRefreshResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Post, "auth/v4/refresh").json(AuthRefresh {
@@ -226,7 +222,6 @@ impl<'a> http::RequestDesc for AuthRefreshRequest<'a> {
 pub struct LogoutRequest {}
 
 impl http::RequestDesc for LogoutRequest {
-    type Output = ();
     type Response = http::NoResponse;
 
     fn build(&self) -> RequestData {
@@ -246,7 +241,6 @@ impl<'a> CaptchaRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for CaptchaRequest<'a> {
-    type Output = String;
     type Response = http::StringResponse;
 
     fn build(&self) -> RequestData {

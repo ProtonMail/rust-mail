@@ -14,8 +14,7 @@ pub struct LatestEventResponse {
 pub struct GetLatestEventRequest;
 
 impl http::RequestDesc for GetLatestEventRequest {
-    type Output = LatestEventResponse;
-    type Response = http::JsonResponse<Self::Output>;
+    type Response = http::JsonResponse<LatestEventResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Get, "core/v4/events/latest")
@@ -50,8 +49,7 @@ impl<'a, T: IsEvent> GetEventRequest<'a, T> {
 }
 
 impl<'a, T: IsEvent> http::RequestDesc for GetEventRequest<'a, T> {
-    type Output = T;
-    type Response = http::JsonResponse<Self::Output>;
+    type Response = http::JsonResponse<T>;
 
     fn build(&self) -> RequestData {
         let message_counts = if self.message_counts { "1" } else { "0" };

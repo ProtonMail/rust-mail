@@ -1,7 +1,7 @@
 use crate::auth::ArcAuthStore;
 use crate::domain::{EventId, IsEvent, User, UserSettings};
 use crate::http::{self, APIEnvConfig};
-use crate::http::{Client, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
+use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
     AuthRefreshRequest, CaptchaRequest, GetEventRequest, GetLatestEventRequest,
     GetUserSaltsRequest, LogoutRequest, UserInfoRequest, UserSettingsRequest,
@@ -92,7 +92,7 @@ impl Session {
     pub async fn execute_request<'a, 'b: 'a, R: RequestDesc + 'a>(
         &'b self,
         r: R,
-    ) -> Result<R::Output, http::HttpRequestError> {
+    ) -> Result<<R::Response as FromResponse>::Output, http::HttpRequestError> {
         wrap_session_request(&self.client, self, r).await
     }
 }
@@ -101,7 +101,7 @@ async fn wrap_session_request<'a, R: RequestDesc + 'a>(
     client: &Client,
     session: &'a Session,
     r: R,
-) -> Result<R::Output, http::HttpRequestError> {
+) -> Result<<R::Response as FromResponse>::Output, http::HttpRequestError> {
     let r = r.build();
     // Get the current auth version before making this call.
     let (data, auth_version) = {
