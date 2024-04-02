@@ -4,6 +4,8 @@ use proton_crypto_account::proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationError,
     VerificationResult, VerifiedData, Verifier, VerifierSync,
 };
+use proton_crypto_account::proton_crypto::utils::to_canonicalized_string;
+
 use proton_crypto_inbox_mime::{
     MimeProcessor, MimeSignatureVerifier, ProcessMime, ProcessMimeError, ProcessedMessage,
 };
@@ -265,7 +267,7 @@ fn verify_mime_signature<T: PGPProviderSync>(
     verifier: &MimeSignatureVerifier,
 ) -> VerificationResult {
     let data_to_verify = verifier.data_to_verify(data);
-    if let Ok(data_to_verify_sanitized) = to_canonicalized_trimmed_string(data_to_verify) {
+    if let Ok(data_to_verify_sanitized) = to_canonicalized_string(data_to_verify, true) {
         pgp_provider
             .new_verifier()
             .with_verification_key_refs(verification_keys)
@@ -291,21 +293,4 @@ fn to_sanitized_string(data: &[u8]) -> Result<String, MessageError> {
     let data_as_string = std::str::from_utf8(data)?;
     let sanitized_body = data_as_string.replace("\r\n", "\n");
     Ok(sanitized_body)
-}
-
-fn to_canonicalized_trimmed_string(data: &[u8]) -> Result<String, MessageError> {
-    let data_as_str = std::str::from_utf8(data)?;
-    let mut data_sanitized = String::with_capacity(data_as_str.len());
-    let mut line_idx = 0;
-    for (idx, c) in data_as_str.chars().enumerate() {
-        if c == '\n' {
-            data_sanitized.push_str(data_as_str[line_idx..idx].trim_end());
-            data_sanitized.push_str("\r\n");
-            line_idx = idx + 1;
-        }
-    }
-    if line_idx < data_as_str.len() {
-        data_sanitized.push_str(data_as_str[line_idx..data_as_str.len()].trim_end());
-    }
-    Ok(data_sanitized)
 }

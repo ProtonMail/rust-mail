@@ -1,6 +1,7 @@
 //! Tests from https://github.com/ProtonMail/pmcrypto/blob/main/test/message/processMIME.spec.ts
 use proton_crypto::crypto::*;
 use proton_crypto::new_pgp_provider;
+use proton_crypto::utils::to_canonicalized_string;
 use proton_crypto_inbox_mime::{MimeProcessor, MimeSignatureVerifier, ProcessMime};
 
 pub const KEY: &str = r#"-----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -309,30 +310,13 @@ Import HTML cöntäct//Subjεέςτ//
     assert_eq!(&processed_message.body, "Import HTML cöntäct//Subjεέςτ//\n");
 }
 
-pub fn to_canonicalized_trimmed_string(data: &[u8]) -> String {
-    let data_as_str = std::str::from_utf8(data).unwrap();
-    let mut data_sanitized = String::with_capacity(data_as_str.len());
-    let mut line_idx = 0;
-    for (idx, c) in data_as_str.chars().enumerate() {
-        if c == '\n' {
-            data_sanitized.push_str(data_as_str[line_idx..idx].trim_end());
-            data_sanitized.push_str("\r\n");
-            line_idx = idx + 1;
-        }
-    }
-    if line_idx < data_as_str.len() {
-        data_sanitized.push_str(data_as_str[line_idx..data_as_str.len()].trim_end());
-    }
-    data_sanitized
-}
-
 fn verify_signature(raw_input: &str, signatures: Vec<MimeSignatureVerifier>) -> VerificationResult {
     let provider = new_pgp_provider();
     let pk = provider
         .public_key_import(KEY, DataEncoding::Armor)
         .unwrap();
     let sig = signatures.first().unwrap();
-    let body = to_canonicalized_trimmed_string(sig.data_to_verify(raw_input.as_bytes()));
+    let body = to_canonicalized_string(sig.data_to_verify(raw_input.as_bytes()), true).unwrap();
     provider
         .new_verifier()
         .with_verification_key(&pk)
