@@ -130,6 +130,9 @@ pub(in crate::conversations) fn prepare_and_patch_db_state_and_skip(
             conv_label.context_size += message.size;
             conv_label.context_num_attachments += message.num_attachments as u64;
             conv_label.context_time = conv_label.context_time.max(message.time);
+            conv_label.context_expiration_time = conv_label
+                .context_expiration_time
+                .max(message.expiration_time);
             if message.unread == true {
                 conv_label.context_num_unread += 1;
             }

@@ -99,6 +99,7 @@ impl LocalConversation {
             result.size = l.context_size;
             result.time = l.context_time;
             result.num_attachments = l.context_num_attachments;
+            result.expiration_time = l.context_expiration_time;
         }
 
         result

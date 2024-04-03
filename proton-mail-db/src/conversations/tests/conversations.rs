@@ -44,6 +44,7 @@ fn test_conversation_create_starred() {
         context_time: 0,
         context_size: 0,
         context_num_attachments: 0,
+        context_expiration_time: 0,
     };
     let (mut conn, _, _d) = new_test_connection();
     with_tx(&mut conn, |tx| {
@@ -119,14 +120,16 @@ fn test_conversation_create_with_labels() {
                     context_time: 3,
                     context_size: 4,
                     context_num_attachments: 5,
+                    context_expiration_time: 6,
                 },
                 ConversationLabels {
                     id: MY_LABEL_ID2.clone(),
-                    context_num_unread: 6,
-                    context_num_messages: 7,
-                    context_time: 8,
-                    context_size: 9,
-                    context_num_attachments: 10,
+                    context_num_unread: 7,
+                    context_num_messages: 8,
+                    context_time: 9,
+                    context_size: 10,
+                    context_num_attachments: 11,
+                    context_expiration_time: 12,
                 },
             ],
             [],
@@ -212,6 +215,7 @@ fn test_conversation_create_with_attachment_and_label() {
                 context_time: 3,
                 context_size: 4,
                 context_num_attachments: 5,
+                context_expiration_time: 6,
             }],
             [AttachmentMetadata {
                 id: MY_ATTACHMENT_ID.clone(),
@@ -255,11 +259,12 @@ fn test_conversation_update() {
         let conv = test_conversation(
             [ConversationLabels {
                 id: MY_LABEL_ID2.clone(),
-                context_num_unread: 6,
-                context_num_messages: 7,
-                context_time: 8,
-                context_size: 9,
-                context_num_attachments: 10,
+                context_num_unread: 7,
+                context_num_messages: 8,
+                context_time: 9,
+                context_size: 10,
+                context_num_attachments: 11,
+                context_expiration_time: 12,
             }],
             [AttachmentMetadata {
                 id: AttachmentId::from("ATTACHMENT2"),
@@ -278,6 +283,7 @@ fn test_conversation_update() {
                 context_time: 3,
                 context_size: 4,
                 context_num_attachments: 5,
+                context_expiration_time: 6,
             }],
             [AttachmentMetadata {
                 id: MY_ATTACHMENT_ID.clone(),

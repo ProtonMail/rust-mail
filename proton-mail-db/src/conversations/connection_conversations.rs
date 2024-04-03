@@ -59,8 +59,8 @@ expiration_time=excluded.expiration_time, size=excluded.size, flagged=excluded.f
 
         let mut labels_statement = self.0.prepare(&format!(
             "INSERT OR REPLACE INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size,
-ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
-(({RESOLVE_LABEL_ID_STATEMENT}),?,?,?,?,?,?)"
+ctx_num_messages, ctx_num_unread, ctx_num_attachments, ctx_expiration_time) VALUES \
+(({RESOLVE_LABEL_ID_STATEMENT}),?,?,?,?,?,?,?)"
         ))?;
 
         let mut attachment_to_conv_stmt = self
@@ -132,6 +132,7 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments) VALUES \
                     label.context_num_messages,
                     label.context_num_unread,
                     label.context_num_attachments,
+                    label.context_expiration_time,
                 ))?;
             }
 
@@ -374,7 +375,6 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         // Update conversation label.
         if !delete {
             let mut stmt = self.0.prepare(&format!(
-                //TODO: Expiration time
                 r"
 WITH conv_messages AS (
     SELECT m.conversation_id, MAX(m.time) AS time, MAX(m.expiration_time) AS expiration_time,
@@ -385,8 +385,8 @@ WITH conv_messages AS (
     WHERE m.deleted=0 AND m.conversation_id IN ({})
     GROUP BY m.conversation_id
 )
-INSERT OR REPLACE INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size, ctx_num_messages, ctx_num_unread, ctx_num_attachments)
-SELECT ?1, conversation_id, time, size, count, unread, attachments FROM conv_messages",
+INSERT OR REPLACE INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size, ctx_num_messages, ctx_num_unread, ctx_num_attachments, ctx_expiration_time)
+SELECT ?1, conversation_id, time, size, count, unread, attachments, expiration_time FROM conv_messages",
                 conv_args
             ))?;
             let mut alloc = StmtIndexAllocator::new();
@@ -919,7 +919,7 @@ json_conv_attachments AS (
 
 SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time,
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0),
-ifnull(CL.ctx_num_attachments,0), C.flagged, CLJ.labels, CA.json_attachments, C.num_messages
+ifnull(CL.ctx_num_attachments,0), C.flagged, CLJ.labels, CA.json_attachments, C.num_messages, ifnull(CL.ctx_expiration_time,0)
 FROM conversations AS C
 INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=?
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
@@ -964,7 +964,7 @@ WHERE C.deleted=0"
             subject: r.get(3)?,
             senders: deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?,
             recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
-            expiration_time: r.get(6)?,
+            expiration_time: r.get(16)?,
             time: r.get(7)?,
             size: r.get(8)?,
             num_messages_ctx: r.get(9)?,
