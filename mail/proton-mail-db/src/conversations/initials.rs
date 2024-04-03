@@ -1,12 +1,15 @@
-pub fn avatar_initials(name: &str) -> String {
+pub fn avatar_text(name: &str, email: &str) -> String {
     let initials = initials(name);
-    if initials.is_empty() {
-        return String::from("?");
+    if !initials.is_empty() {
+        let mut chars = initials.chars();
+        let first = chars.next().unwrap();
+        match chars.next() {
+            Some(second) => return format!("{}{}", first, second.to_lowercase()),
+            None => return format!("{}", first),
+        }
     }
-    let mut chars = initials.chars();
-    let first = chars.next().unwrap();
-    let second = chars.next().unwrap_or(first).to_lowercase().next().unwrap();
-    format!("{}{}", first, second)
+
+    email_text(email)
 }
 
 fn initials(name: &str) -> String {
@@ -14,6 +17,22 @@ fn initials(name: &str) -> String {
         .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()))
         .collect::<String>()
         .to_uppercase()
+}
+
+fn email_text(address: &str) -> String {
+    let local = address.trim_matches(&['<', '>'])
+        .split('@')
+        .next()
+        .expect("email str does not contain email address")
+        .trim();
+
+    let mut chars = local.chars();
+
+    let first = chars.next().expect("email local part is empty").to_uppercase();
+    match chars.next() {
+        Some(second) => format!("{}{}", first, second),
+        None => format!("{}", first),
+    }
 }
 
 #[cfg(test)]
@@ -32,8 +51,18 @@ mod tests {
         assert_eq!(initials("🙂 John Doe"), "JD");
     }
 
-    fn test_avatar_initials() {
-        assert_eq!(avatar_initials("Riri Fifi Loulou"), "Rf");
-        assert_eq!(avatar_initials("🙂"), "?");
+    #[test]
+    fn test_email_text() {
+        assert_eq!(email_text("brains@tracyisland.com"), "Br");
+        assert_eq!(email_text("    brains@tracyisland.com"), "Br");
+        assert_eq!(email_text("A@test.com"), "A");
+        assert_eq!(email_text("<brains@tracyisland.com>"), "Br")
+    }
+
+    #[test]
+    fn test_avatar_text() {
+        assert_eq!(avatar_text("Riri Fifi Loulou", "rifilou@test.com"), "Rf");
+        assert_eq!(avatar_text("🙂", "emojiname@test.com`"), "Em");
+        assert_eq!(avatar_text("OnePart", "onepart@test.com"), "O")
     }
 }
