@@ -20,7 +20,8 @@ fn initials(name: &str) -> String {
 }
 
 fn email_text(address: &str) -> String {
-    let local = address.trim_matches(&['<', '>'])
+    let local = address
+        .trim_matches(&['<', '>'])
         .split('@')
         .next()
         .expect("email str does not contain email address")
@@ -28,7 +29,10 @@ fn email_text(address: &str) -> String {
 
     let mut chars = local.chars();
 
-    let first = chars.next().expect("email local part is empty").to_uppercase();
+    let first = chars
+        .next()
+        .expect("email local part is empty")
+        .to_uppercase();
     match chars.next() {
         Some(second) => format!("{}{}", first, second),
         None => format!("{}", first),

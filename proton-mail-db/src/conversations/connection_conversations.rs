@@ -2,7 +2,8 @@ use crate::attachments::LocalAttachmentMetadataSelector;
 use crate::conversations::types::{LocalConversation, LocalConversationId};
 use crate::json::{deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer};
 use crate::{
-    ConversationAvatarInformation, DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl
+    ConversationAvatarInformation, DBResult, LocalAttachmentMetadata, LocalConversationCount,
+    LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -1044,10 +1045,14 @@ WHERE deleted=0"
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
         let first_sender = senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (String::clone(&first_sender.name), String::clone(&first_sender.address)),
+            Some(first_sender) => (
+                String::clone(&first_sender.name),
+                String::clone(&first_sender.address),
+            ),
             None => (String::new(), String::new()),
         };
-        let avatar_information = ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+        let avatar_information =
+            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
 
         Ok({
             LocalConversation {
@@ -1137,10 +1142,14 @@ WHERE C.deleted=0"
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
         let first_sender = senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (String::clone(&first_sender.name), String::clone(&first_sender.address)),
+            Some(first_sender) => (
+                String::clone(&first_sender.name),
+                String::clone(&first_sender.address),
+            ),
             None => (String::new(), String::new()),
         };
-        let avatar_information = ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+        let avatar_information =
+            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
 
         Ok(LocalConversation {
             id: r.get(0)?,
