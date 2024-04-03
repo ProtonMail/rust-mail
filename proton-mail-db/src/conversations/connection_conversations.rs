@@ -1046,13 +1046,13 @@ WHERE deleted=0"
         let first_sender = senders.first();
         let display_name_email = match first_sender {
             Some(first_sender) => (
-                String::clone(&first_sender.name),
-                String::clone(&first_sender.address),
+                first_sender.name.as_str(),
+                first_sender.address.as_str(),
             ),
-            None => (String::new(), String::new()),
+            None => ("", ""),
         };
         let avatar_information =
-            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
 
         Ok({
             LocalConversation {
@@ -1143,13 +1143,13 @@ WHERE C.deleted=0"
         let first_sender = senders.first();
         let display_name_email = match first_sender {
             Some(first_sender) => (
-                String::clone(&first_sender.name),
-                String::clone(&first_sender.address),
+                first_sender.name.as_str(),
+                first_sender.address.as_str(),
             ),
-            None => (String::new(), String::new()),
+            None => ("", ""),
         };
         let avatar_information =
-            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
 
         Ok(LocalConversation {
             id: r.get(0)?,
@@ -1170,7 +1170,5 @@ WHERE C.deleted=0"
             num_messages: r.get(15)?,
             avatar_information,
         })
-
-        //TODO: initials and colour?
     }
 }
