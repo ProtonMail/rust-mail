@@ -1,4 +1,7 @@
-use crate::{new_u64_type, LabelColor, LocalAttachmentMetadata, LocalLabelId, conversations::proton_color, conversations::initials};
+use crate::{
+    conversations::initials, conversations::proton_color, new_u64_type, LabelColor,
+    LocalAttachmentMetadata, LocalLabelId,
+};
 use proton_api_mail::domain::{
     AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
     MessageMetadata,
@@ -21,7 +24,6 @@ pub struct LocalMessageCount {
     pub unread: u64,
 }
 
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ConversationAvatarInformation {
@@ -31,8 +33,8 @@ pub struct ConversationAvatarInformation {
 }
 
 impl ConversationAvatarInformation {
-    pub fn build(display_name: &str, email: &str) -> ConversationAvatarInformation{
-        ConversationAvatarInformation{
+    pub fn build(display_name: &str, email: &str) -> ConversationAvatarInformation {
+        ConversationAvatarInformation {
             text: initials::avatar_text(display_name, email),
             colour: proton_color::proton_color(display_name).to_string(),
             sender_image_url: "".to_string(),
@@ -70,10 +72,14 @@ impl LocalConversation {
     ) -> Self {
         let first_sender = conversation.senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (String::clone(&first_sender.name), String::clone(&first_sender.address)),
+            Some(first_sender) => (
+                String::clone(&first_sender.name),
+                String::clone(&first_sender.address),
+            ),
             None => (String::new(), String::new()),
         };
-        let avatar_information = ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+        let avatar_information =
+            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
 
         Self {
             id,
@@ -104,10 +110,14 @@ impl LocalConversation {
     ) -> Self {
         let first_sender = conversation.senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (String::clone(&first_sender.name), String::clone(&first_sender.address)),
+            Some(first_sender) => (
+                String::clone(&first_sender.name),
+                String::clone(&first_sender.address),
+            ),
             None => (String::new(), String::new()),
         };
-        let avatar_information = ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+        let avatar_information =
+            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
 
         let mut result = Self {
             id,
