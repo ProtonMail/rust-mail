@@ -10,8 +10,8 @@ pub fn proton_color(name: &str) -> &str {
     for c in name.chars() {
         hash = (c as u32 + ((hash << 5) - hash)) % (65537);
     }
-    let index = hash % PROTON_COLORS.len() as u32;
-    PROTON_COLORS[index as usize]
+    let index = hash as usize % PROTON_COLORS.len();
+    PROTON_COLORS[index]
 }
 
 #[cfg(test)]
