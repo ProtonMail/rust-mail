@@ -36,6 +36,7 @@ CREATE TABLE conversations (
     ctx_num_messages INTEGER NOT NULL,
     ctx_num_unread INTEGER NOT NULL,
     ctx_num_attachments INTEGER NOT NULL,
+    ctx_expiration_time INTEGER NOT NULL,
     PRIMARY KEY(conversation_id, label_id),
     CONSTRAINT constraint_conversation_labels_cid FOREIGN KEY (conversation_id) REFERENCES conversations (id) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT constraint_conversation_labels_lid FOREIGN KEY (label_id) REFERENCES labels (id) ON DELETE CASCADE

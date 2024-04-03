@@ -389,6 +389,7 @@ fn test_create_message_dependencies(tx: &mut MailSqliteConnectionMut) -> LocalCo
             context_time: 0,
             context_size: 0,
             context_num_attachments: 0,
+            context_expiration_time: 0,
         }],
         [],
     );

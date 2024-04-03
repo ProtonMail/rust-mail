@@ -61,6 +61,7 @@ pub struct ConversationLabels {
     pub context_time: u64,
     pub context_size: u64,
     pub context_num_attachments: u64,
+    pub context_expiration_time: u64,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]

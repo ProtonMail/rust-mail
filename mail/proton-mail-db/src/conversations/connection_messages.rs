@@ -265,7 +265,6 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ) -> DBResult<()> {
         let message_id_args = gen_variable_in_argument_list(ids.len());
 
-        //TODO: Expiration time in in this query, but it's not recorded in the labels table.
         let arithmetic = if delete { '-' } else { '+' };
         let query = format!(
             r"
@@ -286,7 +285,8 @@ conv_messages AS (
 ),
 label_modifiers AS (
     SELECT cm.conversation_id, ml.label_id, COUNT(cm.id) as num_messages, SUM(cm.unread) as num_unread,
-           IFNULL(mt.time,0) as time, SUM(cm.num_attachments) as num_attachments, SUM(size) as size
+           IFNULL(mt.time,0) as time, SUM(cm.num_attachments) as num_attachments, SUM(size) as size,
+           IFNULL(MAX(mt.expiration_time),0) as expiration_time
     FROM deleted_messages AS cm
     JOIN deleted_message_labels AS ml ON cm.id = ml.message_id
     LEFT JOIN conv_messages AS mt on mt.label_id = ml.label_id
@@ -297,6 +297,7 @@ UPDATE conversation_labels SET
    ctx_num_messages=ctx_num_messages{arithmetic}label_modifiers.num_messages,
    ctx_num_unread=ctx_num_unread{arithmetic}label_modifiers.num_unread,
    ctx_time=label_modifiers.time,
+   ctx_expiration_time=label_modifiers.expiration_time,
    ctx_size=ctx_size{arithmetic}label_modifiers.size
 FROM label_modifiers WHERE label_modifiers.conversation_id=conversation_labels.conversation_id AND
 conversation_labels.label_id=label_modifiers.label_id
