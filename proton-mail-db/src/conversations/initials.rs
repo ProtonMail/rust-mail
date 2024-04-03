@@ -2,10 +2,11 @@ pub fn avatar_text(name: &str, email: &str) -> String {
     let initials = initials(name);
     if !initials.is_empty() {
         let mut chars = initials.chars();
-        let first = chars.next().unwrap();
-        match chars.next() {
-            Some(second) => return format!("{}{}", first, second.to_lowercase()),
-            None => return format!("{}", first),
+        if let Some(first) = chars.next() {
+            match chars.next() {
+                Some(second) => return format!("{}{}", first, second.to_lowercase()),
+                None => return format!("{}", first),
+            }
         }
     }
 

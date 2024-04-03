@@ -1045,10 +1045,7 @@ WHERE deleted=0"
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
         let first_sender = senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (
-                first_sender.name.as_str(),
-                first_sender.address.as_str(),
-            ),
+            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
             None => ("", ""),
         };
         let avatar_information =
@@ -1142,10 +1139,7 @@ WHERE C.deleted=0"
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
         let first_sender = senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (
-                first_sender.name.as_str(),
-                first_sender.address.as_str(),
-            ),
+            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
             None => ("", ""),
         };
         let avatar_information =
