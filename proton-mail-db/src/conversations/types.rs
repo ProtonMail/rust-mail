@@ -25,15 +25,15 @@ pub struct LocalMessageCount {
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ConversationAvatarInformation {
-    pub initials: String,
+    pub text: String,
     pub colour: String,
     pub sender_image_url: String,
 }
 
 impl ConversationAvatarInformation {
-    pub fn build(display_name: &str) -> ConversationAvatarInformation{
+    pub fn build(display_name: &str, email: &str) -> ConversationAvatarInformation{
         ConversationAvatarInformation{
-            initials: initials::avatar_initials(display_name),
+            text: initials::avatar_text(display_name, email),
             colour: proton_color::proton_color(display_name).to_string(),
             sender_image_url: "".to_string(),
         }
@@ -68,6 +68,13 @@ impl LocalConversation {
         conversation: Conversation,
         labels: Option<Vec<LocalConversationLabel>>,
     ) -> Self {
+        let first_sender = conversation.senders.first();
+        let display_name_email = match first_sender {
+            Some(first_sender) => (String::clone(&first_sender.name), String::clone(&first_sender.address)),
+            None => (String::new(), String::new()),
+        };
+        let avatar_information = ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+
         Self {
             id,
             starred: conversation.is_starred(),
@@ -85,7 +92,7 @@ impl LocalConversation {
             time: 0,
             labels,
             attachments: None,
-            avatar_information: ConversationAvatarInformation::build("John Smith"),
+            avatar_information,
         }
     }
 
@@ -95,6 +102,13 @@ impl LocalConversation {
         conversation: Conversation,
         labels: Option<Vec<LocalConversationLabel>>,
     ) -> Self {
+        let first_sender = conversation.senders.first();
+        let display_name_email = match first_sender {
+            Some(first_sender) => (String::clone(&first_sender.name), String::clone(&first_sender.address)),
+            None => (String::new(), String::new()),
+        };
+        let avatar_information = ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+
         let mut result = Self {
             id,
             starred: conversation.is_starred(),
@@ -112,7 +126,7 @@ impl LocalConversation {
             labels,
             time: 0,
             attachments: None,
-            avatar_information: ConversationAvatarInformation::build("John Smith"),
+            avatar_information,
         };
 
         if let Some(l) = conversation.labels.iter().find(|l| l.id == *label_id) {
