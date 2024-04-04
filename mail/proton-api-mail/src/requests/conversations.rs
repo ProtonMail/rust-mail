@@ -26,8 +26,7 @@ pub struct GetConversationsResponse {
 }
 
 impl http::RequestDesc for GetConversationsRequest {
-    type Output = GetConversationsResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<GetConversationsResponse>;
 
     fn build(&self) -> RequestData {
         let mut data = RequestData::new(Method::Get, "mail/v4/conversations")
@@ -84,8 +83,7 @@ pub struct GetConversationResponse {
 }
 
 impl<'a> http::RequestDesc for GetConversationRequest<'a> {
-    type Output = GetConversationResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<GetConversationResponse>;
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, format!("mail/v4/conversations/{}", self.id))
     }
@@ -93,8 +91,7 @@ impl<'a> http::RequestDesc for GetConversationRequest<'a> {
 
 pub struct GetConversationCountsRequest {}
 impl http::RequestDesc for GetConversationCountsRequest {
-    type Output = GetConversationCountsResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<GetConversationCountsResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, "mail/v4/conversations/count")
@@ -139,8 +136,7 @@ pub struct ConversationsResponseObject {
 }
 
 impl<'c> http::RequestDesc for DeleteConversationsRequest<'c> {
-    type Output = DeleteConversationsResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<DeleteConversationsResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Put, "mail/v4/conversations/delete").json(self)
@@ -168,8 +164,7 @@ pub struct MarkConversationsReadResponse {
 }
 
 impl<'c> http::RequestDesc for MarkConversationsReadRequest<'c> {
-    type Output = MarkConversationsReadResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<MarkConversationsReadResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Put, "mail/v4/conversations/read").json(self)
@@ -197,8 +192,7 @@ pub struct MarkConversationsUnreadResponse {
 }
 
 impl<'c> http::RequestDesc for MarkConversationsUnreadRequest<'c> {
-    type Output = MarkConversationsUnreadResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<MarkConversationsUnreadResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Put, "mail/v4/conversations/unread").json(self)
