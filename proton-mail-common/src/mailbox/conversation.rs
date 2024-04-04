@@ -1,11 +1,12 @@
 use crate::actions::{
-    DeleteConversationsAction, MarkConversationsReadAction, MarkConversationsUnreadAction,
+    DeleteConversationsAction, LabelConversationsAction, MarkConversationsReadAction,
+    MarkConversationsUnreadAction, UnlabelConversationsAction,
 };
 use crate::{
     Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
 use proton_api_mail::proton_api_core::exports::tracing;
-use proton_mail_db::{ConversationQuery, LocalConversation, LocalConversationId};
+use proton_mail_db::{ConversationQuery, LocalConversation, LocalConversationId, LocalLabelId};
 
 impl Mailbox {
     pub fn sync(
@@ -83,6 +84,26 @@ impl Mailbox {
     ) -> MailboxResult<()> {
         self.user_ctx
             .queue_action(MarkConversationsUnreadAction::new(self.label_id, ids))?;
+        Ok(())
+    }
+
+    pub fn label_conversations(
+        &self,
+        label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        self.user_ctx
+            .queue_action(LabelConversationsAction::new(label_id, ids))?;
+        Ok(())
+    }
+
+    pub fn unlabel_conversations(
+        &self,
+        label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        self.user_ctx
+            .queue_action(UnlabelConversationsAction::new(label_id, ids))?;
         Ok(())
     }
 }
