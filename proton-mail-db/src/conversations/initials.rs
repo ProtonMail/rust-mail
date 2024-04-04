@@ -21,23 +21,21 @@ fn initials(name: &str) -> String {
 }
 
 fn email_text(address: &str) -> String {
-    let local = address
-        .trim_matches(&['<', '>'])
-        .split('@')
-        .next()
-        .expect("email str does not contain email address")
-        .trim();
+    let local = match address.trim_matches(&['<', '>']).split('@').next() {
+        Some(first) => first.trim(),
+        None => return "??".to_string(),
+    };
 
     let mut chars = local.chars();
 
-    let first = chars
-        .next()
-        .expect("email local part is empty")
-        .to_uppercase();
-    match chars.next() {
-        Some(second) => format!("{}{}", first, second),
-        None => format!("{}", first),
+    if let Some(first) = chars.next() {
+        match chars.next() {
+            Some(second) => return format!("{}{}", first.to_uppercase(), second),
+            None => return format!("{}", first.to_uppercase()),
+        }
     }
+
+    "??".to_string()
 }
 
 #[cfg(test)]
@@ -61,7 +59,8 @@ mod tests {
         assert_eq!(email_text("brains@tracyisland.com"), "Br");
         assert_eq!(email_text("    brains@tracyisland.com"), "Br");
         assert_eq!(email_text("A@test.com"), "A");
-        assert_eq!(email_text("<brains@tracyisland.com>"), "Br")
+        assert_eq!(email_text("<brains@tracyisland.com>"), "Br");
+        assert_eq!(email_text("@nolocal.com"), "??");
     }
 
     #[test]
