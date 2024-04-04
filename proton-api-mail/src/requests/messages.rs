@@ -27,8 +27,7 @@ impl GetMessageMetadataRequest {
 }
 
 impl http::RequestDesc for GetMessageMetadataRequest {
-    type Output = MessageMetadataResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<MessageMetadataResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Post, "mail/v4/messages")
@@ -53,8 +52,7 @@ impl<'a> GetMessageRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for GetMessageRequest<'a> {
-    type Output = GetMessageResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<GetMessageResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, format!("mail/v4/messages/{}", self.id))
@@ -63,8 +61,7 @@ impl<'a> http::RequestDesc for GetMessageRequest<'a> {
 
 pub struct GetMessageCountsRequest {}
 impl http::RequestDesc for GetMessageCountsRequest {
-    type Output = GetMessageCountsResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<GetMessageCountsResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, "mail/v4/messages/count")
@@ -109,8 +106,7 @@ pub struct DeleteMessagesResponseObject {
 }
 
 impl<'c> http::RequestDesc for DeleteMessagesRequest<'c> {
-    type Output = DeleteMessagesResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<DeleteMessagesResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Put, "mail/v4/conversations/delete").json(self)

@@ -11,8 +11,7 @@ pub struct GetAddressesResponse {
 pub struct GetAddressesRequest {}
 
 impl RequestDesc for GetAddressesRequest {
-    type Output = GetAddressesResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<GetAddressesResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, "core/v4/addresses")

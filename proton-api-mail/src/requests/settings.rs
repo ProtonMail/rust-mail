@@ -11,7 +11,6 @@ pub struct MailSettingsResponse {
 }
 
 impl RequestDesc for GetMailSettingsRequest {
-    type Output = MailSettingsResponse;
     type Response = JsonResponse<MailSettingsResponse>;
 
     fn build(&self) -> RequestData {

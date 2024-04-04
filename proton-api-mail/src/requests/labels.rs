@@ -21,8 +21,7 @@ impl GetLabelsRequest {
 }
 
 impl http::RequestDesc for GetLabelsRequest {
-    type Output = GetLabelsResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<GetLabelsResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Get, "core/v4/labels").query("Type", self.label_type as u8)
@@ -63,8 +62,7 @@ impl<'a> CreateLabelRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for CreateLabelRequest<'a> {
-    type Output = CreateOrUpdateLabelResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<CreateOrUpdateLabelResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Post, "core/v4/labels").json(self)
@@ -100,8 +98,7 @@ impl<'a> UpdateLabelRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for UpdateLabelRequest<'a> {
-    type Output = CreateOrUpdateLabelResponse;
-    type Response = JsonResponse<Self::Output>;
+    type Response = JsonResponse<CreateOrUpdateLabelResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Put, format!("core/v4/labels/{}", self.id)).json(self)
@@ -120,7 +117,6 @@ impl<'a> DeleteLabelRequest<'a> {
 }
 
 impl<'a> http::RequestDesc for DeleteLabelRequest<'a> {
-    type Output = ();
     type Response = NoResponse;
 
     fn build(&self) -> RequestData {
