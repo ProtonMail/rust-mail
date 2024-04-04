@@ -15,6 +15,12 @@ proton-action-queue = {workspace=true}
 uniffi = {optional = true, workspace=true}
 uuid = { version= "1" , features = ["v4"] }
 
+[dev-dependencies]
+bytes = "1.6.0"
+reqwest = { version = "0.12.2", features = ["stream"] }
+tokio = "1.37.0"
+wiremock = "0.6.0"
+
 [lints]
 workspace = true
 
