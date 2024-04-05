@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
-pub struct AuthScope(String);
+pub struct AuthScope(pub String);
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct RefreshToken(pub SecretString);
