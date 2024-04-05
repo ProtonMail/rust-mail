@@ -25,7 +25,7 @@ pub trait KeyChain: Send + Sync {
     fn get(&self) -> Result<Option<String>, KeyChainError>;
 }
 
-#[derive([Default])]
+#[derive(Default)]
 pub struct InMemoryKeyChain {
     data: Mutex<Option<String>>,
 }
