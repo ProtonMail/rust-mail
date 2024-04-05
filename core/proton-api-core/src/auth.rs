@@ -9,10 +9,10 @@ use std::sync::Arc;
 pub struct AuthScope(String);
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct RefreshToken(SecretString);
+pub struct RefreshToken(pub SecretString);
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct AccessToken(SecretString);
+pub struct AccessToken(pub SecretString);
 
 /// Session Authentication Data.
 #[derive(Clone)]
