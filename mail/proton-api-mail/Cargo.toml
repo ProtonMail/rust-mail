@@ -14,7 +14,6 @@ lazy_static = "1"
 bytes = "1.6.0"
 proton-async = {workspace=true}
 reqwest = { version = "0.12.2", features = ["stream"] }
-tokio = "1.37.0"
 tracing-subscriber = {workspace=true, features = ["env-filter"]}
 wiremock = "0.6.0"
 
