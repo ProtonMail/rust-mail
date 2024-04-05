@@ -101,4 +101,10 @@ impl MailUserContext {
         self.inner.user_context.session().logout().await?;
         Ok(())
     }
+
+    /// Ping the proton servers to see if they are responsive/alive.
+    pub async fn ping(&self) -> MailContextResult<()> {
+        self.inner.user_context.session().ping().await?;
+        Ok(())
+    }
 }
