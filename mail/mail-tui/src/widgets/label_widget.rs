@@ -1,5 +1,5 @@
 use crate::widgets::widget_list::ListableWidget;
-use proton_mail_common::proton_mail_db::LocalLabelWithCount;
+use proton_mail_common::proton_mail_db::{LocalLabel, LocalLabelWithCount};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Layout, Rect};
 use ratatui::prelude::Constraint;
@@ -7,23 +7,23 @@ use ratatui::style::Stylize;
 use ratatui::text::Text;
 use ratatui::widgets::Widget;
 
-pub struct LabelWidget<'a> {
+pub struct SideBarLabelWidget<'a> {
     label: &'a LocalLabelWithCount,
 }
 
-impl<'a> LabelWidget<'a> {
+impl<'a> SideBarLabelWidget<'a> {
     pub fn new(label: &'a LocalLabelWithCount) -> Self {
         Self { label }
     }
 }
 
-impl<'a> ListableWidget for LabelWidget<'a> {
+impl<'a> ListableWidget for SideBarLabelWidget<'a> {
     fn height(&self) -> u16 {
         1
     }
 }
 
-impl<'a> Widget for LabelWidget<'a> {
+impl<'a> Widget for SideBarLabelWidget<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let [text_area, _, unread_area, _] = Layout::horizontal([
             Constraint::Min(15),
@@ -45,5 +45,33 @@ impl<'a> Widget for LabelWidget<'a> {
                 .bold()
                 .render(unread_area, buf);
         }
+    }
+}
+
+pub struct LabelWidget<'a> {
+    label: &'a LocalLabel,
+}
+
+impl<'a> LabelWidget<'a> {
+    pub fn new(label: &'a LocalLabel) -> Self {
+        Self { label }
+    }
+}
+
+impl<'a> ListableWidget for LabelWidget<'a> {
+    fn height(&self) -> u16 {
+        1
+    }
+}
+
+impl<'a> Widget for LabelWidget<'a> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let label_name = self
+            .label
+            .path
+            .as_deref()
+            .unwrap_or(self.label.name.as_str());
+
+        Text::from(label_name).render(area, buf);
     }
 }

@@ -5,16 +5,18 @@ use crate::view::View;
 use crate::views::AppViewContext;
 use crate::widgets::{
     ConversationWidget, HelpCategory, HelpItem, LabelWidget, ScrollableList, ScrollableListState,
-    WidgetList, WidgetListItem,
+    SideBarLabelWidget, WidgetList, WidgetListItem,
 };
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use proton_mail_common::exports::tracing::warn;
 use proton_mail_common::proton_api_mail::domain::LabelType;
-use proton_mail_common::proton_mail_db::{LocalLabelId, LocalLabelWithCount};
-use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
+use proton_mail_common::proton_mail_db::{
+    LocalConversationId, LocalLabel, LocalLabelId, LocalLabelWithCount,
+};
+use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
 use ratatui::prelude::Text;
 use ratatui::style::{Color, Style, Stylize};
-use ratatui::widgets::{Block, Borders, HighlightSpacing};
+use ratatui::widgets::{Block, Borders, Clear, HighlightSpacing};
 use ratatui::Frame;
 use std::ops::Deref;
 
@@ -23,6 +25,11 @@ enum FocusedWidget {
     Labels(LabelType),
     Conversation,
 }
+enum LabelSelectionMode {
+    Label(LocalConversationId, Vec<LocalLabel>),
+    Unlabel(LocalConversationId, Vec<LocalLabel>),
+    Move(LocalConversationId, Vec<LocalLabel>),
+}
 
 pub struct ConversationView {
     conversation_list_state: ScrollableListState,
@@ -30,6 +37,8 @@ pub struct ConversationView {
     folder_list_state: ScrollableListState,
     labels_list_state: ScrollableListState,
     focused_widget: FocusedWidget,
+    label_selection_mode: Option<LabelSelectionMode>,
+    label_selection_list_state: ScrollableListState,
 }
 
 impl ConversationView {
@@ -40,8 +49,11 @@ impl ConversationView {
             folder_list_state: ScrollableListState::new(1, None),
             labels_list_state: ScrollableListState::new(1, None),
             focused_widget: FocusedWidget::Conversation,
+            label_selection_mode: None,
+            label_selection_list_state: ScrollableListState::new(1, None),
         };
         r.conversation_list_state.set_focus_gained();
+        r.label_selection_list_state.set_focus_gained();
         r
     }
 
@@ -72,10 +84,10 @@ impl ConversationView {
         fn list_from_labels<'a>(
             labels: &'a [LocalLabelWithCount],
             desc: &'static str,
-        ) -> ScrollableList<'a, LabelWidget<'a>> {
+        ) -> ScrollableList<'a, SideBarLabelWidget<'a>> {
             let labels = labels
                 .iter()
-                .map(|l| WidgetListItem::new(LabelWidget::new(l)))
+                .map(|l| WidgetListItem::new(SideBarLabelWidget::new(l)))
                 .collect::<Vec<_>>();
             let block = Block::new().borders(Borders::TOP).title(desc);
             ScrollableList::new(WidgetList::new(labels).block(block))
@@ -171,6 +183,35 @@ impl ConversationView {
         );
     }
 
+    fn draw_label_selection(&mut self, frame: &mut Frame, area: Rect) {
+        let Some(selection_mode) = &self.label_selection_mode else {
+            return;
+        };
+        let labels = match selection_mode {
+            LabelSelectionMode::Label(_, l) => l,
+            LabelSelectionMode::Unlabel(_, l) => l,
+            LabelSelectionMode::Move(_, l) => l,
+        };
+        let area = area.inner(&Margin {
+            horizontal: 10,
+            vertical: 5,
+        });
+        self.label_selection_list_state.set_len(labels.len());
+        frame.render_widget(Clear {}, area);
+        let labels = labels
+            .iter()
+            .map(|l| WidgetListItem::new(LabelWidget::new(l)))
+            .collect::<Vec<_>>();
+        let block = Block::new()
+            .borders(Borders::ALL)
+            .title("Select Label")
+            .bg(Color::Magenta)
+            .fg(Color::White);
+        let widget = ScrollableList::new(WidgetList::new(labels).block(block));
+
+        frame.render_stateful_widget(widget, area, &mut self.label_selection_list_state);
+    }
+
     fn load_label(&mut self, ctx: &mut AppViewContext, label_id: LocalLabelId) {
         ctx.app_local_dispatcher()
             .queue_event(MailboxEvent::LoadLabelRequest(label_id));
@@ -251,6 +292,29 @@ impl ConversationView {
             }
         }
     }
+
+    pub fn with_selected_conversation(
+        &mut self,
+        ctx: &mut AppViewContext,
+        f: impl FnOnce(&mut Self, &mut AppViewContext, LocalConversationId),
+    ) {
+        if let Some(index) = self.conversation_list_state.selected() {
+            if let Some(id) = if let Some(user_ctx) = ctx.state().mailbox_state.mailbox_context() {
+                user_ctx
+                    .conversations
+                    .value()
+                    .deref()
+                    .get(index)
+                    .map(|c| c.id)
+            } else {
+                None
+            } {
+                f(self, ctx, id);
+            }
+        } else {
+            warn!("No selected conversation")
+        }
+    }
 }
 
 fn find_label_index_mailbox(
@@ -313,6 +377,8 @@ impl View<AppViewContext, AppEvent> for ConversationView {
         self.draw_label_area(&state.mailbox_state, frame, label_area);
 
         self.draw_conversation_area(&state.mailbox_state, frame, conversation_area);
+
+        self.draw_label_selection(frame, area);
     }
 
     fn help_items(&self) -> &[HelpCategory] {
@@ -394,6 +460,18 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                         key: "r",
                         description: "Mark selected conversation read",
                     },
+                    HelpItem {
+                        key: "l",
+                        description: "Label selected conversation",
+                    },
+                    HelpItem {
+                        key: "k",
+                        description: "UnLabel selected conversation",
+                    },
+                    HelpItem {
+                        key: "m",
+                        description: "Move selected conversation",
+                    },
                 ],
             },
         ];
@@ -419,6 +497,45 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                 } else {
                     ctx.app_local_dispatcher()
                         .queue_event(MailboxEvent::PollEventLoop);
+                }
+                return;
+            }
+
+            if let Some(selection) = &mut self.label_selection_mode {
+                match k.code {
+                    KeyCode::Esc => {
+                        self.label_selection_mode = None;
+                    }
+                    KeyCode::Enter => {
+                        let Some(index) = self.label_selection_list_state.selected() else {
+                            return;
+                        };
+                        match selection {
+                            LabelSelectionMode::Label(id, labels) => {
+                                let label_id = labels[index].id;
+                                ctx.app_local_dispatcher()
+                                    .queue_event(MailboxEvent::LabelConversation(*id, label_id));
+                            }
+                            LabelSelectionMode::Unlabel(id, labels) => {
+                                let label_id = labels[index].id;
+                                ctx.app_local_dispatcher()
+                                    .queue_event(MailboxEvent::UnlabelConversation(*id, label_id));
+                            }
+                            LabelSelectionMode::Move(id, labels) => {
+                                let label_id = labels[index].id;
+                                ctx.app_local_dispatcher()
+                                    .queue_event(MailboxEvent::MoveConversation(*id, label_id));
+                            }
+                        };
+                        self.label_selection_mode = None;
+                    }
+                    KeyCode::Up => {
+                        self.label_selection_list_state.prev();
+                    }
+                    KeyCode::Down => {
+                        self.label_selection_list_state.next();
+                    }
+                    _ => {}
                 }
                 return;
             }
@@ -494,67 +611,84 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                         );
                     }
                     KeyCode::Char('d') => {
-                        if let Some(index) = self.conversation_list_state.selected() {
-                            if let Some(id) = if let Some(user_ctx) =
-                                ctx.state().mailbox_state.mailbox_context()
-                            {
-                                user_ctx
-                                    .conversations
-                                    .value()
-                                    .deref()
-                                    .get(index)
-                                    .map(|c| c.id)
-                            } else {
-                                None
-                            } {
-                                ctx.app_local_dispatcher()
-                                    .queue_event(MailboxEvent::DeleteConversation(id))
-                            }
-                        } else {
-                            warn!("No selected conversation")
-                        }
+                        self.with_selected_conversation(ctx, |_, ctx, id| {
+                            ctx.app_local_dispatcher()
+                                .queue_event(MailboxEvent::DeleteConversation(id))
+                        });
                     }
                     KeyCode::Char('u') => {
-                        if let Some(index) = self.conversation_list_state.selected() {
-                            if let Some(id) = if let Some(user_ctx) =
-                                ctx.state().mailbox_state.mailbox_context()
-                            {
-                                user_ctx
-                                    .conversations
-                                    .value()
-                                    .deref()
-                                    .get(index)
-                                    .map(|c| c.id)
-                            } else {
-                                None
-                            } {
-                                ctx.app_local_dispatcher()
-                                    .queue_event(MailboxEvent::MarkConversationUnread(id))
-                            }
-                        } else {
-                            warn!("No selected conversation")
-                        }
+                        self.with_selected_conversation(ctx, |_, ctx, id| {
+                            ctx.app_local_dispatcher()
+                                .queue_event(MailboxEvent::MarkConversationUnread(id))
+                        });
                     }
                     KeyCode::Char('r') => {
-                        if let Some(index) = self.conversation_list_state.selected() {
-                            if let Some(id) = if let Some(user_ctx) =
-                                ctx.state().mailbox_state.mailbox_context()
-                            {
-                                user_ctx
-                                    .conversations
-                                    .value()
-                                    .deref()
-                                    .get(index)
-                                    .map(|c| c.id)
-                            } else {
-                                None
-                            } {
-                                ctx.app_local_dispatcher()
-                                    .queue_event(MailboxEvent::MarkConversationRead(id))
+                        self.with_selected_conversation(ctx, |_, ctx, id| {
+                            ctx.app_local_dispatcher()
+                                .queue_event(MailboxEvent::MarkConversationRead(id))
+                        });
+                    }
+                    KeyCode::Char('l') => {
+                        self.with_selected_conversation(ctx, |this, ctx, id| {
+                            if let Some(state) = ctx.state().mailbox_state.mailbox_context() {
+                                let labels = match state
+                                    .mailbox
+                                    .user_context()
+                                    .get_labels_by_type(LabelType::Label)
+                                {
+                                    Ok(l) => l,
+                                    Err(e) => {
+                                        ctx.app_local_dispatcher()
+                                            .set_error("Failed to get movable folder list", e);
+                                        return;
+                                    }
+                                };
+                                this.label_selection_mode =
+                                    Some(LabelSelectionMode::Label(id, labels));
+                                this.label_selection_list_state.select(Some(0));
+                                this.label_selection_list_state.set_offset(0);
                             }
-                        } else {
-                            warn!("No selected conversation")
-                        }
+                        });
+                    }
+                    KeyCode::Char('k') => {
+                        self.with_selected_conversation(ctx, |this, ctx, id| {
+                            if let Some(state) = ctx.state().mailbox_state.mailbox_context() {
+                                let labels = match state
+                                    .mailbox
+                                    .user_context()
+                                    .get_labels_by_type(LabelType::Label)
+                                {
+                                    Ok(l) => l,
+                                    Err(e) => {
+                                        ctx.app_local_dispatcher()
+                                            .set_error("Failed to get movable folder list", e);
+                                        return;
+                                    }
+                                };
+                                this.label_selection_mode =
+                                    Some(LabelSelectionMode::Unlabel(id, labels));
+                                this.label_selection_list_state.select(Some(0));
+                                this.label_selection_list_state.set_offset(0);
+                            }
+                        });
+                    }
+                    KeyCode::Char('m') => {
+                        self.with_selected_conversation(ctx, |this, ctx, id| {
+                            if let Some(state) = ctx.state().mailbox_state.mailbox_context() {
+                                let labels = match state.mailbox.user_context().movable_folders() {
+                                    Ok(l) => l,
+                                    Err(e) => {
+                                        ctx.app_local_dispatcher()
+                                            .set_error("Failed to get movable folder list", e);
+                                        return;
+                                    }
+                                };
+                                this.label_selection_mode =
+                                    Some(LabelSelectionMode::Move(id, labels));
+                                this.label_selection_list_state.select(Some(0));
+                                this.label_selection_list_state.set_offset(0);
+                            }
+                        });
                     }
                     _ => {}
                 },

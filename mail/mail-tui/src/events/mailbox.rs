@@ -16,6 +16,9 @@ pub enum MailboxEvent {
     DeleteConversation(LocalConversationId),
     MarkConversationRead(LocalConversationId),
     MarkConversationUnread(LocalConversationId),
+    LabelConversation(LocalConversationId, LocalLabelId),
+    UnlabelConversation(LocalConversationId, LocalLabelId),
+    MoveConversation(LocalConversationId, LocalLabelId),
 }
 
 // Custom debug formatter so that log doesn't implode with all the metadata.
@@ -57,6 +60,15 @@ impl std::fmt::Debug for MailboxEvent {
             }
             MailboxEvent::MarkConversationUnread(id) => {
                 write!(f, "MailboxEvent::MarkConversationUnread({id})")
+            }
+            MailboxEvent::LabelConversation(id, lid) => {
+                write!(f, "MailboxEvent::LabelConversation({id}, {lid}")
+            }
+            MailboxEvent::UnlabelConversation(id, lid) => {
+                write!(f, "MailboxEvent::UnlabelConversation({id}, {lid}")
+            }
+            MailboxEvent::MoveConversation(id, lid) => {
+                write!(f, "MailboxEvent::MoveConversation({id}, {lid}")
             }
         }
     }

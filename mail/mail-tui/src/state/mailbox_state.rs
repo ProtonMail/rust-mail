@@ -58,7 +58,7 @@ pub struct MailboxState {
 }
 
 pub struct MailboxUserContextState {
-    mailbox: Mailbox,
+    pub mailbox: Mailbox,
     pub conversations: LiveQuery<ConversationQuery>,
     pub system_labels: LiveQuery<LabelsByTypeQueryWithConversationCount>,
     pub folders: LiveQuery<LabelsByTypeQueryWithConversationCount>,
@@ -351,6 +351,42 @@ impl MailboxState {
                     }
                 } else {
                     warn!("No user context for mark conversation unread")
+                }
+            }
+            MailboxEvent::LabelConversation(id, label_id) => {
+                if let Some(mailbox_context) = &self.user_context {
+                    if let Err(e) = mailbox_context
+                        .mailbox
+                        .label_conversations(label_id, std::iter::once(id))
+                    {
+                        dispatcher.set_error("Failed to label conversation", e);
+                    }
+                } else {
+                    warn!("No user context for label conversation")
+                }
+            }
+            MailboxEvent::UnlabelConversation(id, label_id) => {
+                if let Some(mailbox_context) = &self.user_context {
+                    if let Err(e) = mailbox_context
+                        .mailbox
+                        .unlabel_conversations(label_id, std::iter::once(id))
+                    {
+                        dispatcher.set_error("Failed to unlabel conversation", e);
+                    }
+                } else {
+                    warn!("No user context for unlabel conversation")
+                }
+            }
+            MailboxEvent::MoveConversation(id, label_id) => {
+                if let Some(mailbox_context) = &self.user_context {
+                    if let Err(e) = mailbox_context
+                        .mailbox
+                        .move_conversations(label_id, std::iter::once(id))
+                    {
+                        dispatcher.set_error("Failed to move conversation", e);
+                    }
+                } else {
+                    warn!("No user context for move conversation")
                 }
             }
         }
