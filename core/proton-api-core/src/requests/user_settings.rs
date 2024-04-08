@@ -1,10 +1,10 @@
 use crate::domain::UserSettings;
 use crate::http::{JsonResponse, Method, RequestData, RequestDesc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub struct UserSettingsRequest {}
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct UserSettingsResponse {
     #[serde(rename = "UserSettings")]
     pub user_settings: UserSettings,

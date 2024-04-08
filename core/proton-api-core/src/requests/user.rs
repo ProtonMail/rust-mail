@@ -2,9 +2,9 @@ use crate::domain::User;
 use crate::http;
 use crate::http::{JsonResponse, RequestData};
 use proton_crypto_account::salts::Salts;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserInfoResponse {
     pub user: User,

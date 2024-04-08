@@ -1,11 +1,11 @@
 use crate::domain::IsEvent;
 use crate::http;
 use crate::http::RequestData;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 
 #[doc(hidden)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct LatestEventResponse {
     #[serde(rename = "EventID")]
     pub event_id: crate::domain::EventId,

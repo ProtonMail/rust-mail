@@ -1,11 +1,11 @@
 use crate::domain::{HumanVerification, HumanVerificationType};
 use anyhow::anyhow;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 const HUMAN_VERIFICATION_REQUESTED: u32 = 9001;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct APIErrorDesc {
     pub code: u32,
