@@ -1507,7 +1507,7 @@ dependencies = [
 [[package]]
 name = "proton-action-queue"
 version = "0.3.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#70eac71c23aa98e5f43656c32ddb651ee0e66e98"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#2112f49bbafac10a637c705be3ead27f8445b728"
 dependencies = [
  "chrono",
  "log",
@@ -1523,7 +1523,7 @@ dependencies = [
 [[package]]
 name = "proton-api-core"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#70eac71c23aa98e5f43656c32ddb651ee0e66e98"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#2112f49bbafac10a637c705be3ead27f8445b728"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
@@ -1550,6 +1550,7 @@ dependencies = [
  "lazy_static",
  "proton-api-core",
  "proton-async",
+ "serde",
  "tracing-subscriber",
  "uniffi",
 ]
@@ -1557,7 +1558,7 @@ dependencies = [
 [[package]]
 name = "proton-async"
 version = "0.3.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#70eac71c23aa98e5f43656c32ddb651ee0e66e98"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#2112f49bbafac10a637c705be3ead27f8445b728"
 dependencies = [
  "async-trait",
  "flume",
@@ -1570,7 +1571,7 @@ dependencies = [
 [[package]]
 name = "proton-core-common"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#70eac71c23aa98e5f43656c32ddb651ee0e66e98"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#2112f49bbafac10a637c705be3ead27f8445b728"
 dependencies = [
  "base64 0.22.0",
  "proton-api-core",
@@ -1582,7 +1583,7 @@ dependencies = [
 [[package]]
 name = "proton-core-db"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#70eac71c23aa98e5f43656c32ddb651ee0e66e98"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#2112f49bbafac10a637c705be3ead27f8445b728"
 dependencies = [
  "aes-gcm",
  "proton-api-core",
@@ -1620,7 +1621,7 @@ dependencies = [
 [[package]]
 name = "proton-event-loop"
 version = "0.4.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#70eac71c23aa98e5f43656c32ddb651ee0e66e98"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#2112f49bbafac10a637c705be3ead27f8445b728"
 dependencies = [
  "paste",
  "proton-api-core",
@@ -1696,7 +1697,7 @@ dependencies = [
 [[package]]
 name = "proton-sqlite3"
 version = "0.4.3"
-source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#70eac71c23aa98e5f43656c32ddb651ee0e66e98"
+source = "git+https://gitlab.protontech.ch/rust/proton-api-core.git#2112f49bbafac10a637c705be3ead27f8445b728"
 dependencies = [
  "fixedbitset",
  "parking_lot",

@@ -4,7 +4,7 @@ use crate::domain::{
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
-use proton_api_core::utils::{bool_from_integer, opt_bool_to_integer};
+use proton_api_core::utils::{bool_from_integer, bool_to_integer, opt_bool_to_integer};
 
 pub struct GetConversationsRequest {
     filter: ConversationFilter,
@@ -16,11 +16,15 @@ impl GetConversationsRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetConversationsResponse {
     pub conversations: Vec<Conversation>,
-    #[serde(default, deserialize_with = "bool_from_integer")]
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
     pub stale: bool,
     pub total: u64,
 }
@@ -98,7 +102,7 @@ impl http::RequestDesc for GetConversationCountsRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetConversationCountsResponse {
     pub counts: Vec<ConversationCount>,

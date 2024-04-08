@@ -1,3 +1,5 @@
+pub mod init;
+
 use proton_api_mail::proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
 use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
 use proton_api_mail::proton_api_core::http;
