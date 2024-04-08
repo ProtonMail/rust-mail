@@ -8,7 +8,7 @@ pub mod domain;
 pub mod exports;
 pub mod http;
 pub mod login;
-mod requests;
+pub mod requests;
 mod session;
 
 pub use session::*;
