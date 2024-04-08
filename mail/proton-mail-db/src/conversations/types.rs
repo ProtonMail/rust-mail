@@ -28,7 +28,7 @@ pub struct LocalMessageCount {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ConversationAvatarInformation {
     pub text: String,
-    pub colour: String,
+    pub color: String,
     pub sender_image_url: String,
 }
 
@@ -36,14 +36,14 @@ pub struct ConversationAvatarInformation {
 ///
 /// It contains:
 ///     - the text to display in the avatar,
-///     - the colour to use for the avatar,
+///     - the color to use for the avatar,
 ///     - and the url of the sender image if a valid BIMI image is available.
 impl ConversationAvatarInformation {
-    /// build takes a display name and email address and uses these to determine the text and colour the avatar should be
+    /// build takes a display name and email address and uses these to determine the text and color the avatar should be
     pub fn build(display_name: &str, email: &str) -> ConversationAvatarInformation {
         ConversationAvatarInformation {
             text: initials::avatar_text(display_name, email),
-            colour: proton_color::proton_color(display_name).to_string(),
+            color: proton_color::proton_color(display_name).to_string(),
             sender_image_url: "".to_string(),
         }
     }
