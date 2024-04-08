@@ -10,7 +10,7 @@ proton-crypto-account = {path = "../proton-crypto-account", version = "0.1.0", r
 proton-crypto-inbox-mime = {path = "../proton-crypto-inbox-mime", version = "0.1.0", registry = "proton_internal"}
 thiserror = { workspace = true }
 serde = { version="1", features = ["derive"]}
-base64 = "0.21"
+base64 = { workspace = true }
 
 [dev-dependencies]
 serde_json = "1.0"
