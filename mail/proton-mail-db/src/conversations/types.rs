@@ -32,7 +32,14 @@ pub struct ConversationAvatarInformation {
     pub sender_image_url: String,
 }
 
+/// ConversationAvatarInformation contains the details used for the avatar shown for a conversation.
+///
+/// It contains:
+///     - the text to display in the avatar,
+///     - the colour to use for the avatar,
+///     - and the url of the sender image if a valid BIMI image is available.
 impl ConversationAvatarInformation {
+    /// build takes a display name and email address and uses these to determine the text and colour the avatar should be
     pub fn build(display_name: &str, email: &str) -> ConversationAvatarInformation {
         ConversationAvatarInformation {
             text: initials::avatar_text(display_name, email),
@@ -41,6 +48,7 @@ impl ConversationAvatarInformation {
         }
     }
 
+    /// from_message_addresses creates a ConversationAvatarInformation struct using the details of the first MessageAddress in the provided slice
     pub fn from_message_addresses(
         address_list: &[MessageAddress],
     ) -> ConversationAvatarInformation {
