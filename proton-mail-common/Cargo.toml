@@ -16,11 +16,12 @@ uniffi = {optional = true, workspace=true}
 uuid = { version= "1" , features = ["v4"] }
 
 [dev-dependencies]
-wiremock = {workspace=true}
-tempdir = "0.3.1"
 proton-core-db= {workspace=true}
+tempdir = "0.3.1"
 # anotate your tests with traced_test attribute to see log outputs.
 tracing-test = {version = "0.2.4" , features = ["no-env-filter"]}
+velcro = "0.5.4"
+wiremock = {workspace=true}
 
 [lints]
 workspace = true
