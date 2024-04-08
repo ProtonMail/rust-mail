@@ -17,7 +17,7 @@ impl http::RequestDesc for GetLatestEventRequest {
     type Response = http::JsonResponse<LatestEventResponse>;
 
     fn build(&self) -> RequestData {
-        RequestData::new(http::Method::Get, "core/v4/events/latest")
+        RequestData::new(http::Method::Get, "core/v5/events/latest")
     }
 }
 
