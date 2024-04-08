@@ -3,8 +3,8 @@ use crate::{
     LocalAttachmentMetadata, LocalLabelId,
 };
 use proton_api_mail::domain::{
-    AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
-    MessageMetadata,
+    AddressId, Conversation, ConversationId, ExternalId, LabelId, Message, MessageAddress,
+    MessageId, MessageMetadata,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 
@@ -40,6 +40,18 @@ impl ConversationAvatarInformation {
             sender_image_url: "".to_string(),
         }
     }
+
+    pub fn from_message_addresses(
+        address_list: &[MessageAddress],
+    ) -> ConversationAvatarInformation {
+        let first_sender = address_list.first();
+        let display_name_email = match first_sender {
+            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
+            None => ("", ""),
+        };
+
+        ConversationAvatarInformation::build(display_name_email.0, display_name_email.1)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -70,13 +82,8 @@ impl LocalConversation {
         conversation: Conversation,
         labels: Option<Vec<LocalConversationLabel>>,
     ) -> Self {
-        let first_sender = conversation.senders.first();
-        let display_name_email = match first_sender {
-            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
-            None => ("", ""),
-        };
         let avatar_information =
-            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
+            ConversationAvatarInformation::from_message_addresses(&conversation.senders);
 
         Self {
             id,
@@ -105,13 +112,8 @@ impl LocalConversation {
         conversation: Conversation,
         labels: Option<Vec<LocalConversationLabel>>,
     ) -> Self {
-        let first_sender = conversation.senders.first();
-        let display_name_email = match first_sender {
-            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
-            None => ("", ""),
-        };
         let avatar_information =
-            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
+            ConversationAvatarInformation::from_message_addresses(&conversation.senders);
 
         let mut result = Self {
             id,
