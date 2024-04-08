@@ -1043,13 +1043,7 @@ WHERE deleted=0"
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
-        let first_sender = senders.first();
-        let display_name_email = match first_sender {
-            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
-            None => ("", ""),
-        };
-        let avatar_information =
-            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
+        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
 
         Ok({
             LocalConversation {
@@ -1137,13 +1131,7 @@ WHERE C.deleted=0"
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
-        let first_sender = senders.first();
-        let display_name_email = match first_sender {
-            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
-            None => ("", ""),
-        };
-        let avatar_information =
-            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
+        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
 
         Ok(LocalConversation {
             id: r.get(0)?,
