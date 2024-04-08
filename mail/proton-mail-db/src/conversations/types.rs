@@ -72,14 +72,11 @@ impl LocalConversation {
     ) -> Self {
         let first_sender = conversation.senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (
-                String::clone(&first_sender.name),
-                String::clone(&first_sender.address),
-            ),
-            None => (String::new(), String::new()),
+            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
+            None => ("", ""),
         };
         let avatar_information =
-            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
 
         Self {
             id,
@@ -110,14 +107,11 @@ impl LocalConversation {
     ) -> Self {
         let first_sender = conversation.senders.first();
         let display_name_email = match first_sender {
-            Some(first_sender) => (
-                String::clone(&first_sender.name),
-                String::clone(&first_sender.address),
-            ),
-            None => (String::new(), String::new()),
+            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
+            None => ("", ""),
         };
         let avatar_information =
-            ConversationAvatarInformation::build(&display_name_email.0, &display_name_email.1);
+            ConversationAvatarInformation::build(display_name_email.0, display_name_email.1);
 
         let mut result = Self {
             id,
