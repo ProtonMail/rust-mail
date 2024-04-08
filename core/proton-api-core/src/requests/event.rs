@@ -17,7 +17,7 @@ impl http::RequestDesc for GetLatestEventRequest {
     type Response = http::JsonResponse<LatestEventResponse>;
 
     fn build(&self) -> RequestData {
-        RequestData::new(http::Method::Get, "core/v5/events/latest")
+        RequestData::new(http::Method::Get, "core/v4/events/latest")
     }
 }
 
@@ -56,7 +56,7 @@ impl<'a, T: IsEvent> http::RequestDesc for GetEventRequest<'a, T> {
         let conversation_counts = if self.conversation_counts { "1" } else { "0" };
         RequestData::new(
             http::Method::Get,
-            format!("core/v4/events/{}", self.event_id),
+            format!("core/v5/events/{}", self.event_id),
         )
         .query("MessageCounts", message_counts)
         .query("ConversationCounts", conversation_counts)
