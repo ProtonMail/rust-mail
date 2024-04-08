@@ -4,8 +4,10 @@ pub fn avatar_text(name: &str, email: &str) -> String {
         let mut chars = initials.chars();
         if let Some(first) = chars.next() {
             match chars.next() {
-                Some(second) => return format!("{}{}", first, second.to_lowercase()),
-                None => return format!("{}", first),
+                Some(second) => {
+                    return format!("{}{}", first.to_uppercase(), second.to_lowercase())
+                }
+                None => return format!("{}", first.to_uppercase()),
             }
         }
     }
@@ -14,10 +16,22 @@ pub fn avatar_text(name: &str, email: &str) -> String {
 }
 
 fn initials(name: &str) -> String {
-    name.split_whitespace()
+    let mut s = String::with_capacity(2);
+
+    let mut count = 0;
+    for c in name
+        .split_whitespace()
         .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()))
-        .collect::<String>()
-        .to_uppercase()
+    {
+        s.push(c);
+        count += 1;
+
+        if count == 2 {
+            break;
+        }
+    }
+
+    s
 }
 
 fn email_text(address: &str) -> String {
@@ -45,7 +59,7 @@ mod tests {
     #[test]
     fn test_initials() {
         assert_eq!(initials("John Doe"), "JD");
-        assert_eq!(initials("john doe"), "JD");
+        assert_eq!(initials("john doe"), "jd");
         assert_eq!(initials("John"), "J");
         assert_eq!(initials(""), "");
         assert_eq!(initials("J"), "J");
