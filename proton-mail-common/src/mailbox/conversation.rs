@@ -1,6 +1,6 @@
 use crate::actions::{
     DeleteConversationsAction, LabelConversationsAction, MarkConversationsReadAction,
-    MarkConversationsUnreadAction, UnlabelConversationsAction,
+    MarkConversationsUnreadAction, MoveConversationsAction, UnlabelConversationsAction,
 };
 use crate::{
     Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
@@ -104,6 +104,17 @@ impl Mailbox {
     ) -> MailboxResult<()> {
         self.user_ctx
             .queue_action(UnlabelConversationsAction::new(label_id, ids))?;
+        Ok(())
+    }
+
+    /// Move conversations to a given folder.
+    pub fn move_conversations(
+        &self,
+        label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        self.user_ctx
+            .queue_action(MoveConversationsAction::new(self.label_id, label_id, ids))?;
         Ok(())
     }
 }

@@ -1,4 +1,5 @@
 use crate::ids::new_u64_type;
+use crate::labels::movable_sys_folder_list;
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
@@ -54,6 +55,12 @@ impl LocalLabel {
             expanded: label.expanded,
             sticky: label.sticky,
         }
+    }
+
+    pub fn is_movable_folder(&self) -> bool {
+        self.rid
+            .as_ref()
+            .map_or(false, |rid| movable_sys_folder_list().contains(&rid))
     }
 }
 
