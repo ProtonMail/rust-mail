@@ -3,6 +3,7 @@ mod event_loop;
 mod label_conversations;
 mod mark_conversations_read;
 mod mark_conversations_unread;
+mod move_conversations;
 mod unlabel_conversations;
 
 use crate::WeakMailUserContext;
@@ -11,6 +12,7 @@ pub use event_loop::*;
 pub use label_conversations::*;
 pub use mark_conversations_read::*;
 pub use mark_conversations_unread::*;
+pub use move_conversations::*;
 use proton_action_queue::ActionFactory;
 pub use unlabel_conversations::*;
 
@@ -40,6 +42,11 @@ pub(crate) fn new_action_factory(mail_user_context: WeakMailUserContext) -> Acti
         .expect(ERR_MSG);
     factory
         .register(Box::new(UnlabelConversationsActionFactory::new(
+            mail_user_context.clone(),
+        )))
+        .expect(ERR_MSG);
+    factory
+        .register(Box::new(MoveConversationsActionFactory::new(
             mail_user_context.clone(),
         )))
         .expect(ERR_MSG);
