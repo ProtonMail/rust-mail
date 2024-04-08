@@ -1,9 +1,10 @@
 use crate::common::TestContext;
 use proton_api_mail::domain::{
-    Address, Conversation, ConversationCount, Label, LabelType, MailSettings, MessageCount,
+    Address, AddressId, AddressStatus, AddressType, Conversation, ConversationCount,
+    ConversationId, ConversationLabels, Label, LabelId, LabelType, MailSettings, MessageCount,
     ALL_LABEL_TYPES,
 };
-use proton_api_mail::exports::crypto::domain::UserKeys;
+use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
     EventId, TFAStatus, User, UserFlags, UserId, UserLogAuth, UserMnemonicStatus,
     UserProductUsedSpace, UserSettings, UserSettings2FA, UserSettingsDateFormat,
@@ -16,6 +17,7 @@ use proton_mail_common::{
     MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
 };
 use std::collections::HashMap;
+use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -49,6 +51,88 @@ pub struct Params {
     pub conversation_count: Vec<ConversationCount>,
     /// List of message counts
     pub message_count: Vec<MessageCount>,
+}
+
+impl Params {
+    /// Create a basic set of parameters with some default values.
+    ///
+    /// This function goes beyond the bare type defaults, and sets up some basic
+    /// information to use to test against. Specifically, it sets up a single
+    /// label, a single address, a single conversation, and the related counts.
+    ///
+    pub fn default_basic() -> Self {
+        Self {
+            last_event_id: None,
+            user_info: None,
+            user_settings: None,
+            mail_settings: None,
+            labels: hash_map! {
+                LabelType::Label: vec![Label {
+                    id: LabelId::from("mylabel"),
+                    parent_id: None,
+                    name: "mylabel".to_string(),
+                    path: None,
+                    color: "".to_string(),
+                    label_type: LabelType::Label,
+                    notify: false,
+                    display: false,
+                    sticky: false,
+                    expanded: false,
+                    order: 0,
+                }]
+            },
+            addresses: vec![Address {
+                id: AddressId::from("myaddress"),
+                email: "foo@bar.com".to_string(),
+                send: true,
+                receive: true,
+                status: AddressStatus::Enabled,
+                domain_id: None,
+                address_type: AddressType::Original,
+                order: 0,
+                display_name: "".to_string(),
+                signature: "".to_string(),
+                keys: AddressKeys(vec![]),
+                catch_all: false,
+                proton_mx: false,
+                signed_key_list: Default::default(),
+            }],
+            conversations: vec![Conversation {
+                id: ConversationId::from("myconv"),
+                order: 0,
+                subject: "Hello".to_string(),
+                senders: vec![],
+                recipients: vec![],
+                num_messages: 1,
+                num_unread: 0,
+                num_attachments: 0,
+                expiration_time: 0,
+                size: 12,
+                labels: vec![ConversationLabels {
+                    id: LabelId::inbox().clone(),
+                    context_num_unread: 0,
+                    context_num_messages: 1,
+                    context_time: 0,
+                    context_size: 12,
+                    context_num_attachments: 0,
+                    context_expiration_time: 0,
+                }],
+                display_snooze_reminder: false,
+                attachments_metadata: vec![],
+                attachment_info: Default::default(),
+            }],
+            conversation_count: vec![ConversationCount {
+                label_id: LabelId::inbox().clone(),
+                total: 1,
+                unread: 0,
+            }],
+            message_count: vec![MessageCount {
+                label_id: LabelId::inbox().clone(),
+                total: 1,
+                unread: 0,
+            }],
+        }
+    }
 }
 
 /// Setup user data that should be fetched after login to initialize the database and/or the
