@@ -1,10 +1,11 @@
 use crate::domain::MailSettings;
 use proton_api_core::exports::serde::{self, Deserialize};
 use proton_api_core::http::{JsonResponse, Method, RequestData, RequestDesc};
+use serde::Serialize;
 
 pub struct GetMailSettingsRequest {}
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct MailSettingsResponse {
     pub mail_settings: MailSettings,

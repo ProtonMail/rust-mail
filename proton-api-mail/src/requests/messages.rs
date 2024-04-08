@@ -68,7 +68,7 @@ impl http::RequestDesc for GetMessageCountsRequest {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetMessageCountsResponse {
     pub counts: Vec<MessageCount>,
