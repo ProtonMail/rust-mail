@@ -18,15 +18,13 @@ pub fn avatar_text(name: &str, email: &str) -> String {
 fn initials(name: &str) -> String {
     let mut s = String::with_capacity(2);
 
-    let mut count = 0;
     for c in name
         .split_whitespace()
         .filter_map(|word| word.chars().find(|c| c.is_alphanumeric()))
     {
         s.push(c);
-        count += 1;
 
-        if count == 2 {
+        if s.len() == 2 {
             break;
         }
     }
