@@ -3,8 +3,8 @@ use crate::{
     LocalAttachmentMetadata, LocalLabelId,
 };
 use proton_api_mail::domain::{
-    AddressId, Conversation, ConversationId, ExternalId, LabelId, Message, MessageAddress,
-    MessageId, MessageMetadata,
+    AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
+    MessageMetadata,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 
