@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proton-crypto = {path = "../proton-crypto", version = "0.2.0"}
+proton-crypto = {path = "../proton-crypto", version = "0.2.0", registry = "proton_internal"}
 thiserror = { workspace = true }
 serde = { version="1", features = ["derive"]}
 serde_repr = "0.1"

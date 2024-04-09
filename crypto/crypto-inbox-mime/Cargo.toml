@@ -12,7 +12,7 @@ hex = "0.4.3"
 rand = "0.8.5"
 
 [dev-dependencies]
-proton-crypto = {path = "../proton-crypto", version = "0.2.0"}
+proton-crypto = {path = "../proton-crypto", version = "0.2.0", registry = "proton_internal"}
 
 [lints]
 workspace = true
