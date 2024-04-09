@@ -1,3 +1,4 @@
+pub mod conversations;
 pub mod init;
 
 use proton_api_mail::proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
@@ -38,7 +39,6 @@ impl TestContext {
         api_env_config.skip_srp_proof_validation = true;
         let client = http::ClientBuilder::new()
             .api_env_config(api_env_config)
-            .debug()
             .build()
             .unwrap();
 

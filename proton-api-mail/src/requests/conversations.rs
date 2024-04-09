@@ -130,7 +130,7 @@ pub struct DeleteConversationsResponse {
     pub responses: Vec<ConversationsResponseObject>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde")]
 pub struct ConversationsResponseObject {
     #[serde(rename = "ID")]
@@ -245,13 +245,13 @@ impl<'a> UnlabelConversationRequest<'a> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct UndoToken {
     pub token: String,
     pub valid_until: u64,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde")]
 pub struct LabelConversationsResponse {
     #[serde(rename = "Responses")]
