@@ -14,8 +14,11 @@ use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
 use wiremock::MockServer;
 
-/// Sets up a test context which handcrafts a new session so that we can bypass the authentication
-/// as well as a mock server.
+/// Test context for mail tests.
+///
+/// This struct provides a test context with a handcrafted new session, so that
+/// we can bypass authentication. It also spins up a mock server.
+///
 pub struct TestContext {
     context: MailContext,
     mock_server: MockServer,
@@ -24,6 +27,7 @@ pub struct TestContext {
 }
 
 impl TestContext {
+    /// Generate a test UID.
     fn test_uid() -> Uid {
         Uid::from("TEST_UID")
     }
@@ -33,6 +37,7 @@ impl TestContext {
         let runtime = MTRuntime::new(2).expect("failed to create runtime");
         let mock_server = runtime.block_on(async { MockServer::start().await });
 
+        // Create client with the mock server as the base URL
         let mut api_env_config = APIEnvConfig::default();
         api_env_config.base_url = format!("{}/api", mock_server.uri());
         api_env_config.allow_http = true;
@@ -42,13 +47,17 @@ impl TestContext {
             .build()
             .unwrap();
 
+        // Create a temporary directory for the database
         let tmp_dir = tempdir::TempDir::new("pmc_test").expect("failed to create temp dir");
         let keychain = Arc::new(InMemoryKeyChain::default());
 
+        // Generate a random encryption key and store it in the keychain
         let encryption_key = SessionEncryptionKey::random();
         keychain
             .store(encryption_key.to_base64())
             .expect("failed to store in keychain");
+
+        // Create mail context
         let context = MailContext::new(
             runtime,
             tmp_dir.path(),
@@ -59,8 +68,7 @@ impl TestContext {
         )
         .expect("failed to create mail context");
 
-        // generate a fake session and write it to the database.
-
+        // Generate a fake session and write it to the database
         let pool = proton_core_db::proton_sqlite3::SqliteConnectionPool::new(
             SqliteMode::File(tmp_dir.path().join("session.db")),
             false,
@@ -68,6 +76,7 @@ impl TestContext {
         let mut conn =
             SessionSqliteConnection::from(pool.acquire().expect("failed to acquire connection"));
 
+        // Create a fake session
         let session = proton_core_db::DecryptedUserSession {
             session_id: Self::test_uid(),
             user_id: UserId::from("TEST_USER_ID"),
@@ -99,7 +108,7 @@ impl TestContext {
         &self.context
     }
 
-    /// Get the wiremock server
+    /// Get the Wiremock server.
     pub fn mock_server(&self) -> &MockServer {
         &self.mock_server
     }

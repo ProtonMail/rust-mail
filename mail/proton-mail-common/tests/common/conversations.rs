@@ -10,8 +10,19 @@ use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 impl TestContext {
-    /// Generate new mock requests for labeling conversations. `failed` should contain a list of
-    /// conversations for which we want to simulate failure.
+    /// Generate new mock expectations for labeling conversations.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id`    - The label ID to use for the request.
+    /// * `ids`         - The list of conversation IDs to label.
+    /// * `spam_action` - The spam action to use for the request.
+    /// * `failed`      - The list of conversation IDs for which we want to
+    ///                   simulate failure.
+    ///
     pub fn mock_label_conversation(
         &self,
         label_id: &LabelId,
@@ -38,8 +49,18 @@ impl TestContext {
         });
     }
 
-    /// Generate new mock requests for unlabeling conversations. `failed` should contain a list of
-    /// conversations for which we want to simulate failure.
+    /// Generate new mock expectations for unlabeling conversations.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id` - The label ID to use for the request.
+    /// * `ids`      - The list of conversation IDs to unlabel.
+    /// * `failed`   - The list of conversation IDs for which we want to
+    ///                simulate failure.
+    ///
     pub fn mock_unlabel_conversation(
         &self,
         label_id: &LabelId,
@@ -64,8 +85,17 @@ impl TestContext {
         });
     }
 
-    /// Generate new mock requests for marking conversations as read. `failed` should contain a list of
-    /// conversations for which we want to simulate failure.
+    /// Generate new mock expectations for marking conversations as read.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`    - The list of conversation IDs to label.
+    /// * `failed` - The list of conversation IDs for which we want to
+    ///              simulate failure.
+    ///
     pub fn mock_mark_conversation_read(
         &self,
         ids: impl IntoIterator<Item = ConversationId>,
@@ -91,6 +121,17 @@ impl TestContext {
     }
 }
 
+/// Build a list of conversation responses.
+///
+/// This function builds a list of conversation responses for the given `ids`
+/// and `failed` conversations.
+///
+/// # Parameters
+///
+/// * `ids`    - The list of conversation IDs to build responses for.
+/// * `failed` - The list of conversation IDs for which we want to simulate
+///              failure.
+///
 fn build_conv_responses(
     ids: &[ConversationId],
     failed: impl IntoIterator<Item = ConversationId>,
