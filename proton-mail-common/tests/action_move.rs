@@ -3,7 +3,6 @@ use proton_api_mail::domain::{
     ConversationId, ConversationLabels, Label, LabelId, LabelType, MessageCount,
 };
 use proton_api_mail::exports::crypto::domain::AddressKeys;
-use proton_api_mail::exports::tracing;
 use proton_mail_common::Mailbox;
 use std::collections::HashMap;
 
