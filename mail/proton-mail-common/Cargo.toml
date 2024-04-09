@@ -19,6 +19,8 @@ uuid = { version= "1" , features = ["v4"] }
 wiremock = {workspace=true}
 tempdir = "0.3.1"
 proton-core-db= {workspace=true}
+# anotate your tests with traced_test attribute to see log outputs.
+tracing-test = {version = "0.2.4" , features = ["no-env-filter"]}
 
 [lints]
 workspace = true

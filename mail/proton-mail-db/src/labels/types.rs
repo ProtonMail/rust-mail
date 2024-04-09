@@ -58,9 +58,11 @@ impl LocalLabel {
     }
 
     pub fn is_movable_folder(&self) -> bool {
-        self.rid
-            .as_ref()
-            .map_or(false, |rid| movable_sys_folder_list().contains(&rid))
+        self.label_type == LabelType::Folder
+            || self
+                .rid
+                .as_ref()
+                .map_or(false, |rid| movable_sys_folder_list().contains(&rid))
     }
 }
 

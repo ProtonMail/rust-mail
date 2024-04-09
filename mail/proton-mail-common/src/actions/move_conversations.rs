@@ -160,7 +160,7 @@ impl<'c, 't: 'c> RemoteActionHandler for MoveConversationsRemoteHandler<'c, 't> 
                     .await
             })
             .map_err(|e| {
-                error!("Failed to move conversations read on API: {e}");
+                error!("Failed to move conversations on API: {e}");
                 e
             })?;
 
