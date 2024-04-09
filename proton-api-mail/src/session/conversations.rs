@@ -3,7 +3,8 @@ use crate::domain::{ConversationCount, ConversationFilter, ConversationId, Label
 use crate::requests::{
     ConversationsResponseObject, DeleteConversationsRequest, GetConversationCountsRequest,
     GetConversationRequest, GetConversationResponse, GetConversationsRequest,
-    GetConversationsResponse, MarkConversationsReadRequest, MarkConversationsUnreadRequest,
+    GetConversationsResponse, LabelConversationRequest, MarkConversationsReadRequest,
+    MarkConversationsUnreadRequest, UnlabelConversationRequest,
 };
 use proton_api_core::http;
 
@@ -62,6 +63,29 @@ impl MailSession {
     ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
         self.session
             .execute_request(MarkConversationsUnreadRequest::new(ids))
+            .await
+            .map(|r| r.responses)
+    }
+
+    pub async fn label_conversations(
+        &self,
+        label_id: &LabelId,
+        ids: &[ConversationId],
+        spam_action: Option<bool>,
+    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+        self.session
+            .execute_request(LabelConversationRequest::new(label_id, spam_action, ids))
+            .await
+            .map(|r| r.responses)
+    }
+
+    pub async fn unlabel_conversations(
+        &self,
+        label_id: &LabelId,
+        ids: &[ConversationId],
+    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+        self.session
+            .execute_request(UnlabelConversationRequest::new(label_id, ids))
             .await
             .map(|r| r.responses)
     }

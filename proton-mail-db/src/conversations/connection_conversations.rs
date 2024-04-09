@@ -2,8 +2,8 @@ use crate::attachments::LocalAttachmentMetadataSelector;
 use crate::conversations::types::{LocalConversation, LocalConversationId};
 use crate::json::{deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer};
 use crate::{
-    DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalConversationLabel,
-    LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
+    ConversationAvatarInformation, DBResult, LocalAttachmentMetadata, LocalConversationCount,
+    LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -831,6 +831,175 @@ WHERE label_message_count.label_id = msg_labels.label_id
         )?;
         Ok(())
     }
+
+    pub fn label_conversation(
+        &mut self,
+        label_id: LocalLabelId,
+        id: LocalConversationId,
+    ) -> DBResult<()> {
+        self.label_conversations(label_id, std::iter::once(id))
+    }
+
+    pub fn label_conversations(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let mut label_msg_stmt = self.0.prepare(
+            r"
+WITH conv_msgs AS (
+    SELECT id,? AS label_id FROM messages WHERE conversation_id=?
+)
+INSERT OR IGNORE INTO message_labels (message_id, label_id) SELECT * FROM conv_msgs RETURNING message_id
+",
+        )?;
+
+        for id in ids {
+            // Check if conversation already has this label
+            let (has_label,is_unread) : (bool,bool) =self.0.query_row("SELECT IFNULL(conversation_id,0), IFNULL(ctx_num_unread,0)<>0 FROM conversation_labels WHERE label_id=? AND conversation_id=?", (label_id,id),|r|{Ok((r.get(0)?,r.get(1)?))}).optional()?.unwrap_or((false,false));
+
+            // label all conversation messages
+            let msg_ids: Vec<LocalMessageId> =
+                mapped_rows_to_vec(label_msg_stmt.query_map((label_id, id), |r| r.get(0))?)?;
+
+            if !msg_ids.is_empty() {
+                // collect info.
+                struct MessageInfo {
+                    size: u64,
+                    time: u64,
+                    expiration_time: u64,
+                    count: u64,
+                    unread: u64,
+                    num_attachments: u64,
+                }
+
+                let info= self.0.query_row(&format!(r"
+SELECT MAX(time) AS time, MAX(expiration_time) AS expiration_time, SUM(size) AS size,COUNT(id) AS `count`,
+SUM(unread) AS unread, SUM(num_attachments) AS num_attachments
+FROM messages WHERE id IN ({}) GROUP BY conversation_id", gen_variable_in_argument_list(msg_ids.len())),params_from_iter(msg_ids), |r|{
+                        Ok(MessageInfo{
+                            size: r.get(2)?,
+                            time: r.get(0)?,
+                            expiration_time: r.get(1)?,
+                            count: r.get(3)? ,
+                            unread: r.get(4)?,
+                            num_attachments: r.get(5)?,
+                        })
+                    })?;
+
+                // create label if not exists
+                // must take into account labels that have already been applied
+                self.0.execute(
+                    r"
+INSERT INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size, ctx_num_messages, ctx_num_unread,
+ctx_num_attachments, ctx_expiration_time) VALUES
+(?,?,?,?,?,?,?,?) ON CONFLICT(label_id, conversation_id) DO UPDATE SET
+ctx_time=CASE WHEN excluded.ctx_time > ctx_time THEN excluded.ctx_time ELSE ctx_time END,
+ctx_expiration_time=CASE WHEN excluded.ctx_expiration_time > ctx_expiration_time THEN excluded.ctx_expiration_time ELSE ctx_expiration_time END,
+ctx_size=ctx_size+excluded.ctx_size,
+ctx_num_messages=ctx_num_messages+excluded.ctx_num_messages,
+ctx_num_unread=ctx_num_unread+excluded.ctx_num_unread,
+ctx_num_attachments=ctx_num_attachments+excluded.ctx_num_attachments
+", (label_id, id, info.time, info.size, info.count, info.unread, info.num_attachments, info.expiration_time)
+                )?;
+                // update message counts
+                self.0.execute(
+                    r"
+INSERT INTO label_message_count (label_id, total, unread) VALUES (?,?,?)
+ON CONFLICT(label_id) DO UPDATE SET total=total+excluded.total, unread=unread+excluded.unread",
+                    (label_id, info.count, info.unread),
+                )?;
+                // only update conv label count if conv does not  have label or has not been marked unread yet
+                let should_inc = !has_label;
+                let should_inc_unread = !is_unread && info.unread != 0;
+                if should_inc_unread || should_inc {
+                    self.0.execute(
+                        r"UPDATE label_conversation_count SET unread=unread+?, total=total+? WHERE label_id=?",
+                        (should_inc_unread, should_inc, label_id),
+                    )?;
+                }
+            } else {
+                // Fallback without message metadata
+                self.0.execute(
+                    r"INSERT OR IGNORE INTO conversation_labels
+ VALUES (?,?,0,0,0,0,0,0)",
+                    (id, label_id),
+                )?;
+
+                if !has_label {
+                    // bump the label count by one
+                    self.0.execute(
+                        r"
+INSERT INTO label_conversation_count (label_id, total, unread) VALUES (?,?,0)
+ON CONFLICT(label_id) DO UPDATE SET total=total+excluded.total",
+                        (label_id, 1),
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+    pub fn unlabel_conversation(
+        &mut self,
+        label_id: LocalLabelId,
+        id: LocalConversationId,
+    ) -> DBResult<()> {
+        self.unlabel_conversations(label_id, std::iter::once(id))
+    }
+
+    pub fn unlabel_conversations(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> DBResult<()> {
+        let mut label_msg_stmt = self.0.prepare(
+        r"
+WITH conv_msgs AS (
+    SELECT id, unread FROM messages WHERE conversation_id=?1
+)
+DELETE FROM message_labels WHERE message_id IN (SELECT id FROM messages WHERE conversation_id=?1) AND message_labels.label_id=?2 RETURNING message_id
+",
+    )?;
+
+        for id in ids {
+            // unlabel all conversation messages.
+            let msg_ids: Vec<LocalMessageId> =
+                mapped_rows_to_vec(label_msg_stmt.query_map((id, label_id), |r| r.get(0))?)?;
+
+            // can only do this part if we have conv metadata
+            if !msg_ids.is_empty() {
+                // get unread count
+                let num_msg_unread: u64 = self.0.query_row(
+                    &format!(
+                        "SELECT SUM(unread) FROM messages WHERE id IN ({})",
+                        gen_variable_in_argument_list(msg_ids.len())
+                    ),
+                    params_from_iter(&msg_ids),
+                    |r| r.get(0),
+                )?;
+
+                // update message counts
+                self.0.execute(
+                    r"
+INSERT INTO label_message_count (label_id, total, unread) VALUES (?,?,?)
+ON CONFLICT(label_id) DO UPDATE SET total=total-excluded.total, unread=unread-excluded.unread",
+                    (label_id, msg_ids.len(), num_msg_unread),
+                )?;
+            }
+            // Remove label
+            let conv_label_unread : Option<u64> = self.0.query_row("DELETE FROM conversation_labels WHERE conversation_id=? AND label_id=? RETURNING ctx_num_unread", (id, label_id), |r| r.get(0)).optional()?;
+            // only update conv label count if conv had messages in this label
+            if let Some(num_unread) = conv_label_unread {
+                self.0.execute(
+                    r"UPDATE label_conversation_count SET unread=unread-?, total=total-1 WHERE label_id=?",
+                    (num_unread > 0, label_id),
+                )?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 const RESOLVE_LABEL_ID_STATEMENT: &str = "SELECT id FROM labels WHERE rid = ?";
@@ -873,13 +1042,16 @@ WHERE deleted=0"
     }
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
+        let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
+        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
+
         Ok({
             LocalConversation {
                 id: r.get(0)?,
                 remote_id: r.get(1)?,
                 order: r.get(2)?,
                 subject: r.get(3)?,
-                senders: deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?,
+                senders,
                 recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
                 num_messages: r.get(6)?,
                 num_messages_ctx: 0,
@@ -893,6 +1065,7 @@ WHERE deleted=0"
                 attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(
                     r, 13,
                 )?,
+                avatar_information,
             }
         })
     }
@@ -957,12 +1130,15 @@ WHERE C.deleted=0"
     }
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
+        let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
+        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
+
         Ok(LocalConversation {
             id: r.get(0)?,
             remote_id: r.get(1)?,
             order: r.get(2)?,
             subject: r.get(3)?,
-            senders: deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?,
+            senders,
             recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
             expiration_time: r.get(16)?,
             time: r.get(7)?,
@@ -974,6 +1150,7 @@ WHERE C.deleted=0"
             labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 13)?,
             attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 14)?,
             num_messages: r.get(15)?,
+            avatar_information,
         })
     }
 }

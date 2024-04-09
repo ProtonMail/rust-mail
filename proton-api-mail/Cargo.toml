@@ -9,6 +9,7 @@ categories = ["api-bindings"]
 proton-api-core = {workspace=true}
 uniffi = {workspace=true, optional = true, features = ["tokio"]}
 lazy_static = "1"
+serde = { version = "1.0.197", features = ["derive"] }
 
 [dev-dependencies]
 bytes = "1.6.0"

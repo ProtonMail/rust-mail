@@ -1,8 +1,9 @@
 use crate::domain::Address;
 use proton_api_core::exports::serde::{self, Deserialize};
 use proton_api_core::http::{JsonResponse, Method, RequestData, RequestDesc};
+use serde::Serialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetAddressesResponse {
     pub addresses: Vec<Address>,

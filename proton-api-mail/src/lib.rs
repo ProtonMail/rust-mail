@@ -1,7 +1,7 @@
 //! Rust bindings for the REST API for Proton
 
 pub mod domain;
-mod requests;
+pub mod requests;
 mod session;
 
 pub mod exports {
