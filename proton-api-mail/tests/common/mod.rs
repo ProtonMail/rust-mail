@@ -1,6 +1,19 @@
 use bytes::Bytes;
 use reqwest::{header::CONTENT_LENGTH, header::CONTENT_TYPE, Client, StatusCode};
 
+/// Send a GET request to the specified URL and return the response.
+///
+/// This function is used to make requests to external services in tests. It
+/// provides a convenient way to make requests and get the response status,
+/// body, and other details.
+///
+/// In most cases this function won't be necessary, as requests are fired from
+/// within the library code itself.
+///
+/// # Parameters
+///
+/// * `url` - The URL to request.
+///
 pub async fn request(url: String) -> (StatusCode, Option<String>, Option<usize>, Bytes) {
     let response = Client::new().get(url).send().await.unwrap();
     let status = response.status();

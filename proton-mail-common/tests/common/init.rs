@@ -30,26 +30,34 @@ impl MailUserContextInitializationCallback for NullCallback {
     fn on_stage_err(&self, _: MailUserContextLoadingStage, _: MailContextError) {}
 }
 
-/// Initialization Parameters.
+/// Initialization parameters.
 #[derive(Default)]
 pub struct Params {
-    /// Last event id, if None will be set to "0"
+    /// Last event id. If `None`, it will be set to `0`.
     pub last_event_id: Option<EventId>,
-    /// User info, if None some default values will be set
+
+    /// User info. If `None`, some default values will be set.
     pub user_info: Option<User>,
-    /// User settings, if None some default values will be set
+
+    /// User settings. If `None`, some default values will be set.
     pub user_settings: Option<UserSettings>,
-    /// Mail settings. if None some default values will be set
+
+    /// Mail settings. If `None`, some default values will be set.
     pub mail_settings: Option<MailSettings>,
+
     /// List of labels by type.
     pub labels: HashMap<LabelType, Vec<Label>>,
-    /// List of user addresses
+
+    /// List of user addresses.
     pub addresses: Vec<Address>,
-    /// List of conversations
+
+    /// List of conversations.
     pub conversations: Vec<Conversation>,
-    /// List of conversation counts
+
+    /// List of conversation counts.
     pub conversation_count: Vec<ConversationCount>,
-    /// List of message counts
+
+    /// List of message counts.
     pub message_count: Vec<MessageCount>,
 }
 
@@ -135,10 +143,18 @@ impl Params {
     }
 }
 
-/// Setup user data that should be fetched after login to initialize the database and/or the
-/// context for the tests.
+/// Set up basic user data.
+///
+/// This function sets up basic user data that should be fetched after login to
+/// initialize the database and/or the context for the tests.
+///
+/// # Parameters
+///
+/// * `ctx`    - The test context.
+/// * `params` - The parameters to use for the setup.
+///
 pub async fn setup_user(ctx: &TestContext, mut params: Params) {
-    // latest event id
+    // Latest event id
     Mock::given(method("GET"))
         .and(path("/api/core/v4/events/latest"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -150,6 +166,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .mount(&ctx.mock_server())
         .await;
 
+    // User info
     Mock::given(method("GET"))
         .and(path("/api/core/v4/users"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -197,7 +214,8 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
-    // user settings
+
+    // User settings
     Mock::given(method("GET"))
         .and(path("/api/core/v4/settings"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -256,7 +274,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .mount(&ctx.mock_server())
         .await;
 
-    // mail settings
+    // Mail settings
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/settings"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -309,7 +327,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .mount(&ctx.mock_server())
         .await;
 
-    // mail addresses
+    // Mail addresses
     Mock::given(method("GET"))
         .and(path("/api/core/v4/addresses"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -321,8 +339,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .mount(&ctx.mock_server())
         .await;
 
-    // labels
-
+    // Labels
     for label_type in ALL_LABEL_TYPES {
         let labels = params.labels.remove(&label_type).unwrap_or_default();
         let resp = GetLabelsResponse { labels };
@@ -336,6 +353,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
             .await;
     }
 
+    // Message counts
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages/count"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -347,6 +365,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .mount(&ctx.mock_server())
         .await;
 
+    // Conversation counts
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations/count"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
@@ -358,6 +377,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .mount(&ctx.mock_server())
         .await;
 
+    // Conversations
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
