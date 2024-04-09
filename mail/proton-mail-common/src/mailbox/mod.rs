@@ -1,6 +1,4 @@
 mod conversation;
-mod labels;
-
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::thiserror;

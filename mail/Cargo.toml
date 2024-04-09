@@ -16,6 +16,7 @@ proton-api-core = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git
 ] }
 proton-sqlite3 = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
 proton-core-common = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
+proton-core-db = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
 proton-event-loop = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
 proton-async = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
 proton-action-queue = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
@@ -23,6 +24,7 @@ uniffi = "0.27"
 tracing-subscriber = "0.3"
 lazy_static = "1"
 url = "2.5.0"
+wiremock = "0.6.0"
 
 #[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
 #proton-api-core= {path = "../../proton-api-core/proton-api-core"}

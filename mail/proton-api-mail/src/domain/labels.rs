@@ -6,7 +6,7 @@ use std::convert::Into;
 
 proton_api_core::utils::string_id!(LabelId);
 
-#[derive(Debug, Deserialize_repr, Serialize_repr, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Deserialize_repr, Serialize_repr, Eq, PartialEq, Copy, Clone, Hash)]
 #[repr(u8)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum LabelType {

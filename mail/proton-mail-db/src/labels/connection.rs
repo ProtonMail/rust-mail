@@ -9,6 +9,15 @@ use utils::{gen_variable_in_argument_list, mapped_rows_into_vec};
 
 // --------- LOCAL Labels -----------------------------------------------------------------------
 
+pub(crate) fn movable_sys_folder_list() -> [&'static LabelId; 4] {
+    [
+        LabelId::inbox(),
+        LabelId::archive(),
+        LabelId::spam(),
+        LabelId::trash(),
+    ]
+}
+
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn labels_with_ids(
         &self,
@@ -77,6 +86,15 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                 LocalLabelSelect::from_row,
             )
             .optional()
+    }
+
+    /// Get label with a given local id or fail.
+    pub fn label_with_id_or_err(&self, local_label_id: LocalLabelId) -> DBResult<LocalLabel> {
+        self.0.query_row(
+            &LocalLabelSelect::query_with_id(),
+            [local_label_id],
+            LocalLabelSelect::from_row,
+        )
     }
 
     pub fn label_with_remote_id(&self, label_id: &LabelId) -> DBResult<Option<LocalLabel>> {
@@ -167,6 +185,24 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn mark_label_as_deleted(&mut self, deleted: bool, id: LocalLabelId) -> DBResult<()> {
         self.mark_labels_as_deleted(deleted, std::iter::once(id))
     }
+
+    /// Return the list of labels that are valid folders for a conversation or message to be moved into.
+    pub fn labels_for_conv_or_msg_move(&self) -> DBResult<Vec<LocalLabel>> {
+        let mut folders = self.label_by_type_ordered(LabelType::Folder)?;
+
+        // Get the system labels.
+        let sys_folders = movable_sys_folder_list();
+        let mut stmt = self
+            .0
+            .prepare(&LocalLabelSelect::query_in_rid(sys_folders.len()))?;
+
+        mapped_rows_into_vec(
+            &mut folders,
+            stmt.query_map(params_from_iter(sys_folders), LocalLabelSelect::from_row)?,
+        )?;
+
+        Ok(folders)
+    }
 }
 
 struct LocalLabelSelect {}
@@ -190,6 +226,13 @@ impl LocalLabelSelect {
     fn query_in(count: usize) -> String {
         format!(
             "{} AND id IN ({})",
+            Self::query_all(),
+            gen_variable_in_argument_list(count)
+        )
+    }
+    fn query_in_rid(count: usize) -> String {
+        format!(
+            "{} AND rid IN ({})",
             Self::query_all(),
             gen_variable_in_argument_list(count)
         )

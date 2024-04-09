@@ -8,7 +8,7 @@ pub struct GetLabelsRequest {
 }
 
 #[doc(hidden)]
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetLabelsResponse {
     pub labels: Vec<Label>,

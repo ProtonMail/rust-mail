@@ -2,9 +2,7 @@ use crate::{MailContextResult, MailUserContext, MailboxObservableQueryBuilder};
 use proton_api_mail::domain::{LabelId, LabelType, ALL_LABEL_TYPES};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
-use proton_mail_db::{
-    DBResult, LabelsByTypeQueryWithConversationCount, LocalLabel, LocalLabelId, LocalLabelWithCount,
-};
+use proton_mail_db::{DBResult, LabelsByTypeQueryWithConversationCount, LocalLabel, LocalLabelId};
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -49,14 +47,16 @@ impl MailUserContext {
         Ok(r)
     }
 
-    pub fn get_labels_by_type(
-        &self,
-        label_type: LabelType,
-    ) -> MailContextResult<Vec<LocalLabelWithCount>> {
+    pub fn get_labels_by_type(&self, label_type: LabelType) -> MailContextResult<Vec<LocalLabel>> {
         let conn = self.new_db_connection()?;
-        let r = conn
-            .as_connection_ref()
-            .label_by_type_ordered_with_conversation_count(label_type)?;
+        let r = conn.as_connection_ref().label_by_type_ordered(label_type)?;
+        Ok(r)
+    }
+
+    /// Return the list of folders where messages and conversations can be moved into.
+    pub fn movable_folders(&self) -> MailContextResult<Vec<LocalLabel>> {
+        let conn = self.new_db_connection()?;
+        let r = conn.as_connection_ref().labels_for_conv_or_msg_move()?;
         Ok(r)
     }
 
