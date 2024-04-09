@@ -12,7 +12,13 @@ use proton_api_mail::proton_api_core::domain::{
     UserSettingsPassword, UserSettingsPhone, UserSettingsTimeFormat, UserSettingsWeekStart,
     UserType,
 };
-use proton_api_mail::requests::GetLabelsResponse;
+use proton_api_mail::proton_api_core::requests::{
+    LatestEventResponse, UserInfoResponse, UserSettingsResponse,
+};
+use proton_api_mail::requests::{
+    GetAddressesResponse, GetConversationCountsResponse, GetConversationsResponse,
+    GetLabelsResponse, GetMessageCountsResponse, MailSettingsResponse,
+};
 use proton_mail_common::{
     MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
 };
@@ -157,11 +163,11 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // Latest event id
     Mock::given(method("GET"))
         .and(path("/api/core/v4/events/latest"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::proton_api_core::requests::LatestEventResponse {
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(LatestEventResponse {
                 event_id: params.last_event_id.unwrap_or(EventId::from("0")),
-            },
-        ))
+            }),
+        )
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
@@ -169,48 +175,46 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // User info
     Mock::given(method("GET"))
         .and(path("/api/core/v4/users"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::proton_api_core::requests::UserInfoResponse {
-                user: params.user_info.unwrap_or(User {
-                    id: UserId::from("user"),
-                    name: None,
-                    display_name: None,
-                    email: "".to_string(),
-                    used_space: 0,
-                    max_space: 0,
-                    max_upload: 0,
-                    user_type: UserType::Proton,
-                    create_time: 0,
-                    credit: 0,
-                    currency: "".to_string(),
-                    keys: UserKeys(Vec::new()),
-                    product_used_space: UserProductUsedSpace {
-                        calendar: 0,
-                        contact: 0,
-                        drive: 0,
-                        mail: 0,
-                        pass: 0,
-                    },
-                    to_migrate: false,
-                    mnemonic_status: UserMnemonicStatus::Disabled,
-                    role: 0,
-                    private: 0,
-                    subscribed: 0,
-                    services: 0,
-                    delinquent: 0,
-                    flags: UserFlags {
-                        protected: false,
-                        onboard_checklist_storage_granted: false,
-                        has_temporary_password: false,
-                        test_account: false,
-                        no_login: false,
-                        recovery_attempt: false,
-                        sso: false,
-                        no_proton_address: false,
-                    },
-                }),
-            },
-        ))
+        .respond_with(ResponseTemplate::new(200).set_body_json(UserInfoResponse {
+            user: params.user_info.unwrap_or(User {
+                id: UserId::from("user"),
+                name: None,
+                display_name: None,
+                email: "".to_string(),
+                used_space: 0,
+                max_space: 0,
+                max_upload: 0,
+                user_type: UserType::Proton,
+                create_time: 0,
+                credit: 0,
+                currency: "".to_string(),
+                keys: UserKeys(vec![]),
+                product_used_space: UserProductUsedSpace {
+                    calendar: 0,
+                    contact: 0,
+                    drive: 0,
+                    mail: 0,
+                    pass: 0,
+                },
+                to_migrate: false,
+                mnemonic_status: UserMnemonicStatus::Disabled,
+                role: 0,
+                private: 0,
+                subscribed: 0,
+                services: 0,
+                delinquent: 0,
+                flags: UserFlags {
+                    protected: false,
+                    onboard_checklist_storage_granted: false,
+                    has_temporary_password: false,
+                    test_account: false,
+                    no_login: false,
+                    recovery_attempt: false,
+                    sso: false,
+                    no_proton_address: false,
+                },
+            }),
+        }))
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
@@ -218,8 +222,8 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // User settings
     Mock::given(method("GET"))
         .and(path("/api/core/v4/settings"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::proton_api_core::requests::UserSettingsResponse {
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(UserSettingsResponse {
                 user_settings: params.user_settings.unwrap_or(UserSettings {
                     email: UserSettingsEmail {
                         value: "".to_string(),
@@ -268,8 +272,8 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
                     },
                     session_account_recovery: false,
                 }),
-            },
-        ))
+            }),
+        )
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
@@ -277,8 +281,8 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // Mail settings
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/settings"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::requests::MailSettingsResponse {
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(MailSettingsResponse {
                 mail_settings: params.mail_settings.unwrap_or(MailSettings {
                     display_name: "".to_string(),
                     signature: "".to_string(),
@@ -321,8 +325,8 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
                     hide_remote_images: false,
                     hide_sender_images: false,
                 }),
-            },
-        ))
+            }),
+        )
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
@@ -330,11 +334,11 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // Mail addresses
     Mock::given(method("GET"))
         .and(path("/api/core/v4/addresses"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::requests::GetAddressesResponse {
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetAddressesResponse {
                 addresses: params.addresses,
-            },
-        ))
+            }),
+        )
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
@@ -356,11 +360,11 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // Message counts
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages/count"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::requests::GetMessageCountsResponse {
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetMessageCountsResponse {
                 counts: params.message_count,
-            },
-        ))
+            }),
+        )
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
@@ -368,11 +372,11 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // Conversation counts
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations/count"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::requests::GetConversationCountsResponse {
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetConversationCountsResponse {
                 counts: params.conversation_count,
-            },
-        ))
+            }),
+        )
         .expect(1)
         .mount(&ctx.mock_server())
         .await;
@@ -380,13 +384,13 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
     // Conversations
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(
-            proton_api_mail::requests::GetConversationsResponse {
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                 conversations: params.conversations,
                 stale: false,
                 total: 1,
-            },
-        ))
+            }),
+        )
         .expect(1)
         .mount(&ctx.mock_server())
         .await;

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use bytes::Bytes;
 use reqwest::{header::CONTENT_LENGTH, header::CONTENT_TYPE, Client, StatusCode};
 

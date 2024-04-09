@@ -32,7 +32,6 @@ impl TestContext {
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
         let request = LabelConversationRequest::new(label_id, spam_action, &ids);
-
         let resp = LabelConversationsResponse {
             responses: build_conv_responses(&ids, failed),
             undo_token: None,
@@ -103,7 +102,6 @@ impl TestContext {
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
         let request = MarkConversationsReadRequest::new(&ids);
-
         let resp = LabelConversationsResponse {
             responses: build_conv_responses(&ids, failed),
             undo_token: None,

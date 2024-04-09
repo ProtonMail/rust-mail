@@ -1,10 +1,12 @@
+mod common;
+
+use common::TestContext;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
-mod common;
 
 #[test]
 fn test_mock_context() {
-    let ctx = common::TestContext::new();
+    let ctx = TestContext::new();
     let user_ctx = ctx.user_context();
     ctx.async_runtime().block_on(async {
         Mock::given(method("GET"))
