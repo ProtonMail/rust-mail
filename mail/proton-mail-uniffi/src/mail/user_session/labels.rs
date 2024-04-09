@@ -1,9 +1,10 @@
 use crate::mail::mailbox::MailboxLiveQueryUpdatedCallback;
-use crate::mail::MailUserSession;
+use crate::mail::{MailSessionError, MailUserSession};
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, ObservableQuery, SharedLiveQuery, SharedLiveQueryBuilder,
 };
-use proton_mail_common::proton_mail_db::LabelsByTypeQueryWithConversationCount;
+use proton_mail_common::proton_api_mail::domain::LabelType;
+use proton_mail_common::proton_mail_db::{LabelsByTypeQueryWithConversationCount, LocalLabel};
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
 
@@ -34,6 +35,24 @@ impl MailUserSession {
     ) -> Arc<MailLabelsLiveQuery> {
         let builder = FFIObservableLabelsQueryBuilder(cb);
         self.ctx.new_label_labels_live_query(builder)
+    }
+
+    /// Return the list of labels of type Folder into which a conversations or
+    /// message can be moved.
+    ///
+    /// # Errors
+    /// Returns an error if the list can not be retrieved.
+    pub fn movable_folders(&self) -> Result<Vec<LocalLabel>, MailSessionError> {
+        Ok(self.ctx.get_labels_by_type(LabelType::Label)?)
+    }
+
+    /// Return the list of labels of type Label that can be applied to conversations or
+    /// messages.
+    ///
+    /// # Errors
+    /// Returns an error if the list can not be retrieved.
+    pub fn applicable_labels(&self) -> Result<Vec<LocalLabel>, MailSessionError> {
+        Ok(self.ctx.get_labels_by_type(LabelType::Label)?)
     }
 }
 
