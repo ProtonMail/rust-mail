@@ -1,24 +1,24 @@
+mod common;
+
+use common::init::{setup_user, NullCallback, Params as TestParams};
+use common::TestContext;
 use proton_api_mail::domain::{
     Address, AddressId, AddressStatus, AddressType, Conversation, ConversationCount,
     ConversationId, ConversationLabels, Label, LabelId, LabelType, MessageCount,
 };
 use proton_api_mail::exports::crypto::domain::AddressKeys;
-use proton_api_mail::exports::tracing;
 use proton_mail_common::Mailbox;
 use std::collections::HashMap;
-
-mod common;
+use velcro::hash_map;
 
 #[test]
 fn test_move_between_folders() {
-    let ctx = common::TestContext::new();
+    let ctx = TestContext::new();
     let user_ctx = ctx.user_context();
     let folder_id = LabelId::from("myfolder");
     let conv_id = ConversationId::from("conv_id");
-    let mut labels = HashMap::new();
-    labels.insert(
-        LabelType::Folder,
-        vec![Label {
+    let labels = hash_map! {
+        LabelType::Folder: vec![Label {
             id: folder_id.clone(),
             parent_id: None,
             name: "myfolder".to_string(),
@@ -31,12 +31,12 @@ fn test_move_between_folders() {
             expanded: false,
             order: 0,
         }],
-    );
+    };
 
     ctx.async_runtime().block_on(async {
         let init_params = test_init_params_folder(&conv_id, labels);
-        common::init::setup_user(&ctx, init_params).await;
-        let cb = common::init::NullCallback {};
+        setup_user(&ctx, init_params).await;
+        let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
             .await
@@ -100,15 +100,15 @@ fn test_move_between_folders() {
 
 #[test]
 fn test_move_to_trash_marks_read() {
-    let ctx = common::TestContext::new();
+    let ctx = TestContext::new();
     let user_ctx = ctx.user_context();
     let conv_id = ConversationId::from("conv_id");
     let labels = HashMap::new();
 
     ctx.async_runtime().block_on(async {
         let init_params = test_init_params_folder(&conv_id, labels);
-        common::init::setup_user(&ctx, init_params).await;
-        let cb = common::init::NullCallback {};
+        setup_user(&ctx, init_params).await;
+        let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
             .await
@@ -171,14 +171,12 @@ fn test_move_to_trash_marks_read() {
 
 #[test]
 fn test_move_from_label_does_not_unlabel() {
-    let ctx = common::TestContext::new();
+    let ctx = TestContext::new();
     let user_ctx = ctx.user_context();
     let label_id = LabelId::from("mylabel");
     let conv_id = ConversationId::from("conv_id");
-    let mut labels = HashMap::new();
-    labels.insert(
-        LabelType::Label,
-        vec![Label {
+    let labels = hash_map! {
+        LabelType::Label: vec![Label {
             id: label_id.clone(),
             parent_id: None,
             name: "mylabel".to_string(),
@@ -191,12 +189,12 @@ fn test_move_from_label_does_not_unlabel() {
             expanded: false,
             order: 0,
         }],
-    );
+    };
 
     ctx.async_runtime().block_on(async {
         let init_params = test_init_params_label(&conv_id, label_id.clone(), labels);
-        common::init::setup_user(&ctx, init_params).await;
-        let cb = common::init::NullCallback {};
+        setup_user(&ctx, init_params).await;
+        let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
             .await
@@ -236,8 +234,8 @@ fn test_move_from_label_does_not_unlabel() {
 fn test_init_params_folder(
     conv_id: &ConversationId,
     labels: HashMap<LabelType, Vec<Label>>,
-) -> common::init::Params {
-    common::init::Params {
+) -> TestParams {
+    TestParams {
         last_event_id: None,
         user_info: None,
         user_settings: None,
@@ -299,8 +297,8 @@ fn test_init_params_label(
     conv_id: &ConversationId,
     label_id: LabelId,
     labels: HashMap<LabelType, Vec<Label>>,
-) -> common::init::Params {
-    common::init::Params {
+) -> TestParams {
+    TestParams {
         last_event_id: None,
         user_info: None,
         user_settings: None,

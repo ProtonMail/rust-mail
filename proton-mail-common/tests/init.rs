@@ -1,4 +1,3 @@
-#[allow(unused)]
 mod common;
 
 use common::init::{setup_user, NullCallback, Params as TestParams};

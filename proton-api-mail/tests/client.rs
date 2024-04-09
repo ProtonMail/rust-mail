@@ -1,4 +1,3 @@
-#[allow(unused)]
 mod common;
 
 use crate::common::request;
