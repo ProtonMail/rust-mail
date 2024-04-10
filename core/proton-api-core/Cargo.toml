@@ -18,9 +18,9 @@ tracing = {workspace=true}
 parking_lot = {workspace=true}
 proton-crypto-account = {workspace=true}
 uniffi = {workspace=true, optional = true}
-proton-sqlite3 = {path = "../proton-sqlite3", optional = true}
+proton-sqlite3 = {version = "0.4.3", path = "../proton-sqlite3", registry = "proton", optional = true}
 reqwest = {workspace=true}
-proton-async = {path = "../proton-async"}
+proton-async = {version = "0.3.0", path = "../proton-async", registry = "proton"}
 serde-aux = {workspace=true}
 
 

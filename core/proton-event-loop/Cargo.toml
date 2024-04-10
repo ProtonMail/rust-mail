@@ -5,8 +5,8 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-proton-api-core = {path="../proton-api-core"}
-proton-async= {path="../proton-async"}
+proton-api-core = {path="../proton-api-core", version = "0.2.0", registry = "proton"}
+proton-async= {path="../proton-async", version = "0.3.0", registry = "proton"}
 paste = {workspace=true}
 
 [dev-dependencies]

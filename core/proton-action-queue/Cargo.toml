@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proton-api-core = { path ="../proton-api-core"}
+proton-api-core = { version = "0.2.0", path ="../proton-api-core", registry = "proton"}
 uuid = {version = "1.7", features = ["v4"]}
 tracing = "0.1"
 serde = { version = "1.0.195", features = ["derive"] }
@@ -14,7 +14,7 @@ rmp = "0.8"
 rmp-serde = "1.1"
 log = "0.4.20"
 chrono = { version = "0.4"}
-proton-sqlite3 = {path="../proton-sqlite3"}
+proton-sqlite3 = {version = "0.4.3", path="../proton-sqlite3", registry = "proton"}
 
 [dev-dependencies]
 mockall = "0.12"

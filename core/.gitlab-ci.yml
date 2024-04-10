@@ -1,5 +1,9 @@
 image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
 
+include:
+  - project: "rust/shared/registry"
+    file: "upload_template.yml"
+
 # sccache location to speed up compilation.
 default:
   tags:
@@ -17,6 +21,7 @@ default:
 stages:
   - lint
   - build
+  - deploy
 
 .do_fmt_check:
    script:
@@ -78,3 +83,56 @@ build-ios:
     - cargo build --release --target --target x86_64-apple-ios
     - cargo build --release --target --target aarch64-apple-ios-sim
     - cargo build --release --target --target aarch64-apple-ios
+
+# ------------ Crate Publishing -----------------------------------------------------------------------------------
+# Crates are listed in the order they should be published
+
+deploy-proton-async:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-async"
+  when: manual
+
+deploy-proton-sqlite3:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-sqlite3"
+  when: manual
+
+deploy-proton-api-core:
+  extends: .deploy_to_protonvpn_repository
+  tags:
+    - shared-medium
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-api-core"
+  when: manual
+
+deploy-proton-action-queue:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-action-queue"
+  when: manual
+
+deploy-proton-event-loop:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-event-loop"
+  when: manual
+
+deploy-proton-core-common:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-core-common"
+  when: manual
