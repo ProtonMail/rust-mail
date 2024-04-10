@@ -5,21 +5,20 @@ members = [
     "proton-api-mail",
     "proton-mail-wasm",
     "proton-mail-uniffi",
-    "proton-mail-db",
     "proton-mail-common",
     "proton-mail-utm-stripper",
 ]
 
 [workspace.dependencies]
-proton-api-core = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git", features = [
+proton-api-core = { version = "0.2.0", registry = "proton", features = [
     "sql",
 ] }
-proton-sqlite3 = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
-proton-core-common = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
-proton-core-db = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
-proton-event-loop = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
-proton-async = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
-proton-action-queue = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git"}
+
+proton-sqlite3 = { version="0.4.3", registry = "proton"}
+proton-core-common = { version = "0.1.0", registry = "proton"}
+proton-event-loop = { version = "0.4.0", registry = "proton"}
+proton-async = { version = "0.3.0", registry = "proton"}
+proton-action-queue = { version = "0.3.0", registry = "proton"}
 uniffi = "0.27"
 tracing-subscriber = "0.3"
 lazy_static = "1"

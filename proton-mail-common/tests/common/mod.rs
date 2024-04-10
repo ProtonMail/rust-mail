@@ -7,10 +7,11 @@ use proton_api_mail::proton_api_core::auth::{AccessToken, AuthScope, RefreshToke
 use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
 use proton_api_mail::proton_api_core::http::{APIEnvConfig, ClientBuilder};
 use proton_async::runtime::MTRuntime;
+use proton_core_common::db::proton_sqlite3::{SqliteConnectionPool, SqliteMode};
+use proton_core_common::db::{
+    DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
+};
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
-use proton_core_common::proton_core_db::SessionEncryptionKey;
-use proton_core_db::proton_sqlite3::{SqliteConnectionPool, SqliteMode};
-use proton_core_db::{DecryptedUserSession, EncryptedUserSession, SessionSqliteConnection};
 use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
 use tempdir::TempDir;

@@ -3,7 +3,7 @@ use proton_api_mail::proton_api_core::domain::UserId;
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::tracing::error;
-use proton_core_common::proton_core_db::CoreSqliteConnection;
+use proton_core_common::db::CoreSqliteConnection;
 use proton_core_common::CoreEventSubscriberConnectionProvider;
 
 impl CoreEventSubscriberConnectionProvider for WeakMailUserContext {

@@ -1,3 +1,4 @@
+use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionImpl};
 use crate::exports::proton_sqlite3::rusqlite::Transaction;
 use crate::{MailUserContext, WeakMailUserContext};
 use proton_action_queue::{
@@ -10,7 +11,6 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use proton_mail_db::{LocalConversationId, LocalLabelId, MailSqliteConnectionImpl};
 use std::any::Any;
 use std::ops::Deref;
 
