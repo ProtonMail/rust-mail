@@ -6,10 +6,10 @@ use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
 use proton_api_mail::proton_api_core::http;
 use proton_api_mail::proton_api_core::http::APIEnvConfig;
 use proton_async::runtime::MTRuntime;
+use proton_core_common::db::proton_sqlite3::SqliteMode;
+use proton_core_common::db::SessionEncryptionKey;
+use proton_core_common::db::{EncryptedUserSession, SessionSqliteConnection};
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
-use proton_core_common::proton_core_db::SessionEncryptionKey;
-use proton_core_db::proton_sqlite3::SqliteMode;
-use proton_core_db::{EncryptedUserSession, SessionSqliteConnection};
 use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
 use wiremock::MockServer;
@@ -61,14 +61,14 @@ impl TestContext {
 
         // generate a fake session and write it to the database.
 
-        let pool = proton_core_db::proton_sqlite3::SqliteConnectionPool::new(
+        let pool = proton_core_common::db::proton_sqlite3::SqliteConnectionPool::new(
             SqliteMode::File(tmp_dir.path().join("session.db")),
             false,
         );
         let mut conn =
             SessionSqliteConnection::from(pool.acquire().expect("failed to acquire connection"));
 
-        let session = proton_core_db::DecryptedUserSession {
+        let session = proton_core_common::db::DecryptedUserSession {
             session_id: Self::test_uid(),
             user_id: UserId::from("TEST_USER_ID"),
             name: None,
