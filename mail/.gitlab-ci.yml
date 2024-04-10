@@ -1,5 +1,9 @@
 image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
 
+include:
+  - project: "rust/shared/registry"
+    file: "upload_template.yml"
+
 workflow:
   rules:
     - if: $CI_DEFAULT_BRANCH == $CI_COMMIT_BRANCH
@@ -25,7 +29,7 @@ stages:
   - lint
   - build
   - doc
-  - publish
+  - deploy
 
 
 .do_fmt_check:
@@ -142,7 +146,7 @@ pages:
       allow_failure: true
 
 publish-android:
-  stage: publish
+  stage: deploy
   tags:
     - xlarge-k8s
   rules:
@@ -162,3 +166,38 @@ publish-android:
     when: always
     expire_in: 4 hrs
 
+
+# ------------ Crate Publishing -----------------------------------------------------------------------------------
+# Crates are listed in the order they should be published
+
+deploy-proton-api-mail:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-api-mail"
+  when: manual
+
+deploy-proton-mail-message-detector:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-mail-message-detector"
+  when: manual
+
+deploy-proton-mail-utm-stripper:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-mail-utm-stripper"
+  when: manual
+
+deploy-proton-mail-common:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--package proton-mail-common"
+  when: manual

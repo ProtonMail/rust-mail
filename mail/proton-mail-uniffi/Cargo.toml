@@ -2,6 +2,7 @@
 name = "proton-mail-uniffi"
 version = "0.7.0"
 edition = "2021"
+publish = false
 
 [lib]
 crate-type = ["staticlib", "cdylib"]
