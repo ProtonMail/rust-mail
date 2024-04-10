@@ -2,14 +2,14 @@ mod conversations;
 
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
+use proton_mail_common::db::proton_sqlite3::SharedLiveQuery;
+use proton_mail_common::db::{ConversationQuery, LocalLabelId};
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, LiveQueryUpdated, ObservableQuery, SharedLiveQueryBuilder,
 };
 use proton_mail_common::exports::thiserror;
 use proton_mail_common::exports::tracing::error;
 use proton_mail_common::proton_api_mail::domain::LabelId;
-use proton_mail_common::proton_mail_db::proton_sqlite3::SharedLiveQuery;
-use proton_mail_common::proton_mail_db::{ConversationQuery, LocalLabelId};
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
 

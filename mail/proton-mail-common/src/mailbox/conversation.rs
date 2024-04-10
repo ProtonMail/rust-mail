@@ -2,11 +2,11 @@ use crate::actions::{
     DeleteConversationsAction, LabelConversationsAction, MarkConversationsReadAction,
     MarkConversationsUnreadAction, MoveConversationsAction, UnlabelConversationsAction,
 };
+use crate::db::{ConversationQuery, LocalConversation, LocalConversationId, LocalLabelId};
 use crate::{
     Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
 use proton_api_mail::proton_api_core::exports::tracing;
-use proton_mail_db::{ConversationQuery, LocalConversation, LocalConversationId, LocalLabelId};
 
 impl Mailbox {
     pub fn sync(

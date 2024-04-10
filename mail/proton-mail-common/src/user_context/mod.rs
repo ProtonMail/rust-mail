@@ -10,16 +10,16 @@ pub use initialization::*;
 use proton_action_queue::ActionQueue;
 use std::sync::{Arc, Weak};
 
+use crate::db::MailSqliteConnection;
 use crate::user_context::action_queue::new_action_queue;
 use crate::{MailContext, MailContextResult};
 use proton_api_mail::proton_api_core::domain::UserId;
 use proton_api_mail::proton_api_core::exports::proton_sqlite3::InProcessTrackerService;
 use proton_api_mail::proton_api_core::Session;
 use proton_api_mail::MailSession;
-use proton_core_common::proton_core_db::DBResult;
+use proton_core_common::db::DBResult;
 use proton_core_common::UserContext;
 use proton_event_loop::EventLoop;
-use proton_mail_db::MailSqliteConnection;
 
 #[derive(Clone)]
 pub struct MailUserContext {

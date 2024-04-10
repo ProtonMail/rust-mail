@@ -1,10 +1,10 @@
 mod conversation;
+use crate::db::proton_sqlite3::{InProcessTrackerService, ObservableQuery};
+use crate::db::LocalLabelId;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
-use proton_mail_db::proton_sqlite3::{InProcessTrackerService, ObservableQuery};
-use proton_mail_db::LocalLabelId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MailboxError {
@@ -25,7 +25,7 @@ pub enum MailboxError {
 }
 
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:
-/// Some platforms are able to use the [`proton_mail_db::proton_sqlite3::LiveQuery`] type and other
+/// Some platforms are able to use the [`crate::db::proton_sqlite3::LiveQuery`] type and other
 /// platform may benefit from a different solution.
 pub trait MailboxObservableQueryBuilder<Q: ObservableQuery> {
     type Output;

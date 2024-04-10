@@ -2,8 +2,8 @@ use crate::mail::mailbox::{FFIObservableConversationsQueryBuilder, DEFAULT_CONVE
 use crate::mail::{
     Mailbox, MailboxConversationLiveQuery, MailboxError, MailboxLiveQueryUpdatedCallback,
 };
+use proton_mail_common::db::{LocalConversationId, LocalLabelId};
 use proton_mail_common::exports::tracing::error;
-use proton_mail_common::proton_mail_db::LocalConversationId;
 use std::sync::Arc;
 
 #[uniffi::export]
@@ -42,6 +42,53 @@ impl Mailbox {
     pub fn mark_conversations_unread(&self, ids: Vec<u64>) -> Result<(), MailboxError> {
         self.mbox
             .mark_conversations_unread(ids.into_iter().map(LocalConversationId::from))?;
+        Ok(())
+    }
+
+    /// Move the given conversations from the current mailbox.
+    ///
+    /// Move the conversations with `ids` from the current mailbox to the label with id `label_id`.
+    /// If the current mailbox is not a folder, the conversation will not be moved.
+    /// To retrieve the list of movable folders use the
+    /// [`crate::mail::MailUserSession::movable_folders()`] method.
+    ///
+    /// # Errors
+    /// Returns error if the action fails.
+    pub fn move_conversations(&self, label_id: u64, ids: Vec<u64>) -> Result<(), MailboxError> {
+        self.mbox.move_conversations(
+            LocalLabelId::new(label_id),
+            ids.into_iter().map(LocalConversationId::from),
+        )?;
+        Ok(())
+    }
+
+    /// Label the given conversations with the given label id.
+    ///
+    /// To retrieve the list of applicable labels use the
+    /// [`crate::mail::MailUserSession::applicable_labels()`] method.
+    ///
+    /// # Errors
+    /// Returns error if the action fails.
+    pub fn label_conversations(&self, label_id: u64, ids: Vec<u64>) -> Result<(), MailboxError> {
+        self.mbox.label_conversations(
+            LocalLabelId::new(label_id),
+            ids.into_iter().map(LocalConversationId::from),
+        )?;
+        Ok(())
+    }
+
+    /// Unlabel the given conversations with the given label id.
+    ///
+    /// To retrieve the list of applicable labels use the
+    /// [`crate::mail::MailUserSession::applicable_labels()`] method.
+    ///
+    /// # Errors
+    /// Returns error if the action fails.
+    pub fn unlabel_conversations(&self, label_id: u64, ids: Vec<u64>) -> Result<(), MailboxError> {
+        self.mbox.unlabel_conversations(
+            LocalLabelId::new(label_id),
+            ids.into_iter().map(LocalConversationId::from),
+        )?;
         Ok(())
     }
 }

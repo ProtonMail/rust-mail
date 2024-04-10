@@ -2,12 +2,12 @@ use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged};
 use crate::core::{FFISessionCallback, OSKeyChain, SessionCallback, StoredSession};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
+use pmc::db;
+use pmc::db::DBMigrationError;
 use pmc::exports::proton_event_loop::EventLoopError;
 use pmc::exports::{anyhow, thiserror, tracing};
 use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, HttpRequestError};
-use pmc::proton_core_common::proton_core_db::SessionEncryptionKey;
-use pmc::proton_mail_db;
-use pmc::proton_mail_db::DBMigrationError;
+use pmc::proton_core_common::db::SessionEncryptionKey;
 use proton_mail_common as pmc;
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::proton_api_mail::proton_api_core::http;
@@ -30,7 +30,7 @@ pub struct MailSession {
 #[uniffi(flat_error)]
 pub enum MailSessionError {
     #[error("Database Error: {0}")]
-    DB(#[from] proton_mail_db::DBError),
+    DB(#[from] db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]

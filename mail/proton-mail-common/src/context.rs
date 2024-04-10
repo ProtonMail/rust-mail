@@ -1,14 +1,14 @@
+use crate::db::DBMigrationError;
 use crate::MailUserContext;
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
 use proton_api_mail::proton_api_core::http::{Client, HttpRequestError};
 use proton_api_mail::proton_api_core::login::LoginFlow;
 use proton_async::runtime::MTRuntime;
+use proton_core_common::db::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
-use proton_core_common::proton_core_db::EncryptedUserSession;
 use proton_core_common::{CoreContext, CoreContextError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
-use proton_mail_db::DBMigrationError;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ use std::sync::Arc;
 #[derive(Debug, thiserror::Error)]
 pub enum MailContextError {
     #[error("Database Error: {0}")]
-    DB(#[from] proton_mail_db::DBError),
+    DB(#[from] crate::db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
@@ -129,9 +129,9 @@ struct MailUserDatabaseInitializer {}
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
     fn initialize(
         &self,
-        conn: &mut proton_mail_db::proton_sqlite3::SqliteConnection,
+        conn: &mut crate::db::proton_sqlite3::SqliteConnection,
     ) -> Result<(), DBMigrationError> {
-        proton_mail_db::migrations::migrate_db(conn)?;
+        crate::db::migrations::migrate_db(conn)?;
         proton_action_queue::ActionStore::init_tables(conn)?;
         Ok(())
     }
