@@ -1,7 +1,7 @@
 use crate::state::APP_ID;
 use anyhow::anyhow;
+use proton_mail_common::proton_core_common::db::SessionEncryptionKey;
 use proton_mail_common::proton_core_common::os::{KeyChain, KeyChainError};
-use proton_mail_common::proton_core_common::proton_core_db::SessionEncryptionKey;
 use secrecy::{ExposeSecret, SecretString};
 use std::error::Error;
 use std::sync::Arc;

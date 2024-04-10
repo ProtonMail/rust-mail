@@ -1,5 +1,5 @@
 use crate::widgets::ListableWidget;
-use proton_core_common::proton_core_db::EncryptedUserSession;
+use proton_core_common::db::EncryptedUserSession;
 use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::prelude::{Text, Widget};

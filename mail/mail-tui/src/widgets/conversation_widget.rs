@@ -1,7 +1,7 @@
 use crate::widgets::widget_list::ListableWidget;
 use chrono::DateTime;
+use proton_mail_common::db::LocalConversation;
 use proton_mail_common::proton_api_mail::domain::MessageAddress;
-use proton_mail_common::proton_mail_db::LocalConversation;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Text;

@@ -4,16 +4,16 @@ use crate::events::AppEvent;
 use crate::state::AppState;
 use crate::views::{ConversationView, SessionsView};
 use proton_async::sync::mpsc::Sender;
-use proton_core_common::proton_core_db::proton_sqlite3::{
+use proton_core_common::db::proton_sqlite3::{
     InProcessTrackerService, LiveQuery, LiveQueryBuilder,
+};
+use proton_mail_common::db::proton_sqlite3::ObservableQuery;
+use proton_mail_common::db::{
+    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalLabelId,
 };
 use proton_mail_common::exports::tracing::warn;
 use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::{debug, error};
-use proton_mail_common::proton_mail_db::proton_sqlite3::ObservableQuery;
-use proton_mail_common::proton_mail_db::{
-    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalLabelId,
-};
 use proton_mail_common::{
     MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage, Mailbox, MailboxError, MailboxResult,

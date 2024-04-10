@@ -6,7 +6,7 @@ use crate::state::AppState;
 use crate::views::LoginView;
 use anyhow::anyhow;
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::debug;
-use proton_mail_common::proton_core_common::proton_core_db::EncryptedUserSession;
+use proton_mail_common::proton_core_common::db::EncryptedUserSession;
 use proton_mail_common::{MailContext, MailContextError, MailContextResult, MailUserContext};
 
 pub struct SessionState {

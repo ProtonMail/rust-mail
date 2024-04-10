@@ -9,9 +9,9 @@ edition = "2021"
 dirs = "5"
 anyhow = "1"
 thiserror = "1"
-proton-core-common = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
-proton-mail-common = { git = "https://gitlab.protontech.ch/rust/inbox/mail.git" }
-proton-async = { git = "https://gitlab.protontech.ch/rust/proton-api-core.git" }
+proton-core-common = { version = "0.1.0", registry = "proton" }
+proton-mail-common = { version = "0.2.1", registry = "proton" }
+proton-async = { version = "0.3.0", registry = "proton" }
 crossterm = "0.27.0"
 ratatui = { version = "0.26.1", features = ["all-widgets"] }
 secrecy = "0.8"

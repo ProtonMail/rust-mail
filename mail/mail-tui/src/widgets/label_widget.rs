@@ -1,5 +1,5 @@
 use crate::widgets::widget_list::ListableWidget;
-use proton_mail_common::proton_mail_db::{LocalLabel, LocalLabelWithCount};
+use proton_mail_common::db::{LocalLabel, LocalLabelWithCount};
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Layout, Rect};
 use ratatui::prelude::Constraint;

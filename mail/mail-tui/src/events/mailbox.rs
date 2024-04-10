@@ -1,5 +1,5 @@
 use crate::state::MailboxStateError;
-use proton_mail_common::proton_mail_db::{LocalConversationId, LocalLabelId};
+use proton_mail_common::db::{LocalConversationId, LocalLabelId};
 use proton_mail_common::MailUserContext;
 use std::fmt::Formatter;
 

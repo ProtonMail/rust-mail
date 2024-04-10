@@ -8,11 +8,9 @@ use crate::widgets::{
     SideBarLabelWidget, WidgetList, WidgetListItem,
 };
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use proton_mail_common::db::{LocalConversationId, LocalLabel, LocalLabelId, LocalLabelWithCount};
 use proton_mail_common::exports::tracing::warn;
 use proton_mail_common::proton_api_mail::domain::LabelType;
-use proton_mail_common::proton_mail_db::{
-    LocalConversationId, LocalLabel, LocalLabelId, LocalLabelWithCount,
-};
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Margin, Rect};
 use ratatui::prelude::Text;
 use ratatui::style::{Color, Style, Stylize};

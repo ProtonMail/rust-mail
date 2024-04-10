@@ -20,9 +20,9 @@ pub enum LoginState {
 #[derive(Debug, thiserror::Error)]
 pub enum LoginStateError {
     #[error("Database Error: {0}")]
-    DB(#[from] proton_mail_common::proton_mail_db::DBError),
+    DB(#[from] proton_mail_common::db::DBError),
     #[error("Migration Error: {0}")]
-    DBMigration(#[from] proton_mail_common::proton_mail_db::DBMigrationError),
+    DBMigration(#[from] proton_mail_common::db::DBMigrationError),
     #[error("Network Error: {0}")]
     Http(#[from] proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError),
     #[error("Invalid Login State")]
