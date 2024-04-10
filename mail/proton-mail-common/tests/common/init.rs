@@ -35,7 +35,7 @@ impl MailUserContextInitializationCallback for NullCallback {
 }
 
 /// Initialization parameters.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Params {
     /// Last event id. If `None`, it will be set to `0`.
     pub last_event_id: Option<EventId>,
