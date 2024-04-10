@@ -1,6 +1,5 @@
 use crate::{
-    InProcessTrackerService, SqliteConnection, SqliteConnectionPool, TrackedObserverId,
-    TrackerObserver,
+    InProcessTrackerService, Observer, SqliteConnection, SqliteConnectionPool, TrackedObserverId,
 };
 use parking_lot::lock_api::Mutex;
 use std::cell::RefCell;
@@ -10,8 +9,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tracing::error;
 
-/// Behavior for queries used by [`ObservedQuery`] or [`LiveQuery`].
-pub trait ObservableQuery: Send + Sync + Clone + 'static {
+/// Behavior for queries used by [`Observed`] or [`Live`].
+pub trait Observable: Send + Sync + Clone + 'static {
     type Output: Send + 'static + Default;
     /// Debug name for logging.
     fn debug_name(&self) -> &'static str;
@@ -20,38 +19,41 @@ pub trait ObservableQuery: Send + Sync + Clone + 'static {
     fn tables(&self) -> Vec<String>;
 
     /// Execute the database query.
+    ///
+    /// # Errors
+    /// Should return error if the query fails to execute.
     fn execute(&self, connection: &SqliteConnection) -> rusqlite::Result<Self::Output>;
 }
 
-pub trait QueryObserverCallback<I: Send>: Send + Sync {
+pub trait ObserverCallback<I: Send>: Send + Sync {
     fn on_changed(&self, input: I);
 }
 
-impl<I: Send, F: Fn(I) + Send + Sync> QueryObserverCallback<I> for F {
+impl<I: Send, F: Fn(I) + Send + Sync> ObserverCallback<I> for F {
     fn on_changed(&self, input: I) {
         (self)(input);
     }
 }
 
-/// Contains the state required for the execution of [`ObservableQuery`]. Drop this type
+/// Contains the state required for the execution of [`Observable`]. Drop this type
 /// to stop the observation.
 /// The observation will start as soon as this type is constructed.
-pub struct ObservedQuery {
+pub struct Observed {
     service: InProcessTrackerService,
     observer_id: TrackedObserverId,
 }
 
-impl Drop for ObservedQuery {
+impl Drop for Observed {
     fn drop(&mut self) {
-        self.service.remove_observer(self.observer_id)
+        self.service.remove_observer(self.observer_id);
     }
 }
 
-impl ObservedQuery {
-    pub fn new<Q: ObservableQuery + 'static>(
+impl Observed {
+    pub fn new<Q: Observable + 'static>(
         service: InProcessTrackerService,
         query: Q,
-        callback: impl QueryObserverCallback<Q::Output> + 'static,
+        callback: impl ObserverCallback<Q::Output> + 'static,
     ) -> Self {
         let observer = Box::new(QueryTrackerObserver {
             tables: query.tables(),
@@ -66,13 +68,13 @@ impl ObservedQuery {
     }
 }
 
-struct QueryTrackerObserver<Q: ObservableQuery> {
+struct QueryTrackerObserver<Q: Observable> {
     tables: Vec<String>,
     query: Q,
-    callback: Box<dyn QueryObserverCallback<Q::Output>>,
+    callback: Box<dyn ObserverCallback<Q::Output>>,
 }
 
-impl<Q: ObservableQuery> TrackerObserver for QueryTrackerObserver<Q> {
+impl<Q: Observable> Observer for QueryTrackerObserver<Q> {
     fn tables(&self) -> &[String] {
         &self.tables
     }
@@ -116,7 +118,7 @@ impl<Q: Send + Sized> SharedValue<Q> {
             self.has_new_value.store(true, Ordering::Release);
         }
         if let Some(cb) = &self.update_cb {
-            cb.on_live_query_updated()
+            cb.on_live_query_updated();
         }
     }
 
@@ -137,7 +139,7 @@ pub trait LiveQueryUpdated: Send + Sync {
     fn on_live_query_updated(&self);
 }
 
-/// Builder for [`LiveQuery`].
+/// Builder for [`Live`].
 pub struct LiveQueryBuilder {
     initialization_mode: InitializationMode,
     callback: Option<Box<dyn LiveQueryUpdated>>,
@@ -145,6 +147,7 @@ pub struct LiveQueryBuilder {
 }
 
 impl LiveQueryBuilder {
+    #[must_use]
     pub fn new(service: InProcessTrackerService) -> Self {
         Self {
             initialization_mode: InitializationMode::None,
@@ -154,42 +157,55 @@ impl LiveQueryBuilder {
     }
 
     /// Initialize the first value on the current executing thread.
+    #[must_use]
     pub fn with_foreground_initializer(mut self) -> Self {
         self.initialization_mode = InitializationMode::Foreground;
         self
     }
 
     /// Initialize the first value on a background thread.
+    #[must_use]
     pub fn with_background_initializer(mut self) -> Self {
         self.initialization_mode = InitializationMode::Background;
         self
     }
 
     /// Callback to be called each time a new value is available.
+    #[must_use]
     pub fn with_callback(mut self, callback: impl LiveQueryUpdated + 'static) -> Self {
         self.callback = Some(Box::new(callback));
         self
     }
 
-    pub fn build<Q: ObservableQuery>(self, query: Q) -> LiveQuery<Q> {
+    /// Build the live query.
+    #[must_use]
+    pub fn build<Q: Observable>(self, query: Q) -> Live<Q> {
         let initializer: &dyn LiveQueryInitializer<Q> = match self.initialization_mode {
             InitializationMode::None => &DefaultLiveQueryInitializer {},
             InitializationMode::Foreground => &ForegroundLiveQueryInitializer {},
             InitializationMode::Background => &BackgroundLiveQueryInitializer {},
         };
-        LiveQuery::new(self.service, query, self.callback, initializer)
+        Live::new(self.service, query, self.callback, initializer)
     }
 }
 
-/// Automatically keep the output of the given [`ObservableQuery`] up to date with the latest value
+/// Automatically keep the output of the given [`Observable`] up to date with the latest value
 /// when changes are made to the database.
-pub struct LiveQuery<Q: ObservableQuery> {
-    observed_query: Option<ObservedQuery>,
+pub struct Live<Q: Observable> {
+    observed_query: Option<Observed>,
     last_value: RefCell<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
 }
 
-impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
+impl<Q: Observable + 'static> Live<Q> {
+    /// Create a new instance of live query
+    ///
+    /// # Params
+    ///
+    /// * `service`: The tracker service in which the query will register with
+    /// * `query`: Query implementation to run
+    /// * `cb`: Callback when the query has a new value due to changes made to observed tables
+    /// * `initializer`: Initialization mode
     fn new(
         service: InProcessTrackerService,
         query: Q,
@@ -199,7 +215,7 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
         let shared = Arc::new(SharedValue::new(cb));
         let value = initializer.initialize(&query, service.db_pool(), &shared);
         let shared_cloned = shared.clone();
-        let query = ObservedQuery::new(service, query, move |new_value| {
+        let query = Observed::new(service, query, move |new_value| {
             shared_cloned.store(new_value);
         });
         Self {
@@ -226,7 +242,7 @@ impl<Q: ObservableQuery + 'static> LiveQuery<Q> {
     }
 }
 
-/// Builder for [`SharedLiveQuery`].
+/// Builder for [`SharedLive`].
 pub struct SharedLiveQueryBuilder {
     initialization_mode: InitializationMode,
     callback: Option<Box<dyn LiveQueryUpdated>>,
@@ -234,6 +250,8 @@ pub struct SharedLiveQueryBuilder {
 }
 
 impl SharedLiveQueryBuilder {
+    /// Create a new instance.
+    #[must_use]
     pub fn new(service: InProcessTrackerService) -> Self {
         Self {
             initialization_mode: InitializationMode::None,
@@ -243,40 +261,54 @@ impl SharedLiveQueryBuilder {
     }
 
     /// Initialize the first value on the current executing thread.
+    #[must_use]
     pub fn with_foreground_initializer(mut self) -> Self {
         self.initialization_mode = InitializationMode::Foreground;
         self
     }
 
     /// Initialize the first value on a background thread.
+    #[must_use]
     pub fn with_background_initializer(mut self) -> Self {
         self.initialization_mode = InitializationMode::Background;
         self
     }
 
     /// Callback to be called each time a new value is available.
+    #[must_use]
     pub fn with_callback(mut self, callback: impl LiveQueryUpdated + 'static) -> Self {
         self.callback = Some(Box::new(callback));
         self
     }
-    pub fn build<Q: ObservableQuery>(self, query: Q) -> SharedLiveQuery<Q> {
+
+    /// Build the query type.
+    #[must_use]
+    pub fn build<Q: Observable>(self, query: Q) -> SharedLive<Q> {
         let initializer: &dyn LiveQueryInitializer<Q> = match self.initialization_mode {
             InitializationMode::None => &DefaultLiveQueryInitializer {},
             InitializationMode::Foreground => &ForegroundLiveQueryInitializer {},
             InitializationMode::Background => &BackgroundLiveQueryInitializer {},
         };
-        SharedLiveQuery::new(self.service, query, self.callback, initializer)
+        SharedLive::new(self.service, query, self.callback, initializer)
     }
 }
 
-/// Same as [`LiveQuery`], but can be accessed from multiple threads.
-pub struct SharedLiveQuery<Q: ObservableQuery> {
-    observed_query: parking_lot::Mutex<Option<ObservedQuery>>,
+/// Same as [`Live`], but can be accessed from multiple threads.
+pub struct SharedLive<Q: Observable> {
+    observed_query: parking_lot::Mutex<Option<Observed>>,
     last_value: parking_lot::Mutex<Q::Output>,
     shared: Arc<SharedValue<Q::Output>>,
 }
 
-impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
+impl<Q: Observable + 'static> SharedLive<Q> {
+    /// Create a new instance of shared live query
+    ///
+    /// # Params
+    ///
+    /// * `service`: The tracker service in which the query will register with
+    /// * `query`: Query implementation to run
+    /// * `cb`: Callback when the query has a new value due to changes made to observed tables
+    /// * `initializer`: Initialization mode
     fn new(
         service: InProcessTrackerService,
         query: Q,
@@ -286,7 +318,7 @@ impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
         let shared = Arc::new(SharedValue::new(cb));
         let value = initializer.initialize(&query, service.db_pool(), &shared);
         let shared_cloned = shared.clone();
-        let query = ObservedQuery::new(service, query, move |new_value| {
+        let query = Observed::new(service, query, move |new_value| {
             shared_cloned.store(new_value);
         });
         Self {
@@ -311,15 +343,12 @@ impl<Q: ObservableQuery + 'static> SharedLiveQuery<Q> {
     }
 }
 
-fn run_query<Q: ObservableQuery>(
-    query: &Q,
-    pool: &SqliteConnectionPool,
-) -> rusqlite::Result<Q::Output> {
+fn run_query<Q: Observable>(query: &Q, pool: &SqliteConnectionPool) -> rusqlite::Result<Q::Output> {
     let conn = pool.acquire()?;
     query.execute(&conn)
 }
 
-trait LiveQueryInitializer<Q: ObservableQuery>: 'static + Send + Sync {
+trait LiveQueryInitializer<Q: Observable>: 'static + Send + Sync {
     fn initialize(
         &self,
         query: &Q,
@@ -330,7 +359,7 @@ trait LiveQueryInitializer<Q: ObservableQuery>: 'static + Send + Sync {
 
 struct DefaultLiveQueryInitializer {}
 
-impl<Q: ObservableQuery> LiveQueryInitializer<Q> for DefaultLiveQueryInitializer {
+impl<Q: Observable> LiveQueryInitializer<Q> for DefaultLiveQueryInitializer {
     fn initialize(
         &self,
         _: &Q,
@@ -343,7 +372,7 @@ impl<Q: ObservableQuery> LiveQueryInitializer<Q> for DefaultLiveQueryInitializer
 
 struct BackgroundLiveQueryInitializer {}
 
-impl<Q: ObservableQuery> LiveQueryInitializer<Q> for BackgroundLiveQueryInitializer {
+impl<Q: Observable> LiveQueryInitializer<Q> for BackgroundLiveQueryInitializer {
     fn initialize(
         &self,
         query: &Q,
@@ -368,7 +397,7 @@ impl<Q: ObservableQuery> LiveQueryInitializer<Q> for BackgroundLiveQueryInitiali
 }
 
 struct ForegroundLiveQueryInitializer {}
-impl<Q: ObservableQuery> LiveQueryInitializer<Q> for ForegroundLiveQueryInitializer {
+impl<Q: Observable> LiveQueryInitializer<Q> for ForegroundLiveQueryInitializer {
     fn initialize(
         &self,
         query: &Q,

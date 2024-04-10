@@ -1,4 +1,5 @@
-use crate::domain::IsEvent;
+#![allow(clippy::module_name_repetitions)] // to avoid issue with collisions in the requests namespace
+use crate::domain::Event;
 use crate::http;
 use crate::http::RequestData;
 use serde::{Deserialize, Serialize};
@@ -21,14 +22,15 @@ impl http::RequestDesc for GetLatestEventRequest {
     }
 }
 
-pub struct GetEventRequest<'a, T: IsEvent> {
+pub struct GetEventRequest<'a, T: Event> {
     event_id: &'a crate::domain::EventId,
     conversation_counts: bool,
     message_counts: bool,
     p: PhantomData<T>,
 }
 
-impl<'a, T: IsEvent> GetEventRequest<'a, T> {
+impl<'a, T: Event> GetEventRequest<'a, T> {
+    #[must_use]
     pub fn new(id: &'a crate::domain::EventId) -> Self {
         Self {
             event_id: id,
@@ -38,6 +40,7 @@ impl<'a, T: IsEvent> GetEventRequest<'a, T> {
         }
     }
 
+    #[must_use]
     pub fn with_counts(id: &'a crate::domain::EventId) -> Self {
         Self {
             event_id: id,
@@ -48,7 +51,7 @@ impl<'a, T: IsEvent> GetEventRequest<'a, T> {
     }
 }
 
-impl<'a, T: IsEvent> http::RequestDesc for GetEventRequest<'a, T> {
+impl<'a, T: Event> http::RequestDesc for GetEventRequest<'a, T> {
     type Response = http::JsonResponse<T>;
 
     fn build(&self) -> RequestData {
@@ -58,7 +61,7 @@ impl<'a, T: IsEvent> http::RequestDesc for GetEventRequest<'a, T> {
             http::Method::Get,
             format!("core/v5/events/{}", self.event_id),
         )
-        .query("MessageCounts", message_counts)
-        .query("ConversationCounts", conversation_counts)
+        .query("MessageCounts", &message_counts)
+        .query("ConversationCounts", &conversation_counts)
     }
 }

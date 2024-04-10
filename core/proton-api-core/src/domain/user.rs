@@ -2,14 +2,14 @@ use crate::utils::{bool_from_integer, bool_to_integer};
 use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
-use proton_crypto_account::salts::{SaltError, SaltedPassword, Salts};
+use proton_crypto_account::salts::{SaltError as CryptoSaltError, SaltedPassword, Salts};
 use serde;
 use serde::{Deserialize, Serialize};
 
 crate::utils::string_id!(Uid);
 impl secrecy::Zeroize for Uid {
     fn zeroize(&mut self) {
-        self.0.zeroize()
+        self.0.zeroize();
     }
 }
 
@@ -35,15 +35,17 @@ new_integer_enum!(u8, UserMnemonicStatus {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserProductUsedSpace {
+pub struct ProductUsedSpace {
     pub calendar: i64,
     pub contact: i64,
     pub drive: i64,
     pub mail: i64,
     pub pass: i64,
 }
+
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
-pub struct UserFlags {
+pub struct Flags {
     pub protected: bool,
     #[serde(rename = "onboard-checklist-storage-granted")]
     pub onboard_checklist_storage_granted: bool,
@@ -78,7 +80,7 @@ pub struct User {
     pub credit: i64,
     pub currency: String,
     pub keys: UserKeys,
-    pub product_used_space: UserProductUsedSpace,
+    pub product_used_space: ProductUsedSpace,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
@@ -90,11 +92,11 @@ pub struct User {
     pub subscribed: u32,
     pub services: u32,
     pub delinquent: u32,
-    pub flags: UserFlags,
+    pub flags: Flags,
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum UserSaltError {
+pub enum SaltError {
     #[error("Could not find primary key")]
     PrimaryKeyNotFound,
     #[error("{0}")]
@@ -107,15 +109,19 @@ pub enum UserSaltError {
     Salt(
         #[source]
         #[from]
-        SaltError,
+        CryptoSaltError,
     ),
 }
 
 impl User {
+    /// Get the users primary key.
+    #[must_use]
     pub fn get_primary_key(&self) -> Option<&proton_crypto_account::domain::LockedKey> {
         self.keys.0.iter().find(|&k| k.primary)
     }
 
+    /// Get the user's display name.
+    #[must_use]
     pub fn user_name(&self) -> &str {
         if let Some(display_name) = self.display_name.as_deref() {
             display_name
@@ -125,19 +131,28 @@ impl User {
             &self.email
         }
     }
+
+    /// Salt a user password.
+    ///
+    /// # Errors
+    /// Returns error if the password can't be salted.
     pub fn salt_password<SRP: SRPProvider>(
         &self,
         provider: &SRP,
         salts: &Salts,
         mailbox_password: impl AsRef<[u8]>,
-    ) -> Result<SaltedPassword<<SRP as SRPProvider>::HashedPassword>, UserSaltError> {
+    ) -> Result<SaltedPassword<<SRP as SRPProvider>::HashedPassword>, SaltError> {
         let Some(primary_key) = self.get_primary_key() else {
-            return Err(UserSaltError::PrimaryKeyNotFound);
+            return Err(SaltError::PrimaryKeyNotFound);
         };
         let salted = salts.salt_for_key(provider, &primary_key.id, mailbox_password.as_ref())?;
         Ok(salted)
     }
 
+    /// Unlock the user's encryption keys.
+    ///
+    /// # Errors
+    /// Returns error if the keys can't be unlocked.
     pub fn unlock_keys<SRP: SRPProvider, PGP: PGPProviderSync>(
         &self,
         provider: &PGP,

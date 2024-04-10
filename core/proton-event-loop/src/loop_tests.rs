@@ -4,18 +4,18 @@ use crate::{
     MockSubscriber, Subscriber, SubscriberError,
 };
 use mockall::Sequence;
-use proton_api_core::domain::{EventId, MoreEvents};
+use proton_api_core::domain::{EventId, More};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::serde::{Deserialize, Serialize};
-use proton_async::runtime::MTRuntime;
+use proton_async::runtime::MultiThreaded;
 use std::time::Duration;
 
 proton_api_core::declare_event!(LoopEvent,{f:bool});
 
 #[test]
 fn test_loop_event_collection() {
-    let rt = MTRuntime::new(2).expect("failed to creat runtime");
+    let rt = MultiThreaded::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
         let second_event_id = EventId("1".into());
@@ -24,12 +24,12 @@ fn test_loop_event_collection() {
         let expected_events = [
             LoopEvent {
                 event_id: second_event_id.clone(),
-                more: MoreEvents::Yes,
+                more: More::Yes,
                 f: false,
             },
             LoopEvent {
                 event_id: third_event_id.clone(),
-                more: MoreEvents::No,
+                more: More::No,
                 f: false,
             },
         ];
@@ -143,14 +143,14 @@ fn test_loop_event_collection() {
 
 #[test]
 fn test_error_handler_retry_retries_loop() {
-    let rt = MTRuntime::new(2).expect("failed to creat runtime");
+    let rt = MultiThreaded::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
         let second_event_id = EventId("1".into());
 
         let expected_events = [LoopEvent {
             event_id: second_event_id.clone(),
-            more: MoreEvents::No,
+            more: More::No,
             f: false,
         }];
 
@@ -268,7 +268,7 @@ fn test_error_handler_retry_retries_loop() {
 
 #[test]
 fn test_error_handler_pause_pauses_loop() {
-    let rt = MTRuntime::new(2).expect("failed to creat runtime");
+    let rt = MultiThreaded::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
 
@@ -296,7 +296,7 @@ fn test_error_handler_pause_pauses_loop() {
                 .in_sequence(&mut sequence)
                 .withf(move |id| *id == first_event_id)
                 .return_once(move |_| {
-                    Err(proton_api_core::http::HttpRequestError::Other(anyhow!(
+                    Err(proton_api_core::http::RequestError::Other(anyhow!(
                         "Failure"
                     )))
                 });
@@ -339,7 +339,7 @@ fn test_error_handler_pause_pauses_loop() {
 
 #[test]
 fn test_error_handler_abort_causes_loop_exit() {
-    let rt = MTRuntime::new(2).expect("failed to creat runtime");
+    let rt = MultiThreaded::new(2).expect("failed to creat runtime");
     rt.block_on(async {
         let first_event_id = EventId("0".into());
 
@@ -367,7 +367,7 @@ fn test_error_handler_abort_causes_loop_exit() {
                 .in_sequence(&mut sequence)
                 .withf(move |id| *id == first_event_id)
                 .return_once(move |_| {
-                    Err(proton_api_core::http::HttpRequestError::Other(anyhow!(
+                    Err(proton_api_core::http::RequestError::Other(anyhow!(
                         "Failure"
                     )))
                 });

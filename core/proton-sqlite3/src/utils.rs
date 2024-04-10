@@ -8,6 +8,7 @@ use std::hash::Hash;
 /// let query = format!("SELECT * FROM table WHERE id IN ({})", gen_variable_in_argument_list(5));
 /// ```
 /// The above snippet will print `SELECT * FROM table WHERE id IN (?,?,?,?,?)`.
+#[must_use]
 pub fn gen_variable_in_argument_list(count: usize) -> String {
     debug_assert!(count > 0);
     let mut string = String::with_capacity(count + (count - 1));
@@ -19,6 +20,9 @@ pub fn gen_variable_in_argument_list(count: usize) -> String {
 }
 
 /// Convenience function to insert all mapped rows into an existing Vec or return error if the operation fails.
+///
+/// # Errors
+/// Return error if we fail to deserialize data from a database row.
 pub fn mapped_rows_into_vec<T, F: FnMut(&Row<'_>) -> rusqlite::Result<T>>(
     out: &mut Vec<T>,
     m: MappedRows<F>,
@@ -30,6 +34,9 @@ pub fn mapped_rows_into_vec<T, F: FnMut(&Row<'_>) -> rusqlite::Result<T>>(
 }
 
 /// Convenience function to insert all mapped rows into a Vec or return error if the operation fails.
+///
+/// # Errors
+/// Return error if we fail to deserialize data from a database row.
 pub fn mapped_rows_to_vec<T, F: FnMut(&Row<'_>) -> rusqlite::Result<T>>(
     m: MappedRows<F>,
 ) -> rusqlite::Result<Vec<T>> {
@@ -38,7 +45,10 @@ pub fn mapped_rows_to_vec<T, F: FnMut(&Row<'_>) -> rusqlite::Result<T>>(
     Ok(vec)
 }
 
-/// Convenience function to insert all mapped rows into an existing BTreeSet or return error if the operation fails.
+/// Convenience function to insert all mapped rows into an existing `BTreeSet` or return error if the operation fails.
+///
+/// # Errors
+/// Return error if we fail to deserialize data from a database row.
 pub fn mapped_rows_into_btree_set<
     T: PartialOrd + PartialEq + Ord + Eq,
     F: FnMut(&Row<'_>) -> rusqlite::Result<T>,
@@ -52,7 +62,10 @@ pub fn mapped_rows_into_btree_set<
     Ok(())
 }
 
-/// Convenience function to insert all mapped rows into a BTreeSet or return error if the operation fails.
+/// Convenience function to insert all mapped rows into a `BTreeSet` or return error if the operation fails.
+///
+/// # Errors
+/// Return error if we fail to deserialize data from a database row.
 pub fn mapped_rows_to_btree_set<
     T: PartialOrd + PartialEq + Ord + Eq,
     F: FnMut(&Row<'_>) -> rusqlite::Result<T>,
@@ -64,12 +77,16 @@ pub fn mapped_rows_to_btree_set<
     Ok(btree)
 }
 
-/// Convenience function to insert all mapped rows into an existing HashSet or return error if the operation fails.
+/// Convenience function to insert all mapped rows into an existing `Hash` or return error if the operation fails.
+///
+/// # Errors
+/// Return error if we fail to deserialize data from a database row.
 pub fn mapped_rows_into_hash_set<
     T: Hash + PartialEq + Eq,
     F: FnMut(&Row<'_>) -> rusqlite::Result<T>,
+    S: std::hash::BuildHasher,
 >(
-    out: &mut HashSet<T>,
+    out: &mut HashSet<T, S>,
     m: MappedRows<F>,
 ) -> rusqlite::Result<()> {
     for item in m {
@@ -78,7 +95,10 @@ pub fn mapped_rows_into_hash_set<
     Ok(())
 }
 
-/// Convenience function to insert all mapped rows into a HashSet or return error if the operation fails.
+/// Convenience function to insert all mapped rows into a `HashSet` or return error if the operation fails.
+///
+/// # Errors
+/// Return error if we fail to deserialize data from a database row.
 pub fn mapped_rows_to_hash_set<
     T: Hash + PartialEq + Eq,
     F: FnMut(&Row<'_>) -> rusqlite::Result<T>,
@@ -100,11 +120,12 @@ impl Default for RowIndexAllocator {
     }
 }
 impl RowIndexAllocator {
+    #[must_use]
     pub fn new() -> Self {
         Self(0)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn fetch_and_add(&mut self) -> usize {
         let index = self.0;
         self.0 += 1;
@@ -126,11 +147,12 @@ impl Default for StmtIndexAllocator {
     }
 }
 impl StmtIndexAllocator {
+    #[must_use]
     pub fn new() -> Self {
         Self(1)
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn fetch_and_add(&mut self) -> usize {
         let index = self.0;
         self.0 += 1;

@@ -1,7 +1,7 @@
 use crate::provider::Provider;
 use crate::store::Store;
 use crate::{EventLoop, EventLoopError, Subscriber};
-use proton_api_core::domain::IsEvent;
+use proton_api_core::domain::Event;
 use proton_api_core::exports::tracing::debug;
 use proton_async::futures::FutureExt;
 use proton_async::util::CancellationToken;
@@ -29,16 +29,16 @@ pub trait EventLoopErrorHandler: Send + Sync {
 
 /// This type polls the proton events at a given interval and distributes incoming events among its subscribers.
 #[derive(Clone)]
-pub struct BackgroundEventLoop<T: IsEvent + 'static> {
+pub struct BackgroundEventLoop<T: Event + 'static> {
     inner: Arc<SharedBackgroundEventLoopState<T>>,
 }
-impl<T: IsEvent + 'static> Default for BackgroundEventLoop<T> {
+impl<T: Event + 'static> Default for BackgroundEventLoop<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: IsEvent + 'static> BackgroundEventLoop<T> {
+impl<T: Event + 'static> BackgroundEventLoop<T> {
     pub fn new() -> Self {
         let shared = Arc::new(SharedBackgroundEventLoopState {
             paused: AtomicBool::new(true),
@@ -117,27 +117,27 @@ impl<T: IsEvent + 'static> BackgroundEventLoop<T> {
     }
 }
 
-impl<T: IsEvent> Drop for BackgroundEventLoop<T> {
+impl<T: Event> Drop for BackgroundEventLoop<T> {
     fn drop(&mut self) {
         self.cancel()
     }
 }
 
 #[doc(hidden)]
-enum SubscriberOperation<T: IsEvent> {
+enum SubscriberOperation<T: Event> {
     Register(Box<dyn Subscriber<T>>),
     Unregister(String),
 }
 
 #[doc(hidden)]
-struct SharedBackgroundEventLoopState<T: IsEvent> {
+struct SharedBackgroundEventLoopState<T: Event> {
     paused: AtomicBool,
     pending_subscribers: proton_async::sync::Mutex<Vec<SubscriberOperation<T>>>,
     token: CancellationToken,
 }
 
 #[doc(hidden)]
-struct BackgroundLoopState<T: IsEvent> {
+struct BackgroundLoopState<T: Event> {
     error_handler: Box<dyn EventLoopErrorHandler>,
     shared: Arc<SharedBackgroundEventLoopState<T>>,
     event_loop: EventLoop,
@@ -147,7 +147,7 @@ struct BackgroundLoopState<T: IsEvent> {
 }
 
 #[doc(hidden)]
-impl<T: IsEvent> BackgroundLoopState<T> {
+impl<T: Event> BackgroundLoopState<T> {
     async fn run(&mut self, poll_interval: Duration) {
         debug!("Starting loop");
         loop {

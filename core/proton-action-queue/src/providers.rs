@@ -5,7 +5,7 @@ use proton_api_core::Session;
 #[derive(Debug, thiserror::Error)]
 pub enum SessionProviderError {
     #[error("{0}")]
-    Http(#[source] proton_api_core::http::HttpRequestError),
+    Http(#[source] proton_api_core::http::RequestError),
     #[error("{0}")]
     Client(#[source] anyhow::Error),
     #[error("{0}")]

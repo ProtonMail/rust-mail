@@ -5,7 +5,7 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, AesGcm, Key, KeySizeUser,
 };
-use proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
+use proton_api_core::auth::{AccessToken, RefreshToken, Scope};
 use proton_api_core::domain::{Uid, UserId};
 use proton_api_core::exports::base64::prelude::BASE64_STANDARD;
 use proton_api_core::exports::base64::Engine;
@@ -21,7 +21,7 @@ pub struct DecryptedUserSession {
     pub email: String,
     pub refresh_token: RefreshToken,
     pub access_token: AccessToken,
-    pub scopes: AuthScope,
+    pub scopes: Scope,
 }
 
 impl DecryptedUserSession {
@@ -56,7 +56,7 @@ pub struct EncryptedUserSession {
     pub email: String,
     pub refresh_token: EncryptedRefreshToken,
     pub access_token: EncryptedAccessToken,
-    pub scopes: AuthScope,
+    pub scopes: Scope,
 }
 
 impl EncryptedUserSession {

@@ -3,7 +3,7 @@ use crate::db::{
     DBResult, EncryptedAccessToken, EncryptedData, EncryptedRefreshToken,
     SessionSqliteConnectionImpl,
 };
-use proton_api_core::auth::AuthScope;
+use proton_api_core::auth::Scope;
 use proton_api_core::domain::{Uid, UserId};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
 use proton_sqlite3::utils::mapped_rows_to_vec;
@@ -31,7 +31,7 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
         session_id: &Uid,
         access_token: &EncryptedAccessToken,
         refresh_token: &EncryptedRefreshToken,
-        scopes: &AuthScope,
+        scopes: &Scope,
     ) -> DBResult<()> {
         self.0.execute(
             "UPDATE core_sessions SET access_token=?, refresh_token=?, scopes=?,id=? WHERE user_id=?",

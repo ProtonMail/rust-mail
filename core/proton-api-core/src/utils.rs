@@ -106,7 +106,9 @@ macro_rules! new_integer_enum {
 
 pub use new_integer_enum;
 
-/// Deserialize bool from integer
+/// Deserialize bool from integer.
+/// # Errors
+/// Returns error if serialization fails.
 pub fn bool_from_integer<'de, D>(deserializer: D) -> Result<bool, D::Error>
 where
     D: Deserializer<'de>,
@@ -118,15 +120,19 @@ where
     }
 }
 
-/// Serialize bool from integer
+/// Serialize bool from integer.
+/// # Errors
+/// Returns error if serialization fails.
 pub fn bool_to_integer<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    serializer.serialize_u8(if *value { 1 } else { 0 })
+    serializer.serialize_u8((*value).into())
 }
 
-/// Deserialize Option<bool> from integer
+/// Deserialize Option<bool> from integer.
+/// # Errors
+/// Returns error if serialization fails.
 pub fn opt_bool_from_integer<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
 where
     D: Deserializer<'de>,
@@ -135,10 +141,12 @@ where
     Ok(v.map(|v| v != 0))
 }
 
-/// Serialize Option<bool> to integer
+/// Serialize Option<bool> to integer.
+/// # Errors
+/// Returns error if serialization fails.
 pub fn opt_bool_to_integer<S>(value: &Option<bool>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    value.map(|v| if v { 1 } else { 0 }).serialize(serializer)
+    value.map(u8::from).serialize(serializer)
 }

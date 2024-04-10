@@ -1,10 +1,10 @@
-use proton_api_core::domain::{EventId, IsEvent};
+use proton_api_core::domain::{Event, EventId};
 use proton_api_core::Session;
 use proton_async::async_trait::async_trait;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Provider<T: IsEvent>: Send + Sync {
+pub trait Provider<T: Event>: Send + Sync {
     async fn get_latest_event_id(&self) -> proton_api_core::http::Result<EventId>;
 
     async fn get_event(&self, event_id: &EventId) -> proton_api_core::http::Result<T>;
@@ -21,7 +21,7 @@ impl ProtonProvider {
 }
 
 #[async_trait]
-impl<T: IsEvent> Provider<T> for ProtonProvider {
+impl<T: Event> Provider<T> for ProtonProvider {
     async fn get_latest_event_id(&self) -> proton_api_core::http::Result<EventId> {
         self.session.get_latest_event().await
     }

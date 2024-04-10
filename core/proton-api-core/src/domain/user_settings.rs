@@ -12,7 +12,7 @@ new_integer_enum!(u8,TFAStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserSettingsEmail {
+pub struct Email {
     #[serde(deserialize_with = "deserialize_default_from_null")]
     pub value: String,
     pub status: u8,
@@ -22,7 +22,7 @@ pub struct UserSettingsEmail {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserSettingsPhone {
+pub struct Phone {
     #[serde(deserialize_with = "deserialize_default_from_null")]
     pub value: String,
     pub status: u8,
@@ -32,7 +32,7 @@ pub struct UserSettingsPhone {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserSettings2FA {
+pub struct TwoFA {
     pub enabled: TFAStatus,
     pub allowed: TFAStatus,
     pub expiration_time: Option<u64>,
@@ -40,45 +40,45 @@ pub struct UserSettings2FA {
     pub registered_keys: Vec<FIDOKey>,
 }
 
-new_integer_enum!(u8, UserLogAuth {
+new_integer_enum!(u8, LogAuth {
     Disabled =0,
     Basic=1,
     Advanced=2,
 });
 
-new_integer_enum!(u8, UserSettingsDensity {
+new_integer_enum!(u8, Density {
     Comfortable = 0,
     Compact =1,
 });
 
-new_integer_enum!(u8, UserSettingsWeekStart {
+new_integer_enum!(u8, WeekStart {
     Default =0,
     Monday =1,
     Saturday =6,
     Sunday=7,
 });
 
-new_integer_enum!(u8, UserSettingsDateFormat {
+new_integer_enum!(u8, DateFormat {
     Default =0,
     DDMMYYYY=1,
     MMDDYYYY=2,
     YYYYMMDD=3,
 });
 
-new_integer_enum!(u8, UserSettingsTimeFormat {
+new_integer_enum!(u8, TimeFormat {
     Default=0,
     H24=1,
     H12=2,
 });
 
-new_integer_enum!(u8, UserSettingsEarlyAccess {
+new_integer_enum!(u8, EarlyAccess {
     Regular=0,
     Beta=1,
 });
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserSettingsFlags {
+pub struct SettingsFlags {
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
@@ -93,14 +93,14 @@ pub struct UserSettingsFlags {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserSettingsReferral {
+pub struct Referral {
     pub link: String,
     pub eligible: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserSettingsHighSecurity {
+pub struct HighSecurity {
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
@@ -115,26 +115,28 @@ pub struct UserSettingsHighSecurity {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct UserSettingsPassword {
+pub struct Password {
     pub mode: u32,
     pub expiration_time: Option<u64>,
 }
+
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct UserSettings {
-    pub email: UserSettingsEmail,
-    pub password: UserSettingsPassword,
-    pub phone: UserSettingsPhone,
+    pub email: Email,
+    pub password: Password,
+    pub phone: Phone,
     #[serde(rename = "2FA")]
-    pub two_factor_auth: UserSettings2FA,
+    pub two_factor_auth: TwoFA,
     pub news: u32,
     pub locale: String,
-    pub log_auth: UserLogAuth,
+    pub log_auth: LogAuth,
     pub invoice_text: String,
-    pub density: UserSettingsDensity,
-    pub week_start: UserSettingsWeekStart,
-    pub date_format: UserSettingsDateFormat,
-    pub time_format: UserSettingsTimeFormat,
+    pub density: Density,
+    pub week_start: WeekStart,
+    pub date_format: DateFormat,
+    pub time_format: TimeFormat,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
@@ -145,8 +147,8 @@ pub struct UserSettings {
         serialize_with = "bool_to_integer"
     )]
     pub early_access: bool,
-    pub flags: UserSettingsFlags,
-    pub referral: Option<UserSettingsReferral>,
+    pub flags: SettingsFlags,
+    pub referral: Option<Referral>,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
@@ -167,7 +169,7 @@ pub struct UserSettings {
         serialize_with = "bool_to_integer"
     )]
     pub hide_side_panel: bool,
-    pub high_security: UserSettingsHighSecurity,
+    pub high_security: HighSecurity,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"

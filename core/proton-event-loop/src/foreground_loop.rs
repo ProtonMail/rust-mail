@@ -1,5 +1,5 @@
 use crate::{EventLoopError, Provider, Store, Subscriber};
-use proton_api_core::domain::{EventId, IsEvent};
+use proton_api_core::domain::{Event, EventId};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{self, debug, error, Level};
 use proton_api_core::http;
@@ -25,7 +25,7 @@ impl EventLoop {
     }
 
     #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
-    pub async fn initialize<T: IsEvent>(
+    pub async fn initialize<T: Event>(
         &self,
         store: &dyn Store,
         provider: &dyn Provider<T>,
@@ -46,7 +46,7 @@ impl EventLoop {
     /// iteration.
     /// The execution of the loop is aborted on the first error.
     #[tracing::instrument(name="event_poll",level=Level::DEBUG, skip(self, store, provider, subscribers))]
-    pub async fn poll<T: IsEvent>(
+    pub async fn poll<T: Event>(
         &self,
         store: &dyn Store,
         provider: &dyn Provider<T>,
@@ -107,7 +107,7 @@ impl EventLoop {
         Ok(())
     }
 
-    async fn collect_events<T: IsEvent>(
+    async fn collect_events<T: Event>(
         &self,
         provider: &dyn Provider<T>,
         last_event_id: &EventId,
@@ -137,7 +137,7 @@ impl EventLoop {
         Ok(events)
     }
 
-    async fn publish_events_to_subscribers<T: IsEvent>(
+    async fn publish_events_to_subscribers<T: Event>(
         &self,
         events: &[T],
         subscribers: &[Box<dyn Subscriber<T>>],

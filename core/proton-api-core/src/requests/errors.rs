@@ -1,4 +1,5 @@
-use crate::domain::{HumanVerification, HumanVerificationType};
+#![allow(clippy::module_name_repetitions)] // to avoid issue with collisions in the requests namespace
+use crate::domain::{HumanVerification, Type};
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -37,10 +38,16 @@ pub enum GetHumanVerificationError {
 }
 
 impl APIError {
+    /// Whether the errors is a human verification error request.
+    #[must_use]
     pub fn is_human_verification_request(&self) -> bool {
         self.api_code == HUMAN_VERIFICATION_REQUESTED
     }
 
+    /// Try to retrieve human verification error details.
+    ///
+    /// # Errors
+    /// Returns error if we could not decode the error data.
     pub fn try_get_human_verification_details(
         &self,
     ) -> Result<HumanVerification, GetHumanVerificationError> {
@@ -68,9 +75,9 @@ impl APIError {
 
         for t in &hv.human_verification_methods {
             let hv_type = match t.as_ref() {
-                "captcha" => HumanVerificationType::Captcha,
-                "email" => HumanVerificationType::Email,
-                "sms" => HumanVerificationType::Email,
+                "captcha" => Type::Captcha,
+                "email" => Type::Email,
+                "sms" => Type::Sms,
                 _ => {
                     return Err(GetHumanVerificationError::UnknownVerificationType(
                         t.clone(),
@@ -98,6 +105,8 @@ impl std::fmt::Display for APIError {
 }
 
 impl APIError {
+    /// Create a new error with a given status without any message or details.
+    #[must_use]
     pub fn new(http_status: u16) -> Self {
         Self {
             http_code: http_status,
@@ -107,6 +116,10 @@ impl APIError {
         }
     }
 
+    /// Create a new error with a given status and from a given body.
+    ///
+    /// If the body is not a valid error desc, we just ust the http status code.
+    #[must_use]
     pub fn with_status_and_body(http_status: u16, body: &[u8]) -> Self {
         if body.is_empty() {
             return Self::new(http_status);

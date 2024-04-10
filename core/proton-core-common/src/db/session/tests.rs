@@ -1,5 +1,5 @@
 use crate::db::{DBResult, SessionEncryptionKey};
-use proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
+use proton_api_core::auth::{AccessToken, RefreshToken, Scope};
 
 #[test]
 fn test_encryption() {
@@ -30,7 +30,7 @@ fn test_session_store_load() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        scopes: AuthScope::from("Scope"),
+        scopes: Scope::from("Scope"),
     };
 
     let key = SessionEncryptionKey::random();
@@ -77,7 +77,7 @@ fn test_session_update() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        scopes: AuthScope::from("Scope"),
+        scopes: Scope::from("Scope"),
     };
 
     let updated_session = DecryptedUserSession {
@@ -87,7 +87,7 @@ fn test_session_update() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("refreshed".to_string()),
         access_token: AccessToken::from("another token".to_string()),
-        scopes: AuthScope::from("Scope Scope2"),
+        scopes: Scope::from("Scope Scope2"),
     };
 
     let key = SessionEncryptionKey::random();
@@ -146,7 +146,7 @@ fn test_session_delete_user_id() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        scopes: AuthScope::from("Scope"),
+        scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
     let encrypted_session = session
@@ -178,7 +178,7 @@ fn test_session_delete_session_id() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        scopes: AuthScope::from("Scope"),
+        scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
     let encrypted_session = session

@@ -1,19 +1,19 @@
 use crate::db::{CoreSqliteConnection, DBResult};
-use proton_api_core::domain::{IsEvent, User, UserId, UserProductUsedSpace, UserSettings};
+use proton_api_core::domain::{Event, ProductUsedSpace, User, UserId, UserSettings};
 use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
 use proton_event_loop::proton_async::async_trait::async_trait;
 use proton_event_loop::SubscriberError;
 
-pub trait CoreEvent: IsEvent {
+pub trait CoreEvent: Event {
     fn get_core_event_user(&self) -> Option<&User>;
 
     fn get_core_event_user_settings(&self) -> Option<&UserSettings>;
 
     fn get_core_event_used_space(&self) -> Option<i64>;
 
-    fn get_core_event_used_product_space(&self) -> Option<&UserProductUsedSpace>;
+    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace>;
 }
 
 pub trait CoreEventSubscriberConnectionProvider: Send + Sync {

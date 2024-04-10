@@ -43,29 +43,23 @@ impl TestLocalSource {
 
 #[mockall::automock]
 pub trait RemoteSource: Send + Sync {
-    fn get_messages(&self) -> Result<Vec<Message>, proton_api_core::http::HttpRequestError>;
+    fn get_messages(&self) -> Result<Vec<Message>, proton_api_core::http::RequestError>;
 
-    fn get_message(
-        &self,
-        id: MessageId,
-    ) -> Result<Message, proton_api_core::http::HttpRequestError>;
+    fn get_message(&self, id: MessageId) -> Result<Message, proton_api_core::http::RequestError>;
 
     fn move_messages(
         &self,
         folder_id: FolderId,
         message_ids: &[MessageId],
-    ) -> Result<(), proton_api_core::http::HttpRequestError>;
+    ) -> Result<(), proton_api_core::http::RequestError>;
 
     fn mark_messages_read(
         &self,
         value: bool,
         message_ids: &[MessageId],
-    ) -> Result<(), proton_api_core::http::HttpRequestError>;
+    ) -> Result<(), proton_api_core::http::RequestError>;
 
-    fn delete_messages(
-        &self,
-        id: &[MessageId],
-    ) -> Result<(), proton_api_core::http::HttpRequestError>;
+    fn delete_messages(&self, id: &[MessageId]) -> Result<(), proton_api_core::http::RequestError>;
 }
 
 pub struct TestLocalSourceTransaction<'r, 'c> {

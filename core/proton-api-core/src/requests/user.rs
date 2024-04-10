@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)] // to avoid issue with collisions in the requests namespace
 use crate::domain::User;
 use crate::http;
 use crate::http::{JsonResponse, RequestData};

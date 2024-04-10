@@ -1342,7 +1342,7 @@ dependencies = [
 
 [[package]]
 name = "proton-api-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
@@ -1366,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "proton-async"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "flume",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "proton-event-loop"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "mockall",
  "paste",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "proton-sqlite3"
-version = "0.4.3"
+version = "0.5.0"
 dependencies = [
  "fixedbitset",
  "mockall",

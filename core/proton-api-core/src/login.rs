@@ -1,17 +1,15 @@
 use crate::auth::Auth;
-use crate::domain::{
-    HumanVerification, HumanVerificationLoginData, TFAStatus, TwoFactorAuth, User,
-};
-use crate::requests::{AuthInfoRequest, AuthRequest, TOTPRequest};
+use crate::domain::{HumanVerification, LoginData, TFAStatus, TwoFactorAuth, User};
+use crate::requests::{AuthInfo, TOTPRequest};
 use crate::{http, Session};
 use anyhow::anyhow;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use std::fmt::Formatter;
 
 #[derive(Debug, thiserror::Error)]
-pub enum LoginFlowError {
+pub enum Error {
     #[error("{0}")]
-    Request(#[source] http::HttpRequestError),
+    Request(#[source] http::RequestError),
     #[error("Server SRP proof verification failed: {0}")]
     ServerProof(String),
     #[error("Account 2FA method ({0})is not supported")]
@@ -27,13 +25,14 @@ pub enum LoginFlowError {
 /// Handle all the possible states that are required to transition through in order to become
 /// authenticated.
 
-pub struct LoginFlow {
+pub struct Flow {
     session: Session,
     state: LoginState,
     user: Option<User>,
 }
 
-impl LoginFlow {
+impl Flow {
+    #[must_use]
     pub fn new(session: Session) -> Self {
         Self {
             session,
@@ -43,20 +42,23 @@ impl LoginFlow {
     }
 
     /// Start login with credentials. The `human_verification` parameter only needs to be submitted
-    /// if during the login flow you catch a [`LoginFlowError::HumanVerificationRequired`] error.
+    /// if during the login flow you catch a [`Error::HumanVerificationRequired`] error.
+    ///
+    /// # Errors
+    /// Returns error if the login request or SRP proof calculations failed.
     pub async fn login<'a>(
         &mut self,
         username: &'a str,
         password: &'a str,
-        human_verification: Option<HumanVerificationLoginData>,
-    ) -> Result<(), LoginFlowError> {
+        human_verification: Option<LoginData>,
+    ) -> Result<(), Error> {
         if !(self.is_logged_out() || human_verification.is_some()) {
-            return Err(LoginFlowError::InvalidState);
+            return Err(Error::InvalidState);
         }
 
         let auth_resp = {
             self.session
-                .execute_request(AuthInfoRequest { username })
+                .execute_request(AuthInfo { username })
                 .await
                 .map_err(map_human_verification_err)
         }?;
@@ -71,11 +73,11 @@ impl LoginFlow {
                 &auth_resp.modulus,
                 &auth_resp.server_ephemeral,
             )
-            .map_err(|e| LoginFlowError::SRPProof(e.to_string()))?;
+            .map_err(|e| Error::SRPProof(e.to_string()))?;
 
         let auth_response = self
             .session
-            .execute_request(AuthRequest {
+            .execute_request(crate::requests::Auth {
                 username,
                 client_ephemeral: &proof.ephemeral,
                 client_proof: &proof.proof,
@@ -87,7 +89,7 @@ impl LoginFlow {
 
         let skip_srp_proof_validation = self.session.api_env_config().skip_srp_proof_validation;
         if !skip_srp_proof_validation && proof.expected_server_proof != auth_response.server_proof {
-            return Err(LoginFlowError::ServerProof(
+            return Err(Error::ServerProof(
                 "Server Proof does not match".to_string(),
             ));
         }
@@ -109,7 +111,7 @@ impl LoginFlow {
                 .await
                 .set_auth(auth)
                 .map_err(|e| {
-                    LoginFlowError::Request(http::HttpRequestError::Other(anyhow!(
+                    Error::Request(http::RequestError::Other(anyhow!(
                         "Failed to to store auth: {e}"
                     )))
                 })?;
@@ -124,13 +126,16 @@ impl LoginFlow {
     }
 
     /// Submit TOTP 2FA code.
-    pub async fn submit_totp(&mut self, code: &str) -> Result<(), LoginFlowError> {
+    ///
+    /// # Errors
+    /// Returns error if the request failed.
+    pub async fn submit_totp(&mut self, code: &str) -> Result<(), Error> {
         let LoginState::Awaiting2FA(status) = self.state else {
-            return Err(LoginFlowError::InvalidState);
+            return Err(Error::InvalidState);
         };
 
         if !matches!(status, TFAStatus::Totp | TFAStatus::TotpOrFIDO2) {
-            return Err(LoginFlowError::Unsupported2FA(TwoFactorAuth::TOTP));
+            return Err(Error::Unsupported2FA(TwoFactorAuth::TOTP));
         }
 
         self.session
@@ -143,16 +148,19 @@ impl LoginFlow {
     }
 
     /// Check whether the session has logged in.
+    #[must_use]
     pub fn is_logged_in(&self) -> bool {
         matches!(self.state, LoginState::LoggedIn)
     }
 
     /// Check whether the session in logged out.
+    #[must_use]
     pub fn is_logged_out(&self) -> bool {
         matches!(self.state, LoginState::LoggedOut)
     }
 
     /// Check whether the session in awaiting totp.
+    #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
         matches!(self.state, LoginState::Awaiting2FA(_))
     }
@@ -163,15 +171,17 @@ impl LoginFlow {
         self.user.take()
     }
 
+    #[must_use]
     pub fn user(&self) -> Option<&User> {
         self.user.as_ref()
     }
 
+    #[must_use]
     pub fn session(&self) -> &Session {
         &self.session
     }
 
-    async fn post_login_user_fetch(&mut self) -> Result<(), LoginFlowError> {
+    async fn post_login_user_fetch(&mut self) -> Result<(), Error> {
         // Fetch user info at least once, some accounts trigger HV after login with first
         // API call.
         let user = self
@@ -192,17 +202,17 @@ enum LoginState {
     LoggedIn,
 }
 
-fn map_human_verification_err(e: http::HttpRequestError) -> LoginFlowError {
-    if let http::HttpRequestError::API(e) = &e {
+fn map_human_verification_err(e: http::RequestError) -> Error {
+    if let http::RequestError::API(e) = &e {
         if let Ok(hv) = e.try_get_human_verification_details() {
-            return LoginFlowError::HumanVerificationRequired(hv);
+            return Error::HumanVerificationRequired(hv);
         }
     }
 
-    LoginFlowError::Request(e)
+    Error::Request(e)
 }
 
-impl std::fmt::Debug for LoginFlow {
+impl std::fmt::Debug for Flow {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "LoginFlow(state:{:?})", self.state)
     }

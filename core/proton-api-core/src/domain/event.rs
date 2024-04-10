@@ -6,13 +6,13 @@ crate::utils::string_id!(EventId);
 
 #[derive(Debug, Serialize_repr, Deserialize_repr, Eq, PartialEq, Copy, Clone)]
 #[repr(u8)]
-pub enum MoreEvents {
+pub enum More {
     No = 0,
     Yes = 1,
 }
 #[derive(Debug, Serialize_repr, Deserialize_repr, Eq, PartialEq, Copy, Clone)]
 #[repr(u8)]
-pub enum EventAction {
+pub enum Action {
     Delete = 0,
     Create = 1,
     Update = 2,
@@ -20,7 +20,7 @@ pub enum EventAction {
 }
 
 /// Marker to indicate that that the type is a valid event type.
-pub trait IsEvent:
+pub trait Event:
     for<'de> Deserialize<'de>
     + Serialize
     + Clone
@@ -35,6 +35,8 @@ pub trait IsEvent:
 
     fn has_more(&self) -> bool;
 }
+
+#[allow(clippy::module_name_repetitions)] // this macro is exported at the route of the crate
 #[macro_export]
 macro_rules! declare_event {
     ($name:ident, {$($member_name:ident : $member_type:ty),+}) => {
@@ -43,17 +45,17 @@ macro_rules! declare_event {
         pub struct $name {
             #[serde(rename = "EventID")]
             pub event_id: $crate::domain::EventId,
-            pub more: $crate::domain::MoreEvents,
+            pub more: $crate::domain::More,
             $(pub $member_name: $member_type,)+
         }
 
-        impl $crate::domain::IsEvent for $name {
+        impl $crate::domain::Event for $name {
             fn event_id(&self) -> &$crate::domain::EventId {
                 &self.event_id
             }
 
             fn has_more(&self) -> bool {
-                self.more == $crate::domain::MoreEvents::Yes
+                self.more == $crate::domain::More::Yes
             }
         }
     };
@@ -67,7 +69,7 @@ fn test_custom_event_type() {
 
     let _ = MyEvent {
         event_id: EventId::from("test_id"),
-        more: MoreEvents::No,
+        more: More::No,
         foo: 32,
         bar: false,
         zeta: "".to_string(),
@@ -75,7 +77,7 @@ fn test_custom_event_type() {
 
     let _ = MySingleEvent {
         event_id: EventId::from("bar"),
-        more: MoreEvents::No,
+        more: More::No,
         foo: 0,
     };
 }

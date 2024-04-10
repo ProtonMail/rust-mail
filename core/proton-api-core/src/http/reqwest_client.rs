@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use super::ClientInfo;
 use crate::http::{
-    ClientBuilder, ClientRequest, ClientRequestBuilder, FromResponse, HttpRequestError, Method,
-    Request, RequestData, X_PM_APP_VERSION_HEADER,
+    Builder, ClientRequest, ClientRequestBuilder, FromResponse, Method, Request, RequestData,
+    RequestError, X_PM_APP_VERSION_HEADER,
 };
 use crate::requests::APIError;
 use reqwest;
@@ -15,15 +15,17 @@ pub struct ReqwestClient {
 }
 
 impl ReqwestClient {
+    /// Get the client environment info.
+    #[must_use]
     pub fn info(&self) -> &ClientInfo {
         &self.info
     }
 }
 
-impl TryFrom<ClientBuilder> for ReqwestClient {
+impl TryFrom<Builder> for ReqwestClient {
     type Error = anyhow::Error;
 
-    fn try_from(value: ClientBuilder) -> Result<Self, Self::Error> {
+    fn try_from(value: Builder) -> Result<Self, Self::Error> {
         let mut header_map = reqwest::header::HeaderMap::new();
         header_map.insert(
             X_PM_APP_VERSION_HEADER,
@@ -45,11 +47,11 @@ impl TryFrom<ClientBuilder> for ReqwestClient {
             }
 
             if let Some(d) = value.connect_timeout {
-                builder = builder.connect_timeout(d)
+                builder = builder.connect_timeout(d);
             }
 
             if let Some(d) = value.request_timeout {
-                builder = builder.timeout(d)
+                builder = builder.timeout(d);
             }
 
             builder = builder
@@ -71,33 +73,32 @@ impl TryFrom<ClientBuilder> for ReqwestClient {
     }
 }
 
-impl From<reqwest::Error> for HttpRequestError {
+impl From<reqwest::Error> for RequestError {
     fn from(value: reqwest::Error) -> Self {
         // Check timeout before all other errors as it can be produced by multiple
         // reqwest error kinds.
         if value.is_timeout() {
-            return HttpRequestError::Timeout(anyhow::Error::new(value));
+            return RequestError::Timeout(anyhow::Error::new(value));
         }
 
         #[cfg(not(feature = "web"))]
         if value.is_connect() {
-            return HttpRequestError::Connection(anyhow::Error::new(value));
+            return RequestError::Connection(anyhow::Error::new(value));
         }
 
         if value.is_body() {
-            HttpRequestError::Request(anyhow::Error::new(value))
+            RequestError::Request(anyhow::Error::new(value))
         } else if value.is_redirect() {
-            HttpRequestError::Redirect(
+            RequestError::Redirect(
                 value
                     .url()
-                    .map(|v| v.to_string())
-                    .unwrap_or("Unknown URL".to_string()),
+                    .map_or("Unknown URL".to_owned(), ToString::to_string),
                 anyhow::Error::new(value),
             )
         } else if value.is_request() {
-            HttpRequestError::Request(anyhow::Error::new(value))
+            RequestError::Request(anyhow::Error::new(value))
         } else {
-            HttpRequestError::Other(anyhow::Error::new(value))
+            RequestError::Other(anyhow::Error::new(value))
         }
     }
 }
@@ -134,7 +135,7 @@ impl ClientRequestBuilder for ReqwestClient {
         }
 
         if let Some(body) = &data.body {
-            request = request.body(body.clone())
+            request = request.body(body.clone());
         }
 
         ReqwestRequest(request)
@@ -142,6 +143,10 @@ impl ClientRequestBuilder for ReqwestClient {
 }
 
 impl ReqwestClient {
+    /// Execute a request on the client.
+    ///
+    /// # Errors
+    /// Returns error if the request failed to execute.
     pub async fn direct_exec<R: FromResponse>(
         &self,
         r: ReqwestRequest,
@@ -154,9 +159,9 @@ impl ReqwestClient {
             let body = response
                 .bytes()
                 .await
-                .map_err(|_| HttpRequestError::API(APIError::new(status)))?;
+                .map_err(|_| RequestError::API(APIError::new(status)))?;
 
-            return Err(HttpRequestError::API(APIError::with_status_and_body(
+            return Err(RequestError::API(APIError::with_status_and_body(
                 status,
                 body.as_ref(),
             )));
@@ -173,6 +178,10 @@ impl ReqwestClient {
 }
 
 impl ReqwestClient {
+    /// Execute a request on the client.
+    ///
+    /// # Errors
+    /// Returns error if the request failed to execute.
     pub async fn execute_request<R: Request>(
         &self,
         request: R,
@@ -180,6 +189,11 @@ impl ReqwestClient {
         let r = request.build(self);
         self.direct_exec::<R::Response>(r).await
     }
+
+    /// Execute a request on the client.
+    ///
+    /// # Errors
+    /// Returns error if the request failed to execute.
     pub async fn execute<R: FromResponse>(
         &self,
         request: ReqwestRequest,

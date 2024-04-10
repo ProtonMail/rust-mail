@@ -20,7 +20,7 @@ pub enum ActionError {
     #[error("Local Source: {0}")]
     Local(#[source] anyhow::Error),
     #[error("Local Source: {0}")]
-    Remote(#[from] proton_api_core::http::HttpRequestError),
+    Remote(#[from] proton_api_core::http::RequestError),
     #[error("Serialization error: {0}")]
     Serialization(#[source] rmp_serde::encode::Error),
     #[error("Unknown Error: {0}")]

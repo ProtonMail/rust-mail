@@ -10,13 +10,23 @@ pub trait Migration {
     fn name(&self) -> &str;
 
     /// Perform the migration of from the previous version to the current version.
+    ///
+    /// # Params
+    /// * `tx`: transaction on which to run the migration.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the migration failed to run.
     fn migrate(&self, tx: &mut Transaction) -> rusqlite::Result<()>;
 }
 
+/// Possible errors that may occur during a migration.
 #[derive(Debug, thiserror::Error)]
 pub enum MigratorError {
+    /// Database has an invalid version.
     #[error("Found invalid version {0}")]
     InvalidVersion(usize),
+    /// Migration step failed.
     #[error("Migration error: {0}")]
     Migration(#[from] rusqlite::Error),
 }
@@ -27,6 +37,7 @@ pub enum MigratorError {
 pub struct Migrator {}
 
 impl Migrator {
+    #[must_use]
     pub fn new() -> Self {
         Self {}
     }
@@ -46,6 +57,16 @@ impl Migrator {
     ///     Migration_vN
     ///   ];
     /// ```
+    ///
+    /// # Parameters
+    ///
+    /// * `conn`: sqlite connection for the migration
+    /// * `version_table_name`: unique name under which to identify the version data
+    /// * `migrations`: list of migrations to run
+    ///
+    /// # Errors
+    ///
+    /// Return error if the migration fails.
     ///
     pub fn migrate(
         &self,

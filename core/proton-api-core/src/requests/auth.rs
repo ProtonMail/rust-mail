@@ -1,5 +1,6 @@
-use crate::auth::{AccessToken, AuthScope, RefreshToken};
-use crate::domain::{HumanVerificationLoginData, TFAStatus, Uid, UserId};
+#![allow(clippy::module_name_repetitions)] // to avoid issue with collisions in the requests namespace
+use crate::auth::{AccessToken, RefreshToken, Scope};
+use crate::domain::{LoginData, TFAStatus, Uid, UserId};
 use crate::http;
 use crate::http::{RequestData, X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE};
 use serde::{Deserialize, Serialize};
@@ -8,11 +9,11 @@ use serde_repr::Deserialize_repr;
 #[doc(hidden)]
 #[derive(Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct AuthInfoRequest<'a> {
+pub struct AuthInfo<'a> {
     pub username: &'a str,
 }
 
-impl<'a> http::RequestDesc for AuthInfoRequest<'a> {
+impl<'a> http::RequestDesc for AuthInfo<'a> {
     type Response = http::JsonResponse<AuthInfoResponse>;
 
     fn build(&self) -> RequestData {
@@ -35,17 +36,17 @@ pub struct AuthInfoResponse {
 #[doc(hidden)]
 #[derive(Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct AuthRequest<'a> {
+pub struct Auth<'a> {
     pub username: &'a str,
     pub client_ephemeral: &'a str,
     pub client_proof: &'a str,
     #[serde(rename = "SRPSession")]
     pub srp_session: &'a str,
     #[serde(skip)]
-    pub human_verification: &'a Option<HumanVerificationLoginData>,
+    pub human_verification: &'a Option<LoginData>,
 }
 
-impl<'a> http::RequestDesc for AuthRequest<'a> {
+impl<'a> http::RequestDesc for Auth<'a> {
     type Response = http::JsonResponse<AuthResponse>;
 
     fn build(&self) -> RequestData {
@@ -55,7 +56,7 @@ impl<'a> http::RequestDesc for AuthRequest<'a> {
             // repeat submission with x-pm-human-verification-token and x-pm-human-verification-token-type
             request = request
                 .header(X_PM_HUMAN_VERIFICATION_TOKEN, &hv.token)
-                .header(X_PM_HUMAN_VERIFICATION_TOKEN_TYPE, hv.hv_type.as_str())
+                .header(X_PM_HUMAN_VERIFICATION_TOKEN_TYPE, hv.hv_type.as_str());
         }
 
         request
@@ -74,7 +75,7 @@ pub struct AuthResponse {
     pub access_token: AccessToken,
     pub refresh_token: RefreshToken,
     pub server_proof: String,
-    pub scope: AuthScope,
+    pub scope: Scope,
     #[serde(rename = "2FA")]
     pub tfa: TFAInfo,
     pub password_mode: PasswordMode,
@@ -137,6 +138,7 @@ pub struct FIDO2Auth<'a> {
 }
 
 impl<'a> FIDO2Auth<'a> {
+    #[must_use]
     pub fn empty() -> Self {
         FIDO2Auth {
             authentication_options: serde_json::Value::Null,
@@ -153,6 +155,7 @@ pub struct TOTPRequest<'a> {
 }
 
 impl<'a> TOTPRequest<'a> {
+    #[must_use]
     pub fn new(code: &'a str) -> Self {
         Self { code }
     }
@@ -172,7 +175,7 @@ impl<'a> http::RequestDesc for TOTPRequest<'a> {
 #[doc(hidden)]
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "PascalCase")]
-pub struct AuthRefresh<'a> {
+pub struct AuthRefreshBody<'a> {
     #[serde(rename = "UID")]
     pub uid: &'a str,
     pub refresh_token: &'a str,
@@ -191,25 +194,26 @@ pub struct AuthRefreshResponse {
     pub token_type: Option<String>,
     pub access_token: AccessToken,
     pub refresh_token: RefreshToken,
-    pub scope: AuthScope,
+    pub scope: Scope,
 }
 
-pub struct AuthRefreshRequest<'a> {
+pub struct AuthRefresh<'a> {
     uid: &'a Uid,
     token: &'a str,
 }
 
-impl<'a> AuthRefreshRequest<'a> {
+impl<'a> AuthRefresh<'a> {
+    #[must_use]
     pub fn new(uid: &'a Uid, token: &'a str) -> Self {
         Self { uid, token }
     }
 }
 
-impl<'a> http::RequestDesc for AuthRefreshRequest<'a> {
+impl<'a> http::RequestDesc for AuthRefresh<'a> {
     type Response = http::JsonResponse<AuthRefreshResponse>;
 
     fn build(&self) -> RequestData {
-        RequestData::new(http::Method::Post, "auth/v4/refresh").json(AuthRefresh {
+        RequestData::new(http::Method::Post, "auth/v4/refresh").json(AuthRefreshBody {
             uid: &self.uid.0,
             refresh_token: self.token,
             grant_type: "refresh_token",
@@ -235,6 +239,7 @@ pub struct CaptchaRequest<'a> {
 }
 
 impl<'a> CaptchaRequest<'a> {
+    #[must_use]
     pub fn new(token: &'a str, force_web: bool) -> Self {
         Self { token, force_web }
     }
@@ -246,9 +251,9 @@ impl<'a> http::RequestDesc for CaptchaRequest<'a> {
     fn build(&self) -> RequestData {
         let mut data = RequestData::new(http::Method::Get, "core/v4/captcha");
         if self.force_web {
-            data = data.query("ForceWebMessaging", 1)
+            data = data.query("ForceWebMessaging", &1);
         }
 
-        data.query("Token", self.token)
+        data.query("Token", &self.token)
     }
 }

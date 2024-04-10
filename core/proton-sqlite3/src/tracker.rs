@@ -12,7 +12,7 @@ use tracing::{error, Level};
 
 /// Observer for changes made in the database.
 #[cfg_attr(test, mockall::automock)]
-pub trait TrackerObserver: Send + Sync {
+pub trait Observer: Send + Sync {
     fn tables(&self) -> &[String];
     fn on_tables_changed(&self, tables: &BTreeSet<String>, pool: &SqliteConnectionPool);
 }
@@ -39,12 +39,18 @@ impl AsMut<SqliteConnection> for TrackingConnection {
 
 impl TrackingConnection {
     /// Create a new tracking connection with a given service.
+    ///
+    /// # Params
+    /// * `conn`: Database connection.
+    /// * `service`: Instance where to publish changes.
+    ///
+    /// # Errors
+    /// Returns error if we can not initialize the tracking tables.
     pub fn new(
         mut conn: SqliteConnection,
         service: InProcessTrackerService,
     ) -> rusqlite::Result<Self> {
-        let mut tracker = LocalTracker::new(service);
-        tracker.init(&mut conn)?;
+        let tracker = LocalTracker::new(service, &mut conn)?;
 
         Ok(Self {
             connection: conn,
@@ -53,6 +59,10 @@ impl TrackingConnection {
     }
 
     /// Transactions need to be created through this helper function so that they work correctly.
+    ///
+    /// # Errors
+    /// Returns error if the transaction failed to submit or if there was an issue with tracking
+    /// changes.
     pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut Transaction) -> Result<T, E>>(
         &mut self,
         closure: F,
@@ -75,6 +85,10 @@ pub struct InProcessTrackerService {
 }
 
 impl InProcessTrackerService {
+    /// Create a new instance of an in process tracker service.
+    ///
+    /// # Errors
+    /// Returns error if the worker thread fails to spawn.
     pub fn new(pool: SqliteConnectionPool) -> std::io::Result<Self> {
         let (sender, receiver) = std::sync::mpsc::channel();
         let inner = Arc::new(TrackerServiceInner::new());
@@ -94,10 +108,15 @@ impl InProcessTrackerService {
 
     /// Register a new observer with a list of interested tables. This function returns an
     /// [`TrackedObserverId`] which can later be used to remove the current observer;
-    pub fn add_observer(&self, observer: Box<dyn TrackerObserver>) -> TrackedObserverId {
+    #[must_use]
+    pub fn add_observer(&self, observer: Box<dyn Observer>) -> TrackedObserverId {
         self.inner.add_observer(observer)
     }
 
+    /// Create a new tracking connection.
+    ///
+    /// # Errors
+    /// Returns error if we could not acquire a database connection.
     pub fn new_connection(&self) -> rusqlite::Result<TrackingConnection> {
         let conn = self.pool.acquire()?;
         TrackingConnection::new(conn, self.clone())
@@ -105,9 +124,11 @@ impl InProcessTrackerService {
 
     /// Remove an observer.
     pub fn remove_observer(&self, id: TrackedObserverId) {
-        self.inner.remove_observer(id)
+        self.inner.remove_observer(id);
     }
 
+    /// Get the underlying database connection pool.
+    #[must_use]
     pub fn db_pool(&self) -> &SqliteConnectionPool {
         &self.pool
     }
@@ -198,14 +219,18 @@ impl LocalTrackerState {
 
 const TRACKER_TABLE_NAME: &str = "proton_sqlite_tracker";
 impl LocalTracker {
-    fn new(service: InProcessTrackerService) -> Self {
-        Self {
+    fn new(
+        service: InProcessTrackerService,
+        connection: &mut SqliteConnection,
+    ) -> rusqlite::Result<Self> {
+        Self::init(connection)?;
+        Ok(Self {
             service,
             state: LocalTrackerState::with_capacity(8),
-        }
+        })
     }
 
-    fn init(&mut self, connection: &mut SqliteConnection) -> rusqlite::Result<()> {
+    fn init(connection: &mut SqliteConnection) -> rusqlite::Result<()> {
         // create tracking table and cleanup previous data if re-used from a connection pool.
         connection.tx(|tx| {
             tx.execute(&format!("CREATE TEMP TABLE IF NOT EXISTS {TRACKER_TABLE_NAME} (table_id INTEGER PRIMARY KEY, updated INTEGER)"),())?;
@@ -436,7 +461,7 @@ impl TrackerServiceInner {
         }
     }
 
-    pub fn add_observer(&self, observer: Box<dyn TrackerObserver>) -> TrackedObserverId {
+    pub fn add_observer(&self, observer: Box<dyn Observer>) -> TrackedObserverId {
         let observer = ObserverWrapper::new(observer);
 
         self.with_tables_mut(|tables| {
@@ -486,14 +511,14 @@ impl TrackerServiceInner {
 }
 
 struct ObserverWrapper {
-    observer: Box<dyn TrackerObserver>,
+    observer: Box<dyn Observer>,
     tables_set: BTreeSet<String>,
 }
 
 impl ObserverWrapper {
-    fn new(observer: Box<dyn TrackerObserver>) -> Self {
+    fn new(observer: Box<dyn Observer>) -> Self {
         Self {
-            tables_set: BTreeSet::from_iter(observer.tables().iter().cloned()),
+            tables_set: observer.tables().iter().cloned().collect(),
             observer,
         }
     }
@@ -539,7 +564,7 @@ impl TrackedResultRecorder {
                     self.tables.insert(name);
                 }
             }
-        })
+        });
     }
 }
 
@@ -604,7 +629,7 @@ pub struct TestObserver {
 }
 
 #[cfg(test)]
-impl TrackerObserver for TestObserver {
+impl Observer for TestObserver {
     fn tables(&self) -> &[String] {
         &self.tables
     }
@@ -614,7 +639,7 @@ impl TrackerObserver for TestObserver {
 #[cfg(test)]
 fn new_test_observer(
     tables: impl IntoIterator<Item = &'static str>,
-) -> Box<dyn TrackerObserver + Send + 'static> {
+) -> Box<dyn Observer + Send + 'static> {
     Box::new(TestObserver {
         tables: Vec::from_iter(tables.into_iter().map(|t| t.to_string())),
     })
@@ -857,7 +882,7 @@ fn test_service() {
 
     let tracked_tables = vec!["foo".to_string(), "bar".to_string()];
 
-    let mut observer = MockTrackerObserver::new();
+    let mut observer = MockObserver::new();
     observer.expect_tables().return_const(tracked_tables);
 
     let mut sequence = mockall::Sequence::new();
@@ -909,7 +934,7 @@ fn test_service() {
             cloned_sender.send(()).unwrap();
         });
 
-    tracker_service.add_observer(Box::new(observer));
+    let _ = tracker_service.add_observer(Box::new(observer));
 
     let mut conn = TrackingConnection::new(pool.acquire().unwrap(), tracker_service.clone())
         .expect("Failed to init tracking pool");

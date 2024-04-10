@@ -1,9 +1,7 @@
 use crate::db::DBResult;
 use proton_api_core::domain::{
-    TFAStatus, User, UserFlags, UserId, UserLogAuth, UserProductUsedSpace, UserSettings,
-    UserSettings2FA, UserSettingsDateFormat, UserSettingsDensity, UserSettingsEmail,
-    UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword, UserSettingsPhone,
-    UserSettingsTimeFormat, UserSettingsWeekStart,
+    DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
+    SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserSettings, WeekStart,
 };
 use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
 
@@ -52,7 +50,7 @@ fn test_core_user_space_updates() {
         tx.update_user_used_space(&user.id, user.used_space)
             .expect("failed to update used space");
 
-        user.product_used_space = UserProductUsedSpace {
+        user.product_used_space = ProductUsedSpace {
             calendar: 234235235235,
             contact: 2342342111231,
             drive: 32423487767455,
@@ -79,23 +77,23 @@ fn test_core_store_and_load_user_settings() {
     let user_id = UserId::from("USER");
 
     let settings = UserSettings {
-        email: UserSettingsEmail {
+        email: Email {
             value: "FooBar".to_string(),
             status: 1,
             notify: 2,
             reset: 4,
         },
-        password: UserSettingsPassword {
+        password: Password {
             mode: 2,
             expiration_time: Some(1034),
         },
-        phone: UserSettingsPhone {
+        phone: Phone {
             value: "1234556".to_string(),
             status: 9,
             notify: 5,
             reset: 7,
         },
-        two_factor_auth: UserSettings2FA {
+        two_factor_auth: TwoFA {
             enabled: TFAStatus::FIDO2,
             allowed: TFAStatus::TotpOrFIDO2,
             expiration_time: Some(9999),
@@ -103,15 +101,15 @@ fn test_core_store_and_load_user_settings() {
         },
         news: 111,
         locale: "LOCALE".to_string(),
-        log_auth: UserLogAuth::Advanced,
+        log_auth: LogAuth::Advanced,
         invoice_text: "my_invoice".to_string(),
-        density: UserSettingsDensity::Compact,
-        week_start: UserSettingsWeekStart::Sunday,
-        date_format: UserSettingsDateFormat::YYYYMMDD,
-        time_format: UserSettingsTimeFormat::H12,
+        density: Density::Compact,
+        week_start: WeekStart::Sunday,
+        date_format: DateFormat::YYYYMMDD,
+        time_format: TimeFormat::H12,
         welcome: Default::default(),
         early_access: Default::default(),
-        flags: UserSettingsFlags {
+        flags: SettingsFlags {
             welcomed: true,
             in_app_promos_hidden: Default::default(),
         },
@@ -120,7 +118,7 @@ fn test_core_store_and_load_user_settings() {
         telemetry: true,
         crash_reports: Default::default(),
         hide_side_panel: true,
-        high_security: UserSettingsHighSecurity {
+        high_security: HighSecurity {
             eligible: Default::default(),
             value: true,
         },
@@ -167,7 +165,7 @@ fn new_test_user() -> User {
             recovery_secret_signature: Some("recovery_signature".to_string()),
             address_forwarding_id: None,
         }]),
-        product_used_space: UserProductUsedSpace {
+        product_used_space: ProductUsedSpace {
             calendar: 23,
             contact: 44,
             drive: 99,
@@ -181,7 +179,7 @@ fn new_test_user() -> User {
         subscribed: 3234234,
         services: 23123123,
         delinquent: 4,
-        flags: UserFlags {
+        flags: Flags {
             protected: false,
             onboard_checklist_storage_granted: true,
             has_temporary_password: false,

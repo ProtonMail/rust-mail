@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)] // to avoid issue with collisions in the http namespace
 use crate::http::{FromResponse, Result};
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;

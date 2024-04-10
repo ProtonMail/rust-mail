@@ -1,7 +1,7 @@
 use proton_sqlite3::utils::mapped_rows_to_vec;
 use proton_sqlite3::{
-    InProcessTrackerService, LiveQueryBuilder, ObservableQuery, SqliteConnection,
-    SqliteConnectionPool, SqliteMode, TrackingConnection,
+    InProcessTrackerService, LiveQueryBuilder, Observable, SqliteConnection, SqliteConnectionPool,
+    SqliteMode, TrackingConnection,
 };
 use std::ops::Deref;
 use std::sync::mpsc::TryRecvError;
@@ -9,7 +9,7 @@ use std::sync::mpsc::TryRecvError;
 #[derive(Clone)]
 struct TestQuery {}
 
-impl ObservableQuery for TestQuery {
+impl Observable for TestQuery {
     type Output = Vec<(i64, i64)>;
 
     fn debug_name(&self) -> &'static str {

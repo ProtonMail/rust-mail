@@ -1,3 +1,4 @@
+#![allow(clippy::explicit_auto_deref, clippy::explicit_deref_methods)]
 use std::ops::{Deref, DerefMut};
 use tokio::sync;
 

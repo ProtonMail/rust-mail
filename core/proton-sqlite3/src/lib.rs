@@ -67,6 +67,10 @@ pub struct SqliteConnection {
 impl SqliteConnection {
     /// Convenience transaction wrapper. Creates a new transaction an if the supplied closure does not return an error,
     /// the transaction is committed. On Error, the transaction is rolled back.
+    ///
+    /// # Errors
+    /// Return errors if the transaction failed or an error occurred during the execution of the
+    /// closure.
     pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut Transaction) -> Result<T, E>>(
         &mut self,
         mut closure: F,
@@ -82,6 +86,9 @@ impl SqliteConnection {
 
     /// Return the data version of the database. The data version changes every time a change
     /// has been made by another connection.
+    ///
+    /// # Errors
+    /// Returns error if we fail to retrieve the version information.
     pub fn data_version(&self) -> rusqlite::Result<u64> {
         self.deref()
             .pragma_query_value(None, "data_version", |r| r.get(0))
@@ -113,6 +120,9 @@ pub struct ReadOnlySqliteConnection(SqliteConnection);
 
 impl ReadOnlySqliteConnection {
     /// Same as [`SqliteConnection::data_version`].
+    ///
+    /// # Errors
+    /// Same as [`SqliteConnection::data_version`].
     pub fn data_version(&self) -> rusqlite::Result<u64> {
         self.0.data_version()
     }
@@ -122,7 +132,7 @@ impl Deref for ReadOnlySqliteConnection {
     type Target = Connection;
 
     fn deref(&self) -> &Self::Target {
-        self.0.deref()
+        &self.0
     }
 }
 
@@ -150,6 +160,11 @@ struct ConnectionPoolInner {
 static SQL_LOG_ONCE: std::sync::Once = std::sync::Once::new();
 
 impl SqliteConnectionPool {
+    /// Create a new sqlite connection pool.
+    ///
+    /// # Params
+    /// * `mode`: Sqlite operation mode.
+    /// * `debug`: Whether ot enable debug and trace logs.
     pub fn new(mode: SqliteMode, debug: bool) -> Self {
         if debug {
             SQL_LOG_ONCE.call_once(|| {
@@ -158,13 +173,20 @@ impl SqliteConnectionPool {
                         error!("[{err_code}]: {log}");
                     }))
                 } {
-                    error!("Failed to register sqlite log callback: {e}")
+                    error!("Failed to register sqlite log callback: {e}");
                 }
             });
         }
         Self::with_open_connections_limit(mode, DEFAULT_OPEN_CONNECTION_LIMIT, debug)
     }
 
+    /// Create a new sqlite connection pool.
+    ///
+    /// # Params
+    /// * `mode`: Sqlite operation mode.
+    /// * `limit`: Number of open connections to maintain open in the pool.
+    /// * `debug`: Whether ot enable debug and trace logs.
+    #[must_use]
     pub fn with_open_connections_limit(mode: SqliteMode, limit: usize, debug: bool) -> Self {
         Self {
             inner: Arc::new(ConnectionPoolInner {
@@ -177,6 +199,10 @@ impl SqliteConnectionPool {
         }
     }
 
+    /// Acquire a new connection from the pool.
+    ///
+    /// # Errors
+    /// Returns error if we can't obtain a connection.
     pub fn acquire(&self) -> rusqlite::Result<SqliteConnection> {
         self.inner
             .get_or_create_connection(ConnectionAccess::Write, self.inner.debug)
@@ -187,6 +213,10 @@ impl SqliteConnectionPool {
             })
     }
 
+    /// Acquire a new read-only connection from the pool.
+    ///
+    /// # Errors
+    /// Returns error if we can't obtain a connection.
     pub fn acquire_read_only(&self) -> rusqlite::Result<ReadOnlySqliteConnection> {
         self.inner
             .get_or_create_connection(ConnectionAccess::Read, self.inner.debug)
@@ -212,6 +242,9 @@ impl SqliteConnectionPool {
 
     /// Close all connections in the pool. If a connection can't be closed, it will be put back into the pool
     /// and the error is returned.
+    ///
+    /// # Errors
+    /// Return error if we can not close a db connection.
     pub fn close_all(&self) -> rusqlite::Result<()> {
         self.inner.close_all()
     }
@@ -268,7 +301,7 @@ impl ConnectionPoolInner {
         self.new_connection_impl(flags, debug)
     }
 
-    fn new_connection_impl(&self, flags: OpenFlags, _debug: bool) -> rusqlite::Result<Connection> {
+    fn new_connection_impl(&self, flags: OpenFlags, debug: bool) -> rusqlite::Result<Connection> {
         #[allow(unused_mut)]
         let mut conn = match &self.mode {
             SqliteMode::File(path) => {
@@ -286,7 +319,7 @@ impl ConnectionPoolInner {
 
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
-        if _debug {
+        if debug {
             conn.trace(Some(|l| {
                 tracing::trace!("{l}");
             }));

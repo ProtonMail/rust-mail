@@ -1,6 +1,6 @@
 use proton_api_core::auth::{new_arc_auth_store, InMemoryStore};
 use proton_api_core::http::APIEnvConfig;
-use proton_api_core::login::LoginFlow;
+use proton_api_core::login::Flow;
 use proton_api_core::{http, Session};
 pub use tokio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -32,7 +32,7 @@ async fn main() {
         ..Default::default()
     };
 
-    let client = http::ClientBuilder::new()
+    let client = http::Builder::new()
         .api_env_config(api_env_config)
         .debug()
         .build()
@@ -41,7 +41,7 @@ async fn main() {
     let auth_store = new_arc_auth_store(InMemoryStore::default());
     let session = Session::new(client, auth_store);
 
-    let mut login_flow = LoginFlow::new(session.clone());
+    let mut login_flow = Flow::new(session.clone());
     login_flow
         .login(&user_email, &user_password, None)
         .await

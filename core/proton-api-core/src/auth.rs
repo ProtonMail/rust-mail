@@ -1,16 +1,19 @@
 use crate::domain::{SecretString, Uid, UserId};
-use crate::http::HttpRequestError;
+use crate::http::RequestError;
 use proton_async::sync::RwLock;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
 use std::sync::Arc;
 
+/// Authentication scopes for the session.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
-pub struct AuthScope(pub String);
+pub struct Scope(pub String);
 
+/// Token used to refresh the active session.
 #[derive(Deserialize, Debug, Clone)]
 pub struct RefreshToken(pub SecretString);
 
+/// Authentication token for the current session.
 #[derive(Deserialize, Debug, Clone)]
 pub struct AccessToken(pub SecretString);
 
@@ -28,42 +31,73 @@ pub struct Auth {
     /// Auth token
     pub access_token: AccessToken,
     /// Access scopes
-    pub scope: AuthScope,
+    pub scope: Scope,
 }
 
-pub trait AuthStore: Send + Sync + 'static {
+pub trait Store: Send + Sync + 'static {
     /// Get the current auth if any.
     fn get_auth(&self) -> Option<&Auth>;
+
+    /// Set the new auth state.
+    ///
+    /// # Params
+    /// * `auth`: New authentication state.
+    ///
+    /// # Errors
+    /// Returns error if the update failed.
     fn set_auth(&mut self, auth: Auth) -> Result<(), Box<dyn std::error::Error>>;
 
-    fn refresh_auth_failed(&self, e: &HttpRequestError);
+    /// Notify the implementation that an attempt to refresh the credentials failed.
+    ///
+    /// # Params
+    /// * `e`: Network error which occurred during refresh.
+    fn refresh_auth_failed(&self, e: &RequestError);
 
+    /// Called after the auth info has been updated via a session refresh.
+    ///
+    /// # Params
+    /// * `uid`: session uid.
+    /// * `access_token`: new access token.
+    /// * `refresh_token`: new refresh token.
+    /// * `scope`: new authentication scopes.
+    ///
+    /// # Errors
+    /// Returns error if the new auth state could not be stored.
     fn refresh_auth(
         &mut self,
         uid: Uid,
         access_token: AccessToken,
         refresh_token: RefreshToken,
-        scope: AuthScope,
+        scope: Scope,
     ) -> Result<(), Box<dyn std::error::Error>>;
-    fn set_scopes(
-        &mut self,
-        scopes: AuthScope,
-    ) -> Result<Option<&Auth>, Box<dyn std::error::Error>>;
+
+    /// Update the session authentication scope.
+    ///
+    /// # Errors
+    /// Returns error if the auth state could not be updated.
+    fn set_scopes(&mut self, scopes: Scope) -> Result<Option<&Auth>, Box<dyn std::error::Error>>;
+
+    /// Clear the authentication state, will be called when the user logs out.
+    ///
+    /// # Errors
+    /// Returns error if the auth state could not be deleted.
     fn clear_auth(&mut self) -> Result<(), Box<dyn std::error::Error>>;
 }
 
-pub trait VersionedAuthStore: AuthStore {
+/// Wrapper trait that tracks modifications to the auth data. Each write to the auth data should bump
+/// the version counter. This is used to prevent concurrent refreshes.
+pub trait VersionedAuthStore: Store {
+    /// Get the current version counter.
     fn auth_refresh_version(&self) -> u32;
 }
 
 /// In memory authentication storage.
-
 #[derive(Default)]
 pub struct InMemoryStore {
     auth: Option<Auth>,
 }
 
-impl AuthStore for InMemoryStore {
+impl Store for InMemoryStore {
     fn get_auth(&self) -> Option<&Auth> {
         self.auth.as_ref()
     }
@@ -73,10 +107,7 @@ impl AuthStore for InMemoryStore {
         Ok(())
     }
 
-    fn set_scopes(
-        &mut self,
-        scope: AuthScope,
-    ) -> Result<Option<&Auth>, Box<dyn std::error::Error>> {
+    fn set_scopes(&mut self, scope: Scope) -> Result<Option<&Auth>, Box<dyn std::error::Error>> {
         let Some(auth) = &mut self.auth else {
             return Ok(None);
         };
@@ -90,7 +121,7 @@ impl AuthStore for InMemoryStore {
         uid: Uid,
         access_token: AccessToken,
         refresh_token: RefreshToken,
-        scope: AuthScope,
+        scope: Scope,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(auth) = &mut self.auth {
             auth.uid = uid;
@@ -106,20 +137,20 @@ impl AuthStore for InMemoryStore {
         Ok(())
     }
 
-    fn refresh_auth_failed(&self, _: &HttpRequestError) {}
+    fn refresh_auth_failed(&self, _: &RequestError) {}
 }
 pub type ArcAuthStore = Arc<RwLock<dyn VersionedAuthStore>>;
 
-pub fn new_arc_auth_store<T: AuthStore>(auth: T) -> ArcAuthStore {
+pub fn new_arc_auth_store<T: Store>(auth: T) -> ArcAuthStore {
     Arc::new(RwLock::new(VersionedAuthStoreWrapper::new(auth)))
 }
 
-pub struct VersionedAuthStoreWrapper<T: AuthStore> {
+pub struct VersionedAuthStoreWrapper<T: Store> {
     version: u32,
     auth_store: T,
 }
 
-impl<T: AuthStore> VersionedAuthStoreWrapper<T> {
+impl<T: Store> VersionedAuthStoreWrapper<T> {
     pub fn new(auth_store: T) -> Self {
         Self {
             auth_store,
@@ -128,7 +159,7 @@ impl<T: AuthStore> VersionedAuthStoreWrapper<T> {
     }
 }
 
-impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
+impl<T: Store> Store for VersionedAuthStoreWrapper<T> {
     fn get_auth(&self) -> Option<&Auth> {
         self.auth_store.get_auth()
     }
@@ -138,7 +169,7 @@ impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
         Ok(())
     }
 
-    fn refresh_auth_failed(&self, e: &HttpRequestError) {
+    fn refresh_auth_failed(&self, e: &RequestError) {
         self.auth_store.refresh_auth_failed(e);
     }
 
@@ -147,7 +178,7 @@ impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
         uid: Uid,
         access_token: AccessToken,
         refresh_token: RefreshToken,
-        scope: AuthScope,
+        scope: Scope,
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.auth_store
             .refresh_auth(uid, access_token, refresh_token, scope)?;
@@ -155,10 +186,7 @@ impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
         Ok(())
     }
 
-    fn set_scopes(
-        &mut self,
-        scopes: AuthScope,
-    ) -> Result<Option<&Auth>, Box<dyn std::error::Error>> {
+    fn set_scopes(&mut self, scopes: Scope) -> Result<Option<&Auth>, Box<dyn std::error::Error>> {
         self.auth_store.set_scopes(scopes)
     }
 
@@ -168,19 +196,21 @@ impl<T: AuthStore> AuthStore for VersionedAuthStoreWrapper<T> {
     }
 }
 
-impl<T: AuthStore> VersionedAuthStore for VersionedAuthStoreWrapper<T> {
+impl<T: Store> VersionedAuthStore for VersionedAuthStoreWrapper<T> {
     fn auth_refresh_version(&self) -> u32 {
         self.version
     }
 }
 
 impl AccessToken {
+    #[must_use]
     pub fn expose_secret(&self) -> &str {
         self.0.expose_secret()
     }
 }
 
 impl RefreshToken {
+    #[must_use]
     pub fn expose_secret(&self) -> &str {
         self.0.expose_secret()
     }
@@ -197,20 +227,20 @@ impl<T: Into<String>> From<T> for RefreshToken {
     }
 }
 
-impl AsRef<str> for AuthScope {
+impl AsRef<str> for Scope {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
 
-impl<T: Into<String>> From<T> for AuthScope {
+impl<T: Into<String>> From<T> for Scope {
     fn from(value: T) -> Self {
         Self(value.into())
     }
 }
 
 #[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::ToSql for AuthScope {
+impl proton_sqlite3::rusqlite::types::ToSql for Scope {
     fn to_sql(
         &self,
     ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
@@ -219,7 +249,7 @@ impl proton_sqlite3::rusqlite::types::ToSql for AuthScope {
 }
 
 #[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::FromSql for AuthScope {
+impl proton_sqlite3::rusqlite::types::FromSql for Scope {
     fn column_result(
         value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
     ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {

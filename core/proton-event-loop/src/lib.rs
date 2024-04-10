@@ -5,10 +5,10 @@
 //! # Foreground Example
 //! This version of the loop requires the user to poll the loop manually so that it can progress.
 //! ```
-//! use proton_api_core::domain::IsEvent;
+//! use proton_api_core::domain::Event;
 //! use proton_event_loop::{EventLoop, Provider, Store};
 //!
-//! async fn create_loop_and_poll<T:IsEvent>(store:Box<dyn Store>, provider:Box<dyn Provider<T>>) {
+//! async fn create_loop_and_poll<T:Event>(store:Box<dyn Store>, provider:Box<dyn Provider<T>>) {
 //!     let mut event_loop = EventLoop::new();
 //!
 //!     loop {
@@ -25,10 +25,10 @@
 //! Additionally, this version also has modifiers to pause and resume the loop.
 //! ```
 //! use std::time::Duration;
-//! use proton_api_core::domain::IsEvent;
+//! use proton_api_core::domain::Event;
 //! use proton_event_loop::{BackgroundEventLoop, EventLoop, EventLoopErrorHandler, Provider, Store};
 //!
-//! async fn create_background_loop<T:IsEvent+'static>(store:Box<dyn Store>, provider:Box<dyn Provider<T>>, error_handler:Box<dyn EventLoopErrorHandler>) {
+//! async fn create_background_loop<T:Event+'static>(store:Box<dyn Store>, provider:Box<dyn Provider<T>>, error_handler:Box<dyn EventLoopErrorHandler>) {
 //!     let bg_event_loop = BackgroundEventLoop::new();
 //!
 //!     bg_event_loop.start(Duration::from_secs(15), store, provider, error_handler).await.unwrap();
@@ -58,7 +58,7 @@ pub use store::*;
 pub use subscriber::*;
 
 use proton_api_core::exports::{anyhow, thiserror};
-use proton_api_core::http::HttpRequestError;
+use proton_api_core::http::RequestError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EventLoopError {
@@ -67,7 +67,7 @@ pub enum EventLoopError {
     #[error("Failed to write store: {0}")]
     StoreWrite(anyhow::Error),
     #[error("Failed to retrieve event: {0}")]
-    Provider(#[from] HttpRequestError),
+    Provider(#[from] RequestError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
     #[error("Other: {0}")]

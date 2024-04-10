@@ -42,7 +42,7 @@ pub enum Method {
 #[derive(Debug, Error)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Error))]
 #[cfg_attr(feature = "uniffi", uniffi(flat_error))]
-pub enum HttpRequestError {
+pub enum RequestError {
     #[error("API Error: {0}")]
     API(#[from] crate::requests::APIError),
     #[error("A redirect error occurred at '{0}: {1}")]
@@ -59,10 +59,10 @@ pub enum HttpRequestError {
     Other(#[source] anyhow::Error),
 }
 
-impl From<serde_json::Error> for HttpRequestError {
+impl From<serde_json::Error> for RequestError {
     fn from(value: serde_json::Error) -> Self {
         Self::EncodeOrDecode(value.into())
     }
 }
 
-pub type Result<T> = std::result::Result<T, HttpRequestError>;
+pub type Result<T> = std::result::Result<T, RequestError>;

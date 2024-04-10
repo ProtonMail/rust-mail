@@ -1,4 +1,4 @@
-use proton_api_core::domain::IsEvent;
+use proton_api_core::domain::Event;
 use proton_api_core::exports::anyhow;
 #[cfg(test)]
 use proton_api_core::exports::serde;
@@ -11,7 +11,7 @@ use proton_async::async_trait::async_trait;
 pub enum SubscriberError {
     /// Http error should be returned when the error resulted due to an API or Network error.
     #[error("{0}")]
-    Http(proton_api_core::http::HttpRequestError),
+    Http(proton_api_core::http::RequestError),
     /// Subscriber specific errors should be returned here.
     #[error("{0}")]
     Other(anyhow::Error),
@@ -26,7 +26,7 @@ pub enum SubscriberError {
 /// Subscriber traits allow anyone to access the events from the event loop.
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Subscriber<T: IsEvent + Send + Sync>: Send + Sync {
+pub trait Subscriber<T: Event + Send + Sync>: Send + Sync {
     /// Return the name/id of this subscriber.
     fn name(&self) -> &str;
 
@@ -36,14 +36,14 @@ pub trait Subscriber<T: IsEvent + Send + Sync>: Send + Sync {
 
 /// A Subscriber in which all event communication is performed via channels. This may be useful if your subscribe is
 /// running on another task and do not wish to make the state sharable.
-pub struct ChannelledSubscriber<T: IsEvent + Send + Sync> {
+pub struct ChannelledSubscriber<T: Event + Send + Sync> {
     name: String,
     sender: proton_async::sync::mpsc::Sender<Vec<T>>,
     receiver: proton_async::sync::mpsc::Receiver<Result<(), SubscriberError>>,
 }
 
 #[async_trait]
-impl<T: IsEvent + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
+impl<T: Event + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
     fn name(&self) -> &str {
         &self.name
     }
@@ -61,7 +61,7 @@ impl<T: IsEvent + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
     }
 }
 
-impl<T: IsEvent> ChannelledSubscriber<T> {
+impl<T: Event> ChannelledSubscriber<T> {
     pub fn new(name: String) -> (ChannelledSubscriber<T>, ChanneledSubscriberHandler<T>) {
         let (subscriber_sender, subscriber_receiver) = proton_async::sync::mpsc::bounded(1);
         let (handler_sender, handler_receiver) = proton_async::sync::mpsc::bounded(1);
@@ -82,7 +82,7 @@ impl<T: IsEvent> ChannelledSubscriber<T> {
 
 /// ChanneledSubscriberHandler waits on events to be send over a channel. These can then be consumed by the
 /// `handle_events` function.
-pub struct ChanneledSubscriberHandler<T: IsEvent> {
+pub struct ChanneledSubscriberHandler<T: Event> {
     receiver: proton_async::sync::mpsc::Receiver<Vec<T>>,
     sender: proton_async::sync::mpsc::Sender<Result<(), SubscriberError>>,
 }
@@ -98,7 +98,7 @@ pub enum ChanneledSubscriberError {
     #[error("Failed to send result on channel")]
     Send(Result<(), SubscriberError>),
 }
-impl<T: IsEvent> ChanneledSubscriberHandler<T> {
+impl<T: Event> ChanneledSubscriberHandler<T> {
     /// Handle the events from the event loop.
     pub async fn handle_events_async<Error: Into<SubscriberError>>(
         &mut self,
@@ -178,7 +178,7 @@ proton_api_core::declare_event!(TestEvent,{foo:u32});
 #[test]
 fn test_channeled_subscriber_handle_and_reply() {
     use proton_api_core::domain::EventId;
-    let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
+    let rt = proton_async::runtime::MultiThreaded::new(2).expect("failed to create runtime");
     rt.block_on(async {
         let (s, mut h) = ChannelledSubscriber::new("test".into());
 
@@ -199,7 +199,7 @@ fn test_channeled_subscriber_handle_and_reply() {
 
 #[test]
 fn test_channeled_subscriber_failed_to_send() {
-    let rt = proton_async::runtime::LocalRuntime::new().expect("failed to init runtime");
+    let rt = proton_async::runtime::InPlace::new().expect("failed to init runtime");
     rt.block_on(async {
         let s = {
             let (s, _) = ChannelledSubscriber::new("test".into());
@@ -216,7 +216,7 @@ fn test_channeled_subscriber_failed_to_send() {
 
 #[test]
 fn test_channeled_subscriber_failed_to_receive() {
-    let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
+    let rt = proton_async::runtime::MultiThreaded::new(2).expect("failed to create runtime");
     rt.block_on(async {
         let (s, h) = ChannelledSubscriber::new("test".into());
 
@@ -239,7 +239,7 @@ fn test_channeled_subscriber_failed_to_receive() {
 
 #[test]
 fn test_channeled_subscriber_handler_failed_to_receive() {
-    let rt = proton_async::runtime::LocalRuntime::new().expect("failed to init runtime");
+    let rt = proton_async::runtime::InPlace::new().expect("failed to init runtime");
     rt.block_on(async {
         let mut h = {
             let (_, h) = ChannelledSubscriber::new("test".into());
@@ -257,7 +257,7 @@ fn test_channeled_subscriber_handler_failed_to_receive() {
 
 #[test]
 fn test_channeled_subscriber_handler_failed_to_send() {
-    let rt = proton_async::runtime::MTRuntime::new(2).expect("failed to create runtime");
+    let rt = proton_async::runtime::MultiThreaded::new(2).expect("failed to create runtime");
 
     rt.block_on(async {
         let (s, mut h) = ChannelledSubscriber::new("test".into());
@@ -283,10 +283,10 @@ const DUMMY_EVENT_ID: &str = "EVT_FOO";
 
 #[cfg(test)]
 fn new_dummy_events() -> Vec<TestEvent> {
-    use proton_api_core::domain::{EventId, MoreEvents};
+    use proton_api_core::domain::{EventId, More};
     vec![TestEvent {
         event_id: EventId::from(DUMMY_EVENT_ID),
-        more: MoreEvents::No,
+        more: More::No,
         foo: 0,
     }]
 }

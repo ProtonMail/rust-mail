@@ -1,8 +1,7 @@
 use crate::db::{CoreSqliteConnectionImpl, DBResult};
 use proton_api_core::domain::{
-    User, UserFlags, UserId, UserProductUsedSpace, UserSettings, UserSettings2FA,
-    UserSettingsEmail, UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword,
-    UserSettingsPhone, UserSettingsReferral,
+    Email, Flags, HighSecurity, Password, Phone, ProductUsedSpace, Referral, SettingsFlags, TwoFA,
+    User, UserId, UserSettings,
 };
 use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
@@ -92,7 +91,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
     pub fn update_user_product_used_space(
         &mut self,
         user_id: &UserId,
-        used_space: &UserProductUsedSpace,
+        used_space: &ProductUsedSpace,
     ) -> DBResult<()> {
         self.0.execute(
             "UPDATE users SET pus_calendar=?, pus_contact=?, pus_drive=?, \
@@ -204,7 +203,7 @@ impl UserSelector {
             services: r.get(16)?,
             delinquent: r.get(17)?,
             flags: user_flags_from_u32(r.get(18)?),
-            product_used_space: UserProductUsedSpace {
+            product_used_space: ProductUsedSpace {
                 calendar: r.get(19)?,
                 contact: r.get(20)?,
                 drive: r.get(21)?,
@@ -253,14 +252,11 @@ impl UserSettingsSelector {
         //TODO: compile time index generation?
         let mut alloc = RowIndexAllocator::new();
 
-        fn referral_from_row(
-            r: &Row,
-            alloc: &mut RowIndexAllocator,
-        ) -> DBResult<Option<UserSettingsReferral>> {
+        fn referral_from_row(r: &Row, alloc: &mut RowIndexAllocator) -> DBResult<Option<Referral>> {
             let link: Option<String> = r.get(alloc.fetch_and_add())?;
             let eligible: Option<bool> = r.get(alloc.fetch_and_add())?;
             Ok(if let (Some(link), Some(eligible)) = (link, eligible) {
-                Some(UserSettingsReferral { link, eligible })
+                Some(Referral { link, eligible })
             } else {
                 None
             })
@@ -269,23 +265,23 @@ impl UserSettingsSelector {
         // advance once to skip ove user_id;
         alloc.fetch_and_add();
         Ok(UserSettings {
-            email: UserSettingsEmail {
+            email: Email {
                 value: r.get(alloc.fetch_and_add())?,
                 status: r.get(alloc.fetch_and_add())?,
                 notify: r.get(alloc.fetch_and_add())?,
                 reset: r.get(alloc.fetch_and_add())?,
             },
-            password: UserSettingsPassword {
+            password: Password {
                 mode: r.get(alloc.fetch_and_add())?,
                 expiration_time: r.get(alloc.fetch_and_add())?,
             },
-            phone: UserSettingsPhone {
+            phone: Phone {
                 value: r.get(alloc.fetch_and_add())?,
                 status: r.get(alloc.fetch_and_add())?,
                 notify: r.get(alloc.fetch_and_add())?,
                 reset: r.get(alloc.fetch_and_add())?,
             },
-            two_factor_auth: UserSettings2FA {
+            two_factor_auth: TwoFA {
                 enabled: r.get(alloc.fetch_and_add())?,
                 allowed: r.get(alloc.fetch_and_add())?,
                 expiration_time: r.get(alloc.fetch_and_add())?,
@@ -301,7 +297,7 @@ impl UserSettingsSelector {
             time_format: r.get(alloc.fetch_and_add())?,
             welcome: r.get(alloc.fetch_and_add())?,
             early_access: r.get(alloc.fetch_and_add())?,
-            flags: UserSettingsFlags {
+            flags: SettingsFlags {
                 welcomed: r.get(alloc.fetch_and_add())?,
                 in_app_promos_hidden: r.get(alloc.fetch_and_add())?,
             },
@@ -310,7 +306,7 @@ impl UserSettingsSelector {
             telemetry: r.get(alloc.fetch_and_add())?,
             crash_reports: r.get(alloc.fetch_and_add())?,
             hide_side_panel: r.get(alloc.fetch_and_add())?,
-            high_security: UserSettingsHighSecurity {
+            high_security: HighSecurity {
                 eligible: r.get(alloc.fetch_and_add())?,
                 value: r.get(alloc.fetch_and_add())?,
             },
@@ -319,7 +315,7 @@ impl UserSettingsSelector {
     }
 }
 
-fn user_flags_to_u32(flags: &UserFlags) -> u32 {
+fn user_flags_to_u32(flags: &Flags) -> u32 {
     let mut v = 0_u32;
     v |= flags.protected as u32;
     v |= (flags.onboard_checklist_storage_granted as u32) << 1;
@@ -332,8 +328,8 @@ fn user_flags_to_u32(flags: &UserFlags) -> u32 {
     v
 }
 
-fn user_flags_from_u32(v: u32) -> UserFlags {
-    UserFlags {
+fn user_flags_from_u32(v: u32) -> Flags {
+    Flags {
         protected: (v & 0x01) != 0,
         onboard_checklist_storage_granted: ((v >> 1) & 0x01) != 0,
         has_temporary_password: ((v >> 2) & 0x01) != 0,

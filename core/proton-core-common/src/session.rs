@@ -4,12 +4,12 @@ use crate::db::{
     EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
 };
 use crate::os::{KeyChain, KeyChainError};
-use proton_api_core::auth::{AccessToken, Auth, AuthScope, RefreshToken};
+use proton_api_core::auth::{AccessToken, Auth, RefreshToken, Scope};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
-use proton_api_core::http::HttpRequestError;
+use proton_api_core::http::RequestError;
 use std::error::Error;
 use std::sync::Arc;
 
@@ -21,7 +21,7 @@ pub trait CoreSessionCallback: Send + Sync {
     fn on_session_deleted(&self);
 
     /// Triggered when the refresh operation fails.
-    fn on_refresh_failed(&self, e: &HttpRequestError);
+    fn on_refresh_failed(&self, e: &RequestError);
 
     /// Triggers if any error occurs while persisting the session data.
     fn on_error(&self, err: &CoreSessionError);
@@ -97,7 +97,7 @@ impl CoreSession {
     }
 }
 
-impl proton_api_core::auth::AuthStore for CoreSession {
+impl proton_api_core::auth::Store for CoreSession {
     fn get_auth(&self) -> Option<&Auth> {
         self.auth.as_ref()
     }
@@ -143,7 +143,7 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         Ok(())
     }
 
-    fn refresh_auth_failed(&self, e: &HttpRequestError) {
+    fn refresh_auth_failed(&self, e: &RequestError) {
         if let Some(cb) = &self.cb {
             cb.on_refresh_failed(e);
         }
@@ -155,7 +155,7 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         uid: Uid,
         access_token: AccessToken,
         refresh_token: RefreshToken,
-        scope: AuthScope,
+        scope: Scope,
     ) -> Result<(), Box<dyn Error>> {
         let user_id = {
             let Some(auth) = &self.auth else {
@@ -213,7 +213,7 @@ impl proton_api_core::auth::AuthStore for CoreSession {
         Ok(())
     }
 
-    fn set_scopes(&mut self, _: AuthScope) -> Result<Option<&Auth>, Box<dyn Error>> {
+    fn set_scopes(&mut self, _: Scope) -> Result<Option<&Auth>, Box<dyn Error>> {
         todo!()
     }
 

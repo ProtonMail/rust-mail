@@ -14,10 +14,10 @@ use proton_api_core::exports::proton_sqlite3::SqliteMode;
 use proton_api_core::exports::tracing::Level;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
-use proton_api_core::http::{Client, HttpRequestError};
-use proton_api_core::login::LoginFlow;
+use proton_api_core::http::{Client, RequestError};
+use proton_api_core::login::Flow;
 use proton_api_core::Session;
-use proton_event_loop::proton_async::runtime::MTRuntime;
+use proton_event_loop::proton_async::runtime::MultiThreaded;
 use proton_sqlite3::SqliteConnectionPool;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,7 +38,7 @@ pub enum CoreContextError {
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
     #[error("HTTP Error: {0}")]
-    Http(#[from] HttpRequestError),
+    Http(#[from] RequestError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -58,7 +58,7 @@ pub struct CoreContext {
 }
 
 struct CoreContextInner {
-    runtime: MTRuntime,
+    runtime: MultiThreaded,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
     session_db: SqliteConnectionPool,
@@ -73,7 +73,7 @@ impl CoreContext {
     /// an `user_db_path` for user databases, a`key_chain` implementation and a list of `initializers`
     /// for the user database.
     pub fn new(
-        async_runtime: MTRuntime,
+        async_runtime: MultiThreaded,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -95,7 +95,7 @@ impl CoreContext {
         )
     }
     fn _new(
-        async_runtime: MTRuntime,
+        async_runtime: MultiThreaded,
         session_db_path: PathBuf,
         user_db_path: PathBuf,
         key_chain: Arc<dyn KeyChain>,
@@ -131,7 +131,7 @@ impl CoreContext {
         })
     }
 
-    pub fn async_runtime(&self) -> &MTRuntime {
+    pub fn async_runtime(&self) -> &MultiThreaded {
         &self.inner.runtime
     }
 
@@ -146,7 +146,7 @@ impl CoreContext {
     pub fn new_login_flow(
         &self,
         cb: Option<Box<dyn CoreSessionCallback>>,
-    ) -> CoreContextResult<LoginFlow> {
+    ) -> CoreContextResult<Flow> {
         // Check if we have an encryption key
         let _ = self.get_encryption_key()?;
         let core_session = new_arc_auth_store(CoreSession::new(
@@ -157,7 +157,7 @@ impl CoreContext {
         ));
 
         let session = Session::new(self.inner.client.clone(), core_session);
-        Ok(LoginFlow::new(session))
+        Ok(Flow::new(session))
     }
 
     /// Create a user context from a login flow. This will fail if the flow is not in the
@@ -165,7 +165,7 @@ impl CoreContext {
     #[tracing::instrument(level=Level::DEBUG, skip(self, login_flow))]
     pub fn user_context_from_login_flow(
         &self,
-        login_flow: &LoginFlow,
+        login_flow: &Flow,
     ) -> CoreContextResult<UserContext> {
         if !login_flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
