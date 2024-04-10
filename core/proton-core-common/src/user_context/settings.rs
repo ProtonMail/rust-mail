@@ -1,5 +1,5 @@
+use crate::db::CoreSqliteConnection;
 use crate::{CoreContextResult, UserContext};
-use proton_core_db::CoreSqliteConnection;
 
 impl UserContext {
     pub async fn sync_user_and_settings(&self) -> CoreContextResult<()> {

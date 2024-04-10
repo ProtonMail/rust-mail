@@ -1,8 +1,8 @@
+use crate::db::{CoreSqliteConnection, DBResult};
 use proton_api_core::domain::{IsEvent, User, UserId, UserProductUsedSpace, UserSettings};
 use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
-use proton_core_db::{CoreSqliteConnection, DBResult};
 use proton_event_loop::proton_async::async_trait::async_trait;
 use proton_event_loop::SubscriberError;
 

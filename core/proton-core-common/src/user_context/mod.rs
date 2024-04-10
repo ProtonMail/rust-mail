@@ -1,9 +1,9 @@
-use proton_api_core::domain::UserId;
-use proton_api_core::Session;
-use proton_core_db::proton_sqlite3::{
+use crate::db::proton_sqlite3::{
     InProcessTrackerService, SqliteConnection, SqliteConnectionPool, TrackingConnection,
 };
-use proton_core_db::{CoreSqliteConnection, DBMigrationError, DBResult};
+use crate::db::{CoreSqliteConnection, DBMigrationError, DBResult};
+use proton_api_core::domain::UserId;
+use proton_api_core::Session;
 use std::fmt::{Debug, Formatter};
 
 mod settings;

@@ -1,3 +1,8 @@
+use crate::db::proton_sqlite3::SqliteConnectionPool;
+use crate::db::{
+    DBResult, DecryptedUserSession, EncryptedAccessToken, EncryptedRefreshToken,
+    EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
+};
 use crate::os::{KeyChain, KeyChainError};
 use proton_api_core::auth::{AccessToken, Auth, AuthScope, RefreshToken};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
@@ -5,11 +10,6 @@ use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_api_core::http::HttpRequestError;
-use proton_core_db::proton_sqlite3::SqliteConnectionPool;
-use proton_core_db::{
-    DBResult, DecryptedUserSession, EncryptedAccessToken, EncryptedRefreshToken,
-    EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
-};
 use std::error::Error;
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ pub trait CoreSessionCallback: Send + Sync {
 #[derive(Debug, thiserror::Error)]
 pub enum CoreSessionError {
     #[error("Database Error: {0}")]
-    DB(#[from] proton_core_db::DBError),
+    DB(#[from] crate::db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]

@@ -1,6 +1,6 @@
 //! Core related database for user sessions and user info.
 //!
-//! The crate provide 2 distinct connection types which can be used interchangeably. It is up
+//! The module provide 2 distinct connection types which can be used interchangeably. It is up
 //! to the user of this crate to decide whether they wish to store the user info in the same
 //! or separate databases.
 use proton_sqlite3::{new_connection_wrapper, new_tracked_connection_wrapper, MigratorError};
@@ -21,6 +21,3 @@ pub type DBMigrationError = MigratorError;
 
 new_tracked_connection_wrapper!(CoreSqliteConnection);
 new_connection_wrapper!(SessionSqliteConnection);
-
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();

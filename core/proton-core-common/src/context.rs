@@ -1,4 +1,8 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
+use crate::db::{
+    migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey,
+    SessionSqliteConnection,
+};
 use crate::os::{KeyChain, KeyChainError};
 use crate::session::CoreSession;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
@@ -13,12 +17,8 @@ use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_api_core::http::{Client, HttpRequestError};
 use proton_api_core::login::LoginFlow;
 use proton_api_core::Session;
-use proton_core_db::proton_sqlite3::SqliteConnectionPool;
-use proton_core_db::{
-    migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey,
-    SessionSqliteConnection,
-};
 use proton_event_loop::proton_async::runtime::MTRuntime;
+use proton_sqlite3::SqliteConnectionPool;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -26,7 +26,7 @@ use std::sync::Arc;
 #[derive(Debug, thiserror::Error)]
 pub enum CoreContextError {
     #[error("Database Error: {0}")]
-    DB(#[from] proton_core_db::DBError),
+    DB(#[from] crate::db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
@@ -34,7 +34,7 @@ pub enum CoreContextError {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Database Migration Error: {0}")]
-    DBMigration(#[from] proton_core_db::DBMigrationError),
+    DBMigration(#[from] crate::db::DBMigrationError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
     #[error("HTTP Error: {0}")]

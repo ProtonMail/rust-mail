@@ -1,4 +1,4 @@
-use crate::DBResult;
+use crate::db::DBResult;
 use proton_api_core::domain::{
     TFAStatus, User, UserFlags, UserId, UserLogAuth, UserProductUsedSpace, UserSettings,
     UserSettings2FA, UserSettingsDateFormat, UserSettingsDensity, UserSettingsEmail,
@@ -8,8 +8,8 @@ use proton_api_core::domain::{
 use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
 
 #[cfg(test)]
-fn new_core_test_connection() -> crate::CoreSqliteConnection {
-    use crate::migrations::migrate_core_db;
+fn new_core_test_connection() -> crate::db::CoreSqliteConnection {
+    use crate::db::migrations::migrate_core_db;
     use proton_sqlite3::{InProcessTrackerService, SqliteConnectionPool, SqliteMode};
     let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
     {

@@ -4,7 +4,8 @@ members = [ "proton-action-queue",
     "proton-api-core",
     "proton-async",
     "proton-sqlite3",
-    "proton-event-loop", "proton-core-db", "proton-core-common",
+    "proton-event-loop",
+    "proton-core-common",
 ]
 
 [workspace.dependencies]

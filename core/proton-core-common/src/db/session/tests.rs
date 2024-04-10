@@ -1,4 +1,4 @@
-use crate::{DBResult, SessionEncryptionKey};
+use crate::db::{DBResult, SessionEncryptionKey};
 use proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
 
 #[test]
@@ -10,8 +10,8 @@ fn test_encryption() {
 }
 
 #[cfg(test)]
-fn new_test_connection() -> crate::SessionSqliteConnection {
-    use crate::migrations::migrate_session_db;
+fn new_test_connection() -> crate::db::SessionSqliteConnection {
+    use crate::db::migrations::migrate_session_db;
     use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
     let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
     let mut conn = pool.acquire().expect("failed to acquire connection");
@@ -21,7 +21,7 @@ fn new_test_connection() -> crate::SessionSqliteConnection {
 
 #[test]
 fn test_session_store_load() {
-    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),
@@ -68,7 +68,7 @@ fn test_session_store_load() {
 
 #[test]
 fn test_session_update() {
-    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),
@@ -137,7 +137,7 @@ fn test_session_update() {
 
 #[test]
 fn test_session_delete_user_id() {
-    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),
@@ -169,7 +169,7 @@ fn test_session_delete_user_id() {
 
 #[test]
 fn test_session_delete_session_id() {
-    use crate::session::types::{DecryptedUserSession, SessionEncryptionKey};
+    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
         session_id: Uid::from("session_id"),

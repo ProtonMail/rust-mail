@@ -1380,19 +1380,10 @@ dependencies = [
 name = "proton-core-common"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
  "base64 0.22.0",
  "proton-api-core",
- "proton-core-db",
  "proton-event-loop",
- "uniffi",
-]
-
-[[package]]
-name = "proton-core-db"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "proton-api-core",
  "proton-sqlite3",
  "uniffi",
  "zeroize",

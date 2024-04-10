@@ -1,5 +1,5 @@
-use crate::session::types::EncryptedUserSession;
-use crate::{
+use crate::db::session::types::EncryptedUserSession;
+use crate::db::{
     DBResult, EncryptedAccessToken, EncryptedData, EncryptedRefreshToken,
     SessionSqliteConnectionImpl,
 };

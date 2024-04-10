@@ -1,4 +1,4 @@
-use crate::{CoreSqliteConnectionImpl, DBResult};
+use crate::db::{CoreSqliteConnectionImpl, DBResult};
 use proton_api_core::domain::{
     User, UserFlags, UserId, UserProductUsedSpace, UserSettings, UserSettings2FA,
     UserSettingsEmail, UserSettingsFlags, UserSettingsHighSecurity, UserSettingsPassword,
