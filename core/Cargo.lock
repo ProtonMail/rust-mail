@@ -656,7 +656,8 @@ checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 [[package]]
 name = "gopenpgp-sys"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#2964671b6cf76361957125d154a40232869aad4d"
+source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+checksum = "97de1743be6b9a1f12db3d46e25b6c169b1a1acd172c55237ec3f478a12b0139"
 dependencies = [
  "base64 0.21.7",
  "bindgen",
@@ -1400,10 +1401,12 @@ dependencies = [
 [[package]]
 name = "proton-crypto"
 version = "0.2.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#2964671b6cf76361957125d154a40232869aad4d"
+source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+checksum = "0231b4a3a166a2a22b1082e74cf1db24540c4dd62af089cf06fe4eeff5c6e57f"
 dependencies = [
  "gopenpgp-sys",
  "hex",
+ "parking_lot",
  "serde",
  "thiserror",
 ]
@@ -1411,7 +1414,8 @@ dependencies = [
 [[package]]
 name = "proton-crypto-account"
 version = "0.1.0"
-source = "git+https://gitlab.protontech.ch/rust/proton-crypto-rs.git#2964671b6cf76361957125d154a40232869aad4d"
+source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+checksum = "c4fe10a2d75dfc1cc3b40511b04d11d0efab621c6dde99ee8295d085c7bfb1a8"
 dependencies = [
  "base64 0.21.7",
  "futures",

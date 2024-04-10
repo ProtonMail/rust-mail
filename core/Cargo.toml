@@ -8,7 +8,7 @@ members = [ "proton-action-queue",
 ]
 
 [workspace.dependencies]
-proton-crypto-account = {git="https://gitlab.protontech.ch/rust/proton-crypto-rs.git", default-features = false}
+proton-crypto-account = {version = "0.1.0", registry = "proton_internal"}
 uniffi = {version = "0.27"}
 thiserror = "1"
 serde = {version ="1", features=["derive"]}
