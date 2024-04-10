@@ -2,8 +2,8 @@ use crate::mail::mailbox::{FFIObservableConversationsQueryBuilder, DEFAULT_CONVE
 use crate::mail::{
     Mailbox, MailboxConversationLiveQuery, MailboxError, MailboxLiveQueryUpdatedCallback,
 };
+use proton_mail_common::db::{LocalConversationId, LocalLabelId};
 use proton_mail_common::exports::tracing::error;
-use proton_mail_common::proton_mail_db::{LocalConversationId, LocalLabelId};
 use std::sync::Arc;
 
 #[uniffi::export]

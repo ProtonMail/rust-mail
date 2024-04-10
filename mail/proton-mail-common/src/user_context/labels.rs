@@ -1,8 +1,8 @@
+use crate::db::{DBResult, LabelsByTypeQueryWithConversationCount, LocalLabel, LocalLabelId};
 use crate::{MailContextResult, MailUserContext, MailboxObservableQueryBuilder};
 use proton_api_mail::domain::{LabelId, LabelType, ALL_LABEL_TYPES};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
-use proton_mail_db::{DBResult, LabelsByTypeQueryWithConversationCount, LocalLabel, LocalLabelId};
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]

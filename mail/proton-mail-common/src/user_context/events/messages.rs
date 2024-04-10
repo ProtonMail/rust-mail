@@ -1,7 +1,7 @@
+use crate::db::{DBResult, MailSqliteConnectionMut};
 use proton_api_mail::domain::MessageEvent;
 use proton_api_mail::proton_api_core::domain::EventAction;
 use proton_api_mail::proton_api_core::exports::tracing::warn;
-use proton_mail_db::{DBResult, MailSqliteConnectionMut};
 
 pub fn handle_message_events(
     tx: &mut MailSqliteConnectionMut,

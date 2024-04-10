@@ -1,8 +1,8 @@
+use crate::db::{DBResult, LocalConversation, LocalLabelId};
 use crate::{MailContextResult, MailUserContext};
 use proton_api_mail::domain::{ConversationFilterBuilder, LabelId};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
-use proton_mail_db::{DBResult, LocalConversation, LocalLabelId};
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]

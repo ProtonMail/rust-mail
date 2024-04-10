@@ -1,3 +1,4 @@
+use crate::db::DBResult;
 use crate::user_context::events::addresses::handle_address_event;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
@@ -8,7 +9,6 @@ use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, error};
 use proton_async::async_trait::async_trait;
 use proton_event_loop::{Subscriber, SubscriberError};
-use proton_mail_db::DBResult;
 
 pub struct MailEventSubscriber(WeakMailUserContext);
 

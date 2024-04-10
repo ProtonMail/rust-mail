@@ -8,14 +8,15 @@ edition = "2021"
 [dependencies]
 proton-core-common = {workspace=true}
 proton-async= {workspace=true}
-proton-mail-db = {path ="../proton-mail-db"}
-proton-api-mail = {path ="../proton-api-mail"}
+proton-api-mail = {path ="../proton-api-mail", features = ["sql"]}
 proton-event-loop = {workspace=true}
 proton-action-queue = {workspace=true}
 uniffi = {optional = true, workspace=true}
-uuid = { version= "1" , features = ["v4"] }
+proton-sqlite3 = {workspace=true}
+uuid = {version = "1.7", features = ["v4"]}
 
 [dev-dependencies]
+lazy_static = {workspace=true}
 wiremock = {workspace=true}
 tempdir = "0.3.1"
 # anotate your tests with traced_test attribute to see log outputs.
@@ -25,4 +26,4 @@ tracing-test = {version = "0.2.4" , features = ["no-env-filter"]}
 workspace = true
 
 [features]
-uniffi=["dep:uniffi", "proton-api-mail/uniffi", "proton-event-loop/uniffi", "proton-core-common/uniffi", "proton-mail-db/uniffi"]
+uniffi=["dep:uniffi", "proton-api-mail/uniffi", "proton-event-loop/uniffi", "proton-core-common/uniffi"]
