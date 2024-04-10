@@ -1630,29 +1630,18 @@ dependencies = [
 name = "proton-mail-common"
 version = "0.2.1"
 dependencies = [
+ "lazy_static",
  "proton-action-queue",
  "proton-api-mail",
  "proton-async",
  "proton-core-common",
  "proton-event-loop",
- "proton-mail-db",
+ "proton-sqlite3",
  "tempdir",
  "tracing-test",
  "uniffi",
  "uuid",
  "wiremock",
-]
-
-[[package]]
-name = "proton-mail-db"
-version = "0.3.2"
-dependencies = [
- "lazy_static",
- "proton-api-mail",
- "proton-sqlite3",
- "tracing-subscriber",
- "uniffi",
- "uuid",
 ]
 
 [[package]]

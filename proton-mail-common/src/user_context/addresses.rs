@@ -1,6 +1,6 @@
+use crate::db::DBResult;
 use crate::{MailContextResult, MailUserContext};
 use proton_api_mail::proton_api_core::exports::tracing::{self, debug, Level};
-use proton_mail_db::DBResult;
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]

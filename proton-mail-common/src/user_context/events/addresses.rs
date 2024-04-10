@@ -1,5 +1,5 @@
+use crate::db::{DBResult, MailSqliteConnectionMut};
 use proton_api_mail::domain::Address;
-use proton_mail_db::{DBResult, MailSqliteConnectionMut};
 
 pub fn handle_address_event(
     tx: &mut MailSqliteConnectionMut,
