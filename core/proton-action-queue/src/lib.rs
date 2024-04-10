@@ -1,3 +1,4 @@
+#![allow(clippy::pedantic)] // this crate will get refactored.
 //! This crate provides an implementation of queue where actions can be recorded which modify the
 //! local proton application. Queued action can then be executed, when appropriate by the
 //! application in the same or different process.

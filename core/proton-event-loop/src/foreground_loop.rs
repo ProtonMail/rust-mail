@@ -20,6 +20,7 @@ impl Default for EventLoop {
 
 const MAX_EVENTS_PER_POLL: usize = 50;
 impl EventLoop {
+    #[must_use]
     pub fn new() -> Self {
         Self {}
     }

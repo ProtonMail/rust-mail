@@ -1,11 +1,21 @@
+#![allow(clippy::module_name_repetitions)] // avoid namespace conflicts
 use proton_api_core::domain::EventId;
 use proton_api_core::exports::anyhow;
 use proton_async::async_trait::async_trait;
 
 #[cfg_attr(test, mockall::automock)]
 pub trait Store: Send + Sync {
+    /// Load the latest event id from the store.
+    ///
+    /// # Errors
+    /// Returns error if value failed to be loaded.
     fn load(&self) -> anyhow::Result<Option<EventId>>;
 
+    /// Store the latest event id into the store.
+    ///
+    /// # Errors
+    /// Returns error if value failed to be stored.
+    ///
     fn store(&self, id: &EventId) -> anyhow::Result<()>;
 }
 

@@ -39,6 +39,7 @@ impl<T: Event + 'static> Default for BackgroundEventLoop<T> {
 }
 
 impl<T: Event + 'static> BackgroundEventLoop<T> {
+    #[must_use]
     pub fn new() -> Self {
         let shared = Arc::new(SharedBackgroundEventLoopState {
             paused: AtomicBool::new(true),
@@ -52,10 +53,13 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
     /// Wait until the event loop has been cancelled. This does not imply the event loop has finished executing, but
     /// a cancel signal was received. The event loop will terminate shortly after that.
     pub async fn wait_on_cancelled(&self) {
-        self.inner.token.cancelled().await
+        self.inner.token.cancelled().await;
     }
 
     /// Start the background task which will poll the event loop.
+    ///
+    /// # Errors
+    /// Returns error if the background loop failed to initialize.
     pub async fn start(
         &self,
         interval: Duration,
@@ -79,13 +83,13 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
         };
 
         Ok(proton_async::runtime::spawn(async move {
-            loop_state.run(interval).await
+            loop_state.run(interval).await;
         }))
     }
 
     /// Cancel the execution of the event loop.
     pub fn cancel(&self) {
-        self.inner.token.cancel()
+        self.inner.token.cancel();
     }
 
     /// Pause the event loop. Will affect the next poll cycle.
@@ -100,6 +104,7 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
     }
 
     /// Check whether the event loop is paused.
+    #[must_use]
     pub fn is_paused(&self) -> bool {
         self.inner.paused.load(Ordering::Acquire)
     }
@@ -119,7 +124,7 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
 
 impl<T: Event> Drop for BackgroundEventLoop<T> {
     fn drop(&mut self) {
-        self.cancel()
+        self.cancel();
     }
 }
 
@@ -148,6 +153,7 @@ struct BackgroundLoopState<T: Event> {
 
 #[doc(hidden)]
 impl<T: Event> BackgroundLoopState<T> {
+    #[allow(clippy::ignored_unit_patterns)] // we can not control this macro impl
     async fn run(&mut self, poll_interval: Duration) {
         debug!("Starting loop");
         loop {
@@ -158,7 +164,7 @@ impl<T: Event> BackgroundLoopState<T> {
                 }
 
                 _= proton_async::time::sleep(poll_interval).fuse() => {
-                    self.tick().await
+                    self.tick().await;
                 }
             }
         }

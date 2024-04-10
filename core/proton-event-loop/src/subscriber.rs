@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)] // avoid namespace conflicts
 use proton_api_core::domain::Event;
 use proton_api_core::exports::anyhow;
 #[cfg(test)]
@@ -62,6 +63,7 @@ impl<T: Event + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
 }
 
 impl<T: Event> ChannelledSubscriber<T> {
+    #[must_use]
     pub fn new(name: String) -> (ChannelledSubscriber<T>, ChanneledSubscriberHandler<T>) {
         let (subscriber_sender, subscriber_receiver) = proton_async::sync::mpsc::bounded(1);
         let (handler_sender, handler_receiver) = proton_async::sync::mpsc::bounded(1);
@@ -80,7 +82,7 @@ impl<T: Event> ChannelledSubscriber<T> {
     }
 }
 
-/// ChanneledSubscriberHandler waits on events to be send over a channel. These can then be consumed by the
+/// `ChanneledSubscriberHandler` waits on events to be send over a channel. These can then be consumed by the
 /// `handle_events` function.
 pub struct ChanneledSubscriberHandler<T: Event> {
     receiver: proton_async::sync::mpsc::Receiver<Vec<T>>,
@@ -100,6 +102,10 @@ pub enum ChanneledSubscriberError {
 }
 impl<T: Event> ChanneledSubscriberHandler<T> {
     /// Handle the events from the event loop.
+    ///
+    /// # Errors
+    /// Returns error if the subscriber failed to handle the events or the communication over
+    /// the channel failed.
     pub async fn handle_events_async<Error: Into<SubscriberError>>(
         &mut self,
         mut f: impl FnMut(&[T]) -> Result<(), Error>,
@@ -110,10 +116,14 @@ impl<T: Event> ChanneledSubscriberHandler<T> {
 
         let r = (f)(&events);
 
-        self.reply_async(r.map_err(|e| e.into())).await
+        self.reply_async(r.map_err(Into::into)).await
     }
 
     /// Handle the events from the event loop.
+    ///
+    /// # Errors
+    /// Returns error if the subscriber failed to handle the events or the communication over
+    /// the channel failed.
     pub fn handle_events<Error: Into<SubscriberError>>(
         &mut self,
         mut f: impl FnMut(&[T]) -> Result<(), Error>,
@@ -124,7 +134,7 @@ impl<T: Event> ChanneledSubscriberHandler<T> {
 
         let r = (f)(&events);
 
-        self.reply(r.map_err(|e| e.into()))
+        self.reply(r.map_err(Into::into))
     }
 
     /// Receive events from event loop.
@@ -148,6 +158,9 @@ impl<T: Event> ChanneledSubscriberHandler<T> {
     }
 
     /// Report the result of handling `receive` to the event loop.
+    ///
+    /// # Errors
+    /// Returns error if the reply could not be sent over the channel.
     pub async fn reply_async(
         &self,
         reply: Result<(), SubscriberError>,
@@ -160,6 +173,9 @@ impl<T: Event> ChanneledSubscriberHandler<T> {
     }
 
     /// Report the result of handling `receive` to the event loop.
+    ///
+    /// # Errors
+    /// Returns error if the reply could not be sent over the channel.
     pub fn reply(
         &self,
         reply: Result<(), SubscriberError>,

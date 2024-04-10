@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)] // avoid namespace conflicts
 use proton_api_core::domain::{Event, EventId};
 use proton_api_core::Session;
 use proton_async::async_trait::async_trait;
@@ -15,6 +16,7 @@ pub struct ProtonProvider {
 }
 
 impl ProtonProvider {
+    #[must_use]
     pub fn new(session: Session) -> Self {
         Self { session }
     }
