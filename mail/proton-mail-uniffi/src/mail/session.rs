@@ -5,7 +5,7 @@ use crate::mail::{LoginFlow, MailUserSession};
 use pmc::exports::proton_event_loop::EventLoopError;
 use pmc::exports::{anyhow, thiserror, tracing};
 use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, HttpRequestError};
-use pmc::proton_core_common::proton_core_db::SessionEncryptionKey;
+use pmc::proton_core_common::db::SessionEncryptionKey;
 use pmc::proton_mail_db;
 use pmc::proton_mail_db::DBMigrationError;
 use proton_mail_common as pmc;

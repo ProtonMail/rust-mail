@@ -1,7 +1,7 @@
 use proton_mail_common::exports::thiserror;
 use proton_mail_common::proton_api_mail::proton_api_core::domain::{Uid, UserId};
 use proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError;
-use proton_mail_common::proton_core_common::proton_core_db::EncryptedUserSession;
+use proton_mail_common::proton_core_common::db::EncryptedUserSession;
 use proton_mail_common::proton_core_common::{CoreSessionCallback, CoreSessionError};
 use std::sync::Arc;
 
