@@ -2,7 +2,7 @@ use crate::mail::mailbox::MailboxLiveQueryUpdatedCallback;
 use crate::mail::{MailSessionError, MailUserSession};
 use proton_mail_common::db::{LabelsByTypeQueryWithConversationCount, LocalLabel};
 use proton_mail_common::exports::proton_sqlite3::{
-    InProcessTrackerService, ObservableQuery, SharedLiveQuery, SharedLiveQueryBuilder,
+    InProcessTrackerService, Observable, SharedLive, SharedLiveQueryBuilder,
 };
 use proton_mail_common::proton_api_mail::domain::LabelType;
 use proton_mail_common::MailboxObservableQueryBuilder;

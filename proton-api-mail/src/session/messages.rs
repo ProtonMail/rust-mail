@@ -7,14 +7,14 @@ use crate::requests::{
 use proton_api_core::http;
 
 impl MailSession {
-    pub async fn message(&self, id: &MessageId) -> Result<Message, http::HttpRequestError> {
+    pub async fn message(&self, id: &MessageId) -> Result<Message, http::RequestError> {
         self.session
             .execute_request(GetMessageRequest::new(id))
             .await
             .map(|v| v.message)
     }
 
-    pub async fn message_counts(&self) -> Result<Vec<MessageCount>, http::HttpRequestError> {
+    pub async fn message_counts(&self) -> Result<Vec<MessageCount>, http::RequestError> {
         self.session
             .execute_request(GetMessageCountsRequest {})
             .await
@@ -23,7 +23,7 @@ impl MailSession {
     pub async fn message_metadata(
         &self,
         filter: MessageMetadataFilter,
-    ) -> Result<MessageMetadataResponse, http::HttpRequestError> {
+    ) -> Result<MessageMetadataResponse, http::RequestError> {
         self.session
             .execute_request(GetMessageMetadataRequest::new(filter))
             .await
@@ -33,7 +33,7 @@ impl MailSession {
         &self,
         label_id: Option<&LabelId>,
         ids: &[MessageId],
-    ) -> Result<Vec<DeleteMessagesResponseObject>, http::HttpRequestError> {
+    ) -> Result<Vec<DeleteMessagesResponseObject>, http::RequestError> {
         self.session
             .execute_request(DeleteMessagesRequest::new(label_id, ids))
             .await

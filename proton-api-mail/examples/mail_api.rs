@@ -1,7 +1,7 @@
 use proton_api_core::auth::{new_arc_auth_store, InMemoryStore};
 use proton_api_core::exports::tracing::level_filters::LevelFilter;
 use proton_api_core::http::APIEnvConfig;
-use proton_api_core::login::LoginFlow;
+use proton_api_core::login::Flow;
 use proton_api_core::{http, Session};
 use proton_api_mail::MailSession;
 use std::io::{stdin, stdout, BufRead, Write};
@@ -10,7 +10,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
 fn main() {
-    let runtime = proton_async::runtime::LocalRuntime::new().expect("failed to create runtime");
+    let runtime = proton_async::runtime::InPlace::new().expect("failed to create runtime");
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(true)
         .with_line_number(true)
@@ -26,7 +26,7 @@ fn main() {
     let user_password = std::env::var("USER_PASSWORD").unwrap();
     let api_env_config = APIEnvConfig::default();
 
-    let client = http::ClientBuilder::new()
+    let client = http::Builder::new()
         .api_env_config(api_env_config)
         .debug()
         .build()
@@ -35,7 +35,7 @@ fn main() {
     let auth_store = new_arc_auth_store(InMemoryStore::default());
     let session = Session::new(client, auth_store);
 
-    let mut login_flow = LoginFlow::new(session.clone());
+    let mut login_flow = Flow::new(session.clone());
     runtime.block_on(async {
         login_flow
             .login(&user_email, &user_password, None)

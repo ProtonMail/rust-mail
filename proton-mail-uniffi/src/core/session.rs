@@ -1,6 +1,6 @@
 use proton_mail_common::exports::thiserror;
 use proton_mail_common::proton_api_mail::proton_api_core::domain::{Uid, UserId};
-use proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError;
+use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::proton_core_common::db::EncryptedUserSession;
 use proton_mail_common::proton_core_common::{CoreSessionCallback, CoreSessionError};
 use std::sync::Arc;
@@ -47,7 +47,7 @@ impl SessionError {
         }
     }
 
-    fn from_http_err(value: &HttpRequestError) -> Self {
+    fn from_http_err(value: &RequestError) -> Self {
         SessionError::Http(value.to_string())
     }
 }
@@ -69,7 +69,7 @@ impl CoreSessionCallback for FFISessionCallback {
         self.0.on_session_deleted()
     }
 
-    fn on_refresh_failed(&self, e: &HttpRequestError) {
+    fn on_refresh_failed(&self, e: &RequestError) {
         self.0.on_refresh_failed(SessionError::from_http_err(e))
     }
 

@@ -24,7 +24,8 @@ impl http::RequestDesc for GetLabelsRequest {
     type Response = JsonResponse<GetLabelsResponse>;
 
     fn build(&self) -> RequestData {
-        RequestData::new(http::Method::Get, "core/v4/labels").query("Type", self.label_type as u8)
+        RequestData::new(http::Method::Get, "core/v4/labels")
+            .query("Type", &(self.label_type as u8))
     }
 }
 

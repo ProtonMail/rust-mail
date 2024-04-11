@@ -6,7 +6,7 @@ use pmc::db;
 use pmc::db::DBMigrationError;
 use pmc::exports::proton_event_loop::EventLoopError;
 use pmc::exports::{anyhow, thiserror, tracing};
-use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, HttpRequestError};
+use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, RequestError};
 use pmc::proton_core_common::db::SessionEncryptionKey;
 use proton_mail_common as pmc;
 use proton_mail_common::exports::anyhow::anyhow;
@@ -42,7 +42,7 @@ pub enum MailSessionError {
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
     #[error("HTTP Error: {0}")]
-    Http(#[from] HttpRequestError),
+    Http(#[from] RequestError),
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
@@ -102,7 +102,7 @@ impl MailSession {
         }
 
         // Creating runtime.
-        let runtime = proton_async::runtime::MTRuntime::new(4).map_err(|e| {
+        let runtime = proton_async::runtime::MultiThreaded::new(4).map_err(|e| {
             MailSessionError::Other(anyhow::anyhow!("Failed to init async runtime: {e}"))
         })?;
 
@@ -112,16 +112,14 @@ impl MailSession {
             None => APIEnvConfig::default(),
         };
 
-        let mut client = http::ClientBuilder::new().api_env_config(api_env_config);
+        let mut client = http::Builder::new().api_env_config(api_env_config);
 
         if session_debug_enabled() {
             client = client.debug();
         }
 
         let client = client.build().map_err(|e| {
-            MailSessionError::Http(HttpRequestError::Other(anyhow!(
-                "Failed to create client: {e}"
-            )))
+            MailSessionError::Http(RequestError::Other(anyhow!("Failed to create client: {e}")))
         })?;
 
         tracing::debug!("Creating Context");

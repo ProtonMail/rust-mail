@@ -2,7 +2,7 @@ use crate::mail::MailUserSession;
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_event_loop::{EventLoopError as ELError, SubscriberError};
 use proton_mail_common::exports::{anyhow, thiserror};
-use proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError;
+use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -29,7 +29,7 @@ pub enum EventLoopError {
     #[error("Failed to write store: {0}")]
     StoreWrite(anyhow::Error),
     #[error("Failed to retrieve event: {0}")]
-    Provider(HttpRequestError),
+    Provider(RequestError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
     #[error("Other: {0}")]

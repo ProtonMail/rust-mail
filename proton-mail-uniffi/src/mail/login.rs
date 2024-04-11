@@ -4,8 +4,8 @@ use proton_mail_common::exports::thiserror;
 use proton_mail_common::proton_api_mail::proton_api_core::domain::{
     ExposeSecret, HumanVerification, SecretString, TwoFactorAuth,
 };
-use proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError;
-use proton_mail_common::proton_api_mail::proton_api_core::login::LoginFlow as CoreLoginFlow;
+use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
+use proton_mail_common::proton_api_mail::proton_api_core::login::Flow as CoreLoginFlow;
 use std::sync::Arc;
 use uniffi::deps::anyhow::anyhow;
 
@@ -35,7 +35,7 @@ pub struct LoginFlow {
 #[uniffi(flat_error)]
 pub enum LoginFlowError {
     #[error("{0}")]
-    Request(#[source] HttpRequestError),
+    Request(#[source] RequestError),
     #[error("Server SRP proof verification failed: {0}")]
     ServerProof(String),
     #[error("Account 2FA method ({0})is not supported")]
@@ -70,7 +70,7 @@ impl LoginFlow {
             guard.login(&email, password.expose_secret(), None).await
         });
         handle.await.map_err(|e| {
-            LoginFlowError::Request(HttpRequestError::Other(anyhow!(
+            LoginFlowError::Request(RequestError::Other(anyhow!(
                 "failed to join task handle {e}"
             )))
         })??;
@@ -85,7 +85,7 @@ impl LoginFlow {
             guard.submit_totp(&code).await
         });
         handle.await.map_err(|e| {
-            LoginFlowError::Request(HttpRequestError::Other(anyhow!(
+            LoginFlowError::Request(RequestError::Other(anyhow!(
                 "failed to join task handle {e}"
             )))
         })??;
@@ -116,13 +116,9 @@ impl LoginFlow {
     }
 }
 
-impl From<proton_mail_common::proton_api_mail::proton_api_core::login::LoginFlowError>
-    for LoginFlowError
-{
-    fn from(
-        value: proton_mail_common::proton_api_mail::proton_api_core::login::LoginFlowError,
-    ) -> Self {
-        use proton_mail_common::proton_api_mail::proton_api_core::login::LoginFlowError as LFE;
+impl From<proton_mail_common::proton_api_mail::proton_api_core::login::Error> for LoginFlowError {
+    fn from(value: proton_mail_common::proton_api_mail::proton_api_core::login::Error) -> Self {
+        use proton_mail_common::proton_api_mail::proton_api_core::login::Error as LFE;
         match value {
             LFE::Request(e) => LoginFlowError::Request(e),
             LFE::ServerProof(e) => LoginFlowError::ServerProof(e),

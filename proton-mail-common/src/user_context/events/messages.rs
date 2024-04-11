@@ -1,6 +1,6 @@
 use crate::db::{DBResult, MailSqliteConnectionMut};
 use proton_api_mail::domain::MessageEvent;
-use proton_api_mail::proton_api_core::domain::EventAction;
+use proton_api_mail::proton_api_core::domain::Action;
 use proton_api_mail::proton_api_core::exports::tracing::warn;
 
 pub fn handle_message_events(
@@ -9,17 +9,17 @@ pub fn handle_message_events(
 ) -> DBResult<()> {
     for message_event in message_events {
         match message_event.action {
-            EventAction::Delete => {
+            Action::Delete => {
                 tx.delete_remote_message(&message_event.id)?;
             }
-            EventAction::Create => {
+            Action::Create => {
                 if let Some(message) = &message_event.message {
                     tx.create_message_from_metadata(message)?;
                 } else {
                     warn!("Received create message without message");
                 }
             }
-            EventAction::Update | EventAction::UpdateFlags => {
+            Action::Update | Action::UpdateFlags => {
                 if let Some(message) = &message_event.message {
                     tx.update_message_from_metadata(message)?;
                 } else {

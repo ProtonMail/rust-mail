@@ -2,10 +2,10 @@ mod conversations;
 
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
-use proton_mail_common::db::proton_sqlite3::SharedLiveQuery;
+use proton_mail_common::db::proton_sqlite3::SharedLive;
 use proton_mail_common::db::{ConversationQuery, LocalLabelId};
 use proton_mail_common::exports::proton_sqlite3::{
-    InProcessTrackerService, LiveQueryUpdated, ObservableQuery, SharedLiveQueryBuilder,
+    InProcessTrackerService, LiveQueryUpdated, Observable, SharedLiveQueryBuilder,
 };
 use proton_mail_common::exports::thiserror;
 use proton_mail_common::exports::tracing::error;

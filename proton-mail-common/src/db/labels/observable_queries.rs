@@ -1,6 +1,6 @@
 use crate::db::{LocalLabel, LocalLabelWithCount, MailSqliteConnectionImpl};
 use proton_api_mail::domain::LabelType;
-use proton_sqlite3::{LiveQuery, ObservableQuery, SqliteConnection};
+use proton_sqlite3::{Live, Observable, SqliteConnection};
 
 #[derive(Clone)]
 pub struct LabelsByTypeQuery(LabelType);
@@ -11,7 +11,7 @@ impl LabelsByTypeQuery {
     }
 }
 
-impl ObservableQuery for LabelsByTypeQuery {
+impl Observable for LabelsByTypeQuery {
     type Output = Vec<LocalLabel>;
 
     fn debug_name(&self) -> &'static str {
@@ -31,7 +31,7 @@ impl ObservableQuery for LabelsByTypeQuery {
     }
 }
 
-pub type LabelsByTypeLiveQuery = LiveQuery<LabelsByTypeQuery>;
+pub type LabelsByTypeLiveQuery = Live<LabelsByTypeQuery>;
 
 #[derive(Clone)]
 pub struct LabelsByTypeQueryWithConversationCount(LabelType);
@@ -42,7 +42,7 @@ impl LabelsByTypeQueryWithConversationCount {
     }
 }
 
-impl ObservableQuery for LabelsByTypeQueryWithConversationCount {
+impl Observable for LabelsByTypeQueryWithConversationCount {
     type Output = Vec<LocalLabelWithCount>;
 
     fn debug_name(&self) -> &'static str {

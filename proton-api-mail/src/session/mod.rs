@@ -23,11 +23,11 @@ impl MailSession {
         &self.session
     }
 
-    pub async fn event(&self, id: &EventId) -> Result<MailEvent, http::HttpRequestError> {
+    pub async fn event(&self, id: &EventId) -> Result<MailEvent, http::RequestError> {
         self.session.get_event::<MailEvent>(id).await
     }
 
-    pub async fn mail_settings(&self) -> Result<MailSettings, http::HttpRequestError> {
+    pub async fn mail_settings(&self) -> Result<MailSettings, http::RequestError> {
         self.session
             .execute_request(GetMailSettingsRequest {})
             .await

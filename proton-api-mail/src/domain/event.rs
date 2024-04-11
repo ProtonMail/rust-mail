@@ -2,7 +2,7 @@ use crate::domain::{
     Address, Conversation, ConversationId, Label, LabelId, MailSettings, MessageId, MessageMetadata,
 };
 use crate::domain::{ConversationCount, MessageCount};
-use proton_api_core::domain::{EventAction, User, UserProductUsedSpace, UserSettings};
+use proton_api_core::domain::{Action, ProductUsedSpace, User, UserSettings};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::exports::serde_repr::Deserialize_repr;
 
@@ -21,7 +21,7 @@ proton_api_core::declare_event!(MailEvent, {
     used_space: Option<i64>,
     message_counts:Option<Vec<MessageCount>>,
     conversation_counts:Option<Vec<ConversationCount>>,
-    product_used_space:Option<UserProductUsedSpace>,
+    product_used_space:Option<ProductUsedSpace>,
     conversations: Option<Vec<ConversationEvent>>,
     user_settings: Option<UserSettings>,
     mail_settings: Option<MailSettings>
@@ -33,7 +33,7 @@ proton_api_core::declare_event!(MailEvent, {
 pub struct MessageEvent {
     #[serde(rename = "ID")]
     pub id: MessageId,
-    pub action: EventAction,
+    pub action: Action,
     pub message: Option<MessageMetadata>,
 }
 
@@ -43,7 +43,7 @@ pub struct MessageEvent {
 pub struct LabelEvent {
     #[serde(rename = "ID")]
     pub id: LabelId,
-    pub action: EventAction,
+    pub action: Action,
     pub label: Option<Label>,
 }
 
@@ -53,6 +53,6 @@ pub struct LabelEvent {
 pub struct ConversationEvent {
     #[serde(rename = "ID")]
     pub id: ConversationId,
-    pub action: EventAction,
+    pub action: Action,
     pub conversation: Option<Conversation>,
 }

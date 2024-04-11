@@ -13,12 +13,12 @@ macro_rules! new_live_query {
         /// latest result of the query.
         ///
         #[derive(uniffi::Object)]
-        pub struct $name(SharedLiveQuery<$query>);
+        pub struct $name(SharedLive<$query>);
 
         #[uniffi::export]
         impl $name {
             /// Get the latest value for this Query.
-            pub fn value(&self) -> <$query as ObservableQuery>::Output {
+            pub fn value(&self) -> <$query as Observable>::Output {
                 self.0.value().clone()
             }
 

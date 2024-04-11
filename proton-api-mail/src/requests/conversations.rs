@@ -34,8 +34,8 @@ impl http::RequestDesc for GetConversationsRequest {
 
     fn build(&self) -> RequestData {
         let mut data = RequestData::new(Method::Get, "mail/v4/conversations")
-            .query("Page", self.filter.page)
-            .query("PageSize", self.filter.page_size);
+            .query("Page", &self.filter.page)
+            .query("PageSize", &self.filter.page_size);
 
         if let Some(ids) = &self.filter.ids {
             data = data.query_array("ID", ids);
@@ -65,7 +65,7 @@ impl http::RequestDesc for GetConversationsRequest {
             data = data.query("Sort", sort);
         }
 
-        data.query("Desc", if self.filter.desc { 1 } else { 0 })
+        data.query("Desc", if self.filter.desc { &1 } else { &0 })
     }
 }
 
