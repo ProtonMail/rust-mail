@@ -14,12 +14,12 @@ fn test_new_mailbox() {
         let conversations = params.conversations.clone();
         ctx.setup_user(params.clone()).await;
         ctx.mock_get_conversations(conversations, 2).await;
+        ctx.catch_all().await;
         ctx.user_context()
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
             .expect("failed to initialize");
     });
-    ctx.catch_all();
 
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(
