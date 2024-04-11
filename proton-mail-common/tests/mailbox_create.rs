@@ -13,7 +13,7 @@ fn test_new_mailbox() {
     ctx.async_runtime().block_on(async {
         let conversations = params.conversations.clone();
         ctx.setup_user(params.clone()).await;
-        ctx.mock_get_conversations(conversations, 1).await;
+        ctx.mock_get_conversations(conversations, 2).await;
         ctx.user_context()
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
@@ -31,6 +31,6 @@ fn test_new_mailbox() {
     // Sync the mailbox
     mailbox.conversations(10).unwrap();
     ctx.async_runtime().block_on(async {
-        mailbox.sync(10, None).unwrap();
+        mailbox.sync(10, None).await.unwrap();
     });
 }

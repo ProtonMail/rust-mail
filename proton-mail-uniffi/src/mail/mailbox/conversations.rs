@@ -3,7 +3,6 @@ use crate::mail::{
     Mailbox, MailboxConversationLiveQuery, MailboxError, MailboxLiveQueryUpdatedCallback,
 };
 use proton_mail_common::db::{LocalConversationId, LocalLabelId};
-use proton_mail_common::exports::tracing::error;
 use std::sync::Arc;
 
 #[uniffi::export]
@@ -15,11 +14,7 @@ impl Mailbox {
         limit: i64,
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
     ) -> Arc<MailboxConversationLiveQuery> {
-        //TODO: Improve this.
         let limit = usize::try_from(limit).unwrap_or(DEFAULT_CONVERSATION_COUNT);
-        if let Err(e) = self.mbox.sync(limit, None) {
-            error!("Could not sync mailbox: {e}");
-        }
         let builder = FFIObservableConversationsQueryBuilder(cb);
         self.mbox.new_conversation_query(builder, limit)
     }
