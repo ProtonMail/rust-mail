@@ -9,7 +9,7 @@ use crate::{
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
-    pub fn sync(
+    pub async fn sync(
         &self,
         conversation_count: usize,
         cb: Option<Box<dyn MailboxBackgroundResult<()>>>,
@@ -20,22 +20,18 @@ impl Mailbox {
         if let Some(remote_id) = label.rid.clone() {
             tracing::debug!("Syncing {}({})", self.label_id, remote_id);
             let ctx = self.user_ctx.clone();
-            self.user_ctx
-                .mail_context()
-                .async_runtime()
-                .spawn(async move {
-                    //TODO: check db if we actually need to sync messages.
-                    let r = ctx
-                        .sync_first_conversation_page(remote_id, conversation_count)
-                        .await
-                        .map_err(|e| {
-                            tracing::error!("Failed to sync conversations for labels: {e}");
-                            e.into()
-                        });
-                    if let Some(cb) = cb {
-                        cb.on_background_result(r)
-                    }
+
+            //TODO: check db if we actually need to sync messages.
+            let r = ctx
+                .sync_first_conversation_page(remote_id, conversation_count)
+                .await
+                .map_err(|e| {
+                    tracing::error!("Failed to sync conversations for labels: {e}");
+                    e.into()
                 });
+            if let Some(cb) = cb {
+                cb.on_background_result(r)
+            }
         } else {
             tracing::warn!("Local label {} has no remote id", self.label_id);
         }

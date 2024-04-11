@@ -1,9 +1,10 @@
 mod conversations;
 
-use crate::mail::{MailSessionError, MailUserSession};
+use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::SharedLive;
 use proton_mail_common::db::{ConversationQuery, LocalLabelId};
+use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, LiveQueryUpdated, Observable, SharedLiveQueryBuilder,
 };
@@ -66,12 +67,26 @@ const DEFAULT_CONVERSATION_COUNT: usize = 50;
 impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub fn new(ctx: &MailUserSession, label_id: u64) -> Self {
-        Self {
-            mbox: proton_mail_common::Mailbox::with_id(
-                ctx.ctx().clone(),
-                LocalLabelId::new(label_id),
-            ),
+    pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailSessionResult<Self> {
+        let mbox =
+            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), LocalLabelId::new(label_id));
+        let join_handler = mbox
+            .user_context()
+            .mail_context()
+            .clone()
+            .async_runtime()
+            .spawn(async move {
+                if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT, None).await {
+                    error!("Could not sync mailbox: {e}");
+                }
+                mbox
+            })
+            .await;
+        match join_handler {
+            Ok(mbox) => Ok(Self { mbox }),
+            Err(err) => Err(MailSessionError::Other(anyhow!(
+                "Failed to join task: {err}"
+            ))),
         }
     }
 
