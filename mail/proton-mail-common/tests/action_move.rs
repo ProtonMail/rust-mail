@@ -1,6 +1,6 @@
 mod common;
 
-use common::init::{setup_user, NullCallback, Params as TestParams};
+use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{
     Address, AddressId, AddressStatus, AddressType, Conversation, ConversationCount,
@@ -35,7 +35,7 @@ fn test_move_between_folders() {
 
     ctx.async_runtime().block_on(async {
         let init_params = test_init_params_folder(&conv_id, labels);
-        setup_user(&ctx, init_params).await;
+        ctx.setup_user(init_params).await;
         let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
@@ -107,7 +107,7 @@ fn test_move_to_trash_marks_read() {
 
     ctx.async_runtime().block_on(async {
         let init_params = test_init_params_folder(&conv_id, labels);
-        setup_user(&ctx, init_params).await;
+        ctx.setup_user(init_params).await;
         let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
@@ -193,7 +193,7 @@ fn test_move_from_label_does_not_unlabel() {
 
     ctx.async_runtime().block_on(async {
         let init_params = test_init_params_label(&conv_id, label_id.clone(), labels);
-        setup_user(&ctx, init_params).await;
+        ctx.setup_user(init_params).await;
         let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
