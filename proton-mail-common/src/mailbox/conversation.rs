@@ -3,17 +3,11 @@ use crate::actions::{
     MarkConversationsUnreadAction, MoveConversationsAction, UnlabelConversationsAction,
 };
 use crate::db::{ConversationQuery, LocalConversation, LocalConversationId, LocalLabelId};
-use crate::{
-    Mailbox, MailboxBackgroundResult, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
-};
+use crate::{Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult};
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
-    pub async fn sync(
-        &self,
-        conversation_count: usize,
-        cb: Option<Box<dyn MailboxBackgroundResult<()>>>,
-    ) -> MailboxResult<()> {
+    pub async fn sync(&self, conversation_count: usize) -> MailboxResult<()> {
         let Some(label) = self.user_ctx.get_label(self.label_id)? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
@@ -22,20 +16,16 @@ impl Mailbox {
             let ctx = self.user_ctx.clone();
 
             //TODO: check db if we actually need to sync messages.
-            let r = ctx
-                .sync_first_conversation_page(remote_id, conversation_count)
+            ctx.sync_first_conversation_page(remote_id, conversation_count)
                 .await
                 .map_err(|e| {
                     tracing::error!("Failed to sync conversations for labels: {e}");
                     e.into()
-                });
-            if let Some(cb) = cb {
-                cb.on_background_result(r)
-            }
+                })
         } else {
             tracing::warn!("Local label {} has no remote id", self.label_id);
+            Ok(())
         }
-        Ok(())
     }
 
     pub fn new_conversation_query<Builder: MailboxObservableQueryBuilder<ConversationQuery>>(

@@ -76,7 +76,7 @@ impl Mailbox {
             .clone()
             .async_runtime()
             .spawn(async move {
-                if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT, None).await {
+                if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
                     error!("Could not sync mailbox: {e}");
                 }
                 mbox
