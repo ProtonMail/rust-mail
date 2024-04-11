@@ -31,6 +31,6 @@ fn test_new_mailbox() {
     // Sync the mailbox
     mailbox.conversations(10).unwrap();
     ctx.async_runtime().block_on(async {
-        mailbox.sync(10, None).await.unwrap();
+        mailbox.sync(10).await.unwrap();
     });
 }
