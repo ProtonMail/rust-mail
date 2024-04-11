@@ -20,6 +20,7 @@ pub struct LocalLabel {
     pub notify: bool,
     pub expanded: bool,
     pub sticky: bool,
+    pub initialized: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -36,6 +37,7 @@ pub struct LocalLabelWithCount {
     pub notified: bool,
     pub expanded: bool,
     pub sticky: bool,
+    pub initialized: bool,
     pub total_count: u64,
     pub unread_count: u64,
 }
@@ -54,6 +56,7 @@ impl LocalLabel {
             notify: label.notify,
             expanded: label.expanded,
             sticky: label.sticky,
+            initialized: false,
         }
     }
 
@@ -80,6 +83,7 @@ impl From<LocalLabelWithCount> for LocalLabel {
             notify: value.notified,
             expanded: value.expanded,
             sticky: value.sticky,
+            initialized: value.initialized,
         }
     }
 }
