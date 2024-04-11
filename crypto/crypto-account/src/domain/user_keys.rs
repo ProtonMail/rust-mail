@@ -23,7 +23,7 @@ impl UserKeys {
         Self(Vec::from_iter(v))
     }
 
-    /// Unlocks/decrypts the locked keys with the provided salted_password.
+    /// Unlocks/decrypts the locked keys with the provided `salted_password`.
     ///
     /// Returns the user keys that have been successfully decrypted with the
     /// provided password. If decryption fails for a key, the key is ignored.
@@ -73,7 +73,7 @@ impl UserKeys {
         }
     }
 
-    /// Unlocks/decrypts the locked keys with the salted_password.
+    /// Unlocks/decrypts the locked keys with the `salted_password`.
     ///
     /// Returns the user keys that have been successfully decrypted with the
     /// provided password. If decryption fails, a key is ignored.

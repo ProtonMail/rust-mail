@@ -23,7 +23,7 @@ YJWp7nLYBj9YSh4+qOa/5QM=
 
 const TEST_KEY_PASSWORD: &str = "password";
 
-pub fn get_test_decrypted_user_key<T: PGPProviderSync>(
+fn get_test_decrypted_user_key<T: PGPProviderSync>(
     provider: &T,
 ) -> Vec<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
     let private_key = provider

@@ -45,9 +45,10 @@ where
     }
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 pub(crate) fn bool_to_integer<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    serializer.serialize_u8(if *value { 1 } else { 0 })
+    serializer.serialize_u8(u8::from(*value))
 }

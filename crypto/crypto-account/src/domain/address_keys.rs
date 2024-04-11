@@ -45,7 +45,7 @@ impl AddressKeys {
                 signature,
                 user_keys.as_ref(),
                 user_keys.as_ref(),
-                None,
+                &None,
             );
             let (private_key, public_key) = match decryption_result {
                 Ok(key) => key,

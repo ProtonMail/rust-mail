@@ -144,6 +144,7 @@ impl AsRef<[APIPublicKey]> for APIPublicAddressKeyGroup {
 /// Represents the public keys returned from the `keys/all` route.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
+#[allow(clippy::module_name_repetitions)]
 pub struct APIPublicAddressKeys {
     /// Information about the internal address itself, if it exists. Since the SKL is mandatory, this will never be nullable.
     #[serde(rename = "Address")]

@@ -124,7 +124,7 @@ impl APIPublicAddressKeyGroup {
     }
 }
 
-/// Represents imported public keys derived from [APIPublicAddressKeys](super::APIPublicAddressKeys).
+/// Represents imported public keys derived from [`APIPublicAddressKeys`](super::APIPublicAddressKeys).
 #[derive(Debug, Clone)]
 pub struct PublicAddressKeys<T: PublicKey> {
     /// Information about the internal address itself, if it exists. Since the SKL is mandatory, this will never be nullable.

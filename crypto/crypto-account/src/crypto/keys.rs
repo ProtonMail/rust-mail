@@ -15,15 +15,15 @@ pub fn decrypt_key_token<Prov: PGPProviderSync>(
     signature: &str,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
-    verification_context: Option<Prov::VerificationContext>,
+    verification_context: &Option<Prov::VerificationContext>,
 ) -> Result<Vec<u8>, AccountCryptoError> {
     let mut decryptor = provider
         .new_decryptor()
         .with_decryption_key_refs(decryption_keys)
         .with_verification_key_refs(verification_keys)
         .with_detached_signature_ref(signature.as_bytes(), true);
-    if let Some(context) = &verification_context {
-        decryptor = decryptor.with_verification_context(context)
+    if let Some(context) = verification_context {
+        decryptor = decryptor.with_verification_context(context);
     }
     let verified_data = decryptor
         .decrypt(token.as_bytes(), DataEncoding::Armor)
@@ -43,7 +43,7 @@ pub fn import_key_with_token<Prov: PGPProviderSync>(
     signature: &str,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
-    verification_context: Option<Prov::VerificationContext>,
+    verification_context: &Option<Prov::VerificationContext>,
 ) -> Result<(Prov::PrivateKey, Prov::PublicKey), AccountCryptoError> {
     let decrypted_token = decrypt_key_token(
         provider,
@@ -77,7 +77,7 @@ pub async fn decrypt_key_token_async<Prov: PGPProviderAsync>(
         .with_verification_key_refs(verification_keys)
         .with_detached_signature_ref(signature.as_bytes(), true);
     if let Some(context) = &verification_context {
-        decryptor = decryptor.with_verification_context(context)
+        decryptor = decryptor.with_verification_context(context);
     }
     let verified_data = decryptor
         .decrypt_async(token.as_bytes(), DataEncoding::Armor)

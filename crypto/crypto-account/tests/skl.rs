@@ -35,7 +35,7 @@ fn get_test_skl() -> SignedKeyList {
 fn test_retrieve_skl_data() {
     let skl = get_test_skl();
     let skl_data_result = skl.signed_key_list_data();
-    assert!(skl_data_result.is_ok())
+    assert!(skl_data_result.is_ok());
 }
 
 #[test]

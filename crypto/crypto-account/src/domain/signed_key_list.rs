@@ -28,9 +28,10 @@ crate::string_id! {
     ObsolescenceToken
 }
 
+/// The key `data` of singed key list.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone, Hash)]
 #[serde(rename_all = "PascalCase")]
-/// The key `data` of singed key list.
+#[allow(clippy::module_name_repetitions)]
 pub struct SignedKeyListData {
     pub fingerprint: OpenPGPFingerprint,
     #[serde(rename = "SHA256Fingerprints")]
