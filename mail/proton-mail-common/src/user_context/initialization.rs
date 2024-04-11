@@ -10,7 +10,6 @@ pub enum MailUserContextLoadingStage {
     Events,
     Labels,
     Counters,
-    Conversation,
     Finished,
 }
 pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
@@ -83,14 +82,6 @@ impl MailUserContext {
         if let Err(e) = ctx.sync_conversation_and_message_counts().await {
             error!("Failed to sync conversation and messages counter: {e}");
             return Err((MailUserContextLoadingStage::Counters, e));
-        }
-
-        // load inbox conversations
-        trace!("Syncing Inbox conversations");
-        cb.on_stage(MailUserContextLoadingStage::Conversation);
-        if let Err(e) = ctx.sync_first_conversation_page(label_id, 50).await {
-            error!("Failed to sync Inbox conversation: {e}");
-            return Err((MailUserContextLoadingStage::Conversation, e));
         }
 
         trace!("Syncing Complete");
