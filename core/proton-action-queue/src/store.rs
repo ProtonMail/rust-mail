@@ -1,7 +1,7 @@
 use crate::{Action, ActionId, ActionPriority};
-use proton_sqlite3::{rusqlite, Migration, MigratorError, SqliteConnection};
+use proton_sqlite3::{rusqlite, Migration, MigratorError, SqliteConnection, SqliteTransaction};
 use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
-use rusqlite::{OptionalExtension, ToSql, Transaction};
+use rusqlite::{OptionalExtension, ToSql};
 use serde::de::DeserializeOwned;
 use std::fmt::{Debug, Display, Formatter};
 use tracing::debug;
@@ -80,7 +80,7 @@ impl PendingAction {
     }
 }
 
-pub struct ActionStore<'t, 'tx: 't>(&'t mut Transaction<'tx>);
+pub struct ActionStore<'t, 'tx: 't>(&'t mut SqliteTransaction<'tx>);
 
 const ACTION_VERSION_TABLE_NAME: &str = "action_queue_version";
 const ACTION_TABLE_NAME: &str = "action_queue";
@@ -95,7 +95,7 @@ const ACTION_TABLE_PRIORITY_INDEX_NAME: &str = "action_queue_priority_index";
 const ACTION_TABLE_DATE_TIME_INDEX_NAME: &str = "action_queue_date_time_index";
 
 impl<'t, 'tx: 't> ActionStore<'t, 'tx> {
-    pub fn new(tx: &'t mut Transaction<'tx>) -> Self {
+    pub fn new(tx: &'t mut SqliteTransaction<'tx>) -> Self {
         Self(tx)
     }
 
@@ -119,7 +119,7 @@ ORDER BY {ACTION_TABLE_FIELD_PRIORITY} ASC ,{ACTION_TABLE_FIELD_DATE_TIME} ASC"
         );
 
         self.0
-            .query_row(&query, (), |row| {
+            .query_row(query, (), |row| {
                 Ok(StoredAction {
                     id: row.get(0)?,
                     version: row.get(1)?,
@@ -201,7 +201,7 @@ RETURNING {ACTION_TABLE_FIELD_ID}");
         Ok(())
     }
 
-    pub fn tx(&mut self) -> &'_ mut Transaction<'tx> {
+    pub fn tx(&mut self) -> &'_ mut SqliteTransaction<'tx> {
         self.0
     }
 }
@@ -213,7 +213,7 @@ impl Migration for ActionTableMigrationV1 {
         "action_table_v1"
     }
 
-    fn migrate(&self, tx: &mut Transaction) -> rusqlite::Result<()> {
+    fn migrate(&self, tx: &mut SqliteTransaction) -> rusqlite::Result<()> {
         // create actions table
         {
             let query = format!(
@@ -223,15 +223,15 @@ INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, {ACTION_TABLE_FIELD_ACTION_ID} BLOB 
 {ACTION_TABLE_FIELD_DATE_TIME} INTEGER DEFAULT (datetime('now')), \
 {ACTION_TABLE_FIELD_DATA} BLOB NOT NULL)"
             );
-            tx.execute(&query, ())?;
+            tx.execute(query, ())?;
         }
 
         // Create index on Priority & Date
         let query= format!("CREATE INDEX {ACTION_TABLE_PRIORITY_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_PRIORITY})");
-        tx.execute(&query, ())?;
+        tx.execute(query, ())?;
 
         let query= format!("CREATE INDEX {ACTION_TABLE_DATE_TIME_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_DATE_TIME})");
-        tx.execute(&query, ())?;
+        tx.execute(query, ())?;
 
         Ok(())
     }

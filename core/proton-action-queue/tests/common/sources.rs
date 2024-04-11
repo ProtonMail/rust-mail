@@ -1,7 +1,7 @@
 #![allow(unused)]
 use crate::common::{FolderId, LabelId, Message, MessageId};
 use proton_api_core::exports::anyhow;
-use proton_sqlite3::{rusqlite, InProcessTrackerService};
+use proton_sqlite3::{rusqlite, InProcessTrackerService, SqliteTransaction};
 use rusqlite::{params_from_iter, OptionalExtension};
 use std::str::FromStr;
 
@@ -63,11 +63,11 @@ pub trait RemoteSource: Send + Sync {
 }
 
 pub struct TestLocalSourceTransaction<'r, 'c> {
-    tx: &'r mut rusqlite::Transaction<'c>,
+    tx: &'r mut SqliteTransaction<'c>,
 }
 
 impl<'r, 'c> TestLocalSourceTransaction<'r, 'c> {
-    pub fn new(tx: &'r mut rusqlite::Transaction<'c>) -> Self {
+    pub fn new(tx: &'r mut SqliteTransaction<'c>) -> Self {
         Self { tx }
     }
 

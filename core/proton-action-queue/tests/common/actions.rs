@@ -5,7 +5,7 @@ use proton_action_queue::{
     SessionProvider, StoredAction,
 };
 use proton_api_core::exports::serde::Serialize;
-use proton_sqlite3::rusqlite::Transaction;
+use proton_sqlite3::SqliteTransaction;
 use serde::Deserialize;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
@@ -151,7 +151,7 @@ where
     fn local_handler<'r, 't: 'r>(
         &self,
         action: &'r dyn Any,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(action) = action.downcast_ref::<T>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
@@ -169,7 +169,7 @@ where
     fn remote_handler<'r, 't: 'r>(
         &'r self,
         action: &StoredAction,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
         _: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
         if action.version != MOVE_MESSAGE_ACTION_VERSION {

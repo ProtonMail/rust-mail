@@ -2,11 +2,11 @@ use crate::{SessionProvider, SessionProviderError, StoredAction, StoredActionId}
 use proton_api_core::exports::anyhow;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::thiserror;
-use proton_sqlite3::rusqlite;
 use proton_sqlite3::rusqlite::types::{
     FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef,
 };
-use proton_sqlite3::rusqlite::{ToSql, Transaction};
+use proton_sqlite3::rusqlite::ToSql;
+use proton_sqlite3::{rusqlite, SqliteTransaction};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::any::{Any, TypeId};
@@ -196,14 +196,14 @@ pub trait ActionFactoryInstance: Debug + Send + Sync {
     fn local_handler<'r, 't: 'r>(
         &self,
         action: &'r dyn Any,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError>;
 
     /// Construct a new [`RemoteActionHandler`] for a stored action.
     fn remote_handler<'r, 't: 'r>(
         &'r self,
         action: &StoredAction,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError>;
 }
@@ -241,7 +241,7 @@ impl ActionFactory {
     pub fn local_handler<'r, 't: 'r, T: Action>(
         &self,
         action: &'r T,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryError> {
         let Some(factory) = self.factories.get(action.action_id()) else {
             return Err(ActionFactoryError::UnknownAction(
@@ -258,7 +258,7 @@ impl ActionFactory {
     pub fn remote_handler<'r, 't: 'r>(
         &'r self,
         action: &StoredAction,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryError> {
         let Some(factory) = self.factories.get(&action.action_id) else {

@@ -40,7 +40,7 @@ macro_rules! new_tracked_connection_wrapper {
 
                 /// Get access to read only connection implementations.
                 pub fn as_connection_ref(&self) -> [<$name Ref>]<'_> {
-                    [<$name Ref>]([<$name Impl>](self.0.as_ref()))
+                    [<$name Ref>]([<$name Impl>](self.0.as_ref().rusqlite_connection()))
                 }
 
                 /// Convert the current into another connection type generated from this macro.
@@ -54,7 +54,7 @@ macro_rules! new_tracked_connection_wrapper {
                     mut closure: impl FnMut(&mut [<$name Mut>]) -> Result<T, E>,
                 ) -> Result<T, E> {
                     self.0.tx(|tx| {
-                        let conn_impl = [<$name Impl>](tx.deref());
+                        let conn_impl = [<$name Impl>](tx.rusqlite_transaction().deref());
                         let mut conn = [<$name Mut>](conn_impl);
                         closure(&mut conn)
                     })
@@ -126,7 +126,7 @@ macro_rules! new_connection_wrapper {
 
                 /// Get access to read only connection implementations.
                 pub fn as_connection_ref(&self) -> [<$name Ref>]<'_> {
-                    [<$name Ref>]([<$name Impl>](&self.0))
+                    [<$name Ref>]([<$name Impl>](self.0.rusqlite_connection()))
                 }
 
                 /// Convert the current into another connection type generated from this macro.
@@ -140,7 +140,7 @@ macro_rules! new_connection_wrapper {
                     mut closure: impl FnMut(&mut [<$name Mut>]) -> Result<T, E>,
                 ) -> Result<T, E> {
                     self.0.tx(|tx| {
-                        let conn_impl = [<$name Impl>](tx.deref());
+                        let conn_impl = [<$name Impl>](tx.rusqlite_transaction().deref());
                         let mut conn = [<$name Mut>](conn_impl);
                         closure(&mut conn)
                     })

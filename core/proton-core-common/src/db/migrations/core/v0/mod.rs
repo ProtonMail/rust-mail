@@ -1,5 +1,4 @@
-use proton_sqlite3::rusqlite::Transaction;
-use proton_sqlite3::Migration;
+use proton_sqlite3::{Migration, SqliteTransaction};
 
 pub struct V0 {}
 
@@ -8,7 +7,7 @@ impl Migration for V0 {
         "proton_core_v0"
     }
 
-    fn migrate(&self, tx: &mut Transaction) -> proton_sqlite3::rusqlite::Result<()> {
+    fn migrate(&self, tx: &mut SqliteTransaction) -> proton_sqlite3::rusqlite::Result<()> {
         tx.execute(
             "CREATE TABLE users(\
 id TEXT PRIMARY KEY, name TEXT, display_name TEXT, email TEXT NOT NULL, currency TEXT NOT NULL, \

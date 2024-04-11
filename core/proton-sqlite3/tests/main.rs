@@ -142,7 +142,7 @@ fn run_random_command_test() {
     }
 
     let rdonly = connection_pool
-        .acquire_read_only()
+        .acquire()
         .expect("failed to acquire read only");
 
     let _watcher = connection_pool.watch(move |event| match event {

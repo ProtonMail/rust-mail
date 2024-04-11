@@ -1,7 +1,6 @@
-use crate::{SqliteConnection, SqliteConnectionPool};
+use crate::{SqliteConnection, SqliteConnectionPool, SqliteTransaction};
 use fixedbitset::FixedBitSet;
 use parking_lot::RwLock;
-use rusqlite::Transaction;
 use slotmap::{new_key_type, SlotMap};
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
@@ -63,7 +62,7 @@ impl TrackingConnection {
     /// # Errors
     /// Returns error if the transaction failed to submit or if there was an issue with tracking
     /// changes.
-    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut Transaction) -> Result<T, E>>(
+    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut SqliteTransaction) -> Result<T, E>>(
         &mut self,
         closure: F,
     ) -> Result<T, E> {
@@ -233,8 +232,8 @@ impl LocalTracker {
     fn init(connection: &mut SqliteConnection) -> rusqlite::Result<()> {
         // create tracking table and cleanup previous data if re-used from a connection pool.
         connection.tx(|tx| {
-            tx.execute(&format!("CREATE TEMP TABLE IF NOT EXISTS {TRACKER_TABLE_NAME} (table_id INTEGER PRIMARY KEY, updated INTEGER)"),())?;
-            tx.execute(&format!("DELETE FROM {TRACKER_TABLE_NAME}"),())
+            tx.execute(format!("CREATE TEMP TABLE IF NOT EXISTS {TRACKER_TABLE_NAME} (table_id INTEGER PRIMARY KEY, updated INTEGER)"),())?;
+            tx.execute(format!("DELETE FROM {TRACKER_TABLE_NAME}"),())
         })?;
 
         Ok(())
@@ -289,7 +288,7 @@ impl LocalTracker {
             // Reset updated values.
             connection.tx(|tx| -> rusqlite::Result<usize> {
                 tx.execute(
-                    &format!("UPDATE {TRACKER_TABLE_NAME} SET updated=0 WHERE updated=1"),
+                    format!("UPDATE {TRACKER_TABLE_NAME} SET updated=0 WHERE updated=1"),
                     (),
                 )
             })?;
@@ -300,7 +299,7 @@ impl LocalTracker {
         })
     }
 
-    fn create_triggers(tx: &mut Transaction, table: &str, id: usize) -> rusqlite::Result<()> {
+    fn create_triggers(tx: &mut SqliteTransaction, table: &str, id: usize) -> rusqlite::Result<()> {
         use std::fmt::Write;
         let mut query = String::with_capacity(64);
         for (trigger, name) in TRIGGER_LIST {
@@ -325,7 +324,7 @@ END
         Ok(())
     }
 
-    fn drop_triggers(tx: &mut Transaction, table: &str, id: usize) -> rusqlite::Result<()> {
+    fn drop_triggers(tx: &mut SqliteTransaction, table: &str, id: usize) -> rusqlite::Result<()> {
         use std::fmt::Write;
         let mut query = String::with_capacity(64);
         for (_, name) in TRIGGER_LIST {

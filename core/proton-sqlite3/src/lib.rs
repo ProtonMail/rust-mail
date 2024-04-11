@@ -33,11 +33,11 @@ mod watcher;
 
 pub use migration::*;
 pub use query::*;
+use std::cell::Cell;
 pub use tracker::*;
 
-use parking_lot::Mutex;
-use rusqlite::{Connection, OpenFlags, Transaction};
-use std::ops::{Deref, DerefMut};
+use parking_lot::{Mutex, ReentrantMutex, ReentrantMutexGuard};
+use rusqlite::{Connection, OpenFlags, Params, Row, Transaction};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::error;
@@ -52,6 +52,7 @@ pub use watcher::*;
 pub const DEFAULT_OPEN_CONNECTION_LIMIT: usize = 8;
 
 /// A connection borrowed from a pool. On drop will be returned to the pool it was acquired from.
+/// This type wraps around
 pub struct SqliteConnection {
     pool: Arc<ConnectionPoolInner>,
     // Unfortunately we can't transfer this resource on drop, so the only option we have is to wrap it with option.
@@ -65,16 +66,17 @@ impl SqliteConnection {
     /// # Errors
     /// Return errors if the transaction failed or an error occurred during the execution of the
     /// closure.
-    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut Transaction) -> Result<T, E>>(
+    ///
+    /// # Panic
+    /// Panics if we detect nested transactions. This limitation may be removed in the future.
+    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut SqliteTransaction) -> Result<T, E>>(
         &mut self,
         mut closure: F,
     ) -> Result<T, E> {
         // Default behavior is to roll back the transaction on drop.
-        let mut tx = self.deref_mut().transaction()?;
+        let mut tx = self.transaction()?;
         let value = (closure)(&mut tx)?;
-
         tx.commit()?;
-
         Ok(value)
     }
 
@@ -84,27 +86,135 @@ impl SqliteConnection {
     /// # Errors
     /// Returns error if we fail to retrieve the version information.
     pub fn data_version(&self) -> rusqlite::Result<u64> {
-        self.deref()
+        self.connection()
             .pragma_query_value(None, "data_version", |r| r.get(0))
     }
+
+    /// Prepare a sql statement. See [`Connection::prepare()`] for more details.
+    ///
+    /// # Errors
+    /// See [`Connection::prepare()`] for more details.
+    #[inline]
+    pub fn prepare(&self, sql: impl AsRef<str>) -> rusqlite::Result<rusqlite::Statement<'_>> {
+        self.connection().prepare(sql.as_ref())
+    }
+
+    /// Execute sql query. See [`Connection::execute()`] for more details.
+    ///
+    /// # Errors
+    /// See [`Connection::execute()`] for more details.
+    #[inline]
+    pub fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> rusqlite::Result<usize> {
+        self.connection().execute(sql.as_ref(), params)
+    }
+
+    /// Execute sql query which returns a row. See [`Connection::query_row()`] for more details.
+    ///
+    /// # Errors
+    /// See [`Connection::query_row`] for more details.
+    #[inline]
+    pub fn query_row<T, P, F>(&self, sql: impl AsRef<str>, params: P, f: F) -> rusqlite::Result<T>
+    where
+        P: Params,
+        F: FnOnce(&Row<'_>) -> rusqlite::Result<T>,
+    {
+        self.connection().query_row(sql.as_ref(), params, f)
+    }
+
+    /// Create a new transaction. See [`Connection::transaction()`] for more details.
+    ///
+    /// # Errors
+    /// See [`Connection::transaction()`] for more details.
+    #[allow(clippy::missing_panics_doc)]
+    pub fn transaction(&mut self) -> rusqlite::Result<SqliteTransaction<'_>> {
+        let tx_guard = self.pool.transaction_lock.lock();
+        // Ideally this type did not need to exist and could be made part of the SqliteTransaction
+        // type. However, as soon as we add an implementation of Drop for SqliteTransaction
+        // we get the following error:
+        // error[E0509]: cannot move out of type `SqliteTransaction<'_>`, which implements the `Drop` trait
+        //
+        // Note: The tx_guard needs to kept alive for the lifetime of the SqliteTransaction to ensure
+        // that at any given time in the same process only one transaction can be active at any
+        // time on any number of treads.
+        let tx_scope = TxScope::new(tx_guard)?;
+        self.conn
+            .as_mut()
+            .expect("Should always have a value")
+            .transaction()
+            .map(|tx| SqliteTransaction {
+                _tx_scope: tx_scope,
+                tx,
+            })
+    }
+
+    /// Get the underlying connection type. Use with caution.
+    #[inline]
+    pub fn rusqlite_connection(&self) -> &Connection {
+        self.connection()
+    }
+
+    #[inline]
+    fn connection(&self) -> &Connection {
+        self.conn.as_ref().expect("should always be available")
+    }
 }
+
+/// Wrapper around [`Transaction`] in order to ensure there is only one writer to the
+/// database in order to avoid database locked errors and catch nested transactions.
+pub struct SqliteTransaction<'c> {
+    _tx_scope: TxScope<'c>,
+    tx: Transaction<'c>,
+}
+
+impl<'c> SqliteTransaction<'c> {
+    /// Prepare a sql statement. See [`Connection::prepare()`] for more details.
+    ///
+    /// # Errors
+    /// See [`Connection::prepare()`] for more details.
+    pub fn prepare(&self, sql: impl AsRef<str>) -> rusqlite::Result<rusqlite::Statement<'_>> {
+        self.tx.prepare(sql.as_ref())
+    }
+
+    /// Execute sql query. See [`Connection::execute()`] for more details.
+    ///
+    /// # Errors
+    /// See [`Connection::execute()`] for more details.
+    #[inline]
+    pub fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> rusqlite::Result<usize> {
+        self.tx.execute(sql.as_ref(), params)
+    }
+
+    /// Execute sql query which returns a row. See [`Connection::query_row()`] for more details.
+    ///
+    /// # Errors
+    /// See [`Connection::query_row()`] for more details.
+    #[inline]
+    pub fn query_row<T, P, F>(&self, sql: impl AsRef<str>, params: P, f: F) -> rusqlite::Result<T>
+    where
+        P: Params,
+        F: FnOnce(&Row<'_>) -> rusqlite::Result<T>,
+    {
+        self.tx.query_row(sql.as_ref(), params, f)
+    }
+
+    /// Commit the transaction.
+    ///
+    /// # Errors
+    /// See [`Transaction::commit()`] for more details.
+    pub fn commit(self) -> rusqlite::Result<()> {
+        self.tx.commit()
+    }
+
+    /// Get the underlying transaction type.
+    #[must_use]
+    pub fn rusqlite_transaction(&self) -> &Transaction<'_> {
+        &self.tx
+    }
+}
+
 impl Drop for SqliteConnection {
     fn drop(&mut self) {
         self.pool.release(self.conn.take().unwrap());
-    }
-}
-
-impl Deref for SqliteConnection {
-    type Target = Connection;
-
-    fn deref(&self) -> &Self::Target {
-        self.conn.as_ref().expect("Should always be valid")
-    }
-}
-
-impl DerefMut for SqliteConnection {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.conn.as_mut().expect("Should always be valid")
     }
 }
 
@@ -126,6 +236,7 @@ struct ConnectionPoolInner {
     max_open_connections: usize,
     mode: SqliteMode,
     debug: bool,
+    transaction_lock: ReentrantMutex<Cell<bool>>,
 }
 
 static SQL_LOG_ONCE: std::sync::Once = std::sync::Once::new();
@@ -165,6 +276,7 @@ impl SqliteConnectionPool {
                 connections: Mutex::new(Vec::with_capacity(limit)),
                 max_open_connections: limit,
                 debug,
+                transaction_lock: ReentrantMutex::new(Cell::new(false)),
             }),
         }
     }
@@ -320,6 +432,27 @@ impl ConnectionPoolInner {
     }
 }
 
+struct TxScope<'a>(ReentrantMutexGuard<'a, Cell<bool>>);
+
+impl<'a> TxScope<'a> {
+    fn new(tx_guard: ReentrantMutexGuard<'a, Cell<bool>>) -> rusqlite::Result<Self> {
+        if tx_guard.get() {
+            return Err(rusqlite::Error::UserFunctionError(
+                "Nested transactions are not supported".into(),
+            ));
+        }
+        tx_guard.set(true);
+
+        Ok(Self(tx_guard))
+    }
+}
+
+impl<'a> Drop for TxScope<'a> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
+}
+
 #[cfg(test)]
 fn new_test_dir() -> tempdir::TempDir {
     tempdir::TempDir::new("proton-sqlite3").expect("Failed to create tmp dir")
@@ -357,4 +490,14 @@ fn test_connection_pool() {
 
     pool.close_all().expect("failed to close all connections");
     assert_eq!(pool.inner.get_open_connection_count(), 0);
+}
+#[test]
+fn test_nested_transactions_trigger_error() {
+    let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
+    let mut conn = pool.acquire().expect("failed to acquire");
+    conn.tx(|_| -> rusqlite::Result<()> {
+        let mut conn2 = pool.acquire().expect("failed to acquire");
+        conn2.tx(|_| -> rusqlite::Result<()> { Ok(()) })
+    })
+    .expect_err("nested transactions should trigger errors");
 }

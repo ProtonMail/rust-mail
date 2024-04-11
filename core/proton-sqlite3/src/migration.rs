@@ -1,7 +1,7 @@
 //! Utilities to facility migration of the database.
 
-use crate::SqliteConnection;
-use rusqlite::{OptionalExtension, Transaction};
+use crate::{SqliteConnection, SqliteTransaction};
+use rusqlite::OptionalExtension;
 use tracing::debug;
 
 /// Migration Unit.
@@ -17,7 +17,7 @@ pub trait Migration {
     /// # Errors
     ///
     /// Returns error if the migration failed to run.
-    fn migrate(&self, tx: &mut Transaction) -> rusqlite::Result<()>;
+    fn migrate(&self, tx: &mut SqliteTransaction) -> rusqlite::Result<()>;
 }
 
 /// Possible errors that may occur during a migration.
@@ -103,7 +103,7 @@ fn version_from_migration_list(m: &[Box<dyn Migration>]) -> usize {
     m.len()
 }
 fn get_current_table_version(
-    tx: &mut Transaction,
+    tx: &mut SqliteTransaction,
     table_name: &str,
 ) -> rusqlite::Result<Option<usize>> {
     let query = "SELECT COUNT(DISTINCT `name`) FROM sqlite_master WHERE `type`='table' AND name= ?";
@@ -120,36 +120,36 @@ const VERSION_TABLE_FIELD_VERSION: &str = "version";
 
 const VERSION_TABLE_NAME: &str = "proton_sqlite3_db_version";
 
-fn read_current_table_version(tx: &mut Transaction, id: &str) -> rusqlite::Result<usize> {
+fn read_current_table_version(tx: &mut SqliteTransaction, id: &str) -> rusqlite::Result<usize> {
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
-    let version = tx.query_row(&query, [id], |r| r.get(0)).optional()?;
+    let version = tx.query_row(query, [id], |r| r.get(0)).optional()?;
     Ok(version.unwrap_or(0))
 }
 
-fn create_version_table(tx: &mut Transaction) -> rusqlite::Result<()> {
+fn create_version_table(tx: &mut SqliteTransaction) -> rusqlite::Result<()> {
     let query = format!(
         "CREATE TABLE {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID} TEXT UNIQUE NOT NULL PRIMARY KEY, \
 {VERSION_TABLE_FIELD_VERSION} INTEGER NOT NULL)"
     );
-    tx.execute(&query, ())?;
+    tx.execute(query, ())?;
     Ok(())
 }
 
 fn set_version_table_version(
-    tx: &mut Transaction,
+    tx: &mut SqliteTransaction,
     id: &str,
     version: usize,
 ) -> rusqlite::Result<()> {
     let query = format!("INSERT INTO {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID}, {VERSION_TABLE_FIELD_VERSION}) VALUES (?,?) \
 ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION}=excluded.{VERSION_TABLE_FIELD_VERSION}");
-    tx.execute(&query, (id, version))?;
+    tx.execute(query, (id, version))?;
     Ok(())
 }
 
 fn run_migrations(
-    tx: &mut Transaction,
+    tx: &mut SqliteTransaction,
     table_name: &str,
     current_version: usize,
     migrations: &[Box<dyn Migration>],
@@ -234,7 +234,7 @@ fn create_migration_1() -> Box<dyn Migration> {
         fn name(&self) -> &str {
             "m1"
         }
-        fn migrate(&self, tx: &mut Transaction) -> rusqlite::Result<()> {
+        fn migrate(&self, tx: &mut SqliteTransaction) -> rusqlite::Result<()> {
             tx.execute("CREATE TABLE test1 (ID INTEGER)", ())?;
             Ok(())
         }
@@ -250,7 +250,7 @@ fn create_migration_2() -> Box<dyn Migration> {
         fn name(&self) -> &str {
             "m2"
         }
-        fn migrate(&self, tx: &mut Transaction) -> rusqlite::Result<()> {
+        fn migrate(&self, tx: &mut SqliteTransaction) -> rusqlite::Result<()> {
             tx.execute("CREATE TABLE test2 (ID INTEGER)", ())?;
             Ok(())
         }
