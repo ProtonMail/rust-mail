@@ -50,6 +50,12 @@ fn test_move_between_folders() {
     let mailbox_folder =
         Mailbox::with_remote_id(user_ctx.clone(), &folder_id).expect("failed to create mailbox");
 
+    // Sync the mailbox
+    ctx.async_runtime().block_on(async {
+        mailbox_inbox.sync(10).await.unwrap();
+    });
+
+    // Get the conversation id
     let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
     assert!(mailbox_folder.conversations(10).unwrap().is_empty());
 
@@ -124,6 +130,12 @@ fn test_move_to_trash_marks_read() {
     let mailbox_trash = Mailbox::with_remote_id(user_ctx.clone(), LabelId::trash())
         .expect("failed to create mailbox");
 
+    // Sync the mailbox
+    ctx.async_runtime().block_on(async {
+        mailbox_inbox.sync(10).await.unwrap();
+    });
+
+    // Get the conversation id
     let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
     assert!(mailbox_trash.conversations(10).unwrap().is_empty());
 
@@ -212,6 +224,12 @@ fn test_move_from_label_does_not_unlabel() {
     let mailbox_label =
         Mailbox::with_remote_id(user_ctx.clone(), &label_id).expect("failed to create mailbox");
 
+    // Sync the mailbox
+    ctx.async_runtime().block_on(async {
+        mailbox_inbox.sync(10).await.unwrap();
+    });
+
+    // Get the conversation id
     let local_conv_id = mailbox_label.conversations(10).unwrap().get(0).unwrap().id;
     assert!(mailbox_inbox.conversations(10).unwrap().is_empty());
 

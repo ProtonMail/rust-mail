@@ -2,7 +2,9 @@ use crate::actions::{
     DeleteConversationsAction, LabelConversationsAction, MarkConversationsReadAction,
     MarkConversationsUnreadAction, MoveConversationsAction, UnlabelConversationsAction,
 };
-use crate::db::{ConversationQuery, LocalConversation, LocalConversationId, LocalLabelId};
+use crate::db::{
+    ConversationQuery, DBResult, LocalConversation, LocalConversationId, LocalLabelId,
+};
 use crate::{Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult};
 use proton_api_mail::proton_api_core::exports::tracing;
 
@@ -15,13 +17,34 @@ impl Mailbox {
             tracing::debug!("Syncing {}({})", self.label_id, remote_id);
             let ctx = self.user_ctx.clone();
 
-            //TODO: check db if we actually need to sync messages.
-            ctx.sync_first_conversation_page(remote_id, conversation_count)
+            if label.initialized {
+                tracing::debug!("Label {} already initialized, skipping", self.label_id);
+                return Ok(());
+            }
+            tracing::debug!("Label {} not initialized, fetching", self.label_id);
+
+            let result = ctx
+                .sync_first_conversation_page(remote_id, conversation_count)
                 .await
                 .map_err(|e| {
                     tracing::error!("Failed to sync conversations for labels: {e}");
                     e.into()
-                })
+                });
+
+            let connection = ctx.new_db_connection();
+            match connection {
+                Ok(mut connection) => {
+                    let result = connection.tx(|tx| -> DBResult<()> {
+                        tx.mark_label_as_initialized(label.id)?;
+                        Ok(())
+                    });
+                    if let Err(e) = result {
+                        tracing::error!("Failed to mark label as initialized: {e}");
+                    }
+                }
+                Err(e) => tracing::error!("Failed to get db connection: {e}"),
+            }
+            result
         } else {
             tracing::warn!("Local label {} has no remote id", self.label_id);
             Ok(())

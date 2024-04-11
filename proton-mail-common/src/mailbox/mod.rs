@@ -6,6 +6,8 @@ use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
 
+pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
+
 #[derive(Debug, thiserror::Error)]
 pub enum MailboxError {
     #[error("Could not find label with id '{0}'")]
