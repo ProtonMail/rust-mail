@@ -1,5 +1,5 @@
 mod conversation;
-use crate::db::proton_sqlite3::{InProcessTrackerService, ObservableQuery};
+use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::LocalLabelId;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::LabelId;
@@ -27,14 +27,14 @@ pub enum MailboxError {
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:
 /// Some platforms are able to use the [`crate::db::proton_sqlite3::LiveQuery`] type and other
 /// platform may benefit from a different solution.
-pub trait MailboxObservableQueryBuilder<Q: ObservableQuery> {
+pub trait MailboxObservableQueryBuilder<Q: Observable> {
     type Output;
 
     fn build(self, tracker: InProcessTrackerService, query: Q) -> Self::Output;
 }
 
-impl<Q: ObservableQuery, R, F: FnOnce(InProcessTrackerService, Q) -> R>
-    MailboxObservableQueryBuilder<Q> for F
+impl<Q: Observable, R, F: FnOnce(InProcessTrackerService, Q) -> R> MailboxObservableQueryBuilder<Q>
+    for F
 {
     type Output = R;
 

@@ -4,7 +4,7 @@ use crate::requests::GetAddressesRequest;
 use proton_api_core::http;
 
 impl MailSession {
-    pub async fn addresses(&self) -> Result<Vec<Address>, http::HttpRequestError> {
+    pub async fn addresses(&self) -> Result<Vec<Address>, http::RequestError> {
         self.session
             .execute_request(GetAddressesRequest {})
             .await

@@ -3,7 +3,7 @@ use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
 use proton_api_mail::proton_api_core;
 use proton_api_mail::proton_api_core::domain::{
-    EventId, IsEvent, User, UserProductUsedSpace, UserSettings,
+    Event, EventId, ProductUsedSpace, User, UserSettings,
 };
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
@@ -20,7 +20,7 @@ pub struct MailEvent {
     pub(super) event: proton_api_mail::domain::MailEvent,
 }
 
-impl IsEvent for MailEvent {
+impl Event for MailEvent {
     fn event_id(&self) -> &EventId {
         self.event.event_id()
     }
@@ -43,7 +43,7 @@ impl proton_core_common::CoreEvent for MailEvent {
         self.event.used_space
     }
 
-    fn get_core_event_used_product_space(&self) -> Option<&UserProductUsedSpace> {
+    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
         self.event.product_used_space.as_ref()
     }
 }

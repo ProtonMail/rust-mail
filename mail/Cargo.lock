@@ -1610,9 +1610,9 @@ dependencies = [
 
 [[package]]
 name = "proton-action-queue"
-version = "0.3.0"
+version = "0.4.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "d0d74eb1e46410c3e2079abbd38bee3460cb4b8548e266b962bbf163fdcbbbd0"
+checksum = "9bfac7cd2a38cbf7c6c87682544e608093cac7d6b4902d453e8a53683a6e5007"
 dependencies = [
  "chrono",
  "log",
@@ -1627,9 +1627,9 @@ dependencies = [
 
 [[package]]
 name = "proton-api-core"
-version = "0.2.0"
+version = "0.3.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "1db6bf1773b8e739060e667d24b8ef33c555fc3cf6589be78150edf561c93f77"
+checksum = "80791c22acb2aaf65fbaf5a1aac0d73509df165e457d5f335da5d526fab456a1"
 dependencies = [
  "anyhow",
  "base64 0.22.0",
@@ -1666,9 +1666,9 @@ dependencies = [
 
 [[package]]
 name = "proton-async"
-version = "0.3.0"
+version = "0.4.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "b8c9aa0e755c03bec04fee782f38e6a77d0ed2dd0c71687e5cd4a17d56c484e1"
+checksum = "030c645d9321a39ff8ae3b894a81a6ee01ab3f6dbc218f27ee302baab60765e6"
 dependencies = [
  "async-trait",
  "flume",
@@ -1680,9 +1680,9 @@ dependencies = [
 
 [[package]]
 name = "proton-core-common"
-version = "0.1.0"
+version = "0.2.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "181d9c81a9f13f7b933613b42c9852d67c6779e234c53e4a140db3554dd5fba7"
+checksum = "a606b34562afa7fa999b42fa9e607940bbde9cd43301afcc779a8bfc79341543"
 dependencies = [
  "aes-gcm",
  "base64 0.22.0",
@@ -1723,9 +1723,9 @@ dependencies = [
 
 [[package]]
 name = "proton-event-loop"
-version = "0.4.0"
+version = "0.5.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "be16e0926f48f91ea506835b0001cb7960234dea037774c15c5ad1ec7bdb1320"
+checksum = "66e6c418302fc18fac9baa44a8da0a556a62c24a24703aded370e99c8e9dc531"
 dependencies = [
  "paste",
  "proton-api-core",
@@ -1790,9 +1790,9 @@ dependencies = [
 
 [[package]]
 name = "proton-sqlite3"
-version = "0.4.3"
+version = "0.5.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "d2fae48f7a8f53fb1d9f49934226ac1b7ff180a937b9df074c2a3d43ddc660af"
+checksum = "0a07f3291b1ac572e8c6797d02cf3af7f088cb172163fddc9074d02246d0a16c"
 dependencies = [
  "fixedbitset",
  "parking_lot",

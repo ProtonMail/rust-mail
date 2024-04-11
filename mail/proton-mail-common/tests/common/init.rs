@@ -6,11 +6,9 @@ use proton_api_mail::domain::{
 };
 use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
-    EventId, TFAStatus, User, UserFlags, UserId, UserLogAuth, UserMnemonicStatus,
-    UserProductUsedSpace, UserSettings, UserSettings2FA, UserSettingsDateFormat,
-    UserSettingsDensity, UserSettingsEmail, UserSettingsFlags, UserSettingsHighSecurity,
-    UserSettingsPassword, UserSettingsPhone, UserSettingsTimeFormat, UserSettingsWeekStart,
-    UserType,
+    DateFormat, Density, Email, EventId, Flags, HighSecurity, LogAuth, Password, Phone,
+    ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId,
+    UserMnemonicStatus, UserSettings, UserType, WeekStart,
 };
 use proton_api_mail::proton_api_core::requests::{
     LatestEventResponse, UserInfoResponse, UserSettingsResponse,
@@ -189,7 +187,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
                 credit: 0,
                 currency: "".to_string(),
                 keys: UserKeys(vec![]),
-                product_used_space: UserProductUsedSpace {
+                product_used_space: ProductUsedSpace {
                     calendar: 0,
                     contact: 0,
                     drive: 0,
@@ -203,7 +201,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
                 subscribed: 0,
                 services: 0,
                 delinquent: 0,
-                flags: UserFlags {
+                flags: Flags {
                     protected: false,
                     onboard_checklist_storage_granted: false,
                     has_temporary_password: false,
@@ -225,23 +223,23 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
         .respond_with(
             ResponseTemplate::new(200).set_body_json(UserSettingsResponse {
                 user_settings: params.user_settings.unwrap_or(UserSettings {
-                    email: UserSettingsEmail {
+                    email: Email {
                         value: "".to_string(),
                         status: 0,
                         notify: 0,
                         reset: 0,
                     },
-                    password: UserSettingsPassword {
+                    password: Password {
                         mode: 0,
                         expiration_time: None,
                     },
-                    phone: UserSettingsPhone {
+                    phone: Phone {
                         value: "".to_string(),
                         status: 0,
                         notify: 0,
                         reset: 0,
                     },
-                    two_factor_auth: UserSettings2FA {
+                    two_factor_auth: TwoFA {
                         enabled: TFAStatus::None,
                         allowed: TFAStatus::None,
                         expiration_time: None,
@@ -249,15 +247,15 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
                     },
                     news: 0,
                     locale: "".to_string(),
-                    log_auth: UserLogAuth::Disabled,
+                    log_auth: LogAuth::Disabled,
                     invoice_text: "".to_string(),
-                    density: UserSettingsDensity::Comfortable,
-                    week_start: UserSettingsWeekStart::Default,
-                    date_format: UserSettingsDateFormat::Default,
-                    time_format: UserSettingsTimeFormat::Default,
+                    density: Density::Comfortable,
+                    week_start: WeekStart::Default,
+                    date_format: DateFormat::Default,
+                    time_format: TimeFormat::Default,
                     welcome: false,
                     early_access: false,
-                    flags: UserSettingsFlags {
+                    flags: SettingsFlags {
                         welcomed: false,
                         in_app_promos_hidden: false,
                     },
@@ -266,7 +264,7 @@ pub async fn setup_user(ctx: &TestContext, mut params: Params) {
                     telemetry: false,
                     crash_reports: false,
                     hide_side_panel: false,
-                    high_security: UserSettingsHighSecurity {
+                    high_security: HighSecurity {
                         eligible: false,
                         value: false,
                     },

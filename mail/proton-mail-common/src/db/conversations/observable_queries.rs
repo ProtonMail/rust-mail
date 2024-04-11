@@ -1,5 +1,5 @@
 use crate::db::{LocalConversation, LocalLabelId, MailSqliteConnectionImpl};
-use proton_sqlite3::{ObservableQuery, SqliteConnection};
+use proton_sqlite3::{Observable, SqliteConnection};
 use std::ops::Deref;
 
 #[derive(Clone)]
@@ -15,7 +15,7 @@ impl ConversationQuery {
     }
 }
 
-impl ObservableQuery for ConversationQuery {
+impl Observable for ConversationQuery {
     type Output = Vec<LocalConversation>;
 
     fn debug_name(&self) -> &'static str {

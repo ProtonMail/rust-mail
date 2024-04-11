@@ -1,7 +1,7 @@
 mod common;
 
 use crate::common::request;
-use proton_async::runtime::LocalRuntime;
+use proton_async::runtime::InPlace;
 use reqwest::StatusCode;
 use wiremock::{
     matchers::{method, path},
@@ -14,7 +14,7 @@ mod basic {
 
     #[test]
     fn ping_mock_server() {
-        let runtime = LocalRuntime::new().expect("failed to create runtime");
+        let runtime = InPlace::new().expect("failed to create runtime");
         // Set up mock server with expectations and mock responses
         let mock_server = runtime.block_on(async {
             let mock_server = MockServer::start().await;

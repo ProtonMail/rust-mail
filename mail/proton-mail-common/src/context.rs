@@ -1,12 +1,12 @@
 use crate::db::DBMigrationError;
 use crate::MailUserContext;
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
-use proton_api_mail::proton_api_core::http::{Client, HttpRequestError};
-use proton_api_mail::proton_api_core::login::LoginFlow;
-use proton_async::runtime::MTRuntime;
+use proton_api_mail::proton_api_core::http::{Client, RequestError};
+use proton_api_mail::proton_api_core::login::Flow;
+use proton_async::runtime::MultiThreaded;
 use proton_core_common::db::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
-use proton_core_common::{CoreContext, CoreContextError};
+use proton_core_common::{Context, CoreContextError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
 use std::path::PathBuf;
@@ -28,7 +28,7 @@ pub enum MailContextError {
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
     #[error("HTTP Error: {0}")]
-    Http(#[from] HttpRequestError),
+    Http(#[from] RequestError),
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
@@ -56,12 +56,12 @@ pub type MailContextResult<T> = Result<T, MailContextError>;
 
 #[derive(Clone)]
 pub struct MailContext {
-    core_context: CoreContext,
+    core_context: Context,
 }
 
 impl MailContext {
     pub fn new(
-        async_runtime: MTRuntime,
+        async_runtime: MultiThreaded,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -70,7 +70,7 @@ impl MailContext {
     ) -> Result<Self, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
-        let core_context = CoreContext::new(
+        let core_context = Context::new(
             async_runtime,
             session_db_path,
             user_db_path,
@@ -86,14 +86,14 @@ impl MailContext {
     pub fn new_login_flow(
         &self,
         cb: Option<Box<dyn CoreSessionCallback>>,
-    ) -> MailContextResult<LoginFlow> {
+    ) -> MailContextResult<Flow> {
         let f = self.core_context.new_login_flow(cb)?;
         Ok(f)
     }
 
     pub fn user_context_from_login_flow(
         &self,
-        login_flow: &LoginFlow,
+        login_flow: &Flow,
     ) -> MailContextResult<MailUserContext> {
         let ctx = self.core_context.user_context_from_login_flow(login_flow)?;
         Ok(MailUserContext::new(self.clone(), ctx))
@@ -119,7 +119,7 @@ impl MailContext {
         self.core_context.is_network_corrected()
     }
 
-    pub fn async_runtime(&self) -> &MTRuntime {
+    pub fn async_runtime(&self) -> &MultiThreaded {
         self.core_context.async_runtime()
     }
 }

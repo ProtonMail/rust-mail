@@ -12,7 +12,7 @@ impl MailSession {
     pub async fn conversations(
         &self,
         filter: ConversationFilter,
-    ) -> Result<GetConversationsResponse, http::HttpRequestError> {
+    ) -> Result<GetConversationsResponse, http::RequestError> {
         self.session
             .execute_request(GetConversationsRequest::new(filter))
             .await
@@ -21,15 +21,13 @@ impl MailSession {
     pub async fn conversation(
         &self,
         id: &ConversationId,
-    ) -> Result<GetConversationResponse, http::HttpRequestError> {
+    ) -> Result<GetConversationResponse, http::RequestError> {
         self.session
             .execute_request(GetConversationRequest::new(id))
             .await
     }
 
-    pub async fn conversation_counts(
-        &self,
-    ) -> Result<Vec<ConversationCount>, http::HttpRequestError> {
+    pub async fn conversation_counts(&self) -> Result<Vec<ConversationCount>, http::RequestError> {
         self.session
             .execute_request(GetConversationCountsRequest {})
             .await
@@ -40,7 +38,7 @@ impl MailSession {
         &self,
         label_id: &LabelId,
         ids: &[ConversationId],
-    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+    ) -> Result<Vec<ConversationsResponseObject>, http::RequestError> {
         self.session
             .execute_request(DeleteConversationsRequest::new(label_id, ids))
             .await
@@ -50,7 +48,7 @@ impl MailSession {
     pub async fn mark_conversations_read(
         &self,
         ids: &[ConversationId],
-    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+    ) -> Result<Vec<ConversationsResponseObject>, http::RequestError> {
         self.session
             .execute_request(MarkConversationsReadRequest::new(ids))
             .await
@@ -60,7 +58,7 @@ impl MailSession {
     pub async fn mark_conversations_unread(
         &self,
         ids: &[ConversationId],
-    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+    ) -> Result<Vec<ConversationsResponseObject>, http::RequestError> {
         self.session
             .execute_request(MarkConversationsUnreadRequest::new(ids))
             .await
@@ -72,7 +70,7 @@ impl MailSession {
         label_id: &LabelId,
         ids: &[ConversationId],
         spam_action: Option<bool>,
-    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+    ) -> Result<Vec<ConversationsResponseObject>, http::RequestError> {
         self.session
             .execute_request(LabelConversationRequest::new(label_id, spam_action, ids))
             .await
@@ -83,7 +81,7 @@ impl MailSession {
         &self,
         label_id: &LabelId,
         ids: &[ConversationId],
-    ) -> Result<Vec<ConversationsResponseObject>, http::HttpRequestError> {
+    ) -> Result<Vec<ConversationsResponseObject>, http::RequestError> {
         self.session
             .execute_request(UnlabelConversationRequest::new(label_id, ids))
             .await

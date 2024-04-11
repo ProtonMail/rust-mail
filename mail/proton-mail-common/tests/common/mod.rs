@@ -3,10 +3,10 @@
 pub mod conversations;
 pub mod init;
 
-use proton_api_mail::proton_api_core::auth::{AccessToken, AuthScope, RefreshToken};
+use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope};
 use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
-use proton_api_mail::proton_api_core::http::{APIEnvConfig, ClientBuilder};
-use proton_async::runtime::MTRuntime;
+use proton_api_mail::proton_api_core::http::{APIEnvConfig, Builder};
+use proton_async::runtime::MultiThreaded;
 use proton_core_common::db::proton_sqlite3::{SqliteConnectionPool, SqliteMode};
 use proton_core_common::db::{
     DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
@@ -38,7 +38,7 @@ impl TestContext {
 
     /// Create and initialize test context.
     pub fn new() -> Self {
-        let runtime = MTRuntime::new(2).expect("failed to create runtime");
+        let runtime = MultiThreaded::new(2).expect("failed to create runtime");
         let mock_server = runtime.block_on(async { MockServer::start().await });
 
         // Create client with the mock server as the base URL
@@ -46,7 +46,7 @@ impl TestContext {
         api_env_config.base_url = format!("{}/api", mock_server.uri());
         api_env_config.allow_http = true;
         api_env_config.skip_srp_proof_validation = true;
-        let client = ClientBuilder::new()
+        let client = Builder::new()
             .api_env_config(api_env_config)
             .build()
             .unwrap();
@@ -86,7 +86,7 @@ impl TestContext {
             email: "test@foo.bar".to_string(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
-            scopes: AuthScope(String::new()),
+            scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)
         .expect("failed to generate encrypted session");
@@ -153,7 +153,7 @@ impl TestContext {
     }
 
     /// Get the async runtime.
-    pub fn async_runtime(&self) -> &MTRuntime {
+    pub fn async_runtime(&self) -> &MultiThreaded {
         self.context.async_runtime()
     }
 }
