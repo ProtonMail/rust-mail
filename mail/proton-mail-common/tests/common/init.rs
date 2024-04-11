@@ -378,13 +378,22 @@ impl TestContext {
             .expect(1)
             .mount(self.mock_server())
             .await;
+    }
 
-        // Conversations
+    /// Generate new mock expectations for retrieving conversations.
+    ///
+    /// This function will mock the response for the given conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `conversations` - The list of conversations to respond with.
+    ///
+    pub async fn mock_get_conversations(&self, conversations: Vec<Conversation>) {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/conversations"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
-                    conversations: params.conversations,
+                    conversations,
                     stale: false,
                     total: 1,
                 }),
