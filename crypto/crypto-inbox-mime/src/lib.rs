@@ -4,11 +4,11 @@ use std::ffi::OsStr;
 use std::ops::Range;
 use std::path::Path;
 
+use constants::mime_extensions;
 use mail_parser::{Header, MimeHeaders};
 use mail_parser::{Message, MessageParser};
 
 mod constants;
-use constants::*;
 use rand::RngCore;
 
 /// Mime processing errors.
@@ -81,7 +81,7 @@ impl ProcessedBodyType {
 
 /// Represents a signature extracted from the mime message.
 ///
-/// Contains the OpenPGP signature and the range of the raw data
+/// Contains the `OpenPGP` signature and the range of the raw data
 /// the signatures has to be verified against.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct MimeSignatureVerifier {
@@ -115,7 +115,7 @@ impl ProcessMime for MimeProcessor {
         // Extract signatures.
         let processed_signatures = process_signatures(&parsed_message);
 
-        let encrypted_subject = parsed_message.subject().map(|s| s.to_string());
+        let encrypted_subject = parsed_message.subject().map(ToString::to_string);
         let processed_message = ProcessedMessage {
             body,
             attachments: processed_attachments,
@@ -164,7 +164,7 @@ fn process_attachments(message_id: &str, parsed_message: &Message<'_>) -> Vec<Pr
             // Use the exisiting content id or generate a random id.
             let content_id = attachment
                 .content_id()
-                .map_or_else(random_content_id, |v| v.to_string());
+                .map_or_else(random_content_id, ToString::to_string);
             let data = attachment.contents().to_vec();
 
             Some(ProcessedAttachment {
@@ -338,7 +338,7 @@ fn generate_file_name(
         mime_extensions()
             .get(content_type.as_str())
             .map_or(DEFAULT_FILE_NAME.to_string(), |name| {
-                format!("{}.{}", DEFAULT_FILE_NAME, name)
+                format!("{DEFAULT_FILE_NAME}.{name}")
             })
     } else {
         DEFAULT_FILE_NAME.to_string()

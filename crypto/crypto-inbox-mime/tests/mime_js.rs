@@ -1,10 +1,10 @@
-//! Tests from https://github.com/ProtonMail/pmcrypto/blob/main/test/message/processMIME.spec.ts
+//! Tests from <https://github.com/ProtonMail/pmcrypto/blob/main/test/message/processMIME.spec.ts>
 use proton_crypto::crypto::*;
 use proton_crypto::new_pgp_provider;
 use proton_crypto::utils::to_canonicalized_string;
 use proton_crypto_inbox_mime::{MimeProcessor, MimeSignatureVerifier, ProcessMime};
 
-pub const KEY: &str = r#"-----BEGIN PGP PUBLIC KEY BLOCK-----
+pub const KEY: &str = r"-----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: OpenPGP.js v4.4.6
 Comment: https://openpgpjs.org
 
@@ -17,7 +17,7 @@ MmVRBRXO1BUtkSxwS9zxzQfE/0NZ7QfOOARcbqs2EgorBgEEAZdVAQUBAQdA
 AlxuqzYCGwwACgkQApgazZlru7OCeAD/Waa1g7t1DsrE8Di+ovD19Xs7js4R
 82uvdzLBXafN8okBALL5uHCjG/gkJzHGun2Tj2MKO2ykR6gv6lVKo7jX75kD
 =7vY3
------END PGP PUBLIC KEY BLOCK-----"#;
+-----END PGP PUBLIC KEY BLOCK-----";
 
 pub const MULTIPART_SIGNED_MESSAGE: &str = r#"From: Jon Smith <jon@example.com>
 To: Jon Smith <jon@example.com>
@@ -71,7 +71,7 @@ Content-Transfer-Encoding: quoted-printable
 message with missing signature
 --bar"#;
 
-pub const MULTIPART_SIGNED_MESSAGE_BODY: &str = r#"¡Hola!
+pub const MULTIPART_SIGNED_MESSAGE_BODY: &str = r"¡Hola!
 
 Did you know that talking to yourself is a sign of senility?
 
@@ -84,7 +84,7 @@ trailing whitespace that occurs on lines in order to ensure
 that the message signature is not invalidated when passing  
 a gateway that modifies such whitespace (like BITNET).  
 
-me"#;
+me";
 
 pub const MULTIPART_MESSAGE_WITH_ATTACHMENT: &str = r#"From: Some One <someone@example.com>
 To: "Someone Else" <someone-else@example.com>
@@ -310,7 +310,7 @@ Import HTML cöntäct//Subjεέςτ//
     assert_eq!(&processed_message.body, "Import HTML cöntäct//Subjεέςτ//\n");
 }
 
-fn verify_signature(raw_input: &str, signatures: Vec<MimeSignatureVerifier>) -> VerificationResult {
+fn verify_signature(raw_input: &str, signatures: &[MimeSignatureVerifier]) -> VerificationResult {
     let provider = new_pgp_provider();
     let pk = provider
         .public_key_import(KEY, DataEncoding::Armor)
@@ -336,8 +336,8 @@ fn test_process_multipart_signed_mime_messages_and_verify_signature() {
     assert!(processed_message.attachments.is_empty());
     assert!(processed_message.encrypted_subject.is_none());
     assert!(!signatures.is_empty());
-    let verification_result = verify_signature(MULTIPART_SIGNED_MESSAGE, signatures);
-    assert!(verification_result.is_ok())
+    let verification_result = verify_signature(MULTIPART_SIGNED_MESSAGE, &signatures);
+    assert!(verification_result.is_ok());
 }
 
 #[test]
@@ -349,8 +349,8 @@ fn test_process_multipart_signed_mime_messages_and_verify_signature_with_extra_p
     assert_eq!(&processed_message.body, "hello");
     assert!(processed_message.attachments.is_empty());
     assert!(!signatures.is_empty());
-    let verification_result = verify_signature(EXTRA_MULTIPART_SIGNED_MESSAGE, signatures);
-    assert!(verification_result.is_ok())
+    let verification_result = verify_signature(EXTRA_MULTIPART_SIGNED_MESSAGE, &signatures);
+    assert!(verification_result.is_ok());
 }
 
 #[test]
@@ -360,7 +360,7 @@ fn test_does_not_verify_invalid_messages() {
             .unwrap();
 
     assert_eq!(&processed_message.body, "message with missing signature");
-    assert!(signatures.is_empty())
+    assert!(signatures.is_empty());
 }
 
 #[test]
@@ -374,8 +374,8 @@ fn test_can_parse_messages_with_special_characters_in_boundary() {
     assert!(!signatures.is_empty());
     assert_eq!(&processed_message.body, "hello");
     let verification_result =
-        verify_signature(MULTIPART_MESSAGE_WITH_SPECIAL_CHARACTER, signatures);
-    assert!(verification_result.is_ok())
+        verify_signature(MULTIPART_MESSAGE_WITH_SPECIAL_CHARACTER, &signatures);
+    assert!(verification_result.is_ok());
 }
 
 #[test]
@@ -415,7 +415,7 @@ fn test_can_parse_message_with_encrypted_subject() {
     assert_eq!(&processed_message.body, "hello");
 
     let verification_result =
-        verify_signature(MULTIPART_MESSAGE_WITH_ENCRYPTED_SUBJECT, signatures);
+        verify_signature(MULTIPART_MESSAGE_WITH_ENCRYPTED_SUBJECT, &signatures);
     matches!(verification_result, Err(VerificationError::Failed(_, _)));
 }
 
