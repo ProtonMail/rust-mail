@@ -35,10 +35,11 @@ pub use migration::*;
 pub use query::*;
 pub use tracker::*;
 
+use parking_lot::Mutex;
 use rusqlite::{Connection, OpenFlags, Transaction};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tracing::error;
 
 // re-export;
@@ -50,18 +51,11 @@ pub use watcher::*;
 
 pub const DEFAULT_OPEN_CONNECTION_LIMIT: usize = 8;
 
-#[derive(Eq, PartialEq, Copy, Clone)]
-enum ConnectionAccess {
-    Read,
-    Write,
-}
-
 /// A connection borrowed from a pool. On drop will be returned to the pool it was acquired from.
 pub struct SqliteConnection {
     pool: Arc<ConnectionPoolInner>,
     // Unfortunately we can't transfer this resource on drop, so the only option we have is to wrap it with option.
     conn: Option<Connection>,
-    conn_access: ConnectionAccess,
 }
 
 impl SqliteConnection {
@@ -96,8 +90,7 @@ impl SqliteConnection {
 }
 impl Drop for SqliteConnection {
     fn drop(&mut self) {
-        self.pool
-            .release(self.conn.take().unwrap(), self.conn_access);
+        self.pool.release(self.conn.take().unwrap());
     }
 }
 
@@ -115,27 +108,6 @@ impl DerefMut for SqliteConnection {
     }
 }
 
-/// Wrapper type for read only connections.
-pub struct ReadOnlySqliteConnection(SqliteConnection);
-
-impl ReadOnlySqliteConnection {
-    /// Same as [`SqliteConnection::data_version`].
-    ///
-    /// # Errors
-    /// Same as [`SqliteConnection::data_version`].
-    pub fn data_version(&self) -> rusqlite::Result<u64> {
-        self.0.data_version()
-    }
-}
-
-impl Deref for ReadOnlySqliteConnection {
-    type Target = Connection;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// Sqlite Database Mode
 pub enum SqliteMode {
     /// On disk with WAL2 journaling (Recommended).
@@ -150,8 +122,7 @@ pub struct SqliteConnectionPool {
     inner: Arc<ConnectionPoolInner>,
 }
 struct ConnectionPoolInner {
-    writable_connection: Mutex<Vec<Connection>>,
-    readable_connection: Mutex<Vec<Connection>>,
+    connections: Mutex<Vec<Connection>>,
     max_open_connections: usize,
     mode: SqliteMode,
     debug: bool,
@@ -191,8 +162,7 @@ impl SqliteConnectionPool {
         Self {
             inner: Arc::new(ConnectionPoolInner {
                 mode,
-                writable_connection: Mutex::new(Vec::with_capacity(limit)),
-                readable_connection: Mutex::new(Vec::new()),
+                connections: Mutex::new(Vec::with_capacity(limit)),
                 max_open_connections: limit,
                 debug,
             }),
@@ -205,27 +175,10 @@ impl SqliteConnectionPool {
     /// Returns error if we can't obtain a connection.
     pub fn acquire(&self) -> rusqlite::Result<SqliteConnection> {
         self.inner
-            .get_or_create_connection(ConnectionAccess::Write, self.inner.debug)
+            .get_or_create_connection(self.inner.debug)
             .map(|c| SqliteConnection {
                 pool: self.inner.clone(),
                 conn: Some(c),
-                conn_access: ConnectionAccess::Write,
-            })
-    }
-
-    /// Acquire a new read-only connection from the pool.
-    ///
-    /// # Errors
-    /// Returns error if we can't obtain a connection.
-    pub fn acquire_read_only(&self) -> rusqlite::Result<ReadOnlySqliteConnection> {
-        self.inner
-            .get_or_create_connection(ConnectionAccess::Read, self.inner.debug)
-            .map(|c| {
-                ReadOnlySqliteConnection(SqliteConnection {
-                    pool: self.inner.clone(),
-                    conn: Some(c),
-                    conn_access: ConnectionAccess::Read,
-                })
             })
     }
 
@@ -251,33 +204,20 @@ impl SqliteConnectionPool {
 }
 
 impl ConnectionPoolInner {
-    fn get_or_create_connection(
-        &self,
-        connection_access: ConnectionAccess,
-        debug: bool,
-    ) -> rusqlite::Result<Connection> {
+    fn get_or_create_connection(&self, debug: bool) -> rusqlite::Result<Connection> {
         {
-            let mut accessor = match connection_access {
-                ConnectionAccess::Write => self.writable_connection.lock().expect("lock poisoning"),
-                ConnectionAccess::Read => self.readable_connection.lock().expect("lock poisoning"),
-            };
+            let mut accessor = self.connections.lock();
             if let Some(c) = accessor.pop() {
                 return Ok(c);
             }
         }
 
-        match connection_access {
-            ConnectionAccess::Read => self.new_read_only_connection(debug),
-            ConnectionAccess::Write => self.new_connection(debug),
-        }
+        self.new_connection(debug)
     }
 
-    fn release(&self, conn: Connection, connection_access: ConnectionAccess) {
+    fn release(&self, conn: Connection) {
         {
-            let mut accessor = match connection_access {
-                ConnectionAccess::Write => self.writable_connection.lock().expect("lock poisoning"),
-                ConnectionAccess::Read => self.readable_connection.lock().expect("lock poisoning"),
-            };
+            let mut accessor = self.connections.lock();
             if accessor.len() < self.max_open_connections {
                 accessor.push(conn);
                 return;
@@ -291,14 +231,6 @@ impl ConnectionPoolInner {
 
     fn new_connection(&self, debug: bool) -> rusqlite::Result<Connection> {
         self.new_connection_impl(OpenFlags::default(), debug)
-    }
-
-    fn new_read_only_connection(&self, debug: bool) -> rusqlite::Result<Connection> {
-        let flags = OpenFlags::empty()
-            | OpenFlags::SQLITE_OPEN_READ_ONLY
-            | OpenFlags::SQLITE_OPEN_URI
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-        self.new_connection_impl(flags, debug)
     }
 
     fn new_connection_impl(&self, flags: OpenFlags, debug: bool) -> rusqlite::Result<Connection> {
@@ -329,24 +261,14 @@ impl ConnectionPoolInner {
     }
 
     fn close_all(&self) -> rusqlite::Result<()> {
-        {
-            let mut accessor = self.writable_connection.lock().expect("lock poisoning");
-            while let Some(c) = accessor.pop() {
-                if let Err((c, e)) = c.close() {
-                    accessor.push(c);
-                    return Err(e);
-                }
+        let mut accessor = self.connections.lock();
+        while let Some(c) = accessor.pop() {
+            if let Err((c, e)) = c.close() {
+                accessor.push(c);
+                return Err(e);
             }
         }
-        {
-            let mut accessor = self.readable_connection.lock().expect("lock poisoning");
-            while let Some(c) = accessor.pop() {
-                if let Err((c, e)) = c.close() {
-                    accessor.push(c);
-                    return Err(e);
-                }
-            }
-        }
+
         Ok(())
     }
 
@@ -394,10 +316,7 @@ impl ConnectionPoolInner {
 
     #[cfg(test)]
     fn get_open_connection_count(&self) -> usize {
-        self.writable_connection
-            .lock()
-            .expect("lock poisoning")
-            .len()
+        self.connections.lock().len()
     }
 }
 
