@@ -11,6 +11,7 @@ use proton_crypto_inbox_mime::{
 };
 
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::module_name_repetitions)]
 pub enum MessageError {
     #[error("Failed to decrypt the message body: {0}")]
     Decryption(Box<dyn std::error::Error>),
@@ -95,6 +96,7 @@ impl VerifiableBody {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub trait DecryptableMessage {
     /// Borrows the unique id of the message.
     fn message_id(&self) -> &str;
@@ -224,13 +226,10 @@ fn verify_mime<T: PGPProviderSync>(
             .map(|verifier| verify_mime_signature(pgp_provider, verification_keys, data, verifier)),
     );
     // Select the ok signature if any else just show the result of the first signature.
-    if mime_verification_results
-        .iter()
-        .any(|result| result.is_ok())
-    {
+    if mime_verification_results.iter().any(Result::is_ok) {
         mime_verification_results
             .into_iter()
-            .find(|result| result.is_ok())
+            .find(Result::is_ok)
             .unwrap_or(not_signed_error) // Should not happen
     } else {
         mime_verification_results

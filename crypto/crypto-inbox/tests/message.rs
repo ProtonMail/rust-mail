@@ -290,7 +290,7 @@ OQTmvM6R
 -----END PGP PUBLIC KEY BLOCK-----
 ";
 
-const TEST_EXPECTED_BODY_MIME_GO: &str = r#"Pak
+const TEST_EXPECTED_BODY_MIME_GO: &str = r"Pak
 
 > On Aug 13, 2018, at 4:15 PM, Telekja <telekja@protonmail.com> wrote:
 > 
@@ -308,7 +308,7 @@ const TEST_EXPECTED_BODY_MIME_GO: &str = r#"Pak
 > 
 > 
 
-"#;
+";
 
 struct TestMessage(pub bool, pub String);
 
@@ -374,10 +374,10 @@ fn test_message_decrypt_and_verify_mime() {
     for (idx, attachment) in processed_messsage.attachments.iter().enumerate() {
         if idx != processed_messsage.attachments.len() - 1 {
             let expected_content = format!("attachment{}", idx + 1);
-            let expected_name = format!("{}.txt", expected_content);
+            let expected_name = format!("{expected_content}.txt");
             assert_eq!(attachment.name, expected_name);
             assert_eq!(
-                String::from_utf8(attachment.data.to_vec()).unwrap(),
+                String::from_utf8(attachment.data.clone()).unwrap(),
                 expected_content
             );
         }

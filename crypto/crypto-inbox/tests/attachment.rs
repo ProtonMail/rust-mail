@@ -101,7 +101,7 @@ fn get_test_attachment_encrypted_data() -> Vec<u8> {
     b64.decode(TEST_ATTACHMENT_ENC_DATA).unwrap()
 }
 
-fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
+fn test_attachment_decrypt_helper(attachment_metadata: &TestAttachmentMetdata) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
     let decryption_keys = get_test_address_keys(&pgp_provider);
@@ -126,7 +126,7 @@ fn test_attachment_decrypt_helper(attachment_metadata: TestAttachmentMetdata) {
     assert!(verification_result.is_ok());
 }
 
-fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetdata) {
+fn test_attachment_decrypt_stream_helper(attachment_metadata: &TestAttachmentMetdata) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
     let decryption_keys = get_test_address_keys(&pgp_provider);
@@ -153,23 +153,23 @@ fn test_attachment_decrypt_stream_helper(attachment_metadata: TestAttachmentMetd
 #[test]
 fn test_attachment_decrypt() {
     let attachment_metadata = get_test_attachment_metadata();
-    test_attachment_decrypt_helper(attachment_metadata);
+    test_attachment_decrypt_helper(&attachment_metadata);
 }
 
 #[test]
 fn test_attachment_decrypt_encrypted_signature() {
     let attachment_metadata = get_test_attachment_metadata_enc_sig_only();
-    test_attachment_decrypt_helper(attachment_metadata);
+    test_attachment_decrypt_helper(&attachment_metadata);
 }
 
 #[test]
 fn test_attachment_decrypt_stream() {
     let attachment_metadata = get_test_attachment_metadata();
-    test_attachment_decrypt_stream_helper(attachment_metadata);
+    test_attachment_decrypt_stream_helper(&attachment_metadata);
 }
 
 #[test]
 fn test_attachment_decrypt_stream_encrypted_signature() {
     let attachment_metadata = get_test_attachment_metadata_enc_sig_only();
-    test_attachment_decrypt_stream_helper(attachment_metadata);
+    test_attachment_decrypt_stream_helper(&attachment_metadata);
 }

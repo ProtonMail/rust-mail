@@ -53,6 +53,7 @@ pub fn get_test_address_keys<T: PGPProviderSync>(
     get_test_address_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub fn get_test_address_key_source<T: PGPProviderSync>(
     pgp_provider: &T,
     source: &str,
@@ -70,6 +71,7 @@ pub fn get_test_public_address_keys<T: PGPProviderSync>(
     get_test_public_address_key_source(pgp_provider, TEST_VERIFICATION_KEY)
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub fn get_test_public_address_key_source<T: PGPProviderSync>(
     pgp_provider: &T,
     source: &str,

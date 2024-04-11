@@ -11,19 +11,21 @@ pub enum RecipientType {
     External,
 }
 
-/// AddressType type is either `Normal` or `CatchAll`.
+/// `AddressType` type is either `Normal` or `CatchAll`.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum AddressType {
     Normal,
     CatchAll,
 }
 
-/// Wrapper type for public keys imported InboxImportedPublicKeys
+/// Wrapper type for public keys imported `InboxImportedPublicKeys`
 #[derive(Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub struct InboxImportedPublicKeys<Pub: PublicKey>(pub PublicAddressKeys<Pub>);
 
 /// The inbox public keys for an e-mail address.
 #[derive(Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub struct InboxPublicKeys<Pub: PublicKey> {
     /// The public address keys.
     pub public_keys: Vec<PublicAddressKey<Pub>>,
