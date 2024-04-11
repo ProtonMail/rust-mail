@@ -53,11 +53,11 @@ pub type CoreContextResult<T> = Result<T, CoreContextError>;
 
 /// Context for core operations.
 #[derive(Clone)]
-pub struct CoreContext {
-    inner: Arc<CoreContextInner>,
+pub struct Context {
+    inner: Arc<ContextInner>,
 }
 
-struct CoreContextInner {
+struct ContextInner {
     runtime: MultiThreaded,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
@@ -68,10 +68,23 @@ struct CoreContextInner {
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
 }
 
-impl CoreContext {
+impl Context {
     /// Create a new context by specifying the `session_db_path` where the session database will be created,
     /// an `user_db_path` for user databases, a`key_chain` implementation and a list of `initializers`
     /// for the user database.
+    ///
+    /// # Params
+    /// * `async_runtime`: Instance of a multithreaded async runtime.
+    /// * `session_db_path`: Path where the session db will be written.
+    /// * `user_db_path`: Path where each user db will be written.
+    /// * `key_chain`: Implementation of a keychain store.
+    /// * `initializers`: List of user database initializers that should be called.
+    /// * `client`: Instance of the http client.
+    /// * `network_callback`: Callback to be notified of network status changes.
+    ///
+    /// # Errors
+    /// Returns error if the context failed to initialize correctly.
+    ///
     pub fn new(
         async_runtime: MultiThreaded,
         session_db_path: impl Into<PathBuf>,
@@ -86,7 +99,7 @@ impl CoreContext {
         let user_db_path = user_db_path.into();
         Self::_new(
             async_runtime,
-            session_db_path,
+            &session_db_path,
             user_db_path,
             key_chain,
             initializers,
@@ -96,7 +109,7 @@ impl CoreContext {
     }
     fn _new(
         async_runtime: MultiThreaded,
-        session_db_path: PathBuf,
+        session_db_path: &Path,
         user_db_path: PathBuf,
         key_chain: Arc<dyn KeyChain>,
         initializers: Vec<Box<dyn UserDatabaseInitializer>>,
@@ -104,9 +117,9 @@ impl CoreContext {
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Self> {
         // create path.
-        std::fs::create_dir_all(&session_db_path)?;
+        std::fs::create_dir_all(session_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
-        let session_db_path = get_session_db_path(&session_db_path);
+        let session_db_path = get_session_db_path(session_db_path);
 
         let pool = SqliteConnectionPool::new(
             SqliteMode::File(session_db_path.clone()),
@@ -118,7 +131,7 @@ impl CoreContext {
         }
 
         Ok(Self {
-            inner: Arc::new(CoreContextInner {
+            inner: Arc::new(ContextInner {
                 runtime: async_runtime,
                 network_connected: AtomicBool::new(true),
                 user_db_path,
@@ -131,11 +144,16 @@ impl CoreContext {
         })
     }
 
+    /// Get the async runtime.
+    #[must_use]
     pub fn async_runtime(&self) -> &MultiThreaded {
         &self.inner.runtime
     }
 
     /// Get available sessions.
+    ///
+    /// # Errors
+    /// Returns error if we fail to retrieve the sessions from the db.
     pub fn get_sessions(&self) -> CoreContextResult<Vec<EncryptedUserSession>> {
         let conn = self.get_connection()?;
         let r = conn.as_connection_ref().load_all_sessions()?;
@@ -143,6 +161,8 @@ impl CoreContext {
     }
 
     /// Create a new login flow for a new user.
+    /// # Errors
+    /// Returns error if there is no encryption key in the keychain.
     pub fn new_login_flow(
         &self,
         cb: Option<Box<dyn CoreSessionCallback>>,
@@ -219,6 +239,8 @@ impl CoreContext {
         }
     }
 
+    /// Check whether a network connection is available.
+    #[must_use]
     pub fn is_network_corrected(&self) -> bool {
         self.inner.network_connected.load(Ordering::Relaxed)
     }

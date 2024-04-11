@@ -9,6 +9,10 @@ use proton_sqlite3::utils::{gen_variable_in_argument_list, mapped_rows_to_vec, R
 use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
 
 impl<'c> CoreSqliteConnectionImpl<'c> {
+    /// Create or update a user in the database.
+    ///
+    /// # Errors
+    /// Returns errors if the operation failed.
     pub fn create_or_update_user(&mut self, user: &User) -> DBResult<()> {
         let mut stmt = self.0.prepare(&format!(
             "INSERT OR REPLACE INTO users VALUES ({})",
@@ -62,6 +66,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    /// Get a user with the given user id.
+    ///
+    /// # Errors
+    /// Returns errors if the operation failed.
     pub fn get_user(&mut self, user_id: &UserId) -> DBResult<Option<User>> {
         let Some(mut user) = self
             .0
@@ -80,6 +88,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(Some(user))
     }
 
+    /// Update the user total used storage space.
+    ///
+    /// # Errors
+    /// Returns errors if the operation failed.
     pub fn update_user_used_space(&mut self, user_id: &UserId, used_space: i64) -> DBResult<()> {
         self.0.execute(
             "UPDATE users SET used_space=? WHERE id=?",
@@ -88,6 +100,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    /// Update the user product space usage info.
+    ///
+    /// # Errors
+    /// Returns errors if the operation failed.
     pub fn update_user_product_used_space(
         &mut self,
         user_id: &UserId,
@@ -108,6 +124,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    /// Create or update the user's settings.
+    ///
+    /// # Errors
+    /// Returns errors if the operation failed.
     pub fn create_or_update_user_settings(
         &mut self,
         user_id: &UserId,
@@ -164,6 +184,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    /// Get the user's settings.
+    ///
+    /// # Errors
+    /// Returns errors if the operation failed.
     pub fn get_user_settings(&self, user_id: &UserId) -> DBResult<Option<UserSettings>> {
         self.0
             .query_row(
@@ -249,9 +273,6 @@ impl UserSettingsSelector {
     }
 
     fn from_row(r: &Row) -> DBResult<UserSettings> {
-        //TODO: compile time index generation?
-        let mut alloc = RowIndexAllocator::new();
-
         fn referral_from_row(r: &Row, alloc: &mut RowIndexAllocator) -> DBResult<Option<Referral>> {
             let link: Option<String> = r.get(alloc.fetch_and_add())?;
             let eligible: Option<bool> = r.get(alloc.fetch_and_add())?;
@@ -261,6 +282,9 @@ impl UserSettingsSelector {
                 None
             })
         }
+
+        //TODO: compile time index generation?
+        let mut alloc = RowIndexAllocator::new();
 
         // advance once to skip ove user_id;
         alloc.fetch_and_add();
@@ -317,14 +341,14 @@ impl UserSettingsSelector {
 
 fn user_flags_to_u32(flags: &Flags) -> u32 {
     let mut v = 0_u32;
-    v |= flags.protected as u32;
-    v |= (flags.onboard_checklist_storage_granted as u32) << 1;
-    v |= (flags.has_temporary_password as u32) << 2;
-    v |= (flags.test_account as u32) << 3;
-    v |= (flags.no_login as u32) << 4;
-    v |= (flags.recovery_attempt as u32) << 5;
-    v |= (flags.sso as u32) << 6;
-    v |= (flags.no_proton_address as u32) << 7;
+    v |= u32::from(flags.protected);
+    v |= (u32::from(flags.onboard_checklist_storage_granted)) << 1;
+    v |= (u32::from(flags.has_temporary_password)) << 2;
+    v |= (u32::from(flags.test_account)) << 3;
+    v |= (u32::from(flags.no_login)) << 4;
+    v |= (u32::from(flags.recovery_attempt)) << 5;
+    v |= (u32::from(flags.sso)) << 6;
+    v |= (u32::from(flags.no_proton_address)) << 7;
     v
 }
 

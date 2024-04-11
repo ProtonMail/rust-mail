@@ -10,6 +10,10 @@ mod settings;
 
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
+    /// Initialize the database as needed by running database migrations.
+    ///
+    /// # Errors
+    /// Return error if the migration failed.
     fn initialize(&self, conn: &mut SqliteConnection) -> Result<(), DBMigrationError>;
 }
 
@@ -40,26 +44,42 @@ impl UserContext {
         })
     }
 
+    /// Get the network session.
+    #[must_use]
     pub fn session(&self) -> &Session {
         &self.session
     }
 
+    /// Get the network session converted to a type that accepts this type.
+    #[must_use]
     pub fn session_as<T: From<Session>>(&self) -> T {
         T::from(self.session.clone())
     }
 
+    /// Get a new core db connection.
+    ///
+    /// # Errors
+    /// Returns error if the connection can not be acquired.
     pub fn new_db_connection(&self) -> DBResult<CoreSqliteConnection> {
         self.new_db_connection_as::<CoreSqliteConnection>()
     }
 
+    /// Get a new db connection of a given type.
+    ///
+    /// # Errors
+    /// Returns error if the connection can not be acquired.
     pub fn new_db_connection_as<T: From<TrackingConnection>>(&self) -> DBResult<T> {
-        self.db_tracker.new_connection().map(|c| c.into())
+        self.db_tracker.new_connection().map(Into::into)
     }
 
+    /// Get the tracker service for database operations.
+    #[must_use]
     pub fn tracker_service(&self) -> &InProcessTrackerService {
         &self.db_tracker
     }
 
+    /// Get the user id of this context.
+    #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
     }

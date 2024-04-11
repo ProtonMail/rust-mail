@@ -9,6 +9,10 @@ use proton_sqlite3::rusqlite::{OptionalExtension, Row};
 use proton_sqlite3::utils::mapped_rows_to_vec;
 
 impl<'c> SessionSqliteConnectionImpl<'c> {
+    /// Create or update a session.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub fn create_or_update_session(&mut self, session: &EncryptedUserSession) -> DBResult<()> {
         self.0.execute(
             "INSERT OR REPLACE INTO core_sessions VALUES (?,?,?,?,?,?,?)",
@@ -25,6 +29,10 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    /// Update a session auth data after refresh.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub fn update_session(
         &mut self,
         user_id: &UserId,
@@ -40,12 +48,20 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    /// Retrieve all stored sessions.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub fn load_all_sessions(&self) -> DBResult<Vec<EncryptedUserSession>> {
         let mut stmt = self.0.prepare(EncryptedUserSessionSelector::query())?;
         let r = mapped_rows_to_vec(stmt.query_map((), EncryptedUserSessionSelector::from_row)?)?;
         Ok(r)
     }
 
+    /// Get a session with the given session `id`.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub fn get_session(&self, id: &Uid) -> DBResult<Option<EncryptedUserSession>> {
         let mut stmt = self
             .0
@@ -54,6 +70,10 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
             .optional()
     }
 
+    /// Get a session with the given `user_id`.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub fn get_session_with_user_id(
         &self,
         user_id: &UserId,
@@ -65,12 +85,20 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
             .optional()
     }
 
+    /// Delete a session with the given `session_id`.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub fn delete_session(&self, session_id: &Uid) -> DBResult<()> {
         self.0
             .execute("DELETE FROM core_sessions WHERE id =?", [session_id])?;
         Ok(())
     }
 
+    /// Delete a session with the given `user_id`.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub fn delete_session_with_user_id(&self, user_id: &UserId) -> DBResult<()> {
         self.0
             .execute("DELETE FROM core_sessions WHERE user_id =?", [user_id])?;

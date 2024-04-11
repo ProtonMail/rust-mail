@@ -14,6 +14,8 @@ use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput
 use std::string::FromUtf8Error;
 use zeroize::Zeroize;
 
+/// Contains the session authentication in a decrypted state, ready to be used by the
+/// http client.
 pub struct DecryptedUserSession {
     pub session_id: Uid,
     pub user_id: UserId,
@@ -25,6 +27,10 @@ pub struct DecryptedUserSession {
 }
 
 impl DecryptedUserSession {
+    /// Encrypt the session data so that it can be stored securely.
+    ///
+    /// # Errors
+    /// Returns error if the encryption failed.
     pub fn to_encrypted_session(
         &self,
         key: &SessionEncryptionKey,
@@ -48,6 +54,7 @@ impl DecryptedUserSession {
     }
 }
 
+/// Encrypted session authentication data, can safely be stored on disk.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EncryptedUserSession {
     pub session_id: Uid,
@@ -60,6 +67,10 @@ pub struct EncryptedUserSession {
 }
 
 impl EncryptedUserSession {
+    /// Decrypt the session data so that it can be used.
+    ///
+    /// # Errors
+    /// Returns error if the decryption failed.
     pub fn to_decrypted_session(
         &self,
         key: &SessionEncryptionKey,
@@ -100,10 +111,15 @@ pub struct EncryptedData {
     ciphertext_nonce: Vec<u8>,
 }
 
+/// Encrypted Access token wrapper.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EncryptedAccessToken(pub(crate) EncryptedData);
 
 impl EncryptedAccessToken {
+    /// Encrypt the access token.
+    ///
+    /// # Errors
+    /// Returns error if the encryption failed.
     pub fn new(token: &AccessToken, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(token.expose_secret().as_bytes()).map(Self)
     }
@@ -113,10 +129,16 @@ impl AsRef<[u8]> for EncryptedAccessToken {
         self.0.as_ref()
     }
 }
+
+/// Encrypted refresh token wrapper.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EncryptedRefreshToken(pub(crate) EncryptedData);
 
 impl EncryptedRefreshToken {
+    /// Encrypt the refresh token.
+    ///
+    /// # Errors
+    /// Returns error if the encryption failed.
     pub fn new(token: &RefreshToken, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(token.expose_secret().as_bytes()).map(Self)
     }
@@ -147,6 +169,8 @@ impl FromSql for EncryptedData {
     }
 }
 
+//TODO: This could potentially be reused in other contexts.
+/// Encryption key for encryption of session data.
 #[derive(Clone)]
 pub struct SessionEncryptionKey {
     key: Key<Aes256Gcm>,
@@ -165,11 +189,17 @@ impl AsRef<[u8]> for SessionEncryptionKey {
 }
 
 impl SessionEncryptionKey {
+    /// Create a new random encryption key.
+    #[must_use]
     pub fn random() -> Self {
         let key = Aes256Gcm::generate_key(OsRng);
         Self { key }
     }
 
+    /// Create a key from a collection of bytes.
+    ///
+    /// # Errors
+    /// Return error if the len of the collection is invalid.
     pub fn with_bytes(mut bytes: Vec<u8>) -> Result<Self, Vec<u8>> {
         if bytes.len() < Aes256Gcm::key_size() {
             return Err(bytes);
@@ -181,6 +211,10 @@ impl SessionEncryptionKey {
         Ok(k)
     }
 
+    /// Encrypt the data.
+    ///
+    /// # Errors
+    /// Returns error if the encryption failed.
     pub fn encrypt(&self, data: &[u8]) -> Result<EncryptedData, aes_gcm::Error> {
         let cipher = Aes256Gcm::new(&self.key);
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
@@ -190,6 +224,11 @@ impl SessionEncryptionKey {
             ciphertext_nonce: output,
         })
     }
+
+    /// Decrypt the data.
+    ///
+    /// # Errors
+    /// Returns errors if the decryption failed.
 
     pub fn decrypt(&self, data: &EncryptedData) -> Result<Vec<u8>, aes_gcm::Error> {
         const NONCE_LENGTH: usize = 12;
@@ -206,14 +245,20 @@ impl SessionEncryptionKey {
         Ok(plain_text)
     }
 
+    /// Convert the key into a vector of bytes.
+    #[must_use]
     pub fn to_vec(&self) -> Vec<u8> {
         self.key.to_vec()
     }
 
+    /// Convert the key into a base64 encoded string.
+    #[must_use]
     pub fn to_base64(&self) -> String {
         BASE64_STANDARD.encode(self.key)
     }
 
+    /// Create a key from a base64 string.
+    #[must_use]
     pub fn from_base64(value: &str) -> Option<Self> {
         let Ok(bytes) = BASE64_STANDARD.decode(value) else {
             return None;

@@ -1,9 +1,9 @@
 use proton_sqlite3::rusqlite::Transaction;
 use proton_sqlite3::Migration;
 
-pub struct CoreMigrationV0 {}
+pub struct V0 {}
 
-impl Migration for CoreMigrationV0 {
+impl Migration for V0 {
     fn name(&self) -> &str {
         "proton_core_v0"
     }

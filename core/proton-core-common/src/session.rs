@@ -79,7 +79,6 @@ impl CoreSession {
     }
 
     fn encrypt_tokens(
-        &self,
         key: &SessionEncryptionKey,
         access: &AccessToken,
         refresh: &RefreshToken,
@@ -110,13 +109,14 @@ impl proton_api_core::auth::Store for CoreSession {
             e
         })?;
 
-        let (encrypted_access_token, encrypted_refresh_token) = self
-            .encrypt_tokens(&session_key, &auth.access_token, &auth.refresh_token)
-            .map_err(|e| {
-                error!("Failed to encrypt tokens");
-                self.on_error(&e);
-                Box::new(e)
-            })?;
+        let (encrypted_access_token, encrypted_refresh_token) =
+            Self::encrypt_tokens(&session_key, &auth.access_token, &auth.refresh_token).map_err(
+                |e| {
+                    error!("Failed to encrypt tokens");
+                    self.on_error(&e);
+                    Box::new(e)
+                },
+            )?;
 
         let mut conn = self.new_connection().map_err(|e| {
             error!("Failed to get database connection:{e}");
@@ -171,9 +171,8 @@ impl proton_api_core::auth::Store for CoreSession {
             e
         })?;
 
-        let (encrypted_access_token, encrypted_refresh_token) = self
-            .encrypt_tokens(&session_key, &access_token, &refresh_token)
-            .map_err(|e| {
+        let (encrypted_access_token, encrypted_refresh_token) =
+            Self::encrypt_tokens(&session_key, &access_token, &refresh_token).map_err(|e| {
                 error!("Failed to encrypt tokens");
                 self.on_error(&e);
                 Box::new(e)

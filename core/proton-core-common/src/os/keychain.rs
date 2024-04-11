@@ -19,9 +19,24 @@ impl<T: Into<Box<dyn Error + Send>>> From<T> for KeyChainError {
     }
 }
 
+/// OS Keychain abstraction.
 pub trait KeyChain: Send + Sync {
+    /// Store the string encoded encryption key into the keychain.
+    ///
+    /// # Errors
+    /// Should return error if the operation failed.
     fn store(&self, key: String) -> Result<(), KeyChainError>;
+
+    /// Delete the encryption key from the keychain.
+    ///
+    /// # Errors
+    /// Should return error if the operation failed.
     fn delete(&self) -> Result<(), KeyChainError>;
+
+    /// Retrieve the encryption key from the keychain. Should return `None` if it does not exist.
+    ///
+    /// # Errors
+    /// Should return error if the operation failed.
     fn get(&self) -> Result<Option<String>, KeyChainError>;
 }
 

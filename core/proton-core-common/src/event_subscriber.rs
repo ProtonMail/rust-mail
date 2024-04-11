@@ -1,3 +1,4 @@
+#![allow(clippy::module_name_repetitions)] // is exported in the root of the crate.
 use crate::db::{CoreSqliteConnection, DBResult};
 use proton_api_core::domain::{Event, ProductUsedSpace, User, UserId, UserSettings};
 use proton_api_core::exports::anyhow;
@@ -16,7 +17,13 @@ pub trait CoreEvent: Event {
     fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace>;
 }
 
+/// Since the core database can be embedded into another database, the integrator needs to provide
+/// the subscriber with a way to access this database in order to make the required changes.
 pub trait CoreEventSubscriberConnectionProvider: Send + Sync {
+    /// Get the current user id and database connection.
+    ///
+    /// # Errors
+    /// Return error if the connection or the user id can not be obtained.
     fn get_user_id_and_db_connection(&self) -> anyhow::Result<(UserId, CoreSqliteConnection)>;
 }
 pub struct CoreEventSubscriber<T: CoreEventSubscriberConnectionProvider>(T);

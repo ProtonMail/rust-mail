@@ -3,9 +3,13 @@ use proton_sqlite3::{Migration, Migrator, MigratorError, SqliteConnection};
 
 pub mod v0;
 
+/// Migrate the session database.
+///
+/// # Errors
+/// Returns error if the migration failed.
 pub fn migrate_session_db(conn: &mut SqliteConnection) -> Result<usize, MigratorError> {
     const VERSION_TABLE_NAME: &str = "proton_session_version";
-    let migrations: Vec<Box<dyn Migration>> = vec![Box::new(v0::SessionMigrationV0 {})];
+    let migrations: Vec<Box<dyn Migration>> = vec![Box::new(v0::V0 {})];
 
     let migrator = Migrator::new();
     migrator.migrate(conn, VERSION_TABLE_NAME, &migrations)

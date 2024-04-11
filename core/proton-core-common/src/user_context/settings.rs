@@ -2,6 +2,10 @@ use crate::db::CoreSqliteConnection;
 use crate::{CoreContextResult, UserContext};
 
 impl UserContext {
+    /// Download and store user info and settings into the database
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
     pub async fn sync_user_and_settings(&self) -> CoreContextResult<()> {
         let user = self.session.get_user().await?;
         let settings = self.session.get_user_settings().await?;
