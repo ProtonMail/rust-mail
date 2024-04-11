@@ -121,28 +121,26 @@ impl TestContext {
     /// method to set this up by default as a lower-priority expectation and
     /// establish a catch-all in that way.
     ///
-    pub fn catch_all(&self) {
-        self.context.async_runtime().block_on(async {
-            // If there are any unconfigured calls, we will panic because it's not what
-            // we expect to happen, so the test should fail
-            Mock::given(any())
-                .respond_with(|request: &Request| {
-                    panic!(
-                        "Received unexpected {} request\n  Path: {}\n  Headers:\n{}\n  Body: {}\n",
-                        request.method,
-                        request.url.path(),
-                        request
-                            .headers
-                            .iter()
-                            .map(|header| format!("    {}: {:?}", header.0, header.1))
-                            .collect::<Vec<String>>()
-                            .join("\n"),
-                        String::from_utf8(request.body.clone()).unwrap(),
-                    );
-                })
-                .mount(&self.mock_server)
-                .await;
-        });
+    pub async fn catch_all(&self) {
+        // If there are any unconfigured calls, we will panic because it's not what
+        // we expect to happen, so the test should fail
+        Mock::given(any())
+            .respond_with(|request: &Request| {
+                panic!(
+                    "Received unexpected {} request\n  Path: {}\n  Headers:\n{}\n  Body: {}\n",
+                    request.method,
+                    request.url.path(),
+                    request
+                        .headers
+                        .iter()
+                        .map(|header| format!("    {}: {:?}", header.0, header.1))
+                        .collect::<Vec<String>>()
+                        .join("\n"),
+                    String::from_utf8(request.body.clone()).unwrap(),
+                );
+            })
+            .mount(&self.mock_server)
+            .await;
     }
 
     /// Get the test user mail context.
