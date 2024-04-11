@@ -13,7 +13,7 @@ fn test_init_after_login() {
     ctx.async_runtime().block_on(async {
         let conversations = init_params.conversations.clone();
         ctx.setup_user(init_params).await;
-        ctx.mock_get_conversations(conversations).await;
+        ctx.mock_get_conversations(conversations, 1).await;
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
             .await
