@@ -387,8 +387,9 @@ impl TestContext {
     /// # Parameters
     ///
     /// * `conversations` - The list of conversations to respond with.
+    /// * `expect`        - How many times the endpoint should be called.
     ///
-    pub async fn mock_get_conversations(&self, conversations: Vec<Conversation>) {
+    pub async fn mock_get_conversations(&self, conversations: Vec<Conversation>, expect: u64) {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/conversations"))
             .respond_with(
@@ -398,7 +399,7 @@ impl TestContext {
                     total: 1,
                 }),
             )
-            .expect(1)
+            .expect(expect)
             .mount(self.mock_server())
             .await;
     }

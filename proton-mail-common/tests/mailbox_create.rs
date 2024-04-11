@@ -13,7 +13,7 @@ fn test_new_mailbox() {
     ctx.async_runtime().block_on(async {
         let conversations = params.conversations.clone();
         ctx.setup_user(params.clone()).await;
-        ctx.mock_get_conversations(conversations).await;
+        ctx.mock_get_conversations(conversations, 1).await;
         ctx.user_context()
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
