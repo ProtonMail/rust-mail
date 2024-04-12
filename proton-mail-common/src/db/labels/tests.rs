@@ -213,6 +213,26 @@ fn update_local_label() {
     });
 }
 
+#[test]
+fn test_mark_labels_as_initialized() {
+    let (mut conn, _) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let new_label = tx
+            .create_label(
+                LabelType::Folder,
+                "MyLabel".into(),
+                None,
+                None,
+                LabelColor::purple(),
+            )
+            .expect("failed to create label");
+        assert!(!tx.check_if_label_is_initialized(new_label.id).unwrap());
+        tx.mark_label_as_initialized(new_label.id)
+            .expect("failed to mark label as initialized");
+        assert!(tx.check_if_label_is_initialized(new_label.id).unwrap());
+    });
+}
+
 fn compare_remote_labels_with_local<'i>(
     conn_ref: &MailSqliteConnectionImpl,
     remote_labels: impl Iterator<Item = &'i Label>,
