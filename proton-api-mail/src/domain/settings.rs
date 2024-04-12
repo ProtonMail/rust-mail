@@ -8,6 +8,7 @@ use proton_api_core::utils::{
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct MailSettings {
     pub display_name: String,
     pub signature: String,

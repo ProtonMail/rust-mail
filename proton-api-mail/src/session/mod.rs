@@ -15,10 +15,12 @@ pub struct MailSession {
 }
 
 impl MailSession {
+    #[must_use]
     pub fn new(session: Session) -> Self {
         Self { session }
     }
 
+    #[must_use]
     pub fn session(&self) -> &Session {
         &self.session
     }

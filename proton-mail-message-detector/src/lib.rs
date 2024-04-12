@@ -5,7 +5,6 @@ mod test_messages;
 
 use lazy_static::lazy_static;
 use scraper::{ElementRef, Node, Selector};
-use std::ops::Deref;
 
 const ORIGINAL_MESSAGE: &str = "------- Original Message -------";
 
@@ -42,7 +41,7 @@ const BLOCKQUOTE_TEXT_SELECTORS: [&str; 1] = [ORIGINAL_MESSAGE];
 lazy_static! {
     static ref BLOCKQUOTE_SELECTOR: String = {
         BLOCKQUOTE_SELECTORS
-            .map(|v| format!("{}:not(:empty)", v))
+            .map(|v| format!("{v}:not(:empty)"))
             .join(",")
     };
 }
@@ -75,7 +74,7 @@ fn search_for_content<'a>(element: ElementRef<'a>, text: &'a str) -> Vec<Element
     for elem in element.traverse() {
         if let ego_tree::iter::Edge::Open(node) = elem {
             if let Node::Text(ref node_text) = node.value() {
-                let node_text = node_text.deref();
+                let node_text = &**node_text;
                 if node_text == text {
                     if let Some(parent_node) = node.parent() {
                         if let Some(element_ref) = ElementRef::wrap(parent_node) {
@@ -162,6 +161,11 @@ fn test_block_quote(parent_html: &str, blockquote: ElementRef) -> Option<(String
 ///Try to locate the eventual blockquote present in the document no matter the expeditor of the mail
 ///
 ///Return the HTML content split at the blockquote start
+///
+/// # Panics
+///
+/// Will panic if it fails to parse the blockquote selector
+#[must_use]
 pub fn locate_blockquote(document: &str) -> (String, String) {
     // export const locateBlockquote = (inputDocument: Element | undefined): [content: string, blockquote: string] => {
     //     if (!inputDocument) {
@@ -190,7 +194,7 @@ pub fn locate_blockquote(document: &str) -> (String, String) {
     //         }
     //     });
     let blockquote_selector = scraper::Selector::parse(&BLOCKQUOTE_SELECTOR)
-        .expect("failed to parser blockquote selector");
+        .expect("failed to parse blockquote selector");
 
     let parent_html = root_element.inner_html();
 

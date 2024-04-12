@@ -21,6 +21,7 @@ pub struct MessageMetadataResponse {
 }
 
 impl GetMessageMetadataRequest {
+    #[must_use]
     pub fn new(filter: MessageMetadataFilter) -> Self {
         Self { filter }
     }
@@ -46,6 +47,7 @@ pub struct GetMessageRequest<'a> {
     id: &'a MessageId,
 }
 impl<'a> GetMessageRequest<'a> {
+    #[must_use]
     pub fn new(id: &'a MessageId) -> Self {
         Self { id }
     }
@@ -84,6 +86,7 @@ pub struct DeleteMessagesRequest<'a> {
 }
 
 impl<'a> DeleteMessagesRequest<'a> {
+    #[must_use]
     pub fn new(label_id: Option<&'a LabelId>, ids: &'a [MessageId]) -> Self {
         Self { ids, label_id }
     }

@@ -10,6 +10,7 @@ proton_api_core::utils::string_id!(AddressId);
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Address {
     #[serde(rename = "ID")]
     pub id: AddressId,
@@ -71,7 +72,7 @@ impl rusqlite::types::FromSql for AddressStatus {
             0 => Ok(AddressStatus::Disabled),
             1 => Ok(AddressStatus::Enabled),
             2 => Ok(AddressStatus::Deleting),
-            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+            v => Err(rusqlite::types::FromSqlError::OutOfRange(i64::from(v))),
         }
     }
 }
@@ -105,7 +106,7 @@ impl rusqlite::types::FromSql for AddressType {
             3 => Ok(AddressType::Custom),
             4 => Ok(AddressType::Premium),
             5 => Ok(AddressType::External),
-            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+            v => Err(rusqlite::types::FromSqlError::OutOfRange(i64::from(v))),
         }
     }
 }

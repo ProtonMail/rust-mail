@@ -41,13 +41,11 @@ trivial_casts = "warn"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-cast_possible_truncation = "warn"
-cast_possible_wrap = "warn"
-cast_precision_loss = "warn"
-cast_sign_loss = "warn"
+pedantic = "deny"
+missing_errors_doc = "allow"
+module_name_repetitions = "allow"
 # Useful to track missing comments on private items/code.
 # missing_docs_in_private_items ="warn"
-mut_mut = "warn"
 #Disallow `println!`. Use `debug!` for debug output
 # (which is provided by the `log` crate).
 print_stdout = "warn"
@@ -60,4 +58,4 @@ wrong_self_convention = "warn"
 lto = true
 codegen-units = 1
 panic = "abort"
-opt-level = "z"   # Optimize for size.
+opt-level = "z"  # Optimize for size.

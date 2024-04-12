@@ -22,6 +22,7 @@ use url::Url;
 /// # Arguments
 ///
 /// * `entry_url` - The Url to remove UTM parameters from.
+#[must_use]
 pub fn remove_utm_parameters_from_url(entry_url: &Url) -> Url {
     // TODO: [ET-84] We should not clone the URL, but we need to do it for now.
     let mut url = entry_url.clone();
@@ -37,6 +38,10 @@ pub fn remove_utm_parameters_from_url(entry_url: &Url) -> Url {
 }
 
 /// Removes UTM parameters from a string.
+///
+/// # Errors
+///
+/// Will return `Err` if `entry_url` cannot be parsed into a `Url`
 pub fn remove_utm_parameters_from_string(entry_url: &str) -> Result<Url, url::ParseError> {
     let url = Url::parse(entry_url)?;
     Ok(remove_utm_parameters_from_url(&url))
