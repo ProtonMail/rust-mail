@@ -15,6 +15,7 @@ pub struct GetLabelsResponse {
 }
 
 impl GetLabelsRequest {
+    #[must_use]
     pub fn new(label_type: LabelType) -> Self {
         Self { label_type }
     }
@@ -47,6 +48,7 @@ pub struct CreateLabelRequest<'a> {
 }
 
 impl<'a> CreateLabelRequest<'a> {
+    #[must_use]
     pub fn new(
         name: &'a str,
         color: &'a str,
@@ -83,6 +85,7 @@ pub struct UpdateLabelRequest<'a> {
 }
 
 impl<'a> UpdateLabelRequest<'a> {
+    #[must_use]
     pub fn new(
         id: &'a LabelId,
         name: &'a str,
@@ -112,6 +115,7 @@ pub struct DeleteLabelRequest<'a> {
 }
 
 impl<'a> DeleteLabelRequest<'a> {
+    #[must_use]
     pub fn new(id: &'a LabelId) -> Self {
         Self { id }
     }

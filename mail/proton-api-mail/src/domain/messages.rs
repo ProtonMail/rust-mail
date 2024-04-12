@@ -37,6 +37,7 @@ pub struct MessageAddress {
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct MessageMetadata {
     #[serde(rename = "ID")]
     pub id: MessageId,
@@ -144,6 +145,7 @@ impl rusqlite::types::ToSql for Disposition {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Message {
     #[serde(rename = "ID")]
     pub id: MessageId,
@@ -327,34 +329,42 @@ impl MessageMetadataFilter {
 pub struct MessageMetadataFilterBuilder(MessageMetadataFilter);
 
 impl MessageMetadataFilterBuilder {
+    #[must_use]
     pub fn new(page_number: usize, page_size: usize) -> Self {
         Self(MessageMetadataFilter::new(page_number, page_size))
     }
+
+    #[must_use]
     pub fn with_message_ids(mut self, ids: impl IntoIterator<Item = MessageId>) -> Self {
         self.0.ids = Some(ids.into_iter().collect());
         self
     }
 
+    #[must_use]
     pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
         self.0.subject = Some(subject.into());
         self
     }
 
+    #[must_use]
     pub fn with_external_id(mut self, id: impl Into<ExternalId>) -> Self {
         self.0.external_id = Some(id.into());
         self
     }
 
+    #[must_use]
     pub fn with_address_id(mut self, id: impl Into<AddressId>) -> Self {
         self.0.address_id = Some(id.into());
         self
     }
 
+    #[must_use]
     pub fn with_conversation_id(mut self, id: impl Into<ConversationId>) -> Self {
         self.0.conversation_id = Some(id.into());
         self
     }
 
+    #[must_use]
     pub fn with_label_id(mut self, id: impl Into<LabelId>) -> Self {
         match &mut self.0.label_id {
             None => {
@@ -367,21 +377,25 @@ impl MessageMetadataFilterBuilder {
         self
     }
 
+    #[must_use]
     pub fn with_end_id(mut self, id: impl Into<MessageId>) -> Self {
         self.0.end_id = Some(id.into());
         self
     }
 
+    #[must_use]
     pub fn descending(mut self) -> Self {
         self.0.desc = true;
         self
     }
 
+    #[must_use]
     pub fn with_sort_mode(mut self, mode: MessageMetadataSortMode) -> Self {
         self.0.sort = Some(mode);
         self
     }
 
+    #[must_use]
     pub fn build(self) -> MessageMetadataFilter {
         self.0
     }

@@ -92,6 +92,7 @@ pub struct Conversation {
 
 impl Conversation {
     #[inline]
+    #[must_use]
     pub fn is_starred(&self) -> bool {
         self.labels.iter().any(|l| l.id == *LabelId::starred())
     }
@@ -141,29 +142,36 @@ impl ConversationFilter {
 pub struct ConversationFilterBuilder(ConversationFilter);
 
 impl ConversationFilterBuilder {
+    #[must_use]
     pub fn new(page_number: usize, page_size: usize) -> Self {
         Self(ConversationFilter::new(page_number, page_size))
     }
+
+    #[must_use]
     pub fn with_message_ids(mut self, ids: impl IntoIterator<Item = ConversationId>) -> Self {
         self.0.ids = Some(ids.into_iter().collect());
         self
     }
 
+    #[must_use]
     pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
         self.0.subject = Some(subject.into());
         self
     }
 
+    #[must_use]
     pub fn with_external_id(mut self, id: impl Into<ExternalId>) -> Self {
         self.0.external_id = Some(id.into());
         self
     }
 
+    #[must_use]
     pub fn with_address_id(mut self, id: impl Into<AddressId>) -> Self {
         self.0.address_id = Some(id.into());
         self
     }
 
+    #[must_use]
     pub fn with_label_id(mut self, id: impl Into<LabelId>) -> Self {
         match &mut self.0.label_id {
             None => {
@@ -176,21 +184,25 @@ impl ConversationFilterBuilder {
         self
     }
 
+    #[must_use]
     pub fn with_end_id(mut self, id: impl Into<ConversationId>) -> Self {
         self.0.end_id = Some(id.into());
         self
     }
 
+    #[must_use]
     pub fn descending(mut self) -> Self {
         self.0.desc = true;
         self
     }
 
+    #[must_use]
     pub fn with_sort_mode(mut self, mode: MessageMetadataSortMode) -> Self {
         self.0.sort = Some(mode);
         self
     }
 
+    #[must_use]
     pub fn build(self) -> ConversationFilter {
         self.0
     }

@@ -26,6 +26,7 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
 #[derive(Debug, Deserialize, Serialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Label {
     #[serde(rename = "ID")]
     pub id: LabelId,
@@ -68,7 +69,7 @@ fn default_label_order() -> u32 {
     0
 }
 
-/// SysLabelID represents system label identifiers that are constant for every account.
+/// `SysLabelID` represents system label identifiers that are constant for every account.
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
 pub struct SysLabelId(&'static str);
 
@@ -121,50 +122,62 @@ lazy_static! {
 }
 
 impl LabelId {
+    #[must_use]
     pub fn inbox() -> &'static Self {
         &LABEL_ID_INBOX
     }
 
+    #[must_use]
     pub fn all_drafts() -> &'static Self {
         &LABEL_ID_ALL_DRAFTS
     }
 
+    #[must_use]
     pub fn all_sent() -> &'static Self {
         &LABEL_ID_ALL_SENT
     }
 
+    #[must_use]
     pub fn trash() -> &'static Self {
         &LABEL_ID_TRASH
     }
 
+    #[must_use]
     pub fn spam() -> &'static Self {
         &LABEL_ID_SPAM
     }
 
+    #[must_use]
     pub fn all_mail() -> &'static Self {
         &LABEL_ID_ALL_MAIL
     }
 
+    #[must_use]
     pub fn archive() -> &'static Self {
         &LABEL_ID_ARCHIVE
     }
 
+    #[must_use]
     pub fn sent() -> &'static Self {
         &LABEL_ID_SENT
     }
 
+    #[must_use]
     pub fn drafts() -> &'static Self {
         &LABEL_ID_DRAFTS
     }
 
+    #[must_use]
     pub fn outbox() -> &'static Self {
         &LABEL_ID_OUTBOX
     }
 
+    #[must_use]
     pub fn starred() -> &'static Self {
         &LABEL_ID_STARRED
     }
 
+    #[must_use]
     pub fn all_scheduled() -> &'static Self {
         &LABEL_ID_ALL_SCHEDULED
     }
@@ -187,7 +200,7 @@ impl rusqlite::types::FromSql for LabelType {
             2 => Ok(LabelType::ContactGroup),
             3 => Ok(LabelType::Folder),
             4 => Ok(LabelType::System),
-            v => Err(rusqlite::types::FromSqlError::OutOfRange(v as i64)),
+            v => Err(rusqlite::types::FromSqlError::OutOfRange(i64::from(v))),
         }
     }
 }

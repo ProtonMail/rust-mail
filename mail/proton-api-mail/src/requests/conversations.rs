@@ -11,6 +11,7 @@ pub struct GetConversationsRequest {
 }
 
 impl GetConversationsRequest {
+    #[must_use]
     pub fn new(filter: ConversationFilter) -> Self {
         Self { filter }
     }
@@ -74,6 +75,7 @@ pub struct GetConversationRequest<'a> {
 }
 
 impl<'a> GetConversationRequest<'a> {
+    #[must_use]
     pub fn new(id: &'a ConversationId) -> Self {
         Self { id }
     }
@@ -118,6 +120,7 @@ pub struct DeleteConversationsRequest<'a> {
 }
 
 impl<'a> DeleteConversationsRequest<'a> {
+    #[must_use]
     pub fn new(label_id: &'a LabelId, ids: &'a [ConversationId]) -> Self {
         Self { ids, label_id }
     }
@@ -155,6 +158,7 @@ pub struct MarkConversationsReadRequest<'a> {
 }
 
 impl<'a> MarkConversationsReadRequest<'a> {
+    #[must_use]
     pub fn new(ids: &'a [ConversationId]) -> Self {
         Self { ids }
     }
@@ -183,6 +187,7 @@ pub struct MarkConversationsUnreadRequest<'a> {
 }
 
 impl<'a> MarkConversationsUnreadRequest<'a> {
+    #[must_use]
     pub fn new(ids: &'a [ConversationId]) -> Self {
         Self { ids }
     }
@@ -198,6 +203,7 @@ pub struct MarkConversationsUnreadResponse {
 impl<'c> http::RequestDesc for MarkConversationsUnreadRequest<'c> {
     type Response = JsonResponse<MarkConversationsUnreadResponse>;
 
+    #[must_use]
     fn build(&self) -> RequestData {
         RequestData::new(Method::Put, "mail/v4/conversations/unread").json(self)
     }
@@ -216,6 +222,7 @@ pub struct LabelConversationRequest<'a> {
 }
 
 impl<'a> LabelConversationRequest<'a> {
+    #[must_use]
     pub fn new(
         label_id: &'a LabelId,
         spam_action: Option<bool>,
@@ -240,6 +247,7 @@ pub struct UnlabelConversationRequest<'a> {
 }
 
 impl<'a> UnlabelConversationRequest<'a> {
+    #[must_use]
     pub fn new(label_id: &'a LabelId, ids: &'a [ConversationId]) -> Self {
         Self { label_id, ids }
     }
