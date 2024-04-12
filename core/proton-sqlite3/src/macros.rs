@@ -26,7 +26,7 @@ macro_rules! bind_list_indexed_recursive {
         bind_list_indexed_recursive!(($index+1),$stmt $(,$r)+)
     };
 }
-
+/// Same as [`new_connection_wrapper!`], but for trackable connections.
 #[macro_export]
 macro_rules! new_tracked_connection_wrapper {
     ($name:ident) => {
@@ -113,6 +113,49 @@ macro_rules! new_tracked_connection_wrapper {
     };
 }
 
+/// This macro defines a wrapper over a regular `SqliteConnection` to ensure that mutable database
+/// operations can not be performed outside of transactions. The macro expands into 4 types:
+///
+/// * $name: Base wrapper type.
+/// * ${name}Ref : Accessor type that only provides readonly access to the implementation.
+/// * ${name}Mut : Accessor type that provides read and write access to the implementation. This type
+/// will only be accessible via a transaction.
+/// * ${name}Impl : Type were the actual queries should be implemented while respecting mutability
+///  rules.
+///
+/// This is setup this way so we can write database functions, that in theory, clearly state
+/// whether they are read only or read/write.
+///
+/// # Example
+///
+/// ```
+/// use proton_sqlite3::new_connection_wrapper;
+/// new_connection_wrapper!(MyConn);
+///
+/// // implement all db queries in this type.
+/// impl<'c> MyConnImpl<'c>{
+///     pub fn read_only_query(&self) {
+///         // rusqlite connection is available as `self.0`
+///     }
+///
+///     pub fn mutable_query(&mut self) {}
+/// }
+///
+/// use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
+/// let pool = SqliteConnectionPool::new(SqliteMode::InMemory,false);
+/// // get new connection
+/// let mut conn = pool.acquire().map(MyConn).unwrap();
+///
+/// // perform read only operation.
+/// conn.as_connection_ref().read_only_query();
+///
+/// // perform mutable operation.
+/// conn.tx(|tx:&mut MyConnMut| -> rusqlite::Result<()>{
+///     tx.mutable_query();
+///     Ok(())
+/// }).unwrap();
+/// ```
+///
 #[macro_export]
 macro_rules! new_connection_wrapper {
     ($name:ident) => {
@@ -140,7 +183,7 @@ macro_rules! new_connection_wrapper {
                     mut closure: impl FnMut(&mut [<$name Mut>]) -> Result<T, E>,
                 ) -> Result<T, E> {
                     self.0.tx(|tx| {
-                        let conn_impl = [<$name Impl>](tx.rusqlite_transaction().deref());
+                        let conn_impl = [<$name Impl>](tx.rusqlite_transaction());
                         let mut conn = [<$name Mut>](conn_impl);
                         closure(&mut conn)
                     })
