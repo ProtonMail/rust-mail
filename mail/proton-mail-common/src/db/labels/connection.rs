@@ -136,7 +136,6 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             notify: notified,
             expanded,
             sticky: false,
-            initialized: false,
         })
     }
 
@@ -187,6 +186,33 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         self.mark_labels_as_deleted(deleted, std::iter::once(id))
     }
 
+    /// Check if a label has been initialised.
+    ///
+    /// This simply checks whether a given label has been marked as initialised.
+    /// For more information on the behaviour of this flag, see
+    /// [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized()).
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The id of the label to check.
+    ///
+    /// # Errors
+    ///
+    /// If the database operation fails, the error will be returned unmodified.
+    ///
+    /// # See also
+    ///
+    /// * [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
+    /// * [`mark_labels_as_initialized()`](MailSqliteConnectionImpl::mark_labels_as_initialized())
+    ///
+    pub fn check_if_label_is_initialized(&self, id: LocalLabelId) -> DBResult<bool> {
+        self.0
+            .prepare("SELECT 1 FROM labels WHERE id = ? AND initialized = 1")?
+            .query([id])?
+            .next()
+            .map(|r| r.is_some())
+    }
+
     /// Mark labels as initialised.
     ///
     /// This is a convenience function to mark multiple labels as initialised.
@@ -206,6 +232,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ///
     /// # See also
     ///
+    /// * [`check_if_label_is_initialized()`](MailSqliteConnectionImpl::check_if_label_is_initialized())
     /// * [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
     ///
     pub fn mark_labels_as_initialized(
@@ -236,6 +263,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ///
     /// # See also
     ///
+    /// * [`check_if_label_is_initialized()`](MailSqliteConnectionImpl::check_if_label_is_initialized())
     /// * [`mark_labels_as_initialized()`](MailSqliteConnectionImpl::mark_labels_as_initialized())
     ///
     pub fn mark_label_as_initialized(&mut self, id: LocalLabelId) -> DBResult<()> {
@@ -268,11 +296,11 @@ struct LocalLabelSelect {}
 
 impl LocalLabelSelect {
     fn query_all() -> &'static str {
-        "SELECT id, rid, parent_id, type, `order`, name, path, color, notified, expanded, sticky, initialized FROM labels WHERE deleted=0"
+        "SELECT id, rid, parent_id, type, `order`, name, path, color, notified, expanded, sticky FROM labels WHERE deleted=0"
     }
 
     fn query_by_type_ordered() -> &'static str {
-        "SELECT id, rid, parent_id, type, `order`, name, path, color, notified, expanded, sticky, initialized FROM labels WHERE deleted=0 AND type=? ORDER BY `order`"
+        "SELECT id, rid, parent_id, type, `order`, name, path, color, notified, expanded, sticky FROM labels WHERE deleted=0 AND type=? ORDER BY `order`"
     }
 
     fn query_with_id() -> String {
@@ -310,7 +338,6 @@ impl LocalLabelSelect {
             notify: r.get(8)?,
             expanded: r.get(9)?,
             sticky: r.get(10)?,
-            initialized: r.get(11)?,
         })
     }
 }
@@ -320,13 +347,13 @@ struct LocalLabelSelectWithCount {}
 impl LocalLabelSelectWithCount {
     fn query_conversation() -> &'static str {
         "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
-        l.expanded, l.sticky, l.initialized, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
+        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
         LEFT JOIN label_conversation_count AS lc ON l.id = lc.label_id \
         WHERE deleted=0 AND type=? ORDER BY `order`"
     }
     fn query_message() -> &'static str {
         "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
-        l.expanded, l.sticky, l.initialized, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
+        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
         LEFT JOIN label_message_count AS lc ON l.id = lc.label_id \
         WHERE deleted=0 AND type=? ORDER BY `order`"
     }
@@ -344,9 +371,8 @@ impl LocalLabelSelectWithCount {
             notified: r.get(8)?,
             expanded: r.get(9)?,
             sticky: r.get(10)?,
-            initialized: r.get(11)?,
-            total_count: r.get(12)?,
-            unread_count: r.get(13)?,
+            total_count: r.get(11)?,
+            unread_count: r.get(12)?,
         })
     }
 }

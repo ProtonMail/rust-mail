@@ -17,7 +17,20 @@ impl Mailbox {
             tracing::debug!("Syncing {}({})", self.label_id, remote_id);
             let ctx = self.user_ctx.clone();
 
-            if label.initialized {
+            let mut initialized = false;
+            let connection = ctx.new_db_connection();
+            match connection {
+                Ok(mut connection) => {
+                    let result = connection
+                        .tx(|tx| -> DBResult<bool> { tx.check_if_label_is_initialized(label.id) });
+                    match result {
+                        Ok(value) => initialized = value,
+                        Err(e) => tracing::error!("Failed to check if label is initialized: {e}"),
+                    }
+                }
+                Err(e) => tracing::error!("Failed to get db connection: {e}"),
+            }
+            if initialized {
                 tracing::debug!("Label {} already initialized, skipping", self.label_id);
                 return Ok(());
             }
