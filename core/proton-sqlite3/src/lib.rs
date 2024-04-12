@@ -11,7 +11,7 @@
 //!         let pool_cloned = pool.clone();
 //!         s.spawn(move || {
 //!            let mut con = pool_cloned.acquire().expect("failed to acquire connection");
-//!            let _tx = con.transaction().expect("failed to create transaction");
+//!            let _tx = con.transaction(|tx| -> rusqlite::Result<()>{Ok(())}).expect("failed to create transaction");
 //!
 //!         });
 //!         let pool_cloned = pool.clone();
@@ -66,18 +66,11 @@ impl SqliteConnection {
     /// # Errors
     /// Return errors if the transaction failed or an error occurred during the execution of the
     /// closure.
-    ///
-    /// # Panic
-    /// Panics if we detect nested transactions. This limitation may be removed in the future.
-    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut SqliteTransaction) -> Result<T, E>>(
+    pub fn tx<E: From<rusqlite::Error>, T, F: FnOnce(&mut SqliteTransaction) -> Result<T, E>>(
         &mut self,
-        mut closure: F,
+        closure: F,
     ) -> Result<T, E> {
-        // Default behavior is to roll back the transaction on drop.
-        let mut tx = self.transaction()?;
-        let value = (closure)(&mut tx)?;
-        tx.commit()?;
-        Ok(value)
+        self.transaction(closure)
     }
 
     /// Return the data version of the database. The data version changes every time a change
@@ -126,25 +119,27 @@ impl SqliteConnection {
     /// # Errors
     /// See [`Connection::transaction()`] for more details.
     #[allow(clippy::missing_panics_doc)]
-    pub fn transaction(&mut self) -> rusqlite::Result<SqliteTransaction<'_>> {
+    pub fn transaction<T, E, F>(&mut self, f: F) -> Result<T, E>
+    where
+        E: From<rusqlite::Error>,
+        F: FnOnce(&mut SqliteTransaction) -> Result<T, E>,
+    {
         let tx_guard = self.pool.transaction_lock.lock();
-        // Ideally this type did not need to exist and could be made part of the SqliteTransaction
-        // type. However, as soon as we add an implementation of Drop for SqliteTransaction
-        // we get the following error:
-        // error[E0509]: cannot move out of type `SqliteTransaction<'_>`, which implements the `Drop` trait
-        //
-        // Note: The tx_guard needs to kept alive for the lifetime of the SqliteTransaction to ensure
-        // that at any given time in the same process only one transaction can be active at any
-        // time on any number of treads.
-        let tx_scope = TxScope::new(tx_guard)?;
-        self.conn
+        let _tx_scope = TxScope::new(tx_guard)?;
+        let mut tx = self
+            .conn
             .as_mut()
             .expect("Should always have a value")
             .transaction()
-            .map(|tx| SqliteTransaction {
-                _tx_scope: tx_scope,
-                tx,
-            })
+            .map(|tx| SqliteTransaction { tx })?;
+        let r = f(&mut tx)?;
+
+        tx.commit().map_err(|e| {
+            error!("Faile to commit transaction: {e}");
+            e
+        })?;
+
+        Ok(r)
     }
 
     /// Get the underlying connection type. Use with caution.
@@ -162,7 +157,6 @@ impl SqliteConnection {
 /// Wrapper around [`Transaction`] in order to ensure there is only one writer to the
 /// database in order to avoid database locked errors and catch nested transactions.
 pub struct SqliteTransaction<'c> {
-    _tx_scope: TxScope<'c>,
     tx: Transaction<'c>,
 }
 
