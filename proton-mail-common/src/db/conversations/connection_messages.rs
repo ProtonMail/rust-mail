@@ -527,7 +527,7 @@ fn create_or_update_message_query() -> String {
     conversation_id, rid, address_id, `order`, subject, unread,
     sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector,
     sender_display_image, to_list, cc_list, bcc_list, time, size, expiration_time,
-    is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, flagged
+    is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags
 ) VALUES  ((SELECT id FROM conversations WHERE rid=?),{})
 ON CONFLICT(rid) DO UPDATE SET
     conversation_id = excluded.conversation_id,
@@ -552,10 +552,9 @@ ON CONFLICT(rid) DO UPDATE SET
     is_forwarded=excluded.is_forwarded,
     external_id=excluded.external_id,
     num_attachments=excluded.num_attachments,
-    flags=excluded.flags,
-    flagged=excluded.flagged
+    flags=excluded.flags
 RETURNING id",
-        gen_variable_in_argument_list(24)
+        gen_variable_in_argument_list(23)
     )
 }
 
@@ -566,8 +565,6 @@ fn bind_message_metadata_create(
     cc_list_buffer: &mut JsonWriteBuffer,
     bcc_list_buffer: &mut JsonWriteBuffer,
 ) -> DBResult<()> {
-    use proton_api_mail::domain::LabelId;
-
     let to_list = to_list_buffer.serialize(&m.to_list)?;
     let cc_list = cc_list_buffer.serialize(&m.cc_list)?;
     let bcc_list = bcc_list_buffer.serialize(&m.bcc_list)?;
@@ -598,7 +595,6 @@ fn bind_message_metadata_create(
         &m.external_id,
         m.num_attachments,
         m.flags,
-        m.label_ids.contains(LabelId::starred()),
     }
 
     Ok(())
@@ -607,10 +603,13 @@ fn bind_message_metadata_create(
 struct LocalMessageMetadataSelector {}
 impl LocalMessageMetadataSelector {
     fn query() -> &'static str {
-        "SELECT id, rid, address_id, conversation_id, `order`, subject, unread, \
-sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector, sender_display_image, \
-to_list, cc_list, bcc_list, time, size, expiration_time, \
-is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, flagged FROM messages WHERE deleted=0"
+        r"SELECT id, rid, address_id, conversation_id, `order`, subject, unread,
+sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector, sender_display_image,
+to_list, cc_list, bcc_list, time, size, expiration_time,
+is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, IIF(ml.message_id IS NULL, 0,1)
+FROM messages
+LEFT JOIN message_labels AS ml ON messages.id = ml.message_id AND ml.label_id = (SELECT id FROM labels WHERE rid='10')
+WHERE deleted=0"
     }
 
     fn query_with_id() -> String {
