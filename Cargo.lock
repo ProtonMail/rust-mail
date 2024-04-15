@@ -1850,7 +1850,7 @@ dependencies = [
 
 [[package]]
 name = "proton-api-mail"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bytes",
  "lazy_static",
@@ -1933,7 +1933,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-common"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "lazy_static",
  "proton-action-queue",
