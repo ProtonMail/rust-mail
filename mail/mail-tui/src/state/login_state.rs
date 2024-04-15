@@ -4,16 +4,16 @@ use crate::events::mailbox::MailboxEvent;
 use crate::events::AppEvent;
 use crate::state::AppState;
 use crate::views::TotpView;
-use proton_async::runtime::MTRuntime;
+use proton_async::runtime::MultiThreaded;
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::{debug, error};
-use proton_mail_common::proton_api_mail::proton_api_core::login::LoginFlow;
+use proton_mail_common::proton_api_mail::proton_api_core::login::Flow;
 use proton_mail_common::{MailContext, MailContextResult};
 use secrecy::{ExposeSecret, SecretString};
 
 pub enum LoginState {
     LoggedOut,
     LoggingIn,
-    AwaitingTotp(LoginFlow),
+    AwaitingTotp(Flow),
     SubmittingTotp,
 }
 
@@ -24,7 +24,7 @@ pub enum LoginStateError {
     #[error("Migration Error: {0}")]
     DBMigration(#[from] proton_mail_common::db::DBMigrationError),
     #[error("Network Error: {0}")]
-    Http(#[from] proton_mail_common::proton_api_mail::proton_api_core::http::HttpRequestError),
+    Http(#[from] proton_mail_common::proton_api_mail::proton_api_core::http::RequestError),
     #[error("Invalid Login State")]
     InvalidState,
 }
@@ -68,7 +68,7 @@ impl LoginState {
     fn submit_2fa(
         &mut self,
         dispatcher: AppBackgroundDispatcher<AppState, AppEvent>,
-        runtime: &MTRuntime,
+        runtime: &MultiThreaded,
         code: String,
     ) {
         let state = std::mem::replace(self, LoginState::SubmittingTotp);
@@ -92,7 +92,7 @@ impl LoginState {
             dispatcher.set_error("Invalid Login State", LoginStateError::InvalidState);
         }
     }
-    fn logout(&mut self, runtime: &MTRuntime) {
+    fn logout(&mut self, runtime: &MultiThreaded) {
         match std::mem::replace(self, LoginState::LoggedOut) {
             LoginState::AwaitingTotp(flow) => {
                 debug!("Logging out from TOTP state");
@@ -111,7 +111,7 @@ impl LoginState {
     fn session_from_login_flow(
         &mut self,
         mut dispatcher: AppLocalDispatcher<AppState, AppEvent>,
-        flow: LoginFlow,
+        flow: Flow,
         mail_context: &MailContext,
     ) {
         match mail_context.user_context_from_login_flow(&flow) {

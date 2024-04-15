@@ -185,10 +185,10 @@ impl ConversationView {
         let Some(selection_mode) = &self.label_selection_mode else {
             return;
         };
-        let labels = match selection_mode {
-            LabelSelectionMode::Label(_, l) => l,
-            LabelSelectionMode::Unlabel(_, l) => l,
-            LabelSelectionMode::Move(_, l) => l,
+        let (title, labels) = match selection_mode {
+            LabelSelectionMode::Label(_, l) => ("Select Label to Add", l),
+            LabelSelectionMode::Unlabel(_, l) => ("Select Label to Remove", l),
+            LabelSelectionMode::Move(_, l) => ("Select Folder to Move into", l),
         };
         let area = area.inner(&Margin {
             horizontal: 10,
@@ -202,7 +202,7 @@ impl ConversationView {
             .collect::<Vec<_>>();
         let block = Block::new()
             .borders(Borders::ALL)
-            .title("Select Label")
+            .title(title)
             .bg(Color::Magenta)
             .fg(Color::White);
         let widget = ScrollableList::new(WidgetList::new(labels).block(block));

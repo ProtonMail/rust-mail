@@ -1,4 +1,4 @@
-use proton_mail_common::proton_api_mail::proton_api_core::login::{LoginFlow, LoginFlowError};
+use proton_mail_common::proton_api_mail::proton_api_core::login::{Error, Flow};
 use secrecy::SecretString;
 
 #[derive(Debug)]
@@ -8,10 +8,10 @@ pub enum LoginEvent {
         password: SecretString,
     },
     TwoFARequest(String),
-    LoginFailed(LoginFlowError),
-    LoginSuccess(LoginFlow),
-    LoginSuccess2FA(LoginFlow),
-    LoginNeed2FA(LoginFlow),
-    Login2FAFailed((LoginFlow, LoginFlowError)),
+    LoginFailed(Error),
+    LoginSuccess(Flow),
+    LoginSuccess2FA(Flow),
+    LoginNeed2FA(Flow),
+    Login2FAFailed((Flow, Error)),
     Logout,
 }

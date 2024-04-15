@@ -4,10 +4,8 @@ use crate::events::AppEvent;
 use crate::state::AppState;
 use crate::views::{ConversationView, SessionsView};
 use proton_async::sync::mpsc::Sender;
-use proton_core_common::db::proton_sqlite3::{
-    InProcessTrackerService, LiveQuery, LiveQueryBuilder,
-};
-use proton_mail_common::db::proton_sqlite3::ObservableQuery;
+use proton_core_common::db::proton_sqlite3::{InProcessTrackerService, Live, LiveQueryBuilder};
+use proton_mail_common::db::proton_sqlite3::Observable;
 use proton_mail_common::db::{
     ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalLabelId,
 };
@@ -59,10 +57,10 @@ pub struct MailboxState {
 
 pub struct MailboxUserContextState {
     pub mailbox: Mailbox,
-    pub conversations: LiveQuery<ConversationQuery>,
-    pub system_labels: LiveQuery<LabelsByTypeQueryWithConversationCount>,
-    pub folders: LiveQuery<LabelsByTypeQueryWithConversationCount>,
-    pub labels: LiveQuery<LabelsByTypeQueryWithConversationCount>,
+    pub conversations: Live<ConversationQuery>,
+    pub system_labels: Live<LabelsByTypeQueryWithConversationCount>,
+    pub folders: Live<LabelsByTypeQueryWithConversationCount>,
+    pub labels: Live<LabelsByTypeQueryWithConversationCount>,
     event_loop_poller: Sender<BackgroundTask>,
 }
 
@@ -439,7 +437,7 @@ impl MailUserContextInitializationCallback for MailboxInitCallback {
     }
 }
 
-fn new_live_query<Q: ObservableQuery>(tracker: InProcessTrackerService, query: Q) -> LiveQuery<Q> {
+fn new_live_query<Q: Observable>(tracker: InProcessTrackerService, query: Q) -> Live<Q> {
     LiveQueryBuilder::new(tracker)
         .with_foreground_initializer()
         .build(query)

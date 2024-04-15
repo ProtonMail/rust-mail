@@ -7,7 +7,7 @@ use crate::state::session_state::SessionState;
 use anyhow::anyhow;
 use proton_async::runtime;
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing;
-use proton_mail_common::proton_api_mail::proton_api_core::http::ClientBuilder;
+use proton_mail_common::proton_api_mail::proton_api_core::http::Builder;
 use proton_mail_common::MailContext;
 use std::error::Error;
 use std::path::Path;
@@ -44,8 +44,8 @@ impl AppState {
         tracing::info!("Creating Async Runtime...");
         let mut keychain = AppKeyChain::new()?;
         keychain.init()?;
-        let runtime = runtime::MTRuntime::new(4)?;
-        let client = ClientBuilder::new().build()?;
+        let runtime = runtime::MultiThreaded::new(4)?;
+        let client = Builder::new().build()?;
         let context = MailContext::new(
             runtime,
             config_dir,
