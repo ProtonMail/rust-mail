@@ -30,12 +30,11 @@ pub fn create_message_tables(tx: &mut Transaction) -> crate::db::DBResult<()> {
                 num_attachments INTEGER NOT NULL,
                 flags INTEGER NOT NULL,
                 deleted INTEGER NOT NULL DEFAULT 0,
-                flagged INTEGER NOT NULL DEFAULT 0,
-                
+
                 CONSTRAINT messages_address_id
                     FOREIGN KEY (address_id)
                     REFERENCES addresses (id),
-                
+
                 CONSTRAINT messageS_conversation_id
                     FOREIGN KEY (conversation_id)
                     REFERENCES conversations (id)
@@ -60,14 +59,14 @@ pub fn create_message_tables(tx: &mut Transaction) -> crate::db::DBResult<()> {
             CREATE TABLE message_labels(
                 message_id INTEGER NOT NULL,
                 label_id INTEGER NOT NULL,
-                
+
                 PRIMARY KEY(message_id, label_id),
-                
+
                 CONSTRAINT message_labels_mid
                     FOREIGN KEY (message_id)
                     REFERENCES messages (id)
                     ON DELETE CASCADE ON UPDATE CASCADE,
-                
+
                 CONSTRAINT message_labels_lid
                     FOREIGN KEY (label_id)
                     REFERENCES labels (id)
@@ -92,14 +91,14 @@ pub fn create_message_tables(tx: &mut Transaction) -> crate::db::DBResult<()> {
             CREATE TABLE message_attachments(
                 message_id INTEGER NOT NULL,
                 attachment_id INTEGER NOT NULL,
-                
+
                 PRIMARY KEY(message_id, attachment_id),
-                
+
                 CONSTRAINT message_attachments_cid
                     FOREIGN KEY (message_id)
                     REFERENCES messages (id)
                     ON DELETE CASCADE ON UPDATE CASCADE,
-                
+
                 CONSTRAINT message_attachments_aid
                     FOREIGN KEY (attachment_id)
                     REFERENCES attachments (id)

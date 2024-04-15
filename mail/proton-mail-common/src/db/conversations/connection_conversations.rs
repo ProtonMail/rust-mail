@@ -51,9 +51,9 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ) -> DBResult<Vec<LocalConversationId>> {
         let mut stmt = self.0.prepare(
             "INSERT INTO conversations (rid, `order`, subject, senders, recipients, num_messages, \
-num_unread, num_attachments, expiration_time, size, flagged) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rid) DO UPDATE SET \
+num_unread, num_attachments, expiration_time, size) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rid) DO UPDATE SET \
 num_messages=excluded.num_messages, num_attachments=excluded.num_attachments, num_unread=excluded.num_unread, \
-expiration_time=excluded.expiration_time, size=excluded.size, flagged=excluded.flagged RETURNING id",
+expiration_time=excluded.expiration_time, size=excluded.size RETURNING id",
         )?;
 
         let mut resolve_conv_id_stmt =
@@ -80,7 +80,6 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments, ctx_expiration_time) VALU
             let senders = senders_buffer.serialize(&conv.senders)?;
             let recipients = receives_buffers.serialize(&conv.recipients)?;
 
-            let is_starred = conv.is_starred();
             let conv_id: LocalConversationId = if let Some(id) = stmt
                 .query_row(
                     (
@@ -94,7 +93,6 @@ ctx_num_messages, ctx_num_unread, ctx_num_attachments, ctx_expiration_time) VALU
                         conv.num_attachments,
                         conv.expiration_time,
                         conv.size,
-                        is_starred,
                     ),
                     |r| r.get(0),
                 )
@@ -1024,10 +1022,11 @@ json_conv_attachments AS (
 )
 
 SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages,
-C.num_unread, C.num_attachments, C.expiration_time, C.size, C.flagged, CLJ.labels, CA.json_attachments
+C.num_unread, C.num_attachments, C.expiration_time, C.size, IIF(CF.conversation_id IS NULL, 0,1), CLJ.labels, CA.json_attachments
 FROM conversations AS C
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
 LEFT JOIN json_conv_attachments AS CA ON CA.cid = C.id
+LEFT JOIN conversation_labels AS CF ON C.id = CF.conversation_id AND CF.label_id = (SELECT id FROM labels WHERE rid='10')
 WHERE deleted=0"
     }
 
@@ -1094,11 +1093,12 @@ json_conv_attachments AS (
 
 SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time,
 ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0),
-ifnull(CL.ctx_num_attachments,0), C.flagged, CLJ.labels, CA.json_attachments, C.num_messages, ifnull(CL.ctx_expiration_time,0)
+ifnull(CL.ctx_num_attachments,0), IIF(CF.conversation_id IS NULL, 0,1), CLJ.labels, CA.json_attachments, C.num_messages, ifnull(CL.ctx_expiration_time,0)
 FROM conversations AS C
 INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=?
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
 LEFT JOIN json_conv_attachments AS CA ON CA.cid = C.id
+LEFT JOIN conversation_labels AS CF ON C.id = CF.conversation_id AND CF.label_id = (SELECT id FROM labels WHERE rid='10')
 WHERE C.deleted=0"
     }
 

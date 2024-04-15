@@ -15,7 +15,6 @@ pub fn create_conversation_tables(tx: &mut Transaction) -> crate::db::DBResult<(
                 num_attachments INTEGER NOT NULL,
                 expiration_time INTEGER NOT NULL,
                 size INTEGER NOT NULL,
-                flagged INTEGER NOT NULL,
                 deleted INTEGER NOT NULL DEFAULT 0
             )
         "#,
@@ -39,14 +38,14 @@ pub fn create_conversation_tables(tx: &mut Transaction) -> crate::db::DBResult<(
                ctx_num_unread INTEGER NOT NULL,
                ctx_num_attachments INTEGER NOT NULL,
                ctx_expiration_time INTEGER NOT NULL,
-               
+
                PRIMARY KEY(conversation_id, label_id),
-               
+
                CONSTRAINT constraint_conversation_labels_cid
                    FOREIGN KEY (conversation_id)
                    REFERENCES conversations (id)
                    ON DELETE CASCADE ON UPDATE CASCADE,
-               
+
                CONSTRAINT constraint_conversation_labels_lid
                    FOREIGN KEY (label_id)
                    REFERENCES labels (id)
@@ -72,14 +71,14 @@ pub fn create_conversation_tables(tx: &mut Transaction) -> crate::db::DBResult<(
             CREATE TABLE conversation_attachments(
                 conversation_id INTEGER NOT NULL,
                 attachment_id INTEGER NOT NULL,
-                
+
                 PRIMARY KEY(conversation_id, attachment_id),
-                
+
                 CONSTRAINT conversation_attachments_cid
                     FOREIGN KEY (conversation_id)
                     REFERENCES conversations (id)
                     ON DELETE CASCADE ON UPDATE CASCADE,
-                
+
                 CONSTRAINT conversation_attachments_aid
                     FOREIGN KEY (attachment_id)
                     REFERENCES attachments (id)
