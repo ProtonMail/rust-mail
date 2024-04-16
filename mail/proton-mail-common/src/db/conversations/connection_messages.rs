@@ -290,7 +290,8 @@ conv_messages AS (
     SELECT
         l.label_id,
         MAX(m.time) as time,
-        MAX(m.expiration_time) as expiration_time
+        MAX(m.expiration_time) as expiration_time,
+        MAX(m.snooze_time) as snooze_time
     FROM messages AS m JOIN deleted_messages AS dm ON dm.conversation_id=m.conversation_id
     JOIN message_labels AS l ON l.message_id=m.id
     WHERE m.deleted=0
@@ -305,7 +306,8 @@ label_modifiers AS (
        IFNULL(mt.time,0) as time,
        SUM(cm.num_attachments) as num_attachments,
        SUM(size) as size,
-       IFNULL(MAX(mt.expiration_time),0) as expiration_time
+       IFNULL(MAX(mt.expiration_time),0) as expiration_time,
+       IFNULL(MAX(mt.snooze_time),0) as snooze_time
     FROM deleted_messages AS cm
     JOIN deleted_message_labels AS ml ON cm.id = ml.message_id
     LEFT JOIN conv_messages AS mt on mt.label_id = ml.label_id
@@ -317,6 +319,7 @@ UPDATE conversation_labels SET
    ctx_num_unread=ctx_num_unread{arithmetic}label_modifiers.num_unread,
    ctx_time=label_modifiers.time,
    ctx_expiration_time=label_modifiers.expiration_time,
+   ctx_snooze_time=label_modifiers.snooze_time,
    ctx_size=ctx_size{arithmetic}label_modifiers.size
 FROM label_modifiers WHERE
     label_modifiers.conversation_id=conversation_labels.conversation_id AND
@@ -600,7 +603,8 @@ fn create_or_update_message_query() -> String {
     is_forwarded,
     external_id,
     num_attachments,
-    flags
+    flags,
+    snooze_time
 ) VALUES ((SELECT id FROM conversations WHERE rid=?),{})
 ON CONFLICT(rid) DO UPDATE SET
     conversation_id = excluded.conversation_id,
@@ -625,9 +629,10 @@ ON CONFLICT(rid) DO UPDATE SET
     is_forwarded=excluded.is_forwarded,
     external_id=excluded.external_id,
     num_attachments=excluded.num_attachments,
-    flags=excluded.flags
+    flags=excluded.flags,
+    snooze_time=excluded.snooze_time
 RETURNING id",
-        gen_variable_in_argument_list(23)
+        gen_variable_in_argument_list(24)
     )
 }
 
@@ -668,6 +673,7 @@ fn bind_message_metadata_create(
         &m.external_id,
         m.num_attachments,
         m.flags,
+        m.snooze_time,
     }
 
     Ok(())
@@ -702,7 +708,8 @@ impl LocalMessageMetadataSelector {
     external_id,
     num_attachments,
     flags,
-    IIF(ml.message_id IS NULL, 0,1)
+    IIF(ml.message_id IS NULL, 0,1),
+    snooze_time
 FROM messages
 LEFT JOIN message_labels AS ml ON messages.id = ml.message_id AND ml.label_id = (SELECT id FROM labels WHERE rid='10')
 WHERE deleted=0"
@@ -750,6 +757,7 @@ WHERE deleted=0"
             num_attachments: r.get(23)?,
             flags: r.get(24)?,
             starred: r.get(25)?,
+            snooze_time: r.get(26)?,
         })
     }
 }

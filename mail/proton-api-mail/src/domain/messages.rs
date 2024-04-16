@@ -87,6 +87,7 @@ pub struct MessageMetadata {
     )]
     pub is_forwarded: bool,
     pub expiration_time: u64,
+    pub snooze_time: u64,
     pub num_attachments: u32,
     #[serde(default)]
     pub attachments_metadata: Vec<AttachmentMetadata>,

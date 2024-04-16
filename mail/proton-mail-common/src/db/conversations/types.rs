@@ -77,6 +77,7 @@ pub struct LocalConversation {
     pub num_unread: u64,
     pub num_attachments: u64,
     pub expiration_time: u64,
+    pub snooze_time: u64,
     pub size: u64,
     pub time: u64,
     pub labels: Option<Vec<LocalConversationLabel>>,
@@ -109,6 +110,7 @@ impl LocalConversation {
             expiration_time: conversation.expiration_time,
             size: conversation.size,
             time: 0,
+            snooze_time: 0,
             labels,
             attachments: None,
             avatar_information,
@@ -140,6 +142,7 @@ impl LocalConversation {
             size: conversation.size,
             labels,
             time: 0,
+            snooze_time: 0,
             attachments: None,
             avatar_information,
         };
@@ -151,6 +154,7 @@ impl LocalConversation {
             result.time = l.context_time;
             result.num_attachments = l.context_num_attachments;
             result.expiration_time = l.context_expiration_time;
+            result.snooze_time = l.context_snooze_time;
         }
 
         result
@@ -184,6 +188,7 @@ pub struct LocalMessageMetadata {
     pub time: u64,
     pub size: u64,
     pub expiration_time: u64,
+    pub snooze_time: u64,
     pub is_replied: bool,
     pub is_replied_all: bool,
     pub is_forwarded: bool,
@@ -221,6 +226,7 @@ impl LocalMessageMetadata {
             num_attachments: message.num_attachments,
             flags: message.flags,
             starred: message.label_ids.contains(LabelId::starred()),
+            snooze_time: message.snooze_time,
         }
     }
 }

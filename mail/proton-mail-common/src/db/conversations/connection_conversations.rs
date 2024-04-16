@@ -83,9 +83,10 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                 ctx_num_messages,
                 ctx_num_unread,
                 ctx_num_attachments,
-                ctx_expiration_time
+                ctx_expiration_time,
+                ctx_snooze_time
             ) VALUES
-                (({RESOLVE_LABEL_ID_STATEMENT}),?,?,?,?,?,?,?)"
+                (({RESOLVE_LABEL_ID_STATEMENT}),?,?,?,?,?,?,?,?)"
         ))?;
 
         let mut attachment_to_conv_stmt = self
@@ -156,6 +157,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                     label.context_num_unread,
                     label.context_num_attachments,
                     label.context_expiration_time,
+                    label.context_snooze_time,
                 ))?;
             }
 
@@ -400,16 +402,41 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
             let mut stmt = self.0.prepare(&format!(
                 r"
 WITH conv_messages AS (
-    SELECT m.conversation_id, MAX(m.time) AS time, MAX(m.expiration_time) AS expiration_time,
-    COUNT(m.id) AS `count`, SUM(m.unread) AS unread, SUM(m.num_attachments) AS attachments,
+    SELECT m.conversation_id,
+    MAX(m.time) AS time,
+    MAX(m.expiration_time) AS expiration_time,
+    MAX(m.snooze_time) AS snooze_time,
+    COUNT(m.id) AS `count`,
+    SUM(m.unread) AS unread,
+    SUM(m.num_attachments) AS attachments,
     SUM(m.size) AS size
     FROM messages AS m
     JOIN message_labels AS l ON l.message_id=m.id AND l.label_id=?1
     WHERE m.deleted=0 AND m.conversation_id IN ({})
     GROUP BY m.conversation_id
 )
-INSERT OR REPLACE INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size, ctx_num_messages, ctx_num_unread, ctx_num_attachments, ctx_expiration_time)
-SELECT ?1, conversation_id, time, size, count, unread, attachments, expiration_time FROM conv_messages",
+INSERT OR REPLACE INTO conversation_labels (
+    label_id,
+    conversation_id,
+    ctx_time,
+    ctx_size,
+    ctx_num_messages,
+    ctx_num_unread,
+    ctx_num_attachments,
+    ctx_expiration_time,
+    ctx_snooze_time
+)
+SELECT
+    ?1,
+    conversation_id,
+    time,
+    size,
+    count,
+    unread,
+    attachments,
+    expiration_time,
+    snooze_time
+FROM conv_messages",
                 conv_args
             ))?;
             let mut alloc = StmtIndexAllocator::new();
@@ -902,21 +929,37 @@ INSERT OR IGNORE INTO message_labels (message_id, label_id) SELECT * FROM conv_m
                     count: u64,
                     unread: u64,
                     num_attachments: u64,
+                    snooze_time: u64,
                 }
 
-                let info= self.0.query_row(&format!(r"
-SELECT MAX(time) AS time, MAX(expiration_time) AS expiration_time, SUM(size) AS size,COUNT(id) AS `count`,
-SUM(unread) AS unread, SUM(num_attachments) AS num_attachments
-FROM messages WHERE id IN ({}) GROUP BY conversation_id", gen_variable_in_argument_list(msg_ids.len())),params_from_iter(msg_ids), |r|{
-                        Ok(MessageInfo{
+                let info = self.0.query_row(
+                    &format!(
+                        r"
+SELECT
+    MAX(time) AS time,
+    MAX(expiration_time) AS expiration_time,
+    SUM(size) AS size,
+    COUNT(id) AS `count`,
+    SUM(unread) AS unread,
+    SUM(num_attachments) AS num_attachments,
+    MAX(snooze_time) as snooze_time
+FROM messages
+WHERE id IN ({}) GROUP BY conversation_id",
+                        gen_variable_in_argument_list(msg_ids.len())
+                    ),
+                    params_from_iter(msg_ids),
+                    |r| {
+                        Ok(MessageInfo {
                             size: r.get(2)?,
                             time: r.get(0)?,
                             expiration_time: r.get(1)?,
-                            count: r.get(3)? ,
+                            count: r.get(3)?,
                             unread: r.get(4)?,
                             num_attachments: r.get(5)?,
+                            snooze_time: r.get(6)?,
                         })
-                    })?;
+                    },
+                )?;
 
                 // create label if not exists
                 // must take into account labels that have already been applied
@@ -930,16 +973,18 @@ INSERT INTO conversation_labels (
     ctx_num_messages,
     ctx_num_unread,
     ctx_num_attachments,
-    ctx_expiration_time
-) VALUES (?,?,?,?,?,?,?,?)
+    ctx_expiration_time,
+    ctx_snooze_time
+) VALUES (?,?,?,?,?,?,?,?,?)
 ON CONFLICT(label_id, conversation_id) DO UPDATE SET
     ctx_time=CASE WHEN excluded.ctx_time > ctx_time THEN excluded.ctx_time ELSE ctx_time END,
+    ctx_snooze_time=CASE WHEN excluded.ctx_snooze_time > ctx_snooze_time THEN excluded.ctx_snooze_time ELSE ctx_snooze_time END,
     ctx_expiration_time=CASE WHEN excluded.ctx_expiration_time > ctx_expiration_time THEN excluded.ctx_expiration_time ELSE ctx_expiration_time END,
     ctx_size=ctx_size+excluded.ctx_size,
     ctx_num_messages=ctx_num_messages+excluded.ctx_num_messages,
     ctx_num_unread=ctx_num_unread+excluded.ctx_num_unread,
     ctx_num_attachments=ctx_num_attachments+excluded.ctx_num_attachments
-", (label_id, id, info.time, info.size, info.count, info.unread, info.num_attachments, info.expiration_time)
+", (label_id, id, info.time, info.size, info.count, info.unread, info.num_attachments, info.expiration_time, info.snooze_time)
                 )?;
                 // update message counts
                 self.0.execute(
@@ -961,7 +1006,7 @@ ON CONFLICT(label_id) DO UPDATE SET total=total+excluded.total, unread=unread+ex
                 // Fallback without message metadata
                 self.0.execute(
                     r"INSERT OR IGNORE INTO conversation_labels
- VALUES (?,?,0,0,0,0,0,0)",
+ VALUES (?,?,0,0,0,0,0,0,0)",
                     (id, label_id),
                 )?;
 
@@ -1133,6 +1178,7 @@ WHERE deleted=0"
                 starred: r.get(11)?,
                 labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 12)?,
                 time: 0,
+                snooze_time: 0,
                 attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(
                     r, 13,
                 )?,
@@ -1196,7 +1242,8 @@ SELECT
     CLJ.labels,
     CA.json_attachments,
     C.num_messages,
-    ifnull(CL.ctx_expiration_time,0)
+    ifnull(CL.ctx_expiration_time,0),
+    ifnull(CL.ctx_snooze_time,0)
 FROM conversations AS C
 INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=?
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
@@ -1245,7 +1292,6 @@ WHERE C.deleted=0"
             subject: r.get(3)?,
             senders,
             recipients: deserialize_json_from_row::<Vec<MessageAddress>>(r, 5)?,
-            expiration_time: r.get(16)?,
             time: r.get(7)?,
             size: r.get(8)?,
             num_messages_ctx: r.get(9)?,
@@ -1255,6 +1301,8 @@ WHERE C.deleted=0"
             labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 13)?,
             attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 14)?,
             num_messages: r.get(15)?,
+            expiration_time: r.get(16)?,
+            snooze_time: r.get(17)?,
             avatar_information,
         })
     }

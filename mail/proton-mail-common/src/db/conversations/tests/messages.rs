@@ -390,6 +390,7 @@ fn test_create_message_dependencies(tx: &mut MailSqliteConnectionMut) -> LocalCo
             context_size: 0,
             context_num_attachments: 0,
             context_expiration_time: 0,
+            context_snooze_time: 0,
         }],
         [],
     );
@@ -431,5 +432,6 @@ fn test_message_metadata(
         expiration_time: 10000,
         num_attachments: 24,
         attachments_metadata: attachments.into_iter().collect(),
+        snooze_time: 5000,
     }
 }

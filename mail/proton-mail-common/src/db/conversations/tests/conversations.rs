@@ -16,7 +16,9 @@ use proton_api_mail::domain::{
     AttachmentMetadata, Conversation, ConversationCount, ConversationId, ConversationLabels,
     Disposition, Label, LabelId, LabelType, MessageAddress,
 };
+use proton_api_mail::exports::tracing;
 use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
+use tracing_test::traced_test;
 
 #[test]
 fn test_conversation_create_no_labels() {
@@ -47,6 +49,7 @@ fn test_conversation_create_starred() {
         context_size: 0,
         context_num_attachments: 0,
         context_expiration_time: 0,
+        context_snooze_time: 0,
     };
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
@@ -123,6 +126,7 @@ fn test_conversation_create_with_labels() {
                     context_size: 4,
                     context_num_attachments: 5,
                     context_expiration_time: 6,
+                    context_snooze_time: 21,
                 },
                 ConversationLabels {
                     id: MY_LABEL_ID2.clone(),
@@ -132,6 +136,7 @@ fn test_conversation_create_with_labels() {
                     context_size: 10,
                     context_num_attachments: 11,
                     context_expiration_time: 12,
+                    context_snooze_time: 31,
                 },
             ],
             [],
@@ -218,6 +223,7 @@ fn test_conversation_create_with_attachment_and_label() {
                 context_size: 4,
                 context_num_attachments: 5,
                 context_expiration_time: 6,
+                context_snooze_time: 7,
             }],
             [AttachmentMetadata {
                 id: MY_ATTACHMENT_ID.clone(),
@@ -267,6 +273,7 @@ fn test_conversation_update() {
                 context_size: 10,
                 context_num_attachments: 11,
                 context_expiration_time: 12,
+                context_snooze_time: 21,
             }],
             [AttachmentMetadata {
                 id: AttachmentId::from("ATTACHMENT2"),
@@ -286,6 +293,7 @@ fn test_conversation_update() {
                 context_size: 4,
                 context_num_attachments: 5,
                 context_expiration_time: 6,
+                context_snooze_time: 7,
             }],
             [AttachmentMetadata {
                 id: MY_ATTACHMENT_ID.clone(),
@@ -1090,6 +1098,10 @@ fn test_conversation_label_with_message_metadata() {
                 .iter()
                 .fold(0, |x, m| x.max(m.expiration_time))
         );
+        assert_eq!(
+            db_conversation.snooze_time,
+            state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
+        );
 
         // Check conversation counts have the new conversation.
         {
@@ -1151,6 +1163,10 @@ fn test_conversation_double_label_with_message_metadata() {
                 .iter()
                 .fold(0, |x, m| x.max(m.expiration_time))
         );
+        assert_eq!(
+            db_conversation.snooze_time,
+            state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
+        );
 
         // Check conversation counts have the new conversation.
         {
@@ -1171,6 +1187,7 @@ fn test_conversation_double_label_with_message_metadata() {
 }
 
 #[test]
+#[traced_test]
 fn test_conversation_label_partially() {
     // Label conversation with a label where one of the messages already has been labeled
     let (mut conn, _) = new_test_connection();
@@ -1185,6 +1202,7 @@ fn test_conversation_label_partially() {
             context_size: 0,
             context_num_attachments: 0,
             context_expiration_time: 0,
+            context_snooze_time: 0,
         });
         let (state, state_map) = prepare_and_patch_db_state(tx, state);
 
@@ -1219,6 +1237,10 @@ fn test_conversation_label_partially() {
                 .messages
                 .iter()
                 .fold(0, |x, m| x.max(m.expiration_time))
+        );
+        assert_eq!(
+            db_conversation.snooze_time,
+            state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
         );
 
         // Check conversation counts have the new conversation.
@@ -1264,10 +1286,11 @@ fn test_conversation_label_without_message_metadata() {
         assert_eq!(db_conversation.num_unread, 0);
         assert_eq!(db_conversation.num_messages_ctx, 0);
         assert_eq!(db_conversation.num_attachments, 0);
-        assert_eq!(db_conversation.size, 0,);
-        assert_eq!(db_conversation.time, 0,);
-        assert_eq!(db_conversation.time, 0,);
-        assert_eq!(db_conversation.expiration_time, 0,);
+        assert_eq!(db_conversation.size, 0);
+        assert_eq!(db_conversation.time, 0);
+        assert_eq!(db_conversation.time, 0);
+        assert_eq!(db_conversation.expiration_time, 0);
+        assert_eq!(db_conversation.snooze_time, 0);
 
         // Check conversation counts have the new conversation.
         {
@@ -1313,6 +1336,7 @@ fn test_conversation_double_label_without_message_metadata() {
         assert_eq!(db_conversation.size, 0);
         assert_eq!(db_conversation.time, 0);
         assert_eq!(db_conversation.expiration_time, 0);
+        assert_eq!(db_conversation.snooze_time, 0);
 
         // Check conversation counts have the new conversation.
         {

@@ -128,6 +128,7 @@ impl Params {
                     context_size: 12,
                     context_num_attachments: 0,
                     context_expiration_time: 0,
+                    context_snooze_time: 0,
                 }],
                 display_snooze_reminder: false,
                 attachments_metadata: vec![],
