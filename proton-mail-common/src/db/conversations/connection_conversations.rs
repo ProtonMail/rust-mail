@@ -50,19 +50,42 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         conversations: impl ExactSizeIterator<Item = &'i Conversation>,
     ) -> DBResult<Vec<LocalConversationId>> {
         let mut stmt = self.0.prepare(
-            "INSERT INTO conversations (rid, `order`, subject, senders, recipients, num_messages, \
-num_unread, num_attachments, expiration_time, size) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(rid) DO UPDATE SET \
-num_messages=excluded.num_messages, num_attachments=excluded.num_attachments, num_unread=excluded.num_unread, \
-expiration_time=excluded.expiration_time, size=excluded.size RETURNING id",
+            r"INSERT INTO conversations (
+                rid,
+                `order`,
+                subject,
+                senders,
+                recipients,
+                num_messages,
+                num_unread,
+                num_attachments,
+                expiration_time,
+                size
+        ) VALUES (?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(rid) DO UPDATE SET
+            num_messages=excluded.num_messages,
+            num_attachments=excluded.num_attachments,
+            num_unread=excluded.num_unread,
+            expiration_time=excluded.expiration_time,
+            size=excluded.size
+       RETURNING id",
         )?;
 
         let mut resolve_conv_id_stmt =
             self.0.prepare("SELECT id FROM conversations WHERE rid=?")?;
 
         let mut labels_statement = self.0.prepare(&format!(
-            "INSERT OR REPLACE INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size,
-ctx_num_messages, ctx_num_unread, ctx_num_attachments, ctx_expiration_time) VALUES \
-(({RESOLVE_LABEL_ID_STATEMENT}),?,?,?,?,?,?,?)"
+            r"INSERT OR REPLACE INTO conversation_labels (
+                label_id,
+                conversation_id,
+                ctx_time,
+                ctx_size,
+                ctx_num_messages,
+                ctx_num_unread,
+                ctx_num_attachments,
+                ctx_expiration_time
+            ) VALUES
+                (({RESOLVE_LABEL_ID_STATEMENT}),?,?,?,?,?,?,?)"
         ))?;
 
         let mut attachment_to_conv_stmt = self
@@ -514,7 +537,11 @@ FROM (
         ids: &[LocalConversationId],
     ) -> DBResult<()> {
         self.0.execute(&format!(r"UPDATE label_conversation_count AS lcc SET total=total-dm.num_messages, unread=unread-dm.num_unread FROM (
-            SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
+            SELECT
+                cl.label_id,
+                SUM(cl.ctx_num_unread <> 0) AS num_unread,
+                SUM(cl.ctx_num_messages <> 0) AS num_messages
+            FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
             GROUP BY cl.label_id
         ) AS dm WHERE lcc.label_id=dm.label_id
         ",gen_variable_in_argument_list(ids.len())), params_from_iter(ids.iter()))?;
@@ -523,7 +550,11 @@ FROM (
 
     fn add_conversations_to_all_labels(&mut self, ids: &[LocalConversationId]) -> DBResult<()> {
         self.0.execute(&format!(r"UPDATE label_conversation_count AS lcc SET total=total+dm.num_messages, unread=unread+dm.num_unread FROM (
-            SELECT cl.label_id, SUM(cl.ctx_num_unread <> 0) AS num_unread, SUM(cl.ctx_num_messages <> 0) AS num_messages FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
+            SELECT
+                cl.label_id,
+                SUM(cl.ctx_num_unread <> 0) AS num_unread,
+                SUM(cl.ctx_num_messages <> 0) AS num_messages
+            FROM conversation_labels AS cl WHERE cl.conversation_id IN ({})
             GROUP BY cl.label_id
         ) AS dm WHERE lcc.label_id=dm.label_id
         ",gen_variable_in_argument_list(ids.len())), params_from_iter(ids.iter()))?;
@@ -891,15 +922,23 @@ FROM messages WHERE id IN ({}) GROUP BY conversation_id", gen_variable_in_argume
                 // must take into account labels that have already been applied
                 self.0.execute(
                     r"
-INSERT INTO conversation_labels (label_id, conversation_id, ctx_time, ctx_size, ctx_num_messages, ctx_num_unread,
-ctx_num_attachments, ctx_expiration_time) VALUES
-(?,?,?,?,?,?,?,?) ON CONFLICT(label_id, conversation_id) DO UPDATE SET
-ctx_time=CASE WHEN excluded.ctx_time > ctx_time THEN excluded.ctx_time ELSE ctx_time END,
-ctx_expiration_time=CASE WHEN excluded.ctx_expiration_time > ctx_expiration_time THEN excluded.ctx_expiration_time ELSE ctx_expiration_time END,
-ctx_size=ctx_size+excluded.ctx_size,
-ctx_num_messages=ctx_num_messages+excluded.ctx_num_messages,
-ctx_num_unread=ctx_num_unread+excluded.ctx_num_unread,
-ctx_num_attachments=ctx_num_attachments+excluded.ctx_num_attachments
+INSERT INTO conversation_labels (
+    label_id,
+    conversation_id,
+    ctx_time,
+    ctx_size,
+    ctx_num_messages,
+    ctx_num_unread,
+    ctx_num_attachments,
+    ctx_expiration_time
+) VALUES (?,?,?,?,?,?,?,?)
+ON CONFLICT(label_id, conversation_id) DO UPDATE SET
+    ctx_time=CASE WHEN excluded.ctx_time > ctx_time THEN excluded.ctx_time ELSE ctx_time END,
+    ctx_expiration_time=CASE WHEN excluded.ctx_expiration_time > ctx_expiration_time THEN excluded.ctx_expiration_time ELSE ctx_expiration_time END,
+    ctx_size=ctx_size+excluded.ctx_size,
+    ctx_num_messages=ctx_num_messages+excluded.ctx_num_messages,
+    ctx_num_unread=ctx_num_unread+excluded.ctx_num_unread,
+    ctx_num_attachments=ctx_num_attachments+excluded.ctx_num_attachments
 ", (label_id, id, info.time, info.size, info.count, info.unread, info.num_attachments, info.expiration_time)
                 )?;
                 // update message counts
@@ -1008,21 +1047,52 @@ struct ConversationSelector {}
 impl ConversationSelector {
     fn query() -> &'static str {
         r"WITH json_conversation_labels AS (
-    SELECT C.conversation_id as cid, json_group_array(json_object('id', L.id, 'name', L.name, 'color', L.color)) as labels
+    SELECT
+        C.conversation_id as cid,
+        json_group_array(
+            json_object(
+                'id', L.id,
+                'name', L.name,
+                'color', L.color
+            )
+        ) as labels
     FROM conversation_labels C
     INNER JOIN labels AS L ON C.label_id = L.id AND L.type=1
     GROUP BY C.conversation_id
 ),
 json_conv_attachments AS (
-    SELECT C.conversation_id as cid, json_group_array(json_object('id', A.id, 'rid', A.rid, 'name', A.name,
-    'mime_type', A.mime_type, 'disposition', A.disposition, 'size', A.size)) as json_attachments
+    SELECT
+        C.conversation_id as cid,
+        json_group_array(
+            json_object(
+                'id', A.id,
+                'rid', A.rid,
+                'name', A.name,
+                'mime_type', A.mime_type,
+                'disposition', A.disposition,
+                'size', A.size
+            )
+        ) as json_attachments
     FROM conversation_attachments as C
     INNER JOIN attachments AS A ON C.attachment_id = A.id
     GROUP BY C.conversation_id
 )
 
-SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.num_messages,
-C.num_unread, C.num_attachments, C.expiration_time, C.size, IIF(CF.conversation_id IS NULL, 0,1), CLJ.labels, CA.json_attachments
+SELECT
+    C.id,
+    C.rid,
+    C.`order`,
+    C.subject,
+    C.senders,
+    C.recipients,
+    C.num_messages,
+    C.num_unread,
+    C.num_attachments,
+    C.expiration_time,
+    C.size,
+    IIF(CF.conversation_id IS NULL, 0,1),
+    CLJ.labels,
+    CA.json_attachments
 FROM conversations AS C
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
 LEFT JOIN json_conv_attachments AS CA ON CA.cid = C.id
@@ -1078,22 +1148,55 @@ struct ConversationSelectorWithContext {}
 impl ConversationSelectorWithContext {
     fn query_base() -> &'static str {
         r"WITH json_conversation_labels AS (
-    SELECT C.conversation_id as cid, json_group_array(json_object('id', L.id, 'name', L.name, 'color', L.color)) as labels
+    SELECT
+        C.conversation_id as cid,
+        json_group_array(
+            json_object(
+                'id', L.id,
+                'name', L.name,
+                'color', L.color
+            )
+        ) as labels
     FROM conversation_labels C
     INNER JOIN labels AS L ON C.label_id = L.id AND L.type=1
     GROUP BY C.conversation_id
 ),
 json_conv_attachments AS (
-    SELECT C.conversation_id as cid, json_group_array(json_object('id', A.id, 'rid', A.rid, 'name', A.name,
-    'mime_type', A.mime_type, 'disposition', A.disposition, 'size', A.size)) as json_attachments
+    SELECT
+        C.conversation_id as cid,
+        json_group_array(
+            json_object(
+                'id', A.id,
+                'rid', A.rid,
+                'name', A.name,
+                'mime_type', A.mime_type,
+                'disposition', A.disposition,
+                'size', A.size
+            )
+        ) as json_attachments
     FROM conversation_attachments as C
     INNER JOIN attachments AS A ON C.attachment_id = A.id
     GROUP BY C.conversation_id
 )
 
-SELECT C.id, C.rid, C.`order`, C.subject, C.senders, C.recipients, C.expiration_time,
-ifnull(CL.ctx_time,0), ifnull(CL.ctx_size,0), ifnull(CL.ctx_num_messages,0), ifnull(CL.ctx_num_unread,0),
-ifnull(CL.ctx_num_attachments,0), IIF(CF.conversation_id IS NULL, 0,1), CLJ.labels, CA.json_attachments, C.num_messages, ifnull(CL.ctx_expiration_time,0)
+SELECT
+    C.id,
+    C.rid,
+    C.`order`,
+    C.subject,
+    C.senders,
+    C.recipients,
+    C.expiration_time,
+    ifnull(CL.ctx_time,0),
+    ifnull(CL.ctx_size,0),
+    ifnull(CL.ctx_num_messages,0),
+    ifnull(CL.ctx_num_unread,0),
+    ifnull(CL.ctx_num_attachments,0),
+    IIF(CF.conversation_id IS NULL, 0,1),
+    CLJ.labels,
+    CA.json_attachments,
+    C.num_messages,
+    ifnull(CL.ctx_expiration_time,0)
 FROM conversations AS C
 INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=?
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
