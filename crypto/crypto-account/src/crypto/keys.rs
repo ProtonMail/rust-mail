@@ -21,7 +21,7 @@ pub fn decrypt_key_token<Prov: PGPProviderSync>(
         .new_decryptor()
         .with_decryption_key_refs(decryption_keys)
         .with_verification_key_refs(verification_keys)
-        .with_detached_signature_ref(signature.as_bytes(), true);
+        .with_detached_signature_ref(signature.as_bytes(), false, true);
     if let Some(context) = verification_context {
         decryptor = decryptor.with_verification_context(context);
     }
@@ -75,7 +75,7 @@ pub async fn decrypt_key_token_async<Prov: PGPProviderAsync>(
         .new_decryptor_async()
         .with_decryption_key_refs(decryption_keys)
         .with_verification_key_refs(verification_keys)
-        .with_detached_signature_ref(signature.as_bytes(), true);
+        .with_detached_signature_ref(signature.as_bytes(), false, true);
     if let Some(context) = &verification_context {
         decryptor = decryptor.with_verification_context(context);
     }
