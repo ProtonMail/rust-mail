@@ -71,7 +71,7 @@ impl proton_mail_common::MailUserContextInitializationCallback
     for FFIMailUserInitializationCallback
 {
     fn on_stage(&self, stage: proton_mail_common::MailUserContextLoadingStage) {
-        self.0.on_stage(stage.into())
+        self.0.on_stage(stage.into());
     }
 
     fn on_stage_err(

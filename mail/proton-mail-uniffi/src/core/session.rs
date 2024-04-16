@@ -62,19 +62,19 @@ impl From<Box<dyn SessionCallback>> for FFISessionCallback {
 
 impl CoreSessionCallback for FFISessionCallback {
     fn on_session_refresh(&self) {
-        self.0.on_session_refresh()
+        self.0.on_session_refresh();
     }
 
     fn on_session_deleted(&self) {
-        self.0.on_session_deleted()
+        self.0.on_session_deleted();
     }
 
     fn on_refresh_failed(&self, e: &RequestError) {
-        self.0.on_refresh_failed(SessionError::from_http_err(e))
+        self.0.on_refresh_failed(SessionError::from_http_err(e));
     }
 
     fn on_error(&self, err: &CoreSessionError) {
-        self.0.on_error(SessionError::from_core_session_err(err))
+        self.0.on_error(SessionError::from_core_session_err(err));
     }
 }
 
@@ -97,21 +97,25 @@ impl StoredSession {
 #[uniffi::export]
 impl StoredSession {
     /// Get the session's email.
+    #[must_use]
     pub fn email(&self) -> String {
         self.session.email.clone()
     }
 
     /// Get the session's account name (if any).
+    #[must_use]
     pub fn name(&self) -> Option<String> {
         self.session.name.clone()
     }
 
     /// Get the session's user id.
+    #[must_use]
     pub fn user_id(&self) -> UserId {
         self.session.user_id.clone()
     }
 
     /// Get the session id.
+    #[must_use]
     pub fn session_id(&self) -> Uid {
         self.session.session_id.clone()
     }

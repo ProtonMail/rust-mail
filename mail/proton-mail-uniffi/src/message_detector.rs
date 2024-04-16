@@ -10,6 +10,7 @@ pub struct LocateBlockquoteResult {
 ///
 ///Return the HTML content split at the blockquote start
 #[uniffi::export]
+#[must_use]
 pub fn locate_blockquote(input: &str) -> LocateBlockquoteResult {
     let (before, after) = proton_mail_message_detector::locate_blockquote(input);
     LocateBlockquoteResult { before, after }

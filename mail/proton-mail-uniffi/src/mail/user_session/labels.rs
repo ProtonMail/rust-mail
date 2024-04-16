@@ -11,6 +11,7 @@ use std::sync::Arc;
 #[uniffi::export]
 impl MailUserSession {
     /// Create a query observer on labels of type System.
+    #[must_use]
     pub fn new_system_labels_observed_query(
         &self,
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
@@ -20,6 +21,7 @@ impl MailUserSession {
     }
 
     /// Create a query observer on labels of type Folder.
+    #[must_use]
     pub fn new_folder_labels_observed_query(
         &self,
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
@@ -29,6 +31,7 @@ impl MailUserSession {
     }
 
     /// Create a query observer on labels of type Label.
+    #[must_use]
     pub fn new_label_labels_observed_query(
         &self,
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,

@@ -60,7 +60,7 @@ impl MailSession {
     /// * `log_dir:`: Directory where the log file should be stored.
     /// * `log_debug`: Whether to enable debug and trace logs
     /// * `api_env_config`: The API environment configuration.
-    /// * `key_chain`: KeyChain implementation
+    /// * `key_chain`: `KeyChain` implementation
     /// * `network_callback`: Optional network status changed callback
     #[uniffi::constructor]
     pub fn create(
@@ -175,6 +175,7 @@ impl MailSession {
     }
 
     /// Check whether the network is connected/online.
+    #[must_use]
     pub fn is_network_connected(&self) -> bool {
         self.ctx.is_network_connected()
     }

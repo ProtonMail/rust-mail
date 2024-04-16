@@ -9,6 +9,7 @@ use std::sync::Arc;
 impl Mailbox {
     /// Create a live query for conversations for the currently selected label. If you
     /// change the mailbox label with `switch_label` you need to create a new instance.
+    #[must_use]
     pub fn new_conversation_live_query(
         &self,
         limit: i64,

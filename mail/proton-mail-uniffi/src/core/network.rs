@@ -15,6 +15,6 @@ impl From<Box<dyn NetworkStatusChanged>> for FFINetworkStatusChanged {
 
 impl pcm::NetworkStatusChanged for FFINetworkStatusChanged {
     fn on_network_status_changed(&self, online: bool) {
-        self.0.on_network_status_changed(online)
+        self.0.on_network_status_changed(online);
     }
 }
