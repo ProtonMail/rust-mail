@@ -270,23 +270,42 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             r"
 WITH
 deleted_messages AS (
-    SELECT id, conversation_id, size, unread, num_attachments FROM messages WHERE messages.id IN ({message_id_args})
+    SELECT
+        id,
+        conversation_id,
+        size,
+        unread,
+        num_attachments
+    FROM messages
+    WHERE messages.id IN ({message_id_args})
 ),
 deleted_message_labels AS (
-    SELECT message_labels.label_id, message_labels.message_id FROM message_labels
-        JOIN deleted_messages ON message_id=deleted_messages.id
+    SELECT
+        message_labels.label_id,
+        message_labels.message_id
+    FROM message_labels
+    JOIN deleted_messages ON message_id=deleted_messages.id
 ),
 conv_messages AS (
-    SELECT l.label_id, MAX(m.time) as time, MAX(m.expiration_time) as expiration_time
+    SELECT
+        l.label_id,
+        MAX(m.time) as time,
+        MAX(m.expiration_time) as expiration_time
     FROM messages AS m JOIN deleted_messages AS dm ON dm.conversation_id=m.conversation_id
     JOIN message_labels AS l ON l.message_id=m.id
     WHERE m.deleted=0
     GROUP BY l.label_id
 ),
 label_modifiers AS (
-    SELECT cm.conversation_id, ml.label_id, COUNT(cm.id) as num_messages, SUM(cm.unread) as num_unread,
-           IFNULL(mt.time,0) as time, SUM(cm.num_attachments) as num_attachments, SUM(size) as size,
-           IFNULL(MAX(mt.expiration_time),0) as expiration_time
+    SELECT
+       cm.conversation_id,
+       ml.label_id,
+       COUNT(cm.id) as num_messages,
+       SUM(cm.unread) as num_unread,
+       IFNULL(mt.time,0) as time,
+       SUM(cm.num_attachments) as num_attachments,
+       SUM(size) as size,
+       IFNULL(MAX(mt.expiration_time),0) as expiration_time
     FROM deleted_messages AS cm
     JOIN deleted_message_labels AS ml ON cm.id = ml.message_id
     LEFT JOIN conv_messages AS mt on mt.label_id = ml.label_id
@@ -299,8 +318,9 @@ UPDATE conversation_labels SET
    ctx_time=label_modifiers.time,
    ctx_expiration_time=label_modifiers.expiration_time,
    ctx_size=ctx_size{arithmetic}label_modifiers.size
-FROM label_modifiers WHERE label_modifiers.conversation_id=conversation_labels.conversation_id AND
-conversation_labels.label_id=label_modifiers.label_id
+FROM label_modifiers WHERE
+    label_modifiers.conversation_id=conversation_labels.conversation_id AND
+    conversation_labels.label_id=label_modifiers.label_id
 RETURNING label_id"
         );
 
@@ -319,9 +339,14 @@ RETURNING label_id"
         // Recalculate label conversation unread count.
         let query = format!(
             r"
-UPDATE label_conversation_count SET unread=delta.num_unread, total=delta.num_messages
+UPDATE label_conversation_count SET
+    unread=delta.num_unread,
+    total=delta.num_messages
 FROM(
-    SELECT cl.label_id, SUM(cl.ctx_num_messages <> 0) AS num_messages, SUM(cl.ctx_num_unread <> 0) AS num_unread
+    SELECT
+        cl.label_id,
+        SUM(cl.ctx_num_messages <> 0) AS num_messages,
+        SUM(cl.ctx_num_unread <> 0) AS num_unread
     FROM  conversation_labels AS cl
     WHERE cl.label_id IN ({})
     GROUP BY cl.label_id
@@ -335,10 +360,14 @@ WHERE label_conversation_count.label_id=delta.label_id
         // Update conversation non-context count
         let query = format!(
             r"
-UPDATE conversations SET num_messages=num_messages{arithmetic}deltas.count_delta,
-num_unread=num_unread{arithmetic}deltas.unread_delta
+UPDATE conversations SET
+    num_messages=num_messages{arithmetic}deltas.count_delta,
+    num_unread=num_unread{arithmetic}deltas.unread_delta
 FROM(
-    SELECT conversation_id, COUNT(id) As count_delta, SUM(unread) AS unread_delta
+    SELECT
+        conversation_id,
+        COUNT(id) As count_delta,
+        SUM(unread) AS unread_delta
     FROM messages WHERE id IN ({message_id_args})
     GROUP BY conversation_id
 ) AS deltas
@@ -371,8 +400,12 @@ WHERE deltas.conversation_id=conversations.id
         let args = gen_variable_in_argument_list(conversation_ids.len());
         let mut msg_ids: Vec<LocalMessageId> = Vec::with_capacity(conversation_ids.len());
         let mut update_stmt = self.0.prepare(&format!(
-            "UPDATE messages SET deleted=1 WHERE conversation_id IN ({}) AND deleted = 0 \
-AND id IN (SELECT message_id FROM message_labels WHERE label_id=?) RETURNING id",
+            r"UPDATE messages SET deleted=1
+             WHERE
+                conversation_id IN ({})
+                AND deleted = 0
+                AND id IN (SELECT message_id FROM message_labels WHERE label_id=?)
+            RETURNING id",
             args
         ))?;
 
@@ -400,8 +433,12 @@ AND id IN (SELECT message_id FROM message_labels WHERE label_id=?) RETURNING id"
         let args = gen_variable_in_argument_list(conversation_ids.len());
         let mut msg_ids: Vec<LocalMessageId> = Vec::with_capacity(conversation_ids.len());
         let mut update_stmt = self.0.prepare(&format!(
-            "UPDATE messages SET deleted=0 WHERE conversation_id IN ({}) AND deleted = 1 \
-AND id IN (SELECT message_id FROM message_labels WHERE label_id=?) RETURNING id",
+            r"UPDATE messages SET deleted=0
+             WHERE
+                conversation_id IN ({})
+                AND deleted = 1
+                AND id IN (SELECT message_id FROM message_labels WHERE label_id=?)
+            RETURNING id",
             args
         ))?;
 
@@ -471,16 +508,24 @@ AND id IN (SELECT message_id FROM message_labels WHERE label_id=?) RETURNING id"
         &mut self,
         ids: &[LocalMessageId],
     ) -> DBResult<()> {
-        let mut stmt = self
-            .0
-            .prepare(&format!(
-                r"UPDATE label_message_count AS lmc SET total=total-dm.num_messages, unread=unread-dm.num_unread FROM (
-    SELECT ml.label_id, SUM(m.unread) AS `num_unread`, COUNT(m.id) AS `num_messages` FROM messages AS m
+        let mut stmt = self.0.prepare(&format!(
+            r"UPDATE label_message_count AS lmc SET
+    total=total-dm.num_messages,
+    unread=unread-dm.num_unread
+FROM (
+    SELECT
+        ml.label_id,
+        SUM(m.unread) AS `num_unread`,
+        COUNT(m.id) AS `num_messages`
+    FROM messages AS m
     JOIN message_labels AS ml ON ml.message_id = m.id
     WHERE m.id IN ({})
     GROUP BY ml.label_id
-) AS dm WHERE lmc.label_id = dm.label_id
-",gen_variable_in_argument_list(ids.len())))?;
+) AS dm
+WHERE lmc.label_id = dm.label_id
+",
+            gen_variable_in_argument_list(ids.len())
+        ))?;
         stmt.execute(params_from_iter(ids))?;
         Ok(())
     }
@@ -489,16 +534,24 @@ AND id IN (SELECT message_id FROM message_labels WHERE label_id=?) RETURNING id"
         &mut self,
         ids: &[LocalMessageId],
     ) -> DBResult<()> {
-        let mut stmt = self
-            .0
-            .prepare(&format!(
-                r"UPDATE label_message_count AS lmc SET total=total+dm.num_messages, unread=unread+dm.num_unread FROM (
-    SELECT ml.label_id, SUM(m.unread) AS `num_unread`, COUNT(m.id) AS `num_messages` FROM messages AS m
+        let mut stmt = self.0.prepare(&format!(
+            r"UPDATE label_message_count AS lmc SET
+    total=total+dm.num_messages,
+    unread=unread+dm.num_unread
+    FROM (
+SELECT
+    ml.label_id,
+    SUM(m.unread) AS `num_unread`,
+    COUNT(m.id) AS `num_messages`
+    FROM messages AS m
     JOIN message_labels AS ml ON ml.message_id = m.id
     WHERE m.id IN ({})
     GROUP BY ml.label_id
-) AS dm WHERE lmc.label_id = dm.label_id
-",gen_variable_in_argument_list(ids.len())))?;
+) AS dm
+WHERE lmc.label_id = dm.label_id
+",
+            gen_variable_in_argument_list(ids.len())
+        ))?;
         stmt.execute(params_from_iter(ids))?;
         Ok(())
     }
@@ -524,11 +577,31 @@ macro_rules! bind_list_ordered {
 fn create_or_update_message_query() -> String {
     format!(
         r"INSERT INTO messages (
-    conversation_id, rid, address_id, `order`, subject, unread,
-    sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector,
-    sender_display_image, to_list, cc_list, bcc_list, time, size, expiration_time,
-    is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags
-) VALUES  ((SELECT id FROM conversations WHERE rid=?),{})
+    conversation_id,
+    rid,
+    address_id,
+    `order`,
+    subject,
+    unread,
+    sender_address,
+    sender_name,
+    sender_is_proton,
+    sender_is_simple_login,
+    sender_bimi_selector,
+    sender_display_image,
+    to_list,
+    cc_list,
+    bcc_list,
+    time,
+    size,
+    expiration_time,
+    is_replied,
+    is_replied_all,
+    is_forwarded,
+    external_id,
+    num_attachments,
+    flags
+) VALUES ((SELECT id FROM conversations WHERE rid=?),{})
 ON CONFLICT(rid) DO UPDATE SET
     conversation_id = excluded.conversation_id,
     address_id=excluded.address_id,
@@ -603,10 +676,33 @@ fn bind_message_metadata_create(
 struct LocalMessageMetadataSelector {}
 impl LocalMessageMetadataSelector {
     fn query() -> &'static str {
-        r"SELECT id, rid, address_id, conversation_id, `order`, subject, unread,
-sender_address, sender_name, sender_is_proton, sender_is_simple_login, sender_bimi_selector, sender_display_image,
-to_list, cc_list, bcc_list, time, size, expiration_time,
-is_replied, is_replied_all, is_forwarded, external_id, num_attachments, flags, IIF(ml.message_id IS NULL, 0,1)
+        r"SELECT
+    id,
+    rid,
+    address_id,
+    conversation_id,
+    `order`,
+    subject,
+    unread,
+    sender_address,
+    sender_name,
+    sender_is_proton,
+    sender_is_simple_login,
+    sender_bimi_selector,
+    sender_display_image,
+    to_list,
+    cc_list,
+    bcc_list,
+    time,
+    size,
+    expiration_time,
+    is_replied,
+    is_replied_all,
+    is_forwarded,
+    external_id,
+    num_attachments,
+    flags,
+    IIF(ml.message_id IS NULL, 0,1)
 FROM messages
 LEFT JOIN message_labels AS ml ON messages.id = ml.message_id AND ml.label_id = (SELECT id FROM labels WHERE rid='10')
 WHERE deleted=0"
