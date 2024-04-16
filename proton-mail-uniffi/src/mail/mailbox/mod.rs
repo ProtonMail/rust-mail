@@ -55,7 +55,7 @@ pub trait MailboxLiveQueryUpdatedCallback: Send + Sync {
 
 impl LiveQueryUpdated for Box<dyn MailboxLiveQueryUpdatedCallback> {
     fn on_live_query_updated(&self) {
-        self.on_updated()
+        self.on_updated();
     }
 }
 
@@ -92,9 +92,9 @@ impl Mailbox {
 
     /// Create a new mailbox for a given remote id.
     #[uniffi::constructor]
-    pub fn with_remote_id(ctx: &MailUserSession, label_id: LabelId) -> MailboxResult<Self> {
+    pub fn with_remote_id(ctx: &MailUserSession, label_id: &LabelId) -> MailboxResult<Self> {
         Ok(Self {
-            mbox: proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), &label_id)?,
+            mbox: proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), label_id)?,
         })
     }
 

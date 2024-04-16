@@ -93,6 +93,7 @@ impl LoginFlow {
     }
 
     /// Check whether the login flow has completed.
+    #[must_use]
     pub fn is_logged_in(&self) -> bool {
         self.ctx
             .async_runtime()
@@ -100,13 +101,14 @@ impl LoginFlow {
     }
 
     /// Check whether the login flow is awaiting 2FA input.
+    #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
         self.ctx
             .async_runtime()
             .block_on(async { self.flow.lock().await.is_awaiting_2fa() })
     }
 
-    /// When the flow is considered logged in, transform it into a MailUserContext.
+    /// When the flow is considered logged in, transform it into a `MailUserContext`.
     pub fn to_user_context(&self) -> MailSessionResult<Arc<MailUserSession>> {
         self.ctx.async_runtime().block_on(async {
             let guard = self.flow.lock().await;
@@ -121,10 +123,9 @@ impl From<proton_mail_common::proton_api_mail::proton_api_core::login::Error> fo
         use proton_mail_common::proton_api_mail::proton_api_core::login::Error as LFE;
         match value {
             LFE::Request(e) => LoginFlowError::Request(e),
-            LFE::ServerProof(e) => LoginFlowError::ServerProof(e),
             LFE::Unsupported2FA(e) => LoginFlowError::Unsupported2FA(e),
             LFE::HumanVerificationRequired(e) => LoginFlowError::HumanVerificationRequired(e),
-            LFE::SRPProof(e) => LoginFlowError::ServerProof(e),
+            LFE::ServerProof(e) | LFE::SRPProof(e) => LoginFlowError::ServerProof(e),
             LFE::InvalidState => LoginFlowError::InvalidState,
         }
     }
