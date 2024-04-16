@@ -58,6 +58,8 @@ clippy:
     - !reference [.do_clippy_check, script]
 
 build:
+  tags:
+    - shared-large
   stage: build
   script:
     - !reference [.script-config-git, script]
