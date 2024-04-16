@@ -38,6 +38,7 @@ pub fn create_conversation_tables(tx: &mut Transaction) -> crate::db::DBResult<(
                ctx_num_unread INTEGER NOT NULL,
                ctx_num_attachments INTEGER NOT NULL,
                ctx_expiration_time INTEGER NOT NULL,
+               ctx_snooze_time INTEGER NOT NULL,
 
                PRIMARY KEY(conversation_id, label_id),
 

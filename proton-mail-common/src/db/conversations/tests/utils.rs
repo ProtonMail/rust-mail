@@ -133,6 +133,8 @@ pub(in crate::db::conversations) fn prepare_and_patch_db_state_and_skip(
             conv_label.context_expiration_time = conv_label
                 .context_expiration_time
                 .max(message.expiration_time);
+            conv_label.context_snooze_time =
+                conv_label.context_snooze_time.max(message.snooze_time);
             if message.unread == true {
                 conv_label.context_num_unread += 1;
             }

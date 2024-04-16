@@ -61,6 +61,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                         context_size: 0,
                         context_num_attachments: 0,
                         context_expiration_time: 0,
+                        context_snooze_time: 0,
                     },
                     ConversationLabels {
                         id: MY_LABEL_ID2.clone(),
@@ -70,6 +71,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                         context_size: 0,
                         context_num_attachments: 0,
                         context_expiration_time: 0,
+                        context_snooze_time: 0,
                     },
                 ],
                 display_snooze_reminder: false,
@@ -95,6 +97,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                     context_size: 0,
                     context_num_attachments: 0,
                     context_expiration_time: 0,
+                    context_snooze_time: 0,
                 }],
                 display_snooze_reminder: false,
                 attachments_metadata: vec![],
@@ -146,6 +149,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                     mime_type: "text/plain".to_string(),
                     disposition: Disposition::Inline,
                 }],
+                snooze_time: 0,
             },
             // Conv1 Message 2
             MessageMetadata {
@@ -185,6 +189,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 1000,
             },
             // Conv1 Message 3
             MessageMetadata {
@@ -224,6 +229,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 2000,
             },
             // Conv1 Message 4
             MessageMetadata {
@@ -263,6 +269,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 1500,
             },
             // Conv2 Message 1
             MessageMetadata {
@@ -309,6 +316,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 0,
             },
             // Conv2 Message 2
             MessageMetadata {
@@ -348,6 +356,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 0,
             },
         ],
     }
@@ -378,6 +387,7 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
                     context_time: 0,
                     context_size: 0,
                     context_num_attachments: 0,
+                    context_snooze_time: 0,
                     context_expiration_time: 0,
                 },
                 ConversationLabels {
@@ -388,6 +398,7 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
                     context_size: 0,
                     context_num_attachments: 0,
                     context_expiration_time: 0,
+                    context_snooze_time: 0,
                 },
             ],
             display_snooze_reminder: false,
@@ -439,6 +450,7 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
                     mime_type: "text/plain".to_string(),
                     disposition: Disposition::Inline,
                 }],
+                snooze_time: 0,
             },
             // Conv1 Message 2
             MessageMetadata {
@@ -478,6 +490,7 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 0,
             },
             // Conv1 Message 3
             MessageMetadata {
@@ -517,6 +530,7 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 0,
             },
             // Conv1 Message 4
             MessageMetadata {
@@ -556,6 +570,7 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
                 expiration_time: 0,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 0,
             },
         ],
     }
@@ -627,6 +642,7 @@ pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
                     mime_type: "text/plain".to_string(),
                     disposition: Disposition::Inline,
                 }],
+                snooze_time: 1000,
             },
             // Conv1 Message 2
             MessageMetadata {
@@ -666,6 +682,7 @@ pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
                 expiration_time: 900,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 2000,
             },
             // Conv1 Message 3
             MessageMetadata {
@@ -705,6 +722,7 @@ pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
                 expiration_time: 400,
                 num_attachments: 0,
                 attachments_metadata: vec![],
+                snooze_time: 1500,
             },
         ],
     }
