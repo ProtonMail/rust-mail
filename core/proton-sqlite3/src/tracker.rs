@@ -121,6 +121,32 @@ impl InProcessTrackerService {
         TrackingConnection::new(conn, self.clone())
     }
 
+    /// Create a new tracking connection in an async environment.
+    ///
+    /// Note: Due to sync nature of the library the code is run on the executors sync thread
+    /// pool.
+    ///
+    /// # Errors
+    /// Returns error if the connection can not be acquired, an error occurred during the execution
+    /// or the blocking task failed to join.
+    pub async fn new_connection_async<T, E, F>(&mut self, f: F) -> Result<T, E>
+    where
+        T: Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut TrackingConnection) -> Result<T, E> + Send + 'static,
+    {
+        let cloned = self.clone();
+        proton_async::runtime::spawn_blocking(move || {
+            let conn = cloned.pool.acquire()?;
+            let mut conn = TrackingConnection::new(conn, cloned)?;
+            f(&mut conn)
+        })
+        .await
+        .map_err(|e| {
+            rusqlite::Error::UserFunctionError(format!("Failed to join task: {e}").into())
+        })?
+    }
+
     /// Remove an observer.
     pub fn remove_observer(&self, id: TrackedObserverId) {
         self.inner.remove_observer(id);

@@ -100,6 +100,14 @@ macro_rules! new_tracked_connection_wrapper {
             /// Wrapper to promote read and write.
             pub struct [<$name Mut>]<'c>([<$name Impl>]<'c>);
 
+            impl<'c> [<$name Mut>]<'c> {
+                /// Create a new mutable accessor from a transaction.
+                pub fn new<'t:'c>(tx:&'c mut $crate::SqliteTransaction<'t>) -> Self {
+                    let conn_impl = [<$name Impl>](tx.rusqlite_transaction());
+                    Self(conn_impl)
+                }
+            }
+
             impl<'c> std::ops::Deref for [<$name Mut>]<'c> {
                 type Target = [<$name Impl>]<'c>;
 
@@ -191,8 +199,7 @@ macro_rules! new_connection_wrapper {
                     mut closure: impl FnMut(&mut [<$name Mut>]) -> Result<T, E>,
                 ) -> Result<T, E> {
                     self.0.tx(|tx| {
-                        let conn_impl = [<$name Impl>](tx.rusqlite_transaction());
-                        let mut conn = [<$name Mut>](conn_impl);
+                        let mut conn = [<$name Mut>]::new(tx);
                         closure(&mut conn)
                     })
                 }
@@ -231,6 +238,14 @@ macro_rules! new_connection_wrapper {
 
             /// Wrapper to promote read and write.
             pub struct [<$name Mut>]<'c>([<$name Impl>]<'c>);
+
+            impl<'c> [<$name Mut>]<'c> {
+                /// Create a new mutable accessor from a transaction.
+                pub fn new<'t:'c>(tx:&'c mut $crate::SqliteTransaction<'t>) -> Self {
+                    let conn_impl = [<$name Impl>](tx.rusqlite_transaction());
+                    Self(conn_impl)
+                }
+            }
 
             impl<'c> std::ops::Deref for [<$name Mut>]<'c> {
                 type Target = [<$name Impl>]<'c>;

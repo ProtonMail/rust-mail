@@ -307,6 +307,84 @@ impl SqliteConnectionPool {
     pub fn close_all(&self) -> rusqlite::Result<()> {
         self.inner.close_all()
     }
+
+    /// Acquire a new connection in an async environment and execute a closure on it.
+    ///
+    /// Note: Due to sync nature of the library the code is run on the executors sync thread
+    /// pool.
+    ///
+    /// # Errors
+    /// Returns error if the connection can not be acquired, an error occurred during the execution
+    /// or the blocking task failed to join.
+    pub async fn with_async<T, E, F>(&mut self, f: F) -> Result<T, E>
+    where
+        T: Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut SqliteConnection) -> Result<T, E> + Send + 'static,
+    {
+        let cloned = self.clone();
+        proton_async::runtime::spawn_blocking(move || {
+            let mut conn = cloned.acquire()?;
+            f(&mut conn)
+        })
+        .await
+        .map_err(|e| {
+            rusqlite::Error::UserFunctionError(format!("Failed to join task: {e}").into())
+        })?
+    }
+
+    /// Acquire a new connection in an async environment, start a transaction and execute a
+    /// closure on it.
+    ///
+    /// Note: Due to sync nature of the library the code is run on the executors sync thread
+    /// pool.
+    ///
+    /// # Errors
+    /// Returns error if the connection can not be acquired, an error occurred during the execution
+    /// the blocking task failed to join, or the transaction failed to commit.
+    pub async fn transaction_async<T, E, F>(&mut self, f: F) -> Result<T, E>
+    where
+        T: Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut SqliteTransaction) -> Result<T, E> + Send + 'static,
+    {
+        let cloned = self.clone();
+        proton_async::runtime::spawn_blocking(move || {
+            let mut conn = cloned.acquire()?;
+            conn.transaction(f)
+        })
+        .await
+        .map_err(|e| {
+            rusqlite::Error::UserFunctionError(format!("Failed to join task: {e}").into())
+        })?
+    }
+
+    /// Acquire a connection and execute the given closure on it.
+    ///
+    /// # Errors
+    /// Returns Error if the connection can not be acquired or if the closure returns an error.
+    pub fn with<F, R, E>(&self, mut f: F) -> Result<R, E>
+    where
+        E: From<rusqlite::Error>,
+        F: FnMut(&mut SqliteConnection) -> Result<R, E>,
+    {
+        let mut conn = self.acquire()?;
+        f(&mut conn)
+    }
+
+    /// Acquire a connection start a transaction and run the given closure.
+    ///
+    /// # Errors
+    /// Returns Error if the connection can not be acquired, the closure returns an error or
+    /// the transaction failed to commit.
+    pub fn transaction<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        E: From<rusqlite::Error>,
+        F: FnMut(&mut SqliteTransaction) -> Result<R, E>,
+    {
+        let mut conn = self.acquire()?;
+        conn.transaction(f)
+    }
 }
 
 impl ConnectionPoolInner {
