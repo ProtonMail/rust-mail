@@ -156,8 +156,7 @@ impl Context {
     /// Returns error if we fail to retrieve the sessions from the db.
     pub fn get_sessions(&self) -> CoreContextResult<Vec<EncryptedUserSession>> {
         let conn = self.get_connection()?;
-        let r = conn.as_connection_ref().load_all_sessions()?;
-        Ok(r)
+        Ok(conn.read(|conn| conn.load_all_sessions())?)
     }
 
     /// Create a new login flow for a new user.

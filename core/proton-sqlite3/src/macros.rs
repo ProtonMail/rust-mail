@@ -38,9 +38,13 @@ macro_rules! new_tracked_connection_wrapper {
                     Self(conn)
                 }
 
-                /// Get access to read only connection implementations.
-                pub fn as_connection_ref(&self) -> [<$name Ref>]<'_> {
-                    [<$name Ref>]([<$name Impl>](self.0.as_ref().rusqlite_connection()))
+                /// Get access to read only implementations.
+                pub fn read<T, E: From<$crate::rusqlite::Error>>(
+                    &self,
+                    mut closure: impl FnMut(&[<$name Ref>]) -> Result<T, E>,
+                ) -> Result<T, E> {
+                    let conn = [<$name Ref>]([<$name Impl>](self.0.as_ref().rusqlite_connection()));
+                    closure(&conn)
                 }
 
                 /// Convert the current into another connection type generated from this macro.
@@ -147,7 +151,7 @@ macro_rules! new_tracked_connection_wrapper {
 /// let mut conn = pool.acquire().map(MyConn).unwrap();
 ///
 /// // perform read only operation.
-/// conn.as_connection_ref().read_only_query();
+/// conn.read(|conn| -> rusqlite::Result<()> {Ok(conn.read_only_query())});
 ///
 /// // perform mutable operation.
 /// conn.tx(|tx:&mut MyConnMut| -> rusqlite::Result<()>{
@@ -167,9 +171,13 @@ macro_rules! new_connection_wrapper {
                     Self(conn)
                 }
 
-                /// Get access to read only connection implementations.
-                pub fn as_connection_ref(&self) -> [<$name Ref>]<'_> {
-                    [<$name Ref>]([<$name Impl>](self.0.rusqlite_connection()))
+                /// Get access to read only implementations.
+                pub fn read<T, E: From<$crate::rusqlite::Error>>(
+                    &self,
+                    mut closure: impl FnMut(&[<$name Ref>]) -> Result<T, E>,
+                ) -> Result<T, E> {
+                    let conn = [<$name Ref>]([<$name Impl>](self.0.rusqlite_connection()));
+                    closure(&conn)
                 }
 
                 /// Convert the current into another connection type generated from this macro.
