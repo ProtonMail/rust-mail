@@ -140,6 +140,12 @@ pub fn spawn<R: Send + 'static, F: Future<Output = R> + Send + 'static>(f: F) ->
     JoinHandle::new(tokio::spawn(f))
 }
 
+/// Spawn a new blocking task on different thread pool.
+pub fn spawn_blocking<R: Send + 'static, F: FnOnce() -> R + Send + 'static>(f: F) -> JoinHandle<R> {
+    #[cfg(feature = "tokio-runtime")]
+    JoinHandleWrapper::new(tokio::task::spawn_blocking(f))
+}
+
 #[test]
 fn test_local_thread_runtime() {
     use std::time::Duration;
