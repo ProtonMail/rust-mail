@@ -6,8 +6,8 @@ use std::{
 };
 
 use proton_crypto_account::proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerificationResult,
-    VerifiedData, VerifiedDataReader,
+    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
+    PGPProviderSync, VerificationResult, VerifiedData, VerifiedDataReader,
 };
 
 use crate::string_id;
@@ -123,8 +123,11 @@ pub trait AttachmentDecryption {
             .with_verification_key_refs(verification_keys)
             .with_session_key_ref(&session_key);
         if let Some(attachment_signature) = signature_option {
-            decryptor =
-                decryptor.with_detached_signature_ref(attachment_signature.as_ref(), false, true);
+            decryptor = decryptor.with_detached_signature_ref(
+                attachment_signature.as_ref(),
+                DetachedSignatureVariant::Plaintext,
+                true,
+            );
         } else if let Some(attachment_signature) = enc_signature_option {
             let result = decrypt_and_verify_with_encrypted_signature(
                 pgp_provider,
@@ -168,8 +171,11 @@ pub trait AttachmentDecryption {
             .map_err(AttachmentError::SessionKeyDecryption)?;
         let mut decryptor = pgp_provider.new_decryptor();
         if let Some(attachment_signature) = signature_option {
-            decryptor =
-                decryptor.with_detached_signature_ref(attachment_signature.as_ref(), false, true);
+            decryptor = decryptor.with_detached_signature_ref(
+                attachment_signature.as_ref(),
+                DetachedSignatureVariant::Plaintext,
+                true,
+            );
         } else if let Some(attachment_signature) = enc_signature_option {
             return decrypt_and_verify_with_encrypted_signature_stream(
                 pgp_provider,
@@ -206,7 +212,11 @@ fn decrypt_and_verify_with_encrypted_signature<T: PGPProviderSync>(
         .new_decryptor()
         .with_session_key_ref(attachment_session_key)
         .with_verification_key_refs(verification_keys)
-        .with_detached_signature_ref(detached_signature.as_bytes(), false, false)
+        .with_detached_signature_ref(
+            detached_signature.as_bytes(),
+            DetachedSignatureVariant::Plaintext,
+            false,
+        )
         .decrypt(attachment_data, DataEncoding::Bytes)
         .map_err(AttachmentError::AttachmentDecryption)
         .map(AttachmentDecrypted)
@@ -229,7 +239,11 @@ fn decrypt_and_verify_with_encrypted_signature_stream<'a, T: PGPProviderSync, R:
         .new_decryptor()
         .with_session_key(attachment_session_key)
         .with_verification_key_refs(verification_keys)
-        .with_detached_signature(detached_signature.to_vec(), false, false)
+        .with_detached_signature(
+            detached_signature.to_vec(),
+            DetachedSignatureVariant::Plaintext,
+            false,
+        )
         .decrypt_stream(attachment_data, DataEncoding::Bytes)
         .map_err(AttachmentError::AttachmentDecryption)
         .map(AttachmentDecryptedReader)
