@@ -3,6 +3,7 @@ use crate::events::mailbox::MailboxEvent;
 use crate::events::AppEvent;
 use crate::state::AppState;
 use crate::views::{ConversationView, SessionsView};
+use proton_async::runtime::MultiThreaded;
 use proton_async::sync::mpsc::Sender;
 use proton_core_common::db::proton_sqlite3::{InProcessTrackerService, Live, LiveQueryBuilder};
 use proton_mail_common::db::proton_sqlite3::Observable;
@@ -13,8 +14,8 @@ use proton_mail_common::exports::tracing::warn;
 use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::{debug, error};
 use proton_mail_common::{
-    MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage, Mailbox, MailboxError, MailboxResult,
+    MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
+    MailUserContextLoadingStage, Mailbox, MailboxError,
 };
 
 const CONVERSATION_COUNT: usize = 50;
@@ -138,13 +139,20 @@ impl MailboxState {
 
         self.conversation_loading_state = LoadingState::Done;
 
-        let mailbox = match Mailbox::with_remote_id(user_context, LabelId::inbox()) {
+        let mailbox = match Mailbox::with_remote_id(user_context.clone(), LabelId::inbox()) {
             Ok(m) => m,
             Err(e) => {
                 app_dispatcher.set_error("Failed to Open Mailbox", e);
                 return;
             }
         };
+
+        let bg_dispatcher = app_dispatcher.background_dispatcher();
+        user_context.mail_context().async_runtime().block_on(async {
+            if let Err(e) = mailbox.sync(CONVERSATION_COUNT).await {
+                bg_dispatcher.set_error("Mailbox Error", e)
+            }
+        });
 
         let ctx = mailbox.user_context().clone();
         let dispatcher = app_dispatcher.background_dispatcher();
@@ -197,6 +205,7 @@ impl MailboxState {
     }
     pub fn load_label(
         &mut self,
+        runtime: &MultiThreaded,
         label_id: LocalLabelId,
         mut dispatcher: AppLocalDispatcher<AppState, AppEvent>,
     ) {
@@ -208,16 +217,11 @@ impl MailboxState {
         let background_dispatcher = dispatcher.background_dispatcher();
         mailbox_context.mailbox =
             Mailbox::with_id(mailbox_context.mailbox.user_context().clone(), label_id);
-        if let Err(e) = mailbox_context.mailbox.sync(
-            CONVERSATION_COUNT,
-            Some(Box::new(move |r: MailboxResult<()>| {
-                background_dispatcher
-                    .queue_event(MailboxEvent::LoadConversations(r.map_err(|e| e.into())))
-            })),
-        ) {
-            dispatcher.set_error("Mailbox Error", e);
-            return;
-        }
+        runtime.block_on(async {
+            let r = mailbox_context.mailbox.sync(CONVERSATION_COUNT).await;
+            background_dispatcher
+                .queue_event(MailboxEvent::LoadConversations(r.map_err(Into::into)));
+        });
         mailbox_context.conversations = mailbox_context
             .mailbox
             .new_conversation_query(new_live_query, CONVERSATION_COUNT);
@@ -256,10 +260,11 @@ impl MailboxState {
         &mut self,
         mut dispatcher: AppLocalDispatcher<AppState, AppEvent>,
         event: MailboxEvent,
+        ctx: &MailContext,
     ) {
         match event {
             MailboxEvent::LoadLabelRequest(label_id) => {
-                self.load_label(label_id, dispatcher);
+                self.load_label(ctx.async_runtime(), label_id, dispatcher);
             }
             MailboxEvent::MailboxRefresh => {
                 self.on_refresh(dispatcher);
@@ -404,19 +409,14 @@ impl MailboxInitCallback {
 }
 impl MailUserContextInitializationCallback for MailboxInitCallback {
     fn on_stage(&self, stage: MailUserContextLoadingStage) {
-        match stage {
-            MailUserContextLoadingStage::Conversation => {
-                self.0.queue_event(MailboxEvent::LoadLabels(Ok(())))
+        if stage == MailUserContextLoadingStage::Finished {
+            self.0.queue_event(MailboxEvent::LoadLabels(Ok(())));
+            if self.1 {
+                self.0
+                    .queue_event(MailboxEvent::NewMailboxSessionInitialized);
+            } else {
+                self.0.queue_event(MailboxEvent::LoadConversations(Ok(())))
             }
-            MailUserContextLoadingStage::Finished => {
-                if self.1 {
-                    self.0
-                        .queue_event(MailboxEvent::NewMailboxSessionInitialized);
-                } else {
-                    self.0.queue_event(MailboxEvent::LoadConversations(Ok(())))
-                }
-            }
-            _ => {}
         }
     }
 
@@ -425,10 +425,6 @@ impl MailUserContextInitializationCallback for MailboxInitCallback {
             MailUserContextLoadingStage::Labels => {
                 self.0
                     .queue_event(MailboxEvent::LoadLabels(Err(err.into())));
-            }
-            MailUserContextLoadingStage::Conversation => {
-                self.0
-                    .queue_event(MailboxEvent::LoadConversations(Err(err.into())));
             }
             _ => {
                 self.0.set_error("Failed to load", err);

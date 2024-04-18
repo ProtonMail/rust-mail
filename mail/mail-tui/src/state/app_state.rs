@@ -72,7 +72,8 @@ impl AppEventHandler<AppState, AppEvent> for AppState {
                     .handle_event(dispatcher, &self.mail_context, event)
             }
             AppEvent::Mailbox(event) => {
-                self.mailbox_state.handle_event(dispatcher, event);
+                self.mailbox_state
+                    .handle_event(dispatcher, event, &self.mail_context);
             }
             AppEvent::Session(event) => {
                 self.session_state

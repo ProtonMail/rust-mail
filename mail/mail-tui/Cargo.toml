@@ -9,9 +9,9 @@ edition = "2021"
 dirs = "5"
 anyhow = "1"
 thiserror = "1"
-proton-core-common = { version = "0.2.0", registry = "proton" }
-proton-mail-common = { version = "0.3.0", registry = "proton" }
-proton-async = { version = "0.4.0", registry = "proton" }
+proton-core-common = { version = "0.3", registry = "proton" }
+proton-mail-common = { version = "0.4", registry = "proton" }
+proton-async = { version = "0.5", registry = "proton" }
 crossterm = "0.27.0"
 ratatui = { version = "0.26.1", features = ["all-widgets"] }
 secrecy = "0.8"
