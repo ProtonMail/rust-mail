@@ -363,10 +363,10 @@ impl SqliteConnectionPool {
     ///
     /// # Errors
     /// Returns Error if the connection can not be acquired or if the closure returns an error.
-    pub fn with<F, R, E>(&self, mut f: F) -> Result<R, E>
+    pub fn with<F, R, E>(&self, f: F) -> Result<R, E>
     where
         E: From<rusqlite::Error>,
-        F: FnMut(&mut SqliteConnection) -> Result<R, E>,
+        F: FnOnce(&mut SqliteConnection) -> Result<R, E>,
     {
         let mut conn = self.acquire()?;
         f(&mut conn)
@@ -380,7 +380,7 @@ impl SqliteConnectionPool {
     pub fn transaction<F, R, E>(&self, f: F) -> Result<R, E>
     where
         E: From<rusqlite::Error>,
-        F: FnMut(&mut SqliteTransaction) -> Result<R, E>,
+        F: FnOnce(&mut SqliteTransaction) -> Result<R, E>,
     {
         let mut conn = self.acquire()?;
         conn.transaction(f)

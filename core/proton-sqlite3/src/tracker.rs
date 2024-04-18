@@ -62,7 +62,7 @@ impl TrackingConnection {
     /// # Errors
     /// Returns error if the transaction failed to submit or if there was an issue with tracking
     /// changes.
-    pub fn tx<E: From<rusqlite::Error>, T, F: FnMut(&mut SqliteTransaction) -> Result<T, E>>(
+    pub fn tx<E: From<rusqlite::Error>, T, F: FnOnce(&mut SqliteTransaction) -> Result<T, E>>(
         &mut self,
         closure: F,
     ) -> Result<T, E> {
@@ -145,6 +145,38 @@ impl InProcessTrackerService {
         .map_err(|e| {
             rusqlite::Error::UserFunctionError(format!("Failed to join task: {e}").into())
         })?
+    }
+
+    /// Acquire a connection start a transaction and run the given closure.
+    ///
+    /// # Errors
+    /// Returns Error if the connection can not be acquired, the closure returns an error or
+    /// the transaction failed to commit.
+    pub fn transaction<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        E: From<rusqlite::Error>,
+        F: FnOnce(&mut SqliteTransaction) -> Result<R, E>,
+    {
+        let mut conn = self.new_connection()?;
+        conn.tx(f)
+    }
+
+    /// Acquire a new connection in an async environment, start a transaction and execute a
+    /// closure on it.
+    ///
+    /// Note: Due to sync nature of the library the code is run on the executors sync thread
+    /// pool.
+    ///
+    /// # Errors
+    /// Returns error if the connection can not be acquired, an error occurred during the execution
+    /// the blocking task failed to join, or the transaction failed to commit.
+    pub async fn transaction_async<T, E, F>(&mut self, f: F) -> Result<T, E>
+    where
+        T: Send + 'static,
+        E: From<rusqlite::Error> + Send + 'static,
+        F: FnOnce(&mut SqliteTransaction) -> Result<T, E> + Send + 'static,
+    {
+        self.new_connection_async(move |conn| conn.tx(f)).await
     }
 
     /// Remove an observer.
