@@ -6,8 +6,8 @@ macro_rules! string_id {
         /// Represent an API string identifier $name.
         pub struct $name(pub String);
 
-        impl Display for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 self.0.fmt(f)
             }
         }
