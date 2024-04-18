@@ -1,5 +1,4 @@
 use crate::exports::anyhow::anyhow;
-use crate::exports::proton_sqlite3::rusqlite::Transaction;
 use crate::exports::serde::{self, Deserialize, Serialize};
 use crate::{MailUserContext, WeakMailUserContext};
 use proton_action_queue::{
@@ -8,6 +7,7 @@ use proton_action_queue::{
     SessionProvider, StoredAction,
 };
 use proton_event_loop::EventLoopError;
+use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
 
 define_action_id!(EVENT_LOOP_ACTION_ID, "cccb153b-4cee-4634-90ae-6d7424e5f4d1");
@@ -78,7 +78,7 @@ impl ActionFactoryInstance for EventLoopActionFactory {
     fn local_handler<'r, 't: 'r>(
         &self,
         action: &'r dyn Any,
-        _: &'r mut Transaction<'t>,
+        _: &'r mut SqliteTransaction<'t>,
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(_) = action.downcast_ref::<EventLoopAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
@@ -92,7 +92,7 @@ impl ActionFactoryInstance for EventLoopActionFactory {
     fn remote_handler<'r, 't: 'r>(
         &'r self,
         action: &StoredAction,
-        _: &'r mut Transaction<'t>,
+        _: &'r mut SqliteTransaction<'t>,
         _: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(ctx) = self.ctx.upgrade() else {

@@ -1,5 +1,4 @@
-use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionImpl};
-use crate::exports::proton_sqlite3::rusqlite::Transaction;
+use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use crate::{MailUserContext, WeakMailUserContext};
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -10,8 +9,8 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
+use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
-use std::ops::Deref;
 
 define_action_id!(
     DELETE_CONVERSATION_ACTION_ID,
@@ -41,31 +40,29 @@ impl Action for DeleteConversationsAction {
 
 struct DeleteConversationLocalHandler<'c, 't: 'c> {
     action: &'c DeleteConversationsAction,
-    tx: &'c mut Transaction<'t>,
+    tx: MailSqliteConnectionMut<'t>,
 }
 
 impl<'c, 't: 'c> LocalActionHandler for DeleteConversationLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-        tx.mark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
+        self.tx
+            .mark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
 }
 
-struct DeleteConversationRemoteHandler<'r, 't: 'r> {
+struct DeleteConversationRemoteHandler<'t> {
     ctx: MailUserContext,
     action: DeleteConversationsAction,
     session: MailSession,
-    tx: &'r mut Transaction<'t>,
+    tx: MailSqliteConnectionMut<'t>,
 }
 
-impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't> {
+impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler<'t> {
     fn revert_local(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-        tx.unmark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
+        self.tx
+            .unmark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
@@ -75,10 +72,8 @@ impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't>
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-
-        let Some(label) = tx
+        let Some(label) = self
+            .tx
             .label_with_id(self.action.label_id)
             .map_err(|e| ActionError::Local(anyhow!(e)))?
         else {
@@ -95,7 +90,8 @@ impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't>
             )));
         };
 
-        let conv_ids = tx
+        let conv_ids = self
+            .tx
             .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
             .map_err(|e| {
                 error!("Failed to resolve conversation ids: {e}");
@@ -122,10 +118,12 @@ impl<'c, 't: 'c> RemoteActionHandler for DeleteConversationRemoteHandler<'c, 't>
             .collect::<Vec<_>>();
         if !failed_messages.is_empty() {
             error!("Delete operation failed for: {:?}", failed_messages);
-            let local_ids = tx
+            let local_ids = self
+                .tx
                 .remote_to_local_conversation_ids(failed_messages.iter())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
-            tx.unmark_conversations_as_deleted(self.action.label_id, local_ids.into_iter())
+            self.tx
+                .unmark_conversations_as_deleted(self.action.label_id, local_ids.into_iter())
                 .map_err(|e| {
                     error!("Failed to rollback failed conversations: {e}");
                     ActionError::Local(anyhow!(e))
@@ -155,7 +153,7 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
     fn local_handler<'r, 't: 'r>(
         &self,
         action: &'r dyn Any,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(action) = action.downcast_ref::<DeleteConversationsAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
@@ -164,13 +162,16 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
             ));
         };
 
-        Ok(Box::new(DeleteConversationLocalHandler { action, tx }))
+        Ok(Box::new(DeleteConversationLocalHandler {
+            action,
+            tx: MailSqliteConnectionMut::new(tx),
+        }))
     }
 
     fn remote_handler<'r, 't: 'r>(
         &'r self,
         action: &StoredAction,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(ctx) = self.ctx.upgrade() else {
@@ -189,7 +190,7 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
         Ok(Box::new(DeleteConversationRemoteHandler {
             ctx,
             action,
-            tx,
+            tx: MailSqliteConnectionMut::new(tx),
             session: MailSession::from(session),
         }))
     }

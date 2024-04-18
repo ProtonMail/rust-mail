@@ -1,6 +1,5 @@
 use crate::db::{LocalConversation, LocalLabelId, MailSqliteConnectionImpl};
 use proton_sqlite3::{Observable, SqliteConnection};
-use std::ops::Deref;
 
 #[derive(Clone)]
 pub struct ConversationQuery {
@@ -34,7 +33,7 @@ impl Observable for ConversationQuery {
         &self,
         connection: &SqliteConnection,
     ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
-        let conn = MailSqliteConnectionImpl::new(connection.deref());
+        let conn = MailSqliteConnectionImpl::new(connection.rusqlite_connection());
         let conversations = conn.get_conversations_with_context(self.label_id, self.limit)?;
         Ok(conversations)
     }

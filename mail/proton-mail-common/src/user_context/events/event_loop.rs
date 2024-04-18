@@ -56,12 +56,12 @@ impl proton_event_loop::Store for MailUserContext {
             error!("Failed to acquire db connection: {e}");
             anyhow!("Failed to acquire db connection")
         })?;
-        conn.as_connection_ref()
-            .get_last_event_id(MAIL_EVENT_TYPE_ID)
-            .map_err(|e| {
+        conn.read(|conn| {
+            conn.get_last_event_id(MAIL_EVENT_TYPE_ID).map_err(|e| {
                 error!("Failed to load event id from db:{e}");
                 anyhow!("Failed to load event id {e}")
             })
+        })
     }
 
     fn store(&self, id: &EventId) -> anyhow::Result<()> {

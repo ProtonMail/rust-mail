@@ -1,5 +1,4 @@
-use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionImpl};
-use crate::exports::proton_sqlite3::rusqlite::Transaction;
+use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use crate::{MailUserContext, WeakMailUserContext};
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -11,8 +10,8 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
+use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
-use std::ops::Deref;
 
 define_action_id!(
     MOVE_CONVERSATIONS_ACTION_ID,
@@ -48,61 +47,65 @@ impl Action for MoveConversationsAction {
 
 struct MoveConversationsLocalHandler<'c, 't: 'c> {
     action: &'c MoveConversationsAction,
-    tx: &'c mut Transaction<'t>,
+    tx: MailSqliteConnectionMut<'t>,
 }
 
 impl<'c, 't: 'c> LocalActionHandler for MoveConversationsLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-        let src_label = tx
+        let src_label = self
+            .tx
             .label_with_id_or_err(self.action.active_label_id)
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
-        let dst_label = tx
+        let dst_label = self
+            .tx
             .label_with_id_or_err(self.action.destination_label_id)
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         // If moving to trash, mark conversations as read.
         if dst_label.rid.as_ref() == Some(LabelId::trash()) {
-            tx.mark_conversations_read(self.action.ids.iter().cloned())
+            self.tx
+                .mark_conversations_read(self.action.ids.iter().cloned())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
         }
 
         if src_label.is_movable_folder() {
-            tx.unlabel_conversations(self.action.active_label_id, self.action.ids.iter().cloned())
+            self.tx
+                .unlabel_conversations(self.action.active_label_id, self.action.ids.iter().cloned())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
         }
-        tx.label_conversations(
-            self.action.destination_label_id,
-            self.action.ids.iter().cloned(),
-        )
-        .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        self.tx
+            .label_conversations(
+                self.action.destination_label_id,
+                self.action.ids.iter().cloned(),
+            )
+            .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
 }
 
-struct MoveConversationsRemoteHandler<'r, 't: 'r> {
+struct MoveConversationsRemoteHandler<'t> {
     ctx: MailUserContext,
     action: MoveConversationsAction,
     session: MailSession,
-    tx: &'r mut Transaction<'t>,
+    tx: MailSqliteConnectionMut<'t>,
 }
 
-impl<'c, 't: 'c> RemoteActionHandler for MoveConversationsRemoteHandler<'c, 't> {
+impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
     fn revert_local(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-        let src_label = tx
+        let src_label = self
+            .tx
             .label_with_id_or_err(self.action.active_label_id)
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         if src_label.is_movable_folder() {
-            tx.label_conversations(self.action.active_label_id, self.action.ids.iter().cloned())
+            self.tx
+                .label_conversations(self.action.active_label_id, self.action.ids.iter().cloned())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
         }
-        tx.unlabel_conversations(
-            self.action.destination_label_id,
-            self.action.ids.iter().cloned(),
-        )
-        .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        self.tx
+            .unlabel_conversations(
+                self.action.destination_label_id,
+                self.action.ids.iter().cloned(),
+            )
+            .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
 
@@ -111,13 +114,12 @@ impl<'c, 't: 'c> RemoteActionHandler for MoveConversationsRemoteHandler<'c, 't> 
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-
-        let src_label = tx
+        let src_label = self
+            .tx
             .label_with_id_or_err(self.action.active_label_id)
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
-        let dst_label = tx
+        let dst_label = self
+            .tx
             .label_with_id_or_err(self.action.destination_label_id)
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
 
@@ -136,7 +138,8 @@ impl<'c, 't: 'c> RemoteActionHandler for MoveConversationsRemoteHandler<'c, 't> 
 
         let src_is_folder = src_label.is_movable_folder();
 
-        let conv_ids = tx
+        let conv_ids = self
+            .tx
             .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
             .map_err(|e| {
                 error!("Failed to resolve conversation ids: {e}");
@@ -174,19 +177,22 @@ impl<'c, 't: 'c> RemoteActionHandler for MoveConversationsRemoteHandler<'c, 't> 
                 "Move conversations operation failed for: {:?}",
                 failed_messages
             );
-            let local_ids = tx
+            let local_ids = self
+                .tx
                 .remote_to_local_conversation_ids(failed_messages.iter())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
 
             if src_is_folder {
-                tx.label_conversations(self.action.active_label_id, local_ids.iter().cloned())
+                self.tx
+                    .label_conversations(self.action.active_label_id, local_ids.iter().cloned())
                     .map_err(|e| {
                         error!("Failed to rollback failed for conversations: {e}");
                         ActionError::Local(anyhow!(e))
                     })?;
             }
 
-            tx.unlabel_conversations(self.action.destination_label_id, local_ids.into_iter())
+            self.tx
+                .unlabel_conversations(self.action.destination_label_id, local_ids.into_iter())
                 .map_err(|e| {
                     error!("Failed to rollback failed for conversations: {e}");
                     ActionError::Local(anyhow!(e))
@@ -216,7 +222,7 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
     fn local_handler<'r, 't: 'r>(
         &self,
         action: &'r dyn Any,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(action) = action.downcast_ref::<MoveConversationsAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
@@ -225,13 +231,16 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
             ));
         };
 
-        Ok(Box::new(MoveConversationsLocalHandler { action, tx }))
+        Ok(Box::new(MoveConversationsLocalHandler {
+            action,
+            tx: MailSqliteConnectionMut::new(tx),
+        }))
     }
 
     fn remote_handler<'r, 't: 'r>(
         &'r self,
         action: &StoredAction,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(ctx) = self.ctx.upgrade() else {
@@ -250,7 +259,7 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
         Ok(Box::new(MoveConversationsRemoteHandler {
             ctx,
             action,
-            tx,
+            tx: MailSqliteConnectionMut::new(tx),
             session: MailSession::from(session),
         }))
     }

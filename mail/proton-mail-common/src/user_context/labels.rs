@@ -28,8 +28,7 @@ impl MailUserContext {
 
     pub fn get_local_label_id(&self, id: &LabelId) -> MailContextResult<Option<LocalLabelId>> {
         let conn = self.new_db_connection()?;
-        let id = conn.as_connection_ref().resolve_remote_label_id(id)?;
-        Ok(id)
+        Ok(conn.read(|conn| conn.resolve_remote_label_id(id))?)
     }
 
     pub fn get_label_with_remote_id(
@@ -37,27 +36,23 @@ impl MailUserContext {
         label_id: &LabelId,
     ) -> MailContextResult<Option<LocalLabel>> {
         let conn = self.new_db_connection()?;
-        let r = conn.as_connection_ref().label_with_remote_id(label_id)?;
-        Ok(r)
+        Ok(conn.read(|conn| conn.label_with_remote_id(label_id))?)
     }
 
     pub fn get_label(&self, id: LocalLabelId) -> MailContextResult<Option<LocalLabel>> {
         let conn = self.new_db_connection()?;
-        let r = conn.as_connection_ref().label_with_id(id)?;
-        Ok(r)
+        Ok(conn.read(|conn| conn.label_with_id(id))?)
     }
 
     pub fn get_labels_by_type(&self, label_type: LabelType) -> MailContextResult<Vec<LocalLabel>> {
         let conn = self.new_db_connection()?;
-        let r = conn.as_connection_ref().label_by_type_ordered(label_type)?;
-        Ok(r)
+        Ok(conn.read(|conn| conn.label_by_type_ordered(label_type))?)
     }
 
     /// Return the list of folders where messages and conversations can be moved into.
     pub fn movable_folders(&self) -> MailContextResult<Vec<LocalLabel>> {
         let conn = self.new_db_connection()?;
-        let r = conn.as_connection_ref().labels_for_conv_or_msg_move()?;
-        Ok(r)
+        Ok(conn.read(|conn| conn.labels_for_conv_or_msg_move())?)
     }
 
     pub fn new_system_labels_live_query<

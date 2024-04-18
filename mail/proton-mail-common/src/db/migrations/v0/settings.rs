@@ -1,5 +1,6 @@
-use proton_sqlite3::rusqlite::Transaction;
-pub fn create_settings_table(tx: &mut Transaction) -> crate::db::DBResult<()> {
+use proton_sqlite3::SqliteTransaction;
+
+pub fn create_settings_table(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
     tx.execute(
         r#"
             CREATE TABLE mail_settings (

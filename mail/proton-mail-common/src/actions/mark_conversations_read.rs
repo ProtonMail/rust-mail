@@ -1,5 +1,4 @@
-use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionImpl};
-use crate::exports::proton_sqlite3::rusqlite::Transaction;
+use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use crate::{MailUserContext, WeakMailUserContext};
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -10,8 +9,8 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
+use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
-use std::ops::Deref;
 
 define_action_id!(
     MARK_CONVERSATION_READ_ACTION_ID,
@@ -44,31 +43,29 @@ impl Action for MarkConversationsReadAction {
 
 struct MarkConversationReadLocalHandler<'c, 't: 'c> {
     action: &'c MarkConversationsReadAction,
-    tx: &'c mut Transaction<'t>,
+    tx: MailSqliteConnectionMut<'t>,
 }
 
 impl<'c, 't: 'c> LocalActionHandler for MarkConversationReadLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-        tx.mark_conversations_read(self.action.ids.iter().cloned())
+        self.tx
+            .mark_conversations_read(self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
 }
 
-struct MarkConversationReadRemoteHandler<'r, 't: 'r> {
+struct MarkConversationReadRemoteHandler<'t> {
     ctx: MailUserContext,
     action: MarkConversationsReadAction,
     session: MailSession,
-    tx: &'r mut Transaction<'t>,
+    tx: MailSqliteConnectionMut<'t>,
 }
 
-impl<'c, 't: 'c> RemoteActionHandler for MarkConversationReadRemoteHandler<'c, 't> {
+impl<'t> RemoteActionHandler for MarkConversationReadRemoteHandler<'t> {
     fn revert_local(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-        tx.mark_conversations_read(self.action.ids.iter().cloned())
+        self.tx
+            .mark_conversations_read(self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
         Ok(())
     }
@@ -78,9 +75,8 @@ impl<'c, 't: 'c> RemoteActionHandler for MarkConversationReadRemoteHandler<'c, '
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let conn = (*self.tx).deref();
-        let mut tx = MailSqliteConnectionImpl::from(conn);
-        let conv_ids = tx
+        let conv_ids = self
+            .tx
             .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
             .map_err(|e| {
                 error!("Failed to resolve conversation ids: {e}");
@@ -106,10 +102,12 @@ impl<'c, 't: 'c> RemoteActionHandler for MarkConversationReadRemoteHandler<'c, '
                 "Mark conversations read operation failed for: {:?}",
                 failed_messages
             );
-            let local_ids = tx
+            let local_ids = self
+                .tx
                 .remote_to_local_conversation_ids(failed_messages.iter())
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
-            tx.mark_conversations_unread(self.action.active_label_id, local_ids.into_iter())
+            self.tx
+                .mark_conversations_unread(self.action.active_label_id, local_ids.into_iter())
                 .map_err(|e| {
                     error!("Failed to rollback failed for conversations: {e}");
                     ActionError::Local(anyhow!(e))
@@ -139,7 +137,7 @@ impl ActionFactoryInstance for MarkConversationsReadActionFactory {
     fn local_handler<'r, 't: 'r>(
         &self,
         action: &'r dyn Any,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
     ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(action) = action.downcast_ref::<MarkConversationsReadAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
@@ -148,13 +146,16 @@ impl ActionFactoryInstance for MarkConversationsReadActionFactory {
             ));
         };
 
-        Ok(Box::new(MarkConversationReadLocalHandler { action, tx }))
+        Ok(Box::new(MarkConversationReadLocalHandler {
+            action,
+            tx: MailSqliteConnectionMut::new(tx),
+        }))
     }
 
     fn remote_handler<'r, 't: 'r>(
         &'r self,
         action: &StoredAction,
-        tx: &'r mut Transaction<'t>,
+        tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
         let Some(ctx) = self.ctx.upgrade() else {
@@ -173,7 +174,7 @@ impl ActionFactoryInstance for MarkConversationsReadActionFactory {
         Ok(Box::new(MarkConversationReadRemoteHandler {
             ctx,
             action,
-            tx,
+            tx: MailSqliteConnectionMut::new(tx),
             session: MailSession::from(session),
         }))
     }

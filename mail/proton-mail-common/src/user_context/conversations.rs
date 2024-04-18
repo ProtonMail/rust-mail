@@ -51,9 +51,6 @@ impl MailUserContext {
         count: usize,
     ) -> MailContextResult<Vec<LocalConversation>> {
         let connection = self.new_db_connection()?;
-        let v = connection
-            .as_connection_ref()
-            .get_conversations_with_context(local_label_id, count)?;
-        Ok(v)
+        Ok(connection.read(|conn| conn.get_conversations_with_context(local_label_id, count))?)
     }
 }
