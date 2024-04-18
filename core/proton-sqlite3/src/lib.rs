@@ -125,7 +125,7 @@ impl SqliteConnection {
         F: FnOnce(&mut SqliteTransaction) -> Result<T, E>,
     {
         let tx_guard = self.pool.transaction_lock.lock();
-        let _tx_scope = TxScope::new(tx_guard)?;
+        let _nested_tx_guard = NestedScopeGuard::new(tx_guard)?;
         let mut tx = self
             .conn
             .as_mut()
@@ -504,9 +504,15 @@ impl ConnectionPoolInner {
     }
 }
 
-struct TxScope<'a>(ReentrantMutexGuard<'a, Cell<bool>>);
+/// Helper type which validates that we are performing a transaction inside another transaction.
+/// When dropped will reset the flag state.
+struct NestedScopeGuard<'a>(ReentrantMutexGuard<'a, Cell<bool>>);
 
-impl<'a> TxScope<'a> {
+impl<'a> NestedScopeGuard<'a> {
+    /// Create a new guard, which performs a check to see if we are in a nested transaction.
+    ///
+    /// # Errors
+    /// Returns error if we detect a nested transaction.
     fn new(tx_guard: ReentrantMutexGuard<'a, Cell<bool>>) -> rusqlite::Result<Self> {
         if tx_guard.get() {
             return Err(rusqlite::Error::UserFunctionError(
@@ -519,7 +525,7 @@ impl<'a> TxScope<'a> {
     }
 }
 
-impl<'a> Drop for TxScope<'a> {
+impl<'a> Drop for NestedScopeGuard<'a> {
     fn drop(&mut self) {
         self.0.set(false);
     }
