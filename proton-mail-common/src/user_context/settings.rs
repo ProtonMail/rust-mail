@@ -19,7 +19,6 @@ impl MailUserContext {
 
     pub fn mail_settings(&self) -> MailContextResult<MailSettings> {
         let conn = self.new_db_connection()?;
-        let settings = conn.as_connection_ref().get_mail_settings()?;
-        Ok(settings)
+        Ok(conn.read(|conn| conn.get_mail_settings())?)
     }
 }

@@ -1,6 +1,6 @@
-use proton_sqlite3::rusqlite::Transaction;
+use proton_sqlite3::SqliteTransaction;
 
-pub fn create_addresses_tables(tx: &mut Transaction) -> crate::db::DBResult<()> {
+pub fn create_addresses_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
     // Attachments
     tx.execute(
         r#"

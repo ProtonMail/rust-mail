@@ -1,7 +1,7 @@
 use crate::db::DBResult;
-use proton_sqlite3::rusqlite::Transaction;
+use proton_sqlite3::SqliteTransaction;
 
-pub fn create_event_tables(tx: &mut Transaction) -> DBResult<()> {
+pub fn create_event_tables(tx: &mut SqliteTransaction) -> DBResult<()> {
     tx.execute(
         r#"
             CREATE TABLE event_id_store (

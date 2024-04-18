@@ -1,9 +1,9 @@
 use proton_api_mail::domain::LabelId;
-use proton_sqlite3::rusqlite::Transaction;
+use proton_sqlite3::SqliteTransaction;
 
 type RResult<T> = proton_sqlite3::rusqlite::Result<T>;
 
-pub fn create_labels_tables(tx: &mut Transaction) -> RResult<()> {
+pub fn create_labels_tables(tx: &mut SqliteTransaction) -> RResult<()> {
     // Local version for manipulation.
     tx.execute(
         r#"

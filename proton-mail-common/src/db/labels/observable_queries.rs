@@ -26,7 +26,7 @@ impl Observable for LabelsByTypeQuery {
         &self,
         connection: &SqliteConnection,
     ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
-        let conn = MailSqliteConnectionImpl::new(connection);
+        let conn = MailSqliteConnectionImpl::new(connection.rusqlite_connection());
         conn.label_by_type_ordered(self.0)
     }
 }
@@ -57,7 +57,7 @@ impl Observable for LabelsByTypeQueryWithConversationCount {
         &self,
         connection: &SqliteConnection,
     ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
-        let conn = MailSqliteConnectionImpl::new(connection);
+        let conn = MailSqliteConnectionImpl::new(connection.rusqlite_connection());
         conn.label_by_type_ordered_with_conversation_count(self.0)
     }
 }
