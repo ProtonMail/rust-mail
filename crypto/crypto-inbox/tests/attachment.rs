@@ -3,8 +3,8 @@ use std::io::{self, Write};
 use base64::Engine;
 use proton_crypto_account::proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
 use proton_crypto_inbox::attachment::{
-    encrypt, encrypt_and_sign_to_writer, AttachmentDecryption, AttachmentEncryptedSignature,
-    AttachmentSignature, KeyPackets,
+    encrypt, encrypt_and_sign_to_writer, encrypt_to_writer, AttachmentDecryption,
+    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
 
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -294,4 +294,38 @@ fn test_attachment_encrypt_decrypt_stream() {
 #[test]
 fn test_attachment_encrypt_decrypt_encrypted_signature_stream() {
     test_attachment_encrypt_decrypt_stream_helper(true);
+}
+
+#[test]
+fn test_attachment_encrypt_decrypt_encrypted_no_signatures_stream() {
+    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+
+    let priv_keys = get_test_address_keys(&pgp_provider);
+    let pub_keys: Vec<_> = priv_keys
+        .iter()
+        .map(|key| {
+            pgp_provider
+                .private_key_to_public_key(key.as_ref())
+                .unwrap()
+        })
+        .collect();
+    let mut data = Vec::with_capacity(TEST_ATTACHMENT_PLAIN_DATA.len());
+    let metadata = {
+        let mut attachment_writer = encrypt_to_writer(&pgp_provider, &pub_keys, &mut data).unwrap();
+        attachment_writer
+            .write_all(TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
+            .unwrap();
+        attachment_writer.finalize().unwrap()
+    };
+
+    let decrypted_attachment = metadata
+        .decrypt(&pgp_provider, &priv_keys, &pub_keys, &data)
+        .unwrap();
+
+    assert_eq!(
+        decrypted_attachment.as_ref(),
+        TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
+    );
+    let verification_result = decrypted_attachment.verification_result();
+    assert!(verification_result.is_err());
 }

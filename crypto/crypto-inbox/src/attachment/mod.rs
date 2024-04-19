@@ -12,7 +12,10 @@ use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
 
 use crate::string_id;
 
-string_id![KeyPackets];
+string_id! {
+    /// Encrypted session keys of an attachment.
+    KeyPackets
+}
 
 impl KeyPackets {
     pub(crate) fn new_from_bytes(key_packets: &[u8]) -> Self {
@@ -24,7 +27,10 @@ impl KeyPackets {
     }
 }
 
-string_id![AttachmentSignature];
+string_id! {
+    /// Detached signature over the attachment.
+    AttachmentSignature
+}
 
 impl AsRef<[u8]> for AttachmentSignature {
     fn as_ref(&self) -> &[u8] {
@@ -32,7 +38,10 @@ impl AsRef<[u8]> for AttachmentSignature {
     }
 }
 
-string_id![AttachmentEncryptedSignature];
+string_id! {
+    /// Encrypted detached signature over the attachment.
+    AttachmentEncryptedSignature
+}
 
 impl AsRef<[u8]> for AttachmentEncryptedSignature {
     fn as_ref(&self) -> &[u8] {

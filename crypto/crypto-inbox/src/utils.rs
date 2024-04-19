@@ -1,9 +1,12 @@
 /// Generate a unique type for a string based API identifier.
 #[macro_export]
 macro_rules! string_id {
-    ($name:ident) => {
+    (
+        $(#[$meta:meta])*
+        $name:ident
+    ) => {
         #[derive(Debug, serde::Deserialize, serde::Serialize, Eq, PartialEq, Hash, Clone)]
-        /// Represent an API string identifier $name.
+        $(#[$meta])*
         pub struct $name(pub String);
 
         impl std::fmt::Display for $name {
