@@ -219,7 +219,7 @@ fn process_signatures(parsed_message: &Message<'_>) -> Vec<MimeSignatureVerifier
             let signature = signature_part.text_contents()?;
 
             Some(MimeSignatureVerifier {
-                pgp_signature: signature.to_string(),
+                pgp_signature: signature.to_owned(),
                 verify_data_range: Range {
                     start: offset_raw_start,
                     end: offset_raw_end,
@@ -337,11 +337,11 @@ fn generate_file_name(
     } else if let Some(content_type) = content_type_option {
         mime_extensions()
             .get(content_type.as_str())
-            .map_or(DEFAULT_FILE_NAME.to_string(), |name| {
+            .map_or(DEFAULT_FILE_NAME.to_owned(), |name| {
                 format!("{DEFAULT_FILE_NAME}.{name}")
             })
     } else {
-        DEFAULT_FILE_NAME.to_string()
+        DEFAULT_FILE_NAME.to_owned()
     }
 }
 

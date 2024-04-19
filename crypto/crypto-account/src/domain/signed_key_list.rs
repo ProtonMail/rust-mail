@@ -104,7 +104,7 @@ impl SignedKeyList {
             return Err(SKLError::NoSKLData);
         };
         let verification_context = provider.new_verification_context(
-            KT_SKL_VERIFICATION_CONTEXT_VALUE.to_string(),
+            KT_SKL_VERIFICATION_CONTEXT_VALUE.to_owned(),
             false,
             UnixTimestamp::default(),
         );
@@ -133,7 +133,7 @@ impl SignedKeyList {
             return Err(SKLError::NoSKLData);
         };
         let verification_context = provider.new_verification_context(
-            KT_SKL_VERIFICATION_CONTEXT_VALUE.to_string(),
+            KT_SKL_VERIFICATION_CONTEXT_VALUE.to_owned(),
             false,
             UnixTimestamp::default(),
         );

@@ -140,7 +140,7 @@ pub trait DecryptableMessage {
             .decrypt(self.message_encrypted_body(), DataEncoding::Armor)
             .map_err(MessageError::Decryption)?;
         let decoded_message = std::str::from_utf8(decrypted_message.as_bytes())?;
-        Ok(DecryptedBody::Plain(decoded_message.to_string()))
+        Ok(DecryptedBody::Plain(decoded_message.to_owned()))
     }
 }
 
