@@ -7,6 +7,7 @@ use proton_crypto_account::proton_crypto::crypto::{
 
 use super::{AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
 
+/// Errors thrown by attachment decryption.
 #[derive(Debug, thiserror::Error)]
 pub enum AttachmentDecryptionError {
     #[error("Could not decode key packets: {0}")]
@@ -21,20 +22,31 @@ pub enum AttachmentDecryptionError {
     EncryptedSignatureDecryption(Box<dyn std::error::Error>),
 }
 
+/// Represents decryption result of a decrypted attachment.
 pub struct DecryptedAttachment<T: VerifiedData>(T);
 
 impl<T: VerifiedData> AsRef<[u8]> for DecryptedAttachment<T> {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_bytes()
+        self.as_bytes()
     }
 }
 
 impl<T: VerifiedData> DecryptedAttachment<T> {
+    /// Returns the signature verification result of the data that has been read.
     pub fn verification_result(&self) -> VerificationResult {
         self.0.verification_result()
     }
+    /// Returns a byte slice of the attachments content.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+    /// Returns a vector of the attachments content.
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
 }
 
+/// Reader for reading decrypted attachment data.
 pub struct DecryptedAttachmentReader<'a, R: io::Read + 'a, T: Decryptor<'a>>(
     T::VerifiedDataReader<'a, R>,
 );
@@ -46,7 +58,8 @@ impl<'a, R: io::Read + 'a, T: Decryptor<'a>> io::Read for DecryptedAttachmentRea
 }
 
 impl<'a, R: io::Read + 'a, T: Decryptor<'a>> DecryptedAttachmentReader<'a, R, T> {
-    pub fn verification_result(&self) -> VerificationResult {
+    /// Returns the signature verification result of the data that has been read.
+    pub fn verification_result(self) -> VerificationResult {
         self.0.verification_result()
     }
 }

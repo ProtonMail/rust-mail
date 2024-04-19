@@ -49,7 +49,7 @@ pub enum AttachmentEncryptionError {
 
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
 ///
-/// The output `EncryptedAttachment` consists of the encrypted attachment and the `EncryptedAttachmentMetadata`
+/// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
 /// containing the key packets, signatures, and encrypted signature.
 /// If no signing keys are provided, i.e., a zero length slice, not signatures are produced.
 ///
@@ -115,7 +115,7 @@ pub fn encrypt<Provider: PGPProviderSync>(
 
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
 ///
-/// The output `SigncryptedAttachmentWriter` is a writer where the attachment can be written to
+/// The output [`SigncryptedAttachmentWriter`] is a writer where the attachment can be written to
 /// fo encryption. To retrieve the
 /// Both `encryption_keys` and `signing_keys` must contain at least one key else an error is thrown.
 ///
@@ -178,13 +178,13 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
 
 /// Encrypts an attachment to each key in `encryption_keys` but does not produce any signatures.
 ///
-/// The output `EncryptedAttachmentWriter` is a writer where the attachment can be written to
+/// The output [`EncryptedAttachmentWriter`] is a writer where the attachment can be written to
 /// fo encryption. To retrieve the
 /// `encryption_keys`must contain at least one key else an error is thrown.
 ///
 /// # Warning
 ///
-/// Use `encrypt_and_sign_to_writer` whenever possible to create signatures over the attachment.
+/// Use [`encrypt_and_sign_to_writer`] whenever possible to create signatures over the attachment.
 ///
 /// # Parameters
 ///
