@@ -1,6 +1,6 @@
 use crate::actions::EventLoopAction;
 use crate::user_context::events::subscriber::MailEventSubscriber;
-use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
+use crate::{MailContextResult, MailUserContext};
 use async_trait::async_trait;
 use futures::executor::block_on;
 use proton_api_mail::proton_api_core;
@@ -15,6 +15,7 @@ use proton_core_common::CoreEventSubscriber;
 use proton_event_loop::EventLoopError;
 use stash::datatypes::QueryResultString;
 use stash::params;
+use std::sync::Weak;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde")]
@@ -82,7 +83,7 @@ const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 
 impl proton_event_loop::Store for MailUserContext {
     fn load(&self) -> anyhow::Result<Option<EventId>> {
-        let conn = self.inner.user_context.stash();
+        let conn = self.user_context.stash();
         Ok(block_on(async {
             conn.query::<_, QueryResultString>(
                 "SELECT value FROM event_id_store WHERE id = ?1",
@@ -100,7 +101,7 @@ impl proton_event_loop::Store for MailUserContext {
     }
 
     fn store(&self, id: &EventId) -> anyhow::Result<()> {
-        let conn = self.inner.user_context.stash();
+        let conn = self.user_context.stash();
         block_on(async {
             conn.execute(
                 "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
@@ -135,12 +136,11 @@ impl MailUserContext {
     }
 
     pub async fn poll_event_loop(&self) -> Result<(), EventLoopError> {
-        let weak_ctx = WeakMailUserContext::new(self);
-        let core_subscriber = CoreEventSubscriber::new(weak_ctx.clone());
-        let mail_subscriber = MailEventSubscriber::new(weak_ctx);
+        let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
+        let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
         //TODO: better way to store this.
         let subscribers: [Box<dyn proton_event_loop::Subscriber<MailEvent>>; 2] =
             [Box::new(core_subscriber), Box::new(mail_subscriber)];
-        self.inner.event_loop.poll(self, self, &subscribers).await
+        self.event_loop.poll(self, self, &subscribers).await
     }
 }

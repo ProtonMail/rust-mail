@@ -43,14 +43,14 @@ impl MailUserContext {
 
         trace!("Syncing event id");
         cb.on_stage(MailUserContextLoadingStage::Events);
-        if let Err(e) = ctx.inner.event_loop.initialize(ctx, ctx).await {
+        if let Err(e) = ctx.event_loop.initialize(ctx, ctx).await {
             error!("Failed to sync event id:{e}");
             return Err((MailUserContextLoadingStage::Events, e.into()));
         }
 
         trace!("Syncing User settings");
         cb.on_stage(MailUserContextLoadingStage::User);
-        if let Err(e) = ctx.inner.user_context.sync_user_and_settings().await {
+        if let Err(e) = ctx.user_context.sync_user_and_settings().await {
             error!("Failed to sync user settings: {e}");
             return Err((MailUserContextLoadingStage::User, e.into()));
         }
@@ -64,7 +64,7 @@ impl MailUserContext {
 
         trace!("Syncing Addresses");
         cb.on_stage(MailUserContextLoadingStage::Addresses);
-        if let Err(e) = ctx.inner.user_context.sync_addresses().await {
+        if let Err(e) = ctx.user_context.sync_addresses().await {
             error!("Failed to sync addresses :{e}");
             return Err((MailUserContextLoadingStage::Addresses, e.into()));
         }

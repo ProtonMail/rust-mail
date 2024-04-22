@@ -21,64 +21,33 @@ use proton_core_common::{LoadKeySecret, UserContext};
 use proton_event_loop::EventLoop;
 use stash::stash::Stash;
 
-#[derive(Clone)]
-pub struct MailUserContext {
-    inner: Arc<MailUserContextInner>,
-}
-
-#[derive(Debug, Clone)]
-pub struct WeakMailUserContext {
-    inner: Weak<MailUserContextInner>,
-}
-
-struct MailUserContextInner {
+struct MailUserContext {
+    this: Weak<Self>,
     mail_context: MailContext,
     user_context: UserContext,
     event_loop: EventLoop,
     action_queue: ActionQueue,
 }
 
-impl WeakMailUserContext {
-    pub(crate) fn new(ctx: &MailUserContext) -> Self {
-        Self {
-            inner: Arc::downgrade(&ctx.inner),
-        }
-    }
-    pub fn upgrade(&self) -> Option<MailUserContext> {
-        self.inner.upgrade().map(|v| MailUserContext { inner: v })
-    }
-}
-
-impl From<MailUserContext> for WeakMailUserContext {
-    fn from(value: MailUserContext) -> Self {
-        Self {
-            inner: Arc::downgrade(&value.inner),
-        }
-    }
-}
-
 impl MailUserContext {
-    pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Self {
-        Self {
-            inner: Arc::new_cyclic(|weak| MailUserContextInner {
-                user_context,
-                mail_context,
-                event_loop: EventLoop::new(),
-                action_queue: new_action_queue(WeakMailUserContext {
-                    inner: weak.clone(),
-                }),
-            }),
-        }
+    pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Arc<Self> {
+        Arc::new_cyclic(|this| Self {
+            this: Weak::clone(this),
+            mail_context,
+            user_context,
+            event_loop: EventLoop::new(),
+            action_queue: new_action_queue(Weak::clone(this)),
+        })
     }
 
     pub fn session(&self) -> &Session {
-        self.inner.user_context.session()
+        self.user_context.session()
     }
 
     /// Get the database connection.
     #[must_use]
     pub fn stash(&self) -> &Stash {
-        self.inner.user_context.stash()
+        self.user_context.stash()
     }
 
     pub(crate) fn mail_session(&self) -> MailSession {
@@ -86,11 +55,11 @@ impl MailUserContext {
     }
 
     pub fn mail_context(&self) -> &MailContext {
-        &self.inner.mail_context
+        &self.mail_context
     }
 
     pub fn user_id(&self) -> &UserId {
-        self.inner.user_context.user_id()
+        self.user_context.user_id()
     }
 
     /// Returns the unlocked user keys of this user.
@@ -106,7 +75,6 @@ impl MailUserContext {
         pgp_provider: &Provider,
     ) -> MailContextResult<UnlockedUserKeys<Provider>> {
         let keys = self
-            .inner
             .user_context
             .user_keys_unlocked(pgp_provider, self)
             .await?;
@@ -123,7 +91,6 @@ impl MailUserContext {
     ) -> MailContextResult<UnlockedUserKeys<Provider>> {
         let secret_loader = CloneSecretLoader(self.session().expose_key_secret().await);
         let keys = self
-            .inner
             .user_context
             .user_keys_unlocked(pgp_provider, &secret_loader)
             .await?;
@@ -144,7 +111,6 @@ impl MailUserContext {
         address_id: &AddressId,
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         let keys = self
-            .inner
             .user_context
             .address_keys_unlocked(pgp_provider, self, address_id)
             .await?;
@@ -163,7 +129,6 @@ impl MailUserContext {
         // TODO: This should not be necessary and handled by the UserContext
         let secret = CloneSecretLoader(self.session().expose_key_secret().await);
         let keys = self
-            .inner
             .user_context
             .address_keys_unlocked(pgp_provider, &secret, address_id)
             .await?;
@@ -171,13 +136,13 @@ impl MailUserContext {
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {
-        self.inner.user_context.session().logout().await?;
+        self.user_context.session().logout().await?;
         Ok(())
     }
 
     /// Ping the proton servers to see if they are responsive/alive.
     pub async fn ping(&self) -> MailContextResult<()> {
-        self.inner.user_context.session().ping().await?;
+        self.user_context.session().ping().await?;
         Ok(())
     }
 }

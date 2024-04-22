@@ -21,15 +21,15 @@ use std::sync::Arc;
 /// This object needs to be kept alive for the duration of an active user session.
 #[derive(uniffi::Object)]
 pub struct MailUserSession {
-    ctx: pmc::MailUserContext,
+    ctx: Arc<pmc::MailUserContext>,
 }
 
 impl MailUserSession {
-    pub(crate) fn new(ctx: pmc::MailUserContext) -> Arc<Self> {
+    pub(crate) fn new(ctx: Arc<pmc::MailUserContext>) -> Arc<Self> {
         Arc::new(Self { ctx })
     }
-    pub(crate) fn ctx(&self) -> &pmc::MailUserContext {
-        &self.ctx
+    pub(crate) fn ctx(&self) -> Arc<pmc::MailUserContext> {
+        Arc::clone(self.ctx)
     }
 }
 

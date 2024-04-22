@@ -16,6 +16,7 @@ use proton_api_mail::proton_api_core::http::RequestError;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
 use stash::stash::StashError;
+use std::sync::Arc;
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
@@ -79,7 +80,7 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 /// which is the correct mode.
 #[derive(Clone)]
 pub struct Mailbox {
-    user_ctx: MailUserContext,
+    user_ctx: Arc<MailUserContext>,
     label_id: u64,
     view_mode: MailSettingsViewMode,
 }
@@ -100,7 +101,7 @@ enum LabelIdMode<'a> {
 }
 
 impl Mailbox {
-    async fn new(user_ctx: MailUserContext, label_id: u64) -> MailboxResult<Self> {
+    async fn new(user_ctx: Arc<MailUserContext>, label_id: u64) -> MailboxResult<Self> {
         let Some(label) = Label::load(label_id, &user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
@@ -126,8 +127,8 @@ impl Mailbox {
         })
     }
 
-    pub fn user_context(&self) -> &MailUserContext {
-        &self.user_ctx
+    pub fn user_context(&self) -> Arc<MailUserContext> {
+        Arc::clone(self.user_ctx)
     }
     pub fn label_id(&self) -> u64 {
         self.label_id

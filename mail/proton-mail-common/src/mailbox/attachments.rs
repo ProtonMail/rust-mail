@@ -7,6 +7,8 @@ use proton_crypto_inbox::proton_crypto::crypto::{
 };
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use stash::orm::Model;
+use std::io;
+use std::sync::Arc;
 
 /// A decrypted attachment returned by [`Mailbox::load_attachment_to_buffer`].
 #[derive(Debug)]
@@ -81,7 +83,7 @@ impl Mailbox {
 async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     attachment_info: Attachment,
-    mail_user_ctx: &MailUserContext,
+    mail_user_ctx: Arc<MailUserContext>,
     data: impl io::Read,
 ) -> MailboxResult<DecryptedAttachment> {
     let mut result_buffer: Vec<u8> =

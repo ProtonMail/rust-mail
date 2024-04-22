@@ -1,6 +1,6 @@
 use crate::exports::anyhow::anyhow;
 use crate::exports::serde::{self, Deserialize, Serialize};
-use crate::{MailUserContext, WeakMailUserContext};
+use crate::MailUserContext;
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -10,6 +10,7 @@ use proton_action_queue::{
 use proton_event_loop::EventLoopError;
 use stash::stash::Tether;
 use std::any::Any;
+use std::sync::{Arc, Weak};
 
 define_action_id!(EVENT_LOOP_ACTION_ID, "cccb153b-4cee-4634-90ae-6d7424e5f4d1");
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -23,7 +24,7 @@ impl Action for EventLoopAction {
 
 struct EventLoopLocalActionHandler {}
 struct EventLoopRemoteActionHandler {
-    ctx: MailUserContext,
+    ctx: Arc<MailUserContext>,
 }
 
 impl LocalActionHandler for EventLoopLocalActionHandler {
@@ -60,11 +61,11 @@ impl RemoteActionHandler for EventLoopRemoteActionHandler {
 
 #[derive(Debug)]
 pub(super) struct EventLoopActionFactory {
-    ctx: WeakMailUserContext,
+    ctx: Weak<MailUserContext>,
 }
 
 impl EventLoopActionFactory {
-    pub fn new(ctx: WeakMailUserContext) -> Self {
+    pub fn new(ctx: Weak<MailUserContext>) -> Self {
         Self { ctx }
     }
 }

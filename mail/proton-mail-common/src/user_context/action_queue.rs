@@ -1,34 +1,32 @@
 use crate::actions::new_action_factory;
 use crate::exports::anyhow::anyhow;
 use crate::exports::tracing::error;
-use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
+use crate::{MailContextResult, MailUserContext, MailUserContext};
 use proton_action_queue::{Action, ActionQueue, SessionProviderError};
-use proton_api_mail::proton_api_core::Session;
+use proton_api_core::session::Session;
+use std::sync::Weak;
 
 impl MailUserContext {
     /// Queue an action for later execution.
     pub async fn queue_action<T: Action>(&self, action: T) -> MailContextResult<()> {
-        self.inner.action_queue.queue_action(&action).await?;
+        self.action_queue.queue_action(&action).await?;
         Ok(())
     }
 
     /// Execute exactly one pending action in the queue.
     pub async fn execute_pending_action(&self) -> MailContextResult<()> {
-        self.inner
-            .action_queue
-            .consume_pending_with_limit(1)
-            .await?;
+        self.action_queue.consume_pending_with_limit(1).await?;
         Ok(())
     }
 
     /// Execute all pending actions in the queue.
     pub async fn execute_pending_actions(&self) -> MailContextResult<()> {
-        self.inner.action_queue.consume_pending().await?;
+        self.action_queue.consume_pending().await?;
         Ok(())
     }
 }
 
-struct SessionProvider(WeakMailUserContext);
+struct SessionProvider(Weak<MailUserContext>);
 
 impl proton_action_queue::SessionProvider for SessionProvider {
     fn retrieve_session(&self) -> Result<Session, SessionProviderError> {
@@ -39,14 +37,13 @@ impl proton_action_queue::SessionProvider for SessionProvider {
             )));
         };
 
-        Ok(ctx.inner.user_context.session().clone())
+        Ok(ctx.user_context.session().clone())
     }
 }
 
-pub(super) fn new_action_queue(mail_user_context: WeakMailUserContext) -> ActionQueue {
+pub(super) fn new_action_queue(mail_user_context: Weak<MailUserContext>) -> ActionQueue {
     ActionQueue::new(
         mail_user_context
-            .inner
             .upgrade()
             .unwrap()
             .user_context
