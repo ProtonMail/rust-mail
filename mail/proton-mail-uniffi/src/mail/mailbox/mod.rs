@@ -8,8 +8,8 @@ use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, LiveQueryUpdated, Observable, SharedLiveQueryBuilder,
 };
-use proton_mail_common::exports::thiserror;
 use proton_mail_common::exports::tracing::error;
+use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
@@ -31,6 +31,8 @@ pub enum MailboxError {
     ),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
+    #[error("Invalid Action: {0}")]
+    InvalidAction(anyhow::Error),
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
@@ -119,6 +121,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             }
             proton_mail_common::MailboxError::Context(e) => Self::Context(e.into()),
             proton_mail_common::MailboxError::ActionQueue(e) => Self::ActionQueue(e),
+            proton_mail_common::MailboxError::InvalidAction(e) => Self::InvalidAction(e),
         }
     }
 }
