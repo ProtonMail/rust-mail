@@ -109,4 +109,24 @@ impl Mailbox {
         )?;
         Ok(())
     }
+
+    /// Star the given conversations.
+    ///
+    /// # Errors
+    /// Returns error if the action fails.
+    pub fn star_conversations(&self, ids: Vec<u64>) -> Result<(), MailboxError> {
+        self.mbox
+            .star_conversations(ids.into_iter().map(LocalConversationId::from))?;
+        Ok(())
+    }
+
+    /// Unstar the given conversations.
+    ///
+    /// # Errors
+    /// Returns error if the action fails.
+    pub fn unstar_conversations(&self, ids: Vec<u64>) -> Result<(), MailboxError> {
+        self.mbox
+            .unstar_conversations(ids.into_iter().map(LocalConversationId::from))?;
+        Ok(())
+    }
 }

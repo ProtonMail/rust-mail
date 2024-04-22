@@ -133,6 +133,32 @@ impl Mailbox {
         Ok(())
     }
 
+    /// Star a conversation. This is the equivalent of adding a conversation to the Starred system
+    /// label.
+    ///
+    /// # Error
+    /// Return error if the operation failed.
+    pub fn star_conversations(
+        &self,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        let label_id = self.starred_label_id()?;
+        self.label_conversations(label_id, ids)
+    }
+
+    /// Unstar a conversation. This is the equivalent of removing a conversation from the Starred
+    /// system label.
+    ///
+    /// # Error
+    /// Return error if the operation failed.
+    pub fn unstar_conversations(
+        &self,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        let label_id = self.starred_label_id()?;
+        self.unlabel_conversations(label_id, ids)
+    }
+
     /// Move conversations to a given folder.
     pub fn move_conversations(
         &self,
@@ -169,5 +195,14 @@ impl Mailbox {
         self.user_ctx
             .queue_action(MoveConversationsAction::new(self.label_id, label.id, ids))?;
         Ok(())
+    }
+
+    fn starred_label_id(&self) -> MailboxResult<LocalLabelId> {
+        self.user_ctx
+            .db_read(|conn| conn.resolve_remote_label_id(LabelId::starred()))
+            .map_err(MailContextError::from)?
+            .ok_or(MailboxError::RemoteLabelNotFound(
+                LabelId::starred().clone(),
+            ))
     }
 }
