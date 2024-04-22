@@ -10,7 +10,7 @@ use super::{AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignat
 /// Type for encryption metadata belonging to a specific encrypted attachment.
 ///
 /// The type can contain an encrypted and unencrypted signature (legacy).
-/// For legacy during transition period, both have to be provided.
+/// For legacy during the transition period, both have to be provided.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct EncryptedAttachmentMetadata {
     /// Optional attachment signature.
@@ -51,7 +51,7 @@ pub enum AttachmentEncryptionError {
 ///
 /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
 /// containing the key packets, signatures, and encrypted signature.
-/// If no signing keys are provided, i.e., a zero length slice, not signatures are produced.
+/// If no signing keys are provided, i.e., a zero length slice, no signatures are produced.
 ///
 /// # Parameters
 ///
@@ -116,7 +116,7 @@ pub fn encrypt<Provider: PGPProviderSync>(
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
 ///
 /// The output [`SigncryptedAttachmentWriter`] is a writer where the attachment can be written to
-/// fo encryption. To retrieve the
+/// for encryption.
 /// Both `encryption_keys` and `signing_keys` must contain at least one key else an error is thrown.
 ///
 /// # Parameters
@@ -149,7 +149,7 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
         .generate_session_key()
         .map_err(AttachmentEncryptionError::SessionKeyGeneration)?;
 
-    // Encrypt the session key with all the provide encryption_keys.
+    // Encrypt the session key with all the provided encryption_keys.
     // The encrypted session key packets are called key packets for brevity.
     let key_packets = pgp_provider
         .new_encryptor()
@@ -179,7 +179,7 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
 /// Encrypts an attachment to each key in `encryption_keys` but does not produce any signatures.
 ///
 /// The output [`EncryptedAttachmentWriter`] is a writer where the attachment can be written to
-/// fo encryption. To retrieve the
+/// for encryption.
 /// `encryption_keys`must contain at least one key else an error is thrown.
 ///
 /// # Warning
@@ -390,7 +390,7 @@ where
     }
 }
 
-/// Attachment writer for only encrypting and not signing.
+/// Attachment writer for encryption only without signing.
 #[derive(Debug)]
 pub struct EncryptedAttachmentWriter<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>>(
     KeyPackets,
@@ -412,7 +412,7 @@ impl<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>> Write
 impl<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>>
     EncryptedAttachmentWriter<'a, W, ProvEncryptor>
 {
-    /// Finalizes the encryption and returns the `EncryptedAttachmentMetadata`.
+    /// Finalizes the encryption and returns the [`EncryptedAttachmentMetadata`].
     ///
     /// Must be called once all attachment data has been written to this writer.
     pub fn finalize(self) -> Result<EncryptedAttachmentMetadata, AttachmentEncryptionError> {
