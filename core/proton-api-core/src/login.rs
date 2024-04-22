@@ -88,16 +88,15 @@ impl Flow {
             .map_err(map_human_verification_err)?;
 
         let skip_srp_proof_validation = self.session.api_env_config().skip_srp_proof_validation;
+        // TODO: This inequality comparison should be done in constant time once it is exposed by proton-crypto.
         if !skip_srp_proof_validation && proof.expected_server_proof != auth_response.server_proof {
-            return Err(Error::ServerProof(
-                "Server Proof does not match".to_string(),
-            ));
+            return Err(Error::ServerProof("Server Proof does not match".to_owned()));
         }
 
         let tfa_enabled = auth_response.tfa.enabled;
         {
             let auth = Auth {
-                email: username.to_string(),
+                email: username.to_owned(),
                 user_id: auth_response.user_id,
                 uid: auth_response.uid,
                 refresh_token: auth_response.refresh_token,

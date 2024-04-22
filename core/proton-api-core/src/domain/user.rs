@@ -2,7 +2,7 @@ use crate::utils::{bool_from_integer, bool_to_integer};
 use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
-use proton_crypto_account::salts::{SaltError as CryptoSaltError, SaltedPassword, Salts};
+use proton_crypto_account::salts::{KeySecret, SaltError as CryptoSaltError, Salts};
 use serde;
 use serde::{Deserialize, Serialize};
 
@@ -141,7 +141,7 @@ impl User {
         provider: &SRP,
         salts: &Salts,
         mailbox_password: impl AsRef<[u8]>,
-    ) -> Result<SaltedPassword<<SRP as SRPProvider>::HashedPassword>, SaltError> {
+    ) -> Result<KeySecret, SaltError> {
         let Some(primary_key) = self.get_primary_key() else {
             return Err(SaltError::PrimaryKeyNotFound);
         };
@@ -156,7 +156,7 @@ impl User {
     pub fn unlock_keys<SRP: SRPProvider, PGP: PGPProviderSync>(
         &self,
         provider: &PGP,
-        salted_password: &SaltedPassword<<SRP as SRPProvider>::HashedPassword>,
+        salted_password: &KeySecret,
     ) -> UnlockResult<DecryptedUserKey<<PGP>::PrivateKey, <PGP>::PublicKey>> {
         self.keys.unlock(provider, salted_password)
     }
