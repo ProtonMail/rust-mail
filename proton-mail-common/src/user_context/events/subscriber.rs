@@ -2,17 +2,18 @@ use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
 use crate::user_context::events::MailEvent;
-use crate::WeakMailUserContext;
+use crate::MailUserContext;
 use async_trait::async_trait;
 use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, error};
 use proton_event_loop::{Subscriber, SubscriberError};
 use stash::orm::Model;
+use std::sync::Weak;
 
-pub struct MailEventSubscriber(WeakMailUserContext);
+pub struct MailEventSubscriber(Weak<MailUserContext>);
 
 impl MailEventSubscriber {
-    pub fn new(ctx: WeakMailUserContext) -> Self {
+    pub fn new(ctx: Weak<MailUserContext>) -> Self {
         Self(ctx)
     }
 }
@@ -29,7 +30,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             SubscriberError::Other(e)
         })?;
 
-        let tx = ctx.inner.user_context.stash().transaction().await?;
+        let tx = ctx.user_context.stash().transaction().await?;
 
         {
             for event in events {
