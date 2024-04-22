@@ -1,10 +1,12 @@
 mod conversation;
+
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::LocalLabelId;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
+use uniffi::deps::anyhow;
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
@@ -24,6 +26,8 @@ pub enum MailboxError {
     ),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_action_queue::QueueError),
+    #[error("Action is not valid: {0}")]
+    InvalidAction(anyhow::Error),
 }
 
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:

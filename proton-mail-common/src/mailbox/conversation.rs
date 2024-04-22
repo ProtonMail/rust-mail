@@ -5,7 +5,11 @@ use crate::actions::{
 use crate::db::{
     ConversationQuery, DBResult, LocalConversation, LocalConversationId, LocalLabelId,
 };
-use crate::{Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult};
+use crate::exports::anyhow::anyhow;
+use crate::{
+    MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
+};
+use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
@@ -137,6 +141,33 @@ impl Mailbox {
     ) -> MailboxResult<()> {
         self.user_ctx
             .queue_action(MoveConversationsAction::new(self.label_id, label_id, ids))?;
+        Ok(())
+    }
+
+    /// Move conversations to a given folder with a `remote_id`.
+    ///
+    /// # Errors
+    /// Return error if the action failed, the `remote_id` does not exist or the label
+    /// is not a valid destination.
+    pub fn move_conversations_with_remote_id(
+        &self,
+        remote_id: &LabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+    ) -> MailboxResult<()> {
+        let Some(label) = self
+            .user_ctx
+            .db_read(|conn| conn.label_with_remote_id(remote_id))
+            .map_err(MailContextError::from)?
+        else {
+            return Err(MailboxError::RemoteLabelNotFound(remote_id.clone()));
+        };
+        if !label.is_movable_folder() {
+            return Err(MailboxError::InvalidAction(anyhow!(
+                "Destination is not a valid folder"
+            )));
+        }
+        self.user_ctx
+            .queue_action(MoveConversationsAction::new(self.label_id, label.id, ids))?;
         Ok(())
     }
 }

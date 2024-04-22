@@ -3,6 +3,7 @@ use crate::mail::{
     Mailbox, MailboxConversationLiveQuery, MailboxError, MailboxLiveQueryUpdatedCallback,
 };
 use proton_mail_common::db::{LocalConversationId, LocalLabelId};
+use proton_mail_common::proton_api_mail::domain::LabelId;
 use std::sync::Arc;
 
 #[uniffi::export]
@@ -53,6 +54,27 @@ impl Mailbox {
     pub fn move_conversations(&self, label_id: u64, ids: Vec<u64>) -> Result<(), MailboxError> {
         self.mbox.move_conversations(
             LocalLabelId::new(label_id),
+            ids.into_iter().map(LocalConversationId::from),
+        )?;
+        Ok(())
+    }
+
+    /// Move the given conversations from the current mailbox.
+    ///
+    /// Move the conversations with `ids` from the current mailbox to the label with remote id `label_id`.
+    /// If the current mailbox is not a folder, the conversation will not be moved.
+    /// To retrieve the list of movable folders use the
+    /// [`crate::mail::MailUserSession::movable_folders()`] method.
+    ///
+    /// # Errors
+    /// Returns error if the action fails.
+    pub fn move_conversations_with_remote_id(
+        &self,
+        label_id: &LabelId,
+        ids: Vec<u64>,
+    ) -> Result<(), MailboxError> {
+        self.mbox.move_conversations_with_remote_id(
+            label_id,
             ids.into_iter().map(LocalConversationId::from),
         )?;
         Ok(())
