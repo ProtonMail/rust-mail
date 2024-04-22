@@ -1,6 +1,6 @@
 mod conversations;
 
-use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
+use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::SharedLive;
 use proton_mail_common::db::{ConversationQuery, LocalLabelId};
@@ -33,6 +33,8 @@ pub enum MailboxError {
     ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
     #[error("Invalid Action: {0}")]
     InvalidAction(anyhow::Error),
+    #[error("{0}")]
+    Other(anyhow::Error),
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
@@ -69,9 +71,28 @@ const DEFAULT_CONVERSATION_COUNT: usize = 50;
 impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailSessionResult<Self> {
+    pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
         let mbox =
             proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), LocalLabelId::new(label_id));
+        Self::sync(mbox).await
+    }
+
+    /// Create a new mailbox for a given remote id.
+    #[uniffi::constructor]
+    pub async fn with_remote_id(ctx: &MailUserSession, label_id: &LabelId) -> MailboxResult<Self> {
+        let mbox = proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), label_id)?;
+        Self::sync(mbox).await
+    }
+
+    /// Create a new mailbox for Inbox.
+    #[uniffi::constructor]
+    pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Self> {
+        Self::with_remote_id(ctx, LabelId::inbox()).await
+    }
+}
+
+impl Mailbox {
+    async fn sync(mbox: proton_mail_common::Mailbox) -> MailboxResult<Self> {
         let join_handler = mbox
             .user_context()
             .mail_context()
@@ -86,26 +107,8 @@ impl Mailbox {
             .await;
         match join_handler {
             Ok(mbox) => Ok(Self { mbox }),
-            Err(err) => Err(MailSessionError::Other(anyhow!(
-                "Failed to join task: {err}"
-            ))),
+            Err(err) => Err(MailboxError::Other(anyhow!("Failed to join task: {err}"))),
         }
-    }
-
-    /// Create a new mailbox for a given remote id.
-    #[uniffi::constructor]
-    pub fn with_remote_id(ctx: &MailUserSession, label_id: &LabelId) -> MailboxResult<Self> {
-        Ok(Self {
-            mbox: proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), label_id)?,
-        })
-    }
-
-    /// Create a new mailbox for Inbox.
-    #[uniffi::constructor]
-    pub fn inbox(ctx: &MailUserSession) -> MailboxResult<Self> {
-        Ok(Self {
-            mbox: proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), LabelId::inbox())?,
-        })
     }
 }
 
