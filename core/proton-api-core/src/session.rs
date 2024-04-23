@@ -4,7 +4,7 @@ use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
     AuthRefresh, CaptchaRequest, GetEventRequest, GetLatestEventRequest, GetUserSaltsRequest,
-    LogoutRequest, UserInfoRequest, UserSettingsRequest,
+    LogoutRequest, PostUserForkSessionRequest, UserInfoRequest, UserSettingsRequest,
 };
 use anyhow::anyhow;
 use proton_crypto_account::salts::Salts;
@@ -32,6 +32,29 @@ impl Session {
     #[must_use]
     pub fn api_env_config(&self) -> &APIEnvConfig {
         &self.client.info().env_config
+    }
+
+    /// Fork the current session.
+    ///
+    /// This call has to be made from a parent session, and forks the current
+    /// logged-in user session in order to provide a new session for the same
+    /// user.
+    ///
+    /// If successful, this will return the "Selector" string for the new
+    /// session.
+    ///
+    /// # Errors
+    ///
+    /// Any of the [`http::RequestError`] variants could be returned if there is
+    /// a problem with the HTTP request.
+    ///
+    pub async fn fork(&self) -> Result<String, http::RequestError> {
+        self.execute_request(PostUserForkSessionRequest {
+            child_client_id: "web-account-lite".to_owned(),
+            independent: 0,
+        })
+        .await
+        .map(|r| r.selector)
     }
 
     /// Get the user details.
