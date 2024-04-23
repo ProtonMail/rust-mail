@@ -1,13 +1,13 @@
 [package]
 name = "proton-crypto-inbox"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proton-crypto-account = {path = "../proton-crypto-account", version = "0.1.1", registry = "proton"}
-proton-crypto-inbox-mime = {path = "../proton-crypto-inbox-mime", version = "0.1.1", registry = "proton"}
+proton-crypto-account = {path = "../proton-crypto-account", version = "0.2.0", registry = "proton"}
+proton-crypto-inbox-mime = {path = "../proton-crypto-inbox-mime", version = "0.1.2", registry = "proton"}
 thiserror = { workspace = true }
 serde = { version="1", features = ["derive"]}
 base64 = { workspace = true }
