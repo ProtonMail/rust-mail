@@ -3,7 +3,7 @@ use futures::future::join_all;
 use super::{KeyId, LockedKey, UnlockResult};
 use crate::{
     errors::{AccountCryptoError, KeyError},
-    salts::SaltedPassword,
+    salts::KeySecret,
 };
 use proton_crypto::crypto::{AsPublicKeyRef, DataEncoding, PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,7 @@ impl UserKeys {
     pub fn unlock<T: proton_crypto::crypto::PGPProviderSync>(
         &self,
         provider: &T,
-        salted_password: &SaltedPassword<impl AsRef<[u8]>>,
+        salted_password: &KeySecret,
     ) -> UnlockResult<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
         let mut failed_keys = Vec::new();
         let mut decrypted_address_keys: Vec<DecryptedUserKey<_, _>> =
@@ -80,7 +80,7 @@ impl UserKeys {
     pub async fn unlock_async<T: proton_crypto::crypto::PGPProviderAsync>(
         &self,
         provider: &T,
-        salted_password: &SaltedPassword<impl AsRef<[u8]>>,
+        salted_password: &KeySecret,
     ) -> UnlockResult<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
         let mut failed_keys = Vec::new();
         let mut decrypted_user_keys: Vec<DecryptedUserKey<T::PrivateKey, T::PublicKey>> =

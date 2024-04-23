@@ -1,6 +1,9 @@
 use proton_crypto::crypto::{DataEncoding, PGPProviderSync};
-use proton_crypto::new_pgp_provider;
-use proton_crypto_account::domain::{AddressKeys, DecryptedUserKey, KeyFlag, KeyId, LockedKey};
+use proton_crypto::{new_pgp_provider, new_srp_provider};
+use proton_crypto_account::domain::{
+    AddressKeys, DecryptedUserKey, KeyFlag, KeyId, LockedKey, UserKeys,
+};
+use proton_crypto_account::salts::{Salt, Salts};
 
 const TEST_USER_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -60,6 +63,38 @@ pub fn get_test_locked_address_key() -> AddressKeys {
     )
 }
 
+fn get_test_locked_user_keys() -> UserKeys {
+    let key = LockedKey {
+        id: KeyId::from("aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ=="),
+        version: 3,
+        private_key: "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: ProtonMail\n\nxYYEZie3jRYJKwYBBAHaRw8BAQdAAp+4PE1Sf5V95XrIY/P2dUNk1TOojoEG\nLuuOzULTa1v+CQMINYn0u3DCV01gjT+Noe2HzLxwP2hieZC1aoGCxSrLn0fs\nLeShqv2pCPZ+SdrjXB5s5Rq7OP5Kr/2gN+0KS0yLGdyirFZWe6m5T8j20UQ5\n0M07bm90X2Zvcl9lbWFpbF91c2VAZG9tYWluLnRsZCA8bm90X2Zvcl9lbWFp\nbF91c2VAZG9tYWluLnRsZD7CjAQQFgoAPgWCZie3jQQLCQcICZA4nKgbRZBl\nGQMVCAoEFgACAQIZAQKbAwIeARYhBOZJEArPLqrMMxX8fzicqBtFkGUZAADk\n/AD+LA6NW1K+Z3IT66/DEtjH0cmw6HNqxkBdT7kaL2o5pAMA/j9b4JCurWk/\n62MBM4I9RwXzSo8lmgPiYwPp4d/xgEsMx4sEZie3jRIKKwYBBAGXVQEFAQEH\nQHvLC7RWIDsorX5ZmYwjZbUhbXnEcO2sYt8OFaIh5KtHAwEIB/4JAwhKivkG\nshycUGA6wZtPR2HqO6+jvvSlRau/g2eZnWqhnvB4iIYTcD+CPpcPnWrrNgTz\nAU+kQ5sVrP6OiKKHIkUvHT5+MwelTbcpievGx2zGwngEGBYKACoFgmYnt40J\nkDicqBtFkGUZApsMFiEE5kkQCs8uqswzFfx/OJyoG0WQZRkAAJ6BAQDv4nBl\nNnj0W7XiAjiwRmVrY/sdybelB6j01p7UrcVAxQEAtEmT2cSIScVdWH1j3H9l\n0gGE7amH+cm6CjXOA7+Uwwc=\n=RGJ0\n-----END PGP PRIVATE KEY BLOCK-----\n".to_owned(),
+        token: None,
+        signature: None,
+        activation: None,
+        primary: true,
+        active: true,
+        flags: None,
+        recovery_secret: None,
+        recovery_secret_signature: None,
+        address_forwarding_id: None,
+    };
+    UserKeys(vec![key])
+}
+
+fn get_test_salts() -> Salts {
+    let salt = Salt {
+        id: KeyId::from("aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ=="),
+        key_salt: Some("6bIzN4A8bOwmsiEuCPj74g==".to_owned()),
+    };
+    Salts::new(vec![salt])
+}
+
+fn get_test_key_id() -> KeyId {
+    KeyId::from(
+        "aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ==",
+    )
+}
+
 #[test]
 fn test_address_keys_decrypt() {
     let provider = new_pgp_provider();
@@ -68,4 +103,26 @@ fn test_address_keys_decrypt() {
     let unlocked_keys = address_keys.unlock(&provider, user_keys.as_slice());
     assert!(unlocked_keys.failed.is_empty());
     assert!(!unlocked_keys.unlocked_keys.is_empty());
+}
+
+#[test]
+fn test_user_keys_decrypt() {
+    let provider = new_pgp_provider();
+    let srp_provider = new_srp_provider();
+    let user_keys = get_test_locked_user_keys();
+    let key_id = get_test_key_id();
+    let salts = get_test_salts();
+    // Ok
+    let key_secret = salts
+        .salt_for_key(&srp_provider, &key_id, "password".as_bytes())
+        .unwrap();
+    let unlocked_user_key = user_keys.unlock(&provider, &key_secret);
+    assert!(unlocked_user_key.unlocked_keys.len() == 1);
+    // Faile
+    let key_secret = salts
+        .salt_for_key(&srp_provider, &key_id, "password1".as_bytes())
+        .unwrap();
+    let unlocked_user_key = user_keys.unlock(&provider, &key_secret);
+    assert!(unlocked_user_key.unlocked_keys.is_empty());
+    assert!(unlocked_user_key.failed.len() == 1);
 }
