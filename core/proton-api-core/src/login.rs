@@ -1,9 +1,10 @@
-use crate::auth::Auth;
-use crate::domain::{HumanVerification, LoginData, TFAStatus, TwoFactorAuth, User};
-use crate::requests::{AuthInfo, TOTPRequest};
+use crate::auth::{Auth, UserKeySecret};
+use crate::domain::{HumanVerification, LoginData, SaltError, TFAStatus, TwoFactorAuth, User};
+use crate::requests::{AuthInfo, PasswordMode, TOTPRequest};
 use crate::{http, Session};
 use anyhow::anyhow;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
+use secrecy::{ExposeSecret, SecretVec};
 use std::fmt::Formatter;
 
 #[derive(Debug, thiserror::Error)]
@@ -20,6 +21,16 @@ pub enum Error {
     SRPProof(String),
     #[error("Operation is nto valid in the current state")]
     InvalidState,
+    #[error("Failed to derive the key secret from the password: {0}")]
+    KeySecretDerivation(#[from] SaltError),
+    #[error("Failed to fetch salt to derive the key secret: {0}")]
+    KeySecretSaltFetch(#[from] http::RequestError),
+    #[error("Failed to store the key secret in the authentication state: {0}")]
+    KeySecretAuthUpdate(String),
+    #[error("Failed to decrypt a user key with the derived client secret")]
+    KeySecretDecryption,
+    #[error("Wrong mailbox password provided")]
+    WrongMailboxPassword,
 }
 
 /// Handle all the possible states that are required to transition through in order to become
@@ -29,6 +40,9 @@ pub struct Flow {
     session: Session,
     state: LoginState,
     user: Option<User>,
+    mailbox_password: Option<SecretVec<u8>>,
+    password_mode: Option<PasswordMode>,
+    tfa_status: Option<TFAStatus>,
 }
 
 impl Flow {
@@ -38,6 +52,9 @@ impl Flow {
             session,
             state: LoginState::LoggedOut,
             user: None,
+            mailbox_password: None,
+            password_mode: None,
+            tfa_status: None,
         }
     }
 
@@ -55,6 +72,9 @@ impl Flow {
         if !(self.is_logged_out() || human_verification.is_some()) {
             return Err(Error::InvalidState);
         }
+
+        // We persist the password for the duration of the the login flow.
+        self.mailbox_password = Some(SecretVec::new(password.as_bytes().to_vec()));
 
         let auth_resp = {
             self.session
@@ -88,12 +108,11 @@ impl Flow {
             .map_err(map_human_verification_err)?;
 
         let skip_srp_proof_validation = self.session.api_env_config().skip_srp_proof_validation;
-        // TODO: This inequality comparison should be done in constant time once it is exposed by proton-crypto.
-        if !skip_srp_proof_validation && proof.expected_server_proof != auth_response.server_proof {
+
+        if !skip_srp_proof_validation && !proof.compare_server_proof(&auth_response.server_proof) {
             return Err(Error::ServerProof("Server Proof does not match".to_owned()));
         }
 
-        let tfa_enabled = auth_response.tfa.enabled;
         {
             let auth = Auth {
                 email: username.to_owned(),
@@ -102,6 +121,7 @@ impl Flow {
                 refresh_token: auth_response.refresh_token,
                 access_token: auth_response.access_token,
                 scope: auth_response.scope,
+                key_secret: None,
             };
 
             self.session
@@ -115,13 +135,9 @@ impl Flow {
                     )))
                 })?;
         }
-
-        if tfa_enabled != TFAStatus::None {
-            self.state = LoginState::Awaiting2FA(tfa_enabled);
-            return Ok(());
-        }
-
-        self.post_login_user_fetch().await
+        self.tfa_status = Some(auth_response.tfa.enabled);
+        self.password_mode = Some(auth_response.password_mode);
+        self.next().await
     }
 
     /// Submit TOTP 2FA code.
@@ -142,8 +158,27 @@ impl Flow {
             .await
             .map_err(map_human_verification_err)?;
 
-        self.post_login_user_fetch().await?;
-        Ok(())
+        self.next().await
+    }
+
+    /// Submit the second mailbox password in two password mode.
+    ///
+    /// # Errors
+    /// Returns error if the request failed.
+    /// If the password fails to decrypt the user key it returns a [`Error::WrongMailboxPassword`].
+    pub async fn submit_mailbox_password(&mut self, mailbox_password: &str) -> Result<(), Error> {
+        let LoginState::AwaitingMailboxPassword = self.state else {
+            return Err(Error::InvalidState);
+        };
+
+        self.mailbox_password = Some(SecretVec::new(mailbox_password.as_bytes().to_vec()));
+        let result = self.finalize_login().await;
+        if matches!(result, Err(Error::KeySecretDecryption)) {
+            return Err(Error::WrongMailboxPassword);
+        }
+        result?;
+
+        self.next().await
     }
 
     /// Check whether the session has logged in.
@@ -158,15 +193,26 @@ impl Flow {
         matches!(self.state, LoginState::LoggedOut)
     }
 
-    /// Check whether the session in awaiting totp.
+    /// Check whether the session is awaiting totp.
     #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
         matches!(self.state, LoginState::Awaiting2FA(_))
     }
 
+    /// Check whether the session is awaiting a mailbox password.
+    ///
+    /// If the user is in two password mode the mailbox password has to be provided separately.
+    #[must_use]
+    pub fn is_awaiting_mailbox_password(&self) -> bool {
+        matches!(self.state, LoginState::AwaitingMailboxPassword)
+    }
+
     /// Get the user info from a logged-in session and reset the internal state.
     pub fn reset_and_take_user(&mut self) -> Option<User> {
         self.state = LoginState::LoggedOut;
+        self.password_mode = None;
+        self.tfa_status = None;
+        self.mailbox_password = None;
         self.user.take()
     }
 
@@ -180,7 +226,51 @@ impl Flow {
         &self.session
     }
 
-    async fn post_login_user_fetch(&mut self) -> Result<(), Error> {
+    /// Advances the internal state machine.
+    async fn next(&mut self) -> Result<(), Error> {
+        loop {
+            match self.state {
+                LoginState::LoggedOut => {
+                    let Some(tfa_enabled) = self.tfa_status.take() else {
+                        return Err(Error::InvalidState);
+                    };
+                    if tfa_enabled == TFAStatus::None {
+                        self.state = LoginState::DeriveKeySecret;
+                    } else {
+                        self.state = LoginState::Awaiting2FA(tfa_enabled);
+                        break;
+                    }
+                }
+                LoginState::DeriveKeySecret => {
+                    let Some(mode) = &self.password_mode else {
+                        return Err(Error::InvalidState);
+                    };
+                    match mode {
+                        PasswordMode::One => {
+                            self.finalize_login().await?;
+                            self.state = LoginState::LoggedIn;
+                        }
+                        PasswordMode::Two => {
+                            self.mailbox_password = None;
+                            self.state = LoginState::AwaitingMailboxPassword;
+                            break;
+                        }
+                    }
+                }
+                LoginState::Awaiting2FA(_) => {
+                    self.state = LoginState::DeriveKeySecret;
+                }
+                LoginState::AwaitingMailboxPassword => {
+                    self.state = LoginState::LoggedIn;
+                }
+                LoginState::LoggedIn => break,
+            }
+        }
+        Ok(())
+    }
+
+    /// Finalize the login by fetching the user and deriving the key secret.
+    async fn finalize_login(&mut self) -> Result<(), Error> {
         // Fetch user info at least once, some accounts trigger HV after login with first
         // API call.
         let user = self
@@ -188,8 +278,52 @@ impl Flow {
             .get_user()
             .await
             .map_err(map_human_verification_err)?;
-        self.state = LoginState::LoggedIn;
+        self.derive_key_secret(&user).await?;
         self.user = Some(user);
+        Ok(())
+    }
+
+    /// Derive the key secret to unlock user keys.
+    async fn derive_key_secret(&mut self, user: &User) -> Result<(), Error> {
+        let srp_provider = proton_crypto_account::proton_crypto::new_srp_provider();
+        let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
+        let Some(password) = self.mailbox_password.as_mut() else {
+            return Err(Error::InvalidState);
+        };
+
+        // Fetch the salts to derive the key password.
+        let salts = self
+            .session
+            .get_user_salts()
+            .await
+            .map_err(Error::KeySecretSaltFetch)?;
+
+        // Derive the key secret to unlock the user keys.
+        let key_secret = user
+            .salt_password(&srp_provider, &salts, password.expose_secret())
+            .map(UserKeySecret)
+            .map_err(Error::KeySecretDerivation)?;
+
+        // Check that the key works
+        let unlock_result = user.unlock_keys(&pgp_provider, key_secret.expose_secret());
+        if unlock_result.unlocked_keys.is_empty() {
+            return Err(Error::KeySecretDecryption);
+        }
+
+        // Update the auth state with the derived user secret.
+        self.session
+            .auth_store()
+            .write()
+            .await
+            .refresh_user_key_secret(key_secret)
+            .map_err(|e| {
+                Error::Request(http::RequestError::Other(anyhow!(
+                    "Failed to store auth with user secret: {e}"
+                )))
+            })?;
+
+        // The password is no longer needed, erase it.
+        self.mailbox_password = None;
         Ok(())
     }
 }
@@ -198,6 +332,8 @@ impl Flow {
 enum LoginState {
     LoggedOut,
     Awaiting2FA(TFAStatus),
+    DeriveKeySecret,
+    AwaitingMailboxPassword,
     LoggedIn,
 }
 

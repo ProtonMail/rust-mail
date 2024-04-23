@@ -1,4 +1,4 @@
-use crate::auth::ArcAuthStore;
+use crate::auth::{ArcAuthStore, UserKeySecret};
 use crate::domain::{Event, EventId, User, UserSettings};
 use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
@@ -75,6 +75,17 @@ impl Session {
         self.execute_request(GetUserSaltsRequest {})
             .await
             .map(|v| v.key_salts)
+    }
+
+    /// Exposes the user key secret from the auth store to unlock user keys.
+    ///
+    /// Returns None if the auth store is not available or no key secret is stored.
+    pub async fn expose_key_secret(&self) -> Option<UserKeySecret> {
+        self.auth_store
+            .read()
+            .await
+            .get_auth()
+            .and_then(|auth| auth.key_secret.clone())
     }
 
     /// Logout the user and invalidate the current session.

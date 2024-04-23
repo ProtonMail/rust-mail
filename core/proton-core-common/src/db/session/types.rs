@@ -5,10 +5,11 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, AesGcm, Key, KeySizeUser,
 };
-use proton_api_core::auth::{AccessToken, RefreshToken, Scope};
+use proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
 use proton_api_core::domain::{Uid, UserId};
 use proton_api_core::exports::base64::prelude::BASE64_STANDARD;
 use proton_api_core::exports::base64::Engine;
+use proton_api_core::exports::crypto::salts::KeySecret;
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::string::FromUtf8Error;
@@ -23,6 +24,7 @@ pub struct DecryptedUserSession {
     pub email: String,
     pub refresh_token: RefreshToken,
     pub access_token: AccessToken,
+    pub key_secret: Option<KeySecret>,
     pub scopes: Scope,
 }
 
@@ -42,6 +44,13 @@ impl DecryptedUserSession {
             .encrypt(self.refresh_token.expose_secret().as_bytes())
             .map(EncryptedRefreshToken)?;
 
+        let encrypted_key_secret = self
+            .key_secret
+            .as_ref()
+            .map(|key_secret| key.encrypt(key_secret.as_bytes()))
+            .transpose()?
+            .map(EncryptedKeySecret);
+
         Ok(EncryptedUserSession {
             session_id: self.session_id.clone(),
             user_id: self.user_id.clone(),
@@ -49,6 +58,7 @@ impl DecryptedUserSession {
             email: self.email.clone(),
             refresh_token: encrypted_refresh_token,
             access_token: encrypted_access_token,
+            key_secret: encrypted_key_secret,
             scopes: self.scopes.clone(),
         })
     }
@@ -63,6 +73,7 @@ pub struct EncryptedUserSession {
     pub email: String,
     pub refresh_token: EncryptedRefreshToken,
     pub access_token: EncryptedAccessToken,
+    pub key_secret: Option<EncryptedKeySecret>,
     pub scopes: Scope,
 }
 
@@ -86,6 +97,14 @@ impl EncryptedUserSession {
         let decrypted_refresh_token =
             RefreshToken::from(String::from_utf8(decrypted_refresh_token)?);
 
+        let decrypted_key_secret = self
+            .key_secret
+            .as_ref()
+            .map(|secret_key| key.decrypt(&secret_key.0))
+            .transpose()
+            .map_err(|_| DecryptionError::Decryption)?
+            .map(KeySecret::new);
+
         Ok(DecryptedUserSession {
             session_id: self.session_id.clone(),
             user_id: self.user_id.clone(),
@@ -93,6 +112,7 @@ impl EncryptedUserSession {
             email: self.email.clone(),
             refresh_token: decrypted_refresh_token,
             access_token: decrypted_access_token,
+            key_secret: decrypted_key_secret,
             scopes: self.scopes.clone(),
         })
     }
@@ -143,6 +163,7 @@ impl EncryptedRefreshToken {
         key.encrypt(token.expose_secret().as_bytes()).map(Self)
     }
 }
+
 impl AsRef<[u8]> for EncryptedRefreshToken {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
@@ -166,6 +187,29 @@ impl FromSql for EncryptedData {
         Vec::<u8>::column_result(value).map(|v| Self {
             ciphertext_nonce: v,
         })
+    }
+}
+
+/// Encrypted key secret wrapper.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct EncryptedKeySecret(pub(crate) EncryptedData);
+
+impl EncryptedKeySecret {
+    /// Encrypt the key secret.
+    ///
+    /// # Errors
+    /// Returns error if the encryption failed.
+    pub fn new(
+        key_secret: &UserKeySecret,
+        key: &SessionEncryptionKey,
+    ) -> Result<Self, aes_gcm::Error> {
+        key.encrypt(key_secret.expose_secret().as_bytes()).map(Self)
+    }
+}
+
+impl AsRef<[u8]> for EncryptedKeySecret {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
     }
 }
 

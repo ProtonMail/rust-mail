@@ -153,7 +153,7 @@ impl User {
     ///
     /// # Errors
     /// Returns error if the keys can't be unlocked.
-    pub fn unlock_keys<SRP: SRPProvider, PGP: PGPProviderSync>(
+    pub fn unlock_keys<PGP: PGPProviderSync>(
         &self,
         provider: &PGP,
         salted_password: &KeySecret,

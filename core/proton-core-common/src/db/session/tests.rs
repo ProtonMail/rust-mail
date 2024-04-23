@@ -1,5 +1,8 @@
 use crate::db::{DBResult, SessionEncryptionKey};
-use proton_api_core::auth::{AccessToken, RefreshToken, Scope};
+use proton_api_core::{
+    auth::{AccessToken, RefreshToken, Scope},
+    exports::crypto::salts::KeySecret,
+};
 
 #[test]
 fn test_encryption() {
@@ -30,6 +33,7 @@ fn test_session_store_load() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
+        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
 
@@ -61,6 +65,18 @@ fn test_session_store_load() {
             db_session.refresh_token.expose_secret(),
             session.refresh_token.expose_secret()
         );
+        assert_eq!(
+            db_session
+                .key_secret
+                .as_ref()
+                .expect("key secret must be there")
+                .as_bytes(),
+            session
+                .key_secret
+                .as_ref()
+                .expect("key secret must be there")
+                .as_bytes()
+        );
         Ok(())
     })
     .expect("failed");
@@ -77,6 +93,7 @@ fn test_session_update() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
+        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
 
@@ -87,6 +104,7 @@ fn test_session_update() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("refreshed".to_string()),
         access_token: AccessToken::from("another token".to_string()),
+        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope Scope2"),
     };
 
@@ -115,7 +133,6 @@ fn test_session_update() {
             .get_session_with_user_id(&session.user_id)
             .unwrap()
             .unwrap();
-        assert_eq!(encrypted_updated_session, db_encrypted_session);
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, updated_session.session_id);
         assert_eq!(db_session.user_id, updated_session.user_id);
@@ -130,6 +147,9 @@ fn test_session_update() {
             db_session.refresh_token.expose_secret(),
             updated_session.refresh_token.expose_secret()
         );
+        db_session
+            .key_secret
+            .expect("Key secret should still be there after update");
         Ok(())
     })
     .expect("failed");
@@ -146,6 +166,7 @@ fn test_session_delete_user_id() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
+        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
@@ -178,6 +199,7 @@ fn test_session_delete_session_id() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
+        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();

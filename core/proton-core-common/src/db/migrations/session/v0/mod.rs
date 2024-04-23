@@ -10,7 +10,7 @@ impl proton_sqlite3::Migration for V0 {
         tx.execute(
             "CREATE TABLE core_sessions (id TEXT UNIQUE NOT NULL, \
 user_id TEXT UNIQUE NOT NULL PRIMARY KEY, email TEXT NOT NULL, name TEXT DEFAULT NULL,\
-access_token BLOB NOT NULL, refresh_token BLOB NOT NULL, scopes TEXT NOT NULL DEFAULT '')",
+access_token BLOB NOT NULL, refresh_token BLOB NOT NULL, key_secret BLOB DEFAULT NULL, scopes TEXT NOT NULL DEFAULT '')",
             (),
         )?;
 

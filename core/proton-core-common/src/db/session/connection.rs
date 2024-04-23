@@ -8,6 +8,8 @@ use proton_api_core::domain::{Uid, UserId};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
 use proton_sqlite3::utils::mapped_rows_to_vec;
 
+use super::EncryptedKeySecret;
+
 impl<'c> SessionSqliteConnectionImpl<'c> {
     /// Create or update a session.
     ///
@@ -15,7 +17,7 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
     /// Returns error if the operation failed.
     pub fn create_or_update_session(&mut self, session: &EncryptedUserSession) -> DBResult<()> {
         self.0.execute(
-            "INSERT OR REPLACE INTO core_sessions VALUES (?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO core_sessions VALUES (?,?,?,?,?,?,?,?)",
             (
                 &session.session_id,
                 &session.user_id,
@@ -23,6 +25,7 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
                 &session.name,
                 session.access_token.as_ref(),
                 &session.refresh_token.as_ref(),
+                session.key_secret.as_ref().map(AsRef::as_ref),
                 &session.scopes,
             ),
         )?;
@@ -44,6 +47,22 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
         self.0.execute(
             "UPDATE core_sessions SET access_token=?, refresh_token=?, scopes=?,id=? WHERE user_id=?",
             (access_token.as_ref(), refresh_token.as_ref(), scopes, session_id, user_id),
+        )?;
+        Ok(())
+    }
+
+    /// Update the user key secret to newly derived key.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
+    pub fn update_user_key_secret(
+        &mut self,
+        user_id: &UserId,
+        user_key_secret: &EncryptedKeySecret,
+    ) -> DBResult<()> {
+        self.0.execute(
+            "UPDATE core_sessions SET key_secret=? WHERE user_id=?",
+            (user_key_secret.as_ref(), user_id),
         )?;
         Ok(())
     }
@@ -130,7 +149,10 @@ impl EncryptedUserSessionSelector {
             refresh_token: r
                 .get::<usize, EncryptedData>(5)
                 .map(EncryptedRefreshToken)?,
-            scopes: r.get(6)?,
+            key_secret: r
+                .get::<usize, Option<EncryptedData>>(6)?
+                .map(EncryptedKeySecret),
+            scopes: r.get(7)?,
         })
     }
 }

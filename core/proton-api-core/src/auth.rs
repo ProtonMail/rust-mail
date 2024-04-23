@@ -1,6 +1,7 @@
 use crate::domain::{SecretString, Uid, UserId};
 use crate::http::RequestError;
 use proton_async::sync::RwLock;
+use proton_crypto_account::salts::KeySecret;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
 use std::sync::Arc;
@@ -17,6 +18,10 @@ pub struct RefreshToken(pub SecretString);
 #[derive(Deserialize, Debug, Clone)]
 pub struct AccessToken(pub SecretString);
 
+/// The user key secret to unlock user keys.
+#[derive(Debug, Clone)]
+pub struct UserKeySecret(pub KeySecret);
+
 /// Session Authentication Data.
 #[derive(Clone)]
 pub struct Auth {
@@ -32,6 +37,8 @@ pub struct Auth {
     pub access_token: AccessToken,
     /// Access scopes
     pub scope: Scope,
+    /// KeySecret to unlock the user keys.
+    pub key_secret: Option<UserKeySecret>,
 }
 
 pub trait Store: Send + Sync + 'static {
@@ -69,6 +76,18 @@ pub trait Store: Send + Sync + 'static {
         access_token: AccessToken,
         refresh_token: RefreshToken,
         scope: Scope,
+    ) -> Result<(), Box<dyn std::error::Error>>;
+
+    /// Update the user key secret to unlock user keys.
+    ///
+    /// # Params
+    /// * `user_key_secret`: The freshly derived user key secret.
+    ///
+    /// # Errors
+    /// Returns error if the new auth state could not be updated.
+    fn refresh_user_key_secret(
+        &mut self,
+        user_key_secret: UserKeySecret,
     ) -> Result<(), Box<dyn std::error::Error>>;
 
     /// Update the session authentication scope.
@@ -114,6 +133,16 @@ impl Store for InMemoryStore {
 
         auth.scope = scope;
         Ok(Some(auth))
+    }
+
+    fn refresh_user_key_secret(
+        &mut self,
+        key_secret: UserKeySecret,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(auth) = &mut self.auth {
+            auth.key_secret = Some(key_secret);
+        }
+        Ok(())
     }
 
     fn refresh_auth(
@@ -186,6 +215,13 @@ impl<T: Store> Store for VersionedAuthStoreWrapper<T> {
         Ok(())
     }
 
+    fn refresh_user_key_secret(
+        &mut self,
+        user_key_secret: UserKeySecret,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.auth_store.refresh_user_key_secret(user_key_secret)
+    }
+
     fn set_scopes(&mut self, scopes: Scope) -> Result<Option<&Auth>, Box<dyn std::error::Error>> {
         self.auth_store.set_scopes(scopes)
     }
@@ -215,6 +251,15 @@ impl RefreshToken {
         self.0.expose_secret()
     }
 }
+
+impl UserKeySecret {
+    /// Exposes the internal key secret to unlock user keys.
+    #[must_use]
+    pub fn expose_secret(&self) -> &KeySecret {
+        &self.0
+    }
+}
+
 impl<T: Into<String>> From<T> for AccessToken {
     fn from(value: T) -> Self {
         Self(SecretString::new(value.into()))
@@ -224,6 +269,12 @@ impl<T: Into<String>> From<T> for AccessToken {
 impl<T: Into<String>> From<T> for RefreshToken {
     fn from(value: T) -> Self {
         Self(SecretString::new(value.into()))
+    }
+}
+
+impl<T: Into<Vec<u8>>> From<T> for UserKeySecret {
+    fn from(value: T) -> Self {
+        Self(KeySecret::new(value.into()))
     }
 }
 
