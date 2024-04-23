@@ -25,7 +25,7 @@ impl<'a> http::RequestDesc for AuthInfo<'a> {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct AuthInfoResponse {
-    pub version: i32,
+    pub version: u8,
     pub modulus: String,
     pub server_ephemeral: String,
     pub salt: String,
