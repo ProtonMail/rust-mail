@@ -5,6 +5,7 @@ use proton_api_core::{http, Session};
 
 mod address;
 mod conversations;
+mod image_proxy;
 mod labels;
 mod messages;
 
