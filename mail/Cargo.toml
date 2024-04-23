@@ -16,7 +16,7 @@ proton-api-core = { version = "0.3.0", registry = "proton", features = [
 ] }
 
 proton-sqlite3 = { version="0.6", registry = "proton"}
-proton-core-common = { version = "0.3", registry = "proton"}
+proton-core-common = { version = "0.3.0", registry = "proton"}
 proton-event-loop = { version = "0.6", registry = "proton"}
 proton-async = { version = "0.5", registry = "proton"}
 proton-action-queue = { version = "0.5", registry = "proton"}
