@@ -1,12 +1,13 @@
 mod conversation;
 
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
-use crate::db::LocalLabelId;
+use crate::db::{LocalConversationId, LocalLabelId};
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::LabelId;
-use proton_api_mail::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
+use proton_api_mail::proton_api_core::http::RequestError;
+use uniffi::deps::anyhow;
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
@@ -18,6 +19,10 @@ pub enum MailboxError {
     RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
     LabelDoesNotHaveRemoteId(LocalLabelId),
+    #[error("Conversation '{0}' not found")]
+    ConversationNotFound(LocalConversationId),
+    #[error("API request failed with error: '{0}'")]
+    APIError(RequestError),
     #[error("{0}")]
     Context(
         #[from]
