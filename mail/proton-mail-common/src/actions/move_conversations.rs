@@ -52,6 +52,12 @@ struct MoveConversationsLocalHandler<'c, 't: 'c> {
 
 impl<'c, 't: 'c> LocalActionHandler for MoveConversationsLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
+        if self.action.ids.is_empty() {
+            return Err(ActionError::Local(anyhow!(
+                "No conversations in this action"
+            )));
+        }
+
         let src_label = self
             .tx
             .label_with_id_or_err(self.action.active_label_id)
