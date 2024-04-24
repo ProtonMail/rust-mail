@@ -229,7 +229,7 @@ impl Mailbox {
             None,
             None,
         )
-        .expect("msg");
+        .map_err(MailboxError::AddressDomainLogoError)?;
 
         let session = self.user_ctx.mail_session();
         match self

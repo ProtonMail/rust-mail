@@ -3,7 +3,7 @@ use crate::mail::{
     Mailbox, MailboxConversationLiveQuery, MailboxError, MailboxLiveQueryUpdatedCallback,
 };
 use proton_mail_common::db::{LocalConversationId, LocalLabelId};
-use proton_mail_common::proton_api_mail::domain::LabelId;
+use proton_mail_common::proton_api_mail::domain::{LabelId, LightOrDarkMode};
 use std::sync::Arc;
 
 #[uniffi::export]
@@ -128,5 +128,33 @@ impl Mailbox {
         self.mbox
             .unstar_conversations(ids.into_iter().map(LocalConversationId::from))?;
         Ok(())
+    }
+
+    /// Get the sender image for a conversation.
+    ///
+    /// size is used to give the x*x size of the returned image (will default to 32 if none provided)
+    /// mode can be used to select if the "light" or "dark" mode of the image is desired (default is light)
+    ///
+    /// # Errors
+    /// Returns errors if the API call fails, the mode value is invalid, the conversation doesn't exist, or
+    /// if there's an issue with the sender that causes problems when creating the API request on our side.
+    pub fn get_image_for_conversation(
+        &self,
+        conversation_id: u64,
+        size: Option<u32>,
+        mode: Option<String>,
+    ) -> Result<Vec<u8>, MailboxError> {
+        let mode = match mode {
+            Some(m) => match m.as_str() {
+                "light" | "Light" => Some(LightOrDarkMode::Light),
+                "dark" | "Dark" => Some(LightOrDarkMode::Dark),
+                _ => return Err(MailboxError::InvalidImageMode(m)),
+            },
+            None => None,
+        };
+
+        self.mbox
+            .get_image_for_conversation(LocalConversationId::from(conversation_id), size, mode)
+            .map_err(MailboxError::from)
     }
 }
