@@ -81,8 +81,7 @@ build-wasm:
   script:
     - !reference [.script-config-git, script]
     - cd proton-mail-wasm
-    - CRATE_VERSION=$(cargo pkgid | cut -d "#" -f2)
-    - wasm-pack build -d "./web_pkg/$CRATE_VERSION"
+    - wasm-pack build -d "./web_pkg"
   artifacts:
     name: proton-mail-wasm
     paths:
@@ -97,9 +96,9 @@ build-ios:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
-    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework/$CRATE_VERSION"
-    - cd "./tmp/ios-framework/$CRATE_VERSION/package" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
+    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework"
+    - CRATE_VERSION=$(cargo pkgid --manifest-path=proton-mail-uniffi/Cargo.toml | cut -d "#" -f2)
+    - cd "./tmp/ios-framework/$CRATE_VERSION" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
 
   artifacts:
     name: proton-mail-ios
