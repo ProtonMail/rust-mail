@@ -1003,10 +1003,25 @@ ON CONFLICT(label_id) DO UPDATE SET total=total+excluded.total, unread=unread+ex
                     )?;
                 }
             } else {
-                // Fallback without message metadata
+                // Fallback without message metadata. We should grab the highest time values from
+                // all the remaining labels assigned to this conversation. All conversations
+                // messages will at the minimum, always assigned the All Mail label.
                 self.0.execute(
-                    r"INSERT OR IGNORE INTO conversation_labels
- VALUES (?,?,0,0,0,0,0,0,0)",
+                    r"
+INSERT OR IGNORE INTO conversation_labels
+SELECT
+    ?1,
+    ?2,
+    IFNULL(MAX(ctx_time),0) AS time,
+    IFNULL(MAX(ctx_size),0) AS size,
+    IFNULL(MAX(ctx_num_messages),0) AS num_messages,
+    IFNULL(MAX(ctx_num_unread),0) AS num_unread,
+    IFNULL(MAX(ctx_num_attachments),0) AS num_attachments,
+    IFNULL(MAX(ctx_expiration_time),0) AS expiration_time,
+    IFNULL(MAX(ctx_snooze_time),0) AS snooze_time
+FROM conversation_labels
+WHERE conversation_id=?1
+",
                     (id, label_id),
                 )?;
 

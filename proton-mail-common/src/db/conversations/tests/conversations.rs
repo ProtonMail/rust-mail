@@ -1,5 +1,6 @@
 use crate::db::conversations::tests::db_states::{
-    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+    new_test_delete_db_state, new_test_label_db_state,
+    new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
 };
 use crate::db::conversations::tests::utils::{
     conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
@@ -1337,6 +1338,62 @@ fn test_conversation_double_label_without_message_metadata() {
         assert_eq!(db_conversation.time, 0);
         assert_eq!(db_conversation.expiration_time, 0);
         assert_eq!(db_conversation.snooze_time, 0);
+
+        // Check conversation counts have the new conversation.
+        {
+            let conv_counts = conv_counts_as_map(tx);
+            {
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                // unread is 0 due to lack of messages.
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 1);
+            }
+        }
+    });
+}
+
+#[test]
+fn test_conversation_label_without_metadata_uses_information_from_other_labels() {
+    // Check that when we label a conversation without message metadata, we
+    // grab the maximum value of the other labels this conversation belongs to.
+    // There is a fallback to 0 values if no such thing exists. In production
+    // conversation will always be assigned to the "All Mail".
+    let (mut conn, _) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let state = new_test_label_db_state_label_with_existing_labels();
+        let (state, state_map) = prepare_and_patch_db_state_and_skip(tx, state, true);
+
+        let local_conv_id = *state_map
+            .conversations
+            .get(&state.conversations[0].id)
+            .unwrap();
+        let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+        tx.label_conversation(local_label_id1, local_conv_id)
+            .expect("failed to label");
+
+        let db_conversation = tx
+            .get_conversation_with_context(local_conv_id, local_label_id1)
+            .expect("failed to get conversation")
+            .unwrap();
+
+        // Because we have no message metadata, all these values should be empty
+        let conv_label = &state.conversations[0].labels[0];
+        assert_eq!(db_conversation.num_unread, conv_label.context_num_unread);
+        assert_eq!(
+            db_conversation.num_messages_ctx,
+            conv_label.context_num_messages
+        );
+        assert_eq!(
+            db_conversation.num_attachments,
+            conv_label.context_num_attachments
+        );
+        assert_eq!(db_conversation.size, conv_label.context_size);
+        assert_eq!(db_conversation.time, conv_label.context_time);
+        assert_eq!(
+            db_conversation.expiration_time,
+            conv_label.context_expiration_time
+        );
+        assert_eq!(db_conversation.snooze_time, conv_label.context_snooze_time);
 
         // Check conversation counts have the new conversation.
         {

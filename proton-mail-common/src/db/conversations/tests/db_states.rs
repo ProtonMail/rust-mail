@@ -727,3 +727,84 @@ pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
         ],
     }
 }
+
+/// Database state where there is one conversation which has one label applied and we
+/// need to tes that if we apply another label it does populate the table with 0
+/// values.
+pub(super) fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
+    let conv_id1 = DELETE_DB_CONV1.clone();
+    TestDBState {
+        addresses: vec![test_address()],
+        labels: vec![test_label1(), test_label2()],
+        conversations: vec![Conversation {
+            id: conv_id1.clone(),
+            order: 0,
+            subject: String::new(),
+            senders: vec![],
+            recipients: vec![],
+            num_messages: 0,
+            num_unread: 0,
+            num_attachments: 0,
+            expiration_time: 0,
+            size: 0,
+            labels: vec![ConversationLabels {
+                id: MY_LABEL_ID2.clone(),
+                context_num_unread: 0,
+                context_num_messages: 0,
+                context_time: 0,
+                context_size: 0,
+                context_num_attachments: 0,
+                context_expiration_time: 0,
+                context_snooze_time: 0,
+            }],
+            display_snooze_reminder: false,
+            attachments_metadata: vec![],
+            attachment_info: Default::default(),
+        }],
+        messages: vec![MessageMetadata {
+            id: new_message_id(0),
+            conversation_id: conv_id1.clone(),
+            address_id: MY_ADDRESS_ID.clone(),
+            order: 0,
+            label_ids: vec![MY_LABEL_ID2.clone()],
+            external_id: None,
+            subject: "Message subject".to_string(),
+            sender: MessageAddress {
+                address: "bar@bar.com".to_string(),
+                name: "".to_string(),
+                is_proton: Default::default(),
+                display_sender_image: Default::default(),
+                is_simple_login: Default::default(),
+                bimi_selector: None,
+            },
+            to_list: vec![MessageAddress {
+                address: "foo@bar.com".to_string(),
+                name: "".to_string(),
+                is_proton: Default::default(),
+                display_sender_image: Default::default(),
+                is_simple_login: Default::default(),
+                bimi_selector: None,
+            }],
+            cc_list: vec![],
+            bcc_list: vec![],
+            reply_tos: vec![],
+            flags: 0,
+            time: 100,
+            size: 512,
+            unread: Default::default(),
+            is_replied: Default::default(),
+            is_replied_all: Default::default(),
+            is_forwarded: Default::default(),
+            expiration_time: 100,
+            num_attachments: 1,
+            attachments_metadata: vec![AttachmentMetadata {
+                id: AttachmentId::from("MyAttachId"),
+                size: 1024,
+                name: "text.text".to_string(),
+                mime_type: "text/plain".to_string(),
+                disposition: Disposition::Inline,
+            }],
+            snooze_time: 1000,
+        }],
+    }
+}
