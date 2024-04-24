@@ -3,7 +3,7 @@ mod conversations;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::SharedLive;
-use proton_mail_common::db::{ConversationQuery, LocalLabelId};
+use proton_mail_common::db::{ConversationQuery, LocalConversationId, LocalLabelId};
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, LiveQueryUpdated, Observable, SharedLiveQueryBuilder,
@@ -11,6 +11,7 @@ use proton_mail_common::exports::proton_sqlite3::{
 use proton_mail_common::exports::tracing::error;
 use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::domain::LabelId;
+use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
 
@@ -33,6 +34,10 @@ pub enum MailboxError {
     ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
     #[error("Invalid Action: {0}")]
     InvalidAction(anyhow::Error),
+    #[error("Conversation '{0}' not found")]
+    ConversationNotFound(LocalConversationId),
+    #[error("API request failed with error: '{0}'")]
+    APIError(RequestError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -125,6 +130,10 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             proton_mail_common::MailboxError::Context(e) => Self::Context(e.into()),
             proton_mail_common::MailboxError::ActionQueue(e) => Self::ActionQueue(e),
             proton_mail_common::MailboxError::InvalidAction(e) => Self::InvalidAction(e),
+            proton_mail_common::MailboxError::ConversationNotFound(e) => {
+                Self::ConversationNotFound(e)
+            }
+            proton_mail_common::MailboxError::APIError(e) => Self::APIError(e),
         }
     }
 }

@@ -9,7 +9,7 @@ use crate::exports::anyhow::anyhow;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
-use proton_api_mail::domain::LabelId;
+use proton_api_mail::domain::{AddressDomainLogoDetails, LabelId, LightOrDarkMode};
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
@@ -195,6 +195,52 @@ impl Mailbox {
         self.user_ctx
             .queue_action(MoveConversationsAction::new(self.label_id, label.id, ids))?;
         Ok(())
+    }
+
+    pub fn get_image_for_conversation(
+        &self,
+        conversation_id: LocalConversationId,
+        size: Option<u32>,
+        mode: Option<LightOrDarkMode>,
+    ) -> MailboxResult<Vec<u8>> {
+        if self.user_ctx.mail_settings()?.hide_sender_images {
+            // sender images are to be hidden, return nothing
+            return Ok(vec![]);
+        }
+
+        let conversation = self
+            .user_ctx
+            .db_read(|conn| conn.get_conversation(conversation_id))
+            .map_err(MailContextError::from)?
+            .ok_or(MailboxError::ConversationNotFound(conversation_id))?;
+
+        let sender_for_image = conversation.senders.first().expect("boo");
+
+        if !sender_for_image.display_sender_image {
+            return Ok(vec![]);
+        }
+
+        let address_request_details = AddressDomainLogoDetails::new(
+            Some(sender_for_image.address.clone()),
+            None,
+            size,
+            mode,
+            sender_for_image.bimi_selector.clone(),
+            None,
+            None,
+        )
+        .expect("msg");
+
+        let session = self.user_ctx.mail_session();
+        match self
+            .user_ctx
+            .mail_context()
+            .async_runtime()
+            .block_on(session.get_address_domain_logo(address_request_details))
+        {
+            Ok(response) => Ok(response.image),
+            Err(e) => Err(MailboxError::APIError(e)),
+        }
     }
 
     fn starred_label_id(&self) -> MailboxResult<LocalLabelId> {
