@@ -38,6 +38,19 @@ fn test_move_between_folders() {
         let conversations = init_params.conversations.clone();
         ctx.setup_user(init_params).await;
         ctx.mock_get_conversations(conversations, 1).await;
+        // mock unlabel
+        ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], [])
+            .await;
+        // mock for label
+        ctx.mock_label_conversation(&folder_id, [conv_id.clone()], None, [])
+            .await;
+        // mock unlabel
+        ctx.mock_unlabel_conversation(&folder_id, [conv_id.clone()], [])
+            .await;
+        // mock for label
+        ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, [])
+            .await;
+        ctx.catch_all().await;
         let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
@@ -69,10 +82,6 @@ fn test_move_between_folders() {
     assert!(!mailbox_folder.conversations(10).unwrap().is_empty());
 
     // flush queue to execute on remote
-    // mock unlabel
-    ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], []);
-    // mock for label
-    ctx.mock_label_conversation(&folder_id, [conv_id.clone()], None, []);
     user_ctx
         .execute_pending_actions()
         .expect("failed to flush queue");
@@ -92,10 +101,6 @@ fn test_move_between_folders() {
     assert!(mailbox_folder.conversations(10).unwrap().is_empty());
 
     // flush queue to execute on remote
-    // mock unlabel
-    ctx.mock_unlabel_conversation(&folder_id, [conv_id.clone()], []);
-    // mock for label
-    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, []);
     user_ctx
         .execute_pending_actions()
         .expect("failed to flush queue");
@@ -118,6 +123,17 @@ fn test_move_to_trash_marks_read() {
         let conversations = init_params.conversations.clone();
         ctx.setup_user(init_params).await;
         ctx.mock_get_conversations(conversations, 1).await;
+        ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], [])
+            .await;
+        ctx.mock_label_conversation(LabelId::trash(), [conv_id.clone()], None, [])
+            .await;
+        ctx.mock_unlabel_conversation(LabelId::trash(), [conv_id.clone()], [])
+            .await;
+        ctx.mock_mark_conversation_read(std::iter::once(conv_id.clone()), [])
+            .await;
+        ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, [])
+            .await;
+        ctx.catch_all().await;
         let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
@@ -149,9 +165,6 @@ fn test_move_to_trash_marks_read() {
     assert!(!mailbox_trash.conversations(10).unwrap().is_empty());
 
     // flush queue to execute on remote
-    ctx.mock_mark_conversation_read([conv_id.clone()], []);
-    ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], []);
-    ctx.mock_label_conversation(LabelId::trash(), [conv_id.clone()], None, []);
     user_ctx
         .execute_pending_actions()
         .expect("failed to flush queue");
@@ -171,10 +184,6 @@ fn test_move_to_trash_marks_read() {
     assert!(mailbox_trash.conversations(10).unwrap().is_empty());
 
     // flush queue to execute on remote
-    // mock unlabel
-    ctx.mock_unlabel_conversation(LabelId::trash(), [conv_id.clone()], []);
-    // mock for label
-    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, []);
     user_ctx
         .execute_pending_actions()
         .expect("failed to flush queue");
@@ -212,6 +221,9 @@ fn test_move_from_label_does_not_unlabel() {
         let conversations = init_params.conversations.clone();
         ctx.setup_user(init_params).await;
         ctx.mock_get_conversations(conversations, 1).await;
+        ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, [])
+            .await;
+        ctx.catch_all().await;
         let cb = NullCallback {};
         user_ctx
             .initialize_async(LabelId::inbox().clone(), &cb)
@@ -244,7 +256,6 @@ fn test_move_from_label_does_not_unlabel() {
 
     // flush queue to execute on remote
     // mock for label
-    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, []);
     user_ctx
         .execute_pending_actions()
         .expect("failed to flush queue");

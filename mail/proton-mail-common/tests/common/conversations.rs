@@ -91,7 +91,7 @@ impl TestContext {
     /// * `failed` - The list of conversation IDs for which we want to
     ///              simulate failure.
     ///
-    pub fn mock_mark_conversation_read(
+    pub async fn mock_mark_conversation_read(
         &self,
         ids: impl IntoIterator<Item = ConversationId>,
         failed: impl IntoIterator<Item = ConversationId>,
@@ -103,15 +103,13 @@ impl TestContext {
             undo_token: None,
         };
 
-        self.async_runtime().block_on(async {
-            Mock::given(method("PUT"))
-                .and(path("/api/mail/v4/conversations/read"))
-                .and(body_json(request))
-                .respond_with(ResponseTemplate::new(200).set_body_json(resp))
-                .expect(1)
-                .mount(self.mock_server())
-                .await;
-        });
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/conversations/read"))
+            .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
     }
 }
 
