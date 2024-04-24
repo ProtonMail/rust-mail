@@ -2015,7 +2015,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "proton-async",
  "proton-mail-common",
