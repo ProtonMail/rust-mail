@@ -64,6 +64,16 @@ impl LocalLabel {
                 .as_ref()
                 .map_or(false, |rid| movable_sys_folder_list().contains(&rid))
     }
+
+    /// Check whether this label is a "labelable" label. This includes all labels of type `Label`
+    /// and the Starred system label.
+    pub fn is_applicable_label(&self) -> bool {
+        self.label_type == LabelType::Label
+            || self
+                .rid
+                .as_ref()
+                .map_or(false, |rid| rid == LabelId::starred())
+    }
 }
 
 impl From<LocalLabelWithCount> for LocalLabel {
