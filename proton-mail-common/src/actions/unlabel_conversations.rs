@@ -45,6 +45,12 @@ struct MarkConversationReadLocalHandler<'c, 't: 'c> {
 
 impl<'c, 't: 'c> LocalActionHandler for MarkConversationReadLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
+        if self.action.ids.is_empty() {
+            return Err(ActionError::Local(anyhow!(
+                "No conversations in this action"
+            )));
+        }
+
         let Some(label) = self
             .tx
             .label_with_id(self.action.label_id)

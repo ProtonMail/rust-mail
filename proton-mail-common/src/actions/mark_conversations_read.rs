@@ -64,6 +64,12 @@ struct MarkConversationReadRemoteHandler<'t> {
 
 impl<'t> RemoteActionHandler for MarkConversationReadRemoteHandler<'t> {
     fn revert_local(&mut self) -> ActionResult<()> {
+        if self.action.ids.is_empty() {
+            return Err(ActionError::Local(anyhow!(
+                "No conversations in this action"
+            )));
+        }
+
         self.tx
             .mark_conversations_read(self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
