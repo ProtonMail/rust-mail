@@ -1,6 +1,6 @@
 [package]
 name = "proton-api-core"
-version = "0.3.4"
+version = "0.3.5"
 edition = "2021"
 keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
