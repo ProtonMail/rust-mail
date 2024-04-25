@@ -138,7 +138,7 @@ impl Mailbox {
     /// # Errors
     /// Returns errors if the API call fails, the mode value is invalid, the conversation doesn't exist, or
     /// if there's an issue with the sender that causes problems when creating the API request on our side.
-    pub fn get_image_for_conversation(
+    pub async fn get_image_for_conversation(
         &self,
         conversation_id: u64,
         size: Option<u32>,
@@ -155,6 +155,7 @@ impl Mailbox {
 
         self.mbox
             .get_image_for_conversation(LocalConversationId::from(conversation_id), size, mode)
+            .await
             .map_err(MailboxError::from)
     }
 }

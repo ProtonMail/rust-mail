@@ -9,9 +9,7 @@ use crate::exports::anyhow::anyhow;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
-use proton_api_mail::domain::{
-    AddressDomainLogoDetailsBuilder, LabelId, LightOrDarkMode,
-};
+use proton_api_mail::domain::{AddressDomainLogoDetailsBuilder, LabelId, LightOrDarkMode};
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
@@ -199,7 +197,7 @@ impl Mailbox {
         Ok(())
     }
 
-    pub fn get_image_for_conversation(
+    pub async fn get_image_for_conversation(
         &self,
         conversation_id: LocalConversationId,
         size: Option<u32>,
@@ -241,12 +239,10 @@ impl Mailbox {
             .build()
             .map_err(MailboxError::AddressDomainLogoError)?;
 
-        let session = self.user_ctx.mail_session() ;
-        match self
-            .user_ctx
-            .mail_context()
-            .async_runtime()
-            .block_on(session.get_address_domain_logo(address_request_details))
+        let session = self.user_ctx.mail_session();
+        match session
+            .get_address_domain_logo(address_request_details)
+            .await
         {
             Ok(response) => Ok(response.image),
             Err(e) => Err(MailboxError::APIError(e)),
