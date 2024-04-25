@@ -1,6 +1,6 @@
 #![allow(clippy::module_name_repetitions)] // is exported in the root of the crate.
 use crate::db::{CoreSqliteConnection, DBResult};
-use proton_api_core::domain::{Event, ProductUsedSpace, User, UserId, UserSettings};
+use proton_api_core::domain::{Address, Event, ProductUsedSpace, User, UserId, UserSettings};
 use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
@@ -11,6 +11,8 @@ pub trait CoreEvent: Event {
     fn get_core_event_user(&self) -> Option<&User>;
 
     fn get_core_event_user_settings(&self) -> Option<&UserSettings>;
+
+    fn get_core_event_addresses(&self) -> Option<&[Address]>;
 
     fn get_core_event_used_space(&self) -> Option<i64>;
 
@@ -73,6 +75,13 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                     tx.update_user_product_used_space(&user_id, used_product_space)
                         .map_err(|e| {
                             error!("Failed to update used product space: {e}");
+                            e
+                        })?;
+                }
+                if let Some(addresses) = event.get_core_event_addresses() {
+                    tx.create_or_update_addresses(addresses.iter())
+                        .map_err(|e| {
+                            error!("Failed to update user addresses: {e}");
                             e
                         })?;
                 }

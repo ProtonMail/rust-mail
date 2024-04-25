@@ -1,10 +1,11 @@
 use crate::auth::{ArcAuthStore, UserKeySecret};
-use crate::domain::{Event, EventId, User, UserSettings};
+use crate::domain::{Address, Event, EventId, User, UserSettings};
 use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
-    AuthRefresh, CaptchaRequest, GetEventRequest, GetLatestEventRequest, GetUserSaltsRequest,
-    LogoutRequest, PostUserForkSessionRequest, UserInfoRequest, UserSettingsRequest,
+    AuthRefresh, CaptchaRequest, GetAddressesRequest, GetEventRequest, GetLatestEventRequest,
+    GetUserSaltsRequest, LogoutRequest, PostUserForkSessionRequest, UserInfoRequest,
+    UserSettingsRequest,
 };
 use anyhow::anyhow;
 use proton_crypto_account::salts::Salts;
@@ -65,6 +66,16 @@ impl Session {
         self.execute_request(UserInfoRequest {})
             .await
             .map(|r| r.user)
+    }
+
+    /// Get the addresses for a user.
+    ///
+    /// # Errors
+    /// Returns error if the request failed.
+    pub async fn addresses(&self) -> Result<Vec<Address>, http::RequestError> {
+        self.execute_request(GetAddressesRequest {})
+            .await
+            .map(|v| v.addresses)
     }
 
     /// Get the user salts.

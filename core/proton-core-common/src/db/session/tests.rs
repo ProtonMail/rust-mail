@@ -1,8 +1,18 @@
+use crate::db::{migrate_session_db, SessionSqliteConnection};
 use crate::db::{DBResult, SessionEncryptionKey};
 use proton_api_core::{
     auth::{AccessToken, RefreshToken, Scope},
     exports::crypto::salts::KeySecret,
 };
+
+#[cfg(test)]
+fn new_test_connection() -> SessionSqliteConnection {
+    use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
+    let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
+    let mut conn = pool.acquire().expect("failed to acquire connection");
+    migrate_session_db(&mut conn).expect("failed to migrate");
+    conn.into()
+}
 
 #[test]
 fn test_encryption() {
@@ -10,16 +20,6 @@ fn test_encryption() {
     let ciphertext = key.encrypt(b"plaintext message".as_ref()).unwrap();
     let plaintext = key.decrypt(&ciphertext).unwrap();
     assert_eq!(&plaintext, b"plaintext message");
-}
-
-#[cfg(test)]
-fn new_test_connection() -> crate::db::SessionSqliteConnection {
-    use crate::db::migrations::migrate_session_db;
-    use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
-    let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
-    let mut conn = pool.acquire().expect("failed to acquire connection");
-    migrate_session_db(&mut conn).expect("failed to migrate");
-    conn.into()
 }
 
 #[test]
@@ -182,7 +182,7 @@ fn test_session_delete_user_id() {
             .expect("expect failed to delete user");
 
         let db_encrypted_session = tx.get_session_with_user_id(&session.user_id).unwrap();
-        assert!(matches!(db_encrypted_session, None));
+        assert!(db_encrypted_session.is_none());
         Ok(())
     })
     .expect("failed");
@@ -215,7 +215,7 @@ fn test_session_delete_session_id() {
             .expect("expect failed to delete user");
 
         let db_encrypted_session = tx.get_session_with_user_id(&session.user_id).unwrap();
-        assert!(matches!(db_encrypted_session, None));
+        assert!(db_encrypted_session.is_none());
         Ok(())
     })
     .expect("failed");

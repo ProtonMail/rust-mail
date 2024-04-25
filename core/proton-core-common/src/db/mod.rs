@@ -6,6 +6,7 @@
 use proton_sqlite3::{new_connection_wrapper, new_tracked_connection_wrapper, MigratorError};
 use std::ops::Deref;
 
+mod addresses;
 mod core;
 mod migrations;
 mod session;
@@ -21,3 +22,18 @@ pub type DBMigrationError = MigratorError;
 
 new_tracked_connection_wrapper!(CoreSqliteConnection);
 new_connection_wrapper!(SessionSqliteConnection);
+
+#[cfg(test)]
+fn new_core_test_connection() -> CoreSqliteConnection {
+    use proton_sqlite3::{InProcessTrackerService, SqliteConnectionPool, SqliteMode};
+    let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
+    {
+        let mut conn = pool.acquire().unwrap();
+        migrate_core_db(&mut conn).unwrap();
+    }
+    let tracker = InProcessTrackerService::new(pool).expect("failed to create tracker service");
+    tracker
+        .new_connection()
+        .expect("failed to acquire connection")
+        .into()
+}

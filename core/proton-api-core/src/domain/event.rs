@@ -72,7 +72,7 @@ fn test_custom_event_type() {
         more: More::No,
         foo: 32,
         bar: false,
-        zeta: "".to_string(),
+        zeta: String::new(),
     };
 
     let _ = MySingleEvent {

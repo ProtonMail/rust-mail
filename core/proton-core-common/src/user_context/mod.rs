@@ -6,7 +6,8 @@ use proton_api_core::domain::UserId;
 use proton_api_core::Session;
 use std::fmt::{Debug, Formatter};
 
-mod settings;
+mod addresses;
+mod user;
 
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
