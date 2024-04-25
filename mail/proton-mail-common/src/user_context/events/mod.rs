@@ -1,4 +1,3 @@
-mod addresses;
 mod conversations;
 mod core;
 mod event_loop;

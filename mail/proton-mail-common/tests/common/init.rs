@@ -1,21 +1,20 @@
 use crate::common::TestContext;
 use proton_api_mail::domain::{
-    Address, AddressId, AddressStatus, AddressType, Conversation, ConversationCount,
-    ConversationId, ConversationLabels, Label, LabelId, LabelType, MailSettings, MessageCount,
-    ALL_LABEL_TYPES,
+    Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
+    MailSettings, MessageCount, ALL_LABEL_TYPES,
 };
 use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
-    DateFormat, Density, Email, EventId, Flags, HighSecurity, LogAuth, Password, Phone,
-    ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId,
-    UserMnemonicStatus, UserSettings, UserType, WeekStart,
+    Address, AddressId, AddressStatus, AddressType, DateFormat, Density, Email, EventId, Flags,
+    HighSecurity, LogAuth, Password, Phone, ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat,
+    TwoFA, User, UserId, UserMnemonicStatus, UserSettings, UserType, WeekStart,
 };
 use proton_api_mail::proton_api_core::requests::{
-    LatestEventResponse, UserInfoResponse, UserSettingsResponse,
+    GetAddressesResponse, LatestEventResponse, UserInfoResponse, UserSettingsResponse,
 };
 use proton_api_mail::requests::{
-    GetAddressesResponse, GetConversationCountsResponse, GetConversationsResponse,
-    GetLabelsResponse, GetMessageCountsResponse, MailSettingsResponse,
+    GetConversationCountsResponse, GetConversationsResponse, GetLabelsResponse,
+    GetMessageCountsResponse, MailSettingsResponse,
 };
 use proton_mail_common::{
     MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
@@ -46,14 +45,14 @@ pub struct Params {
     /// User settings. If `None`, some default values will be set.
     pub user_settings: Option<UserSettings>,
 
+    /// List of user addresses.
+    pub addresses: Vec<Address>,
+
     /// Mail settings. If `None`, some default values will be set.
     pub mail_settings: Option<MailSettings>,
 
     /// List of labels by type.
     pub labels: HashMap<LabelType, Vec<Label>>,
-
-    /// List of user addresses.
-    pub addresses: Vec<Address>,
 
     /// List of conversations.
     pub conversations: Vec<Conversation>,

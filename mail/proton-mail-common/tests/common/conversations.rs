@@ -135,7 +135,7 @@ fn build_conv_responses(
     let failed: HashSet<ConversationId> = HashSet::from_iter(failed);
     ids.iter()
         .map(|id| {
-            let code = if failed.contains(&id) {
+            let code = if failed.contains(id) {
                 CODE_FAIL
             } else {
                 CODE_SUCCESS

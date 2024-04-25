@@ -1,6 +1,5 @@
 //! Mapping of Mail domain into a Sqlite Database.
 
-mod addresses;
 mod attachments;
 mod conversations;
 mod events;

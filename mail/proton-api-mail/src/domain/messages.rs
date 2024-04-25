@@ -1,10 +1,12 @@
-use crate::domain::{AddressId, ConversationId, LabelId};
+use crate::domain::{ConversationId, LabelId};
+use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
 use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
 proton_api_core::utils::string_id!(AttachmentId);
+uniffi::custom_newtype!(AddressId, String);
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]

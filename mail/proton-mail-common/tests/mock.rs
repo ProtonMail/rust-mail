@@ -13,7 +13,7 @@ fn test_mock_context() {
             .and(path("/api/tests/ping"))
             .respond_with(ResponseTemplate::new(200))
             .expect(1)
-            .mount(&ctx.mock_server())
+            .mount(ctx.mock_server())
             .await;
 
         user_ctx.ping().await.expect("failed to ping");

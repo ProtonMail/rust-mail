@@ -3,6 +3,7 @@
 pub mod conversations;
 pub mod init;
 
+use proton_api_mail::exports::crypto::salts::KeySecret;
 use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope};
 use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
 use proton_api_mail::proton_api_core::http::{APIEnvConfig, Builder};
@@ -42,10 +43,12 @@ impl TestContext {
         let mock_server = runtime.block_on(async { MockServer::start().await });
 
         // Create client with the mock server as the base URL
-        let mut api_env_config = APIEnvConfig::default();
-        api_env_config.base_url = format!("{}/api", mock_server.uri());
-        api_env_config.allow_http = true;
-        api_env_config.skip_srp_proof_validation = true;
+        let mut api_env_config = APIEnvConfig {
+            base_url: format!("{}/api", mock_server.uri()),
+            allow_http: true,
+            skip_srp_proof_validation: true,
+            ..Default::default()
+        };
         let client = Builder::new()
             .api_env_config(api_env_config)
             .build()
@@ -86,7 +89,7 @@ impl TestContext {
             email: "test@foo.bar".to_string(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
-            key_secret: None,
+            key_secret: Some(KeySecret::new(b"secret".to_vec())),
             scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)
