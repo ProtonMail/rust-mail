@@ -30,7 +30,6 @@ pub struct LocalMessageCount {
 pub struct ConversationAvatarInformation {
     pub text: String,
     pub color: String,
-    pub sender_image_url: String,
 }
 
 /// ConversationAvatarInformation contains the details used for the avatar shown for a conversation.
@@ -38,14 +37,12 @@ pub struct ConversationAvatarInformation {
 /// It contains:
 ///     - the text to display in the avatar,
 ///     - the color to use for the avatar,
-///     - and the url of the sender image if a valid BIMI image is available.
 impl ConversationAvatarInformation {
     /// build takes a display name and email address and uses these to determine the text and color the avatar should be
     pub fn build(display_name: &str, email: &str) -> ConversationAvatarInformation {
         ConversationAvatarInformation {
             text: initials::avatar_text(display_name, email),
             color: proton_color::proton_color(display_name).to_string(),
-            sender_image_url: "".to_string(),
         }
     }
 
