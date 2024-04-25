@@ -6,8 +6,8 @@ use proton_api_core::exports::thiserror;
 pub enum AddressDomainLogoError {
     #[error("AddressDomainLogoDetails must include either an address or a domain")]
     NeitherAddressNorDomain(),
-    #[error("max_scale_up_factor must be 1, 2, 3, or 4")]
-    InvalidMaxScaleUpFactor(),
+    #[error("max_scale_up_factor must be 1, 2, 3, or 4.  Value provided was: {0}")]
+    InvalidMaxScaleUpFactor(u8),
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
@@ -28,38 +28,10 @@ pub struct AddressDomainLogoDetails {
     pub format: Option<String>,
 }
 
-impl AddressDomainLogoDetails {
-    pub fn new(
-        address: Option<String>,
-        domain: Option<String>,
-        size: Option<u32>,
-        mode: Option<LightOrDarkMode>,
-        bimi_selector: Option<String>,
-        max_scale_up_factor: Option<u8>,
-        format: Option<String>,
-    ) -> Result<Self, AddressDomainLogoError> {
-        if address.is_none() && domain.is_none() {
-            return Err(AddressDomainLogoError::NeitherAddressNorDomain());
-        }
-
-        if let Some(msup) = max_scale_up_factor {
-            if msup == 0 || msup > 4 {
-                return Err(AddressDomainLogoError::InvalidMaxScaleUpFactor());
-            }
-        }
-
-        Ok(Self {
-            address,
-            domain,
-            size,
-            mode,
-            bimi_selector,
-            max_scale_up_factor,
-            format,
-        })
-    }
-}
-
+/// A builder used to create the struct for the body of requests to the API for logos for email addresses or
+/// domains.  Note, these requests must have either and address or a domain value set so building the
+/// [`AddressDomainLogoDetails`] (via ``build``) will fail if you haven't either set an address via the
+/// ``address`` function or a domain via the ``domain`` function.
 #[derive(Default)]
 pub struct AddressDomainLogoDetailsBuilder(AddressDomainLogoDetails);
 
@@ -99,12 +71,19 @@ impl AddressDomainLogoDetailsBuilder {
         self
     }
 
+    /// Add a value for the maximum allowed scale up factor.  
+    ///
+    /// # Errors
+    /// Will return a [`AddressDomainLogoError::InvalidMaxScaleUpFactor`] if the provided ``max_scale_up_factor``
+    /// is not a 1, 2, 3, or 4.
     pub fn max_scale_up_factor(
         mut self,
         max_scale_up_factor: u8,
     ) -> Result<AddressDomainLogoDetailsBuilder, AddressDomainLogoError> {
         if max_scale_up_factor == 0 || max_scale_up_factor > 4 {
-            return Err(AddressDomainLogoError::InvalidMaxScaleUpFactor());
+            return Err(AddressDomainLogoError::InvalidMaxScaleUpFactor(
+                max_scale_up_factor,
+            ));
         }
 
         self.0.max_scale_up_factor = Some(max_scale_up_factor);
@@ -117,6 +96,10 @@ impl AddressDomainLogoDetailsBuilder {
         self
     }
 
+    /// Returns the constructed [`AddressDomainLogoDetails`]
+    ///
+    /// # Errors
+    /// Will return an error if there is neither an ``address`` nor a ``domain`` set in the builder.
     pub fn build(self) -> Result<AddressDomainLogoDetails, AddressDomainLogoError> {
         if self.0.address.is_none() && self.0.domain.is_none() {
             return Err(AddressDomainLogoError::NeitherAddressNorDomain());
