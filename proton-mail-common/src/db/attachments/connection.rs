@@ -1,6 +1,7 @@
 use crate::db::attachments::LocalAttachmentId;
 use crate::db::{DBResult, LocalAttachmentMetadata, MailSqliteConnectionImpl};
-use proton_api_mail::domain::{AddressId, AttachmentMetadata};
+use proton_api_mail::domain::AttachmentMetadata;
+use proton_api_mail::proton_api_core::domain::AddressId;
 use proton_sqlite3::rusqlite::Row;
 
 impl<'c> MailSqliteConnectionImpl<'c> {

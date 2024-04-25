@@ -8,6 +8,7 @@ use proton_api_mail::domain::{
     MessageMetadata,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
+use proton_api_mail::proton_api_core::domain::AddressId;
 
 new_u64_type!(LocalConversationId);
 

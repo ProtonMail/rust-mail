@@ -1,5 +1,5 @@
 use crate::db::conversations::tests::conversations::{
-    test_address, test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2,
+    test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
 use crate::db::conversations::tests::utils::TestDBState;
 use lazy_static::lazy_static;
@@ -22,7 +22,6 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
     let conv_id1 = DELETE_DB_CONV1.clone();
     let conv_id2 = DELETE_DB_CONV2.clone();
     TestDBState {
-        addresses: vec![test_address()],
         labels: vec![
             test_label1(),
             test_label2(),
@@ -366,7 +365,6 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
     // Conversation 1 has 4 messages, split between 2 labels, All unread.
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
-        addresses: vec![test_address()],
         labels: vec![test_label1(), test_label2()],
         conversations: vec![Conversation {
             id: conv_id1.clone(),
@@ -579,7 +577,6 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
 pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
-        addresses: vec![test_address()],
         labels: vec![test_label1()],
         conversations: vec![Conversation {
             id: conv_id1.clone(),
@@ -734,7 +731,6 @@ pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
 pub(super) fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
-        addresses: vec![test_address()],
         labels: vec![test_label1(), test_label2()],
         conversations: vec![Conversation {
             id: conv_id1.clone(),

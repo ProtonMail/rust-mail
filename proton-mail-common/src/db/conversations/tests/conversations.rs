@@ -13,19 +13,18 @@ use crate::db::{
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
-    Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType, AttachmentId,
-    AttachmentMetadata, Conversation, ConversationCount, ConversationId, ConversationLabels,
-    Disposition, Label, LabelId, LabelType, MessageAddress,
+    AttachmentId, AttachmentMetadata, Conversation, ConversationCount, ConversationId,
+    ConversationLabels, Disposition, Label, LabelId, LabelType, MessageAddress,
 };
 use proton_api_mail::exports::tracing;
-use proton_api_mail::proton_api_core::exports::crypto::domain::AddressKeys;
+use proton_api_mail::proton_api_core::domain::AddressId;
 use tracing_test::traced_test;
 
 #[test]
 fn test_conversation_create_no_labels() {
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        create_address_and_labels(tx);
+        create_labels(tx);
         let conv = test_conversation([], []);
         let id = tx
             .create_conversation(&conv)
@@ -54,7 +53,7 @@ fn test_conversation_create_starred() {
     };
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        create_address_and_labels(tx);
+        create_labels(tx);
         tx.create_remote_label(&test_starred_label()).unwrap();
 
         // Add starred label, should gain starred attribute.
@@ -116,7 +115,7 @@ fn test_conversation_create_starred() {
 fn test_conversation_create_with_labels() {
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        let local_label_ids = create_address_and_labels(tx);
+        let local_label_ids = create_labels(tx);
         let conv = test_conversation(
             [
                 ConversationLabels {
@@ -176,7 +175,7 @@ fn test_conversation_create_with_labels() {
 fn test_conversation_create_with_attachment() {
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        create_address_and_labels(tx);
+        create_labels(tx);
         let conv = test_conversation(
             [],
             [AttachmentMetadata {
@@ -214,7 +213,7 @@ fn test_conversation_create_with_attachment() {
 fn test_conversation_create_with_attachment_and_label() {
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        let local_labels = create_address_and_labels(tx);
+        let local_labels = create_labels(tx);
         let conv = test_conversation(
             [ConversationLabels {
                 id: MY_LABEL_ID1.clone(),
@@ -264,7 +263,7 @@ fn test_conversation_create_with_attachment_and_label() {
 fn test_conversation_update() {
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        let local_label_ids = create_address_and_labels(tx);
+        let local_label_ids = create_labels(tx);
         let conv = test_conversation(
             [ConversationLabels {
                 id: MY_LABEL_ID2.clone(),
@@ -775,7 +774,7 @@ fn test_conversation_undelete() {
 fn test_conversation_counts() {
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        let labels = create_address_and_labels(tx);
+        let labels = create_labels(tx);
         let counts = [
             ConversationCount {
                 label_id: MY_LABEL_ID1.clone(),
@@ -1490,11 +1489,9 @@ lazy_static! {
     pub(super) static ref MY_CONVERSATION_ID: ConversationId =
         ConversationId::from("MyConversationID");
 }
-pub(in crate::db::conversations) fn create_address_and_labels(
+pub(in crate::db::conversations) fn create_labels(
     tx: &mut MailSqliteConnectionMut,
 ) -> Vec<LocalLabelId> {
-    tx.create_or_update_address(&test_address())
-        .expect("failed to create address");
     let labels = [test_label1(), test_label2()];
     tx.create_remote_labels(labels.iter())
         .expect("failed to create labels");
@@ -1504,32 +1501,6 @@ pub(in crate::db::conversations) fn create_address_and_labels(
         .expect("failed to resolve label ids");
     assert_eq!(r.len(), 2);
     r
-}
-pub(in crate::db::conversations) fn test_address() -> Address {
-    Address {
-        id: MY_ADDRESS_ID.clone(),
-        email: "hello@world".to_string(),
-        send: Default::default(),
-        receive: Default::default(),
-        status: AddressStatus::Enabled,
-        domain_id: None,
-        address_type: AddressType::Original,
-        order: 0,
-        display_name: "HelloWorld".to_string(),
-        signature: "SIGNATURE".to_string(),
-        keys: AddressKeys(Vec::new()),
-        catch_all: false,
-        proton_mx: false,
-        signed_key_list: AddressSignedKeyList {
-            min_epoch_id: None,
-            max_epoch_id: None,
-            expected_min_epoch_id: None,
-            data: None,
-            obsolescence_token: None,
-            signature: None,
-            revision: 0,
-        },
-    }
 }
 
 pub(in crate::db::conversations) fn test_label1() -> Label {

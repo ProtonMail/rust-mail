@@ -1,6 +1,5 @@
 //! Domain Types.
 
-mod addresses;
 mod conversations;
 mod event;
 mod image_proxy;
@@ -8,7 +7,6 @@ mod labels;
 mod messages;
 mod settings;
 
-pub use addresses::*;
 pub use conversations::*;
 pub use event::*;
 pub use image_proxy::*;

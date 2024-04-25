@@ -3,10 +3,11 @@ mod common;
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{
-    Address, AddressId, AddressStatus, AddressType, Conversation, ConversationCount,
-    ConversationId, ConversationLabels, Label, LabelId, LabelType, MessageCount,
+    Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
+    MessageCount,
 };
 use proton_api_mail::exports::crypto::domain::AddressKeys;
+use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus, AddressType};
 use proton_mail_common::Mailbox;
 use velcro::hash_map;
 
@@ -44,7 +45,7 @@ fn test_label_custom_label() {
         Mailbox::with_remote_id(user_ctx.clone(), &label_id).expect("failed to create mailbox");
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
+    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
 
     // Label conversation.
     mailbox_inbox
@@ -104,7 +105,7 @@ fn test_label_starred() {
         .expect("failed to create mailbox");
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
+    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
 
     // Label conversation.
     mailbox_inbox
@@ -155,7 +156,7 @@ fn test_label_fails_when_labelling_folders() {
         Mailbox::with_remote_id(user_ctx.clone(), &folder_id).expect("failed to create mailbox");
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
+    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
 
     // Label conversation, should fail.
     mailbox_inbox

@@ -32,10 +32,6 @@ pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<
                 snooze_time INTEGER NOT NULL DEFAULT 0,
                 deleted INTEGER NOT NULL DEFAULT 0,
 
-                CONSTRAINT messages_address_id
-                    FOREIGN KEY (address_id)
-                    REFERENCES addresses (id),
-
                 CONSTRAINT messageS_conversation_id
                     FOREIGN KEY (conversation_id)
                     REFERENCES conversations (id)

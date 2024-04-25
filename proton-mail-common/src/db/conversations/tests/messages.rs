@@ -1,5 +1,5 @@
 use crate::db::conversations::tests::conversations::{
-    create_address_and_labels, test_conversation, test_label1, test_starred_label, MY_ADDRESS_ID,
+    create_labels, test_conversation, test_label1, test_starred_label, MY_ADDRESS_ID,
     MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
 use crate::db::conversations::tests::db_states::new_test_delete_db_state;
@@ -128,7 +128,7 @@ fn test_update_message() {
 fn test_message_counts() {
     let (mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
-        let labels = create_address_and_labels(tx);
+        let labels = create_labels(tx);
         let counts = [
             MessageCount {
                 label_id: MY_LABEL_ID1.clone(),
@@ -312,7 +312,7 @@ pub fn test_delete_local_message_does_not_change_conv_unread_count() {
         let local_label_id = state_map.labels.get(&MY_LABEL_ID1).unwrap();
 
         let conv_counts = conv_counts_as_map(tx);
-        let label_conv_counts = conv_counts.get(&local_label_id).unwrap();
+        let label_conv_counts = conv_counts.get(local_label_id).unwrap();
         assert_eq!(label_conv_counts.unread, 1);
     });
 }
@@ -431,7 +431,7 @@ lazy_static! {
 }
 
 fn test_create_message_dependencies(tx: &mut MailSqliteConnectionMut) -> LocalConversationId {
-    create_address_and_labels(tx);
+    create_labels(tx);
     let conversation = test_conversation(
         [ConversationLabels {
             id: MY_LABEL_ID1.clone(),

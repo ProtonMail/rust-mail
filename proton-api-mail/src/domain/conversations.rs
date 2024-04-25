@@ -1,7 +1,8 @@
 use crate::domain::{
-    AddressId, AttachmentMetadata, ExternalId, LabelId, MessageAddress, MessageAttachmentInfo,
+    AttachmentMetadata, ExternalId, LabelId, MessageAddress, MessageAttachmentInfo,
     MessageMetadataSortMode,
 };
+use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::serde::{Deserialize, Serialize};
 use proton_api_core::utils::bool_to_integer;

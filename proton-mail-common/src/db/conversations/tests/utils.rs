@@ -3,14 +3,13 @@ use crate::db::{
     MailSqliteConnectionMut,
 };
 use proton_api_mail::domain::{
-    Address, Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId,
+    Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId,
     MessageAddress, MessageCount, MessageId, MessageMetadata,
 };
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default)]
 pub(in crate::db::conversations) struct TestDBState {
-    pub addresses: Vec<Address>,
     pub labels: Vec<Label>,
     pub conversations: Vec<Conversation>,
     pub messages: Vec<MessageMetadata>,
@@ -40,9 +39,6 @@ pub(in crate::db::conversations) fn prepare_and_patch_db_state_and_skip(
     let mut result = TestDBStateMap {
         ..Default::default()
     };
-    // create addresses
-    tx.create_or_update_addresses(env.addresses.iter())
-        .expect("failed to create addresses");
 
     // create labels
     let local_label_ids = tx

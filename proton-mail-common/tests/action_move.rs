@@ -3,10 +3,11 @@ mod common;
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{
-    Address, AddressId, AddressStatus, AddressType, Conversation, ConversationCount,
-    ConversationId, ConversationLabels, Label, LabelId, LabelType, MessageCount,
+    Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
+    MessageCount,
 };
 use proton_api_mail::exports::crypto::domain::AddressKeys;
+use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus, AddressType};
 use proton_mail_common::Mailbox;
 use std::collections::HashMap;
 use velcro::hash_map;
@@ -69,7 +70,7 @@ fn test_move_between_folders() {
     });
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
+    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
     assert!(mailbox_folder.conversations(10).unwrap().is_empty());
 
     // submit action
@@ -152,7 +153,7 @@ fn test_move_to_trash_marks_read() {
     });
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
+    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
     assert!(mailbox_trash.conversations(10).unwrap().is_empty());
 
     // submit action
@@ -242,7 +243,7 @@ fn test_move_from_label_does_not_unlabel() {
     });
 
     // Get the conversation id
-    let local_conv_id = mailbox_label.conversations(10).unwrap().get(0).unwrap().id;
+    let local_conv_id = mailbox_label.conversations(10).unwrap().first().unwrap().id;
     assert!(mailbox_inbox.conversations(10).unwrap().is_empty());
 
     // submit action

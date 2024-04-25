@@ -1,5 +1,4 @@
 mod action_queue;
-mod addresses;
 mod conversations;
 mod events;
 mod initialization;
