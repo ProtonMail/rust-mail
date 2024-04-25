@@ -9,7 +9,9 @@ use crate::exports::anyhow::anyhow;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
-use proton_api_mail::domain::{AddressDomainLogoDetails, LabelId, LightOrDarkMode};
+use proton_api_mail::domain::{
+    AddressDomainLogoDetailsBuilder, LabelId, LightOrDarkMode,
+};
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
@@ -220,18 +222,26 @@ impl Mailbox {
             return Ok(vec![]);
         }
 
-        let address_request_details = AddressDomainLogoDetails::new(
-            Some(sender_for_image.address.clone()),
-            None,
-            size,
-            mode,
-            sender_for_image.bimi_selector.clone(),
-            None,
-            None,
-        )
-        .map_err(MailboxError::AddressDomainLogoError)?;
+        let mut address_request_details =
+            AddressDomainLogoDetailsBuilder::new().address(sender_for_image.address.clone());
 
-        let session = self.user_ctx.mail_session();
+        if let Some(s) = size {
+            address_request_details = address_request_details.size(s);
+        }
+
+        if let Some(m) = mode {
+            address_request_details = address_request_details.mode(m);
+        }
+
+        if let Some(bimi_sel) = &sender_for_image.bimi_selector {
+            address_request_details = address_request_details.bimi_selector(bimi_sel.clone());
+        }
+
+        let address_request_details = address_request_details
+            .build()
+            .map_err(MailboxError::AddressDomainLogoError)?;
+
+        let session = self.user_ctx.mail_session() ;
         match self
             .user_ctx
             .mail_context()
