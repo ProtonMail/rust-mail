@@ -25,7 +25,7 @@ pub enum AttachmentDecryptionError {
     EncryptedSignatureDecryption(CryptoError),
 }
 
-/// Represents decryption result of a decrypted attachment.s
+/// Represents decryption result of a decrypted attachment.
 pub struct DecryptedAttachment<T: VerifiedData>(T);
 
 impl<T: VerifiedData> AsRef<[u8]> for DecryptedAttachment<T> {
