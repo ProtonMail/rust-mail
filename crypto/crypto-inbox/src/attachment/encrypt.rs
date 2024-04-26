@@ -1,8 +1,14 @@
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    string::FromUtf8Error,
+};
 
-use proton_crypto_account::proton_crypto::crypto::{
-    ArmorerSync, AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
-    EncryptorDetachedSignatureWriter, EncryptorSync, EncryptorWriter, PGPProviderSync,
+use proton_crypto_account::proton_crypto::{
+    crypto::{
+        ArmorerSync, AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
+        EncryptorDetachedSignatureWriter, EncryptorSync, EncryptorWriter, PGPProviderSync,
+    },
+    CryptoError,
 };
 
 use super::{AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
@@ -34,17 +40,19 @@ pub struct EncryptedAttachment {
 #[derive(Debug, thiserror::Error)]
 pub enum AttachmentEncryptionError {
     #[error("Failed to encrypt and sign attachment: {0}")]
-    Encryption(Box<dyn std::error::Error>),
+    Encryption(CryptoError),
+    #[error("Failed to to convert to utf-8 string: {0}")]
+    Encoding(#[from] FromUtf8Error),
     #[error("Failed to encrypt attached signature: {0}")]
-    SignatureEncryption(Box<dyn std::error::Error>),
+    SignatureEncryption(CryptoError),
     #[error("No encryption keys provided")]
     NoKeys,
     #[error("No signing keys provided")]
     NoSigningKeys,
     #[error("Session key generation failed: {0}")]
-    SessionKeyGeneration(Box<dyn std::error::Error>),
+    SessionKeyGeneration(CryptoError),
     #[error("Session key encryption failed: {0}")]
-    SessionKeyEncryption(Box<dyn std::error::Error>),
+    SessionKeyEncryption(CryptoError),
 }
 
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
@@ -102,8 +110,7 @@ pub fn encrypt<Provider: PGPProviderSync>(
         &key_packets,
         &session_key,
         &detached_signature_bytes,
-    )
-    .map_err(|err| AttachmentEncryptionError::Encryption(err.into()))?;
+    )?;
 
     let metadata = EncryptedAttachmentMetadata {
         signature: Some(detached_signature),
@@ -251,9 +258,8 @@ fn armor_detached_signature<T: PGPProviderSync>(
         .armorer()
         .armor_signature(detached_signature_bytes)
         .map_err(AttachmentEncryptionError::Encryption)?;
-    String::from_utf8(detached_signature_armored)
-        .map(AttachmentSignature)
-        .map_err(|err| AttachmentEncryptionError::Encryption(err.into()))
+    let signature = String::from_utf8(detached_signature_armored).map(AttachmentSignature)?;
+    Ok(signature)
 }
 
 // Encrypt the detached signature with the session key and attach the key packets.
@@ -285,9 +291,9 @@ fn encrypt_detached_signature<T: PGPProviderSync>(
         .armorer()
         .armor_message(&encrypted_signature_bytes)
         .map_err(AttachmentEncryptionError::SignatureEncryption)?;
-    String::from_utf8(encrypted_detached_signature_armored)
-        .map(AttachmentEncryptedSignature)
-        .map_err(|err| AttachmentEncryptionError::SignatureEncryption(err.into()))
+    let attachment_encrypted_signature = String::from_utf8(encrypted_detached_signature_armored)
+        .map(AttachmentEncryptedSignature)?;
+    Ok(attachment_encrypted_signature)
 }
 
 fn encrypt_attachment_without_signing<T: PGPProviderSync>(

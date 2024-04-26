@@ -6,6 +6,7 @@ use proton_crypto_account::proton_crypto::crypto::{
 };
 use proton_crypto_account::proton_crypto::utils::to_canonicalized_string;
 
+use proton_crypto_account::proton_crypto::{CryptoError, CryptoInfoError};
 use proton_crypto_inbox_mime::{
     MimeProcessor, MimeSignatureVerifier, ProcessMime, ProcessMimeError, ProcessedMessage,
 };
@@ -14,7 +15,7 @@ use proton_crypto_inbox_mime::{
 #[allow(clippy::module_name_repetitions)]
 pub enum MessageError {
     #[error("Failed to decrypt the message body: {0}")]
-    Decryption(Box<dyn std::error::Error>),
+    Decryption(#[from] CryptoError),
     #[error("Failed to decode message body to utf-8 string: {0}")]
     BodyDecode(#[from] Utf8Error),
     #[error("Failed to decode mime message body: {0}")]
@@ -137,8 +138,7 @@ pub trait DecryptableMessage {
             .new_decryptor()
             .with_passphrase(passphrase.as_ref())
             .with_ut8_sanitization()
-            .decrypt(self.message_encrypted_body(), DataEncoding::Armor)
-            .map_err(MessageError::Decryption)?;
+            .decrypt(self.message_encrypted_body(), DataEncoding::Armor)?;
         let decoded_message = std::str::from_utf8(decrypted_message.as_bytes())?;
         Ok(DecryptedBody::Plain(decoded_message.to_owned()))
     }
@@ -153,8 +153,7 @@ fn decrypt_mime<T: PGPProviderSync>(
     let decrypted_body = pgp_provider
         .new_decryptor()
         .with_decryption_key_refs(decryption_keys)
-        .decrypt(data, DataEncoding::Armor)
-        .map_err(MessageError::Decryption)?;
+        .decrypt(data, DataEncoding::Armor)?;
     let signatures = decrypted_body.signatures().unwrap_or_default();
     let raw_mime_data = decrypted_body.into_vec();
     let (mime_body_data, mime_signatures) =
@@ -202,7 +201,7 @@ fn verify_mime<T: PGPProviderSync>(
     if verification_keys.is_empty() {
         // No verification keys provided.
         return Err(VerificationError::NoVerifier(
-            "No verification keys provided".into(),
+            CryptoInfoError::new("No verification keys provided").into(),
         ));
     }
     if !signatures.is_empty() {
@@ -212,7 +211,9 @@ fn verify_mime<T: PGPProviderSync>(
             .with_verification_key_refs(verification_keys)
             .verify_detached(data, signatures, DataEncoding::Bytes);
     }
-    let not_signed_error = Err(VerificationError::NotSigned("No signature found".into()));
+    let not_signed_error = Err(VerificationError::NotSigned(
+        CryptoInfoError::new("No signature found").into(),
+    ));
     if mime_signatures.is_empty() {
         // No signature found.
         return not_signed_error;
@@ -246,11 +247,13 @@ fn verify_normal<T: PGPProviderSync>(
     signatures: &[u8],
 ) -> VerificationResult {
     if signatures.is_empty() {
-        return Err(VerificationError::NotSigned("No signature found".into()));
+        return Err(VerificationError::NotSigned(
+            CryptoInfoError::new("No signature found").into(),
+        ));
     }
     if verification_keys.is_empty() {
         return Err(VerificationError::NoVerifier(
-            "No verification key provided".into(),
+            CryptoInfoError::new("No verification key provided").into(),
         ));
     }
     pgp_provider

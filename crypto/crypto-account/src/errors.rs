@@ -1,4 +1,4 @@
-use proton_crypto::crypto::VerificationError;
+use proton_crypto::{crypto::VerificationError, CryptoError};
 
 use crate::domain::KeyId;
 
@@ -17,11 +17,11 @@ pub enum AccountCryptoError {
     #[error("Failed to verify signature for token {0}")]
     TokenVerification(#[from] VerificationError),
     #[error("Failed to decrypt token {0}")]
-    TokenDecryption(crate::Error),
+    TokenDecryption(CryptoError),
     #[error("Failed to import key {0}")]
-    KeyImport(crate::Error),
+    KeyImport(CryptoError),
     #[error("Failed to export public key from private key {0}")]
-    TransformPublic(crate::Error),
+    TransformPublic(CryptoError),
 }
 
 #[derive(Debug, thiserror::Error)]

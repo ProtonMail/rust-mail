@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::domain::KeyId;
 use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
-use proton_crypto::srp::SRPProvider;
+use proton_crypto::{srp::SRPProvider, CryptoError};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -18,7 +18,7 @@ pub enum SaltError {
     #[error("Could not decode key salt: {0}")]
     Base64Decode(#[from] base64::DecodeError),
     #[error("Failed to hash: {0}")]
-    Hash(#[from] crate::Error),
+    Hash(#[from] CryptoError),
     #[error("Failed to decoded hash")]
     HashDecode,
 }

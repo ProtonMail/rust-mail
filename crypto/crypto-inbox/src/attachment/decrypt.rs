@@ -1,8 +1,11 @@
 use std::io;
 
-use proton_crypto_account::proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
-    PGPProviderSync, VerificationResult, VerifiedData, VerifiedDataReader,
+use proton_crypto_account::proton_crypto::{
+    crypto::{
+        AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
+        PGPProviderSync, VerificationResult, VerifiedData, VerifiedDataReader,
+    },
+    CryptoError,
 };
 
 use super::{AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
@@ -13,16 +16,16 @@ pub enum AttachmentDecryptionError {
     #[error("Could not decode key packets: {0}")]
     Base64Decode(#[from] base64::DecodeError),
     #[error("Failed to decrypt key packets to session key with the decryption keys: {0}")]
-    SessionKeyDecryption(Box<dyn std::error::Error>),
+    SessionKeyDecryption(CryptoError),
     #[error("Failed to decrypt attachment with the extracted session key: {0}")]
-    AttachmentDecryption(Box<dyn std::error::Error>),
+    AttachmentDecryption(CryptoError),
     #[error("Failed to decrypt and write to the output writer: {0}")]
     AttachmentDecryptionWrite(std::io::Error),
     #[error("Failed to decrypt encrypted detached signature: {0}")]
-    EncryptedSignatureDecryption(Box<dyn std::error::Error>),
+    EncryptedSignatureDecryption(CryptoError),
 }
 
-/// Represents decryption result of a decrypted attachment.
+/// Represents decryption result of a decrypted attachment.s
 pub struct DecryptedAttachment<T: VerifiedData>(T);
 
 impl<T: VerifiedData> AsRef<[u8]> for DecryptedAttachment<T> {
