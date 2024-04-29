@@ -4,7 +4,7 @@ use crate::db::{
 };
 use crate::new_u64_type;
 use proton_api_mail::domain::{
-    AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
+    AddressId, Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageId,
     MessageMetadata,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
@@ -77,7 +77,7 @@ pub struct LocalConversation {
     pub snooze_time: u64,
     pub size: u64,
     pub time: u64,
-    pub labels: Option<Vec<LocalConversationLabel>>,
+    pub labels: Option<Vec<LocalInlineLabelInfo>>,
     pub starred: bool,
     pub attachments: Option<Vec<LocalAttachmentMetadata>>,
     pub avatar_information: ConversationAvatarInformation,
@@ -87,7 +87,7 @@ impl LocalConversation {
     pub fn from_conversation(
         id: LocalConversationId,
         conversation: Conversation,
-        labels: Option<Vec<LocalConversationLabel>>,
+        labels: Option<Vec<LocalInlineLabelInfo>>,
     ) -> Self {
         let avatar_information =
             ConversationAvatarInformation::from_message_addresses(&conversation.senders);
@@ -118,7 +118,7 @@ impl LocalConversation {
         id: LocalConversationId,
         label_id: &LabelId,
         conversation: Conversation,
-        labels: Option<Vec<LocalConversationLabel>>,
+        labels: Option<Vec<LocalInlineLabelInfo>>,
     ) -> Self {
         let avatar_information =
             ConversationAvatarInformation::from_message_addresses(&conversation.senders);
@@ -161,10 +161,20 @@ impl LocalConversation {
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(crate = "self::serde")]
-pub struct LocalConversationLabel {
+pub struct LocalInlineLabelInfo {
     pub id: LocalLabelId,
     pub name: String,
     pub color: LabelColor,
+}
+
+impl LocalInlineLabelInfo {
+    pub fn from_label(id: LocalLabelId, label: &Label) -> Self {
+        Self {
+            id,
+            name: label.name.clone(),
+            color: LabelColor::from(label.color.clone()),
+        }
+    }
 }
 
 new_u64_type!(LocalMessageId);
@@ -193,6 +203,8 @@ pub struct LocalMessageMetadata {
     pub num_attachments: u32,
     pub flags: u64,
     pub starred: bool,
+    pub attachments: Option<Vec<LocalAttachmentMetadata>>,
+    pub labels: Option<Vec<LocalInlineLabelInfo>>,
 }
 
 impl LocalMessageMetadata {
@@ -200,6 +212,7 @@ impl LocalMessageMetadata {
         id: LocalMessageId,
         conv_id: LocalConversationId,
         message: MessageMetadata,
+        labels: Option<Vec<LocalInlineLabelInfo>>,
     ) -> Self {
         Self {
             id,
@@ -224,6 +237,8 @@ impl LocalMessageMetadata {
             flags: message.flags,
             starred: message.label_ids.contains(LabelId::starred()),
             snooze_time: message.snooze_time,
+            attachments: None,
+            labels,
         }
     }
 }

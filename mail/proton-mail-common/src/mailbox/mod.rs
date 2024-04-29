@@ -4,10 +4,10 @@ use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::{LocalConversationId, LocalLabelId};
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::{AddressDomainLogoError, LabelId};
+use proton_api_mail::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
 use proton_api_mail::proton_api_core::http::RequestError;
-use uniffi::deps::anyhow;
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 

@@ -5,7 +5,7 @@ use crate::db::json::{
 };
 use crate::db::{
     ConversationAvatarInformation, DBResult, LocalAttachmentMetadata, LocalConversationCount,
-    LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
+    LocalInlineLabelInfo, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -1191,7 +1191,7 @@ WHERE deleted=0"
                 expiration_time: r.get(9)?,
                 size: r.get(10)?,
                 starred: r.get(11)?,
-                labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 12)?,
+                labels: deserialize_optional_json_from_row::<Vec<LocalInlineLabelInfo>>(r, 12)?,
                 time: 0,
                 snooze_time: 0,
                 attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(
@@ -1313,7 +1313,7 @@ WHERE C.deleted=0"
             num_unread: r.get(10)?,
             num_attachments: r.get(11)?,
             starred: r.get(12)?,
-            labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 13)?,
+            labels: deserialize_optional_json_from_row::<Vec<LocalInlineLabelInfo>>(r, 13)?,
             attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 14)?,
             num_messages: r.get(15)?,
             expiration_time: r.get(16)?,
