@@ -22,6 +22,7 @@ tempdir = "0.3.1"
 tracing-test = {version = "0.2.4" , features = ["no-env-filter"]}
 velcro = "0.5.4"
 wiremock = {workspace=true}
+tempfile = "3.10.1"
 
 # not compatible with global clippy configuration yet
 # [lints]

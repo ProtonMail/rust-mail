@@ -5,7 +5,7 @@ use proton_api_mail::domain::{Label, LabelId, LabelType};
 
 #[test]
 fn test_remote_label_add() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let labels = test_labels();
         tx.create_remote_labels(labels.iter()).unwrap();
@@ -15,7 +15,7 @@ fn test_remote_label_add() {
 
 #[test]
 fn test_remote_label_add_duplicate() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let label = Label {
             id: LabelId::from("label_id2"),
@@ -41,7 +41,7 @@ fn test_remote_label_add_duplicate() {
 
 #[test]
 fn test_remote_label_update() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let mut labels = test_labels();
         tx.create_remote_labels(labels.iter()).unwrap();
@@ -70,7 +70,7 @@ fn test_remote_label_update() {
 
 #[test]
 fn test_delete_remote() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let labels = test_labels();
         tx.create_remote_labels(labels.iter()).unwrap();
@@ -93,7 +93,7 @@ fn test_delete_remote() {
 
 #[test]
 fn create_local_label() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         for t in [
             LabelType::Label,
@@ -121,7 +121,7 @@ fn create_local_label() {
 
 #[test]
 fn create_local_label_has_ascending_order_per_type() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         for t in [
             LabelType::Label,
@@ -159,7 +159,7 @@ fn create_local_label_has_ascending_order_per_type() {
 
 #[test]
 fn update_local_label() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let new_label = tx
             .create_label(
@@ -215,7 +215,7 @@ fn update_local_label() {
 
 #[test]
 fn test_mark_labels_as_initialized() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let new_label = tx
             .create_label(

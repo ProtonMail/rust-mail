@@ -3,7 +3,7 @@ use proton_api_mail::domain::MailSettings;
 
 #[test]
 fn test_mail_settings_store_read() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     with_tx(&mut conn, |tx| {
         let settings = MailSettings {
             display_name: "foo".to_string(),

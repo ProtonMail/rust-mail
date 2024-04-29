@@ -6,6 +6,7 @@ use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
 proton_api_core::utils::string_id!(AttachmentId);
+#[cfg(feature = "uniffi")]
 uniffi::custom_newtype!(AddressId, String);
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
