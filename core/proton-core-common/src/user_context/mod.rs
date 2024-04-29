@@ -5,8 +5,11 @@ use crate::db::{CoreSqliteConnection, DBMigrationError, DBResult};
 use proton_api_core::domain::UserId;
 use proton_api_core::Session;
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
+pub use self::keys::*;
 mod addresses;
+mod keys;
 mod user;
 
 /// Extra initializer for the user database.
@@ -24,6 +27,7 @@ pub struct UserContext {
     session: Session,
     db_tracker: InProcessTrackerService,
     user_id: UserId,
+    pub(self) key_manager: Arc<CryptoKeyManager>,
 }
 
 impl Debug for UserContext {
@@ -42,6 +46,7 @@ impl UserContext {
             session,
             db_tracker: InProcessTrackerService::new(db_pool)?,
             user_id: id,
+            key_manager: Arc::new(CryptoKeyManager::new()),
         })
     }
 
