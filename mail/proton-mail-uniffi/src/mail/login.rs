@@ -1,6 +1,6 @@
 use crate::mail::{MailSessionResult, MailUserSession};
 use proton_mail_common as pmc;
-use proton_mail_common::exports::thiserror;
+use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::proton_api_core::domain::{
     ExposeSecret, HumanVerification, SecretString, TwoFactorAuth,
 };
@@ -46,6 +46,16 @@ pub enum LoginFlowError {
     SRPProof(String),
     #[error("Operation is nto valid in the current state")]
     InvalidState,
+    #[error("Failed to derive the key secret from the password: {0}")]
+    KeySecretDerivation(anyhow::Error),
+    #[error("Failed to fetch salt to derive the key secret: {0}")]
+    KeySecretSaltFetch(#[from] RequestError),
+    #[error("Failed to store the key secret in the authentication state: {0}")]
+    KeySecretAuthUpdate(String),
+    #[error("Failed to decrypt a user key with the derived client secret")]
+    KeySecretDecryption,
+    #[error("Wrong mailbox password provided")]
+    WrongMailboxPassword,
 }
 
 pub type LoginFlowResult<T> = Result<T, LoginFlowError>;
@@ -127,6 +137,11 @@ impl From<proton_mail_common::proton_api_mail::proton_api_core::login::Error> fo
             LFE::HumanVerificationRequired(e) => LoginFlowError::HumanVerificationRequired(e),
             LFE::ServerProof(e) | LFE::SRPProof(e) => LoginFlowError::ServerProof(e),
             LFE::InvalidState => LoginFlowError::InvalidState,
+            LFE::KeySecretDerivation(e) => LoginFlowError::KeySecretDerivation(anyhow!("{e}")),
+            LFE::KeySecretSaltFetch(e) => LoginFlowError::KeySecretSaltFetch(e),
+            LFE::KeySecretAuthUpdate(e) => LoginFlowError::KeySecretAuthUpdate(e),
+            LFE::KeySecretDecryption => LoginFlowError::KeySecretDecryption,
+            LFE::WrongMailboxPassword => LoginFlowError::WrongMailboxPassword,
         }
     }
 }

@@ -86,6 +86,7 @@ impl TestContext {
             email: "test@foo.bar".to_string(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
+            key_secret: None,
             scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)
