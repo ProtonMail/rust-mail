@@ -1,11 +1,17 @@
-use crate::domain::{ConversationId, LabelId};
+use crate::domain::{AttachmentMetadata, ConversationId, LabelId};
 use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
+use proton_api_core::exports::serde_json;
 use proton_api_core::utils::{bool_from_integer, bool_to_integer};
+use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
+
+use super::{AttachmentId, Disposition};
 
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
-proton_api_core::utils::string_id!(AttachmentId);
+
+#[cfg(feature = "uniffi")]
+uniffi::custom_newtype!(AddressId, String);
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
@@ -108,46 +114,6 @@ pub enum MimeType {
     MessageRFC822,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(crate = "self::serde", rename_all = "snake_case")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum Disposition {
-    Inline,
-    Attachment,
-}
-
-use crate::exports::serde_json;
-#[cfg(feature = "sql")]
-use proton_api_core::exports::proton_sqlite3::rusqlite;
-use proton_crypto_inbox::attachment::{
-    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
-};
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::FromSql for Disposition {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        match value.as_str()? {
-            "inline" => Ok(Disposition::Inline),
-            "attachment" => Ok(Disposition::Attachment),
-            _ => Err(rusqlite::types::FromSqlError::Other(
-                "Invalid enum value".into(),
-            )),
-        }
-    }
-}
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::ToSql for Disposition {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Borrowed(
-            rusqlite::types::ValueRef::Text(match self {
-                Disposition::Inline => "inline".as_bytes(),
-                Disposition::Attachment => "attachment".as_bytes(),
-            }),
-        ))
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
@@ -193,43 +159,6 @@ pub struct MessageAttachmentHeaders {
     pub image_width: Option<String>,
     #[serde(rename = "x-pm-image-height")]
     pub image_height: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
-pub struct Attachment {
-    #[serde(rename = "ID")]
-    pub id: AttachmentId,
-    pub name: String,
-    pub size: u64,
-    #[serde(rename = "MIMEType")]
-    pub mime_type: String,
-    pub disposition: Disposition,
-    pub key_packets: KeyPackets,
-    pub signature: Option<AttachmentSignature>,
-    pub enc_signature: Option<AttachmentEncryptedSignature>,
-    pub sender: Option<MessageAddress>,
-    #[serde(rename = "AddressID")]
-    pub address_id: AddressId,
-    #[serde(rename = "MessageID")]
-    pub message_id: MessageId,
-    #[serde(rename = "ConversationID")]
-    pub conversation_id: ConversationId,
-    pub is_auto_forwardee: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct AttachmentMetadata {
-    #[serde(rename = "ID")]
-    pub id: AttachmentId,
-    pub size: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(rename = "MIMEType")]
-    pub mime_type: String,
-    pub disposition: Disposition,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Copy)]
