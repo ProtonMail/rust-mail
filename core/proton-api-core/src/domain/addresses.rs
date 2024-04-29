@@ -1,9 +1,11 @@
 use proton_crypto_account::domain::AddressKeys;
-use proton_sqlite3::rusqlite;
 use serde;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_default_from_null;
 use serde_repr::{Deserialize_repr, Serialize_repr};
+
+#[cfg(feature = "sql")]
+use proton_sqlite3::rusqlite;
 
 use crate::utils::{self, bool_from_integer, bool_to_integer};
 
