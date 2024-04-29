@@ -9,7 +9,7 @@ use crate::db::conversations::tests::utils::{
 use crate::db::conversations::types::LocalConversation;
 use crate::db::{
     new_test_connection, with_tx, LabelColor, LocalAttachmentMetadata, LocalConversationCount,
-    LocalConversationLabel, LocalLabelId, MailSqliteConnectionMut,
+    LocalInlineLabelInfo, LocalLabelId, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
@@ -154,7 +154,7 @@ fn test_conversation_create_with_labels() {
                 id,
                 label,
                 conv.clone(),
-                Some(vec![LocalConversationLabel {
+                Some(vec![LocalInlineLabelInfo {
                     id: local_label_ids[0],
                     name: "MyLabel".to_string(),
                     color: LabelColor::black(),
@@ -315,7 +315,7 @@ fn test_conversation_update() {
             id,
             &MY_LABEL_ID1,
             conv_update.clone(),
-            Some(vec![LocalConversationLabel {
+            Some(vec![LocalInlineLabelInfo {
                 id: local_label_ids[0],
                 name: "MyLabel".to_string(),
                 color: LabelColor::black(),

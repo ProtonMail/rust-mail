@@ -1,5 +1,5 @@
 use crate::db::conversations::tests::conversations::{
-    create_address_and_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
+    create_address_and_labels, test_conversation, test_label1, test_starred_label, MY_ADDRESS_ID,
     MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
 use crate::db::conversations::tests::db_states::new_test_delete_db_state;
@@ -7,13 +7,13 @@ use crate::db::conversations::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
 };
 use crate::db::{
-    new_test_connection, with_tx, LocalConversationId, LocalMessageCount, LocalMessageMetadata,
-    MailSqliteConnectionMut,
+    new_test_connection, with_tx, LocalAttachmentMetadata, LocalConversationId,
+    LocalInlineLabelInfo, LocalMessageCount, LocalMessageMetadata, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
-    AttachmentMetadata, ConversationLabels, LabelId, LabelType, MessageAddress, MessageCount,
-    MessageId, MessageMetadata,
+    AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType,
+    MessageAddress, MessageCount, MessageId, MessageMetadata,
 };
 
 #[test]
@@ -29,7 +29,16 @@ fn test_create_message() {
             .get_message_metadata(id)
             .expect("failed to get message")
             .expect("must have a value");
-        let expected = LocalMessageMetadata::from_message_metadata(id, conv_id, metadata);
+        let expected = LocalMessageMetadata::from_message_metadata(
+            id,
+            conv_id,
+            metadata,
+            Some(vec![LocalInlineLabelInfo::from_label(
+                tx.resolve_remote_label_id(&MY_LABEL_ID1).unwrap().unwrap(),
+                &test_label1(),
+            )]),
+        );
+
         assert_eq!(db_metadata, expected);
 
         let message_labels = tx
@@ -40,6 +49,47 @@ fn test_create_message() {
     });
 }
 
+#[test]
+fn test_create_message_with_attachments() {
+    let (mut conn, _) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let attachment_metadata = AttachmentMetadata {
+            id: AttachmentId::from("myattachment"),
+            size: 80,
+            name: "foo.pdf".to_string(),
+            mime_type: "application/pdf".to_string(),
+            disposition: Disposition::Inline,
+        };
+        let _ = test_create_message_dependencies(tx);
+        let metadata = test_message_metadata([MY_LABEL_ID1.clone()], [attachment_metadata.clone()]);
+        let id = tx
+            .create_message_from_metadata(&metadata)
+            .expect("failed to create message");
+
+        let message_labels = tx
+            .get_message_labels(id)
+            .expect("failed to get labels")
+            .expect("must have value");
+        assert_eq!(message_labels.len(), 1);
+
+        let attachments = tx
+            .message_attachments(id)
+            .expect("failed to get attachments")
+            .expect("must have value");
+        assert_eq!(attachments.len(), 1);
+        let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
+            attachments[0].id,
+            attachment_metadata.clone(),
+        );
+        assert_eq!(attachments[0], converted_attachment);
+
+        let db_conversation = tx.get_message_metadata(id).unwrap().unwrap();
+        assert_eq!(
+            db_conversation.attachments.unwrap()[0],
+            converted_attachment
+        );
+    });
+}
 #[test]
 fn test_update_message() {
     let (mut conn, _) = new_test_connection();
@@ -61,7 +111,8 @@ fn test_update_message() {
             .get_message_metadata(id)
             .expect("failed to get message")
             .expect("must have a value");
-        let expected = LocalMessageMetadata::from_message_metadata(id, conv_id, metadata_updated);
+        let expected =
+            LocalMessageMetadata::from_message_metadata(id, conv_id, metadata_updated, None);
         assert_eq!(db_metadata, expected);
         assert!(db_metadata.starred);
 

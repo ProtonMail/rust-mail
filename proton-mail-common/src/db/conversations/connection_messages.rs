@@ -1,7 +1,10 @@
-use crate::db::json::{deserialize_json_from_row, JsonWriteBuffer};
+use crate::db::json::{
+    deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer,
+};
 use crate::db::{
-    DBResult, LocalConversationId, LocalLabelId, LocalMessageCount, LocalMessageId,
-    LocalMessageMetadata, MailSqliteConnectionImpl,
+    DBResult, LocalAttachmentMetadata, LocalAttachmentMetadataSelector, LocalConversationId,
+    LocalInlineLabelInfo, LocalLabelId, LocalMessageCount, LocalMessageId, LocalMessageMetadata,
+    MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{MessageAddress, MessageCount, MessageId, MessageMetadata};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Statement};
@@ -195,6 +198,33 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn delete_remote_message(&mut self, id: &MessageId) -> DBResult<()> {
         self.0.execute("DELETE FROM messages WHERE rid=?", [id])?;
         Ok(())
+    }
+
+    /// Get the attachments of a message.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_attachments(
+        &self,
+        id: LocalMessageId,
+    ) -> DBResult<Option<Vec<LocalAttachmentMetadata>>> {
+        let query = format!(
+            r"{}
+JOIN message_attachments ON att.id=message_attachments.attachment_id AND
+    message_attachments.message_id=?
+",
+            LocalAttachmentMetadataSelector::query(),
+        );
+
+        let mut stmt = self.0.prepare(&query)?;
+        let Some(rows) = stmt
+            .query_map([id], LocalAttachmentMetadataSelector::from_row)
+            .optional()?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(mapped_rows_to_vec(rows)?))
     }
 
     pub fn mark_local_message_as_deleted(&mut self, id: LocalMessageId) -> DBResult<()> {
@@ -682,7 +712,40 @@ fn bind_message_metadata_create(
 struct LocalMessageMetadataSelector {}
 impl LocalMessageMetadataSelector {
     fn query() -> &'static str {
-        r"SELECT
+        r"
+
+WITH json_message_labels AS (
+    SELECT
+    C.message_id as cid,
+    json_group_array(
+        json_object(
+            'id', L.id,
+            'name', L.name,
+            'color', L.color
+        )
+    ) as labels
+    FROM message_labels C
+    INNER JOIN labels AS L ON C.label_id = L.id AND L.type=1
+GROUP BY C.message_id
+),
+json_message_attachments AS (
+    SELECT
+    C.message_id as cid,
+    json_group_array(
+        json_object(
+            'id', A.id,
+            'rid', A.rid,
+            'name', A.name,
+            'mime_type', A.mime_type,
+            'disposition', A.disposition,
+            'size', A.size
+        )
+    ) as json_attachments
+    FROM message_attachments as C
+    INNER JOIN attachments AS A ON C.attachment_id = A.id
+    GROUP BY C.message_id
+)
+SELECT
     id,
     rid,
     address_id,
@@ -709,9 +772,13 @@ impl LocalMessageMetadataSelector {
     num_attachments,
     flags,
     IIF(ml.message_id IS NULL, 0,1),
-    snooze_time
-FROM messages
-LEFT JOIN message_labels AS ml ON messages.id = ml.message_id AND ml.label_id = (SELECT id FROM labels WHERE rid='10')
+    snooze_time,
+    MA.json_attachments,
+    MLJ.labels
+FROM messages AS M
+LEFT JOIN json_message_labels AS MLJ ON MLJ.cid = M.id
+LEFT JOIN json_message_attachments AS MA ON MA.cid = M.id
+LEFT JOIN message_labels AS ml ON M.id = ml.message_id AND ml.label_id = (SELECT id FROM labels WHERE rid='10')
 WHERE deleted=0"
     }
 
@@ -758,6 +825,8 @@ WHERE deleted=0"
             flags: r.get(24)?,
             starred: r.get(25)?,
             snooze_time: r.get(26)?,
+            attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 27)?,
+            labels: deserialize_optional_json_from_row::<Vec<LocalInlineLabelInfo>>(r, 28)?,
         })
     }
 }
