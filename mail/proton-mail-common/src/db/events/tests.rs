@@ -3,7 +3,7 @@ use proton_api_mail::proton_api_core::domain::EventId;
 
 #[test]
 fn test_event_id_store_get_set() {
-    let (mut conn, _) = new_test_connection();
+    let (_, mut conn, _) = new_test_connection();
     conn.tx(|tx| -> DBResult<()> {
         let event_id1 = EventId::from("EVENT1");
         let event_id2 = EventId::from("EVENT2");

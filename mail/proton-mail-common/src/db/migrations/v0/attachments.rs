@@ -14,7 +14,11 @@ pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResu
                 key_patckets TEXT DEFAULT NULL,
                 signature TEXT DEFAULT NULL,
                 enc_signature TEXT DEFAULT NULL,
-                disposition TEXT NOT NULL
+                disposition TEXT NOT NULL,
+
+                CONSTRAINT attachments_address_id
+                    FOREIGN KEY (address_id)
+                    REFERENCES addresses (id)
             )
         "#,
         (),
