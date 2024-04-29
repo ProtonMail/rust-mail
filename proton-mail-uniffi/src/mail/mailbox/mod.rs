@@ -98,6 +98,14 @@ impl Mailbox {
     pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Self> {
         Self::with_remote_id(ctx, LabelId::inbox()).await
     }
+
+    /// Create a new mailbox for a given label id.
+    #[uniffi::constructor]
+    pub async fn with_local_id(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
+        // Note: This is a workaround for the default constructor not being able to be
+        // generated on Kotlin.
+        Self::new(ctx, label_id).await
+    }
 }
 
 impl Mailbox {
