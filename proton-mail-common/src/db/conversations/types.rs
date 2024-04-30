@@ -4,7 +4,7 @@ use crate::db::{
 };
 use crate::new_u64_type;
 use proton_api_mail::domain::{
-    AddressId, Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageId,
+    Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageId,
     MessageMetadata,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
