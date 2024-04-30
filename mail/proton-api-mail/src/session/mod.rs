@@ -3,6 +3,7 @@ use crate::requests::GetMailSettingsRequest;
 use proton_api_core::domain::EventId;
 use proton_api_core::{http, Session};
 
+mod attachments;
 mod conversations;
 mod image_proxy;
 mod labels;
