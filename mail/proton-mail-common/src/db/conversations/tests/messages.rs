@@ -7,7 +7,7 @@ use crate::db::conversations::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
 };
 use crate::db::{
-with_file_sqlite_db, with_tx, with_tx_core, LocalAttachmentMetadata, LocalConversationId,
+    with_file_sqlite_db, with_tx, with_tx_core, LocalAttachmentMetadata, LocalConversationId,
     LocalInlineLabelInfo, LocalMessageCount, LocalMessageMetadata, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
@@ -22,28 +22,29 @@ use super::utils::prepare_db_state_core;
 
 #[test]
 fn test_create_message() {
-    let (mut conn, _) = new_test_connection();
-    with_tx(&mut conn, |tx| {
-        let conv_id = test_create_message_dependencies(tx);
-        let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
-        let id = tx
-            .create_message_from_metadata(&metadata)
-            .expect("failed to create message");
-        let db_metadata = tx
-            .get_message_metadata(id)
-            .expect("failed to get message")
-            .expect("must have a value");
-        let expected = LocalMessageMetadata::from_message_metadata(
-            id,
-            conv_id,
-            metadata,
-            Some(vec![LocalInlineLabelInfo::from_label(
-                tx.resolve_remote_label_id(&MY_LABEL_ID1).unwrap().unwrap(),
-                &test_label1(),
-            )]),
-        );
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            let conv_id = test_create_message_dependencies(tx);
+            let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
+            let id = tx
+                .create_message_from_metadata(&metadata)
+                .expect("failed to create message");
+            let db_metadata = tx
+                .get_message_metadata(id)
+                .expect("failed to get message")
+                .expect("must have a value");
+            let expected = LocalMessageMetadata::from_message_metadata(
+                id,
+                conv_id,
+                metadata,
+                Some(vec![LocalInlineLabelInfo::from_label(
+                    tx.resolve_remote_label_id(&MY_LABEL_ID1).unwrap().unwrap(),
+                    &test_label1(),
+                )]),
+            );
 
-        assert_eq!(db_metadata, expected);
+            assert_eq!(db_metadata, expected);
 
             let message_labels = tx
                 .get_message_labels(id)
@@ -56,70 +57,75 @@ fn test_create_message() {
 
 #[test]
 fn test_create_message_with_attachments() {
-    let (mut conn, _) = new_test_connection();
-    with_tx(&mut conn, |tx| {
-        let attachment_metadata = AttachmentMetadata {
-            id: AttachmentId::from("myattachment"),
-            size: 80,
-            name: "foo.pdf".to_string(),
-            mime_type: "application/pdf".to_string(),
-            disposition: Disposition::Inline,
-        };
-        let _ = test_create_message_dependencies(tx);
-        let metadata = test_message_metadata([MY_LABEL_ID1.clone()], [attachment_metadata.clone()]);
-        let id = tx
-            .create_message_from_metadata(&metadata)
-            .expect("failed to create message");
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            let attachment_metadata = AttachmentMetadata {
+                id: AttachmentId::from("myattachment"),
+                size: 80,
+                name: "foo.pdf".to_string(),
+                mime_type: "application/pdf".to_string(),
+                disposition: Disposition::Inline,
+            };
+            let _ = test_create_message_dependencies(tx);
+            let metadata =
+                test_message_metadata([MY_LABEL_ID1.clone()], [attachment_metadata.clone()]);
+            let id = tx
+                .create_message_from_metadata(&metadata)
+                .expect("failed to create message");
 
-        let message_labels = tx
-            .get_message_labels(id)
-            .expect("failed to get labels")
-            .expect("must have value");
-        assert_eq!(message_labels.len(), 1);
+            let message_labels = tx
+                .get_message_labels(id)
+                .expect("failed to get labels")
+                .expect("must have value");
+            assert_eq!(message_labels.len(), 1);
 
-        let attachments = tx
-            .message_attachments(id)
-            .expect("failed to get attachments")
-            .expect("must have value");
-        assert_eq!(attachments.len(), 1);
-        let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
-            attachments[0].id,
-            attachment_metadata.clone(),
-        );
-        assert_eq!(attachments[0], converted_attachment);
+            let attachments = tx
+                .message_attachments(id)
+                .expect("failed to get attachments")
+                .expect("must have value");
+            assert_eq!(attachments.len(), 1);
+            let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
+                attachments[0].id,
+                attachment_metadata.clone(),
+            );
+            assert_eq!(attachments[0], converted_attachment);
 
-        let db_conversation = tx.get_message_metadata(id).unwrap().unwrap();
-        assert_eq!(
-            db_conversation.attachments.unwrap()[0],
-            converted_attachment
-        );
+            let db_conversation = tx.get_message_metadata(id).unwrap().unwrap();
+            assert_eq!(
+                db_conversation.attachments.unwrap()[0],
+                converted_attachment
+            );
+        });
     });
 }
+
 #[test]
 fn test_update_message() {
-    let (mut conn, _) = new_test_connection();
-    with_tx(&mut conn, |tx| {
-        let conv_id = test_create_message_dependencies(tx);
-        tx.create_remote_label(&test_starred_label()).unwrap();
-        let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
-        let mut metadata_updated =
-            test_message_metadata([MY_LABEL_ID2.clone(), LabelId::starred().clone()], []);
-        metadata_updated.order = 20;
-        metadata_updated.unread = true;
-        metadata_updated.label_ids.push(LabelId::starred().clone());
-        let id = tx
-            .create_message_from_metadata(&metadata)
-            .expect("failed to create message");
-        tx.update_message_from_metadata(&metadata_updated)
-            .expect("failed to update message");
-        let db_metadata = tx
-            .get_message_metadata(id)
-            .expect("failed to get message")
-            .expect("must have a value");
-        let expected =
-            LocalMessageMetadata::from_message_metadata(id, conv_id, metadata_updated, None);
-        assert_eq!(db_metadata, expected);
-        assert!(db_metadata.starred);
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            let conv_id = test_create_message_dependencies(tx);
+            tx.create_remote_label(&test_starred_label()).unwrap();
+            let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
+            let mut metadata_updated =
+                test_message_metadata([MY_LABEL_ID2.clone(), LabelId::starred().clone()], []);
+            metadata_updated.order = 20;
+            metadata_updated.unread = true;
+            metadata_updated.label_ids.push(LabelId::starred().clone());
+            let id = tx
+                .create_message_from_metadata(&metadata)
+                .expect("failed to create message");
+            tx.update_message_from_metadata(&metadata_updated)
+                .expect("failed to update message");
+            let db_metadata = tx
+                .get_message_metadata(id)
+                .expect("failed to get message")
+                .expect("must have a value");
+            let expected =
+                LocalMessageMetadata::from_message_metadata(id, conv_id, metadata_updated, None);
+            assert_eq!(db_metadata, expected);
+            assert!(db_metadata.starred);
 
             let message_labels = tx
                 .get_message_labels(id)

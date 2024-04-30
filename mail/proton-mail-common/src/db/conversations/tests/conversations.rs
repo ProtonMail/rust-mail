@@ -8,8 +8,8 @@ use crate::db::conversations::tests::utils::{
 };
 use crate::db::conversations::types::LocalConversation;
 use crate::db::{
-with_file_sqlite_db, with_tx, with_tx_core, LabelColor, LocalAttachmentMetadata, LocalConversationCount,
-    LocalInlineLabelInfo, LocalLabelId, MailSqliteConnectionMut,
+    with_file_sqlite_db, with_tx, with_tx_core, LabelColor, LocalAttachmentMetadata,
+    LocalConversationCount, LocalInlineLabelInfo, LocalLabelId, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
@@ -166,7 +166,7 @@ fn test_conversation_create_with_labels() {
                     id,
                     label,
                     conv.clone(),
-                    Some(vec![LocalConversationLabel {
+                    Some(vec![LocalInlineLabelInfo {
                         id: local_label_ids[0],
                         name: "MyLabel".to_string(),
                         color: LabelColor::black(),
@@ -331,8 +331,8 @@ fn test_conversation_update() {
 
             let mut local_conversation = LocalConversation::from_conversation_and_label(
                 id,
-                label,
-                conv.clone(),
+                &MY_LABEL_ID1,
+                conv_update.clone(),
                 Some(vec![LocalInlineLabelInfo {
                     id: local_label_ids[0],
                     name: "MyLabel".to_string(),
@@ -356,181 +356,8 @@ fn test_conversation_update() {
                 .get_conversation_with_context(id, local_label_ids[0])
                 .expect("failed to get conversation")
                 .expect("should have value");
-            assert_eq!(
-                local_conversation, db_conversation,
-                "conversation with context (LabelId={label}) do not match"
-            );
-        }
-    });
-}
-
-#[test]
-fn test_conversation_create_with_attachment() {
-    let (mut conn, _) = new_test_connection();
-    with_tx(&mut conn, |tx| {
-        create_labels(tx);
-        let conv = test_conversation(
-            [],
-            [AttachmentMetadata {
-                id: MY_ATTACHMENT_ID.clone(),
-                size: 4098,
-                name: "My Attachment.pdf".to_string(),
-                mime_type: "application/pdf".to_string(),
-                disposition: Disposition::Attachment,
-            }],
-        );
-        let id = tx
-            .create_conversation(&conv)
-            .expect("failed to create conversation");
-
-        let attachments = tx
-            .get_conversation_attachments(id)
-            .expect("failed to get attachments")
-            .expect("must have value");
-        assert_eq!(attachments.len(), 1);
-        let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
-            attachments[0].id,
-            conv.attachments_metadata[0].clone(),
-        );
-        assert_eq!(attachments[0], converted_attachment);
-
-        let db_conversation = tx.get_conversation(id).unwrap().unwrap();
-        assert_eq!(
-            db_conversation.attachments.unwrap()[0],
-            converted_attachment
-        );
-    });
-}
-
-#[test]
-fn test_conversation_create_with_attachment_and_label() {
-    let (mut conn, _) = new_test_connection();
-    with_tx(&mut conn, |tx| {
-        let local_labels = create_labels(tx);
-        let conv = test_conversation(
-            [ConversationLabels {
-                id: MY_LABEL_ID1.clone(),
-                context_num_unread: 1,
-                context_num_messages: 2,
-                context_time: 3,
-                context_size: 4,
-                context_num_attachments: 5,
-                context_expiration_time: 6,
-                context_snooze_time: 7,
-            }],
-            [AttachmentMetadata {
-                id: MY_ATTACHMENT_ID.clone(),
-                size: 4098,
-                name: "My Attachment.pdf".to_string(),
-                mime_type: "application/pdf".to_string(),
-                disposition: Disposition::Attachment,
-            }],
-        );
-        let id = tx
-            .create_conversation(&conv)
-            .expect("failed to create conversation");
-
-        let attachments = tx
-            .get_conversation_attachments(id)
-            .expect("failed to get attachments")
-            .expect("must have value");
-        assert_eq!(attachments.len(), 1);
-        let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
-            attachments[0].id,
-            conv.attachments_metadata[0].clone(),
-        );
-        assert_eq!(attachments[0], converted_attachment);
-
-        let db_conversation = tx
-            .get_conversation_with_context(id, local_labels[0])
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            db_conversation.attachments.unwrap()[0],
-            converted_attachment
-        );
-    });
-}
-
-#[test]
-fn test_conversation_update() {
-    let (mut conn, _) = new_test_connection();
-    with_tx(&mut conn, |tx| {
-        let local_label_ids = create_labels(tx);
-        let conv = test_conversation(
-            [ConversationLabels {
-                id: MY_LABEL_ID2.clone(),
-                context_num_unread: 7,
-                context_num_messages: 8,
-                context_time: 9,
-                context_size: 10,
-                context_num_attachments: 11,
-                context_expiration_time: 12,
-                context_snooze_time: 21,
-            }],
-            [AttachmentMetadata {
-                id: AttachmentId::from("ATTACHMENT2"),
-                size: 224515,
-                name: "Attachment.json".to_string(),
-                mime_type: "application/json".to_string(),
-                disposition: Disposition::Attachment,
-            }],
-        );
-
-        let conv_update = test_conversation(
-            [ConversationLabels {
-                id: MY_LABEL_ID1.clone(),
-                context_num_unread: 1,
-                context_num_messages: 2,
-                context_time: 3,
-                context_size: 4,
-                context_num_attachments: 5,
-                context_expiration_time: 6,
-                context_snooze_time: 7,
-            }],
-            [AttachmentMetadata {
-                id: MY_ATTACHMENT_ID.clone(),
-                size: 4098,
-                name: "My Attachment.pdf".to_string(),
-                mime_type: "application/pdf".to_string(),
-                disposition: Disposition::Attachment,
-            }],
-        );
-        let id = tx
-            .create_conversation(&conv)
-            .expect("failed to create conversation");
-
-        tx.update_conversation(&conv_update)
-            .expect("failed to update conversation");
-
-        let mut local_conversation = LocalConversation::from_conversation_and_label(
-            id,
-            &MY_LABEL_ID1,
-            conv_update.clone(),
-            Some(vec![LocalInlineLabelInfo {
-                id: local_label_ids[0],
-                name: "MyLabel".to_string(),
-                color: LabelColor::black(),
-            }]),
-        );
-
-        let attachments = tx
-            .get_conversation_attachments(id)
-            .expect("failed to get attachments")
-            .expect("must have value");
-        assert_eq!(attachments.len(), 1);
-        let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
-            attachments[0].id,
-            conv_update.attachments_metadata[0].clone(),
-        );
-
-        local_conversation.attachments = Some(vec![converted_attachment]);
-
-        let db_conversation = tx
-            .get_conversation_with_context(id, local_label_ids[0])
-            .expect("failed to get conversation")
-            .expect("should have value");
-        assert_eq!(local_conversation, db_conversation,);
+            assert_eq!(local_conversation, db_conversation,);
+        });
     });
 }
 
