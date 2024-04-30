@@ -58,7 +58,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         let mut message_to_attachment_stmt = self
             .0
             .prepare("INSERT OR IGNORE into message_attachments VALUES (?,?)")?;
-        let mut attachment_stmt = self.create_attachment_ref_statement()?;
+        let mut attachment_stmt = self.create_message_attachment_ref_statement()?;
 
         for metadata in metadata {
             bind_message_metadata_create(
@@ -70,8 +70,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             )?;
             let local_id: LocalMessageId = msg_stmt
                 .raw_query()
-                .next()
-                .unwrap()
+                .next()?
                 .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
                 .and_then(|r| r.get(0))?;
 
@@ -116,7 +115,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
 
             for attachment in &metadata.attachments_metadata {
                 let attachment_id =
-                    attachment_stmt.insert(Some(&metadata.address_id), attachment)?;
+                    attachment_stmt.insert(Some(&metadata.address_id), attachment, local_id)?;
                 message_to_attachment_stmt.execute((local_id, attachment_id))?;
             }
 

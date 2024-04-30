@@ -11,14 +11,30 @@ pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResu
                 size INTEGER NOT NULL,
                 mime_type TEXT NOT NULL,
                 address_id TEXT DEFAULT NULL,
-                key_patckets TEXT DEFAULT NULL,
+                key_packets TEXT DEFAULT NULL,
                 signature TEXT DEFAULT NULL,
                 enc_signature TEXT DEFAULT NULL,
                 disposition TEXT NOT NULL,
 
+                sender TEXT DEFAULT NULL,
+
+                conversation_id INTEGER DEFAULT NULL,
+                message_id INTEGER DEFAULT NULL,
+                is_auto_forwardee INTEGER NOT NULL DEFAULT 0,
+
                 CONSTRAINT attachments_address_id
                     FOREIGN KEY (address_id)
-                    REFERENCES addresses (id)
+                    REFERENCES addresses (id),
+
+                CONSTRAINT attachments_conversation_id
+                    FOREIGN KEY (conversation_id)
+                    REFERENCES conversations (id)
+                    ON DELETE CASCADE
+
+                CONSTRAINT attachments_message_id
+                    FOREIGN KEY (message_id)
+                    REFERENCES messages (id)
+                    ON DELETE CASCADE
             )
         "#,
         (),
