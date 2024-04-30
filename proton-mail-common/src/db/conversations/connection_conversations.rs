@@ -93,7 +93,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             .0
             .prepare("INSERT OR IGNORE into conversation_attachments VALUES (?, ?)")?;
 
-        let mut attachments_stmt = self.create_attachment_ref_statement()?;
+        let mut attachments_stmt = self.create_conversation_attachment_ref_statement()?;
 
         let mut senders_buffer = JsonWriteBuffer::new();
         let mut receives_buffers = JsonWriteBuffer::new();
@@ -181,7 +181,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                 )?;
             }
             for attachment in &conv.attachments_metadata {
-                let attachment_id = attachments_stmt.insert(None, attachment)?;
+                let attachment_id = attachments_stmt.insert(None, attachment, conv_id)?;
                 attachment_to_conv_stmt.execute((conv_id, attachment_id))?;
             }
 

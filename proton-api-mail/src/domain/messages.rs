@@ -121,6 +121,9 @@ pub enum Disposition {
 
 #[cfg(feature = "sql")]
 use proton_api_core::exports::proton_sqlite3::rusqlite;
+use proton_crypto_inbox::attachment::{
+    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+};
 
 #[cfg(feature = "sql")]
 impl rusqlite::types::FromSql for Disposition {
@@ -222,8 +225,17 @@ pub struct Attachment {
     #[serde(rename = "MIMEType")]
     pub mime_type: String,
     pub disposition: Disposition,
-    pub key_packets: Option<String>,
-    pub signature: Option<String>,
+    pub key_packets: KeyPackets,
+    pub signature: Option<AttachmentSignature>,
+    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    pub sender: Option<MessageAddress>,
+    #[serde(rename = "AddressID")]
+    pub address_id: AddressId,
+    #[serde(rename = "MessageID")]
+    pub message_id: MessageId,
+    #[serde(rename = "ConversationID")]
+    pub conversation_id: ConversationId,
+    pub is_auto_forwardee: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
