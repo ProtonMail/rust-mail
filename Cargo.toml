@@ -11,15 +11,15 @@ members = [
 ]
 
 [workspace.dependencies]
-proton-api-core = { version = "0.3.6", registry = "proton", features = [
-    "sql",
+proton-api-core = {version = "0.4.0", registry = "proton", features = [
+    "sql", "uniffi"
 ] }
 
-proton-sqlite3 = { version="0.6", registry = "proton"}
-proton-core-common = { version = "=0.3.3", registry = "proton"}
-proton-event-loop = { version = "=0.6.3", registry = "proton"}
-proton-async = { version = "0.5", registry = "proton"}
-proton-action-queue = { version = "=0.5.3", registry = "proton"}
+proton-sqlite3 = {version="0.6", registry = "proton"}
+proton-core-common = {version = "0.4.0", registry = "proton"}
+proton-event-loop = {version = "0.6.3", registry = "proton"}
+proton-async = {version = "0.5", registry = "proton"}
+proton-action-queue = {version = "0.5.3", registry = "proton"}
 uniffi = "0.27.1"
 tracing-subscriber = "0.3"
 lazy_static = "1"
@@ -41,7 +41,7 @@ trivial_casts = "warn"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-pedantic = "warn"
+pedantic = "deny"
 missing_errors_doc = "allow"
 module_name_repetitions = "allow"
 # Useful to track missing comments on private items/code.
