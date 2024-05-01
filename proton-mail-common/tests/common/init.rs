@@ -1,7 +1,7 @@
 use crate::common::TestContext;
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
-    MailSettings, MessageCount, ALL_LABEL_TYPES,
+    MailSettings, MessageAddress, MessageCount, ALL_LABEL_TYPES,
 };
 use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
@@ -112,7 +112,14 @@ impl Params {
                 id: ConversationId::from("myconv"),
                 order: 0,
                 subject: "Hello".to_string(),
-                senders: vec![],
+                senders: vec![MessageAddress {
+                    address: "jsmith@test.com".to_owned(),
+                    name: "John Smith".to_owned(),
+                    is_proton: true,
+                    display_sender_image: true,
+                    is_simple_login: false,
+                    bimi_selector: None,
+                }],
                 recipients: vec![],
                 num_messages: 1,
                 num_unread: 0,
