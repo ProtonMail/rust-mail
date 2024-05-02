@@ -1,8 +1,14 @@
 use futures::future::join_all;
 
 use super::{DecryptedUserKey, KeyError, KeyFlag, KeyId, LockedKey, UnlockResult};
-use proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
+use proton_crypto::crypto::{AsPublicKeyRef, PGPProviderSync, PrivateKey, PublicKey};
 use serde::{Deserialize, Serialize};
+
+#[allow(type_alias_bounds)]
+pub type UnlockedAddressKey<Provider: PGPProviderSync> =
+    DecryptedAddressKey<<Provider>::PrivateKey, <Provider>::PublicKey>;
+#[allow(clippy::module_name_repetitions)]
+pub type UnlockedAddressKeys<Provider> = Vec<UnlockedAddressKey<Provider>>;
 
 /// Represents locked address keys of a user retrieved from the API.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -23,13 +29,13 @@ impl AddressKeys {
     ///
     /// Returns the address keys that were successfully decrypted and verified using the provided user keys.
     /// If decryption or verification fails for a key, the key is not included in the returned vector.
-    pub fn unlock<T: proton_crypto::crypto::PGPProviderSync>(
+    pub fn unlock<T: PGPProviderSync>(
         &self,
         provider: &T,
         user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey, T::PublicKey>]>,
-    ) -> UnlockResult<DecryptedAddressKey<T::PrivateKey, T::PublicKey>> {
+    ) -> UnlockResult<UnlockedAddressKey<T>> {
         let mut failed_keys = Vec::new();
-        let mut decrypted_address_keys: Vec<DecryptedAddressKey<_, _>> =
+        let mut decrypted_address_keys: Vec<UnlockedAddressKey<T>> =
             Vec::with_capacity(self.0.len());
         decrypted_address_keys.extend(self.0.iter().filter_map(|locked_key| {
             let (Some(token), Some(signature), Some(flags)) =
@@ -74,10 +80,10 @@ impl AddressKeys {
     pub async fn unlock_async<T: proton_crypto::crypto::PGPProviderAsync>(
         &self,
         provider: &T,
-        user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey, T::PublicKey>]>,
-    ) -> UnlockResult<DecryptedAddressKey<T::PrivateKey, T::PublicKey>> {
+        user_keys: impl AsRef<[UnlockedAddressKey<T>]>,
+    ) -> UnlockResult<UnlockedAddressKey<T>> {
         let mut failed_keys = Vec::new();
-        let mut decrypted_address_keys: Vec<DecryptedAddressKey<_, _>> =
+        let mut decrypted_address_keys: Vec<UnlockedAddressKey<T>> =
             Vec::with_capacity(self.0.len());
         let mut decrypted_address_key_futures: Vec<_> = Vec::with_capacity(self.0.len());
         for locked_key in &self.0 {

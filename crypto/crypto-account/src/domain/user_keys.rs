@@ -5,8 +5,17 @@ use crate::{
     errors::{AccountCryptoError, KeyError},
     salts::KeySecret,
 };
-use proton_crypto::crypto::{AsPublicKeyRef, DataEncoding, PrivateKey, PublicKey};
+use proton_crypto::crypto::{
+    AsPublicKeyRef, DataEncoding, PGPProviderAsync, PGPProviderSync, PrivateKey, PublicKey,
+};
 use serde::{Deserialize, Serialize};
+
+#[allow(type_alias_bounds)]
+pub type UnlockedUserKey<Provider: PGPProviderSync> =
+    DecryptedUserKey<<Provider>::PrivateKey, <Provider>::PublicKey>;
+
+#[allow(clippy::module_name_repetitions)]
+pub type UnlockedUserKeys<Provider> = Vec<UnlockedUserKey<Provider>>;
 
 /// Represents locked user keys retrieved from the API.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -27,14 +36,13 @@ impl UserKeys {
     ///
     /// Returns the user keys that have been successfully decrypted with the
     /// provided password. If decryption fails for a key, the key is ignored.
-    pub fn unlock<T: proton_crypto::crypto::PGPProviderSync>(
+    pub fn unlock<T: PGPProviderSync>(
         &self,
         provider: &T,
         salted_password: &KeySecret,
-    ) -> UnlockResult<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
+    ) -> UnlockResult<UnlockedUserKey<T>> {
         let mut failed_keys = Vec::new();
-        let mut decrypted_address_keys: Vec<DecryptedUserKey<_, _>> =
-            Vec::with_capacity(self.0.len());
+        let mut decrypted_address_keys: Vec<UnlockedUserKey<T>> = Vec::with_capacity(self.0.len());
         decrypted_address_keys.extend(self.0.iter().filter_map(|locked_key| {
             let decryption_result = provider.private_key_import(
                 &locked_key.private_key,
@@ -77,11 +85,11 @@ impl UserKeys {
     ///
     /// Returns the user keys that have been successfully decrypted with the
     /// provided password. If decryption fails, a key is ignored.
-    pub async fn unlock_async<T: proton_crypto::crypto::PGPProviderAsync>(
+    pub async fn unlock_async<T: PGPProviderAsync>(
         &self,
         provider: &T,
         salted_password: &KeySecret,
-    ) -> UnlockResult<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
+    ) -> UnlockResult<UnlockedUserKey<T>> {
         let mut failed_keys = Vec::new();
         let mut decrypted_user_keys: Vec<DecryptedUserKey<T::PrivateKey, T::PublicKey>> =
             Vec::with_capacity(self.0.len());
