@@ -149,7 +149,7 @@ impl Default for CryptoKeyManager {
         CryptoKeyManager {
             user_key_lifetime: USER_KEY_LIFETIME,
             address_key_lifetime: ADDRESS_KEY_LIFETIME,
-            user_keys: RwLock::new(CacheOption::None),
+            user_keys: RwLock::new(CacheOption::none()),
             address_keys: RwLock::new(HashMap::new()),
         }
     }
@@ -212,7 +212,7 @@ impl CryptoKeyManager {
     /// Clears the user key cache.
     pub fn clear_user_key_cache(&self) {
         let mut user_keys_ref_mut = self.user_keys.write();
-        *user_keys_ref_mut = CacheOption::None;
+        *user_keys_ref_mut = CacheOption::none();
     }
 
     /// Clears the address key cache.
@@ -385,26 +385,27 @@ impl UserContext {
     }
 }
 
-enum CacheOption<T> {
-    Some(Instant, Arc<T>),
-    None,
-}
+pub struct CacheOption<T>(Option<(Instant, Arc<T>)>);
 
 impl<T> CacheOption<T> {
     fn new(item: T) -> Self {
-        CacheOption::Some(Instant::now(), Arc::new(item))
+        Self(Some((Instant::now(), Arc::new(item))))
+    }
+
+    fn none() -> Self {
+        Self(None)
     }
 
     fn get(&self, lifetime: Duration) -> Option<Arc<T>> {
-        match self {
-            CacheOption::Some(cache, value) => {
+        match &self.0 {
+            Some((cache, value)) => {
                 let item_lifetime = Instant::now().elapsed() - cache.elapsed();
                 if item_lifetime > lifetime {
                     return None;
                 }
                 Some(Arc::clone(value))
             }
-            CacheOption::None => None,
+            None => None,
         }
     }
 }
