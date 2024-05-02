@@ -22,7 +22,7 @@ fi
 
 # Upload file to the iOS registry
 
-REGISTRY_DEST=$CI_API_V4_URL/projects/3278/packages/generic/rust-sdk/$CRATE_VERSION/$FILE_TO_PUBLISH
+REGISTRY_DEST=$CI_API_V4_URL/projects/3398/packages/generic/rust-sdk/$CRATE_VERSION/$FILE_TO_PUBLISH
 echo $REGISTRY_DEST
 
 RESPONSE_CODE=$(curl -s -o /dev/null -w "%{http_code}" --header "PRIVATE-TOKEN: $iOSRegistryAccessToken" --upload-file $FILE_TO_PUBLISH "$REGISTRY_DEST")
