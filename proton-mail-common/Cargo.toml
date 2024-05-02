@@ -15,6 +15,7 @@ uniffi = {optional = true, workspace=true}
 proton-sqlite3 = {workspace=true}
 uuid = {version = "1.7", features = ["v4"]}
 proton-crypto-inbox = {workspace= true}
+bytes = {workspace= true}
 
 [dev-dependencies]
 lazy_static = {workspace=true}
