@@ -159,7 +159,7 @@ impl Mailbox {
             .await
             .map_err(MailboxError::from)
         {
-            Ok(resp) => Ok(resp.to_vec()), //TODO replace when we have saving to files or uniffi supports Bytes
+            Ok(resp) => Ok(resp.to_vec()), //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
             Err(e) => Err(e),
         }
     }
