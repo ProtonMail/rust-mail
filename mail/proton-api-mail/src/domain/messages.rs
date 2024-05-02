@@ -119,6 +119,7 @@ pub enum Disposition {
     Attachment,
 }
 
+use crate::exports::serde_json;
 #[cfg(feature = "sql")]
 use proton_api_core::exports::proton_sqlite3::rusqlite;
 use proton_crypto_inbox::attachment::{
@@ -154,65 +155,47 @@ impl rusqlite::types::ToSql for Disposition {
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Message {
-    #[serde(rename = "ID")]
-    pub id: MessageId,
-    #[serde(rename = "ConversationID")]
-    pub conversation_id: ConversationId,
-    #[serde(rename = "AddressID")]
-    pub address_id: AddressId,
-    pub order: u64,
-    #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<LabelId>,
-    #[serde(rename = "ExternalID")]
-    pub external_id: Option<ExternalId>,
-    #[serde(default)]
-    pub subject: String,
-    #[serde(default)]
-    pub sender: MessageAddress,
-    #[serde(default)]
-    pub to_list: Vec<MessageAddress>,
-    #[serde(rename = "CCList")]
-    //TODO: Doesn't have to be default, but fails with GPA otherwise
-    pub cc_list: Option<Vec<MessageAddress>>,
-    #[serde(rename = "BCCList")]
-    //TODO: Doesn't have to be default, but fails with GPA otherwise
-    pub bcc_list: Option<Vec<MessageAddress>>,
-    #[serde(default)]
-    pub reply_tos: Vec<MessageAddress>,
-    pub flags: u64,
-    pub time: u64,
-    pub size: u64,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub unread: bool,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub is_replied: bool,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub is_replied_all: bool,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub is_forwarded: bool,
-
-    pub num_attachments: u32,
-
+    #[serde(flatten)]
+    pub metadata: MessageMetadata,
     pub header: Option<String>,
-    //TODO:
-    //pub parsed_headers: Headers,
+    // this can either be a string or an array of strings.
+    pub parsed_headers: serde_json::Value,
     pub body: Option<String>,
     #[serde(rename = "MIMEType")]
     pub mime_type: Option<MimeType>,
     #[serde(default)]
-    pub attachments: Vec<Attachment>,
+    pub attachments: Vec<MessageAttachment>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct MessageAttachment {
+    #[serde(rename = "ID")]
+    pub id: AttachmentId,
+    pub name: String,
+    pub size: u64,
+    #[serde(rename = "MIMEType")]
+    pub mime_type: String,
+    pub disposition: Disposition,
+    pub key_packets: KeyPackets,
+    pub signature: Option<AttachmentSignature>,
+    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    pub headers: MessageAttachmentHeaders,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[serde(crate = "self::serde")]
+pub struct MessageAttachmentHeaders {
+    #[serde(rename = "content-disposition")]
+    pub content_disposition: String,
+    #[serde(rename = "content-id")]
+    pub content_id: Option<String>,
+    #[serde(rename = "content-transfer-encoding")]
+    pub content_transfer_encoding: Option<String>,
+    #[serde(rename = "x-pm-image-width")]
+    pub image_width: Option<String>,
+    #[serde(rename = "x-pm-image-height")]
+    pub image_height: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
