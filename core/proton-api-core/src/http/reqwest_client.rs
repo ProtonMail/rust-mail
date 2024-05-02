@@ -168,7 +168,7 @@ impl ReqwestClient {
         }
 
         if !R::NEEDS_BODY {
-            return R::from_response([], self.info.debug);
+            return R::from_response(bytes::Bytes::new(), self.info.debug);
         }
 
         let bytes = response.bytes().await?;

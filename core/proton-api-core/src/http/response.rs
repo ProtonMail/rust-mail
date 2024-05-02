@@ -13,7 +13,7 @@ impl FromResponse for NoResponse {
 
     const NEEDS_BODY: bool = false;
 
-    fn from_response<T: AsRef<[u8]>>(_: T, _: bool) -> Result<Self::Output> {
+    fn from_response(_: bytes::Bytes, _: bool) -> Result<Self::Output> {
         Ok(())
     }
 }
@@ -25,7 +25,7 @@ impl<T: DeserializeOwned> FromResponse for JsonResponse<T> {
 
     const NEEDS_BODY: bool = true;
 
-    fn from_response<R: AsRef<[u8]>>(response: R, debug: bool) -> Result<Self::Output> {
+    fn from_response(response: bytes::Bytes, debug: bool) -> Result<Self::Output> {
         // uncomment for debug.
         if debug {
             debug!(
@@ -46,7 +46,7 @@ impl FromResponse for StringResponse {
 
     const NEEDS_BODY: bool = true;
 
-    fn from_response<R: AsRef<[u8]>>(response: R, debug: bool) -> Result<Self::Output> {
+    fn from_response(response: bytes::Bytes, debug: bool) -> Result<Self::Output> {
         let v = String::from_utf8_lossy(response.as_ref()).to_string();
         if debug {
             debug!("StringResponse: {}", v);
@@ -58,17 +58,18 @@ impl FromResponse for StringResponse {
 pub struct ByteResponse {}
 
 impl FromResponse for ByteResponse {
-    type Output = Vec<u8>;
+    type Output = bytes::Bytes;
 
     const NEEDS_BODY: bool = true;
 
-    fn from_response<R: AsRef<[u8]>>(response: R, debug: bool) -> Result<Self::Output> {
-        let v: Vec<u8> = response.as_ref().to_vec();
-
+    fn from_response(response: bytes::Bytes, debug: bool) -> Result<Self::Output> {
         if debug {
-            debug!("ByteResponse: {}", general_purpose::STANDARD.encode(&v));
+            debug!(
+                "ByteResponse (encoded into base64 for your convenience): {}",
+                general_purpose::STANDARD.encode(&response)
+            );
         }
 
-        Ok(v)
+        Ok(response)
     }
 }

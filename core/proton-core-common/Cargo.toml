@@ -9,7 +9,7 @@ edition = "2021"
 proton-event-loop = {path = "../proton-event-loop", version = "0.6.3", registry = "proton"}
 base64 = {workspace=true}
 proton-sqlite3 = {path ="../proton-sqlite3", version = "0.6.0", registry = "proton"}
-proton-api-core= {path ="../proton-api-core", version = "0.4.0", features = ["sql"], registry = "proton"}
+proton-api-core= {path ="../proton-api-core", version = "0.5.0", features = ["sql"], registry = "proton"}
 aes-gcm = {workspace=true}
 zeroize = {workspace=true}
 uniffi = {workspace=true, optional = true}
