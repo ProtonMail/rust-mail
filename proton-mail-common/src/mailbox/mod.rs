@@ -21,6 +21,8 @@ pub enum MailboxError {
     LabelDoesNotHaveRemoteId(LocalLabelId),
     #[error("Conversation '{0}' not found")]
     ConversationNotFound(LocalConversationId),
+    #[error("Problem with conversation with local ID: '{0}'")]
+    ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
     #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]

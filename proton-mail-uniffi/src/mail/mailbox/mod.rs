@@ -36,6 +36,8 @@ pub enum MailboxError {
     InvalidAction(anyhow::Error),
     #[error("Conversation '{0}' not found")]
     ConversationNotFound(LocalConversationId),
+    #[error("Problem with conversation with local ID: '{0}'")]
+    ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
     #[error("Invalid mode: '{0}'")]
@@ -145,6 +147,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             proton_mail_common::MailboxError::ConversationNotFound(e) => {
                 Self::ConversationNotFound(e)
             }
+            proton_mail_common::MailboxError::ConversationError(e) => Self::ConversationError(e),
             proton_mail_common::MailboxError::APIError(e) => Self::APIError(e),
             proton_mail_common::MailboxError::AddressDomainLogoError(e) => {
                 Self::AddressDomainLogoError(e)

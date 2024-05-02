@@ -224,7 +224,10 @@ impl Mailbox {
             .map_err(MailContextError::from)?
             .ok_or(MailboxError::ConversationNotFound(conversation_id))?;
 
-        let sender_for_image = conversation.senders.first().expect("boo"); //TODO ROB - fix this!
+        let sender_for_image = conversation
+            .senders
+            .first()
+            .ok_or(MailboxError::ConversationError(conversation_id))?;
 
         if !sender_for_image.display_sender_image {
             return Ok(Bytes::new());
