@@ -3,6 +3,7 @@ use proton_api_core::exports::tracing::level_filters::LevelFilter;
 use proton_api_core::http::APIEnvConfig;
 use proton_api_core::login::Flow;
 use proton_api_core::{http, Session};
+use proton_api_mail::domain::{MessageMetadataFilter, MessageMetadataFilterBuilder};
 use proton_api_mail::MailSession;
 use std::io::{stdin, stdout, BufRead, Write};
 use tracing_subscriber::layer::SubscriberExt;
@@ -79,8 +80,20 @@ fn main() {
 
     let mail_session = MailSession::new(session.clone());
 
-    let settings = runtime.block_on(async { mail_session.mail_settings().await.unwrap() });
-    println!("User Mail Settings:\n{:?}", settings);
+    let messages = runtime.block_on(async {
+        mail_session
+            .message_metadata(MessageMetadataFilterBuilder::new(0, 10).build())
+            .await
+            .unwrap()
+            .messages
+    });
+
+    for m in messages {
+        runtime.block_on(async {
+            let m = mail_session.message(&m.id).await.unwrap();
+            println!("{:?}", m.attachments);
+        })
+    }
 
     runtime.block_on(async {
         session.logout().await.unwrap();
