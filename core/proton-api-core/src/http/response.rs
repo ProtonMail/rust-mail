@@ -1,5 +1,6 @@
 #![allow(clippy::module_name_repetitions)] // to avoid issue with collisions in the http namespace
 use crate::http::{FromResponse, Result};
+use base64::{engine::general_purpose, Engine as _};
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
 use tracing::debug;
@@ -51,5 +52,23 @@ impl FromResponse for StringResponse {
             debug!("StringResponse: {}", v);
         }
         Ok(String::from_utf8_lossy(response.as_ref()).to_string())
+    }
+}
+
+pub struct ByteResponse {}
+
+impl FromResponse for ByteResponse {
+    type Output = Vec<u8>;
+
+    const NEEDS_BODY: bool = true;
+
+    fn from_response<R: AsRef<[u8]>>(response: R, debug: bool) -> Result<Self::Output> {
+        let v: Vec<u8> = response.as_ref().to_vec();
+
+        if debug {
+            debug!("ByteResponse: {}", general_purpose::STANDARD.encode(&v));
+        }
+
+        Ok(v)
     }
 }
