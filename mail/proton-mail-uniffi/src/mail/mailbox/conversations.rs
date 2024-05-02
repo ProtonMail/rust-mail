@@ -153,9 +153,14 @@ impl Mailbox {
             None => None,
         };
 
-        self.mbox
+        match self
+            .mbox
             .get_image_for_conversation(LocalConversationId::from(conversation_id), size, mode)
             .await
             .map_err(MailboxError::from)
+        {
+            Ok(resp) => Ok(resp.to_vec()), //TODO replace when we have saving to files or uniffi supports Bytes
+            Err(e) => Err(e),
+        }
     }
 }

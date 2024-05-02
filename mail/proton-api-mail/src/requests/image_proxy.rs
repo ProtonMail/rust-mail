@@ -1,6 +1,6 @@
 use crate::domain::{AddressDomainLogoDetails, LightOrDarkMode};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
-use proton_api_core::http::{JsonResponse, Method, RequestData, RequestDesc};
+use proton_api_core::http::{ByteResponse, Method, RequestData, RequestDesc};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
@@ -16,7 +16,7 @@ impl GetAddressDomainLogoRequest {
 }
 
 impl RequestDesc for GetAddressDomainLogoRequest {
-    type Response = JsonResponse<GetAddressDomainLogoResponse>; // TODO: change so it's not a JsonResponse because the API won't return a JSON response
+    type Response = ByteResponse; // TODO: change so it's not a JsonResponse because the API won't return a JSON response
 
     fn build(&self) -> RequestData {
         let mut data = RequestData::new(Method::Get, "core/v4/images/logo");
@@ -54,10 +54,4 @@ impl RequestDesc for GetAddressDomainLogoRequest {
 
         data
     }
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
-pub struct GetAddressDomainLogoResponse {
-    pub image: Vec<u8>,
 }

@@ -3,7 +3,6 @@ mod common;
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{Label, LabelId, LabelType};
-use proton_mail_common::db::LocalConversationId;
 use proton_mail_common::Mailbox;
 
 #[test]
@@ -31,7 +30,7 @@ fn test_get_sender_image() {
     ctx.async_runtime().block_on(async {
         let conversations = params.conversations.clone();
         ctx.setup_user(params.clone()).await;
-        ctx.mock_get_conversations(conversations, 2).await;
+        ctx.mock_get_conversations(conversations, 1).await;
         ctx.mock_get_image_for_conversation(vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
             .await;
         ctx.catch_all().await;
@@ -45,16 +44,18 @@ fn test_get_sender_image() {
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
 
     ctx.async_runtime().block_on(async {
-        mailbox.sync(2).await;
+        mailbox.sync(1).await.expect("mailbox sync failed");
     });
     let local_conversation = mailbox.conversations(2).unwrap();
 
     ctx.async_runtime().block_on(async {
         let image = mailbox
-            //.rob_testing()
             .get_image_for_conversation(local_conversation.first().unwrap().id, None, None)
             .await
             .unwrap();
-        assert_eq!(image, vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
+        assert_eq!(
+            image.to_vec(),
+            vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
+        )
     });
 }

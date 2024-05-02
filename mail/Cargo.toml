@@ -11,15 +11,16 @@ members = [
 ]
 
 [workspace.dependencies]
-proton-api-core = {version = "0.4.0", registry = "proton", features = [
+proton-api-core = {version = "=0.5.0", registry = "proton", features = [
     "sql", "uniffi"
 ] }
 
 proton-sqlite3 = {version="0.6", registry = "proton"}
-proton-core-common = {version = "0.4.0", registry = "proton"}
-proton-event-loop = {version = "0.6.4", registry = "proton"}
+proton-core-common = {version = "=0.5.1", registry = "proton"}
+proton-event-loop = {version = "=0.6.6", registry = "proton"}
 proton-async = {version = "0.5", registry = "proton"}
-proton-action-queue = {version = "0.5.4", registry = "proton"}
+proton-action-queue = {version = "=0.5.6", registry = "proton"}
+bytes = "1.4"
 uniffi = "0.27.1"
 tracing-subscriber = "0.3"
 lazy_static = "1"

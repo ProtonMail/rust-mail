@@ -1,8 +1,6 @@
 use super::MailSession;
-use crate::{
-    domain::AddressDomainLogoDetails,
-    requests::{GetAddressDomainLogoRequest, GetAddressDomainLogoResponse},
-};
+use crate::{domain::AddressDomainLogoDetails, requests::GetAddressDomainLogoRequest};
+use bytes::Bytes;
 use proton_api_core::http;
 
 impl MailSession {
@@ -10,7 +8,7 @@ impl MailSession {
     pub async fn get_address_domain_logo(
         &self,
         request_details: AddressDomainLogoDetails,
-    ) -> Result<GetAddressDomainLogoResponse, http::RequestError> {
+    ) -> Result<Bytes, http::RequestError> {
         self.session
             .execute_request(GetAddressDomainLogoRequest::new(request_details))
             .await

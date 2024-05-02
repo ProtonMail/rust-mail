@@ -9,6 +9,7 @@ use crate::exports::anyhow::anyhow;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
+use bytes::Bytes;
 use proton_api_mail::domain::{AddressDomainLogoDetailsBuilder, LabelId, LightOrDarkMode};
 use proton_api_mail::proton_api_core::exports::tracing;
 
@@ -210,11 +211,11 @@ impl Mailbox {
         conversation_id: LocalConversationId,
         size: Option<u32>,
         mode: Option<LightOrDarkMode>,
-    ) -> MailboxResult<Vec<u8>> {
+    ) -> MailboxResult<Bytes> {
         // this may need updating after completion of ET-181
         if self.user_ctx.mail_settings()?.hide_sender_images {
             // sender images are to be hidden, return nothing
-            return Ok(vec![]);
+            return Ok(Bytes::new());
         }
 
         let conversation = self
@@ -223,10 +224,10 @@ impl Mailbox {
             .map_err(MailContextError::from)?
             .ok_or(MailboxError::ConversationNotFound(conversation_id))?;
 
-        let sender_for_image = conversation.senders.first().expect("boo");
+        let sender_for_image = conversation.senders.first().expect("boo"); //TODO ROB - fix this!
 
         if !sender_for_image.display_sender_image {
-            return Ok(vec![]);
+            return Ok(Bytes::new());
         }
 
         let mut address_request_details =
@@ -253,7 +254,7 @@ impl Mailbox {
             .get_address_domain_logo(address_request_details)
             .await
         {
-            Ok(response) => Ok(response.image),
+            Ok(response) => Ok(response),
             Err(e) => Err(MailboxError::APIError(e)),
         }
     }
