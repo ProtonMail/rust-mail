@@ -44,6 +44,8 @@ pub enum MailboxError {
     InvalidImageMode(String),
     #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
     AddressDomainLogoError(AddressDomainLogoError),
+    #[error("Problem creating/joining a new thread: '{0}'")]
+    ThreadSpawnError(anyhow::Error),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -152,6 +154,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             proton_mail_common::MailboxError::AddressDomainLogoError(e) => {
                 Self::AddressDomainLogoError(e)
             }
+            proton_mail_common::MailboxError::ThreadSpawnError(e) => Self::ThreadSpawnError(e),
         }
     }
 }

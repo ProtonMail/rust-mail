@@ -16,7 +16,7 @@ impl GetAddressDomainLogoRequest {
 }
 
 impl RequestDesc for GetAddressDomainLogoRequest {
-    type Response = ByteResponse; // TODO: change so it's not a JsonResponse because the API won't return a JSON response
+    type Response = ByteResponse;
 
     fn build(&self) -> RequestData {
         let mut data = RequestData::new(Method::Get, "core/v4/images/logo");

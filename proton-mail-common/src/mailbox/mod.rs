@@ -27,6 +27,8 @@ pub enum MailboxError {
     APIError(RequestError),
     #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
     AddressDomainLogoError(AddressDomainLogoError),
+    #[error("Problem creating/joining a new thread: '{0}'")]
+    ThreadSpawnError(anyhow::Error),
     #[error("{0}")]
     Context(
         #[from]
