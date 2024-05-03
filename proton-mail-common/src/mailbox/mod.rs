@@ -27,8 +27,6 @@ pub enum MailboxError {
     APIError(RequestError),
     #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
     AddressDomainLogoError(AddressDomainLogoError),
-    #[error("Problem creating/joining a new thread: '{0}'")]
-    ThreadSpawnError(anyhow::Error),
     #[error("{0}")]
     Context(
         #[from]
@@ -62,6 +60,7 @@ impl<Q: Observable, R, F: FnOnce(InProcessTrackerService, Q) -> R> MailboxObserv
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
 
+#[derive(Clone)]
 pub struct Mailbox {
     user_ctx: MailUserContext,
     label_id: LocalLabelId,
