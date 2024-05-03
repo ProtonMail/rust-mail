@@ -252,29 +252,12 @@ impl Mailbox {
             .build()
             .map_err(MailboxError::AddressDomainLogoError)?;
 
-        let ctx = self.user_ctx.clone();
-        let join_handler = self
-            .user_context()
-            .mail_context()
-            .clone()
-            .async_runtime()
-            .spawn(async move {
-                ctx.mail_session()
-                    .get_address_domain_logo(address_request_details)
-                    .await
-            })
-            .await;
-
-        match join_handler {
-            Ok(join_response) => match join_response {
-                Ok(response) => Ok(response),
-                Err(e) => Err(MailboxError::APIError(e)),
-            },
-            Err(join_error) => Err(MailboxError::ThreadSpawnError(anyhow!(
-                "failed to join thread with error: {}",
-                join_error
-            ))),
-        }
+        Ok(self
+            .user_ctx
+            .mail_session()
+            .get_address_domain_logo(address_request_details)
+            .await
+            .map_err(MailContextError::from)?)
     }
 
     fn starred_label_id(&self) -> MailboxResult<LocalLabelId> {

@@ -1,6 +1,7 @@
 use crate::mail::mailbox::{FFIObservableConversationsQueryBuilder, DEFAULT_CONVERSATION_COUNT};
 use crate::mail::{
-    Mailbox, MailboxConversationLiveQuery, MailboxError, MailboxLiveQueryUpdatedCallback,
+    map_task_join_error, Mailbox, MailboxConversationLiveQuery, MailboxError,
+    MailboxLiveQueryUpdatedCallback,
 };
 use proton_mail_common::db::{LocalConversationId, LocalLabelId};
 use proton_mail_common::proton_api_mail::domain::{LabelId, LightOrDarkMode};
@@ -153,14 +154,27 @@ impl Mailbox {
             None => None,
         };
 
-        match self
-            .mbox
-            .get_image_for_conversation(LocalConversationId::from(conversation_id), size, mode)
+        let mbox = self.mbox.clone();
+        self.mbox
+            .user_context()
+            .mail_context()
+            .clone()
+            .async_runtime()
+            .spawn(async move {
+                match mbox
+                    .get_image_for_conversation(
+                        LocalConversationId::from(conversation_id),
+                        size,
+                        mode,
+                    )
+                    .await
+                    .map_err(MailboxError::from)
+                {
+                    Ok(resp) => Ok(resp.to_vec()), //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
+                    Err(e) => Err(e),
+                }
+            })
             .await
-            .map_err(MailboxError::from)
-        {
-            Ok(resp) => Ok(resp.to_vec()), //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
-            Err(e) => Err(e),
-        }
+            .map_err(map_task_join_error)?
     }
 }
