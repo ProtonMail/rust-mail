@@ -1,8 +1,9 @@
+mod attachments;
 mod conversation;
 mod messages;
 
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
-use crate::db::{LocalConversationId, LocalLabel, LocalLabelId};
+use crate::db::{LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId};
 use crate::exports::tracing;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
@@ -10,6 +11,7 @@ use proton_api_mail::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
 use proton_api_mail::proton_api_core::http::RequestError;
+use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
@@ -21,6 +23,12 @@ pub enum MailboxError {
     RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
     LabelDoesNotHaveRemoteId(LocalLabelId),
+    #[error("Attachment '{0}' not found")]
+    AttachmentNotFound(LocalAttachmentId),
+    #[error("Attachment decryption failed: {0}")]
+    AttachmentDecryption(#[from] AttachmentDecryptionError),
+    #[error("Attachment decryption failed: {0}")]
+    AttachmentDecryptionIO(String),
     #[error("Conversation '{0}' not found")]
     ConversationNotFound(LocalConversationId),
     #[error("Problem with conversation with local ID: '{0}'")]

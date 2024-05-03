@@ -1,17 +1,20 @@
+mod attachments;
 mod conversations;
 mod messages;
 
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::SharedLive;
-use proton_mail_common::db::{ConversationQuery, LocalConversationId, LocalLabelId};
+use proton_mail_common::db::{
+    ConversationQuery, LocalAttachmentId, LocalConversationId, LocalLabelId,
+};
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, LiveQueryUpdated, Observable, SharedLiveQueryBuilder,
 };
 use proton_mail_common::exports::tracing::error;
 use proton_mail_common::exports::{anyhow, thiserror};
-use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
+use proton_mail_common::proton_api_mail::domain::{AddressDomainLogoError, LabelId, MailSettingsViewMode};
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::future::Future;
@@ -44,6 +47,12 @@ pub enum MailboxError {
     APIError(RequestError),
     #[error("Mailbox is not in the right view mode for the current operation")]
     InvalidViewMode,
+    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
+    AddressDomainLogoError(AddressDomainLogoError),
+    #[error("Attachment '{0}' not found")]
+    AttachmentNotFound(LocalAttachmentId),
+    #[error("Attachment decryption failed: {0}")]
+    AttachmentDecryption(String),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -174,6 +183,13 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             proton_mail_common::MailboxError::ConversationError(e) => Self::ConversationError(e),
             proton_mail_common::MailboxError::APIError(e) => Self::APIError(e),
             proton_mail_common::MailboxError::InvalidViewMode => Self::InvalidViewMode,
+            proton_mail_common::MailboxError::AttachmentNotFound(e) => Self::AttachmentNotFound(e),
+            proton_mail_common::MailboxError::AttachmentDecryption(e) => {
+                Self::AttachmentDecryption(e.to_string())
+            }
+            proton_mail_common::MailboxError::AttachmentDecryptionIO(e) => {
+                Self::AttachmentDecryption(e.to_string())
+            }
         }
     }
 }
