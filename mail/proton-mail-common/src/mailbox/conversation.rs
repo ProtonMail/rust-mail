@@ -198,24 +198,30 @@ impl Mailbox {
         Ok(())
     }
 
-    /// Get a logo for a conversation identified by the provided ``conversation_id`` value.  The API request is only made in
-    /// the case where neither the mail settings nor the particular sender are configured to prevent a sender image being shown.
+    /// Get a logo for a conversation identified by the provided ``conversation_id`` value.
     ///
-    /// If a logo is to be sought via the API, the logo will be for the first sender in the list included in the conversation.
+    /// The API request is only made in the case where neither the mail settings nor the particular
+    /// sender are configured to prevent a sender image being shown.
+    ///
+    /// If a logo is to be sought via the API, the logo will be for the first sender in the list
+    /// included in the conversation.
+    ///
+    /// When no logo is available `None` is returned.
     ///
     /// # Errors
-    /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an issue with the sender that causes
-    /// problems when creating the API request on our side.
-    pub async fn get_image_for_conversation(
+    /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an
+    /// issue with the sender that causes problems when creating the API request on our side.
+    pub async fn image_for_conversation(
         &self,
         conversation_id: LocalConversationId,
         size: Option<u32>,
         mode: Option<LightOrDarkMode>,
-    ) -> MailboxResult<Bytes> {
+        format: Option<String>,
+    ) -> MailboxResult<Option<Bytes>> {
         // this may need updating after completion of ET-181
         if self.user_ctx.mail_settings()?.hide_sender_images {
             // sender images are to be hidden, return nothing
-            return Ok(Bytes::new());
+            return Ok(None);
         }
 
         let conversation = self
@@ -230,7 +236,7 @@ impl Mailbox {
             .ok_or(MailboxError::ConversationError(conversation_id))?;
 
         if !sender_for_image.display_sender_image {
-            return Ok(Bytes::new());
+            return Ok(None);
         }
 
         let mut address_request_details =
@@ -248,16 +254,21 @@ impl Mailbox {
             address_request_details = address_request_details.bimi_selector(bimi_sel.clone());
         }
 
+        if let Some(format) = format {
+            address_request_details = address_request_details.format(format)
+        }
+
         let address_request_details = address_request_details
             .build()
             .map_err(MailboxError::AddressDomainLogoError)?;
 
-        Ok(self
-            .user_ctx
-            .mail_session()
-            .get_address_domain_logo(address_request_details)
-            .await
-            .map_err(MailContextError::from)?)
+        Ok(Some(
+            self.user_ctx
+                .mail_session()
+                .get_address_domain_logo(address_request_details)
+                .await
+                .map_err(MailContextError::from)?,
+        ))
     }
 
     fn starred_label_id(&self) -> MailboxResult<LocalLabelId> {

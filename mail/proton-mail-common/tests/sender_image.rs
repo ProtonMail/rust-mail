@@ -50,9 +50,10 @@ fn test_get_sender_image() {
 
     ctx.async_runtime().block_on(async {
         let image = mailbox
-            .get_image_for_conversation(local_conversation.first().unwrap().id, None, None)
+            .image_for_conversation(local_conversation.first().unwrap().id, None, None, None)
             .await
-            .unwrap();
+            .expect("failed to get image")
+            .expect("should have value");
         assert_eq!(
             image.to_vec(),
             vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
