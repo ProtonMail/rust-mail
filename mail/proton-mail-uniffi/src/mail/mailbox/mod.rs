@@ -108,6 +108,12 @@ impl Mailbox {
         // generated on Kotlin.
         Self::new(ctx, label_id).await
     }
+
+    /// Get the label id of the mailbox.
+    #[must_use]
+    pub fn label_id(&self) -> u64 {
+        self.mbox.label_id().value()
+    }
 }
 
 impl Mailbox {
