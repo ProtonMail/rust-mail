@@ -63,6 +63,10 @@ macro_rules! new_u64_type {
             pub fn new(v: u64) -> Self {
                 Self(v)
             }
+
+            pub fn value(&self) -> u64 {
+                self.0
+            }
         }
 
         impl From<u64> for $name {
