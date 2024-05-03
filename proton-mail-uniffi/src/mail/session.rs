@@ -47,6 +47,8 @@ pub enum MailSessionError {
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
+    #[error("Failed to access PGP keys: {0}")]
+    PGPKeyAccess(anyhow::Error),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -199,6 +201,7 @@ impl From<pmc::MailContextError> for MailSessionError {
             pmc::MailContextError::EventLoop(err) => MailSessionError::EventLoop(err),
             pmc::MailContextError::Other(err) => MailSessionError::Other(err),
             pmc::MailContextError::ActionQueue(e) => Self::ActionQueue(e),
+            pmc::MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
         }
     }
 }

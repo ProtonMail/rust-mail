@@ -6,7 +6,7 @@ use proton_api_mail::proton_api_core::login::Flow;
 use proton_async::runtime::MultiThreaded;
 use proton_core_common::db::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
-use proton_core_common::{Context, CoreContextError};
+use proton_core_common::{Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
 use std::path::PathBuf;
@@ -33,6 +33,8 @@ pub enum MailContextError {
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_action_queue::QueueError),
+    #[error("Failed to access PGP keys: {0}")]
+    PGPKeyAccess(KeyHandlingError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -48,6 +50,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::KeyChainHasNoKey => MailContextError::KeyChainHasNoKey,
             CoreContextError::Other(err) => MailContextError::Other(err),
             CoreContextError::Http(err) => MailContextError::Http(err),
+            CoreContextError::PGPKeyAccess(err) => MailContextError::PGPKeyAccess(err),
         }
     }
 }
