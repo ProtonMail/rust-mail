@@ -266,6 +266,7 @@ fn test_init_params_label() -> (TestParams, ConversationId, LabelId, LabelId) {
                 total: 1,
                 unread: 0,
             }],
+            attachments: Vec::new(),
         },
         conv_id,
         label_id,

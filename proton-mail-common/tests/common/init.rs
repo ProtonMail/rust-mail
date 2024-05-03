@@ -1,7 +1,8 @@
 use crate::common::TestContext;
 use proton_api_mail::domain::{
-    Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
-    MailSettings, MessageAddress, MessageCount, MessageMetadata, ALL_LABEL_TYPES,
+    Attachment, Conversation, ConversationCount, ConversationId, ConversationLabels, Label,
+    LabelId, LabelType, MailSettings, MessageAddress, MessageCount, MessageId, MessageMetadata,
+    ALL_LABEL_TYPES,
 };
 use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
@@ -23,6 +24,12 @@ use std::collections::HashMap;
 use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
+
+use super::account::{
+    test_address_keys_for_user_address, test_user_keys, TEST_ADDRESS_ID,
+    TEST_ADDRESS_KEY_SIGNATURE, TEST_ADDRESS_KEY_TOKEN, TEST_USER_ID, TEST_USER_MAIL,
+};
+use super::attachment::{test_attachment, test_attachment_metadata};
 
 /// Mail user context init callback that does nothing.
 pub struct NullCallback {}
@@ -56,6 +63,9 @@ pub struct Params {
 
     /// List of conversations.
     pub conversations: Vec<Conversation>,
+
+    /// List of attachments.
+    pub attachments: Vec<Attachment>,
 
     /// List of conversation counts.
     pub conversation_count: Vec<ConversationCount>,
@@ -93,8 +103,8 @@ impl Params {
                 }]
             },
             addresses: vec![Address {
-                id: AddressId::from("myaddress"),
-                email: "foo@bar.com".to_string(),
+                id: AddressId::from(TEST_ADDRESS_ID),
+                email: TEST_USER_MAIL.to_owned(),
                 send: true,
                 receive: true,
                 status: AddressStatus::Enabled,
@@ -102,8 +112,8 @@ impl Params {
                 address_type: AddressType::Original,
                 order: 0,
                 display_name: "".to_string(),
-                signature: "".to_string(),
-                keys: AddressKeys(vec![]),
+                signature: TEST_ADDRESS_KEY_SIGNATURE.to_owned(),
+                keys: test_address_keys_for_user_address(),
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: Default::default(),
@@ -137,9 +147,13 @@ impl Params {
                     context_snooze_time: 0,
                 }],
                 display_snooze_reminder: false,
-                attachments_metadata: vec![],
+                attachments_metadata: vec![test_attachment_metadata()],
                 attachment_info: Default::default(),
             }],
+            attachments: vec![test_attachment(
+                MessageId::from("mymessage "),
+                ConversationId::from("myconv"),
+            )],
             conversation_count: vec![ConversationCount {
                 label_id: LabelId::inbox().clone(),
                 total: 1,
@@ -182,10 +196,10 @@ impl TestContext {
             .and(path("/api/core/v4/users"))
             .respond_with(ResponseTemplate::new(200).set_body_json(UserInfoResponse {
                 user: params.user_info.unwrap_or(User {
-                    id: UserId::from("user"),
+                    id: UserId::from(TEST_USER_ID),
                     name: None,
                     display_name: None,
-                    email: "".to_string(),
+                    email: TEST_USER_MAIL.to_owned(),
                     used_space: 0,
                     max_space: 0,
                     max_upload: 0,
@@ -193,7 +207,7 @@ impl TestContext {
                     create_time: 0,
                     credit: 0,
                     currency: "".to_string(),
-                    keys: UserKeys(vec![]),
+                    keys: test_user_keys(),
                     product_used_space: ProductUsedSpace {
                         calendar: 0,
                         contact: 0,

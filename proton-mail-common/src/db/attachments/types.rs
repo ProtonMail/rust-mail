@@ -3,7 +3,9 @@ use crate::new_u64_type;
 use proton_api_mail::domain::{AttachmentId, AttachmentMetadata, Disposition, MessageAddress};
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::proton_api_core::domain::AddressId;
-use proton_crypto_inbox::attachment;
+use proton_crypto_inbox::attachment::{
+    self, AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+};
 new_u64_type!(LocalAttachmentId);
 
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
@@ -74,5 +76,19 @@ impl LocalAttachment {
             signature: attachment.signature.clone(),
             encrypted_signature: attachment.enc_signature.clone(),
         }
+    }
+}
+
+impl AttachmentDecryption for LocalAttachment {
+    fn attachment_key_packets(&self) -> &KeyPackets {
+        &self.key_packets
+    }
+
+    fn attachment_signature(&self) -> &Option<AttachmentSignature> {
+        &self.signature
+    }
+
+    fn attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature> {
+        &self.encrypted_signature
     }
 }

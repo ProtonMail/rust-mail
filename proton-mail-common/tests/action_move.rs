@@ -328,6 +328,7 @@ fn test_init_params_folder(
             total: 1,
             unread: 0,
         }],
+        attachments: Vec::new(),
     }
 }
 fn test_init_params_label(
@@ -392,5 +393,6 @@ fn test_init_params_label(
             total: 1,
             unread: 0,
         }],
+        attachments: Vec::new(),
     }
 }

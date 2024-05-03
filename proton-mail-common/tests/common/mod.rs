@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+pub mod account;
+pub mod attachment;
 pub mod conversations;
 pub mod init;
 
@@ -18,6 +20,8 @@ use std::sync::Arc;
 use tempdir::TempDir;
 use wiremock::matchers::any;
 use wiremock::{Mock, MockServer, Request};
+
+use self::account::{test_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 
 /// Test context for mail tests.
 ///
@@ -84,12 +88,12 @@ impl TestContext {
         // Create a fake session
         let session = DecryptedUserSession {
             session_id: Self::test_uid(),
-            user_id: UserId::from("TEST_USER_ID"),
+            user_id: UserId::from(TEST_USER_ID),
             name: None,
-            email: "test@foo.bar".to_string(),
+            email: TEST_USER_MAIL.to_owned(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
-            key_secret: Some(UserKeySecret::from(b"secret".to_vec())),
+            key_secret: Some(test_user_secret()),
             scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)
