@@ -34,7 +34,7 @@ type CachedAddressKeys = Vec<CachedAddressKey>;
 const USER_KEY_LIFETIME: Duration = Duration::from_secs(600);
 
 /// The default lifetime of address keys in the cache.
-const ADDRESS_KEY_LIFETIME: Duration = Duration::from_secs(600);
+const ADDRESS_KEY_LIFETIME: Duration = Duration::from_secs(300);
 
 /// Represents a cached user key independent of the PGP provider.
 struct CachedUserKey {
@@ -302,6 +302,8 @@ impl CryptoKeyManager {
     }
 
     /// Helper function to load and unlock user address keys from the DB.
+    ///
+    /// This function acquires a write lock on `self.address_keys` to update the cache.
     async fn load_address_keys_db<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
@@ -326,6 +328,8 @@ impl CryptoKeyManager {
     }
 
     /// Helper function to load and unlock user keys from the DB.
+    ///
+    /// This function acquires a write lock on `self.user_keys` to update the cache.
     async fn load_user_keys_db<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
@@ -399,7 +403,7 @@ impl<T> CacheOption<T> {
     fn get(&self, lifetime: Duration) -> Option<Arc<T>> {
         match &self.0 {
             Some((cache, value)) => {
-                let item_lifetime = Instant::now().elapsed() - cache.elapsed();
+                let item_lifetime = cache.elapsed();
                 if item_lifetime > lifetime {
                     return None;
                 }
