@@ -39,8 +39,11 @@ const USER_KEY_LIFETIME: Duration = Duration::from_secs(600);
 /// The default lifetime of address keys in the cache.
 const ADDRESS_KEY_LIFETIME: Duration = Duration::from_secs(300);
 
-/// A function that loads the user secret to unlock the user keys.
-type KeySecretLoadFn = dyn Fn() -> Option<UserKeySecret>;
+/// A trait that loads the user secret to unlock the user keys.
+pub trait LoadKeySecret {
+    /// Loads the user secret to unlock the user keys.
+    fn key_secret(&self) -> Option<&UserKeySecret>;
+}
 
 /// Represents a cached user key independent of the PGP provider.
 struct CachedUserKey {
@@ -178,13 +181,13 @@ impl CryptoKeyManager {
     pub fn user_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        secret_load_fn: &KeySecretLoadFn,
+        secret_load: &impl LoadKeySecret,
         user_ctx: &UserContext,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         let cached_keys = self.user_keys.read().get(self.user_key_lifetime);
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_user_keys_cache(pgp_provider, cached_keys.as_ref())?,
-            None => self.load_user_keys_db(pgp_provider, secret_load_fn, user_ctx)?,
+            None => self.load_user_keys_db(pgp_provider, secret_load, user_ctx)?,
         };
         Ok(unlocked_keys)
     }
@@ -198,7 +201,7 @@ impl CryptoKeyManager {
     pub fn address_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        secret_load_fn: &KeySecretLoadFn,
+        secret_load: &impl LoadKeySecret,
         user_ctx: &UserContext,
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
@@ -209,9 +212,7 @@ impl CryptoKeyManager {
             .and_then(|opt| opt.get(self.address_key_lifetime));
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_address_keys_cache(pgp_provider, cached_keys.as_ref())?,
-            None => {
-                self.load_address_keys_db(pgp_provider, secret_load_fn, user_ctx, address_id)?
-            }
+            None => self.load_address_keys_db(pgp_provider, secret_load, user_ctx, address_id)?,
         };
         Ok(unlocked_keys)
     }
@@ -314,7 +315,7 @@ impl CryptoKeyManager {
     fn load_address_keys_db<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        secret_load_fn: &KeySecretLoadFn,
+        secret_load_fn: &impl LoadKeySecret,
         user_ctx: &UserContext,
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
@@ -341,7 +342,7 @@ impl CryptoKeyManager {
     fn load_user_keys_db<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        secret_load_fn: &KeySecretLoadFn,
+        secret_loader: &impl LoadKeySecret,
         user_ctx: &UserContext,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         // Load the user from the DB.
@@ -350,7 +351,9 @@ impl CryptoKeyManager {
             .tx(|tx| tx.get_user(user_ctx.user_id()))?
             .ok_or(KeyHandlingError::NoUser)?;
         // Load the user secret to unlock the key.
-        let pw = secret_load_fn().ok_or(KeyHandlingError::NoUserSecret)?;
+        let pw = secret_loader
+            .key_secret()
+            .ok_or(KeyHandlingError::NoUserSecret)?;
         // Unlock the keys.
         let unlock_result = user.unlock_keys(pgp_provider, pw.expose_secret());
         if unlock_result.unlocked_keys.is_empty() {
@@ -370,13 +373,13 @@ impl UserContext {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub fn user_keys_unlocked<Provider: PGPProviderSync>(
+    pub fn user_keys_unlocked<Provider: PGPProviderSync, Secret: LoadKeySecret>(
         &self,
         pgp_provider: &Provider,
-        secret_load_fn: &KeySecretLoadFn,
+        secret_loader: &Secret,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         self.key_manager
-            .user_keys(pgp_provider, secret_load_fn, self)
+            .user_keys(pgp_provider, secret_loader, self)
     }
 
     /// Returns the unlocked address keys of this user for the given address.
@@ -388,7 +391,7 @@ impl UserContext {
     pub fn address_keys_unlocked<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        secret_load_fn: &KeySecretLoadFn,
+        secret_load_fn: &impl LoadKeySecret,
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         self.key_manager
