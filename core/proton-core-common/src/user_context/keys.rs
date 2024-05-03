@@ -42,7 +42,7 @@ const ADDRESS_KEY_LIFETIME: Duration = Duration::from_secs(300);
 /// A trait that loads the user secret to unlock the user keys.
 pub trait LoadKeySecret {
     /// Loads the user secret to unlock the user keys.
-    fn key_secret(&self) -> Option<&UserKeySecret>;
+    fn key_secret(&self) -> Option<UserKeySecret>;
 }
 
 /// Represents a cached user key independent of the PGP provider.
