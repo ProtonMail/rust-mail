@@ -1,3 +1,4 @@
+use crate::avatar::AvatarInformation;
 use crate::db::json::{
     deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer,
 };
@@ -794,6 +795,17 @@ WHERE deleted=0"
     }
 
     fn from_row(r: &Row) -> DBResult<LocalMessageMetadata> {
+        let sender = MessageAddress {
+            address: r.get(7)?,
+            name: r.get(8)?,
+            is_proton: r.get(9)?,
+            is_simple_login: r.get(10)?,
+            bimi_selector: r.get(11)?,
+            display_sender_image: r.get(12)?,
+        };
+
+        let avatar_information = AvatarInformation::from_message_address(&sender);
+
         Ok(LocalMessageMetadata {
             id: r.get(0)?,
             rid: r.get(1)?,
@@ -802,14 +814,7 @@ WHERE deleted=0"
             order: r.get(4)?,
             subject: r.get(5)?,
             unread: r.get(6)?,
-            sender: MessageAddress {
-                address: r.get(7)?,
-                name: r.get(8)?,
-                is_proton: r.get(9)?,
-                is_simple_login: r.get(10)?,
-                bimi_selector: r.get(11)?,
-                display_sender_image: r.get(12)?,
-            },
+            sender,
             to: deserialize_json_from_row(r, 13)?,
             cc: deserialize_json_from_row(r, 14)?,
             bcc: deserialize_json_from_row(r, 15)?,
@@ -826,6 +831,7 @@ WHERE deleted=0"
             snooze_time: r.get(26)?,
             attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 27)?,
             labels: deserialize_optional_json_from_row::<Vec<LocalInlineLabelInfo>>(r, 28)?,
+            avatar_information,
         })
     }
 }

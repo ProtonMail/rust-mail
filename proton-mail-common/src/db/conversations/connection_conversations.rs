@@ -1,11 +1,12 @@
+use crate::avatar::AvatarInformation;
 use crate::db::attachments::LocalAttachmentMetadataSelector;
 use crate::db::conversations::types::{LocalConversation, LocalConversationId};
 use crate::db::json::{
     deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer,
 };
 use crate::db::{
-    ConversationAvatarInformation, DBResult, LocalAttachmentMetadata, LocalConversationCount,
-    LocalInlineLabelInfo, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
+    DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalInlineLabelInfo, LocalLabelId,
+    LocalMessageId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -1174,7 +1175,7 @@ WHERE deleted=0"
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
-        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
+        let avatar_information = AvatarInformation::from_message_addresses(&senders);
 
         Ok({
             LocalConversation {
@@ -1298,7 +1299,7 @@ WHERE C.deleted=0"
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
-        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
+        let avatar_information = AvatarInformation::from_message_addresses(&senders);
 
         Ok(LocalConversation {
             id: r.get(0)?,
