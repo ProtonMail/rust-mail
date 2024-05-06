@@ -3,7 +3,7 @@ mod conversation;
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::{LocalConversationId, LocalLabelId};
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
-use proton_api_mail::domain::{AddressDomainLogoError, LabelId};
+use proton_api_mail::domain::LabelId;
 use proton_api_mail::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
@@ -25,8 +25,6 @@ pub enum MailboxError {
     ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
-    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
-    AddressDomainLogoError(AddressDomainLogoError),
     #[error("{0}")]
     Context(
         #[from]

@@ -10,7 +10,7 @@ use proton_mail_common::exports::proton_sqlite3::{
 };
 use proton_mail_common::exports::tracing::error;
 use proton_mail_common::exports::{anyhow, thiserror};
-use proton_mail_common::proton_api_mail::domain::{AddressDomainLogoError, LabelId};
+use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
@@ -40,10 +40,6 @@ pub enum MailboxError {
     ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
-    #[error("Invalid mode: '{0}'")]
-    InvalidImageMode(String),
-    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
-    AddressDomainLogoError(AddressDomainLogoError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -155,9 +151,6 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             }
             proton_mail_common::MailboxError::ConversationError(e) => Self::ConversationError(e),
             proton_mail_common::MailboxError::APIError(e) => Self::APIError(e),
-            proton_mail_common::MailboxError::AddressDomainLogoError(e) => {
-                Self::AddressDomainLogoError(e)
-            }
         }
     }
 }

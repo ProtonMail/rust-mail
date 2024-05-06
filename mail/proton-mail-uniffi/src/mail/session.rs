@@ -10,6 +10,7 @@ use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, RequestError};
 use pmc::proton_core_common::db::SessionEncryptionKey;
 use proton_mail_common as pmc;
 use proton_mail_common::exports::anyhow::anyhow;
+use proton_mail_common::proton_api_mail::domain::AddressDomainLogoError;
 use proton_mail_common::proton_api_mail::proton_api_core::http;
 use proton_mail_common::proton_core_common::CoreSessionCallback;
 use std::path::PathBuf;
@@ -49,6 +50,10 @@ pub enum MailSessionError {
     ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(anyhow::Error),
+    #[error("Invalid mode: '{0}'")]
+    InvalidImageMode(String),
+    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
+    AddressDomainLogoError(#[from] AddressDomainLogoError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -202,6 +207,7 @@ impl From<pmc::MailContextError> for MailSessionError {
             pmc::MailContextError::Other(err) => MailSessionError::Other(err),
             pmc::MailContextError::ActionQueue(e) => Self::ActionQueue(e),
             pmc::MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
+            pmc::MailContextError::AddressDomainLogoError(e) => Self::AddressDomainLogoError(e),
         }
     }
 }

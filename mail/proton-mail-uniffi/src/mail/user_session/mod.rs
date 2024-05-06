@@ -1,5 +1,6 @@
 mod actions;
 mod events;
+mod images;
 mod initialization;
 mod labels;
 mod settings;
