@@ -1,5 +1,6 @@
 use crate::db::DBMigrationError;
 use crate::MailUserContext;
+use proton_api_mail::domain::AddressDomainLogoError;
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
 use proton_api_mail::proton_api_core::http::{Client, RequestError};
 use proton_api_mail::proton_api_core::login::Flow;
@@ -35,6 +36,8 @@ pub enum MailContextError {
     ActionQueue(#[from] proton_action_queue::QueueError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(KeyHandlingError),
+    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
+    AddressDomainLogoError(#[from] AddressDomainLogoError),
     #[error("{0}")]
     Other(anyhow::Error),
 }

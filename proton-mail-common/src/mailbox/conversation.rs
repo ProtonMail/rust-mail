@@ -9,8 +9,7 @@ use crate::exports::anyhow::anyhow;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
-use bytes::Bytes;
-use proton_api_mail::domain::{AddressDomainLogoDetailsBuilder, LabelId, LightOrDarkMode};
+use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
@@ -196,78 +195,6 @@ impl Mailbox {
         self.user_ctx
             .queue_action(MoveConversationsAction::new(self.label_id, label.id, ids))?;
         Ok(())
-    }
-
-    /// Get a logo for a conversation identified by the provided ``conversation_id`` value.
-    ///
-    /// The API request is only made in the case where neither the mail settings nor the particular
-    /// sender are configured to prevent a sender image being shown.
-    ///
-    /// If a logo is to be sought via the API, the logo will be for the first sender in the list
-    /// included in the conversation.
-    ///
-    /// When no logo is available `None` is returned.
-    ///
-    /// # Errors
-    /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an
-    /// issue with the sender that causes problems when creating the API request on our side.
-    pub async fn image_for_conversation(
-        &self,
-        conversation_id: LocalConversationId,
-        size: Option<u32>,
-        mode: Option<LightOrDarkMode>,
-        format: Option<String>,
-    ) -> MailboxResult<Option<Bytes>> {
-        if self.user_ctx.with_mail_settings(|s| s.hide_sender_images) {
-            // sender images are to be hidden, return nothing
-            return Ok(None);
-        }
-
-        let conversation = self
-            .user_ctx
-            .db_read(|conn| conn.get_conversation(conversation_id))
-            .map_err(MailContextError::from)?
-            .ok_or(MailboxError::ConversationNotFound(conversation_id))?;
-
-        let sender_for_image = conversation
-            .senders
-            .first()
-            .ok_or(MailboxError::ConversationError(conversation_id))?;
-
-        if !sender_for_image.display_sender_image {
-            return Ok(None);
-        }
-
-        let mut address_request_details =
-            AddressDomainLogoDetailsBuilder::new().address(sender_for_image.address.clone());
-
-        if let Some(s) = size {
-            address_request_details = address_request_details.size(s);
-        }
-
-        if let Some(m) = mode {
-            address_request_details = address_request_details.mode(m);
-        }
-
-        if let Some(bimi_sel) = &sender_for_image.bimi_selector {
-            address_request_details = address_request_details.bimi_selector(bimi_sel.clone());
-        }
-
-        if let Some(format) = format {
-            address_request_details = address_request_details.format(format)
-        }
-
-        let address_request_details = address_request_details
-            .build()
-            .map_err(MailboxError::AddressDomainLogoError)?;
-
-        Ok(Some(
-            self.user_ctx
-                .mail_session()
-                .get_address_domain_logo(address_request_details)
-                .await
-                .map_err(MailContextError::from)?,
-        ))
     }
 
     fn starred_label_id(&self) -> MailboxResult<LocalLabelId> {

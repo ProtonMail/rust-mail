@@ -1,6 +1,7 @@
 mod action_queue;
 mod conversations;
 mod events;
+mod images;
 mod initialization;
 mod labels;
 mod settings;
