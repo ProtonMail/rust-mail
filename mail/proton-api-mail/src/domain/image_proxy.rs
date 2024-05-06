@@ -11,6 +11,7 @@ pub enum AddressDomainLogoError {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(crate = "self::serde")]
 pub enum LightOrDarkMode {
     Light,
     Dark,

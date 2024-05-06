@@ -9,7 +9,6 @@ categories = ["api-bindings"]
 proton-api-core = {workspace=true}
 uniffi = {workspace=true, optional = true, features = ["tokio"]}
 lazy_static = "1"
-serde = { version = "1.0.197", features = ["derive"] }
 proton-crypto-inbox = {workspace= true}
 bytes = {workspace= true}
 
