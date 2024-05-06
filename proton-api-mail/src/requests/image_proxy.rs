@@ -35,8 +35,8 @@ impl RequestDesc for GetAddressDomainLogoRequest {
 
         if let Some(mode) = &self.details.mode {
             data = match mode {
-                LightOrDarkMode::Light => data.query("Mode", &"Light"),
-                LightOrDarkMode::Dark => data.query("Mode", &"Dark"),
+                LightOrDarkMode::Light => data.query("Mode", &"light"),
+                LightOrDarkMode::Dark => data.query("Mode", &"dark"),
             };
         }
 
