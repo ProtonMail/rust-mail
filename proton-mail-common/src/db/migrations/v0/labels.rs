@@ -20,8 +20,9 @@ pub fn create_labels_tables(tx: &mut SqliteTransaction) -> RResult<()> {
                 notified INTEGER NOT NULL DEFAULT 0,
                 expanded INTEGER NOT NULL DEFAULT 0,
                 sticky INTEGER NOT NULL DEFAULT 0,
-                initialized INTEGER NOT NULL DEFAULT 0,
-                
+                initialized_conv INTEGER NOT NULL DEFAULT 0,
+                initialized_msg INTEGER NOT NULL DEFAULT 0,
+
                 CONSTRAINT constraint_labels_parent_id
                     FOREIGN KEY (parent_id)
                     REFERENCES labels (id)

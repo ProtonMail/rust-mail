@@ -186,11 +186,11 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         self.mark_labels_as_deleted(deleted, std::iter::once(id))
     }
 
-    /// Check if a label has been initialised.
+    /// Check if a label's conversations have been initialised.
     ///
-    /// This simply checks whether a given label has been marked as initialised.
+    /// This simply checks whether a given label's conversations have been marked as initialised.
     /// For more information on the behaviour of this flag, see
-    /// [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized()).
+    /// [`mark_label_as_initialized_conversations()`](MailSqliteConnectionImpl::mark_label_as_initialized_conversations()).
     ///
     /// # Parameters
     ///
@@ -202,53 +202,20 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ///
     /// # See also
     ///
-    /// * [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
-    /// * [`mark_labels_as_initialized()`](MailSqliteConnectionImpl::mark_labels_as_initialized())
+    /// * [`mark_label_as_initialized_conversations()`](MailSqliteConnectionImpl::mark_label_as_initialized_conversations())
     ///
-    pub fn check_if_label_is_initialized(&self, id: LocalLabelId) -> DBResult<bool> {
+    pub fn check_if_label_is_initialized_conversations(&self, id: LocalLabelId) -> DBResult<bool> {
         self.0
-            .prepare("SELECT 1 FROM labels WHERE id = ? AND initialized = 1")?
+            .prepare("SELECT 1 FROM labels WHERE id = ? AND initialized_conv = 1")?
             .query([id])?
             .next()
             .map(|r| r.is_some())
     }
 
-    /// Mark labels as initialised.
-    ///
-    /// This is a convenience function to mark multiple labels as initialised.
-    /// See [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
-    /// for more information.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids` - The list of label ids to mark as initialised. Typically only
-    ///           one will need to be updated, in which case see
-    ///           [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized()).
-    ///
-    /// # Errors
-    ///
-    /// If any of the database operations fail, the associated error will be
-    /// returned unmodified.
-    ///
-    /// # See also
-    ///
-    /// * [`check_if_label_is_initialized()`](MailSqliteConnectionImpl::check_if_label_is_initialized())
-    /// * [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
-    ///
-    pub fn mark_labels_as_initialized(
-        &mut self,
-        ids: impl Iterator<Item = LocalLabelId>,
-    ) -> DBResult<()> {
-        for id in ids {
-            self.mark_label_as_initialized(id)?;
-        }
-        Ok(())
-    }
-
-    /// Mark a label as initialised.
+    /// Mark a label's conversations as initialised.
     ///
     /// This is used to mark a label that has been initialised — in other words,
-    /// which has had its initial load of data. It is undesirable to repeat the
+    /// which has had its initial load of conversations. It is undesirable to repeat the
     /// initial data load if we already have it, hence this flag. Once a label
     /// has been marked as initialised, the initial data load will not be
     /// repeated.
@@ -263,12 +230,64 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ///
     /// # See also
     ///
-    /// * [`check_if_label_is_initialized()`](MailSqliteConnectionImpl::check_if_label_is_initialized())
-    /// * [`mark_labels_as_initialized()`](MailSqliteConnectionImpl::mark_labels_as_initialized())
+    /// * [`check_if_label_is_initialized_conversations()`](MailSqliteConnectionImpl::check_if_label_is_initialized_conversations())
     ///
-    pub fn mark_label_as_initialized(&mut self, id: LocalLabelId) -> DBResult<()> {
+    pub fn mark_label_as_initialized_conversations(&mut self, id: LocalLabelId) -> DBResult<()> {
         self.0
-            .prepare("UPDATE labels SET initialized = 1 WHERE id = ?")?
+            .prepare("UPDATE labels SET initialized_conv = 1 WHERE id = ?")?
+            .execute([id])?;
+        Ok(())
+    }
+
+    /// Check if a label's messages have been initialised.
+    ///
+    /// This simply checks whether a given label's messages have been marked as initialised.
+    /// For more information on the behaviour of this flag, see
+    /// [`mark_label_as_initialized_messages()`](MailSqliteConnectionImpl::mark_label_as_initialized_messages()).
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The id of the label to check.
+    ///
+    /// # Errors
+    ///
+    /// If the database operation fails, the error will be returned unmodified.
+    ///
+    /// # See also
+    ///
+    /// * [`mark_label_as_initialized_messages()`](MailSqliteConnectionImpl::mark_label_as_initialized_messages())
+    ///
+    pub fn check_if_label_is_initialized_messages(&self, id: LocalLabelId) -> DBResult<bool> {
+        self.0
+            .prepare("SELECT 1 FROM labels WHERE id = ? AND initialized_msg = 1")?
+            .query([id])?
+            .next()
+            .map(|r| r.is_some())
+    }
+
+    /// Mark a label's messages as initialised.
+    ///
+    /// This is used to mark a label that has been initialised — in other words,
+    /// which has had its initial load of messages. It is undesirable to repeat the
+    /// initial data load if we already have it, hence this flag. Once a label
+    /// has been marked as initialised, the initial data load will not be
+    /// repeated.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The id of the label to mark as initialised.
+    ///
+    /// # Errors
+    ///
+    /// If the database operation fails, the error will be returned unmodified.
+    ///
+    /// # See also
+    ///
+    /// * [`check_if_label_is_initialized_messages()`](MailSqliteConnectionImpl::check_if_label_is_initialized_messages())
+    ///
+    pub fn mark_label_as_initialized_messages(&mut self, id: LocalLabelId) -> DBResult<()> {
+        self.0
+            .prepare("UPDATE labels SET initialized_msg = 1 WHERE id = ?")?
             .execute([id])?;
         Ok(())
     }
