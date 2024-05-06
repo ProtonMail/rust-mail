@@ -13,7 +13,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(())
     }
 
-    pub fn get_mail_settings(&self) -> DBResult<MailSettings> {
+    pub fn mail_settings(&self) -> DBResult<MailSettings> {
         self.0.query_row(
             "SELECT value FROM mail_settings WHERE id=?",
             [MAIL_SETTINGS_ID],

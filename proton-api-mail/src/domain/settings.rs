@@ -140,6 +140,53 @@ pub struct MailSettings {
     pub hide_sender_images: bool,
 }
 
+impl Default for MailSettings {
+    fn default() -> Self {
+        Self {
+            display_name: String::new(),
+            signature: String::new(),
+            theme: String::new(),
+            auto_save_contacts: false,
+            composer_mode: MailSettingsComposerMode::default(),
+            message_buttons: MailSettingsMessageButtons::default(),
+            show_images: MailSettingsShowImages::default(),
+            show_moved: MailSettingsShowMoved::default(),
+            auto_delete_spam_and_trash_days: None,
+            almost_all_mail: MailSettingsAlmostAllMail::default(),
+            next_message_on_move: None,
+            view_mode: MailSettingsViewMode::default(),
+            view_layout: MailSettingsViewLayout::default(),
+            swipe_left: MailSettingsSwipeAction::default(),
+            swipe_right: MailSettingsSwipeAction::default(),
+            shortcuts: false,
+            pm_signature: MailSettingsPMSignature::default(),
+            pm_signature_referral_link: false,
+            image_proxy: 0,
+            num_message_per_page: 0,
+            draft_mime_type: String::new(),
+            receive_mime_type: String::new(),
+            show_mime_type: String::new(),
+            enable_folder_color: false,
+            inherit_parent_folder_color: false,
+            submission_access: false,
+            right_to_left: MailSettingsComposerDirection::LeftToRight,
+            attach_public_key: false,
+            sign: false,
+            pgp_scheme: MailSettingsPGPScheme::Mime,
+            prompt_pin: false,
+            sticky_labels: false,
+            confirm_link: false,
+            delay_send_seconds: 0,
+            font_face: None,
+            spam_action: None,
+            block_sender_confirmation: None,
+            mobile_settings: None,
+            hide_remote_images: false,
+            hide_sender_images: false,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct MailSettingsAutoResponder {

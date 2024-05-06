@@ -12,6 +12,7 @@ mod settings;
 pub use attachments::*;
 pub use conversations::*;
 pub use labels::*;
+pub use settings::*;
 
 use proton_sqlite3::{
     new_tracked_connection_wrapper, InProcessTrackerService, MigratorError, TrackingConnection,

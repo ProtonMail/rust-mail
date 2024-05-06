@@ -48,7 +48,7 @@ fn test_mail_settings_store_read() {
             hide_sender_images: Default::default(),
         };
         tx.create_or_update_mail_settings(&settings).unwrap();
-        let db_settings = tx.get_mail_settings().unwrap();
+        let db_settings = tx.mail_settings().unwrap();
         assert_eq!(db_settings, settings);
     })
 }

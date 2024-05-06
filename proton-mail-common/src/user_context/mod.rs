@@ -9,7 +9,10 @@ pub use initialization::*;
 use proton_action_queue::ActionQueue;
 use std::sync::{Arc, Weak};
 
-use crate::db::{MailSqliteConnection, MailSqliteConnectionMut, MailSqliteConnectionRef};
+use crate::db::{
+    new_mail_settings_live_query, MailSettingsLiveQuery, MailSqliteConnection,
+    MailSqliteConnectionMut, MailSqliteConnectionRef,
+};
 use crate::user_context::action_queue::new_action_queue;
 use crate::{MailContext, MailContextResult};
 use proton_api_mail::proton_api_core::domain::UserId;
@@ -35,6 +38,7 @@ struct MailUserContextInner {
     user_context: UserContext,
     event_loop: EventLoop,
     action_queue: ActionQueue,
+    mail_settings: MailSettingsLiveQuery,
 }
 
 impl WeakMailUserContext {
@@ -58,6 +62,7 @@ impl From<MailUserContext> for WeakMailUserContext {
 
 impl MailUserContext {
     pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Self {
+        let mail_settings = new_mail_settings_live_query(user_context.tracker_service().clone());
         Self {
             inner: Arc::new_cyclic(|weak| MailUserContextInner {
                 user_context,
@@ -66,6 +71,7 @@ impl MailUserContext {
                 action_queue: new_action_queue(WeakMailUserContext {
                     inner: weak.clone(),
                 }),
+                mail_settings,
             }),
         }
     }
