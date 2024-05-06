@@ -305,7 +305,7 @@ fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
         refresh_token: session.refresh_token,
         access_token: session.access_token,
         scope: session.scopes,
-        key_secret: None,
+        key_secret: session.key_secret,
     }
 }
 

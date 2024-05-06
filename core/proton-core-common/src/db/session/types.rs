@@ -9,7 +9,6 @@ use proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
 use proton_api_core::domain::{Uid, UserId};
 use proton_api_core::exports::base64::prelude::BASE64_STANDARD;
 use proton_api_core::exports::base64::Engine;
-use proton_api_core::exports::crypto::salts::KeySecret;
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use std::string::FromUtf8Error;
@@ -24,7 +23,7 @@ pub struct DecryptedUserSession {
     pub email: String,
     pub refresh_token: RefreshToken,
     pub access_token: AccessToken,
-    pub key_secret: Option<KeySecret>,
+    pub key_secret: Option<UserKeySecret>,
     pub scopes: Scope,
 }
 
@@ -47,7 +46,7 @@ impl DecryptedUserSession {
         let encrypted_key_secret = self
             .key_secret
             .as_ref()
-            .map(|key_secret| key.encrypt(key_secret.as_bytes()))
+            .map(|key_secret| key.encrypt(key_secret.expose_secret().as_bytes()))
             .transpose()?
             .map(EncryptedKeySecret);
 
@@ -103,7 +102,7 @@ impl EncryptedUserSession {
             .map(|secret_key| key.decrypt(&secret_key.0))
             .transpose()
             .map_err(|_| DecryptionError::Decryption)?
-            .map(KeySecret::new);
+            .map(UserKeySecret::from);
 
         Ok(DecryptedUserSession {
             session_id: self.session_id.clone(),

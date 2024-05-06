@@ -1,9 +1,7 @@
 use crate::db::{migrate_session_db, SessionSqliteConnection};
 use crate::db::{DBResult, SessionEncryptionKey};
-use proton_api_core::{
-    auth::{AccessToken, RefreshToken, Scope},
-    exports::crypto::salts::KeySecret,
-};
+use proton_api_core::auth::UserKeySecret;
+use proton_api_core::auth::{AccessToken, RefreshToken, Scope};
 
 #[cfg(test)]
 fn new_test_connection() -> SessionSqliteConnection {
@@ -33,7 +31,7 @@ fn test_session_store_load() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
+        key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
 
@@ -70,11 +68,13 @@ fn test_session_store_load() {
                 .key_secret
                 .as_ref()
                 .expect("key secret must be there")
+                .expose_secret()
                 .as_bytes(),
             session
                 .key_secret
                 .as_ref()
                 .expect("key secret must be there")
+                .expose_secret()
                 .as_bytes()
         );
         Ok(())
@@ -93,7 +93,7 @@ fn test_session_update() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
+        key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
 
@@ -104,7 +104,7 @@ fn test_session_update() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("refreshed".to_string()),
         access_token: AccessToken::from("another token".to_string()),
-        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
+        key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope Scope2"),
     };
 
@@ -166,7 +166,7 @@ fn test_session_delete_user_id() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
+        key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
@@ -199,7 +199,7 @@ fn test_session_delete_session_id() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-        key_secret: Some(KeySecret::new(vec![1, 2, 3, 4])),
+        key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
