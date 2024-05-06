@@ -218,8 +218,7 @@ impl Mailbox {
         mode: Option<LightOrDarkMode>,
         format: Option<String>,
     ) -> MailboxResult<Option<Bytes>> {
-        // this may need updating after completion of ET-181
-        if self.user_ctx.mail_settings()?.hide_sender_images {
+        if self.user_ctx.with_mail_settings(|s| s.hide_sender_images) {
             // sender images are to be hidden, return nothing
             return Ok(None);
         }
