@@ -31,7 +31,7 @@ impl http::RequestDesc for GetMessageMetadataRequest {
     type Response = JsonResponse<MessageMetadataResponse>;
 
     fn build(&self) -> RequestData {
-        RequestData::new(http::Method::Post, "mail/v4/messages")
+        RequestData::new(Method::Post, "mail/v4/messages")
             .header("X-HTTP-Method-Override", "GET")
             .json(&self.filter)
     }

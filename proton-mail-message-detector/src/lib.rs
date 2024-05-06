@@ -179,7 +179,7 @@ pub fn locate_blockquote(document: &str) -> (String, String) {
     //     const tmpDocument = body || inputDocument;
 
     let body_selector =
-        scraper::Selector::parse("body").expect("failed to create selector for body");
+        Selector::parse("body").expect("failed to create selector for body");
     let root_element = if let Some(body) = parsed_doc.select(&body_selector).next() {
         body
     } else {
@@ -193,7 +193,7 @@ pub fn locate_blockquote(document: &str) -> (String, String) {
     //             result = testBlockquote(blockquote);
     //         }
     //     });
-    let blockquote_selector = scraper::Selector::parse(&BLOCKQUOTE_SELECTOR)
+    let blockquote_selector = Selector::parse(&BLOCKQUOTE_SELECTOR)
         .expect("failed to parse blockquote selector");
 
     let parent_html = root_element.inner_html();

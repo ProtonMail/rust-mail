@@ -43,14 +43,14 @@ impl Into<KeyChainError> for OSKeyChainError {
 }
 impl KeyChain for FFIKeyChain {
     fn store(&self, key: String) -> Result<(), KeyChainError> {
-        self.0.store(key).map_err(std::convert::Into::into)
+        self.0.store(key).map_err(Into::into)
     }
 
     fn delete(&self) -> Result<(), KeyChainError> {
-        self.0.delete().map_err(std::convert::Into::into)
+        self.0.delete().map_err(Into::into)
     }
 
     fn get(&self) -> Result<Option<String>, KeyChainError> {
-        self.0.get().map_err(std::convert::Into::into)
+        self.0.get().map_err(Into::into)
     }
 }
