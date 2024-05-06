@@ -22,7 +22,9 @@ impl Mailbox {
         let Some(label) = self.user_ctx.get_label(self.label_id)? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
-        let view_mode = self.user_ctx.with_mail_settings(|s| s.view_mode);
+        let view_mode = label
+            .mail_settings_view_mode()
+            .unwrap_or(self.user_ctx.with_mail_settings(|s| s.view_mode));
         if let Some(remote_id) = label.rid.clone() {
             tracing::debug!("Syncing {}({})", self.label_id, remote_id);
             let ctx = self.user_ctx.clone();
