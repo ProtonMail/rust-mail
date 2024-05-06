@@ -1,5 +1,4 @@
 use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
-use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::proton_api_mail::domain::LabelId;
 
 #[uniffi::export]
@@ -14,17 +13,14 @@ impl MailUserSession {
     ) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
         let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
-        let h = self.ctx.mail_context().async_runtime().spawn(async move {
+        self.uniffi_async(async move {
             let cb_ref = cb.as_ref();
-            ctx.initialize_async(LabelId::inbox().clone(), cb_ref).await
-        });
-        if let Err((_, err)) = h
-            .await
-            .map_err(|e| MailSessionError::Other(anyhow!("Failed to join task: {e}")))?
-        {
-            return Err(err.into());
-        }
-        Ok(())
+            if let Err((_, e)) = ctx.initialize_async(LabelId::inbox().clone(), cb_ref).await {
+                return Err(MailSessionError::from(e));
+            }
+            Ok(())
+        })
+        .await
     }
 }
 
