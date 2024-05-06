@@ -1,3 +1,44 @@
+use crate::proton_color::proton_color;
+use proton_api_mail::domain::MessageAddress;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct AvatarInformation {
+    pub text: String,
+    pub color: String,
+}
+
+/// Contains the details used for the avatar shown for a conversation.
+///
+/// It contains:
+///     - the text to display in the avatar,
+///     - the color to use for the avatar,
+impl AvatarInformation {
+    /// Takes display name and email address and uses these to determine the text and color the avatar should be.
+    pub fn build(display_name: &str, email: &str) -> AvatarInformation {
+        AvatarInformation {
+            text: avatar_text(display_name, email),
+            color: proton_color(display_name).to_string(),
+        }
+    }
+
+    /// Creates an AvatarInformation struct using the details of the first MessageAddress in the provided slice.
+    pub fn from_message_addresses(address_list: &[MessageAddress]) -> AvatarInformation {
+        let first_sender = address_list.first();
+        let display_name_email = match first_sender {
+            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
+            None => ("", ""),
+        };
+
+        AvatarInformation::build(display_name_email.0, display_name_email.1)
+    }
+
+    /// Creates an AvatarInformation struct using a MessageAddress.
+    pub fn from_message_address(address: &MessageAddress) -> AvatarInformation {
+        AvatarInformation::build(address.name.as_str(), address.address.as_str())
+    }
+}
+
 pub fn avatar_text(name: &str, email: &str) -> String {
     let initials = initials(name);
     if !initials.is_empty() {
