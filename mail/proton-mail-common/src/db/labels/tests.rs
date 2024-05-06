@@ -226,10 +226,22 @@ fn test_mark_labels_as_initialized() {
                 LabelColor::purple(),
             )
             .expect("failed to create label");
-        assert!(!tx.check_if_label_is_initialized(new_label.id).unwrap());
-        tx.mark_label_as_initialized(new_label.id)
+        assert!(!tx
+            .check_if_label_is_initialized_conversations(new_label.id)
+            .unwrap());
+        tx.mark_label_as_initialized_conversations(new_label.id)
             .expect("failed to mark label as initialized");
-        assert!(tx.check_if_label_is_initialized(new_label.id).unwrap());
+        assert!(tx
+            .check_if_label_is_initialized_conversations(new_label.id)
+            .unwrap());
+        assert!(!tx
+            .check_if_label_is_initialized_messages(new_label.id)
+            .unwrap());
+        tx.mark_label_as_initialized_messages(new_label.id)
+            .expect("failed to mark label as initialized");
+        assert!(tx
+            .check_if_label_is_initialized_messages(new_label.id)
+            .unwrap());
     });
 }
 

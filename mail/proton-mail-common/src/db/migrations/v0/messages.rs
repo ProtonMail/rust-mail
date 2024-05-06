@@ -7,7 +7,7 @@ pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rid TEXT UNIQUE,
                 address_id TEXT NOT NULL,
-                conversation_id INTEGER NOT NULL,
+                conversation_id INTEGER DEFAUL NULL,
                 `order` INTEGER NOT NULL,
                 subject TEXT NOT NULL,
                 unread INTEGER NOT NULL,

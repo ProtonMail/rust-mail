@@ -2,69 +2,90 @@ use crate::actions::{
     DeleteConversationsAction, LabelConversationsAction, MarkConversationsReadAction,
     MarkConversationsUnreadAction, MoveConversationsAction, UnlabelConversationsAction,
 };
-use crate::db::{
-    ConversationQuery, DBResult, LocalConversation, LocalConversationId, LocalLabelId,
-};
+use crate::db::{ConversationQuery, LocalConversation, LocalConversationId, LocalLabelId};
 use crate::exports::anyhow::anyhow;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
-use proton_api_mail::domain::LabelId;
+use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
-    pub async fn sync(&self, conversation_count: usize) -> MailboxResult<()> {
+    /// Sync the label's messages or conversations.
+    ///
+    /// Depending on the user's mail settings, this function will either sync the conversations
+    /// or the messages of the label.
+    ///
+    /// # Errors
+    /// Returns error if API request or database changes failed.
+    pub async fn sync(&self, count: usize) -> MailboxResult<()> {
         let Some(label) = self.user_ctx.get_label(self.label_id)? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
+        let view_mode = self.user_ctx.with_mail_settings(|s| s.view_mode);
         if let Some(remote_id) = label.rid.clone() {
             tracing::debug!("Syncing {}({})", self.label_id, remote_id);
             let ctx = self.user_ctx.clone();
 
-            let mut initialized = false;
-            let connection = ctx.new_db_connection();
-            match connection {
-                Ok(mut connection) => {
-                    let result = connection
-                        .tx(|tx| -> DBResult<bool> { tx.check_if_label_is_initialized(label.id) });
-                    match result {
-                        Ok(value) => initialized = value,
-                        Err(e) => tracing::error!("Failed to check if label is initialized: {e}"),
+            let initialized = ctx
+                .db_read(|conn| match view_mode {
+                    MailSettingsViewMode::Conversations => {
+                        conn.check_if_label_is_initialized_conversations(label.id)
                     }
-                }
-                Err(e) => tracing::error!("Failed to get db connection: {e}"),
-            }
+                    MailSettingsViewMode::Messages => {
+                        conn.check_if_label_is_initialized_messages(label.id)
+                    }
+                })
+                .map_err(|e| {
+                    tracing::error!("Failed to check if label is initialized: {e}");
+                    MailContextError::DB(e)
+                })?;
             if initialized {
                 tracing::debug!("Label {} already initialized, skipping", self.label_id);
                 return Ok(());
             }
-            tracing::debug!("Label {} not initialized, fetching", self.label_id);
+            tracing::debug!(
+                "Label {} not initialized, fetching (mode={:?})",
+                self.label_id,
+                view_mode
+            );
 
-            let result = ctx
-                .sync_first_conversation_page(remote_id, conversation_count)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to sync conversations for labels: {e}");
-                    e.into()
-                });
+            match view_mode {
+                MailSettingsViewMode::Conversations => ctx
+                    .sync_first_conversation_page(remote_id, count)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to sync conversations for label: {e}");
+                        e
+                    }),
+                MailSettingsViewMode::Messages => ctx
+                    .sync_first_message_page(remote_id, count)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to sync messages for label: {e}");
+                        e
+                    }),
+            }?;
 
-            let connection = ctx.new_db_connection();
-            match connection {
-                Ok(mut connection) => {
-                    let result = connection.tx(|tx| -> DBResult<()> {
-                        tx.mark_label_as_initialized(label.id)?;
-                        Ok(())
-                    });
-                    if let Err(e) = result {
-                        tracing::error!("Failed to mark label as initialized: {e}");
+            ctx.db_write(|tx| {
+                match view_mode {
+                    MailSettingsViewMode::Conversations => {
+                        tx.mark_label_as_initialized_conversations(label.id)?;
+                    }
+                    MailSettingsViewMode::Messages => {
+                        tx.mark_label_as_initialized_messages(label.id)?;
                     }
                 }
-                Err(e) => tracing::error!("Failed to get db connection: {e}"),
-            }
-            result
-        } else {
-            tracing::warn!("Local label {} has no remote id", self.label_id);
+                Ok(())
+            })
+            .map_err(|e| {
+                tracing::error!("Failed to mark label as initialized: {e}");
+                MailContextError::DB(e)
+            })?;
+
             Ok(())
+        } else {
+            Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id))
         }
     }
 

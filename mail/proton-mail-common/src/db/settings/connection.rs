@@ -1,9 +1,13 @@
 use crate::db::json::{deserialize_json_from_row, serde_json_err_to_sql_err};
 use crate::db::{DBResult, MailSqliteConnectionImpl};
-use proton_api_mail::domain::MailSettings;
+use proton_api_mail::domain::{MailSettings, MailSettingsViewMode};
 use proton_api_mail::exports::serde_json;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
+    /// Create or update the mail settings.
+    ///
+    /// # Errors
+    /// Return Error if the query failed.
     pub fn create_or_update_mail_settings(&mut self, settings: &MailSettings) -> DBResult<()> {
         let settings_json = serde_json::to_string(settings).map_err(serde_json_err_to_sql_err)?;
         self.0.execute(
@@ -13,11 +17,27 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(())
     }
 
+    /// Get all the mail settings.
+    ///
+    /// # Errors
+    /// Return Error if the query failed.
     pub fn mail_settings(&self) -> DBResult<MailSettings> {
         self.0.query_row(
             "SELECT value FROM mail_settings WHERE id=?",
             [MAIL_SETTINGS_ID],
             |r| deserialize_json_from_row(r, 0),
+        )
+    }
+
+    /// Retrieve the current mail view mode.
+    ///
+    /// # Errors
+    /// Return Error if the query failed.
+    pub fn mail_settings_view_mode(&self) -> DBResult<MailSettingsViewMode> {
+        self.0.query_row(
+            "SELECT json_extract(value, '$.ViewMode') FROM mail_settings WHERE id=?",
+            [MAIL_SETTINGS_ID],
+            |r| r.get(0),
         )
     }
 }

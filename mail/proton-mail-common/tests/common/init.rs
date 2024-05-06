@@ -1,7 +1,7 @@
 use crate::common::TestContext;
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
-    MailSettings, MessageAddress, MessageCount, ALL_LABEL_TYPES,
+    MailSettings, MessageAddress, MessageCount, MessageMetadata, ALL_LABEL_TYPES,
 };
 use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
@@ -14,7 +14,7 @@ use proton_api_mail::proton_api_core::requests::{
 };
 use proton_api_mail::requests::{
     GetConversationCountsResponse, GetConversationsResponse, GetLabelsResponse,
-    GetMessageCountsResponse, MailSettingsResponse,
+    GetMessageCountsResponse, MailSettingsResponse, MessageMetadataResponse,
 };
 use proton_mail_common::{
     MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
@@ -402,6 +402,30 @@ impl TestContext {
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                     conversations,
+                    stale: false,
+                    total: 1,
+                }),
+            )
+            .expect(expect)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving message metadata.
+    ///
+    /// This function will mock the response for the given message metadata.
+    ///
+    /// # Parameters
+    ///
+    /// * `metadata` - The list of message to respond with.
+    /// * `expect`   - How many times the endpoint should be called.
+    ///
+    pub async fn mock_get_message_metadata(&self, metadata: Vec<MessageMetadata>, expect: u64) {
+        Mock::given(method("POST"))
+            .and(path("/api/mail/v4/messages"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(MessageMetadataResponse {
+                    messages: metadata,
                     stale: false,
                     total: 1,
                 }),
