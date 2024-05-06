@@ -9,14 +9,11 @@ pub trait View<S, E> {
 
     fn draw(&mut self, state: &S, frame: &mut Frame, area: Rect);
 
-    fn on_event(&mut self, _: &mut S, event: E) -> Option<E> {
-        Some(event)
-    }
-
     fn help_items(&self) -> &[HelpCategory];
 
     fn on_input(&mut self, state: &mut S, event: &Event);
 
+    #[allow(unused)]
     fn name(&self) -> &'static str;
 }
 

@@ -302,7 +302,7 @@ impl<'a, T: ListableWidget> WidgetList<'a, T> {
             .skip(state.offset)
             .take(last_visible_index - first_visible_index)
         {
-            let (x, y) = if self.direction == ratatui::widgets::ListDirection::BottomToTop {
+            let (x, y) = if self.direction == ListDirection::BottomToTop {
                 current_height += item.height();
                 (list_area.left(), list_area.bottom() - current_height)
             } else {
