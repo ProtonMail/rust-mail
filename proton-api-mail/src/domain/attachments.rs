@@ -1,4 +1,8 @@
-use proton_api_core::exports::serde::{self, Deserialize, Serialize};
+use crate::domain::{ConversationId, MessageAddress, MessageId};
+use proton_api_core::{
+    domain::AddressId,
+    exports::serde::{self, Deserialize, Serialize},
+};
 
 proton_api_core::utils::string_id!(AttachmentId);
 
@@ -10,7 +14,6 @@ pub enum Disposition {
     Attachment,
 }
 
-use crate::exports::serde_json;
 #[cfg(feature = "sql")]
 use proton_api_core::exports::proton_sqlite3::rusqlite;
 use proton_crypto_inbox::attachment::{
