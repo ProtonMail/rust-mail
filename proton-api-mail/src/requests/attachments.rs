@@ -1,6 +1,6 @@
 use crate::domain::{Attachment, AttachmentId};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
-use proton_api_core::http::{JsonResponse, Method, RequestData, RequestDesc};
+use proton_api_core::http::{ByteResponse, JsonResponse, Method, RequestData, RequestDesc};
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
@@ -16,17 +16,11 @@ impl GetAttachmentRequest {
 }
 
 impl RequestDesc for GetAttachmentRequest {
-    type Response = JsonResponse<GetAttachmentResponse>;
+    type Response = ByteResponse;
 
     fn build(&self) -> RequestData {
         RequestData::new(Method::Get, format!("mail/v4/attachments/{}", self.id))
     }
-}
-
-#[derive(Deserialize, Serialize)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
-pub struct GetAttachmentResponse {
-    pub attachment: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
