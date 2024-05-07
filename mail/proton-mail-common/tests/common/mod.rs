@@ -4,7 +4,7 @@ pub mod conversations;
 pub mod init;
 
 use proton_api_mail::exports::crypto::salts::KeySecret;
-use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope};
+use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
 use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
 use proton_api_mail::proton_api_core::http::{APIEnvConfig, Builder};
 use proton_async::runtime::MultiThreaded;
@@ -89,7 +89,7 @@ impl TestContext {
             email: "test@foo.bar".to_string(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
-            key_secret: Some(KeySecret::new(b"secret".to_vec())),
+            key_secret: Some(UserKeySecret::from(b"secret".to_vec())),
             scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)
