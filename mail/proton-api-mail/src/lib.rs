@@ -17,10 +17,6 @@ uniffi::setup_scaffolding!();
 #[cfg(feature = "uniffi")]
 mod hidden {
     use crate::domain::{ConversationId, ExternalId, MessageId};
-    use proton_api_core::domain::AddressId;
-
-    //TODO: ET-266 this should be handled in proton-api-core.
-    uniffi::custom_newtype!(AddressId, String);
 
     // Note: We need to generate at least on uniffi type which includes custom types
     // declared in this crate or it will lead to linking issues in the binding code.
@@ -29,6 +25,5 @@ mod hidden {
         pub cid: ConversationId,
         pub mid: MessageId,
         pub eid: ExternalId,
-        pub aid: AddressId,
     }
 }
