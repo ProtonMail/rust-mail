@@ -8,10 +8,10 @@ use proton_async::sync::mpsc::Sender;
 use proton_core_common::db::proton_sqlite3::{InProcessTrackerService, Live, LiveQueryBuilder};
 use proton_mail_common::db::proton_sqlite3::Observable;
 use proton_mail_common::db::{
-    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalLabelId,
+    ConversationQuery, LabelsByTypeQueryWithConversationCount, LocalLabelId, MessageQuery,
 };
 use proton_mail_common::exports::tracing::warn;
-use proton_mail_common::proton_api_mail::domain::LabelId;
+use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_mail_common::proton_api_mail::proton_api_core::exports::tracing::{debug, error};
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
@@ -56,9 +56,25 @@ pub struct MailboxState {
     pending_context: Option<MailUserContext>,
 }
 
+pub enum ViewMode {
+    Conversations(Live<ConversationQuery>),
+    Messages(Live<MessageQuery>),
+}
+
+impl ViewMode {
+    pub fn new(mbox: &Mailbox) -> Result<Self, MailboxError> {
+        Ok(if mbox.view_mode() == MailSettingsViewMode::Conversations {
+            ViewMode::Conversations(
+                mbox.new_conversation_query(new_live_query, CONVERSATION_COUNT)?,
+            )
+        } else {
+            ViewMode::Messages(mbox.new_messages_query(new_live_query, CONVERSATION_COUNT)?)
+        })
+    }
+}
 pub struct MailboxUserContextState {
     pub mailbox: Mailbox,
-    pub conversations: Live<ConversationQuery>,
+    pub view_mode: ViewMode,
     pub system_labels: Live<LabelsByTypeQueryWithConversationCount>,
     pub folders: Live<LabelsByTypeQueryWithConversationCount>,
     pub labels: Live<LabelsByTypeQueryWithConversationCount>,
@@ -70,15 +86,15 @@ impl MailboxUserContextState {
         mailbox: Mailbox,
         mail_user_context: &MailUserContext,
         event_loop_poller: Sender<BackgroundTask>,
-    ) -> Self {
-        Self {
-            conversations: mailbox.new_conversation_query(new_live_query, CONVERSATION_COUNT),
+    ) -> Result<Self, MailboxError> {
+        Ok(Self {
+            view_mode: ViewMode::new(&mailbox)?,
             system_labels: mail_user_context.new_system_labels_live_query(new_live_query),
             folders: mail_user_context.new_folder_labels_live_query(new_live_query),
             labels: mail_user_context.new_label_labels_live_query(new_live_query),
             mailbox,
             event_loop_poller,
-        }
+        })
     }
 }
 
@@ -185,7 +201,12 @@ impl MailboxState {
             }
         });
 
-        self.user_context = Some(MailboxUserContextState::new(mailbox, &ctx_cloned, s));
+        match MailboxUserContextState::new(mailbox, &ctx_cloned, s) {
+            Ok(m) => self.user_context = Some(m),
+            Err(e) => {
+                app_dispatcher.set_error("Mailbox Error", e);
+            }
+        }
     }
 
     fn on_mailbox_open(
@@ -216,16 +237,28 @@ impl MailboxState {
 
         let background_dispatcher = dispatcher.background_dispatcher();
         mailbox_context.mailbox =
-            Mailbox::with_id(mailbox_context.mailbox.user_context().clone(), label_id);
-        runtime.block_on(async {
-            let r = mailbox_context.mailbox.sync(CONVERSATION_COUNT).await;
+            match Mailbox::with_id(mailbox_context.mailbox.user_context().clone(), label_id) {
+                Ok(m) => m,
+                Err(e) => {
+                    dispatcher.set_error("Mailbox Error", e);
+                    return;
+                }
+            };
+        let mbox = mailbox_context.mailbox.clone();
+        runtime.spawn(async move {
+            let r = mbox.sync(CONVERSATION_COUNT).await;
             background_dispatcher
                 .queue_event(MailboxEvent::LoadConversations(r.map_err(Into::into)));
         });
-        mailbox_context.conversations = mailbox_context
-            .mailbox
-            .new_conversation_query(new_live_query, CONVERSATION_COUNT);
-        self.conversation_loading_state = LoadingState::Loading;
+        match ViewMode::new(&mailbox_context.mailbox) {
+            Ok(m) => {
+                mailbox_context.view_mode = m;
+                self.conversation_loading_state = LoadingState::Loading;
+            }
+            Err(e) => {
+                dispatcher.set_error("Mailbox Error", e);
+            }
+        }
     }
 
     pub fn poll_event_loop(&mut self) {

@@ -1,11 +1,11 @@
 use crate::events::mailbox::MailboxEvent;
 use crate::events::AppEvent;
-use crate::state::{LoadingState, MailboxState, MailboxUserContextState};
+use crate::state::{LoadingState, MailboxState, MailboxUserContextState, ViewMode};
 use crate::view::View;
 use crate::views::AppViewContext;
 use crate::widgets::{
-    ConversationWidget, HelpCategory, HelpItem, LabelWidget, ScrollableList, ScrollableListState,
-    SideBarLabelWidget, WidgetList, WidgetListItem,
+    ConversationWidget, HelpCategory, HelpItem, LabelWidget, MessageWidget, ScrollableList,
+    ScrollableListState, SideBarLabelWidget, WidgetList, WidgetListItem,
 };
 use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use proton_mail_common::db::{LocalConversationId, LocalLabel, LocalLabelId, LocalLabelWithCount};
@@ -30,7 +30,7 @@ enum LabelSelectionMode {
 }
 
 pub struct ConversationView {
-    conversation_list_state: ScrollableListState,
+    item_list_state: ScrollableListState,
     system_labels_list_state: ScrollableListState,
     folder_list_state: ScrollableListState,
     labels_list_state: ScrollableListState,
@@ -42,7 +42,7 @@ pub struct ConversationView {
 impl ConversationView {
     pub fn new() -> Self {
         let mut r = Self {
-            conversation_list_state: ScrollableListState::new(3, Some(0)),
+            item_list_state: ScrollableListState::new(3, Some(0)),
             system_labels_list_state: ScrollableListState::new(1, Some(0)),
             folder_list_state: ScrollableListState::new(1, None),
             labels_list_state: ScrollableListState::new(1, None),
@@ -50,7 +50,7 @@ impl ConversationView {
             label_selection_mode: None,
             label_selection_list_state: ScrollableListState::new(1, None),
         };
-        r.conversation_list_state.set_focus_gained();
+        r.item_list_state.set_focus_gained();
         r.label_selection_list_state.set_focus_gained();
         r
     }
@@ -142,43 +142,87 @@ impl ConversationView {
             return;
         }
 
-        let conversations = mailbox_context.conversations.value();
-        let conversations = conversations.deref();
-        self.conversation_list_state.set_len(conversations.len());
-        let list_items = conversations
-            .iter()
-            .enumerate()
-            .map(|(idx, c)| {
-                let item = WidgetListItem::new(ConversationWidget::new(c));
-                let item = if idx % 2 == 0 {
-                    item.style(Style::default().bg(Color::LightMagenta))
-                } else {
-                    item
-                };
-                if c.num_unread != 0 {
-                    item.bold()
-                } else {
-                    item
-                }
-            })
-            .collect::<Vec<_>>();
-        frame.render_stateful_widget(
-            ScrollableList::new(
-                WidgetList::new(list_items)
-                    .highlight_symbol(">> ")
-                    .highlight_spacing(HighlightSpacing::Always)
-                    .highlight_style(Style {
-                        fg: Some(Color::Magenta),
-                        bg: Some(Color::White),
-                        underline_color: None,
-                        add_modifier: Default::default(),
-                        sub_modifier: Default::default(),
+        //TODO: improve
+        match &mailbox_context.view_mode {
+            ViewMode::Conversations(query) => {
+                let conversations = query.value();
+                let conversations = conversations.deref();
+                self.item_list_state.set_len(conversations.len());
+                let list_items = conversations
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, c)| {
+                        let item = WidgetListItem::new(ConversationWidget::new(c));
+                        let item = if idx % 2 == 0 {
+                            item.style(Style::default().bg(Color::LightMagenta))
+                        } else {
+                            item
+                        };
+                        if c.num_unread != 0 {
+                            item.bold()
+                        } else {
+                            item
+                        }
                     })
-                    .block(Block::new().borders(Borders::all())),
-            ),
-            area,
-            &mut self.conversation_list_state,
-        );
+                    .collect::<Vec<_>>();
+                frame.render_stateful_widget(
+                    ScrollableList::new(
+                        WidgetList::new(list_items)
+                            .highlight_symbol(">> ")
+                            .highlight_spacing(HighlightSpacing::Always)
+                            .highlight_style(Style {
+                                fg: Some(Color::Magenta),
+                                bg: Some(Color::White),
+                                underline_color: None,
+                                add_modifier: Default::default(),
+                                sub_modifier: Default::default(),
+                            })
+                            .block(Block::new().borders(Borders::all())),
+                    ),
+                    area,
+                    &mut self.item_list_state,
+                );
+            }
+            ViewMode::Messages(query) => {
+                let messages = query.value();
+                let messages = messages.deref();
+                self.item_list_state.set_len(messages.len());
+                let list_items = messages
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, c)| {
+                        let item = WidgetListItem::new(MessageWidget::new(c));
+                        let item = if idx % 2 == 0 {
+                            item.style(Style::default().bg(Color::LightMagenta))
+                        } else {
+                            item
+                        };
+                        if c.unread {
+                            item.bold()
+                        } else {
+                            item
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                frame.render_stateful_widget(
+                    ScrollableList::new(
+                        WidgetList::new(list_items)
+                            .highlight_symbol(">> ")
+                            .highlight_spacing(HighlightSpacing::Always)
+                            .highlight_style(Style {
+                                fg: Some(Color::Magenta),
+                                bg: Some(Color::White),
+                                underline_color: None,
+                                add_modifier: Default::default(),
+                                sub_modifier: Default::default(),
+                            })
+                            .block(Block::new().borders(Borders::all())),
+                    ),
+                    area,
+                    &mut self.item_list_state,
+                );
+            }
+        }
     }
 
     fn draw_label_selection(&mut self, frame: &mut Frame, area: Rect) {
@@ -240,7 +284,7 @@ impl ConversationView {
         self.labels_list_state.set_focus_lost();
         self.system_labels_list_state.set_focus_lost();
         self.folder_list_state.set_focus_lost();
-        self.conversation_list_state.set_focus_lost();
+        self.item_list_state.set_focus_lost();
 
         match current_label_type {
             LabelType::Label => {
@@ -276,7 +320,7 @@ impl ConversationView {
                 list_state.set_focus_gained();
                 list_state.select(selection);
             }
-            FocusedWidget::Conversation => self.conversation_list_state.set_focus_gained(),
+            FocusedWidget::Conversation => self.item_list_state.set_focus_gained(),
         }
     }
 
@@ -296,14 +340,13 @@ impl ConversationView {
         ctx: &mut AppViewContext,
         f: impl FnOnce(&mut Self, &mut AppViewContext, LocalConversationId),
     ) {
-        if let Some(index) = self.conversation_list_state.selected() {
+        if let Some(index) = self.item_list_state.selected() {
             if let Some(id) = if let Some(user_ctx) = ctx.state().mailbox_state.mailbox_context() {
-                user_ctx
-                    .conversations
-                    .value()
-                    .deref()
-                    .get(index)
-                    .map(|c| c.id)
+                if let ViewMode::Conversations(q) = &user_ctx.view_mode {
+                    q.value().deref().get(index).map(|c| c.id)
+                } else {
+                    None
+                }
             } else {
                 None
             } {
@@ -596,10 +639,10 @@ impl View<AppViewContext, AppEvent> for ConversationView {
                 }
                 FocusedWidget::Conversation => match k.code {
                     KeyCode::Up => {
-                        self.conversation_list_state.prev();
+                        self.item_list_state.prev();
                     }
                     KeyCode::Down => {
-                        self.conversation_list_state.next();
+                        self.item_list_state.next();
                     }
                     KeyCode::Left => {
                         let mailbox_state = &ctx.state().mailbox_state;
