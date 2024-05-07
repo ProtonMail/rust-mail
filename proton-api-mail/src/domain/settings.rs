@@ -146,28 +146,28 @@ impl Default for MailSettings {
             display_name: String::new(),
             signature: String::new(),
             theme: String::new(),
-            auto_save_contacts: false,
+            auto_save_contacts: true,
             composer_mode: MailSettingsComposerMode::default(),
             message_buttons: MailSettingsMessageButtons::default(),
             show_images: MailSettingsShowImages::default(),
             show_moved: MailSettingsShowMoved::default(),
             auto_delete_spam_and_trash_days: None,
             almost_all_mail: MailSettingsAlmostAllMail::default(),
-            next_message_on_move: None,
+            next_message_on_move: Some(MailSettingsNextMessageOnMove::DisabledExplicit),
             view_mode: MailSettingsViewMode::default(),
             view_layout: MailSettingsViewLayout::default(),
             swipe_left: MailSettingsSwipeAction::default(),
             swipe_right: MailSettingsSwipeAction::default(),
-            shortcuts: false,
+            shortcuts: true,
             pm_signature: MailSettingsPMSignature::default(),
             pm_signature_referral_link: false,
             image_proxy: 0,
             num_message_per_page: 0,
-            draft_mime_type: String::new(),
-            receive_mime_type: String::new(),
-            show_mime_type: String::new(),
+            draft_mime_type: "text/html".to_owned(),
+            receive_mime_type: "text/html".to_owned(),
+            show_mime_type: "text/html".to_owned(),
             enable_folder_color: false,
-            inherit_parent_folder_color: false,
+            inherit_parent_folder_color: true,
             submission_access: false,
             right_to_left: MailSettingsComposerDirection::LeftToRight,
             attach_public_key: false,
@@ -175,7 +175,7 @@ impl Default for MailSettings {
             pgp_scheme: MailSettingsPGPScheme::Mime,
             prompt_pin: false,
             sticky_labels: false,
-            confirm_link: false,
+            confirm_link: true,
             delay_send_seconds: 0,
             font_face: None,
             spam_action: None,
@@ -256,7 +256,7 @@ new_integer_enum!(u8, MailSettingsAlmostAllMail {
 
 impl Default for MailSettingsAlmostAllMail {
     fn default() -> Self {
-        Self::AllMail
+        Self::AlmostAllMail
     }
 }
 
