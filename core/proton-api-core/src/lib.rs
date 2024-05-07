@@ -26,5 +26,6 @@ mod hidden {
     struct Dummy {
         pub user_id: crate::domain::UserId,
         pub uid: crate::domain::Uid,
+        pub aid: crate::domain::AddressId,
     }
 }
