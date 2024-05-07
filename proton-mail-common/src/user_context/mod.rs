@@ -1,4 +1,5 @@
 mod action_queue;
+mod attachment;
 mod conversations;
 mod events;
 mod images;

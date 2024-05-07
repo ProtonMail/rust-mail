@@ -1,14 +1,17 @@
-use std::io;
+use std::{fmt::format, io};
 
 use proton_api_mail::{
     domain::{
         Attachment, AttachmentId, AttachmentMetadata, ConversationId, Disposition, MessageId,
     },
     proton_api_core::domain::AddressId,
+    requests::GetAttachmentMetadataResponse,
 };
 use proton_crypto_inbox::attachment::KeyPackets;
+use wiremock::matchers::{body_json, method, path, path_regex};
+use wiremock::{Mock, ResponseTemplate};
 
-use super::account::TEST_ADDRESS_ID;
+use super::{account::TEST_ADDRESS_ID, TestContext};
 
 const TEST_ATTACHMENT_ID: &str =
     "5OkOlBi3Swa4cHRyChyUazwt8GYDBLIAX-ZYnGg8-nAHNKjj5EgR5uH-GePQFaWQPgS60aoJ1Dl2s6UI4BmwNw==";
@@ -27,7 +30,10 @@ pub fn test_attachment_metadata() -> AttachmentMetadata {
 /// The complete metadata for the default attachment.
 ///
 /// The attachment is encrypted with the default test account address key.
-pub fn test_attachment(message_id: MessageId, conversation_id: ConversationId) -> Attachment {
+pub fn test_attachment_metadata_complete(
+    message_id: MessageId,
+    conversation_id: ConversationId,
+) -> Attachment {
     let metadata = test_attachment_metadata();
     Attachment {
         id: metadata.id.clone(),
@@ -59,4 +65,51 @@ pub fn test_attachment_data() -> Vec<u8> {
 /// The expected plaintext content of the default test attachment.
 pub fn test_expected_attachment_decrypted() -> Vec<u8> {
     b"attachment".to_vec()
+}
+
+impl TestContext {
+    /// Generate new mock for retrieving complete attachment metadata.
+    ///
+    /// This function will mock the response for the give attachment metadata.
+    ///
+    /// # Parameters
+    ///
+    /// * `attachment` - The metadata to return as a response.
+    ///
+    pub async fn mock_get_attachment_metadata(&self, attachment: Attachment) {
+        let path_for_attachment = format!("api/mail/v4/attachments/{}/metadata", attachment.id);
+        Mock::given(method("GET"))
+            .and(path(path_for_attachment))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetAttachmentMetadataResponse {
+                    response: attachment,
+                }),
+            )
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+    /// Generate new mock for retrieving attachment content.
+    ///
+    /// This function will mock the response for the attachment content request
+    /// for the given `attachment_id`.
+    ///
+    /// # Parameters
+    ///
+    /// * `attachment_id`      - The attachment id the content should correspond to.
+    /// * `attachment_content` - The attachment content the mock replies with.
+    ///
+    pub async fn mock_get_attachment_data(
+        &self,
+        attachment_id: AttachmentId,
+        attachment_content: Vec<u8>,
+    ) {
+        let path_for_attachment = format!("api/mail/v4/attachments/{}", attachment_id);
+        Mock::given(method("GET"))
+            .and(path_regex(r"mail/v4/attachments/[^/]*[^/]$"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(attachment_content))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
 }

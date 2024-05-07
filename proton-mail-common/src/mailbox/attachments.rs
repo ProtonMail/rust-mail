@@ -2,7 +2,7 @@ use std::io;
 
 use crate::db::{LocalAttachment, LocalAttachmentId};
 use crate::{MailContextError, MailUserContext, Mailbox, MailboxError, MailboxResult};
-use proton_crypto_inbox::attachment::{AttachmentDecryption, InternalAttachmentReader};
+use proton_crypto_inbox::attachment::AttachmentDecryption;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
 };
@@ -27,30 +27,52 @@ impl Mailbox {
         attachment_id: LocalAttachmentId,
     ) -> MailboxResult<(Vec<u8>, VerificationResult)> {
         let user_context = self.user_context();
-        let metadata_complete = user_context
+        // First check if the metadata is complete for decryption.
+        let (metadata_complete, attachment_id_opt) = user_context
             .db_read(|conn| conn.is_attachment_metadata_complete(attachment_id))
             .map_err(MailContextError::from)?
             .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
+
         if !metadata_complete {
-            // TODO: Sync metadata
-            todo!()
+            let remote_attachment_id =
+                attachment_id_opt.ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
+            user_context
+                .mail_context()
+                .async_runtime()
+                .block_on(user_context.sync_complete_attachment_metadata(remote_attachment_id))
+                .map_err(MailContextError::from)?;
         }
 
+        // Load the complete attachment metadata.
         let attachment_metadata = user_context
             .db_read(|conn| conn.attachment_with_id(attachment_id))
             .map_err(MailContextError::from)?
             .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
 
-        // TODO: Load data attachment data, a reader from a file would be optimal.
-        let attachment_source = b"attachment data";
-        let attachment_source_reader: &[u8] = attachment_source.as_ref();
+        let remote_attachment_id = attachment_metadata
+            .rid
+            .as_ref()
+            .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
 
+        // Load the attachment content.
+        // TODO: Lets opt for a stream in the future
+        let attachment_source_reader = user_context
+            .mail_context()
+            .async_runtime()
+            .block_on(
+                user_context
+                    .mail_session()
+                    .attachment_content(remote_attachment_id.clone()),
+            )
+            .map_err(MailContextError::from)?;
+
+        // Decrypt it.
         let pgp_provider = new_pgp_provider();
         decrypt_attachment_to_buffer(
             &pgp_provider,
             &attachment_metadata,
             user_context,
-            attachment_source_reader,
+            attachment_source_reader.as_ref(),
         )
     }
 }
@@ -65,7 +87,8 @@ fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
     let mut result_buffer: Vec<u8> =
         Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
 
-    let address_keys = mail_user_ctx.address_keys_unlocked(pgp_provider, &attachment_info.address_id)?;
+    let address_keys =
+        mail_user_ctx.address_keys_unlocked(pgp_provider, &attachment_info.address_id)?;
 
     // TODO: Load the real verification keys in the future.
     let verification_keys: Vec<<Provider as PGPProvider>::PublicKey> = Vec::new();

@@ -24,10 +24,12 @@ fn test_attachment_create_without_metadata() {
             .tx(|tx| -> DBResult<()> {
                 let attachment = test_attachment();
                 let local_id = tx.create_or_update_attachment(&attachment)?;
-                assert!(tx
-                    .is_attachment_metadata_complete(local_id)
-                    .unwrap()
-                    .unwrap());
+                assert!(
+                    tx.is_attachment_metadata_complete(local_id)
+                        .unwrap()
+                        .unwrap()
+                        .0
+                );
                 let expected = LocalAttachment::from_attachment(
                     local_id,
                     conv_id,
@@ -59,15 +61,19 @@ fn test_attachment_create_with_metadata() {
             create_attachment_dependencies(&mut core_conn, &mut mail_conn, Some(metadata)).unwrap();
         mail_conn
             .tx(|tx| -> DBResult<()> {
-                assert!(!tx
-                    .is_attachment_metadata_complete(LocalAttachmentId::new(1))
-                    .unwrap()
-                    .unwrap());
+                assert!(
+                    !tx.is_attachment_metadata_complete(LocalAttachmentId::new(1))
+                        .unwrap()
+                        .unwrap()
+                        .0
+                );
                 let local_id = tx.create_or_update_attachment(&attachment)?;
-                assert!(tx
-                    .is_attachment_metadata_complete(local_id)
-                    .unwrap()
-                    .unwrap());
+                assert!(
+                    tx.is_attachment_metadata_complete(local_id)
+                        .unwrap()
+                        .unwrap()
+                        .0
+                );
                 let expected = LocalAttachment::from_attachment(
                     local_id,
                     conv_id,

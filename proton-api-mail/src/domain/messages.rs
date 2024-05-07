@@ -3,7 +3,9 @@ use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
 use proton_api_core::exports::serde_json;
 use proton_api_core::utils::{bool_from_integer, bool_to_integer};
-use proton_crypto_inbox::attachment::{AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
+use proton_crypto_inbox::attachment::{
+    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+};
 
 use super::{AttachmentId, Disposition};
 
