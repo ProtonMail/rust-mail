@@ -148,4 +148,16 @@ mod type_forwarding {
         proton_api_mail::UniFfiTag,
         crate::UniFfiTag
     );
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::domain::ExternalId,
+        proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::proton_api_core::domain::AddressId,
+        proton_api_mail::proton_api_core::UniFfiTag,
+        crate::UniFfiTag
+    );
 }

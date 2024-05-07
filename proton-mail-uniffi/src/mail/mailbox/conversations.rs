@@ -8,17 +8,18 @@ use std::sync::Arc;
 
 #[uniffi::export]
 impl Mailbox {
-    /// Create a live query for conversations for the currently selected label. If you
-    /// change the mailbox label with `switch_label` you need to create a new instance.
-    #[must_use]
+    /// Create a live query for conversations for the currently selected label.
+    ///
+    /// # Errors
+    /// Return error if the mailbox's view mode is not [`MailSettingsViewMode::Conversations`].
     pub fn new_conversation_live_query(
         &self,
         limit: i64,
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
-    ) -> Arc<MailboxConversationLiveQuery> {
+    ) -> Result<Arc<MailboxConversationLiveQuery>, MailboxError> {
         let limit = usize::try_from(limit).unwrap_or(DEFAULT_CONVERSATION_COUNT);
         let builder = FFIObservableConversationsQueryBuilder(cb);
-        self.mbox.new_conversation_query(builder, limit)
+        Ok(self.mbox.new_conversation_query(builder, limit)?)
     }
 
     /// Delete/Destroy the given conversations for the current mailbox.

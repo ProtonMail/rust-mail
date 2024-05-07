@@ -142,10 +142,12 @@ impl LocalInlineLabelInfo {
 new_u64_type!(LocalMessageId);
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalMessageMetadata {
     pub id: LocalMessageId,
     pub rid: Option<MessageId>,
-    pub conversation_id: LocalConversationId,
+    //TODO: ET-223 - We can sync messages without syncing conversations
+    pub conversation_id: Option<LocalConversationId>,
     pub address_id: AddressId,
     pub order: u64,
     pub subject: String,
@@ -182,7 +184,7 @@ impl LocalMessageMetadata {
             id,
             rid: Some(message.id),
             address_id: message.address_id,
-            conversation_id: conv_id,
+            conversation_id: Some(conv_id),
             order: message.order,
             subject: message.subject,
             unread: message.unread,
