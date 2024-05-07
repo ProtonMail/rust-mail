@@ -1,4 +1,5 @@
 mod conversations;
+mod messages;
 
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
@@ -10,7 +11,7 @@ use proton_mail_common::exports::proton_sqlite3::{
 };
 use proton_mail_common::exports::tracing::error;
 use proton_mail_common::exports::{anyhow, thiserror};
-use proton_mail_common::proton_api_mail::domain::LabelId;
+use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::future::Future;
@@ -41,6 +42,8 @@ pub enum MailboxError {
     ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
+    #[error("Mailbox is not in the right view mode for the current operation")]
+    InvalidViewMode,
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -81,7 +84,7 @@ impl Mailbox {
     #[uniffi::constructor]
     pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
         let mbox =
-            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), LocalLabelId::new(label_id));
+            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), LocalLabelId::new(label_id))?;
         Self::sync(mbox).await
     }
 
@@ -110,6 +113,12 @@ impl Mailbox {
     #[must_use]
     pub fn label_id(&self) -> u64 {
         self.mbox.label_id().value()
+    }
+
+    /// Get the mailbox's active view mode.
+    #[must_use]
+    pub fn view_mode(&self) -> MailSettingsViewMode {
+        self.mbox.view_mode()
     }
 }
 
@@ -164,6 +173,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             }
             proton_mail_common::MailboxError::ConversationError(e) => Self::ConversationError(e),
             proton_mail_common::MailboxError::APIError(e) => Self::APIError(e),
+            proton_mail_common::MailboxError::InvalidViewMode => Self::InvalidViewMode,
         }
     }
 }

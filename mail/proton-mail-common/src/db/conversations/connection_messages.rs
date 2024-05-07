@@ -154,6 +154,22 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(result)
     }
 
+    /// Get up to `count` message metadata for all messages in `label_id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_metadata_list(
+        &self,
+        label_id: LocalLabelId,
+        count: usize,
+    ) -> DBResult<Vec<LocalMessageMetadata>> {
+        let mut stmt = self
+            .0
+            .prepare(&LocalMessageMetadataSelector::query_with_label_and_limit())?;
+        let r = stmt.query_map((label_id, count), LocalMessageMetadataSelector::from_row)?;
+        mapped_rows_to_vec(r)
+    }
+
     pub fn get_message_labels(&self, id: LocalMessageId) -> DBResult<Option<Vec<LocalLabelId>>> {
         if let Some(r) = self
             .0
@@ -710,10 +726,9 @@ fn bind_message_metadata_create(
 }
 
 struct LocalMessageMetadataSelector {}
-impl LocalMessageMetadataSelector {
-    fn query() -> &'static str {
-        r"
+const MESSAGE_SELECTOR_ORDER_CLAUSE: &str = " GROUP BY M.id ORDER BY M.time DESC, M.`order` DESC ";
 
+const MESSAGE_SELECTOR_QUERY_BEGIN: &str = r"
 WITH json_message_labels AS (
     SELECT
     C.message_id as cid,
@@ -776,10 +791,18 @@ SELECT
     MA.json_attachments,
     MLJ.labels
 FROM messages AS M
-LEFT JOIN json_message_labels AS MLJ ON MLJ.cid = M.id
 LEFT JOIN json_message_attachments AS MA ON MA.cid = M.id
 LEFT JOIN message_labels AS ml ON M.id = ml.message_id AND ml.label_id = (SELECT id FROM labels WHERE rid='10')
-WHERE deleted=0"
+LEFT JOIN json_message_labels AS MLJ ON MLJ.cid = M.id
+";
+
+const MESSAGE_SELECTOR_QUERY_END: &str = r"
+WHERE deleted=0
+";
+
+impl LocalMessageMetadataSelector {
+    fn query() -> String {
+        format!("{MESSAGE_SELECTOR_QUERY_BEGIN}{MESSAGE_SELECTOR_QUERY_END}")
     }
 
     fn query_with_id() -> String {
@@ -792,6 +815,11 @@ WHERE deleted=0"
             Self::query(),
             gen_variable_in_argument_list(count)
         )
+    }
+    fn query_with_label_and_limit() -> String {
+        const LABEL_CLAUSE: &str =
+            "INNER JOIN message_labels AS MSL ON MSL.message_id=M.id AND MSL.label_id=?";
+        format!("{MESSAGE_SELECTOR_QUERY_BEGIN} {LABEL_CLAUSE} {MESSAGE_SELECTOR_QUERY_END} {MESSAGE_SELECTOR_ORDER_CLAUSE} LIMIT ?")
     }
 
     fn from_row(r: &Row) -> DBResult<LocalMessageMetadata> {

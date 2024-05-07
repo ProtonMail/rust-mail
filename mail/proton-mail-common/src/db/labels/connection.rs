@@ -492,6 +492,19 @@ expanded=?, notified=?, sticky=? WHERE rid=?",
             .optional()
     }
 
+    /// Get the remote id for a label with `id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn remote_label_id_from_local_id(
+        &self,
+        id: LocalLabelId,
+    ) -> DBResult<Option<Option<LabelId>>> {
+        self.0
+            .query_row("SELECT rid FROM labels WHERE id=?", [id], |r| r.get(0))
+            .optional()
+    }
+
     pub fn resolve_remote_label_ids<'i>(
         &self,
         ids: impl ExactSizeIterator<Item = &'i LabelId>,

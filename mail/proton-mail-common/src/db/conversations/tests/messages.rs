@@ -315,6 +315,25 @@ pub fn test_delete_local_message() {
 }
 
 #[test]
+pub fn test_message_metadata_list() {
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        let state = new_test_delete_db_state();
+        with_tx_core(&mut core_conn, |core_tx| {
+            prepare_db_state_core(core_tx, &state.addresses)
+        });
+        with_tx(&mut conn, |tx| {
+            let (_, state_map) = prepare_and_patch_db_state(tx, state.clone());
+            let messages = tx
+                .message_metadata_list(*state_map.labels.get(&MY_LABEL_ID1).unwrap(), 10)
+                .unwrap();
+            assert_eq!(messages.len(), 3);
+            assert!(messages[0].time > messages[1].time);
+            assert!(messages[1].time > messages[2].time);
+        });
+    });
+}
+
+#[test]
 pub fn test_delete_local_message_does_not_change_conv_unread_count() {
     with_file_sqlite_db(|mut core_conn, mut conn, _| {
         let state = new_test_delete_db_state();

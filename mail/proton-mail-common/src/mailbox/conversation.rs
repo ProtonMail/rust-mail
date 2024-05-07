@@ -8,98 +8,25 @@ use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
 use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
-use proton_api_mail::proton_api_core::exports::tracing;
 
 impl Mailbox {
-    /// Sync the label's messages or conversations.
-    ///
-    /// Depending on the user's mail settings, this function will either sync the conversations
-    /// or the messages of the label.
+    /// Create a new live query for conversations.
     ///
     /// # Errors
-    /// Returns error if API request or database changes failed.
-    pub async fn sync(&self, count: usize) -> MailboxResult<()> {
-        let Some(label) = self.user_ctx.get_label(self.label_id)? else {
-            return Err(MailboxError::LabelNotFound(self.label_id));
-        };
-        let view_mode = label
-            .mail_settings_view_mode()
-            .unwrap_or(self.user_ctx.with_mail_settings(|s| s.view_mode));
-        if let Some(remote_id) = label.rid.clone() {
-            tracing::debug!("Syncing {}({})", self.label_id, remote_id);
-            let ctx = self.user_ctx.clone();
-
-            let initialized = ctx
-                .db_read(|conn| match view_mode {
-                    MailSettingsViewMode::Conversations => {
-                        conn.check_if_label_is_initialized_conversations(label.id)
-                    }
-                    MailSettingsViewMode::Messages => {
-                        conn.check_if_label_is_initialized_messages(label.id)
-                    }
-                })
-                .map_err(|e| {
-                    tracing::error!("Failed to check if label is initialized: {e}");
-                    MailContextError::DB(e)
-                })?;
-            if initialized {
-                tracing::debug!("Label {} already initialized, skipping", self.label_id);
-                return Ok(());
-            }
-            tracing::debug!(
-                "Label {} not initialized, fetching (mode={:?})",
-                self.label_id,
-                view_mode
-            );
-
-            match view_mode {
-                MailSettingsViewMode::Conversations => ctx
-                    .sync_first_conversation_page(remote_id, count)
-                    .await
-                    .map_err(|e| {
-                        tracing::error!("Failed to sync conversations for label: {e}");
-                        e
-                    }),
-                MailSettingsViewMode::Messages => ctx
-                    .sync_first_message_page(remote_id, count)
-                    .await
-                    .map_err(|e| {
-                        tracing::error!("Failed to sync messages for label: {e}");
-                        e
-                    }),
-            }?;
-
-            ctx.db_write(|tx| {
-                match view_mode {
-                    MailSettingsViewMode::Conversations => {
-                        tx.mark_label_as_initialized_conversations(label.id)?;
-                    }
-                    MailSettingsViewMode::Messages => {
-                        tx.mark_label_as_initialized_messages(label.id)?;
-                    }
-                }
-                Ok(())
-            })
-            .map_err(|e| {
-                tracing::error!("Failed to mark label as initialized: {e}");
-                MailContextError::DB(e)
-            })?;
-
-            Ok(())
-        } else {
-            Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id))
-        }
-    }
-
+    /// Return error if the mailbox's view mode is not [`MailSettingsViewMode::Conversations`].
     pub fn new_conversation_query<Builder: MailboxObservableQueryBuilder<ConversationQuery>>(
         &self,
         builder: Builder,
         limit: usize,
-    ) -> Builder::Output {
-        builder.build(
+    ) -> Result<Builder::Output, MailboxError> {
+        if self.view_mode() != MailSettingsViewMode::Conversations {
+            return Err(MailboxError::InvalidViewMode);
+        }
+
+        Ok(builder.build(
             self.user_ctx.tracker_service().clone(),
             ConversationQuery::new(self.label_id, limit),
-        )
+        ))
     }
 
     pub fn conversations(&self, count: usize) -> MailboxResult<Vec<LocalConversation>> {
