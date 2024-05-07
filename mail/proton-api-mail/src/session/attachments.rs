@@ -3,14 +3,13 @@ use proton_api_core::http;
 
 use crate::{
     domain::AttachmentId,
-    requests::{
-        GetAttachmentMetadataRequest, GetAttachmentMetadataResponse, GetAttachmentRequest,
-    },
+    requests::{GetAttachmentMetadataRequest, GetAttachmentMetadataResponse, GetAttachmentRequest},
     MailSession,
 };
 
 impl MailSession {
-    pub async fn get_attachment(
+    /// Calls the API to load encrypted attachment content for the given `attachment_id`.
+    pub async fn attachment_content(
         &self,
         attachment_id: AttachmentId,
     ) -> Result<Bytes, http::RequestError> {
@@ -19,7 +18,8 @@ impl MailSession {
             .await
     }
 
-    pub async fn get_attachment_metadata(
+    /// Calls the API to load the full attachment metadata for decrypting its content.
+    pub async fn attachment_metadata_complete(
         &self,
         attachment_id: AttachmentId,
     ) -> Result<GetAttachmentMetadataResponse, http::RequestError> {

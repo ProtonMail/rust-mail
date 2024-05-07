@@ -29,7 +29,7 @@ use super::account::{
     test_address_keys_for_user_address, test_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_ADDRESS_KEY_TOKEN, TEST_USER_ID, TEST_USER_MAIL,
 };
-use super::attachment::{test_attachment, test_attachment_metadata};
+use super::attachment::{test_attachment_metadata, test_attachment_metadata_complete};
 
 /// Mail user context init callback that does nothing.
 pub struct NullCallback {}
@@ -150,7 +150,7 @@ impl Params {
                 attachments_metadata: vec![test_attachment_metadata()],
                 attachment_info: Default::default(),
             }],
-            attachments: vec![test_attachment(
+            attachments: vec![test_attachment_metadata_complete(
                 MessageId::from("mymessage "),
                 ConversationId::from("myconv"),
             )],

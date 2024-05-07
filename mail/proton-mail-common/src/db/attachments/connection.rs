@@ -4,7 +4,7 @@ use crate::db::{
     DBResult, LocalAttachment, LocalAttachmentMetadata, LocalConversationId, LocalMessageId,
     MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{Attachment, AttachmentMetadata};
+use proton_api_mail::domain::{Attachment, AttachmentId, AttachmentMetadata};
 use proton_api_mail::proton_api_core::domain::AddressId;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
@@ -183,15 +183,19 @@ RETURNING id
     ///
     /// # Errors
     /// Return error if the query fails.
-    pub fn is_attachment_metadata_complete(&self, id: LocalAttachmentId) -> DBResult<Option<bool>> {
+    pub fn is_attachment_metadata_complete(
+        &self,
+        id: LocalAttachmentId,
+    ) -> DBResult<Option<(bool, Option<AttachmentId>)>> {
         let result = self
             .0
             .query_row(
-                "SELECT key_packets FROM attachments WHERE id=?",
+                "SELECT key_packets, rid FROM attachments WHERE id=?",
                 [id],
                 |r| {
-                    let r = r.get_ref(0)?;
-                    Ok(r.as_str_or_null()?.is_some())
+                    let v_ref = r.get_ref(0)?;
+                    let rid = r.get(1)?;
+                    Ok((v_ref.as_str_or_null()?.is_some(), rid))
                 },
             )
             .optional()?;

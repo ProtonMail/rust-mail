@@ -14,7 +14,9 @@ use proton_mail_common::exports::proton_sqlite3::{
 };
 use proton_mail_common::exports::tracing::error;
 use proton_mail_common::exports::{anyhow, thiserror};
-use proton_mail_common::proton_api_mail::domain::{AddressDomainLogoError, LabelId, MailSettingsViewMode};
+use proton_mail_common::proton_api_mail::domain::{
+    AddressDomainLogoError, LabelId, MailSettingsViewMode,
+};
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::future::Future;
