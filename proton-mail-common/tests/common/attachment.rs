@@ -8,7 +8,7 @@ use proton_api_mail::{
     requests::GetAttachmentMetadataResponse,
 };
 use proton_crypto_inbox::attachment::KeyPackets;
-use wiremock::matchers::{body_json, method, path, path_regex};
+use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 use super::{account::TEST_ADDRESS_ID, TestContext};
@@ -106,7 +106,7 @@ impl TestContext {
     ) {
         let path_for_attachment = format!("api/mail/v4/attachments/{}", attachment_id);
         Mock::given(method("GET"))
-            .and(path_regex(r"mail/v4/attachments/[^/]*[^/]$"))
+            .and(path(path_for_attachment))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(attachment_content))
             .expect(1)
             .mount(self.mock_server())
