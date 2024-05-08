@@ -48,5 +48,5 @@ impl RequestDesc for GetAttachmentMetadataRequest {
 #[derive(Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetAttachmentMetadataResponse {
-    pub response: Attachment,
+    pub attachment: Attachment,
 }
