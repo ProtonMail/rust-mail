@@ -2,6 +2,8 @@ mod attachments;
 mod conversation;
 mod messages;
 
+pub use attachments::DecryptedAttachment;
+
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::{LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId};
 use crate::exports::tracing;

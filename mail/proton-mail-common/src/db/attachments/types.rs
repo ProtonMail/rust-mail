@@ -79,6 +79,19 @@ impl LocalAttachment {
     }
 }
 
+impl From<LocalAttachment> for LocalAttachmentMetadata {
+    fn from(value: LocalAttachment) -> Self {
+        Self {
+            id: value.id,
+            rid: value.rid,
+            name: value.name,
+            size: value.size,
+            mime_type: value.mime_type,
+            disposition: value.disposition,
+        }
+    }
+}
+
 impl AttachmentDecryption for LocalAttachment {
     fn attachment_key_packets(&self) -> &KeyPackets {
         &self.key_packets
