@@ -82,7 +82,7 @@ impl TestContext {
             .and(path(path_for_attachment))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetAttachmentMetadataResponse {
-                    response: attachment,
+                    attachment: attachment,
                 }),
             )
             .expect(1)

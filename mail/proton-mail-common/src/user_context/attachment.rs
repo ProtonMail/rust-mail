@@ -21,7 +21,7 @@ impl MailUserContext {
     ) -> MailContextResult<()> {
         let session = self.mail_session();
         let attachment_response = session.attachment_metadata_complete(attachment_id).await?;
-        self.db_write(|tx| tx.create_or_update_attachment(&attachment_response.response))?;
+        self.db_write(|tx| tx.create_or_update_attachment(&attachment_response.attachment))?;
         Ok(())
     }
 }
