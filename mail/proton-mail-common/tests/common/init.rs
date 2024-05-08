@@ -26,10 +26,10 @@ use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 
 use super::account::{
-    test_address_keys_for_user_address, test_user_keys, TEST_ADDRESS_ID,
+    testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_ADDRESS_KEY_TOKEN, TEST_USER_ID, TEST_USER_MAIL,
 };
-use super::attachment::{test_attachment_metadata, test_attachment_metadata_complete};
+use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 
 /// Mail user context init callback that does nothing.
 pub struct NullCallback {}
@@ -113,7 +113,7 @@ impl Params {
                 order: 0,
                 display_name: "".to_string(),
                 signature: TEST_ADDRESS_KEY_SIGNATURE.to_owned(),
-                keys: test_address_keys_for_user_address(),
+                keys: testdata_address_keys_for_user_address(),
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: Default::default(),
@@ -147,10 +147,10 @@ impl Params {
                     context_snooze_time: 0,
                 }],
                 display_snooze_reminder: false,
-                attachments_metadata: vec![test_attachment_metadata()],
+                attachments_metadata: vec![testdata_attachment_metadata()],
                 attachment_info: Default::default(),
             }],
-            attachments: vec![test_attachment_metadata_complete(
+            attachments: vec![testdata_attachment_metadata_complete(
                 MessageId::from("mymessage "),
                 ConversationId::from("myconv"),
             )],
@@ -207,7 +207,7 @@ impl TestContext {
                     create_time: 0,
                     credit: 0,
                     currency: "".to_string(),
-                    keys: test_user_keys(),
+                    keys: testdata_user_keys(),
                     product_used_space: ProductUsedSpace {
                         calendar: 0,
                         contact: 0,

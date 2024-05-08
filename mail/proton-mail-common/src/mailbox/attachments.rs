@@ -96,10 +96,10 @@ async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
 
     let signature_verification = {
         let address_keys = mail_user_ctx
-            .address_keys_unlocked_async(pgp_provider, &attachment_info.address_id)
+            .unlocked_address_keys_async(pgp_provider, &attachment_info.address_id)
             .await?;
 
-        // TODO: Load the real verification keys in the future.
+        // TODO: Load the sender verification keys for correct signature verification.
         let verification_keys: Vec<<Provider as PGPProvider>::PublicKey> = Vec::new();
 
         let mut decrypting_reader = attachment_info.decrypt_from_reader(

@@ -21,7 +21,7 @@ use tempdir::TempDir;
 use wiremock::matchers::any;
 use wiremock::{Mock, MockServer, Request};
 
-use self::account::{test_user_secret, TEST_USER_ID, TEST_USER_MAIL};
+use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 
 /// Test context for mail tests.
 ///
@@ -93,7 +93,7 @@ impl TestContext {
             email: TEST_USER_MAIL.to_owned(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
-            key_secret: Some(test_user_secret()),
+            key_secret: Some(testdata_user_secret()),
             scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)

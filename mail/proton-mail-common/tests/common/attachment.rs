@@ -17,7 +17,7 @@ const TEST_ATTACHMENT_ID: &str =
     "5OkOlBi3Swa4cHRyChyUazwt8GYDBLIAX-ZYnGg8-nAHNKjj5EgR5uH-GePQFaWQPgS60aoJ1Dl2s6UI4BmwNw==";
 
 /// The metadata for the default attachment.
-pub fn test_attachment_metadata() -> AttachmentMetadata {
+pub fn testdata_attachment_metadata() -> AttachmentMetadata {
     AttachmentMetadata {
         id: AttachmentId::from(TEST_ATTACHMENT_ID),
         size: 61,
@@ -30,11 +30,11 @@ pub fn test_attachment_metadata() -> AttachmentMetadata {
 /// The complete metadata for the default attachment.
 ///
 /// The attachment is encrypted with the default test account address key.
-pub fn test_attachment_metadata_complete(
+pub fn testdata_attachment_metadata_complete(
     message_id: MessageId,
     conversation_id: ConversationId,
 ) -> Attachment {
-    let metadata = test_attachment_metadata();
+    let metadata = testdata_attachment_metadata();
     Attachment {
         id: metadata.id.clone(),
         name: metadata.name.clone(),
@@ -53,7 +53,7 @@ pub fn test_attachment_metadata_complete(
 }
 
 /// The encrypted data of the default attachment.
-pub fn test_attachment_data() -> Vec<u8> {
+pub fn testdata_attachment_data() -> Vec<u8> {
     vec![
         210, 59, 1, 75, 249, 106, 13, 153, 197, 164, 144, 235, 96, 92, 106, 220, 206, 208, 189, 17,
         127, 6, 220, 69, 65, 126, 205, 138, 245, 180, 110, 215, 254, 99, 121, 249, 127, 69, 117,
@@ -63,7 +63,7 @@ pub fn test_attachment_data() -> Vec<u8> {
 }
 
 /// The expected plaintext content of the default test attachment.
-pub fn test_expected_attachment_decrypted() -> Vec<u8> {
+pub fn testdata_expected_attachment_decrypted() -> Vec<u8> {
     b"attachment".to_vec()
 }
 

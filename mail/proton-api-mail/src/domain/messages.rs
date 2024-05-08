@@ -1,4 +1,4 @@
-use crate::domain::{AttachmentMetadata, ConversationId, LabelId};
+use crate::domain::{AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId};
 use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
 use proton_api_core::exports::serde_json;
@@ -7,13 +7,8 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
 
-use super::{AttachmentId, Disposition};
-
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
-
-#[cfg(feature = "uniffi")]
-uniffi::custom_newtype!(AddressId, String);
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]

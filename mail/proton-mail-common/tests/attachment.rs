@@ -6,7 +6,7 @@ use proton_api_mail::domain::LabelId;
 use proton_crypto_inbox::proton_crypto::crypto::VerificationError;
 use proton_mail_common::Mailbox;
 
-use crate::common::attachment::{test_attachment_data, test_expected_attachment_decrypted};
+use crate::common::attachment::{testdata_attachment_data, testdata_expected_attachment_decrypted};
 
 #[test]
 fn test_load_attachment_buffer() {
@@ -21,7 +21,7 @@ fn test_load_attachment_buffer() {
         ctx.mock_get_conversations(conversations, 1).await;
         ctx.mock_get_attachment_metadata(test_attachment.clone())
             .await;
-        ctx.mock_get_attachment_data(test_attachment.id.clone(), test_attachment_data())
+        ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
             .await;
         ctx.catch_all().await;
         ctx.user_context()
@@ -56,7 +56,7 @@ fn test_load_attachment_buffer() {
             .expect("decryption should not fail");
         assert_eq!(
             decryption_result.content,
-            test_expected_attachment_decrypted(),
+            testdata_expected_attachment_decrypted(),
             "attachments should be equal"
         );
         assert!(

@@ -9,6 +9,8 @@ use crate::{
 
 impl MailSession {
     /// Calls the API to load encrypted attachment content for the given `attachment_id`.
+    ///
+    /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
     pub async fn attachment_content(
         &self,
         attachment_id: AttachmentId,
@@ -19,6 +21,8 @@ impl MailSession {
     }
 
     /// Calls the API to load the full attachment metadata for decrypting its content.
+    ///
+    /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
     pub async fn attachment_metadata_complete(
         &self,
         attachment_id: AttachmentId,
