@@ -154,6 +154,28 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(result)
     }
 
+    /// Get message metadata for a conversation with `id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn messages_metadata_for_conversation(
+        &self,
+        id: LocalConversationId,
+    ) -> DBResult<Vec<LocalMessageMetadata>> {
+        let mut stmt = self
+            .0
+            .prepare(&LocalMessageMetadataSelector::query_with_conversation_id())?;
+        let r = stmt.query_map([id], LocalMessageMetadataSelector::from_row)?;
+        let result = mapped_rows_to_vec(r)?;
+        // If there are no messages for this conversation it means the conversation
+        // has been removed. There should always be one message.
+        if result.is_empty() {
+            return Err(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows);
+        }
+
+        Ok(result)
+    }
+
     /// Get up to `count` message metadata for all messages in `label_id`.
     ///
     /// # Errors
@@ -727,6 +749,8 @@ fn bind_message_metadata_create(
 
 struct LocalMessageMetadataSelector {}
 const MESSAGE_SELECTOR_ORDER_CLAUSE: &str = " GROUP BY M.id ORDER BY M.time DESC, M.`order` DESC ";
+const MESSAGE_SELECTOR_ORDER_CLAUSE_CONVERSATION: &str =
+    " GROUP BY M.id ORDER BY M.time ASC, M.`order` DESC ";
 
 const MESSAGE_SELECTOR_QUERY_BEGIN: &str = r"
 WITH json_message_labels AS (
@@ -807,6 +831,13 @@ impl LocalMessageMetadataSelector {
 
     fn query_with_id() -> String {
         format!("{} AND id=?", Self::query())
+    }
+
+    fn query_with_conversation_id() -> String {
+        format!(
+            "{} AND conversation_id=? {MESSAGE_SELECTOR_ORDER_CLAUSE_CONVERSATION}",
+            Self::query()
+        )
     }
 
     fn query_with_id_in(count: usize) -> String {

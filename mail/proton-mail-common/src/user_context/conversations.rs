@@ -1,5 +1,6 @@
-use crate::db::{DBResult, LocalConversation, LocalLabelId};
-use crate::{MailContextResult, MailUserContext};
+use crate::db::{DBResult, LocalConversation, LocalConversationId, LocalLabelId};
+use crate::exports::tracing::error;
+use crate::{MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult};
 use proton_api_mail::domain::{ConversationFilterBuilder, LabelId, MessageMetadataFilterBuilder};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
@@ -75,6 +76,44 @@ impl MailUserContext {
             tx.create_or_update_message_counts(message_counts.iter())?;
             Ok(())
         })?;
+        Ok(())
+    }
+
+    /// Sync the conversation with `id`'s messages.
+    ///
+    /// If this is the first time this is called, the messages will be downloaded from the server.
+    ///
+    /// # Errors
+    /// Returns error if the db queries failed or the network request failed.
+    #[tracing::instrument(level = Level::DEBUG, skip(self))]
+    pub async fn sync_conversation_messages(&self, id: LocalConversationId) -> MailboxResult<()> {
+        let Some((has_messages, rid)) = self
+            .db_read(|conn| conn.conversation_has_messages(id))
+            .map_err(MailContextError::from)?
+        else {
+            return Err(MailboxError::ConversationNotFound(id));
+        };
+
+        if !has_messages {
+            let Some(rid) = rid else {
+                return Err(MailboxError::ConversationDoesNotHaveRemoteId(id));
+            };
+            debug!("Syncing conversation messages");
+            let conversation = self.mail_session().conversation(&rid).await.map_err(|e| {
+                error!("failed to download conversation messages: {e}");
+                MailContextError::from(e)
+            })?;
+
+            self.db_write(|tx| {
+                tx.create_messages_from_metadata(conversation.messages.iter())?;
+                tx.set_conversation_has_messages(id, true)
+            })
+            .map_err(|e| {
+                error!("Failed to write message metadata: {e}");
+                MailContextError::DB(e)
+            })?;
+        }
+
         Ok(())
     }
 

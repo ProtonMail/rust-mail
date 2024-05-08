@@ -2,7 +2,10 @@ use crate::actions::{
     DeleteConversationsAction, LabelConversationsAction, MarkConversationsReadAction,
     MarkConversationsUnreadAction, MoveConversationsAction, UnlabelConversationsAction,
 };
-use crate::db::{ConversationQuery, LocalConversation, LocalConversationId, LocalLabelId};
+use crate::db::{
+    ConversationMessagesQuery, ConversationQuery, LocalConversation, LocalConversationId,
+    LocalLabelId, LocalMessageMetadata,
+};
 use crate::exports::anyhow::anyhow;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
@@ -145,6 +148,44 @@ impl Mailbox {
         self.user_ctx
             .queue_action(MoveConversationsAction::new(self.label_id, label.id, ids))?;
         Ok(())
+    }
+
+    /// Retrieve the conversation with `id`'s messages.
+    ///
+    /// If this is the first time this is called, the messages will be downloaded from the server.
+    ///
+    /// # Errors
+    /// Returns error if the db queries failed or the network request failed.
+    pub async fn conversation_messages(
+        &self,
+        id: LocalConversationId,
+    ) -> MailboxResult<Vec<LocalMessageMetadata>> {
+        self.user_context().sync_conversation_messages(id).await?;
+        Ok(self
+            .user_ctx
+            .db_read(|conn| conn.messages_metadata_for_conversation(id))
+            .map_err(MailContextError::from)?)
+    }
+
+    /// Create a new live query for a conversation with `id` 's messages.
+    ///
+    /// If this is the first time this is called, the messages will be downloaded from the server.
+    ///
+    /// # Errors
+    /// Return error if the network request or the database operation failed.
+    pub async fn new_conversation_message_query<
+        Builder: MailboxObservableQueryBuilder<ConversationMessagesQuery>,
+    >(
+        &self,
+        builder: Builder,
+        id: LocalConversationId,
+    ) -> Result<Builder::Output, MailboxError> {
+        self.user_ctx.sync_conversation_messages(id).await?;
+
+        Ok(builder.build(
+            self.user_ctx.tracker_service().clone(),
+            ConversationMessagesQuery::new(id),
+        ))
     }
 
     fn starred_label_id(&self) -> MailboxResult<LocalLabelId> {

@@ -33,6 +33,8 @@ pub enum MailboxError {
     AttachmentDecryptionIO(String),
     #[error("Conversation '{0}' not found")]
     ConversationNotFound(LocalConversationId),
+    #[error("Conversation '{0}' does not have a remote id")]
+    ConversationDoesNotHaveRemoteId(LocalConversationId),
     #[error("Problem with conversation with local ID: '{0}'")]
     ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]

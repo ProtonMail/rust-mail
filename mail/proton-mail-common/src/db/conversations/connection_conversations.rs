@@ -1100,6 +1100,46 @@ ON CONFLICT(label_id) DO UPDATE SET total=total-excluded.total, unread=unread-ex
 
         Ok(())
     }
+
+    /// Check whether we already downloaded the messages for a conversation with `id`.
+    ///
+    /// This function also returns the remote id, since it will be necessary to retrieve the
+    /// data later.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn conversation_has_messages(
+        &self,
+        id: LocalConversationId,
+    ) -> DBResult<Option<(bool, Option<ConversationId>)>> {
+        self.0
+            .query_row(
+                "SELECT has_messages, rid FROM conversations WHERE id =?",
+                [id],
+                |r| {
+                    let has_messages = r.get(0)?;
+                    let rid = r.get(1)?;
+                    Ok((has_messages, rid))
+                },
+            )
+            .optional()
+    }
+
+    /// Mark messages for a conversation with `id` as downloaded.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn set_conversation_has_messages(
+        &self,
+        id: LocalConversationId,
+        value: bool,
+    ) -> DBResult<()> {
+        self.0.execute(
+            "UPDATE conversations SET has_messages = ? WHERE id = ?",
+            (value, id),
+        )?;
+        Ok(())
+    }
 }
 
 const RESOLVE_LABEL_ID_STATEMENT: &str = "SELECT id FROM labels WHERE rid = ?";
