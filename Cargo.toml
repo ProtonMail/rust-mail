@@ -43,7 +43,7 @@ trivial_casts = "warn"
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-pedantic = "warn"
+pedantic = "deny"
 missing_errors_doc = "allow"
 module_name_repetitions = "allow"
 # Useful to track missing comments on private items/code.

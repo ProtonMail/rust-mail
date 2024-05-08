@@ -158,7 +158,7 @@ impl MailUserContext {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub fn user_keys_unlocked<Provider: PGPProviderSync>(
+    pub fn unlocked_user_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
     ) -> MailContextResult<UnlockedUserKeys<Provider>> {
@@ -173,7 +173,7 @@ impl MailUserContext {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn user_keys_unlocked_async<Provider: PGPProviderSync>(
+    pub async fn unlocked_user_keys_async<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
     ) -> MailContextResult<UnlockedUserKeys<Provider>> {
@@ -193,7 +193,7 @@ impl MailUserContext {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub fn address_keys_unlocked<Provider: PGPProviderSync>(
+    pub fn unlocked_address_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         address_id: &AddressId,
@@ -209,7 +209,7 @@ impl MailUserContext {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn address_keys_unlocked_async<Provider: PGPProviderSync>(
+    pub async fn unlocked_address_keys_async<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         address_id: &AddressId,

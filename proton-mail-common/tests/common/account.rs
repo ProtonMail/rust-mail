@@ -30,7 +30,7 @@ pub const TEST_ADDRESS_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersi
 pub const TEST_ADDRESS_KEY_TOKEN: &str = "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4DJ8rw1vR308gSAQdAwfey4aUSny0pDcCM0OykFF+KoquoUEuc5I48NYNn\nNkYwdMVXcHgrNAOVkSgBcCS5VxaRb3Lmo610XkQRnCyuadgvce4pRFqtx0+A\nNCNgn/Px0nEB+tPsQJL+EePQHgMZXhXmW3tS6/7jxzyCkuJVKdXHFNu3kTNU\nthAEwWkLUrQu280+De/2UEFq8oB6vjvUJiohremKSNp2Wr8fhL+XQubLoCtw\nln9Pw5EL3607i64Cs5f88Ew35GeKPQw/uUuCI8uB0A==\n=dj6J\n-----END PGP MESSAGE-----\n";
 pub const TEST_ADDRESS_KEY_SIGNATURE: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwnUEARYKACcFgmYnt8kJkDicqBtFkGUZFiEE5kkQCs8uqswzFfx/OJyoG0WQ\nZRkAACZ4AP49xBDsaIUR1IEJlMqTdwaSJ+02eXXpJANwT/mg2QNTJwD/fXhq\nojjc2LEMrebiFAl4GQgXxkUgnPuvpCyiB80C3A8=\n=KsBO\n-----END PGP SIGNATURE-----\n";
 
-fn test_locked_user_key() -> LockedKey {
+fn testdata_locked_user_key() -> LockedKey {
     LockedKey {
         id: KeyId::from(TEST_USER_KEY_ID),
         version: 3,
@@ -47,7 +47,7 @@ fn test_locked_user_key() -> LockedKey {
     }
 }
 
-fn test_locked_address_key() -> LockedKey {
+fn testdata_locked_address_key() -> LockedKey {
     LockedKey {
         id: KeyId::from(TEST_ADDRESS_KEY_ID),
         version: 3,
@@ -65,17 +65,17 @@ fn test_locked_address_key() -> LockedKey {
 }
 
 /// Returns the default test user keys.
-pub fn test_user_keys() -> UserKeys {
-    UserKeys(vec![test_locked_user_key()])
+pub fn testdata_user_keys() -> UserKeys {
+    UserKeys(vec![testdata_locked_user_key()])
 }
 
 /// Returns the user secret to unlock the default test user keys.
-pub fn test_user_secret() -> UserKeySecret {
+pub fn testdata_user_secret() -> UserKeySecret {
     let salts = Salts::new(iter::once(Salt {
         id: KeyId::from(TEST_USER_KEY_ID),
         key_salt: Some("6bIzN4A8bOwmsiEuCPj74g==".to_owned()),
     }));
-    let locked_key = test_locked_user_key();
+    let locked_key = testdata_locked_user_key();
     let srp_provider = new_srp_provider();
     salts
         .salt_for_key(&srp_provider, &locked_key.id, TEST_USER_PASSWORD.as_bytes())
@@ -84,6 +84,6 @@ pub fn test_user_secret() -> UserKeySecret {
 }
 
 /// Returns the address keys for the default test user matching its address [`TEST_USER_MAIL`].
-pub fn test_address_keys_for_user_address() -> AddressKeys {
-    AddressKeys(vec![test_locked_address_key()])
+pub fn testdata_address_keys_for_user_address() -> AddressKeys {
+    AddressKeys(vec![testdata_locked_address_key()])
 }

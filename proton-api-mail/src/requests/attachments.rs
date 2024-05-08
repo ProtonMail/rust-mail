@@ -2,8 +2,7 @@ use crate::domain::{Attachment, AttachmentId};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::http::{ByteResponse, JsonResponse, Method, RequestData, RequestDesc};
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[derive(Debug)]
 pub struct GetAttachmentRequest {
     pub id: AttachmentId,
 }
@@ -23,8 +22,7 @@ impl RequestDesc for GetAttachmentRequest {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[derive(Debug)]
 pub struct GetAttachmentMetadataRequest {
     pub id: AttachmentId,
 }
