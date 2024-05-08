@@ -47,12 +47,19 @@ fn test_get_sender_image() {
         mailbox.sync(1).await.expect("mailbox sync failed");
     });
     let local_conversation = mailbox.conversations(2).unwrap();
-    let senders = &local_conversation.first().unwrap().senders;
+    let sender = &local_conversation.first().unwrap().senders.first().unwrap();
 
     ctx.async_runtime().block_on(async {
         let image = ctx
             .user_context()
-            .image_for_senders(senders, None, None, None)
+            .image_for_sender(
+                sender.address.clone(),
+                sender.bimi_selector.clone(),
+                sender.display_sender_image,
+                None,
+                None,
+                None,
+            )
             .await
             .expect("failed to get image")
             .expect("should have value");
