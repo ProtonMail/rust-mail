@@ -33,7 +33,7 @@ impl Mailbox {
     /// # Errors
     /// Returns an error if the encrypted attachment fetching or decryption fails.
     /// Signature verification failures are not returned as errors.
-    pub fn load_attachment_to_buffer(
+    pub async fn load_attachment_to_buffer(
         &self,
         attachment_id: LocalAttachmentId,
     ) -> MailboxResult<DecryptedAttachment> {
@@ -48,9 +48,8 @@ impl Mailbox {
             let remote_attachment_id =
                 attachment_id_opt.ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
             user_context
-                .mail_context()
-                .async_runtime()
-                .block_on(user_context.sync_complete_attachment_metadata(remote_attachment_id))
+                .sync_complete_attachment_metadata(remote_attachment_id)
+                .await
                 .map_err(MailContextError::from)?;
         }
 
@@ -68,13 +67,9 @@ impl Mailbox {
         // Load the attachment content.
         // TODO: Lets opt for a stream in the future
         let attachment_source_reader = user_context
-            .mail_context()
-            .async_runtime()
-            .block_on(
-                user_context
-                    .mail_session()
-                    .attachment_content(remote_attachment_id.clone()),
-            )
+            .mail_session()
+            .attachment_content(remote_attachment_id.clone())
+            .await
             .map_err(MailContextError::from)?;
 
         // Decrypt it.
@@ -85,11 +80,12 @@ impl Mailbox {
             user_context,
             attachment_source_reader.as_ref(),
         )
+        .await
     }
 }
 
 /// Helper function to decrypt the attachment.
-fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
+async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     attachment_info: LocalAttachment,
     mail_user_ctx: &MailUserContext,
@@ -99,8 +95,9 @@ fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
         Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
 
     let signature_verification = {
-        let address_keys =
-            mail_user_ctx.address_keys_unlocked(pgp_provider, &attachment_info.address_id)?;
+        let address_keys = mail_user_ctx
+            .address_keys_unlocked_async(pgp_provider, &attachment_info.address_id)
+            .await?;
 
         // TODO: Load the real verification keys in the future.
         let verification_keys: Vec<<Provider as PGPProvider>::PublicKey> = Vec::new();

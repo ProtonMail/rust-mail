@@ -152,6 +152,10 @@ impl MailUserContext {
 
     /// Returns the unlocked user keys of this user.
     ///
+    /// # Warning
+    /// Cannot be called from an async context as it uses the runtime to block.
+    /// Use [`MailUserContext::user_keys_unlocked_async`] instead.
+    ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub fn user_keys_unlocked<Provider: PGPProviderSync>(
@@ -165,7 +169,27 @@ impl MailUserContext {
         Ok(keys)
     }
 
+    /// Returns the unlocked user keys of this user from an async context..
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub async fn user_keys_unlocked_async<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> MailContextResult<UnlockedUserKeys<Provider>> {
+        let secret_loader = CloneSecretLoader(self.session().expose_key_secret().await);
+        let keys = self
+            .inner
+            .user_context
+            .user_keys_unlocked(pgp_provider, &secret_loader)?;
+        Ok(keys)
+    }
+
     /// Returns the unlocked address keys for this user.
+    ///
+    /// # Warning
+    /// Cannot be called from an async context as it uses the runtime to block.
+    /// Use [`MailUserContext::address_keys_unlocked_async`] instead.
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
@@ -181,6 +205,24 @@ impl MailUserContext {
         Ok(keys)
     }
 
+    /// Returns the unlocked address keys for this user from an async context.
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub async fn address_keys_unlocked_async<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        address_id: &AddressId,
+    ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
+        // TODO: This should not be necessary and handled by the UserContext
+        let secret = CloneSecretLoader(self.session().expose_key_secret().await);
+        let keys =
+            self.inner
+                .user_context
+                .address_keys_unlocked(pgp_provider, &secret, address_id)?;
+        Ok(keys)
+    }
+
     pub async fn logout(&self) -> MailContextResult<()> {
         self.inner.user_context.session().logout().await?;
         Ok(())
@@ -190,6 +232,14 @@ impl MailUserContext {
     pub async fn ping(&self) -> MailContextResult<()> {
         self.inner.user_context.session().ping().await?;
         Ok(())
+    }
+}
+
+struct CloneSecretLoader(Option<UserKeySecret>);
+
+impl LoadKeySecret for CloneSecretLoader {
+    fn key_secret(&self) -> Option<UserKeySecret> {
+        self.0.clone()
     }
 }
 

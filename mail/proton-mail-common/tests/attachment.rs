@@ -49,17 +49,22 @@ fn test_load_attachment_buffer() {
         .unwrap()
         .id;
     // Load and decrypt attachment.
-    let decryption_result = mailbox.load_attachment_to_buffer(attachment_id).unwrap();
-    assert_eq!(
-        decryption_result.content,
-        test_expected_attachment_decrypted(),
-        "attachments should be equal"
-    );
-    assert!(
-        matches!(
-            decryption_result.verification_result,
-            Err(VerificationError::NotSigned(_))
-        ),
-        "There should be no signatures to verify"
-    );
+    ctx.async_runtime().block_on(async {
+        let decryption_result = mailbox
+            .load_attachment_to_buffer(attachment_id)
+            .await
+            .expect("decryption should not fail");
+        assert_eq!(
+            decryption_result.content,
+            test_expected_attachment_decrypted(),
+            "attachments should be equal"
+        );
+        assert!(
+            matches!(
+                decryption_result.verification_result,
+                Err(VerificationError::NotSigned(_))
+            ),
+            "There should be no signatures to verify"
+        );
+    });
 }

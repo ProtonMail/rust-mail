@@ -43,13 +43,17 @@ impl Mailbox {
     /// # Errors
     /// Returns errors if the retrieval or decryption of the attachment fails.
     /// Signature verification failures are not returned as errors.
-    pub fn load_attachment_to_buffer(
+    pub async fn load_attachment_to_buffer(
         &self,
         local_attachment_id: u64,
     ) -> Result<DecryptedAttachment, MailboxError> {
-        self.mbox
-            .load_attachment_to_buffer(local_attachment_id.into())
-            .map(Into::into)
-            .map_err(MailboxError::from)
+        let mbox = self.mbox.clone();
+        self.uniffi_async(async move {
+            mbox.load_attachment_to_buffer(local_attachment_id.into())
+                .await
+                .map(Into::into)
+                .map_err(MailboxError::from)
+        })
+        .await
     }
 }
