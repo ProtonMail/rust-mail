@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use proton_mail_common::db::LocalAttachmentMetadata;
+
 use crate::{
     core::SignatureVerificationResult,
     mail::{Mailbox, MailboxError},
@@ -7,11 +9,23 @@ use crate::{
 
 /// Returned by [`Mailbox::load_attachment_to_buffer`].
 #[derive(Debug, Clone, uniffi::Record)]
-pub struct AttachmentBufferResult {
+pub struct DecryptedAttachment {
+    /// Metadata of the decrypted attachment.
+    pub attachment_metadata: LocalAttachmentMetadata,
     /// The attachment content.
     pub content: Vec<u8>,
     /// The result of the signature verification.
     pub verification_result: Arc<SignatureVerificationResult>,
+}
+
+impl From<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
+    fn from(value: proton_mail_common::DecryptedAttachment) -> Self {
+        Self {
+            attachment_metadata: value.attachment_metadata,
+            content: value.content,
+            verification_result: Arc::new(value.verification_result.into()),
+        }
+    }
 }
 
 #[uniffi::export]
@@ -32,13 +46,10 @@ impl Mailbox {
     pub fn load_attachment_to_buffer(
         &self,
         local_attachment_id: u64,
-    ) -> Result<AttachmentBufferResult, MailboxError> {
+    ) -> Result<DecryptedAttachment, MailboxError> {
         self.mbox
             .load_attachment_to_buffer(local_attachment_id.into())
-            .map(|(content, verification_result)| AttachmentBufferResult {
-                content,
-                verification_result: Arc::new(verification_result.into()),
-            })
+            .map(Into::into)
             .map_err(MailboxError::from)
     }
 }
