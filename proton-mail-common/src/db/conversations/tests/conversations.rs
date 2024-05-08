@@ -9,7 +9,8 @@ use crate::db::conversations::tests::utils::{
 use crate::db::conversations::types::LocalConversation;
 use crate::db::{
     with_file_sqlite_db, with_tx, with_tx_core, LabelColor, LocalAttachmentMetadata,
-    LocalConversationCount, LocalInlineLabelInfo, LocalLabelId, MailSqliteConnectionMut,
+    LocalConversationCount, LocalConversationId, LocalInlineLabelInfo, LocalLabelId,
+    MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
@@ -43,6 +44,39 @@ fn test_conversation_create_no_labels() {
                 .expect("failed to get conversation")
                 .expect("should have value");
             assert_eq!(local_conversation, db_conversation);
+        });
+    });
+}
+
+#[test]
+fn test_conversation_has_messages_flag() {
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, create_address);
+        with_tx(&mut conn, |tx| {
+            create_labels(tx);
+            let conv = test_conversation([], []);
+            let id = tx
+                .create_conversation(&conv)
+                .expect("failed to create conversation");
+
+            let (has_messages, _) = tx.conversation_has_messages(id).unwrap().unwrap();
+            assert!(!has_messages);
+            tx.set_conversation_has_messages(id, true).unwrap();
+            let (has_messages, rid) = tx.conversation_has_messages(id).unwrap().unwrap();
+            assert!(has_messages);
+            assert_eq!(rid, Some(conv.id));
+        });
+    });
+}
+
+#[test]
+fn test_unknown_conversation_messages_returns_error() {
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, create_address);
+        with_tx(&mut conn, |tx| {
+            let id = LocalConversationId::new(1024);
+            tx.messages_metadata_for_conversation(id)
+                .expect_err("should fail");
         });
     });
 }

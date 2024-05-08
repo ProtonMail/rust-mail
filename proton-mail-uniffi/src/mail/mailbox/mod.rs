@@ -43,6 +43,8 @@ pub enum MailboxError {
     InvalidAction(anyhow::Error),
     #[error("Conversation '{0}' not found")]
     ConversationNotFound(LocalConversationId),
+    #[error("Conversation '{0}' does not have a remote id")]
+    ConversationDoesNotHaveRemoteId(LocalConversationId),
     #[error("Problem with conversation with local ID: '{0}'")]
     ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
@@ -191,6 +193,9 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             }
             proton_mail_common::MailboxError::AttachmentDecryptionIO(e) => {
                 Self::AttachmentDecryption(e.to_string())
+            }
+            proton_mail_common::MailboxError::ConversationDoesNotHaveRemoteId(e) => {
+                Self::ConversationDoesNotHaveRemoteId(e)
             }
         }
     }

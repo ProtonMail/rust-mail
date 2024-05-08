@@ -81,7 +81,7 @@ impl<'a> GetConversationRequest<'a> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetConversationResponse {
     pub conversation: Conversation,

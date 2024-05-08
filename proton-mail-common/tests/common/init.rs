@@ -14,8 +14,8 @@ use proton_api_mail::proton_api_core::requests::{
     GetAddressesResponse, LatestEventResponse, UserInfoResponse, UserSettingsResponse,
 };
 use proton_api_mail::requests::{
-    GetConversationCountsResponse, GetConversationsResponse, GetLabelsResponse,
-    GetMessageCountsResponse, MailSettingsResponse, MessageMetadataResponse,
+    GetConversationCountsResponse, GetConversationResponse, GetConversationsResponse,
+    GetLabelsResponse, GetMessageCountsResponse, MailSettingsResponse, MessageMetadataResponse,
 };
 use proton_mail_common::{
     MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
@@ -442,6 +442,38 @@ impl TestContext {
                     messages: metadata,
                     stale: false,
                     total: 1,
+                }),
+            )
+            .expect(expect)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving conversation's messages.
+    ///
+    /// This function will mock the response for the given conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `conversation` - Requested Conversation
+    /// * `messages`     -
+    /// * `expect`       - How many times the endpoint should be called.
+    ///
+    pub async fn mock_get_conversation_messages(
+        &self,
+        conversation: Conversation,
+        messages: Vec<MessageMetadata>,
+        expect: u64,
+    ) {
+        Mock::given(method("GET"))
+            .and(path(format!(
+                "/api/mail/v4/conversations/{}",
+                conversation.id
+            )))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationResponse {
+                    conversation,
+                    messages,
                 }),
             )
             .expect(expect)

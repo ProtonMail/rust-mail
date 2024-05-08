@@ -1,9 +1,16 @@
-use crate::mail::mailbox::{FFIObservableConversationsQueryBuilder, DEFAULT_CONVERSATION_COUNT};
+use crate::mail::mailbox::{
+    FFIObservableConversationsQueryBuilder, Observable, SharedLiveQueryBuilder,
+    DEFAULT_CONVERSATION_COUNT,
+};
 use crate::mail::{
     Mailbox, MailboxConversationLiveQuery, MailboxError, MailboxLiveQueryUpdatedCallback,
 };
-use proton_mail_common::db::{LocalConversationId, LocalLabelId};
+use crate::new_live_query;
+use proton_mail_common::db::proton_sqlite3::InProcessTrackerService;
+use proton_mail_common::db::proton_sqlite3::SharedLive;
+use proton_mail_common::db::{ConversationMessagesQuery, LocalConversationId, LocalLabelId};
 use proton_mail_common::proton_api_mail::domain::LabelId;
+use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
 
 #[uniffi::export]
@@ -129,5 +136,46 @@ impl Mailbox {
         self.mbox
             .unstar_conversations(ids.into_iter().map(LocalConversationId::from))?;
         Ok(())
+    }
+
+    /// Create a live query for a conversation with `id`'s messages.
+    ///
+    /// If this is the first time it is called for this conversation, the messages will
+    /// be retrieved from the server.
+    ///
+    /// # Errors
+    /// Returns error if the request or the db query
+    pub async fn new_conversation_messages_live_query(
+        &self,
+        id: u64,
+        cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+    ) -> Result<Arc<MailboxConversationMessagesLiveQuery>, MailboxError> {
+        let mbox = self.mbox.clone();
+        self.uniffi_async(async move {
+            let id = LocalConversationId::from(id);
+            let builder = FFIObservableConversationMessagesQueryBuilder(cb);
+            Ok(mbox.new_conversation_message_query(builder, id).await?)
+        })
+        .await
+    }
+}
+
+new_live_query!(
+    MailboxConversationMessagesLiveQuery,
+    ConversationMessagesQuery
+);
+
+struct FFIObservableConversationMessagesQueryBuilder(Box<dyn MailboxLiveQueryUpdatedCallback>);
+impl MailboxObservableQueryBuilder<ConversationMessagesQuery>
+    for FFIObservableConversationMessagesQueryBuilder
+{
+    type Output = Arc<MailboxConversationMessagesLiveQuery>;
+
+    fn build(
+        self,
+        tracker: InProcessTrackerService,
+        query: ConversationMessagesQuery,
+    ) -> Self::Output {
+        MailboxConversationMessagesLiveQuery::new_foreground(tracker, query, self.0)
     }
 }

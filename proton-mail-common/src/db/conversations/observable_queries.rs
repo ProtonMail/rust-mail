@@ -1,6 +1,10 @@
-use crate::db::{LocalConversation, LocalLabelId, LocalMessageMetadata, MailSqliteConnectionImpl};
+use crate::db::{
+    LocalConversation, LocalConversationId, LocalLabelId, LocalMessageMetadata,
+    MailSqliteConnectionImpl,
+};
 use proton_sqlite3::{Observable, SqliteConnection};
 
+/// Observable query which observers a limited number of conversations in a label.
 #[derive(Clone)]
 pub struct ConversationQuery {
     label_id: LocalLabelId,
@@ -39,6 +43,7 @@ impl Observable for ConversationQuery {
     }
 }
 
+/// Observable query which observers a limited number of messages in a label.
 #[derive(Clone)]
 pub struct MessageQuery {
     label_id: LocalLabelId,
@@ -74,5 +79,42 @@ impl Observable for MessageQuery {
         let conn = MailSqliteConnectionImpl::new(connection.rusqlite_connection());
         let conversations = conn.message_metadata_list(self.label_id, self.limit)?;
         Ok(conversations)
+    }
+}
+
+/// Observable query which observers the messages of a conversation
+#[derive(Clone)]
+pub struct ConversationMessagesQuery {
+    id: LocalConversationId,
+}
+
+impl ConversationMessagesQuery {
+    pub fn new(id: LocalConversationId) -> Self {
+        Self { id }
+    }
+}
+
+impl Observable for ConversationMessagesQuery {
+    type Output = Vec<LocalMessageMetadata>;
+
+    fn debug_name(&self) -> &'static str {
+        "ConversationMessages"
+    }
+
+    fn tables(&self) -> Vec<String> {
+        vec![
+            "messages".to_owned(),
+            "message_labels".to_owned(),
+            "labels".to_owned(),
+        ]
+    }
+
+    fn execute(
+        &self,
+        connection: &SqliteConnection,
+    ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
+        let conn = MailSqliteConnectionImpl::new(connection.rusqlite_connection());
+        let messages = conn.messages_metadata_for_conversation(self.id)?;
+        Ok(messages)
     }
 }

@@ -29,6 +29,7 @@ macro_rules! new_live_query {
         }
 
         impl $name {
+            #[allow(unused)]
             fn new(
                 tracker: InProcessTrackerService,
                 query: $query,
@@ -37,6 +38,20 @@ macro_rules! new_live_query {
                 Arc::new(Self(
                     SharedLiveQueryBuilder::new(tracker)
                         .with_background_initializer()
+                        .with_callback(cb)
+                        .build(query),
+                ))
+            }
+
+            #[allow(unused)]
+            fn new_foreground(
+                tracker: InProcessTrackerService,
+                query: $query,
+                cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+            ) -> Arc<Self> {
+                Arc::new(Self(
+                    SharedLiveQueryBuilder::new(tracker)
+                        .with_foreground_initializer()
                         .with_callback(cb)
                         .build(query),
                 ))
