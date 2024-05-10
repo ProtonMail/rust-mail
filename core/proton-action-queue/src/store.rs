@@ -12,7 +12,7 @@ pub struct StoredActionId(pub u64);
 
 impl Display for StoredActionId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.0, f)
+        Display::fmt(&self.0, f)
     }
 }
 
