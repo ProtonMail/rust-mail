@@ -58,4 +58,33 @@ impl MailUserSession {
         self.uniffi_async(async move { Ok(ctx.logout().await?) })
             .await
     }
+
+    /// Fork the current session.
+    ///
+    /// This call has to be made from a parent session, and forks the current
+    /// logged-in user session in order to provide a new session for the same
+    /// user.
+    ///
+    /// If successful, this will return the "Selector" string for the new
+    /// session.
+    ///
+    /// # Errors
+    ///
+    /// Any of the [`MailSessionError::Http`] possibilities could be returned if
+    /// there is a problem with the HTTP request.
+    ///
+    pub async fn fork(&self) -> Result<String, MailSessionError> {
+        // The handling of this async call is super-ugly, but aligns with the
+        // code elsewhere for now
+        let ctx = self.ctx.clone();
+        let handle = self
+            .ctx
+            .mail_context()
+            .async_runtime()
+            .spawn(async move { ctx.session().fork().await });
+        match handle.await {
+            Ok(result) => result.map_err(MailSessionError::from),
+            Err(e) => Err(map_task_join_error(e)),
+        }
+    }
 }
