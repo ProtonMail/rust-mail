@@ -2,7 +2,6 @@
 resolver ="2"
 members = [ "proton-action-queue",
     "proton-api-core",
-    "proton-async",
     "proton-sqlite3",
     "proton-event-loop",
     "proton-core-common",

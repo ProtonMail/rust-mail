@@ -87,13 +87,6 @@ build-ios:
 # ------------ Crate Publishing -----------------------------------------------------------------------------------
 # Crates are listed in the order they should be published
 
-deploy-proton-async:
-  extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
-  variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-async"
-  when: manual
-
 deploy-proton-sqlite3:
   extends: .deploy_to_protonvpn_repository
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
