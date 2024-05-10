@@ -63,7 +63,7 @@ build:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cargo build --release
+    - cargo build
     - cargo test
 
 build-macos:
@@ -73,7 +73,7 @@ build-macos:
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cargo build --release
+    - cargo build
     - cargo test
 
 build-wasm:
