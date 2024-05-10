@@ -52,7 +52,6 @@ mod foreground_loop;
 pub use background_loop::*;
 pub use foreground_loop::*;
 pub use paste;
-pub use proton_async;
 pub use provider::*;
 pub use store::*;
 pub use subscriber::*;

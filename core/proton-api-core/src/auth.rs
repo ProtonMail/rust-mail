@@ -1,9 +1,9 @@
 use crate::domain::{SecretString, Uid, UserId};
 use crate::http::RequestError;
-use proton_async::sync::RwLock;
 use secrecy::ExposeSecret;
 use serde::Deserialize;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Authentication scopes for the session.
 #[derive(Debug, Clone, Deserialize, Eq, PartialEq)]

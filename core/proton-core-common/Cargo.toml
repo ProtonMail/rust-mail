@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = {workspace=true}
 proton-event-loop = {path = "../proton-event-loop", version = "0.6.0", registry = "proton"}
 base64 = {workspace=true}
 proton-sqlite3 = {path ="../proton-sqlite3", version = "0.6.0", registry = "proton"}

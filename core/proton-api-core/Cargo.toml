@@ -22,7 +22,7 @@ proton-sqlite3 = {version = "0.6.0", path = "../proton-sqlite3", registry = "pro
 reqwest = {workspace=true}
 proton-async = {version = "0.5.0", path = "../proton-async", registry = "proton"}
 serde-aux = {workspace=true}
-
+tokio = {workspace=true}
 
 [features]
 default = []

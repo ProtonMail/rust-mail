@@ -1,10 +1,12 @@
-#![allow(clippy::module_name_repetitions)] // is exported in the root of the crate.
+#![allow(clippy::module_name_repetitions)]
+
+use async_trait::async_trait;
+// is exported in the root of the crate.
 use crate::db::{CoreSqliteConnection, DBResult};
 use proton_api_core::domain::{Event, ProductUsedSpace, User, UserId, UserSettings};
 use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
-use proton_event_loop::proton_async::async_trait::async_trait;
 use proton_event_loop::SubscriberError;
 
 pub trait CoreEvent: Event {

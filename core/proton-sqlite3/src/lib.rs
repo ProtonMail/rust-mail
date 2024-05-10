@@ -40,6 +40,7 @@ use parking_lot::{Mutex, ReentrantMutex, ReentrantMutexGuard};
 use rusqlite::{Connection, OpenFlags, Params, Row, Transaction};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::task::spawn_blocking;
 use tracing::error;
 
 // re-export;
@@ -323,7 +324,7 @@ impl SqliteConnectionPool {
         F: FnOnce(&mut SqliteConnection) -> Result<T, E> + Send + 'static,
     {
         let cloned = self.clone();
-        proton_async::runtime::spawn_blocking(move || {
+        spawn_blocking(move || {
             let mut conn = cloned.acquire()?;
             f(&mut conn)
         })
@@ -349,7 +350,7 @@ impl SqliteConnectionPool {
         F: FnOnce(&mut SqliteTransaction) -> Result<T, E> + Send + 'static,
     {
         let cloned = self.clone();
-        proton_async::runtime::spawn_blocking(move || {
+        spawn_blocking(move || {
             let mut conn = cloned.acquire()?;
             conn.transaction(f)
         })

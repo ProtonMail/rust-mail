@@ -15,6 +15,7 @@ fixedbitset = "0.5"
 slotmap = "1"
 paste = {workspace=true}
 proton-async = {version = "0.5.0", path = "../proton-async", registry = "proton"}
+tokio = {workspace=true}
 
 [dev-dependencies]
 rand = {workspace=true}

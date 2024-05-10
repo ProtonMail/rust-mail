@@ -1,4 +1,8 @@
-#![allow(clippy::module_name_repetitions)] // avoid namespace conflicts
+#![allow(clippy::module_name_repetitions)]
+
+use async_trait::async_trait;
+use flume::{Receiver, Sender};
+// avoid namespace conflicts
 use proton_api_core::domain::Event;
 use proton_api_core::exports::anyhow;
 #[cfg(test)]
@@ -6,7 +10,6 @@ use proton_api_core::exports::serde;
 #[cfg(test)]
 use proton_api_core::exports::serde::{Deserialize, Serialize};
 use proton_api_core::exports::thiserror;
-use proton_async::async_trait::async_trait;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubscriberError {
@@ -39,8 +42,8 @@ pub trait Subscriber<T: Event + Send + Sync>: Send + Sync {
 /// running on another task and do not wish to make the state sharable.
 pub struct ChannelledSubscriber<T: Event + Send + Sync> {
     name: String,
-    sender: proton_async::sync::mpsc::Sender<Vec<T>>,
-    receiver: proton_async::sync::mpsc::Receiver<Result<(), SubscriberError>>,
+    sender: Sender<Vec<T>>,
+    receiver: Receiver<Result<(), SubscriberError>>,
 }
 
 #[async_trait]
@@ -65,8 +68,8 @@ impl<T: Event + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
 impl<T: Event> ChannelledSubscriber<T> {
     #[must_use]
     pub fn new(name: String) -> (ChannelledSubscriber<T>, ChanneledSubscriberHandler<T>) {
-        let (subscriber_sender, subscriber_receiver) = proton_async::sync::mpsc::bounded(1);
-        let (handler_sender, handler_receiver) = proton_async::sync::mpsc::bounded(1);
+        let (subscriber_sender, subscriber_receiver) = flume::bounded(1);
+        let (handler_sender, handler_receiver) = flume::bounded(1);
 
         (
             ChannelledSubscriber {
@@ -85,8 +88,8 @@ impl<T: Event> ChannelledSubscriber<T> {
 /// `ChanneledSubscriberHandler` waits on events to be send over a channel. These can then be consumed by the
 /// `handle_events` function.
 pub struct ChanneledSubscriberHandler<T: Event> {
-    receiver: proton_async::sync::mpsc::Receiver<Vec<T>>,
-    sender: proton_async::sync::mpsc::Sender<Result<(), SubscriberError>>,
+    receiver: Receiver<Vec<T>>,
+    sender: Sender<Result<(), SubscriberError>>,
 }
 
 /// Error returned by `ChanneledSubscriberHandler` which includes errors when receiving events or transmitting
@@ -191,107 +194,91 @@ impl<T: Event> ChanneledSubscriberHandler<T> {
 #[cfg(test)]
 proton_api_core::declare_event!(TestEvent,{foo:u32});
 
-#[test]
-fn test_channeled_subscriber_handle_and_reply() {
+#[tokio::test]
+async fn test_channeled_subscriber_handle_and_reply() {
     use proton_api_core::domain::EventId;
-    let rt = proton_async::runtime::MultiThreaded::new(2).expect("failed to create runtime");
-    rt.block_on(async {
-        let (s, mut h) = ChannelledSubscriber::new("test".into());
+    let (s, mut h) = ChannelledSubscriber::new("test".into());
 
-        let task = rt.spawn(async move {
-            h.handle_events_async(|events: &[TestEvent]| -> Result<(), SubscriberError> {
-                assert_eq!(events[0].event_id, EventId::from(DUMMY_EVENT_ID));
-                Ok(())
-            })
+    let task = tokio::spawn(async move {
+        h.handle_events_async(|events: &[TestEvent]| -> Result<(), SubscriberError> {
+            assert_eq!(events[0].event_id, EventId::from(DUMMY_EVENT_ID));
+            Ok(())
+        })
+        .await
+        .expect("failed to handle event");
+    });
+    let events = new_dummy_events();
+    s.on_events(&events).await.expect("failed handle events");
+
+    task.await.expect("expected no error on join");
+}
+
+#[tokio::test]
+async fn test_channeled_subscriber_failed_to_send() {
+    let s = {
+        let (s, _) = ChannelledSubscriber::new("test".into());
+        s
+    };
+
+    let events = new_dummy_events();
+    assert!(matches!(
+        s.on_events(&events).await.expect_err("expected error"),
+        SubscriberError::Send
+    ));
+}
+
+#[tokio::test]
+async fn test_channeled_subscriber_failed_to_receive() {
+    let (s, h) = ChannelledSubscriber::new("test".into());
+
+    let task = tokio::spawn(async move {
+        h.receiver
+            .recv_async()
             .await
-            .expect("failed to handle event");
-        });
-        let events = new_dummy_events();
-        s.on_events(&events).await.expect("failed handle events");
-
-        task.await.expect("expected no error on join");
-    })
-}
-
-#[test]
-fn test_channeled_subscriber_failed_to_send() {
-    let rt = proton_async::runtime::InPlace::new().expect("failed to init runtime");
-    rt.block_on(async {
-        let s = {
-            let (s, _) = ChannelledSubscriber::new("test".into());
-            s
-        };
-
-        let events = new_dummy_events();
-        assert!(matches!(
-            s.on_events(&events).await.expect_err("expected error"),
-            SubscriberError::Send
-        ));
+            .expect("expected to receive data");
+        drop(h);
     });
+    let events = new_dummy_events();
+    assert!(matches!(
+        s.on_events(&events).await.expect_err("expected error"),
+        SubscriberError::Receive
+    ));
+
+    task.await.expect("expected no error on join");
 }
 
-#[test]
-fn test_channeled_subscriber_failed_to_receive() {
-    let rt = proton_async::runtime::MultiThreaded::new(2).expect("failed to create runtime");
-    rt.block_on(async {
-        let (s, h) = ChannelledSubscriber::new("test".into());
+#[tokio::test]
+async fn test_channeled_subscriber_handler_failed_to_receive() {
+    let mut h = {
+        let (_, h) = ChannelledSubscriber::new("test".into());
+        h
+    };
 
-        let task = rt.spawn(async move {
-            h.receiver
-                .recv_async()
-                .await
-                .expect("expected to receive data");
-            drop(h);
-        });
+    assert!(matches!(
+        h.handle_events_async(|_: &[TestEvent]| -> Result<(), SubscriberError> { Ok(()) })
+            .await
+            .expect_err("expected error"),
+        ChanneledSubscriberError::Receive
+    ));
+}
+
+#[tokio::test]
+async fn test_channeled_subscriber_handler_failed_to_send() {
+    let (s, mut h) = ChannelledSubscriber::new("test".into());
+
+    let task = tokio::spawn(async move {
         let events = new_dummy_events();
-        assert!(matches!(
-            s.on_events(&events).await.expect_err("expected error"),
-            SubscriberError::Receive
-        ));
-
-        task.await.expect("expected no error on join");
+        s.sender.send_async(events).await.expect("failed to send");
+        drop(s);
     });
-}
 
-#[test]
-fn test_channeled_subscriber_handler_failed_to_receive() {
-    let rt = proton_async::runtime::InPlace::new().expect("failed to init runtime");
-    rt.block_on(async {
-        let mut h = {
-            let (_, h) = ChannelledSubscriber::new("test".into());
-            h
-        };
-
-        assert!(matches!(
-            h.handle_events_async(|_: &[TestEvent]| -> Result<(), SubscriberError> { Ok(()) })
-                .await
-                .expect_err("expected error"),
-            ChanneledSubscriberError::Receive
-        ));
-    });
-}
-
-#[test]
-fn test_channeled_subscriber_handler_failed_to_send() {
-    let rt = proton_async::runtime::MultiThreaded::new(2).expect("failed to create runtime");
-
-    rt.block_on(async {
-        let (s, mut h) = ChannelledSubscriber::new("test".into());
-
-        let task = rt.spawn(async move {
-            let events = new_dummy_events();
-            s.sender.send_async(events).await.expect("failed to send");
-            drop(s);
-        });
-
-        task.await.expect("expected no error on join");
-        assert!(matches!(
-            h.handle_events_async(|_| -> Result<(), SubscriberError> { Ok(()) })
-                .await
-                .expect_err("expected error"),
-            ChanneledSubscriberError::Send(_)
-        ));
-    })
+    task.await.expect("expected no error on join");
+    assert!(matches!(
+        h.handle_events_async(|_| -> Result<(), SubscriberError> { Ok(()) })
+            .await
+            .expect_err("expected error"),
+        ChanneledSubscriberError::Send(_)
+    ));
 }
 
 #[cfg(test)]

@@ -1,7 +1,9 @@
-#![allow(clippy::module_name_repetitions)] // avoid namespace conflicts
+#![allow(clippy::module_name_repetitions)]
+
+use async_trait::async_trait;
+// avoid namespace conflicts
 use proton_api_core::domain::EventId;
 use proton_api_core::exports::anyhow;
-use proton_async::async_trait::async_trait;
 
 #[cfg_attr(test, mockall::automock)]
 pub trait Store: Send + Sync {

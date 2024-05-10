@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::Arc;
+use tokio::task::spawn_blocking;
 use tracing::{error, Level};
 
 /// Observer for changes made in the database.
@@ -136,7 +137,7 @@ impl InProcessTrackerService {
         F: FnOnce(&mut TrackingConnection) -> Result<T, E> + Send + 'static,
     {
         let cloned = self.clone();
-        proton_async::runtime::spawn_blocking(move || {
+        spawn_blocking(move || {
             let conn = cloned.pool.acquire()?;
             let mut conn = TrackingConnection::new(conn, cloned)?;
             f(&mut conn)
