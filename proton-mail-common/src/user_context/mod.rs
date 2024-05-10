@@ -81,7 +81,7 @@ impl MailUserContext {
         }
     }
 
-    pub(crate) fn session(&self) -> &Session {
+    pub fn session(&self) -> &Session {
         self.inner.user_context.session()
     }
 
