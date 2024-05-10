@@ -1,4 +1,4 @@
-image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0-nocache
 
 include:
   - project: "rust/shared/registry"
@@ -9,15 +9,9 @@ workflow:
     - if: $CI_DEFAULT_BRANCH == $CI_COMMIT_BRANCH
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
 
-# sccache location to speed up compilation.
 default:
   tags:
     - shared-medium
-  cache: &global_cache
-    key: sccache
-    paths:
-      - /tmp/cache
-
 
 # Config git acccess to other repos
 .script-config-git:
@@ -187,7 +181,7 @@ publish-ios:
 
 deploy-proton-api-mail:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0-nocache
   tags:
     - shared-medium
   variables:
@@ -196,21 +190,21 @@ deploy-proton-api-mail:
 
 deploy-proton-mail-message-detector:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0-nocache
   variables:
     CARGO_PACKAGE_OPTIONS: "--package proton-mail-message-detector"
   when: manual
 
 deploy-proton-mail-utm-stripper:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0-nocache
   variables:
     CARGO_PACKAGE_OPTIONS: "--package proton-mail-utm-stripper"
   when: manual
 
 deploy-proton-mail-common:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0-nocache
   tags:
     - shared-medium
   variables:
