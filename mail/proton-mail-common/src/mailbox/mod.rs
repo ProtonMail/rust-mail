@@ -7,6 +7,7 @@ pub use attachments::DecryptedAttachment;
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::{LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId};
 use crate::exports::tracing;
+use crate::exports::tracing::debug;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_api_mail::exports::anyhow;
@@ -119,6 +120,7 @@ impl Mailbox {
         let view_mode = label
             .mail_settings_view_mode()
             .unwrap_or(user_ctx.with_mail_settings(|s| s.view_mode));
+        debug!("Creating Mailbox ({}, view_mode={:?})", label.id, view_mode);
         Self {
             label_id: label.id,
             view_mode,

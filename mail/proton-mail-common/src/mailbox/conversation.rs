@@ -7,6 +7,7 @@ use crate::db::{
     LocalLabelId, LocalMessageMetadata,
 };
 use crate::exports::anyhow::anyhow;
+use crate::exports::tracing::error;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
@@ -23,6 +24,10 @@ impl Mailbox {
         limit: usize,
     ) -> Result<Builder::Output, MailboxError> {
         if self.view_mode() != MailSettingsViewMode::Conversations {
+            error!(
+                "Mailbox is not in conversation view, current view mode = {:?}",
+                self.view_mode()
+            );
             return Err(MailboxError::InvalidViewMode);
         }
 

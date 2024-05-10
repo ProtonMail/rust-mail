@@ -1,4 +1,5 @@
 use crate::db::{LocalMessageMetadata, MessageQuery};
+use crate::exports::tracing::error;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
@@ -15,6 +16,10 @@ impl Mailbox {
         limit: usize,
     ) -> Result<Builder::Output, MailboxError> {
         if self.view_mode() != MailSettingsViewMode::Messages {
+            error!(
+                "Mailbox is not in message view, current view mode = {:?}",
+                self.view_mode()
+            );
             return Err(MailboxError::InvalidViewMode);
         }
 
