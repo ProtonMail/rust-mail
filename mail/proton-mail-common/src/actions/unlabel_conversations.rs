@@ -1,5 +1,4 @@
 use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
-use crate::{MailUserContext, WeakMailUserContext};
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -70,7 +69,6 @@ impl<'c, 't: 'c> LocalActionHandler for MarkConversationReadLocalHandler<'c, 't>
 }
 
 struct MarkConversationReadRemoteHandler<'t> {
-    ctx: MailUserContext,
     action: UnlabelConversationsAction,
     session: MailSession,
     tx: MailSqliteConnectionMut<'t>,
@@ -149,13 +147,11 @@ impl<'t> RemoteActionHandler for MarkConversationReadRemoteHandler<'t> {
 }
 
 #[derive(Debug)]
-pub(super) struct UnlabelConversationsActionFactory {
-    ctx: WeakMailUserContext,
-}
+pub(super) struct UnlabelConversationsActionFactory {}
 
 impl UnlabelConversationsActionFactory {
-    pub fn new(ctx: WeakMailUserContext) -> Self {
-        Self { ctx }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -188,12 +184,6 @@ impl ActionFactoryInstance for UnlabelConversationsActionFactory {
         tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ActionFactoryInstanceError::Unknown(anyhow!(
-                "Could not upgrade context"
-            )));
-        };
-
         if action.version != UnlabelConversationsAction::VERSION {
             return Err(ActionFactoryInstanceError::InvalidVersion(action.version));
         }
@@ -202,7 +192,6 @@ impl ActionFactoryInstance for UnlabelConversationsActionFactory {
         let session = session_provider.retrieve_session()?;
 
         Ok(Box::new(MarkConversationReadRemoteHandler {
-            ctx,
             action,
             tx: MailSqliteConnectionMut::new(tx),
             session: MailSession::from(session),
