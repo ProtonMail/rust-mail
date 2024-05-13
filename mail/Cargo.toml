@@ -15,7 +15,7 @@ proton-api-core = {version = "=0.5.2", registry = "proton", features = [
     "sql", "uniffi"
 ] }
 
-proton-sqlite3 = {version="0.6", registry = "proton"}
+proton-sqlite3 = {version="=0.6.0", registry = "proton"}
 proton-core-common = {version = "=0.5.4", registry = "proton"}
 proton-event-loop = {version = "=0.6.8", registry = "proton"}
 proton-async = {version = "0.5", registry = "proton"}
