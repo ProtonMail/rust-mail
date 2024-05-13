@@ -1,11 +1,11 @@
 [package]
 name = "proton-event-loop"
-version = "0.6.8"
+version = "0.6.9"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-proton-api-core = {path="../proton-api-core", version = "0.5.2", registry = "proton"}
+proton-api-core = {path="../proton-api-core", version = "0.5.3", registry = "proton"}
 proton-async= {path="../proton-async", version = "0.5.0", registry = "proton"}
 paste = {workspace=true}
 
