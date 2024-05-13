@@ -1,6 +1,7 @@
 use crate::exports::anyhow::anyhow;
 use crate::exports::serde::{self, Deserialize, Serialize};
 use crate::{MailUserContext, WeakMailUserContext};
+use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
@@ -43,11 +44,8 @@ impl RemoteActionHandler for EventLoopRemoteActionHandler {
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let ctx = self.ctx.clone();
-        ctx.mail_context()
-            .async_runtime()
-            .block_on(async { self.ctx.poll_event_loop().await })
-            .map_err(|e| match e {
+        block_on(async {
+            self.ctx.poll_event_loop().await.map_err(|e| match e {
                 EventLoopError::StoreRead(e) => ActionError::Local(e),
                 EventLoopError::StoreWrite(e) => ActionError::Local(e),
                 EventLoopError::Provider(err) => ActionError::Remote(err),
@@ -56,6 +54,7 @@ impl RemoteActionHandler for EventLoopRemoteActionHandler {
                 }
                 EventLoopError::Other(e) => ActionError::Unknown(anyhow!(e)),
             })
+        })
     }
 }
 

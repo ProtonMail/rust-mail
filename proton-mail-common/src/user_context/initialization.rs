@@ -1,6 +1,7 @@
 use crate::{MailContextError, MailUserContext};
 use proton_api_mail::domain::LabelId;
 use proton_api_mail::proton_api_core::exports::tracing::{self, error, trace, Level};
+use tokio::spawn;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MailUserContextLoadingStage {
@@ -25,7 +26,7 @@ impl MailUserContext {
         cb: Box<dyn MailUserContextInitializationCallback>,
     ) {
         let ctx = self.clone();
-        self.mail_context().async_runtime().spawn(async move {
+        spawn(async move {
             if let Err((stage, err)) = ctx.initialize_async(label_id, cb.as_ref()).await {
                 cb.on_stage_err(stage, err);
             }

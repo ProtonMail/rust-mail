@@ -1,5 +1,6 @@
 use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use crate::{MailUserContext, WeakMailUserContext};
+use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
@@ -145,11 +146,8 @@ impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
                 error!("Failed to resolve conversation ids: {e}");
                 ActionError::Local(anyhow!(e))
             })?;
-        let responses = self
-            .ctx
-            .mail_context()
-            .async_runtime()
-            .block_on(async {
+        let responses = block_on(async {
+            {
                 if *dst_rid == *LabelId::trash() {
                     self.session.mark_conversations_read(&conv_ids).await?;
                 }
@@ -161,11 +159,12 @@ impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
                 self.session
                     .label_conversations(dst_rid, &conv_ids, None)
                     .await
-            })
+            }
             .map_err(|e| {
                 error!("Failed to move conversations on API: {e}");
                 e
-            })?;
+            })
+        })?;
 
         let failed_messages = responses
             .into_iter()

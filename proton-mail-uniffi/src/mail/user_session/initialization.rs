@@ -1,6 +1,7 @@
 use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::proton_api_mail::domain::LabelId;
+use tokio::spawn;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -14,7 +15,7 @@ impl MailUserSession {
     ) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
         let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
-        let h = self.ctx.mail_context().async_runtime().spawn(async move {
+        let h = spawn(async move {
             let cb_ref = cb.as_ref();
             ctx.initialize_async(LabelId::inbox().clone(), cb_ref).await
         });

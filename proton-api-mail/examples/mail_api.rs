@@ -9,8 +9,8 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
-fn main() {
-    let runtime = proton_async::runtime::InPlace::new().expect("failed to create runtime");
+#[tokio::main]
+async fn main() {
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(true)
         .with_line_number(true)
@@ -36,12 +36,10 @@ fn main() {
     let session = Session::new(client, auth_store);
 
     let mut login_flow = Flow::new(session.clone());
-    runtime.block_on(async {
-        login_flow
-            .login(&user_email, &user_password, None)
-            .await
-            .unwrap();
-    });
+    login_flow
+        .login(&user_email, &user_password, None)
+        .await
+        .unwrap();
 
     if login_flow.is_awaiting_2fa() {
         let mut line_reader = std::io::BufReader::new(stdin());
@@ -61,7 +59,7 @@ fn main() {
 
                 let totp = line.trim_end_matches('\n');
 
-                match runtime.block_on(async { login_flow.submit_totp(totp).await }) {
+                match login_flow.submit_totp(totp).await {
                     Ok(_) => {
                         break;
                     }
@@ -79,10 +77,8 @@ fn main() {
 
     let mail_session = MailSession::new(session.clone());
 
-    let settings = runtime.block_on(async { mail_session.mail_settings().await.unwrap() });
+    let settings = mail_session.mail_settings().await.unwrap();
     println!("User Mail Settings:\n{:?}", settings);
 
-    runtime.block_on(async {
-        session.logout().await.unwrap();
-    })
+    session.logout().await.unwrap();
 }

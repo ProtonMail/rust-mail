@@ -5,6 +5,8 @@ use crate::exports::tracing::error;
 use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
 use proton_action_queue::{Action, ActionQueue, SessionProviderError};
 use proton_api_mail::proton_api_core::Session;
+use std::sync::Arc;
+use tokio::task::spawn_blocking;
 
 impl MailUserContext {
     /// Queue an action for later execution.
@@ -20,8 +22,9 @@ impl MailUserContext {
     }
 
     /// Execute all pending actions in the queue.
-    pub fn execute_pending_actions(&self) -> MailContextResult<()> {
-        self.inner.action_queue.consume_pending()?;
+    pub async fn execute_pending_actions(&self) -> MailContextResult<()> {
+        let inner = Arc::clone(&self.inner);
+        drop(spawn_blocking(move || inner.action_queue.consume_pending()).await);
         Ok(())
     }
 }

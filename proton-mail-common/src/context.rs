@@ -3,7 +3,6 @@ use crate::MailUserContext;
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
 use proton_api_mail::proton_api_core::http::{Client, RequestError};
 use proton_api_mail::proton_api_core::login::Flow;
-use proton_async::runtime::MultiThreaded;
 use proton_core_common::db::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError};
@@ -61,7 +60,6 @@ pub struct MailContext {
 
 impl MailContext {
     pub fn new(
-        async_runtime: MultiThreaded,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -71,7 +69,6 @@ impl MailContext {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
         let core_context = Context::new(
-            async_runtime,
             session_db_path,
             user_db_path,
             key_chain,
@@ -117,10 +114,6 @@ impl MailContext {
 
     pub fn is_network_connected(&self) -> bool {
         self.core_context.is_network_corrected()
-    }
-
-    pub fn async_runtime(&self) -> &MultiThreaded {
-        self.core_context.async_runtime()
     }
 }
 
