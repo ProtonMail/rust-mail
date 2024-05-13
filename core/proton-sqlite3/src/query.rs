@@ -26,11 +26,11 @@ pub trait Observable: Send + Sync + Clone + 'static {
 }
 
 pub trait ObserverCallback<I: Send>: Send + Sync {
-    fn on_changed(&self, input: I);
+    fn on_changed(&self, input: rusqlite::Result<I>);
 }
 
-impl<I: Send, F: Fn(I) + Send + Sync> ObserverCallback<I> for F {
-    fn on_changed(&self, input: I) {
+impl<I: Send, F: Fn(rusqlite::Result<I>) + Send + Sync> ObserverCallback<I> for F {
+    fn on_changed(&self, input: rusqlite::Result<I>) {
         (self)(input);
     }
 }
@@ -81,17 +81,14 @@ impl<Q: Observable> Observer for QueryTrackerObserver<Q> {
 
     fn on_tables_changed(&self, _: &BTreeSet<String>, pool: &SqliteConnectionPool) {
         tracing::debug!("Observable Query {} updated", self.query.debug_name());
-        let r = match run_query(&self.query, pool) {
-            Ok(r) => r,
-            Err(e) => {
-                error!(
-                    "Query({}) failed to execute: {}",
-                    self.query.debug_name(),
-                    e
-                );
-                return;
-            }
-        };
+        let r = run_query(&self.query, pool);
+        if let Err(e) = &r {
+            error!(
+                "Query({}) failed to execute: {}",
+                self.query.debug_name(),
+                e
+            );
+        }
         self.callback.on_changed(r);
     }
 }
@@ -177,6 +174,13 @@ impl LiveQueryBuilder {
         self
     }
 
+    /// Callback to be called each time a new value is available.
+    #[must_use]
+    pub fn with_dyn_callback(mut self, callback: Box<dyn LiveQueryUpdated>) -> Self {
+        self.callback = Some(callback);
+        self
+    }
+
     /// Build the live query.
     #[must_use]
     pub fn build<Q: Observable>(self, query: Q) -> Live<Q> {
@@ -193,8 +197,8 @@ impl LiveQueryBuilder {
 /// when changes are made to the database.
 pub struct Live<Q: Observable> {
     observed_query: Option<Observed>,
-    last_value: RefCell<Q::Output>,
-    shared: Arc<SharedValue<Q::Output>>,
+    last_value: RefCell<rusqlite::Result<Q::Output>>,
+    shared: Arc<SharedValue<rusqlite::Result<Q::Output>>>,
 }
 
 impl<Q: Observable + 'static> Live<Q> {
@@ -215,9 +219,13 @@ impl<Q: Observable + 'static> Live<Q> {
         let shared = Arc::new(SharedValue::new(cb));
         let value = initializer.initialize(&query, service.db_pool(), &shared);
         let shared_cloned = shared.clone();
-        let query = Observed::new(service, query, move |new_value| {
-            shared_cloned.store(new_value);
-        });
+        let query = Observed::new(
+            service,
+            query,
+            move |new_value: rusqlite::Result<Q::Output>| {
+                shared_cloned.store(new_value);
+            },
+        );
         Self {
             last_value: RefCell::new(value),
             observed_query: Some(query),
@@ -226,7 +234,7 @@ impl<Q: Observable + 'static> Live<Q> {
     }
 
     /// Get the latest value or the last updated value.
-    pub fn value(&self) -> impl Deref<Target = Q::Output> + '_ {
+    pub fn value(&self) -> impl Deref<Target = rusqlite::Result<Q::Output>> + '_ {
         if let Some(new_value) = self.shared.take() {
             {
                 *self.last_value.borrow_mut() = new_value;
@@ -296,8 +304,8 @@ impl SharedLiveQueryBuilder {
 /// Same as [`Live`], but can be accessed from multiple threads.
 pub struct SharedLive<Q: Observable> {
     observed_query: parking_lot::Mutex<Option<Observed>>,
-    last_value: parking_lot::Mutex<Q::Output>,
-    shared: Arc<SharedValue<Q::Output>>,
+    last_value: parking_lot::Mutex<rusqlite::Result<Q::Output>>,
+    shared: Arc<SharedValue<rusqlite::Result<Q::Output>>>,
 }
 
 impl<Q: Observable + 'static> SharedLive<Q> {
@@ -329,7 +337,7 @@ impl<Q: Observable + 'static> SharedLive<Q> {
     }
 
     /// Get the latest value or the last updated value.
-    pub fn value(&self) -> impl Deref<Target = Q::Output> + '_ {
+    pub fn value(&self) -> impl Deref<Target = rusqlite::Result<Q::Output>> + '_ {
         let mut accessor = self.last_value.lock();
         if let Some(new_value) = self.shared.take() {
             *accessor = new_value;
@@ -353,8 +361,8 @@ trait LiveQueryInitializer<Q: Observable>: 'static + Send + Sync {
         &self,
         query: &Q,
         pool: &SqliteConnectionPool,
-        shared_value: &Arc<SharedValue<Q::Output>>,
-    ) -> Q::Output;
+        shared_value: &Arc<SharedValue<rusqlite::Result<Q::Output>>>,
+    ) -> rusqlite::Result<Q::Output>;
 }
 
 struct DefaultLiveQueryInitializer {}
@@ -364,9 +372,9 @@ impl<Q: Observable> LiveQueryInitializer<Q> for DefaultLiveQueryInitializer {
         &self,
         _: &Q,
         _: &SqliteConnectionPool,
-        _: &Arc<SharedValue<Q::Output>>,
-    ) -> Q::Output {
-        Q::Output::default()
+        _: &Arc<SharedValue<rusqlite::Result<Q::Output>>>,
+    ) -> rusqlite::Result<Q::Output> {
+        Ok(Q::Output::default())
     }
 }
 
@@ -377,22 +385,22 @@ impl<Q: Observable> LiveQueryInitializer<Q> for BackgroundLiveQueryInitializer {
         &self,
         query: &Q,
         pool: &SqliteConnectionPool,
-        shared_value: &Arc<SharedValue<Q::Output>>,
-    ) -> Q::Output {
+        shared_value: &Arc<SharedValue<rusqlite::Result<Q::Output>>>,
+    ) -> rusqlite::Result<Q::Output> {
         let query = query.clone();
         let pool = pool.clone();
         let shared_value = shared_value.clone();
-        std::thread::spawn(move || match run_query(&query, &pool) {
-            Ok(v) => shared_value.store(v),
-            Err(e) => {
+        std::thread::spawn(move || {
+            let r = run_query(&query, &pool);
+            if let Err(e) = &r {
                 error!(
                     "Query ({}) failed to run during initialization: {e}",
                     query.debug_name()
                 );
             }
+            shared_value.store(r);
         });
-
-        Default::default()
+        Ok(Default::default())
     }
 }
 
@@ -402,18 +410,16 @@ impl<Q: Observable> LiveQueryInitializer<Q> for ForegroundLiveQueryInitializer {
         &self,
         query: &Q,
         pool: &SqliteConnectionPool,
-        _: &Arc<SharedValue<Q::Output>>,
-    ) -> Q::Output {
-        match run_query(query, pool) {
-            Ok(v) => v,
-            Err(e) => {
-                error!(
-                    "Query ({}) failed to run during initialization: {e}",
-                    query.debug_name()
-                );
-                Default::default()
-            }
+        _: &Arc<SharedValue<rusqlite::Result<Q::Output>>>,
+    ) -> rusqlite::Result<Q::Output> {
+        let r = run_query(query, pool);
+        if let Err(e) = &r {
+            error!(
+                "Query ({}) failed to run during initialization: {e}",
+                query.debug_name()
+            );
         }
+        r
     }
 }
 
