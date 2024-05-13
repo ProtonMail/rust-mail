@@ -62,7 +62,7 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
     )?;
 
     tx.execute(
-        "CREATE UNIQUE INDEX index_address_keys_addr_id ON address_keys (address_id)",
+        "CREATE INDEX index_address_keys_addr_id ON address_keys (address_id)",
         (),
     )?;
 
