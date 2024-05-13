@@ -37,7 +37,7 @@ pub struct Auth {
     pub access_token: AccessToken,
     /// Access scopes
     pub scope: Scope,
-    /// KeySecret to unlock the user keys.
+    /// `KeySecret` to unlock the user keys.
     pub key_secret: Option<UserKeySecret>,
 }
 
