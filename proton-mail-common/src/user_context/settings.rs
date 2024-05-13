@@ -19,14 +19,14 @@ impl MailUserContext {
     }
 
     /// Get the users mail settings.
-    pub fn mail_settings(&self) -> impl Deref<Target = MailSettings> + '_ {
+    pub fn mail_settings(&self) -> impl Deref<Target = DBResult<MailSettings>> + '_ {
         self.inner.mail_settings.value()
     }
 
     /// Extract a value from the user's mail settings.
     pub fn with_mail_settings<T, F>(&self, f: F) -> T
     where
-        F: FnOnce(&MailSettings) -> T,
+        F: FnOnce(&DBResult<MailSettings>) -> T,
     {
         f(self.inner.mail_settings.value().deref())
     }
