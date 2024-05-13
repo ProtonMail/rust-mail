@@ -1,6 +1,6 @@
 [package]
 name = "proton-api-core"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
@@ -18,7 +18,7 @@ tracing = {workspace=true}
 parking_lot = {workspace=true}
 proton-crypto-account = {workspace=true}
 uniffi = {workspace=true, optional = true}
-proton-sqlite3 = {version = "0.6.0", path = "../proton-sqlite3", registry = "proton", optional = true}
+proton-sqlite3 = {version = "0.6.1", path = "../proton-sqlite3", registry = "proton", optional = true}
 reqwest = {workspace=true}
 proton-async = {version = "0.5.0", path = "../proton-async", registry = "proton"}
 serde-aux = {workspace=true}
