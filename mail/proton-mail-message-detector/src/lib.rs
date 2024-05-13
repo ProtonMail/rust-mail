@@ -178,8 +178,7 @@ pub fn locate_blockquote(document: &str) -> (String, String) {
     //     const body = inputDocument.querySelector('body');
     //     const tmpDocument = body || inputDocument;
 
-    let body_selector =
-        Selector::parse("body").expect("failed to create selector for body");
+    let body_selector = Selector::parse("body").expect("failed to create selector for body");
     let root_element = if let Some(body) = parsed_doc.select(&body_selector).next() {
         body
     } else {
@@ -193,8 +192,8 @@ pub fn locate_blockquote(document: &str) -> (String, String) {
     //             result = testBlockquote(blockquote);
     //         }
     //     });
-    let blockquote_selector = Selector::parse(&BLOCKQUOTE_SELECTOR)
-        .expect("failed to parse blockquote selector");
+    let blockquote_selector =
+        Selector::parse(&BLOCKQUOTE_SELECTOR).expect("failed to parse blockquote selector");
 
     let parent_html = root_element.inner_html();
 

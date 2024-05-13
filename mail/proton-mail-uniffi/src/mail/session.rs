@@ -101,11 +101,6 @@ impl MailSession {
             })?;
         }
 
-        // Creating runtime.
-        let runtime = proton_async::runtime::MultiThreaded::new(4).map_err(|e| {
-            MailSessionError::Other(anyhow::anyhow!("Failed to init async runtime: {e}"))
-        })?;
-
         // Creating client.
         let api_env_config = match api_env_config {
             Some(config) => config,
@@ -124,7 +119,6 @@ impl MailSession {
 
         tracing::debug!("Creating Context");
         let mail_ctx = pmc::MailContext::new(
-            runtime,
             session_path,
             user_path,
             Arc::from(FFIKeyChain::from(key_chain)),

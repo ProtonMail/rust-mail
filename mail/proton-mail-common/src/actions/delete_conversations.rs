@@ -1,5 +1,7 @@
 use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use crate::{MailUserContext, WeakMailUserContext};
+use async_trait::async_trait;
+use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
@@ -59,6 +61,7 @@ struct DeleteConversationRemoteHandler<'t> {
     tx: MailSqliteConnectionMut<'t>,
 }
 
+#[async_trait]
 impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler<'t> {
     fn revert_local(&mut self) -> ActionResult<()> {
         self.tx
@@ -97,19 +100,15 @@ impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler<'t> {
                 error!("Failed to resolve conversation ids: {e}");
                 ActionError::Local(anyhow!(e))
             })?;
-        let responses = self
-            .ctx
-            .mail_context()
-            .async_runtime()
-            .block_on(async {
-                self.session
-                    .delete_conversations(&label_id, &conv_ids)
-                    .await
-            })
-            .map_err(|e| {
-                error!("Failed to delete conversations on API: {e}");
-                e
-            })?;
+        let responses = block_on(async {
+            self.session
+                .delete_conversations(&label_id, &conv_ids)
+                .await
+                .map_err(|e| {
+                    error!("Failed to delete conversations on API: {e}");
+                    e
+                })
+        })?;
 
         let failed_messages = responses
             .into_iter()

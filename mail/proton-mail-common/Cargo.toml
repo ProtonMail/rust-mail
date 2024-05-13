@@ -6,13 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = {workspace=true}
+futures = {workspace=true}
 proton-core-common = {workspace=true}
-proton-async= {workspace=true}
 proton-api-mail = {version = "0.3",path ="../proton-api-mail", features = ["sql"], registry = "proton"}
 proton-event-loop = {workspace=true}
 proton-action-queue = {workspace=true}
 uniffi = {optional = true, workspace=true}
 proton-sqlite3 = {workspace=true}
+tokio = {workspace=true}
 uuid = {version = "1.7", features = ["v4"]}
 
 [dev-dependencies]
