@@ -11,6 +11,7 @@ use crate::exports::tracing::debug;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_api_mail::exports::anyhow;
+use proton_api_mail::exports::tracing::warn;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
 use proton_api_mail::proton_api_core::http::RequestError;
@@ -119,7 +120,15 @@ impl Mailbox {
     fn from_label(user_ctx: MailUserContext, label: LocalLabel) -> Self {
         let view_mode = label
             .mail_settings_view_mode()
-            .unwrap_or(user_ctx.with_mail_settings(|s| s.view_mode));
+            .unwrap_or(user_ctx.with_mail_settings(|s| match s {
+                Ok(s) => s.view_mode,
+                Err(e) => {
+                    warn!(
+                        "mail settings not available, using default value for view mode. Err: {e}"
+                    );
+                    MailSettingsViewMode::Conversations
+                }
+            }));
         debug!("Creating Mailbox ({}, view_mode={:?})", label.id, view_mode);
         Self {
             label_id: label.id,
