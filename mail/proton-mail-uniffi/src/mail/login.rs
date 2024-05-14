@@ -1,3 +1,4 @@
+use crate::mail::settings::{FFIMailsSettingsCallback, MailSettingsUpdated};
 use crate::mail::{MailSessionResult, MailUserSession};
 use proton_mail_common as pmc;
 use proton_mail_common::exports::{anyhow, thiserror};
@@ -119,10 +120,16 @@ impl LoginFlow {
     }
 
     /// When the flow is considered logged in, transform it into a `MailUserContext`.
-    pub fn to_user_context(&self) -> MailSessionResult<Arc<MailUserSession>> {
+    pub fn to_user_context(
+        &self,
+        mail_settings_cb: Option<Box<dyn MailSettingsUpdated>>,
+    ) -> MailSessionResult<Arc<MailUserSession>> {
         self.ctx.async_runtime().block_on(async {
             let guard = self.flow.lock().await;
-            let user_ctx = self.ctx.user_context_from_login_flow(&guard)?;
+            let user_ctx = self.ctx.user_context_from_login_flow(
+                &guard,
+                mail_settings_cb.map(FFIMailsSettingsCallback::boxed),
+            )?;
             Ok(MailUserSession::new(user_ctx))
         })
     }

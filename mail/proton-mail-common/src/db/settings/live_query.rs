@@ -1,17 +1,23 @@
 use crate::db::MailSqliteConnectionImpl;
 use proton_api_mail::domain::MailSettings;
 use proton_sqlite3::{
-    InProcessTrackerService, Observable, SharedLive, SharedLiveQueryBuilder, SqliteConnection,
+    InProcessTrackerService, LiveQueryUpdated, Observable, SharedLive, SharedLiveQueryBuilder,
+    SqliteConnection,
 };
 
 /// Mail Settings Live Query.
 pub type MailSettingsLiveQuery = SharedLive<MailSettingsObservable>;
 
 /// Create a new live query for the mail settings.
-pub fn new_mail_settings_live_query(tracker: InProcessTrackerService) -> MailSettingsLiveQuery {
-    SharedLiveQueryBuilder::new(tracker)
-        .with_foreground_initializer()
-        .build(MailSettingsObservable {})
+pub fn new_mail_settings_live_query(
+    tracker: InProcessTrackerService,
+    cb: Option<Box<dyn LiveQueryUpdated>>,
+) -> MailSettingsLiveQuery {
+    let mut query = SharedLiveQueryBuilder::new(tracker).with_foreground_initializer();
+    if let Some(cb) = cb {
+        query = query.with_dyn_callback(cb);
+    }
+    query.build(MailSettingsObservable {})
 }
 
 /// Observer for the user's mail settings.

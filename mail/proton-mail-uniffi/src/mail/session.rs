@@ -1,6 +1,7 @@
 use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged};
 use crate::core::{FFISessionCallback, OSKeyChain, SessionCallback, StoredSession};
 use crate::mail::logging::init_log;
+use crate::mail::settings::{FFIMailsSettingsCallback, MailSettingsUpdated};
 use crate::mail::{LoginFlow, MailUserSession};
 use pmc::db;
 use pmc::db::DBMigrationError;
@@ -171,13 +172,16 @@ impl MailSession {
     pub fn user_context_from_session(
         &self,
         session: &StoredSession,
-        cb: Option<Box<dyn SessionCallback>>,
+        session_cb: Option<Box<dyn SessionCallback>>,
+        mail_settings_cb: Option<Box<dyn MailSettingsUpdated>>,
     ) -> MailSessionResult<Arc<MailUserSession>> {
-        let cb =
-            cb.map(|cb| -> Box<dyn CoreSessionCallback> { Box::new(FFISessionCallback::from(cb)) });
-        let ctx = self
-            .ctx
-            .user_context_from_session(session.encrypted_session(), cb)?;
+        let session_cb = session_cb
+            .map(|cb| -> Box<dyn CoreSessionCallback> { Box::new(FFISessionCallback::from(cb)) });
+        let ctx = self.ctx.user_context_from_session(
+            session.encrypted_session(),
+            session_cb,
+            mail_settings_cb.map(FFIMailsSettingsCallback::boxed),
+        )?;
         Ok(MailUserSession::new(ctx))
     }
 
