@@ -3,6 +3,7 @@ mod common;
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{Label, LabelId, LabelType};
+use proton_mail_common::settings::MailSettings;
 use proton_mail_common::Mailbox;
 
 #[test]
@@ -48,11 +49,13 @@ fn test_get_sender_image() {
     });
     let local_conversation = mailbox.conversations(2).unwrap();
     let sender = &local_conversation.first().unwrap().senders.first().unwrap();
+    let mail_settings = MailSettings::new(&ctx.user_context(), None);
 
     ctx.async_runtime().block_on(async {
         let image = ctx
             .user_context()
             .image_for_sender(
+                &mail_settings,
                 sender.address.clone(),
                 sender.bimi_selector.clone(),
                 sender.display_sender_image,

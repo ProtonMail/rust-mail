@@ -11,7 +11,6 @@ use crate::exports::tracing::debug;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
 use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_api_mail::exports::anyhow;
-use proton_api_mail::exports::tracing::warn;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
 use proton_api_mail::proton_api_core::http::RequestError;
@@ -53,6 +52,8 @@ pub enum MailboxError {
     InvalidViewMode,
     #[error("Action is not valid: {0}")]
     InvalidAction(anyhow::Error),
+    #[error("Database Error: {0}")]
+    DB(#[from] crate::db::DBError),
 }
 
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:
@@ -101,40 +102,60 @@ impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> 
     }
 }
 
+enum LabelIdMode<'a> {
+    Local(LocalLabelId),
+    Remote(&'a LabelId),
+}
+
 impl Mailbox {
     pub fn with_remote_id(user_ctx: MailUserContext, label_id: &LabelId) -> MailboxResult<Self> {
-        let Some(label) = user_ctx.get_label_with_remote_id(label_id)? else {
-            return Err(MailboxError::RemoteLabelNotFound(label_id.clone()));
-        };
-
-        Ok(Self::from_label(user_ctx, label))
+        let (label, view_mode) =
+            Self::retrieve_label_and_view_mode(&user_ctx, LabelIdMode::Remote(label_id))?;
+        Ok(Self::from_label_and_view_mode(user_ctx, label, view_mode))
     }
 
     pub fn with_id(user_ctx: MailUserContext, label_id: LocalLabelId) -> MailboxResult<Self> {
-        let Some(label) = user_ctx.get_label(label_id)? else {
-            return Err(MailboxError::LabelNotFound(label_id));
-        };
-        Ok(Self::from_label(user_ctx, label))
+        let (label, view_mode) =
+            Self::retrieve_label_and_view_mode(&user_ctx, LabelIdMode::Local(label_id))?;
+        Ok(Self::from_label_and_view_mode(user_ctx, label, view_mode))
     }
 
-    fn from_label(user_ctx: MailUserContext, label: LocalLabel) -> Self {
-        let view_mode = label
-            .mail_settings_view_mode()
-            .unwrap_or(user_ctx.with_mail_settings(|s| match s {
-                Ok(s) => s.view_mode,
-                Err(e) => {
-                    warn!(
-                        "mail settings not available, using default value for view mode. Err: {e}"
-                    );
-                    MailSettingsViewMode::Conversations
-                }
-            }));
+    fn from_label_and_view_mode(
+        user_ctx: MailUserContext,
+        label: LocalLabel,
+        view_mode: MailSettingsViewMode,
+    ) -> Self {
+        let view_mode = label.mail_settings_view_mode().unwrap_or(view_mode);
         debug!("Creating Mailbox ({}, view_mode={:?})", label.id, view_mode);
         Self {
             label_id: label.id,
             view_mode,
             user_ctx,
         }
+    }
+
+    fn retrieve_label_and_view_mode(
+        user_context: &MailUserContext,
+        label_id: LabelIdMode,
+    ) -> MailboxResult<(LocalLabel, MailSettingsViewMode)> {
+        user_context.db_read(|conn| {
+            let label = match label_id {
+                LabelIdMode::Local(id) => {
+                    let Some(label) = conn.label_with_id(id)? else {
+                        return Err(MailboxError::LabelNotFound(id));
+                    };
+                    label
+                }
+                LabelIdMode::Remote(id) => {
+                    let Some(label) = conn.label_with_remote_id(id)? else {
+                        return Err(MailboxError::RemoteLabelNotFound(id.clone()));
+                    };
+                    label
+                }
+            };
+            let view_mode = conn.mail_settings_view_mode()?;
+            Ok((label, view_mode))
+        })
     }
 
     pub fn user_context(&self) -> &MailUserContext {

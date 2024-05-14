@@ -154,7 +154,7 @@ impl TestContext {
     /// Get the test user mail context.
     pub fn user_context(&self) -> MailUserContext {
         self.context
-            .user_context_from_session(&self.encrypted_user_session, None, None)
+            .user_context_from_session(&self.encrypted_user_session, None)
             .expect("failed to create user context")
     }
 

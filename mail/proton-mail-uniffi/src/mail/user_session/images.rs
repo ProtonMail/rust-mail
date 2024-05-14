@@ -1,6 +1,8 @@
+use crate::mail::settings::MailUserSettings;
 use crate::mail::MailUserSession;
 use crate::mail::{MailSessionError, MailSessionResult};
 use proton_mail_common::proton_api_mail::domain::LightOrDarkMode;
+use std::sync::Arc;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -19,8 +21,10 @@ impl MailUserSession {
     /// # Errors
     /// Returns errors if the API call fails, the mode value is invalid, the conversation doesn't exist, or
     /// if there's an issue with the sender that causes problems when creating the API request on our side.
+    #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,
+        mail_settings: Arc<MailUserSettings>,
         address: String,
         bimi_selector: Option<String>,
         display_sender_image: bool,
@@ -35,6 +39,7 @@ impl MailUserSession {
             //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
             Ok(ctx
                 .image_for_sender(
+                    mail_settings.settings(),
                     address,
                     bimi_selector,
                     display_sender_image,

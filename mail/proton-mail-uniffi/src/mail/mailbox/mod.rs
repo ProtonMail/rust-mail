@@ -57,6 +57,8 @@ pub enum MailboxError {
     AttachmentNotFound(LocalAttachmentId),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(String),
+    #[error("Database Error: {0}")]
+    DB(#[from] proton_mail_common::db::DBError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -197,6 +199,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             proton_mail_common::MailboxError::ConversationDoesNotHaveRemoteId(e) => {
                 Self::ConversationDoesNotHaveRemoteId(e)
             }
+            proton_mail_common::MailboxError::DB(e) => Self::DB(e),
         }
     }
 }

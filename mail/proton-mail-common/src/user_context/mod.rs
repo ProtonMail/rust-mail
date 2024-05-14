@@ -14,10 +14,7 @@ use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::domain::{UnlockedAddressKeys, UnlockedUserKeys};
 use std::sync::{Arc, Weak};
 
-use crate::db::{
-    new_mail_settings_live_query, MailSettingsLiveQuery, MailSqliteConnection,
-    MailSqliteConnectionMut, MailSqliteConnectionRef,
-};
+use crate::db::{MailSqliteConnection, MailSqliteConnectionMut, MailSqliteConnectionRef};
 use crate::user_context::action_queue::new_action_queue;
 use crate::{MailContext, MailContextResult};
 use proton_api_mail::proton_api_core::domain::{AddressId, UserId};
@@ -27,7 +24,6 @@ use proton_api_mail::MailSession;
 use proton_core_common::db::DBResult;
 use proton_core_common::{LoadKeySecret, UserContext};
 use proton_event_loop::EventLoop;
-use proton_sqlite3::LiveQueryUpdated;
 
 #[derive(Clone)]
 pub struct MailUserContext {
@@ -44,7 +40,6 @@ struct MailUserContextInner {
     user_context: UserContext,
     event_loop: EventLoop,
     action_queue: ActionQueue,
-    mail_settings: MailSettingsLiveQuery,
 }
 
 impl WeakMailUserContext {
@@ -67,15 +62,7 @@ impl From<MailUserContext> for WeakMailUserContext {
 }
 
 impl MailUserContext {
-    pub(crate) fn new(
-        mail_context: MailContext,
-        user_context: UserContext,
-        mail_settings_updated: Option<Box<dyn LiveQueryUpdated>>,
-    ) -> Self {
-        let mail_settings = new_mail_settings_live_query(
-            user_context.tracker_service().clone(),
-            mail_settings_updated,
-        );
+    pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Self {
         Self {
             inner: Arc::new_cyclic(|weak| MailUserContextInner {
                 user_context,
@@ -84,7 +71,6 @@ impl MailUserContext {
                 action_queue: new_action_queue(WeakMailUserContext {
                     inner: weak.clone(),
                 }),
-                mail_settings,
             }),
         }
     }

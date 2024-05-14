@@ -1,4 +1,5 @@
 use crate::exports::tracing::warn;
+use crate::settings::MailSettings;
 use crate::{MailContextResult, MailUserContext};
 use bytes::Bytes;
 use proton_api_mail::domain::{AddressDomainLogoDetailsBuilder, LightOrDarkMode};
@@ -25,8 +26,10 @@ impl MailUserContext {
     /// # Errors
     /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an
     /// issue with the sender that causes problems when creating the API request on our side.
+    #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,
+        mail_settings: &MailSettings,
         address: String,
         bimi_selector: Option<String>,
         display_sender_image: bool,
@@ -34,7 +37,7 @@ impl MailUserContext {
         mode: Option<LightOrDarkMode>,
         format: Option<String>,
     ) -> MailContextResult<Option<Bytes>> {
-        if self.with_mail_settings(|s| {
+        if mail_settings.with(|s| {
             match s {
                 Ok(s) => s.hide_sender_images,
                 Err(e) => {
