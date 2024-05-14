@@ -289,6 +289,13 @@ impl SharedLiveQueryBuilder {
         self
     }
 
+    /// Callback to be called each time a new value is available.
+    #[must_use]
+    pub fn with_dyn_callback(mut self, callback: Box<dyn LiveQueryUpdated>) -> Self {
+        self.callback = Some(callback);
+        self
+    }
+
     /// Build the query type.
     #[must_use]
     pub fn build<Q: Observable>(self, query: Q) -> SharedLive<Q> {
