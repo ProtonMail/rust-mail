@@ -3,7 +3,7 @@ mod events;
 mod images;
 mod initialization;
 mod labels;
-mod settings;
+pub mod settings;
 
 use crate::mail::{map_task_join_error, MailSessionError, MailSessionResult};
 use proton_mail_common as pmc;

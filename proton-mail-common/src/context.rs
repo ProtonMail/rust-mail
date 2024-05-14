@@ -10,6 +10,7 @@ use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
+use proton_sqlite3::LiveQueryUpdated;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -97,21 +98,40 @@ impl MailContext {
         Ok(f)
     }
 
+    /// Create a new context from a login flow.
+    ///
+    /// # Errors
+    /// Returns error if the flow is in an invalid state or there was an issue initializing
+    /// the user database.
     pub fn user_context_from_login_flow(
         &self,
         login_flow: &Flow,
+        mail_settings_updated: Option<Box<dyn LiveQueryUpdated>>,
     ) -> MailContextResult<MailUserContext> {
         let ctx = self.core_context.user_context_from_login_flow(login_flow)?;
-        Ok(MailUserContext::new(self.clone(), ctx))
+        Ok(MailUserContext::new(
+            self.clone(),
+            ctx,
+            mail_settings_updated,
+        ))
     }
 
+    /// Create a new context from an existing session.
+    ///
+    /// # Errors
+    /// Returns error if we failed to decrypt the user session or access the user database.
     pub fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
         cb: Option<Box<dyn CoreSessionCallback>>,
+        mail_settings_updated: Option<Box<dyn LiveQueryUpdated>>,
     ) -> MailContextResult<MailUserContext> {
         let ctx = self.core_context.user_context_from_session(session, cb)?;
-        Ok(MailUserContext::new(self.clone(), ctx))
+        Ok(MailUserContext::new(
+            self.clone(),
+            ctx,
+            mail_settings_updated,
+        ))
     }
     pub fn get_sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
         let s = self.core_context.get_sessions()?;

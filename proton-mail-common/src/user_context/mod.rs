@@ -27,6 +27,7 @@ use proton_api_mail::MailSession;
 use proton_core_common::db::DBResult;
 use proton_core_common::{LoadKeySecret, UserContext};
 use proton_event_loop::EventLoop;
+use proton_sqlite3::LiveQueryUpdated;
 
 #[derive(Clone)]
 pub struct MailUserContext {
@@ -66,8 +67,15 @@ impl From<MailUserContext> for WeakMailUserContext {
 }
 
 impl MailUserContext {
-    pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Self {
-        let mail_settings = new_mail_settings_live_query(user_context.tracker_service().clone());
+    pub(crate) fn new(
+        mail_context: MailContext,
+        user_context: UserContext,
+        mail_settings_updated: Option<Box<dyn LiveQueryUpdated>>,
+    ) -> Self {
+        let mail_settings = new_mail_settings_live_query(
+            user_context.tracker_service().clone(),
+            mail_settings_updated,
+        );
         Self {
             inner: Arc::new_cyclic(|weak| MailUserContextInner {
                 user_context,
