@@ -35,21 +35,24 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
     tx.execute(
         r"
         CREATE TABLE user_keys (
-            user_id TEXT UNIQUE NOT NULL,
-            key_id TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL,
+            key_id TEXT PRIMARY KEY NOT NULL,
             version INTEGER NOT NULL,
             private_key TEXT NOT NULL,
             `primary` INTEGER NOT NULL,
             active INTEGER NOT NULL,
             recovery_secret TEXT,
             recovery_secret_signature TEXT,
-            PRIMARY KEY(user_id, user_id)
+
+            CONSTRAINT user_keys_id
+                FOREIGN KEY (user_id)
+                REFERENCES users (id)
         )",
         (),
     )?;
 
     tx.execute(
-        "CREATE UNIQUE INDEX index_user_keys_userid ON user_keys(user_id)",
+        "CREATE INDEX index_user_keys_userid ON user_keys(user_id)",
         (),
     )?;
 
