@@ -1,12 +1,16 @@
 use std::sync::Arc;
 
 use super::ClientInfo;
+use crate::crypto_clock::server_crypto_clock;
 use crate::http::{
     Builder, ClientRequest, ClientRequestBuilder, FromResponse, Method, Request, RequestData,
     RequestError, X_PM_APP_VERSION_HEADER,
 };
 use crate::requests::APIError;
+use chrono::DateTime;
+use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
 use reqwest;
+use reqwest::header::HeaderMap;
 
 #[derive(Debug, Clone)]
 pub struct ReqwestClient {
@@ -155,6 +159,12 @@ impl ReqwestClient {
 
         let status = response.status().as_u16();
 
+        // Tries to read the server time from the header and update the server clock.
+        // The server clock is used for crypto operations.
+        if let Some(server_time) = parse_server_time(response.headers()) {
+            server_crypto_clock().update_clock(server_time);
+        }
+
         if status >= 400 {
             let body = response
                 .bytes()
@@ -200,4 +210,13 @@ impl ReqwestClient {
     ) -> crate::http::Result<R::Output> {
         self.direct_exec::<R>(request).await
     }
+}
+
+fn parse_server_time(headers: &HeaderMap) -> Option<UnixTimestamp> {
+    headers
+        .get("date")
+        .and_then(|response_time_header| response_time_header.to_str().ok())
+        .and_then(|response_time| DateTime::parse_from_rfc2822(response_time).ok())
+        .and_then(|parsed_server_time| parsed_server_time.timestamp().try_into().ok())
+        .map(UnixTimestamp)
 }
