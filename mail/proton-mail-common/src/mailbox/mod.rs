@@ -254,6 +254,7 @@ impl Mailbox {
                 MailContextError::DB(e)
             })?;
 
+            tracing::debug!("Syncing finished");
             Ok(())
         } else {
             Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id))
