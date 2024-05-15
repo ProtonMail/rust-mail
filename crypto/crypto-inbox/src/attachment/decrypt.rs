@@ -20,7 +20,7 @@ pub enum AttachmentDecryptionError {
     #[error("Failed to decrypt attachment with the extracted session key: {0}")]
     AttachmentDecryption(CryptoError),
     #[error("Failed to decrypt and write to the output writer: {0}")]
-    AttachmentDecryptionWrite(std::io::Error),
+    AttachmentDecryptionWrite(io::Error),
     #[error("Failed to decrypt encrypted detached signature: {0}")]
     EncryptedSignatureDecryption(CryptoError),
 }
