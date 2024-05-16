@@ -1,4 +1,4 @@
-use std::{sync::OnceLock, time::SystemTime};
+use std::time::SystemTime;
 
 use parking_lot::{Once, RwLock};
 use proton_crypto_account::proton_crypto::{
@@ -47,16 +47,23 @@ impl Default for ServerCryptoClock {
     }
 }
 
+static CRYPTO_CLOCK: ServerCryptoClock = ServerCryptoClock(RwLock::new(None));
+
 /// Returns the global clock that tracks server time via http requests.
 ///
 /// This clock is used for crypto operations.
 #[allow(clippy::module_name_repetitions)]
 pub fn server_crypto_clock() -> &'static ServerCryptoClock {
-    static CRYPTO_CLOCK: OnceLock<ServerCryptoClock> = OnceLock::new();
+    &CRYPTO_CLOCK
+}
+
+/// Set the crypto clock provider in proton crypto to the server crypto clock.
+///
+/// The function ensures that the provider is only initialized once.
+#[allow(clippy::module_name_repetitions)]
+pub fn init_server_crypto_clock() {
     static INIT: Once = Once::new();
-    let out = CRYPTO_CLOCK.get_or_init(ServerCryptoClock::default);
     INIT.call_once(|| {
-        crypto_clock().set_provider(Box::new(out));
+        crypto_clock().set_provider(Box::new(&CRYPTO_CLOCK));
     });
-    out
 }
