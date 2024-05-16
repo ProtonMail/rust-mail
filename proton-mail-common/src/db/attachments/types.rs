@@ -51,6 +51,10 @@ pub struct LocalAttachment {
     pub key_packets: attachment::KeyPackets,
     pub signature: Option<attachment::AttachmentSignature>,
     pub encrypted_signature: Option<attachment::AttachmentEncryptedSignature>,
+    pub content_id: Option<String>,
+    pub content_transfer_encoding: Option<String>,
+    pub pm_image_width: Option<String>,
+    pub pm_image_height: Option<String>,
 }
 
 impl LocalAttachment {
@@ -75,6 +79,10 @@ impl LocalAttachment {
             key_packets: attachment.key_packets.clone(),
             signature: attachment.signature.clone(),
             encrypted_signature: attachment.enc_signature.clone(),
+            content_id: None,
+            content_transfer_encoding: None,
+            pm_image_width: None,
+            pm_image_height: None,
         }
     }
 }

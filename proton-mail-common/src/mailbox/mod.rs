@@ -3,9 +3,10 @@ mod conversation;
 mod messages;
 
 pub use attachments::DecryptedAttachment;
+pub use messages::DecryptedMessageBody;
 
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
-use crate::db::{LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId};
+use crate::db::{LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId, LocalMessageId};
 use crate::exports::tracing;
 use crate::exports::tracing::debug;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
@@ -36,6 +37,8 @@ pub enum MailboxError {
     ConversationNotFound(LocalConversationId),
     #[error("Conversation '{0}' does not have a remote id")]
     ConversationDoesNotHaveRemoteId(LocalConversationId),
+    #[error("Message '{0}' does not have a remote id")]
+    MessageDoesNotHaveRemoteId(LocalMessageId),
     #[error("Problem with conversation with local ID: '{0}'")]
     ConversationError(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
@@ -54,6 +57,8 @@ pub enum MailboxError {
     InvalidAction(anyhow::Error),
     #[error("Database Error: {0}")]
     DB(#[from] crate::db::DBError),
+    #[error("Message decryption error: {0}")]
+    MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
 }
 
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:

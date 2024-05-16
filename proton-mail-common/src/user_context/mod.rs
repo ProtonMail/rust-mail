@@ -5,6 +5,7 @@ mod events;
 mod images;
 mod initialization;
 mod labels;
+mod messages;
 mod settings;
 
 pub use initialization::*;

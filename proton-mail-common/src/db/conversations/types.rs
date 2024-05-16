@@ -3,10 +3,11 @@ use crate::db::{LabelColor, LocalAttachmentMetadata, LocalLabelId};
 use crate::new_u64_type;
 use proton_api_mail::domain::{
     Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageId,
-    MessageMetadata,
+    MessageMetadata, MimeType,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::proton_api_core::domain::AddressId;
+use std::collections::HashMap;
 
 new_u64_type!(LocalConversationId);
 
@@ -141,6 +142,9 @@ impl LocalInlineLabelInfo {
 
 new_u64_type!(LocalMessageId);
 
+/// Contains all the metadata associated with a message.
+///
+/// For the message body see [`LocalMessageBodyMetadata`].
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalMessageMetadata {
@@ -206,6 +210,36 @@ impl LocalMessageMetadata {
             attachments: None,
             labels,
             avatar_information,
+        }
+    }
+}
+
+/// Metadata associated with the Body of a message.
+///
+/// Message bodies are not stored in the database.
+///
+/// For metadata associated with a message see [`LocalMessageMetadata`].
+#[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct LocalMessageBodyMetadata {
+    pub id: LocalMessageId,
+    pub rid: Option<MessageId>,
+    pub header: String,
+    pub parsed_headers: HashMap<String, String>,
+    pub mime_type: MimeType,
+    pub address_id: AddressId,
+}
+
+#[cfg(test)]
+impl LocalMessageBodyMetadata {
+    pub fn from_message(id: LocalMessageId, message: &proton_api_mail::domain::Message) -> Self {
+        Self {
+            id,
+            rid: Some(message.metadata.id.clone()),
+            header: message.header.clone(),
+            parsed_headers: message.parsed_headers.clone(),
+            mime_type: message.mime_type,
+            address_id: message.metadata.address_id.clone(),
         }
     }
 }

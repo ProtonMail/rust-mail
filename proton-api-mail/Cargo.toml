@@ -11,6 +11,7 @@ uniffi = {workspace=true, optional = true, features = ["tokio"]}
 lazy_static = "1"
 proton-crypto-inbox = {workspace= true}
 bytes = {workspace= true}
+serde = { version = "1.0.200", features = ["derive"] }
 
 [dev-dependencies]
 bytes = "1.6.0"
