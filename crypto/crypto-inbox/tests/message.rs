@@ -321,8 +321,8 @@ impl DecryptableMessage for TestMessage {
         self.1.as_bytes()
     }
 
-    fn message_id(&self) -> &str {
-        "unique-message-id"
+    fn message_id(&self) -> Option<&str> {
+        Some("unique-message-id")
     }
 }
 

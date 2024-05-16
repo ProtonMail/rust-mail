@@ -22,6 +22,8 @@ pub enum MessageError {
     MimeBodyDecode(#[from] ProcessMimeError),
     #[error("Mime is currently not supported")]
     NotSupportedMime,
+    #[error("Missing message identifier for mime decryption")]
+    MissingMessageID,
 }
 
 /// A decrypted message body that either contains a plain body or a decrypted `mime` body.
@@ -100,10 +102,12 @@ impl VerifiableBody {
 #[allow(clippy::module_name_repetitions)]
 pub trait DecryptableMessage {
     /// Borrows the unique id of the message.
-    fn message_id(&self) -> &str;
+    fn message_id(&self) -> Option<&str>;
     /// Indicates wether the message is mime.
     ///
     /// If it returns true mime decryption is triggered.
+    ///
+    /// Must return true if the `MIMEType` of the message is `multipart/mixed`.
     fn message_is_mime(&self) -> bool;
     /// Returns a reference to the encrypted body of the message.
     fn message_encrypted_body(&self) -> &[u8];
@@ -122,7 +126,7 @@ pub trait DecryptableMessage {
                 pgp_provider,
                 decryption_keys,
                 self.message_encrypted_body(),
-                self.message_id(),
+                self.message_id().ok_or(MessageError::MissingMessageID)?,
             )
         } else {
             decrypt_normal(pgp_provider, decryption_keys, self.message_encrypted_body())
