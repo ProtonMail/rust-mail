@@ -135,6 +135,12 @@ pub struct APIPublicAddressKeyGroup {
     pub signed_key_list: Option<SignedKeyList>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct APIPublicAddressKeyGroupWithoutSKL {
+    pub keys: Vec<APIPublicKey>,
+}
+
 impl AsRef<[APIPublicKey]> for APIPublicAddressKeyGroup {
     fn as_ref(&self) -> &[APIPublicKey] {
         &self.keys
@@ -154,7 +160,7 @@ pub struct APIPublicAddressKeys {
     pub catch_all_keys: Option<APIPublicAddressKeyGroup>,
     /// Any other key that cannot be verified, such as Proton legacy keys or WKD.
     #[serde(rename = "Unverified")]
-    pub unverified_keys: Option<APIPublicAddressKeyGroup>,
+    pub unverified_keys: Option<APIPublicAddressKeyGroupWithoutSKL>,
     /// List of warnings to show to the user related to phishing and message routing.
     pub warnings: Vec<String>,
     /// True when domain has valid proton MX.
