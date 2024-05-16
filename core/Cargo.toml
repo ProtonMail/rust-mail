@@ -9,7 +9,7 @@ members = [ "proton-action-queue",
 ]
 
 [workspace.dependencies]
-proton-crypto-account = {version = "=0.2.2", registry = "proton"}
+proton-crypto-account = {version = "=0.2.3", registry = "proton"}
 uniffi = {version = "0.27"}
 thiserror = "1"
 serde = {version ="1", features=["derive"]}
