@@ -16,7 +16,7 @@ uniffi::setup_scaffolding!();
 
 #[cfg(feature = "uniffi")]
 mod hidden {
-    use crate::domain::{ConversationId, ExternalId, MessageId};
+    use crate::domain::{ConversationId, ExternalId, MessageId, MimeType};
 
     // Note: We need to generate at least on uniffi type which includes custom types
     // declared in this crate or it will lead to linking issues in the binding code.
@@ -25,5 +25,6 @@ mod hidden {
         pub cid: ConversationId,
         pub mid: MessageId,
         pub eid: ExternalId,
+        pub mime_type: MimeType,
     }
 }

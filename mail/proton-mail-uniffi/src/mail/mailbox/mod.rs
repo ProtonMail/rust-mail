@@ -6,7 +6,7 @@ use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::SharedLive;
 use proton_mail_common::db::{
-    ConversationQuery, LocalAttachmentId, LocalConversationId, LocalLabelId,
+    ConversationQuery, LocalAttachmentId, LocalConversationId, LocalLabelId, LocalMessageId,
 };
 use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_sqlite3::{
@@ -47,6 +47,8 @@ pub enum MailboxError {
     ConversationDoesNotHaveRemoteId(LocalConversationId),
     #[error("Problem with conversation with local ID: '{0}'")]
     ConversationError(LocalConversationId),
+    #[error("Message '{0}' does not have a remote id")]
+    MessageDoesNotHaveRemoteId(LocalMessageId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
     #[error("Mailbox is not in the right view mode for the current operation")]
@@ -59,6 +61,8 @@ pub enum MailboxError {
     AttachmentDecryption(String),
     #[error("Database Error: {0}")]
     DB(#[from] proton_mail_common::db::DBError),
+    #[error("Message decryption error: {0}")]
+    MessageDecryption(anyhow::Error),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -200,6 +204,12 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
                 Self::ConversationDoesNotHaveRemoteId(e)
             }
             proton_mail_common::MailboxError::DB(e) => Self::DB(e),
+            proton_mail_common::MailboxError::MessageDoesNotHaveRemoteId(e) => {
+                Self::MessageDoesNotHaveRemoteId(e)
+            }
+            proton_mail_common::MailboxError::MessageDecryption(e) => {
+                Self::MessageDecryption(anyhow!("{e}"))
+            }
         }
     }
 }

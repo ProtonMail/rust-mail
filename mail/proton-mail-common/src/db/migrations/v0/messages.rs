@@ -1,3 +1,4 @@
+use indoc::indoc;
 use proton_sqlite3::SqliteTransaction;
 
 pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
@@ -118,5 +119,22 @@ pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<
         (),
     )?;
 
+    // Message bodies table
+    tx.execute(
+        indoc! {"
+        CREATE TABLE message_bodies (
+            id INTEGER PRIMARY KEY NOT NULL,
+            header TEXT NOT NULL,
+            parsed_headers TEXT NOT NULL,
+            mime_type TEXT NOT NULL,
+
+            CONSTRAINT message_bodies_id
+                FOREIGN KEY (id)
+                REFERENCES messages (id)
+                ON DELETE CASCADE
+        )"
+        },
+        (),
+    )?;
     Ok(())
 }

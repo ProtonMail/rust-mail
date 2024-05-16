@@ -10,7 +10,7 @@ use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 /// Errors that may occur while interacting with a MailContext.
@@ -63,6 +63,8 @@ pub type MailContextResult<T> = Result<T, MailContextError>;
 #[derive(Clone)]
 pub struct MailContext {
     core_context: Context,
+    // TODO: cleanup after Dan's refactor.
+    mail_cache_path: PathBuf,
 }
 
 impl MailContext {
@@ -70,6 +72,7 @@ impl MailContext {
         async_runtime: MultiThreaded,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
+        mail_cache_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
         client: Client,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
@@ -86,7 +89,10 @@ impl MailContext {
             network_callback,
         )?;
 
-        Ok(Self { core_context })
+        Ok(Self {
+            core_context,
+            mail_cache_path: mail_cache_path.into(),
+        })
     }
 
     pub fn new_login_flow(
@@ -136,6 +142,11 @@ impl MailContext {
 
     pub fn async_runtime(&self) -> &MultiThreaded {
         self.core_context.async_runtime()
+    }
+
+    /// Path where mail content should be cached.
+    pub fn mail_cache_path(&self) -> &Path {
+        &self.mail_cache_path
     }
 }
 

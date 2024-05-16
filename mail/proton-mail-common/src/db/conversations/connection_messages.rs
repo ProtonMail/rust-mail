@@ -4,10 +4,11 @@ use crate::db::json::{
 };
 use crate::db::{
     DBResult, LocalAttachmentMetadata, LocalAttachmentMetadataSelector, LocalConversationId,
-    LocalInlineLabelInfo, LocalLabelId, LocalMessageCount, LocalMessageId, LocalMessageMetadata,
-    MailSqliteConnectionImpl,
+    LocalInlineLabelInfo, LocalLabelId, LocalMessageBodyMetadata, LocalMessageCount,
+    LocalMessageId, LocalMessageMetadata, MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{MessageAddress, MessageCount, MessageId, MessageMetadata};
+use indoc::indoc;
+use proton_api_mail::domain::{Message, MessageAddress, MessageCount, MessageId, MessageMetadata};
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
@@ -242,7 +243,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ///
     /// # Errors
     /// Returns error if the query failed.
-    pub fn message_attachments(
+    pub fn message_attachments_metadata(
         &self,
         id: LocalMessageId,
     ) -> DBResult<Option<Vec<LocalAttachmentMetadata>>> {
@@ -253,16 +254,13 @@ JOIN message_attachments ON att.id=message_attachments.attachment_id AND
 ",
             LocalAttachmentMetadataSelector::query(),
         );
-
         let mut stmt = self.0.prepare(&query)?;
-        let Some(rows) = stmt
-            .query_map([id], LocalAttachmentMetadataSelector::from_row)
-            .optional()?
-        else {
+        let rows = stmt.query_map([id], LocalAttachmentMetadataSelector::from_row)?;
+        let r = mapped_rows_to_vec(rows)?;
+        if r.is_empty() {
             return Ok(None);
-        };
-
-        Ok(Some(mapped_rows_to_vec(rows)?))
+        }
+        Ok(Some(r))
     }
 
     pub fn mark_local_message_as_deleted(&mut self, id: LocalMessageId) -> DBResult<()> {
@@ -625,6 +623,121 @@ WHERE lmc.label_id = dm.label_id
         ))?;
         stmt.execute(params_from_iter(ids))?;
         Ok(())
+    }
+
+    /// Create or update message bodies.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn create_or_update_message_body(
+        &mut self,
+        message: &Message,
+    ) -> DBResult<LocalMessageBodyMetadata> {
+        // Create message body
+        let query = indoc! {"
+            INSERT INTO message_bodies (
+               id,
+               header,
+               parsed_headers,
+               mime_type
+            ) VALUES ((SELECT id FROM messages WHERE rid=?),?,?,?)
+            ON CONFLICT(id) DO UPDATE SET
+                header=excluded.header,
+                parsed_headers=excluded.parsed_headers,
+                mime_type=excluded.mime_type
+            RETURNING id
+        "};
+
+        let mut json_writer = JsonWriteBuffer::new();
+        let parsed_headers = json_writer.serialize(&message.parsed_headers)?;
+        let local_id: LocalMessageId = self.0.query_row(
+            query,
+            (
+                &message.metadata.id,
+                &message.header,
+                &parsed_headers,
+                &message.mime_type,
+            ),
+            |r| r.get(0),
+        )?;
+
+        // Update attachment headers
+        if !message.attachments.is_empty() {
+            let conversation_id = self.message_conversation_id(local_id)?;
+            self.create_or_update_attachments_from_message(
+                local_id,
+                conversation_id,
+                &message.attachments,
+            )?;
+        }
+
+        Ok(LocalMessageBodyMetadata {
+            id: local_id,
+            rid: Some(message.metadata.id.clone()),
+            header: message.header.clone(),
+            parsed_headers: message.parsed_headers.clone(),
+            mime_type: message.mime_type,
+            address_id: message.metadata.address_id.clone(),
+        })
+    }
+
+    /// Retrieve the conversation id for message with `id`
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_conversation_id(
+        &self,
+        id: LocalMessageId,
+    ) -> DBResult<Option<LocalConversationId>> {
+        self.0
+            .query_row(
+                "SELECT conversation_id FROM messages WHERE id=?",
+                [id],
+                |r| r.get(0),
+            )
+            .optional()
+    }
+
+    /// Retrieve the remote id for a message with `id`
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_remote_id(&self, id: LocalMessageId) -> DBResult<Option<Option<MessageId>>> {
+        self.0
+            .query_row("SELECT rid FROM messages WHERE id=?", [id], |r| r.get(0))
+            .optional()
+    }
+
+    /// Get the message body for a message with `id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_body(&self, id: LocalMessageId) -> DBResult<Option<LocalMessageBodyMetadata>> {
+        let query = indoc! {"
+             SELECT
+                MB.id,
+                M.rid,
+                MB.header,
+                MB.parsed_headers,
+                MB.mime_type,
+                M.address_id
+             FROM message_bodies AS MB
+             JOIN messages AS M ON M.id=MB.id
+             WHERE MB.id =?
+        "};
+
+        self.0
+            .query_row(query, [id], |r| {
+                Ok(LocalMessageBodyMetadata {
+                    id: r.get(0)?,
+                    rid: r.get(1)?,
+                    header: r.get(2)?,
+                    parsed_headers: deserialize_json_from_row(r, 3)?,
+                    mime_type: r.get(4)?,
+                    address_id: r.get(5)?,
+                })
+            })
+            .optional()
     }
 }
 

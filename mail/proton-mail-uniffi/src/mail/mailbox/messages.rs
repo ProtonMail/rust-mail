@@ -3,10 +3,9 @@ use crate::mail::mailbox::{Observable, SharedLive, SharedLiveQueryBuilder};
 use crate::mail::{Mailbox, MailboxError, MailboxLiveQueryUpdatedCallback};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::InProcessTrackerService;
-use proton_mail_common::db::MessageQuery;
+use proton_mail_common::db::{LocalMessageId, MessageQuery};
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
-
 #[uniffi::export]
 impl Mailbox {
     /// Create a live query for messages for the currently selected label.
@@ -21,6 +20,18 @@ impl Mailbox {
         let limit = usize::try_from(limit).unwrap_or(DEFAULT_CONVERSATION_COUNT);
         let builder = FFIObservableMessagesQueryBuilder(cb);
         Ok(self.mbox.new_messages_query(builder, limit)?)
+    }
+
+    /// Retrieve and decrypt the body of message with `id`.
+    ///
+    /// If the message body has never been fetched before, it will be retrieved from the
+    /// servers.
+    ///
+    /// # Errors
+    /// Returns error if the network request, the database query, reading/writing
+    /// the body to the cache or decrypting the body failed.
+    pub async fn message_body(&self, id: u64) -> Result<String, MailboxError> {
+        Ok(self.mbox.message_body(LocalMessageId::from(id)).await?.body)
     }
 }
 

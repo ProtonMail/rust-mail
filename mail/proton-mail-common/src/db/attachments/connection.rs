@@ -4,13 +4,14 @@ use crate::db::{
     DBResult, LocalAttachment, LocalAttachmentMetadata, LocalConversationId, LocalMessageId,
     MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{Attachment, AttachmentId, AttachmentMetadata};
+use indoc::indoc;
+use proton_api_mail::domain::{Attachment, AttachmentId, AttachmentMetadata, MessageAttachment};
 use proton_api_mail::proton_api_core::domain::AddressId;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
-use proton_sqlite3::utils::RowIndexAllocator;
+use proton_sqlite3::utils::{mapped_rows_to_vec, RowIndexAllocator};
 use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
 
 impl<'c> MailSqliteConnectionImpl<'c> {
@@ -87,40 +88,38 @@ RETURNING id",
         let iter = attachment.into_iter();
         let mut result = Vec::with_capacity(iter.size_hint().1.unwrap_or(0));
 
-        let mut stmt = self.0.prepare(
-            r"
-INSERT INTO attachments (
-    rid,
-    name,
-    size,
-    mime_type,
-    address_id,
-    key_packets,
-    signature,
-    enc_signature,
-    disposition,
-    sender,
-    conversation_id,
-    message_id,
-    is_auto_forwardee
-) VALUES (
-    ?,?,?,?,?,?,?,?,?,?,
-    (SELECT id FROM conversations WHERE rid=?),
-    (SELECT id FROM messages WHERE rid=?),
-    ?
-)
-ON CONFLICT (rid) DO UPDATE SET
-    key_packets=excluded.key_packets,
-    address_id=excluded.address_id,
-    signature=excluded.signature,
-    enc_signature=excluded.enc_signature,
-    sender=excluded.sender,
-    conversation_id=excluded.conversation_id,
-    message_id=excluded.message_id,
-    is_auto_forwardee=excluded.is_auto_forwardee
-RETURNING id
-        ",
-        )?;
+        let mut stmt = self.0.prepare(indoc! {"
+            INSERT INTO attachments (
+                rid,
+                name,
+                size,
+                mime_type,
+                address_id,
+                key_packets,
+                signature,
+                enc_signature,
+                disposition,
+                sender,
+                conversation_id,
+                message_id,
+                is_auto_forwardee
+            ) VALUES (
+                ?,?,?,?,?,?,?,?,?,?,
+                (SELECT id FROM conversations WHERE rid=?),
+                (SELECT id FROM messages WHERE rid=?),
+                ?
+            )
+            ON CONFLICT (rid) DO UPDATE SET
+                key_packets=excluded.key_packets,
+                address_id=excluded.address_id,
+                signature=excluded.signature,
+                enc_signature=excluded.enc_signature,
+                sender=excluded.sender,
+                conversation_id=excluded.conversation_id,
+                message_id=excluded.message_id,
+                is_auto_forwardee=excluded.is_auto_forwardee
+            RETURNING id
+        "})?;
 
         let mut buffer = JsonWriteBuffer::new();
 
@@ -158,6 +157,85 @@ RETURNING id
         Ok(result)
     }
 
+    /// Create or update local attachments from metadata present in Messages.
+    ///
+    /// Attachment metadata present on messages includes extra information that is not
+    /// present in the full attachment info.
+    ///
+    /// # Errors
+    /// Returns errors if the query fails.
+    pub fn create_or_update_attachments_from_message<'i>(
+        &mut self,
+        message_id: LocalMessageId,
+        conversation_id: Option<LocalConversationId>,
+        attachments: impl IntoIterator<Item = &'i MessageAttachment>,
+    ) -> DBResult<Vec<LocalAttachmentId>> {
+        let iter = attachments.into_iter();
+        let mut result = Vec::with_capacity(iter.size_hint().1.unwrap_or(0));
+
+        let mut stmt = self.0.prepare(indoc! {"
+            INSERT INTO attachments (
+                rid,
+                name,
+                size,
+                mime_type,
+                key_packets,
+                signature,
+                enc_signature,
+                disposition,
+                conversation_id,
+                message_id,
+                content_id,
+                transfer_encoding,
+                image_width,
+                image_height
+            ) VALUES (
+                ?,?,?,?,?,?,?,?,?,
+                ?,?,?,?,?
+            )
+            ON CONFLICT (rid) DO UPDATE SET
+                key_packets=excluded.key_packets,
+                signature=excluded.signature,
+                enc_signature=excluded.enc_signature,
+                conversation_id=excluded.conversation_id,
+                message_id=excluded.message_id,
+                content_id=excluded.content_id,
+                transfer_encoding=excluded.transfer_encoding,
+                image_width=excluded.image_width,
+                image_height=excluded.image_height
+            RETURNING id
+        "})?;
+
+        for attachment in iter {
+            bind_list_indexed!(
+                &mut stmt,
+                &attachment.id,
+                &attachment.name,
+                attachment.size,
+                &attachment.mime_type,
+                &attachment.key_packets.0.as_str(),
+                attachment.signature.as_ref().map(|v| v.0.as_str()),
+                attachment.enc_signature.as_ref().map(|v| v.0.as_str()),
+                &attachment.disposition,
+                conversation_id,
+                message_id,
+                &attachment.headers.content_id,
+                &attachment.headers.content_transfer_encoding,
+                &attachment.headers.image_width,
+                &attachment.headers.image_height,
+            );
+            let local_id: LocalAttachmentId = stmt
+                .raw_query()
+                .next()?
+                .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
+                .and_then(|r| r.get(0))?;
+
+            result.push(local_id);
+        }
+
+        Ok(result)
+    }
+
     /// Get an attachment with `id`.
     ///
     /// # Errors
@@ -170,6 +248,18 @@ RETURNING id
                 LocalAttachmentSelector::from_row,
             )
             .optional()
+    }
+
+    /// Get all attachments for message with `id`.
+    ///
+    /// # Errors
+    /// Returns error if the query fails.
+    pub fn attachments_for_message(&self, id: LocalMessageId) -> DBResult<Vec<LocalAttachment>> {
+        let mut stmt = self
+            .0
+            .prepare(&LocalAttachmentSelector::query_with_message_id())?;
+        let rows = stmt.query_map([id], LocalAttachmentSelector::from_row)?;
+        mapped_rows_to_vec(rows)
     }
 
     /// Check whether attachment with `id` is complete.
@@ -280,27 +370,35 @@ pub struct LocalAttachmentSelector {}
 
 impl LocalAttachmentSelector {
     pub fn query() -> &'static str {
-        r"
-SELECT
-    id,
-    rid,
-    name,
-    size,
-    mime_type,
-    address_id,
-    key_packets,
-    signature,
-    enc_signature,
-    disposition,
-    sender,
-    message_id,
-    conversation_id
-FROM attachments
-"
+        indoc! {"
+            SELECT
+                id,
+                rid,
+                name,
+                size,
+                mime_type,
+                address_id,
+                key_packets,
+                signature,
+                enc_signature,
+                disposition,
+                sender,
+                message_id,
+                conversation_id,
+                content_id,
+                transfer_encoding,
+                image_width,
+                image_height
+            FROM attachments
+        "}
     }
 
     pub fn query_with_id() -> String {
         format!("{} WHERE id=?", Self::query())
+    }
+
+    pub fn query_with_message_id() -> String {
+        format!("{} WHERE message_id=?", Self::query())
     }
 
     pub fn from_row(r: &Row) -> DBResult<LocalAttachment> {
@@ -325,6 +423,10 @@ FROM attachments
             sender: deserialize_optional_json_from_row(r, ridx.fetch_and_add())?,
             message_id: r.get(ridx.fetch_and_add())?,
             conversation_id: r.get(ridx.fetch_and_add())?,
+            content_id: r.get(ridx.fetch_and_add())?,
+            content_transfer_encoding: r.get(ridx.fetch_and_add())?,
+            pm_image_width: r.get(ridx.fetch_and_add())?,
+            pm_image_height: r.get(ridx.fetch_and_add())?,
         })
     }
 }

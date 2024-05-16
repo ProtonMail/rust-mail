@@ -8,14 +8,17 @@ use crate::db::conversations::tests::utils::{
 };
 use crate::db::{
     with_file_sqlite_db, with_tx, with_tx_core, LocalAttachmentMetadata, LocalConversationId,
-    LocalInlineLabelInfo, LocalMessageCount, LocalMessageMetadata, MailSqliteConnectionMut,
+    LocalInlineLabelInfo, LocalMessageBodyMetadata, LocalMessageCount, LocalMessageMetadata,
+    MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
-    AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType,
-    MessageAddress, MessageCount, MessageId, MessageMetadata,
+    AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType, Message,
+    MessageAddress, MessageAttachment, MessageAttachmentHeaders, MessageCount, MessageId,
+    MessageMetadata, MimeType,
 };
 use proton_core_common::db::CoreSqliteConnectionMut;
+use proton_crypto_inbox::attachment::KeyPackets;
 
 use super::conversations::create_address;
 use super::utils::prepare_db_state_core;
@@ -81,7 +84,7 @@ fn test_create_message_with_attachments() {
             assert_eq!(message_labels.len(), 1);
 
             let attachments = tx
-                .message_attachments(id)
+                .message_attachments_metadata(id)
                 .expect("failed to get attachments")
                 .expect("must have value");
             assert_eq!(attachments.len(), 1);
@@ -465,6 +468,158 @@ pub fn test_undelete_local_message() {
                 // Conversation should be deleted
                 assert!(tx.get_conversation(local_conv_id).unwrap().is_some());
             }
+        });
+    });
+}
+
+#[test]
+fn test_create_message_and_body() {
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            test_create_message_dependencies(tx);
+            let message = Message {
+                metadata: test_message_metadata([MY_LABEL_ID1.clone()], []),
+                header: "my headers".to_string(),
+                parsed_headers: velcro::hash_map! {
+                    "foo".to_owned():"bar".to_owned(),
+                    "zeta".to_string():"gama".to_string(),
+                },
+                body: "my_message".to_string(),
+                mime_type: MimeType::TextPlain,
+                attachments: vec![],
+            };
+            let id = tx
+                .create_message_from_metadata(&message.metadata)
+                .expect("failed to create message");
+            let db_body_after_insert = tx.create_or_update_message_body(&message).unwrap();
+
+            assert_eq!(id, db_body_after_insert.id);
+
+            let db_message_body = tx
+                .message_body(id)
+                .expect("failed to get message")
+                .expect("must have a value");
+
+            assert_eq!(db_body_after_insert, db_message_body);
+
+            let expected = LocalMessageBodyMetadata::from_message(id, &message);
+
+            assert_eq!(db_message_body, expected);
+        });
+    });
+}
+
+#[test]
+fn test_update_message_and_body() {
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            test_create_message_dependencies(tx);
+            let mut message = Message {
+                metadata: test_message_metadata([MY_LABEL_ID1.clone()], []),
+                header: "my headers".to_string(),
+                parsed_headers: velcro::hash_map! {
+                    "foo".to_owned():"bar".to_owned(),
+                    "zeta".to_string():"gama".to_string(),
+                },
+                body: "my_message".to_string(),
+                mime_type: MimeType::TextPlain,
+                attachments: vec![],
+            };
+            let id = tx
+                .create_message_from_metadata(&message.metadata)
+                .expect("failed to create message");
+            tx.create_or_update_message_body(&message).unwrap();
+
+            // Update the body
+            message
+                .parsed_headers
+                .insert("marco".to_owned(), "polo".to_owned());
+            message.header = "new header".to_owned();
+            message.body = "new body type".to_owned();
+            message.mime_type = MimeType::TextHTML;
+
+            tx.create_or_update_message_body(&message).unwrap();
+
+            let db_message_body = tx
+                .message_body(id)
+                .expect("failed to get message")
+                .expect("must have a value");
+
+            let expected = LocalMessageBodyMetadata::from_message(id, &message);
+
+            assert_eq!(db_message_body, expected);
+        });
+    });
+}
+
+#[test]
+fn test_create_message_and_body_with_attachments() {
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            let attachment_id = AttachmentId::from("attachment");
+            test_create_message_dependencies(tx);
+            let message = Message {
+                metadata: test_message_metadata(
+                    [MY_LABEL_ID1.clone()],
+                    [AttachmentMetadata {
+                        id: attachment_id.clone(),
+                        size: 1024,
+                        name: "fooo".to_string(),
+                        mime_type: "text/html".to_owned(),
+                        disposition: Disposition::Inline,
+                    }],
+                ),
+                header: "my headers".to_string(),
+                parsed_headers: velcro::hash_map! {
+                    "foo".to_owned():"bar".to_owned(),
+                    "zeta".to_string():"gama".to_string(),
+                },
+                body: "my_message".to_string(),
+                mime_type: MimeType::TextPlain,
+                attachments: vec![MessageAttachment {
+                    id: attachment_id.clone(),
+                    name: "fooo".to_owned(),
+                    size: 1024,
+                    mime_type: "text/html".to_owned(),
+                    disposition: Disposition::Inline,
+                    key_packets: KeyPackets::from("packets"),
+                    signature: None,
+                    enc_signature: None,
+                    headers: MessageAttachmentHeaders {
+                        content_disposition: "inline".to_string(),
+                        content_id: Some("mycontent_id".to_owned()),
+                        content_transfer_encoding: Some("base64".to_string()),
+                        image_width: Some("1280".to_owned()),
+                        image_height: Some("720".to_owned()),
+                    },
+                }],
+            };
+            let id = tx
+                .create_message_from_metadata(&message.metadata)
+                .expect("failed to create message");
+            tx.create_or_update_message_body(&message).unwrap();
+            let local_attachments = tx.attachments_for_message(id).expect("must have value");
+            let local_attachment = local_attachments.first().unwrap();
+
+            assert_eq!(
+                local_attachment.content_id,
+                message.attachments[0].headers.content_id
+            );
+            assert_eq!(
+                local_attachment.content_transfer_encoding,
+                message.attachments[0].headers.content_transfer_encoding
+            );
+            assert_eq!(
+                local_attachment.pm_image_width,
+                message.attachments[0].headers.image_width
+            );
+            assert_eq!(
+                local_attachment.pm_image_height,
+                message.attachments[0].headers.image_height
+            );
         });
     });
 }

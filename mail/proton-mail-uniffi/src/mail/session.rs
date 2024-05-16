@@ -59,39 +59,55 @@ pub enum MailSessionError {
 }
 pub type MailSessionResult<T> = Result<T, MailSessionError>;
 
+/// Configuration parameters for the [`MailSession`]
+#[derive(uniffi::Record)]
+pub struct MailSessionParams {
+    /// Directory where the session database should be stored.
+    pub session_dir: String,
+    /// Directory where the user databases should be stored.
+    pub user_dir: String,
+    /// Directory where the mail cache should be stored.
+    pub mail_cache_dir: String,
+    /// Directory where the logs should be stored.
+    pub log_dir: String,
+    /// Whether to enable debug and trace logs.
+    pub log_debug: bool,
+    /// API Environment configuration.
+    pub api_env_config: Option<APIEnvConfig>,
+}
+
 #[uniffi::export]
 impl MailSession {
-    /// Create a new mail context:
-    /// * `session_dir`: Directory where the session db should be stored.
-    /// * `user_dri`: Directory where the user db should be stored.
-    /// * `log_dir:`: Directory where the log file should be stored.
-    /// * `log_debug`: Whether to enable debug and trace logs
-    /// * `api_env_config`: The API environment configuration.
-    /// * `key_chain`: `KeyChain` implementation
-    /// * `network_callback`: Optional network status changed callback
+    // NOTE: Callbacks can not be stored in record types, which is why they are still in the
+    // constructor.
+    /// Create a new mail session.
+    ///
+    /// # Params
+    /// * `params`: See [`MailSessionParams`] for parameter details.
+    /// * `key_chain`: Keychain implementation.
+    /// * `network_callback`: Optional network status changes callback.
+    ///
     #[uniffi::constructor]
     pub fn create(
-        session_dir: String,
-        user_dir: String,
-        log_dir: String,
-        log_debug: bool,
+        params: MailSessionParams,
         key_chain: Box<dyn OSKeyChain>,
-        api_env_config: Option<APIEnvConfig>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> MailSessionResult<Self> {
-        let mut log_path = PathBuf::from(log_dir);
+        let mut log_path = PathBuf::from(params.log_dir);
         std::fs::create_dir_all(&log_path)?;
         log_path.push("proton-mail-uniffi.log");
 
-        init_log(&log_path, log_debug)?;
+        init_log(&log_path, params.log_debug)?;
 
-        let session_path = PathBuf::from(session_dir);
-        let user_path = PathBuf::from(user_dir);
+        let session_path = PathBuf::from(params.session_dir);
+        let user_path = PathBuf::from(params.user_dir);
+        let mail_cache_path = PathBuf::from(params.mail_cache_dir);
 
         // create directories.
         tracing::debug!("Creating directories");
         std::fs::create_dir_all(&session_path)?;
         std::fs::create_dir_all(&user_path)?;
+        std::fs::create_dir_all(&mail_cache_path)?;
 
         // Generate session key;
         tracing::debug!("Checking keychain");
@@ -114,7 +130,7 @@ impl MailSession {
         })?;
 
         // Creating client.
-        let api_env_config = match api_env_config {
+        let api_env_config = match params.api_env_config {
             Some(config) => config,
             None => APIEnvConfig::default(),
         };
@@ -134,6 +150,7 @@ impl MailSession {
             runtime,
             session_path,
             user_path,
+            mail_cache_path,
             Arc::from(FFIKeyChain::from(key_chain)),
             client,
             network_callback.map(

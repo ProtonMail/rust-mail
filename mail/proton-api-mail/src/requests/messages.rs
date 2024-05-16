@@ -1,8 +1,7 @@
 use crate::domain::{
     LabelId, Message, MessageCount, MessageId, MessageMetadata, MessageMetadataFilter,
 };
-use crate::exports::serde::Serialize;
-use proton_api_core::exports::serde::{self, Deserialize};
+use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
 use proton_api_core::utils::{bool_from_integer, bool_to_integer};
@@ -41,7 +40,7 @@ impl http::RequestDesc for GetMessageMetadataRequest {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetMessageResponse {
     pub message: Message,

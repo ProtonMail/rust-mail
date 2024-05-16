@@ -1,11 +1,11 @@
 use crate::domain::{AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId};
 use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
-use proton_api_core::exports::serde_json;
 use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
+use std::collections::HashMap;
 
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
@@ -97,6 +97,7 @@ pub struct MessageMetadata {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[serde(crate = "self::serde")]
 pub enum MimeType {
     #[serde(rename = "text/plain")]
@@ -117,12 +118,11 @@ pub enum MimeType {
 pub struct Message {
     #[serde(flatten)]
     pub metadata: MessageMetadata,
-    pub header: Option<String>,
-    // this can either be a string or an array of strings.
-    pub parsed_headers: serde_json::Value,
-    pub body: Option<String>,
+    pub header: String,
+    pub parsed_headers: HashMap<String, String>,
+    pub body: String,
     #[serde(rename = "MIMEType")]
-    pub mime_type: Option<MimeType>,
+    pub mime_type: MimeType,
     #[serde(default)]
     pub attachments: Vec<MessageAttachment>,
 }
@@ -330,4 +330,45 @@ pub struct MessageCount {
     pub label_id: LabelId,
     pub total: u64,
     pub unread: u64,
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::ToSql for MimeType {
+    fn to_sql(
+        &self,
+    ) -> crate::exports::proton_sqlite3::rusqlite::Result<
+        crate::exports::proton_sqlite3::rusqlite::types::ToSqlOutput<'_>,
+    > {
+        match self {
+            MimeType::TextPlain => "text/plain",
+            MimeType::TextHTML => "text/html",
+            MimeType::MultipartMixed => "multipart/mixed",
+            MimeType::MultipartRelated => "multipart/related",
+            MimeType::MessageRFC822 => "message/rfc822",
+        }
+        .to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MimeType {
+    fn column_result(
+        value: crate::exports::proton_sqlite3::rusqlite::types::ValueRef<'_>,
+    ) -> crate::exports::proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        let value = value.as_str()?;
+        Ok(match value {
+            "text/plain" => MimeType::TextPlain,
+            "text/html" => MimeType::TextHTML,
+            "multipart/mixed" => MimeType::MultipartMixed,
+            "multipart/related" => MimeType::MultipartRelated,
+            "message/rfc822" => MimeType::MessageRFC822,
+            _ => {
+                return Err(
+                    crate::exports::proton_sqlite3::rusqlite::types::FromSqlError::Other(
+                        format!("invalid mime type value:{value}").into(),
+                    ),
+                )
+            }
+        })
+    }
 }

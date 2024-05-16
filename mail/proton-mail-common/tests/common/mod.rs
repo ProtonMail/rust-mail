@@ -4,6 +4,7 @@ pub mod account;
 pub mod attachment;
 pub mod conversations;
 pub mod init;
+mod messages;
 
 use proton_api_mail::exports::crypto::salts::KeySecret;
 use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
@@ -43,6 +44,15 @@ impl TestContext {
 
     /// Create and initialize test context.
     pub fn new() -> Self {
+        Self::_new(None, None)
+    }
+
+    /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
+    pub fn with_user_secret_and_user_id(user_key_secret: UserKeySecret, user_id: UserId) -> Self {
+        Self::_new(Some(user_key_secret), Some(user_id))
+    }
+
+    fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<UserId>) -> Self {
         let runtime = MultiThreaded::new(2).expect("failed to create runtime");
         let mock_server = runtime.block_on(async { MockServer::start().await });
 
@@ -62,6 +72,9 @@ impl TestContext {
         let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
         let keychain = Arc::new(InMemoryKeyChain::default());
 
+        let cache_path = tmp_dir.path().join("mail-cache");
+        std::fs::create_dir_all(&cache_path).expect("failed to create mail cache dir");
+
         // Generate a random encryption key and store it in the keychain
         let encryption_key = SessionEncryptionKey::random();
         keychain
@@ -73,6 +86,7 @@ impl TestContext {
             runtime,
             tmp_dir.path(),
             tmp_dir.path(),
+            cache_path,
             keychain,
             client,
             None,
@@ -88,12 +102,12 @@ impl TestContext {
         // Create a fake session
         let session = DecryptedUserSession {
             session_id: Self::test_uid(),
-            user_id: UserId::from(TEST_USER_ID),
+            user_id: user_id.unwrap_or(UserId::from(TEST_USER_ID)),
             name: None,
             email: TEST_USER_MAIL.to_owned(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
-            key_secret: Some(testdata_user_secret()),
+            key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
             scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)

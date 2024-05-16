@@ -1,9 +1,10 @@
+use indoc::indoc;
 use proton_sqlite3::SqliteTransaction;
 
 pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
     // Attachments
     tx.execute(
-        r#"
+        indoc! {"
             CREATE TABLE attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rid TEXT UNIQUE,
@@ -15,12 +16,14 @@ pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResu
                 signature TEXT DEFAULT NULL,
                 enc_signature TEXT DEFAULT NULL,
                 disposition TEXT NOT NULL,
-
                 sender TEXT DEFAULT NULL,
-
                 conversation_id INTEGER DEFAULT NULL,
                 message_id INTEGER DEFAULT NULL,
                 is_auto_forwardee INTEGER NOT NULL DEFAULT 0,
+                content_id TEXT DEFAULT NULL,
+                transfer_encoding TEXT DEFAULT NULL,
+                image_width TEXT DEFAULT NULL,
+                image_height TEXT DEFAULT NULL,
 
                 CONSTRAINT attachments_address_id
                     FOREIGN KEY (address_id)
@@ -29,14 +32,14 @@ pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResu
                 CONSTRAINT attachments_conversation_id
                     FOREIGN KEY (conversation_id)
                     REFERENCES conversations (id)
-                    ON DELETE CASCADE
+                    ON DELETE CASCADE,
 
                 CONSTRAINT attachments_message_id
                     FOREIGN KEY (message_id)
                     REFERENCES messages (id)
                     ON DELETE CASCADE
             )
-        "#,
+        "},
         (),
     )?;
 
