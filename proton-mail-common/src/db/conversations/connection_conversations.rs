@@ -293,14 +293,37 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         );
 
         let mut stmt = self.0.prepare(&query)?;
-        let Some(rows) = stmt
-            .query_map([id], LocalAttachmentMetadataSelector::from_row)
-            .optional()?
-        else {
-            return Ok(None);
-        };
+        let rows = stmt.query_map([id], LocalAttachmentMetadataSelector::from_row)?;
 
-        Ok(Some(mapped_rows_to_vec(rows)?))
+        let r = mapped_rows_to_vec(rows)?;
+
+        if r.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(r))
+    }
+
+    /// Get all label ids associated with a conversation
+    ///
+    /// # Errors
+    /// Returns error on query failure
+    pub fn conversation_label_ids(
+        &self,
+        conv_id: LocalConversationId,
+    ) -> DBResult<Option<Vec<LocalLabelId>>> {
+        let mut stmt = self
+            .0
+            .prepare("SELECT (label_id) FROM conversation_labels WHERE conversation_id=?")?;
+
+        let rows = stmt.query_map([conv_id], |r| r.get(0))?;
+        let rows = mapped_rows_to_vec(rows)?;
+
+        if rows.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(rows))
+        }
     }
 
     pub fn mark_conversation_as_deleted(

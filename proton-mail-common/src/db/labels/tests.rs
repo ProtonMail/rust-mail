@@ -85,7 +85,7 @@ fn test_delete_remote() {
             .map(|l| l.into())
             .collect::<Vec<_>>();
 
-        assert_eq!(tx.labels().unwrap().len(), 11);
+        assert_eq!(tx.labels().unwrap().len(), 12);
 
         compare_remote_labels_with_local(&tx, remote_labels.iter());
     });
