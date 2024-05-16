@@ -73,6 +73,47 @@ impl<'c, 't: 'c> LocalActionHandler for MoveConversationsLocalHandler<'c, 't> {
                 .map_err(|e| ActionError::Local(anyhow!(e)))?;
         }
 
+        // When moving in Trash or Spam, remove all labels (but AllMail)
+        if dst_label.rid.as_ref() == Some(LabelId::trash())
+            || dst_label.rid.as_ref() == Some(LabelId::spam())
+        {
+            let all_mail_id = self
+                .tx
+                .resolve_remote_label_id(LabelId::all_mail())
+                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            if let Some(all_mail_id) = all_mail_id {
+                for &local_conversation_id in &self.action.ids {
+                    if let Some(local_label_ids) = self
+                        .tx
+                        .conversation_label_ids(local_conversation_id)
+                        .map_err(|e| ActionError::Local(anyhow!(e)))?
+                    {
+                        local_label_ids
+                            .iter()
+                            .filter(|&&id| id != all_mail_id)
+                            .try_for_each(|&local_label_id| {
+                                self.tx
+                                    .unlabel_conversation(local_label_id, local_conversation_id)
+                                    .map_err(|e| ActionError::Local(anyhow!(e)))
+                            })?;
+                    }
+                }
+            }
+            // When moving out of Trash or Spam, add AlmostAllMail label
+        } else if src_label.rid.as_ref() == Some(LabelId::trash())
+            || src_label.rid.as_ref() == Some(LabelId::spam())
+        {
+            let almost_all_mail_id = self
+                .tx
+                .resolve_remote_label_id(LabelId::almost_all_mail())
+                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            if let Some(almost_all_mail_id) = almost_all_mail_id {
+                self.tx
+                    .label_conversations(almost_all_mail_id, self.action.ids.iter().cloned())
+                    .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            }
+        }
+
         if src_label.is_movable_folder() {
             self.tx
                 .unlabel_conversations(self.action.active_label_id, self.action.ids.iter().cloned())
@@ -129,12 +170,6 @@ impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
             .label_with_id_or_err(self.action.destination_label_id)
             .map_err(|e| ActionError::Local(anyhow!(e)))?;
 
-        let Some(src_rid) = src_label.rid.as_ref() else {
-            return Err(ActionError::Local(anyhow!(
-                "Label {} does not have a remote id",
-                self.action.active_label_id
-            )));
-        };
         let Some(dst_rid) = dst_label.rid.as_ref() else {
             return Err(ActionError::Local(anyhow!(
                 "Label {} does not have a remote id",
@@ -156,14 +191,6 @@ impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
             .mail_context()
             .async_runtime()
             .block_on(async {
-                if *dst_rid == *LabelId::trash() {
-                    self.session.mark_conversations_read(&conv_ids).await?;
-                }
-                if src_is_folder {
-                    self.session
-                        .unlabel_conversations(src_rid, &conv_ids)
-                        .await?;
-                }
                 self.session
                     .label_conversations(dst_rid, &conv_ids, None)
                     .await

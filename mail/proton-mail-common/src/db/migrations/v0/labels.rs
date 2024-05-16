@@ -85,6 +85,7 @@ pub fn create_labels_tables(tx: &mut SqliteTransaction) -> RResult<()> {
         (LabelId::spam(), "Spam"),
         (LabelId::trash(), "Trash"),
         (LabelId::all_mail(), "All Mail"),
+        (LabelId::almost_all_mail(), "Almost All Mail"),
     ];
     for (index, (id, name)) in labels.iter().enumerate() {
         stmt.execute((id, name, index))?;
