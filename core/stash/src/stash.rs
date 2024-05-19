@@ -228,9 +228,9 @@ use uniffi::Error as UniffiError;
 ///
 /// # See also
 ///
+/// * [`Query::run()`]
 /// * [`Stash::query()`]
 /// * [`Tether::query()`]
-/// * [`Worker::query()`]
 /// * [`converter()`]
 ///
 type AnyRecords = Vec<Box<dyn Any + Send>>;
@@ -277,6 +277,7 @@ impl Deref for AgnosticConnection<'_> {
 /// # See also
 ///
 /// * [`Instruction`]
+/// * [`OperationLogic`]
 /// * [`Query`]
 /// * [`Worker`]
 ///
@@ -363,8 +364,10 @@ struct Instruction {
     /// to the caller.
     channel: OneshotSender<Result<usize, StashError>>,
 
-    /// The unique handle of the connection to use for the query. If [`None`], a
-    /// new connection will be created.
+    /// The unique handle of the connection to use for the query. If [`Some`] a
+    /// database connection will be created and associated if not already
+    /// registered, and re-used otherwise. If [`None`], a new database
+    /// connection will be created, but not registered, and used just this once.
     conn_handle: Option<Arc<()>>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
@@ -375,6 +378,47 @@ struct Instruction {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+}
+
+impl OperationLogic for Instruction {
+    type Output = usize;
+
+    /// Prepares and executes a query, and returns the number of affected rows.
+    ///
+    /// This function prepares a query and executes it on the database, and then
+    /// indicates whether it was successful, returning the number of affected
+    /// rows.
+    ///
+    /// **Note: This function is the one that actually deals with the query
+    /// execution, which occurs on the background worker thread in response to
+    /// queued instructions. It is an internal function. For the public-facing
+    /// versions of this function, which lead to it being called, see
+    /// [`Stash::execute()`] and [`Tether::execute()`].**
+    ///
+    /// # Parameters
+    ///
+    /// * `connection` - The database connection to use for the operation.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
+    ///     the query.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///
+    /// # See also
+    ///
+    /// * [`Query::run()`]
+    /// * [`Stash::execute()`]
+    /// * [`Tether::execute()`]
+    ///
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
+        connection
+            .execute(&self.query, &*Self::prepare_params(&self.params))
+            .map_err(StashError::ExecutionError)
+    }
 }
 
 /// An operation to be executed by the worker, which returns data.
@@ -394,12 +438,15 @@ struct Query {
     /// to the caller.
     channel: OneshotSender<Result<AnyRecords, StashError>>,
 
-    /// The unique handle of the connection to use for the query. If [`None`], a
-    /// new connection will be created.
+    /// The unique handle of the connection to use for the query. If [`Some`] a
+    /// database connection will be created and associated if not already
+    /// registered, and re-used otherwise. If [`None`], a new database
+    /// connection will be created, but not registered, and used just this once.
     conn_handle: Option<Arc<()>>,
 
     /// The deserialisation function to use to convert the query results into
-    /// the desired type.
+    /// the desired type. This is necessary because the [`Rows`] type returned
+    /// by the [`rusqlite`] library is not thread-safe.
     #[allow(clippy::type_complexity)]
     converter: Box<dyn Fn(Rows<'_>) -> Result<AnyRecords, DeserializationError> + Send>,
 
@@ -411,6 +458,57 @@ struct Query {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+}
+
+impl OperationLogic for Query {
+    type Output = AnyRecords;
+
+    /// Prepares and executes a query, and returns any rows of data emitted.
+    ///
+    /// This function prepares a query and executes it on the database, and then
+    /// indicates whether it was successful, returning the number of affected
+    /// rows.
+    ///
+    /// **Note: This function is the one that actually deals with the query
+    /// execution, which occurs on the background worker thread in response to
+    /// queued instructions. It is an internal function. For the public-facing
+    /// versions of this function, which lead to it being called, see
+    /// [`Stash::query()`] and [`Tether::query()`].**
+    ///
+    /// # Parameters
+    ///
+    /// * `connection` - The database connection to use for the operation.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
+    ///     converting from [`Rows`] to `T`.
+    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
+    ///     the query.
+    ///   - [`PreparationError`](StashError::PreparationError) - Problem
+    ///     preparing the query.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///
+    /// # See also
+    ///
+    /// * [`Instruction::run()`]
+    /// * [`Stash::query()`]
+    /// * [`Tether::query()`]
+    ///
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<AnyRecords, StashError> {
+        let mut statement = connection
+            .prepare(&self.query)
+            .map_err(StashError::PreparationError)?;
+        let rows: Result<AnyRecords, DeserializationError> = (self.converter)(
+            statement
+                .query(&*Self::prepare_params(&self.params))
+                .map_err(StashError::ExecutionError)?,
+        );
+        rows.map_err(StashError::DeserializationError)
+    }
 }
 
 /// Database interaction interface.
@@ -1092,24 +1190,47 @@ impl Worker {
             };
 
             while let Ok(operation) = receiver.recv() {
+                let conn_handle = match operation {
+                    Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
+                    Operation::Query(ref query) => query.conn_handle.clone(),
+                };
+                let connection_result = match conn_handle {
+                    Some(ref handle) => worker
+                        .get_connection(handle)
+                        .map(AgnosticConnection::Borrowed),
+                    None => worker
+                        .pool
+                        .get()
+                        .map(AgnosticConnection::Owned)
+                        .map_err(StashError::TetherError),
+                };
+                let connection = match connection_result {
+                    Ok(connection) => connection,
+                    Err(error) => {
+                        if match operation {
+                            Operation::Instruct(instruction) => {
+                                instruction.channel.send(Err(error)).map_err(|_err| ())
+                            }
+                            Operation::Query(query) => {
+                                query.channel.send(Err(error)).map_err(|_err| ())
+                            }
+                        }
+                        .is_err()
+                        {
+                            error!("Oneshot error: Failed sending error back to caller");
+                        }
+                        continue;
+                    }
+                };
                 if (match operation {
-                    Operation::Instruct(instruction) => instruction
-                        .channel
-                        .send(worker.execute(
-                            instruction.conn_handle,
-                            &instruction.query,
-                            &instruction.params,
-                        ))
-                        .map_err(|_err| ()),
-                    Operation::Query(query) => query
-                        .channel
-                        .send(worker.query(
-                            query.conn_handle,
-                            &query.query,
-                            &query.params,
-                            &query.converter,
-                        ))
-                        .map_err(|_err| ()),
+                    Operation::Instruct(instruction) => {
+                        let result = instruction.run(&connection);
+                        instruction.channel.send(result).map_err(|_err| ())
+                    }
+                    Operation::Query(query) => {
+                        let result = query.run(&connection);
+                        query.channel.send(result).map_err(|_err| ())
+                    }
                 })
                 .is_err()
                 {
@@ -1124,66 +1245,6 @@ impl Worker {
         }));
 
         Ok(sender)
-    }
-
-    /// Prepares and executes a query, and returns the number of affected rows.
-    ///
-    /// This function prepares a query and executes it on the database, and then
-    /// indicates whether it was successful, returning the number of affected
-    /// rows.
-    ///
-    /// **Note: This function is the one that actually deals with the query
-    /// execution, which occurs on the background worker thread in response to
-    /// queued instructions. It is an internal function. For the public-facing
-    /// versions of this function, which lead to it being called, see
-    /// [`Stash::execute()`] and [`Tether::execute()`].**
-    ///
-    /// # Parameters
-    ///
-    /// * `conn_handle` - The handle of the connection to use for the query. If
-    ///                   [`Some`] a database connection will be created and
-    ///                   associated if not already registered, and re-used
-    ///                   otherwise. If [`None`], a new database connection will
-    ///                   be created, but not registered, and used just this
-    ///                   once.
-    /// * `query`       - The query to execute.
-    /// * `params`      - The parameters to pass to the query.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// # See also
-    ///
-    /// * [`Tether::execute()`]
-    /// * [`Stash::execute()`]
-    /// * [`Worker::query()`]
-    ///
-    fn execute(
-        &mut self,
-        conn_handle: Option<Arc<()>>,
-        query: &str,
-        params: &[Box<dyn ToSql + Send>],
-    ) -> Result<usize, StashError> {
-        let params_refs: Vec<&dyn ToSql> = params
-            .iter()
-            .map(|p| {
-                #[allow(clippy::shadow_same)]
-                let p: &dyn ToSql = &**p;
-                p
-            })
-            .collect();
-        match conn_handle {
-            Some(handle) => AgnosticConnection::Borrowed(self.get_connection(&handle)?),
-            None => AgnosticConnection::Owned(self.pool.get().map_err(StashError::TetherError)?),
-        }
-        .execute(query, &*params_refs)
-        .map_err(StashError::ExecutionError)
     }
 
     /// Gets a connection from the pool.
@@ -1238,82 +1299,66 @@ impl Worker {
             }
         }
     }
+}
 
-    /// Prepares and executes a query, and returns any rows of data emitted.
+/// Logic for carrying out an operation on the database.
+///
+/// This trait provides the interface for providing and running logic to carry
+/// out an operation on the database.
+///
+/// # See also
+///
+/// * [`Instruction`]
+/// * [`Operation`]
+/// * [`Query`]
+///
+trait OperationLogic {
+    /// The type of the output of the operation, i.e. what is returned by the
+    /// [`run()`](OperationLogic::run()) method's implementation.
+    type Output;
+
+    /// Prepares parameters ready to be used with a query.
     ///
-    /// This function prepares a query and executes it on the database, and then
-    /// indicates whether it was successful, returning the number of affected
-    /// rows.
-    ///
-    /// **Note: This function is the one that actually deals with the query
-    /// execution, which occurs on the background worker thread in response to
-    /// queued instructions. It is an internal function. For the public-facing
-    /// versions of this function, which lead to it being called, see
-    /// [`Stash::query()`] and [`Tether::query()`].**
+    /// This function prepares the parameters for a query, converting them into
+    /// a form that can be used with the [`rusqlite`] library.
     ///
     /// # Parameters
     ///
-    /// * `conn_handle` - The handle of the connection to use for the query. If
-    ///                   [`Some`] a database connection will be created and
-    ///                   associated if not already registered, and re-used
-    ///                   otherwise. If [`None`], a new database connection will
-    ///                   be created, but not registered, and used just this
-    ///                   once.
-    /// * `query`       - The query to execute.
-    /// * `params`      - The parameters to pass to the query.
-    /// * `converter`   - The deserialisation function to use to convert the
-    ///                   query results into the desired type. This is
-    ///                   necessary because the [`Rows`] type returned by the
-    ///                   [`rusqlite`] library is not thread-safe.
+    /// * `params` - The parameters to prepare.
     ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
-    ///     converting from [`Rows`] to `T`.
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`PreparationError`](StashError::PreparationError) - Problem
-    ///     preparing the query.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// # See also
-    ///
-    /// * [`Tether::query()`]
-    /// * [`Stash::query()`]
-    /// * [`Worker::execute()`]
-    ///
-    fn query(
-        &mut self,
-        conn_handle: Option<Arc<()>>,
-        query: &str,
-        params: &[Box<dyn ToSql + Send>],
-        converter: &dyn Fn(Rows<'_>) -> Result<AnyRecords, DeserializationError>,
-    ) -> Result<AnyRecords, StashError> {
-        let params_refs: Vec<&dyn ToSql> = params
+    fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
+        params
             .iter()
             .map(|p| {
                 #[allow(clippy::shadow_same)]
                 let p: &dyn ToSql = &**p;
                 p
             })
-            .collect();
-        let connection = match conn_handle {
-            Some(handle) => AgnosticConnection::Borrowed(self.get_connection(&handle)?),
-            None => AgnosticConnection::Owned(self.pool.get().map_err(StashError::TetherError)?),
-        };
-        let mut statement = connection
-            .prepare(query)
-            .map_err(StashError::PreparationError)?;
-        let rows: Result<AnyRecords, DeserializationError> = converter(
-            statement
-                .query(&*params_refs)
-                .map_err(StashError::ExecutionError)?,
-        );
-        rows.map_err(StashError::DeserializationError)
+            .collect()
     }
+
+    /// Carries out an operation on the database.
+    ///
+    /// This function carries out, or runs, an operation on the database. Its
+    /// exact behaviour is determined by the implementation of the trait, and
+    /// the associated documentation should be consulted for more details.
+    ///
+    /// # Parameters
+    ///
+    /// * `connection` - The database connection to use for the operation.
+    ///
+    /// # Errors
+    ///
+    /// Various [`StashError`] variants can be returned. For more details see
+    /// the individual implementations of this trait.
+    ///
+    /// # See also
+    ///
+    /// * [`Instruction`]
+    /// * [`Operation`]
+    /// * [`Query`]
+    ///
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Self::Output, StashError>;
 }
 
 /// Converts the query results into the desired type.
@@ -1322,7 +1367,7 @@ impl Worker {
 /// library is not thread-safe. We only need one converter function, but the key
 /// is that the context of the generic type `T` is established at the point this
 /// function is used by [`Stash::query()`] and [`Tether::query()`] and passed
-/// through the queue to [`Worker::query()`].
+/// through the queue to [`Query::run()`].
 ///
 /// Notably, we cannot really get away from use of `Box<dyn Any>` here, as we
 /// need to be able to return a collection of any type that implements the
