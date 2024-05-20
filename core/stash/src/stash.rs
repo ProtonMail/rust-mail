@@ -55,6 +55,104 @@
 //! executed sequentially, and that connections are managed and made
 //! thread-safe.
 //!
+//! # Approach to async
+//!
+//! The [`Stash`] struct is designed to be used in an asynchronous context. The
+//! [`query()`][Stash::query()] and [`execute()`][Stash::execute()] methods are
+//! asynchronous (as are their connection-specific [`Tether`] counterparts), and
+//! the [`Stash`] struct itself is cloneable and shareable across threads. The
+//! database handling uses the [`r2d2`] and [`rusqlite`] crates, which are
+//! synchronous, so they are handled in a separate background thread by a worker
+//! to avoid blocking the main Tokio runtime, and to ensure that there is a
+//! synchronous "funnel" to handle all database operations.
+//!
+//! As the various [`rusqlite`] types are not [`Send`] compatible, they cannot
+//! be passed between threads, and so cannot cross the async boundary. Therefore
+//! this approach of the background worker and the [`Tether`] struct is
+//! necessary to provide a thread-safe and async-compatible interface to the
+//! database.
+//!
+//! The main worker processes the incoming queries and other database operations
+//! via an MPSC queue. As soon as it picks a query up from the queue it hands it
+//! over to another worker on a separate thread for processing. If the query is
+//! a once-off, i.e. does not need to re-use a database connection, then it is
+//! executed in an async thread, and the [`spawn_blocking()`] function is used
+//! to run the blocking synchronous code in a separate thread. This allows the
+//! Tokio runtime to continue running other tasks while the blocking code is
+//! running.
+//!
+//! This is important because otherwise the executor would be blocked, and Tokio
+//! would not be able to run other tasks. To clarify: the mechanism by which the
+//! Tokio runtime operates is that of work scheduling. It will run the various
+//! work units (tasks) that it has against the available OS threads, via
+//! allocated "core" threads, and will switch between them (i.e. between the
+//! tasks) as necessary, allocating the tasks against the core threads according
+//! to its work management priorities. If a task blocks, then the thread that it
+//! is running on will be blocked, and the Tokio runtime will not be able to run
+//! other tasks on that thread.
+//!
+//! Bear in mind that asking Tokio to create a new "thread" is not the same as
+//! creating a new OS thread. Tokio uses a thread pool, and manages the work
+//! units, each of which *can* operate on a separate thread, allocating the work
+//! units to the available core OS threads as needed. For this reason, it is
+//! important to notify the Tokio runtime when a task is going to issue a
+//! blocking call (e.g. waiting on file or network I/O), or perform a lot of
+//! compute without yielding. Such a situation can prevent the executor from
+//! driving other tasks forward, and can lead to a deadlock. Notifying the
+//! executor allows it to hand off any other tasks it has to a new core thread
+//! before the blocking call is made. Tokio handles blocking situations
+//! separately, in blocking threads, which are separate from the core threads.
+//!
+//! Tokio has two kinds of threads in its thread pool: core (OS) threads, and
+//! blocking threads. By default, Tokio will create one core thread for each CPU
+//! core, and up to around 500 blocking threads. Using [`block_in_place()`](tokio::task::block_in_place())
+//! temporarily *changes* the current thread category from core to blocking,
+//! allowing the runtime to spawn another core thread to handle things while the
+//! blocking code runs. Because the whole thread categorisation is changed,
+//! anything else (i.e. other tasks) associated with the thread are taken with
+//! it. Whereas, [`spawn_blocking()`] sends the *task* to a thread in the
+//! blocking category, allowing the other associated tasks to continue.
+//!
+//! The two main ways of notifying the Tokio runtime that a task is blocking are
+//! [`block_in_place()`](tokio::task::block_in_place()) and
+//! [`spawn_blocking()`]. The difference is that [`block_in_place()`](tokio::task::block_in_place())
+//! blocks the current core thread, whereas [`spawn_blocking()`] spawns a new
+//! thread *request* to run the blocking code. Both allow the Tokio runtime to
+//! continue running other tasks, and allow the executor to continue in general,
+//! but [`block_in_place()`](tokio::task::block_in_place()) will hold up any
+//! other tasks running on the current thread, and will prevent the thread from
+//! being used for anything else until the work completes.
+//!
+//! It is always importance to consider performance, efficiency, and resource
+//! availability when designing asynchronous code. Improper use can lead to
+//! exhaustion, starvation, and deadlocks. We do not have to worry about thread
+//! pool exhaustion, because Tokio will spawn more blocking threads until the
+//! upper limit is reached, after which, the tasks are put into a queue. That
+//! means we are free to request new threads as new database queries arise,
+//! without concern.
+//!
+//! As a rule of thumb, async code should never run for too long between `await`
+//! occurrences. This is because the Tokio runtime uses cooperative scheduling,
+//! and will not interrupt a task that is running. Hence care should be taken to
+//! identify those places that may block, especially when using synchronous
+//! libraries. On the other hand, over-use of async can cause performance
+//! degradation due to the overhead of task management, mainly the time taken to
+//! switch tasks between threads. Notably, it is in this area that Go tends to
+//! outperform Rust, because Go uses a different threading model with
+//! goroutines. The Tokio approach of essentially hibernating and reviving tasks
+//! is more complex, but allows for more fine-grained control and better
+//! resource management, and increased predictability and confidence. Therefore,
+//! it is important to only make async those functions that need to be async
+//! (bearing in mind the "polluting" effect of async on the codebase), and not
+//! to just make everything async by default. In reality, providing these basic
+//! guidelines are followed, operational issues are rare, and performance is
+//! generally very good.
+//!
+//! Note that due to the async-safe implementation, there is no need to use the
+//! [`spawn_blocking()`] function in calling code. It is use where necessary
+//! internally. These notes are provided for general information and context,
+//! and to guide future development.
+//!
 //! # Thread structure and management
 //!
 //! It is worth describing the thread structure and management in more detail.
@@ -629,104 +727,6 @@ impl OperationLogic for Query {
 /// which is very similar to the [`query()`][Stash::query()] method, but does
 /// not return any rows of data. Note, however, that this method may be removed
 /// in future if it does not prove to be useful in practice.
-///
-/// # Approach to async
-///
-/// The [`Stash`] struct is designed to be used in an asynchronous context. The
-/// [`query()`][Stash::query()] and [`execute()`][Stash::execute()] methods are
-/// asynchronous (as are their connection-specific [`Tether`] counterparts), and
-/// the [`Stash`] struct itself is cloneable and shareable across threads. The
-/// database handling uses the [`r2d2`] and [`rusqlite`] crates, which are
-/// synchronous, so they are handled in a separate background thread by a worker
-/// to avoid blocking the main Tokio runtime, and to ensure that there is a
-/// synchronous "funnel" to handle all database operations.
-///
-/// As the various [`rusqlite`] types are not [`Send`] compatible, they cannot
-/// be passed between threads, and so cannot cross the async boundary. Therefore
-/// this approach of the background worker and the [`Tether`] struct is
-/// necessary to provide a thread-safe and async-compatible interface to the
-/// database.
-///
-/// The main worker processes the incoming queries and other database operations
-/// via an MPSC queue. As soon as it picks a query up from the queue it hands it
-/// over to another worker on a separate thread for processing. If the query is
-/// a once-off, i.e. does not need to re-use a database connection, then it is
-/// executed in an async thread, and the [`spawn_blocking()`] function is used
-/// to run the blocking synchronous code in a separate thread. This allows the
-/// Tokio runtime to continue running other tasks while the blocking code is
-/// running.
-///
-/// This is important because otherwise the executor would be blocked, and Tokio
-/// would not be able to run other tasks. To clarify: the mechanism by which the
-/// Tokio runtime operates is that of work scheduling. It will run the various
-/// work units (tasks) that it has against the available OS threads, via
-/// allocated "core" threads, and will switch between them (i.e. between the
-/// tasks) as necessary, allocating the tasks against the core threads according
-/// to its work management priorities. If a task blocks, then the thread that it
-/// is running on will be blocked, and the Tokio runtime will not be able to run
-/// other tasks on that thread.
-///
-/// Bear in mind that asking Tokio to create a new "thread" is not the same as
-/// creating a new OS thread. Tokio uses a thread pool, and manages the work
-/// units, each of which *can* operate on a separate thread, allocating the work
-/// units to the available core OS threads as needed. For this reason, it is
-/// important to notify the Tokio runtime when a task is going to issue a
-/// blocking call (e.g. waiting on file or network I/O), or perform a lot of
-/// compute without yielding. Such a situation can prevent the executor from
-/// driving other tasks forward, and can lead to a deadlock. Notifying the
-/// executor allows it to hand off any other tasks it has to a new core thread
-/// before the blocking call is made. Tokio handles blocking situations
-/// separately, in blocking threads, which are separate from the core threads.
-///
-/// Tokio has two kinds of threads in its thread pool: core (OS) threads, and
-/// blocking threads. By default, Tokio will create one core thread for each CPU
-/// core, and up to around 500 blocking threads. Using [`block_in_place()`](tokio::task::block_in_place())
-/// temporarily *changes* the current thread category from core to blocking,
-/// allowing the runtime to spawn another core thread to handle things while the
-/// blocking code runs. Because the whole thread categorisation is changed,
-/// anything else (i.e. other tasks) associated with the thread are taken with
-/// it. Whereas, [`spawn_blocking()`] sends the *task* to a thread in the
-/// blocking category, allowing the other associated tasks to continue.
-///
-/// The two main ways of notifying the Tokio runtime that a task is blocking are
-/// [`block_in_place()`](tokio::task::block_in_place()) and
-/// [`spawn_blocking()`]. The difference is that [`block_in_place()`](tokio::task::block_in_place())
-/// blocks the current core thread, whereas [`spawn_blocking()`] spawns a new
-/// thread *request* to run the blocking code. Both allow the Tokio runtime to
-/// continue running other tasks, and allow the executor to continue in general,
-/// but [`block_in_place()`](tokio::task::block_in_place()) will hold up any
-/// other tasks running on the current thread, and will prevent the thread from
-/// being used for anything else until the work completes.
-///
-/// It is always importance to consider performance, efficiency, and resource
-/// availability when designing asynchronous code. Improper use can lead to
-/// exhaustion, starvation, and deadlocks. We do not have to worry about thread
-/// pool exhaustion, because Tokio will spawn more blocking threads until the
-/// upper limit is reached, after which, the tasks are put into a queue. That
-/// means we are free to request new threads as new database queries arise,
-/// without concern.
-///
-/// As a rule of thumb, async code should never run for too long between `await`
-/// occurrences. This is because the Tokio runtime uses cooperative scheduling,
-/// and will not interrupt a task that is running. Hence care should be taken to
-/// identify those places that may block, especially when using synchronous
-/// libraries. On the other hand, over-use of async can cause performance
-/// degradation due to the overhead of task management, mainly the time taken to
-/// switch tasks between threads. Notably, it is in this area that Go tends to
-/// outperform Rust, because Go uses a different threading model with
-/// goroutines. The Tokio approach of essentially hibernating and reviving tasks
-/// is more complex, but allows for more fine-grained control and better
-/// resource management, and increased predictability and confidence. Therefore,
-/// it is important to only make async those functions that need to be async
-/// (bearing in mind the "polluting" effect of async on the codebase), and not
-/// to just make everything async by default. In reality, providing these basic
-/// guidelines are followed, operational issues are rare, and performance is
-/// generally very good.
-///
-/// Note that due to the async-safe implementation, there is no need to use the
-/// [`spawn_blocking()`] function in calling code. It is use where necessary
-/// internally. These notes are provided for general information and context,
-/// and to guide future development.
 ///
 #[derive(Clone, Debug)]
 pub struct Stash {
