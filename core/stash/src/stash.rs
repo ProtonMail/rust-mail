@@ -426,12 +426,16 @@ type AnyRecords = Vec<Box<dyn Any + Send>>;
 ///
 /// # See also
 ///
+/// * [`Command`]
 /// * [`Instruction`]
 /// * [`OperationLogic`]
 /// * [`Query`]
 /// * [`Worker`]
 ///
 enum Operation {
+    /// Commits a transaction, i.e. finalises it.
+    CommitTransaction(Command),
+
     /// A query to be executed, where no results are expected. This is usually
     /// a write query, or a command, but differentiation is up to the caller and
     /// not enforced.
@@ -441,6 +445,12 @@ enum Operation {
     /// read query, but could be any query where results are expected, such as
     /// an `INSERT` query that returns the ID of the inserted row.
     Query(Query),
+
+    /// Rolls back a transaction, i.e. abandons it.
+    RollbackTransaction(Command),
+
+    /// Starts a new transaction.
+    StartTransaction(Command),
 }
 
 impl Operation {
@@ -455,6 +465,9 @@ impl Operation {
     ///
     fn send_back_error(&mut self, error: StashError) {
         match *self {
+            Self::CommitTransaction(ref mut command)
+            | Self::RollbackTransaction(ref mut command)
+            | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
             Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
             Self::Query(ref mut query) => query.send_back(Err(error)),
         }
@@ -485,6 +498,11 @@ pub enum StashError {
     #[error("Statement execution error: {0}")]
     ExecutionError(SqliteError),
 
+    /// An operation requiring a transaction was attempted, such as a commit or
+    /// rollback, but no active transaction was found.
+    #[error("No active transaction")]
+    NoActiveTransaction,
+
     /// There was a problem with statement preparation. Note that this refers to
     /// preparing a statement from a query and parameters, prior to execution.
     #[error("Statement preparation error: {0}")]
@@ -514,6 +532,65 @@ pub enum StashError {
     /// never happen in practice.
     #[error("Thread panic: Join handle failed")]
     ThreadPanic,
+
+    /// An attempt was made to start a transaction, but one is already active.
+    #[error("Transaction already started")]
+    TransactionAlreadyStarted,
+
+    /// There was a problem with a transaction.
+    #[error("Transaction error: {0}")]
+    TransactionError(SqliteError),
+}
+
+/// A command operation to be executed by the worker.
+///
+/// This is used for system-defined operations (i.e. those where the user does
+/// not define the query) such starting a new transaction.
+///
+/// # See also
+///
+/// * [`Operation`]
+/// * [`Instruction`]
+/// * [`Query`]
+///
+struct Command {
+    /// The communication channel used to send the result of the operation back
+    /// to the caller.
+    channel: Option<OneshotSender<Result<(), StashError>>>,
+
+    /// The unique handle of the connection to use for the query. If [`Some`] a
+    /// database connection will be created and associated if not already
+    /// registered, and re-used otherwise. If [`None`], a new database
+    /// connection will be created, but not registered, and used just this once.
+    conn_handle: Option<Arc<()>>,
+}
+
+impl OperationLogic for Command {
+    type Output = ();
+
+    fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>> {
+        self.channel.take()
+    }
+
+    /// Carries out a command.
+    ///
+    /// **Note: This function does not actually do anything, as the operational
+    /// context for commands is the [`Operation`] variant they are wrapped in.**
+    ///
+    /// # Parameters
+    ///
+    /// * `connection` - The database connection to use for the operation.
+    ///
+    /// # Errors
+    ///
+    /// None.
+    ///
+    fn run(
+        &self,
+        _connection: &PooledConnection<SqliteConnectionManager>,
+    ) -> Result<(), StashError> {
+        Ok(())
+    }
 }
 
 /// An operation to be executed by the worker, which does not return any data.
@@ -524,6 +601,7 @@ pub enum StashError {
 ///
 /// # See also
 ///
+/// * [`Command`]
 /// * [`Operation`]
 /// * [`Query`]
 ///
@@ -605,6 +683,7 @@ impl OperationLogic for Instruction {
 ///
 /// # See also
 ///
+/// * [`Command`]
 /// * [`Instruction`]
 /// * [`Operation`]
 ///
@@ -1015,6 +1094,48 @@ impl Stash {
             })
             .collect()
     }
+
+    /// Starts a new transaction.
+    ///
+    /// This function starts a new transaction on a new database connection. All
+    /// queries executed within the transaction must be executed against the
+    /// same connection, and so a new connection is created for the transaction
+    /// to ensure this.
+    ///
+    /// Note that under the current design, transactions are not nestable, and
+    /// each transaction must be carried out on its own, independent connection.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted)
+    ///     - A new transaction cannot be started because one is already active
+    ///     on this connection.
+    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
+    ///     the transaction.
+    ///
+    pub async fn transaction(&self) -> Result<(), StashError> {
+        let connection = self.connection();
+        let (that_end, this_end) = oneshot::channel();
+        let operation = Operation::StartTransaction(Command {
+            channel: Some(that_end),
+            conn_handle: Some(Arc::clone(&connection.handle)),
+        });
+        self.queue
+            .send_async(operation)
+            .await
+            .map_err(|err| StashError::QueueError(err.to_string()))?;
+        this_end
+            .await
+            .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
 }
 
 /// Database connection context.
@@ -1074,6 +1195,40 @@ pub struct Tether {
 }
 
 impl Tether {
+    /// Commits a transaction.
+    ///
+    /// This function commits, i.e. finalises, an existing, active transaction.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
+    ///     transaction is currently active on this connection.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///   - [`TransactionError`](StashError::ExecutionError) - Problem
+    ///     committing the transaction.
+    ///
+    pub async fn commit(&self) -> Result<(), StashError> {
+        let (that_end, this_end) = oneshot::channel();
+        let operation = Operation::CommitTransaction(Command {
+            channel: Some(that_end),
+            conn_handle: Some(Arc::clone(&self.handle)),
+        });
+        self.queue
+            .send_async(operation)
+            .await
+            .map_err(|err| StashError::QueueError(err.to_string()))?;
+        this_end
+            .await
+            .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
+
     /// Runs a query against an open connection, and returns the affected row
     /// count.
     ///
@@ -1188,6 +1343,41 @@ impl Tether {
                     .map_err(|_err| StashError::DowncastError)
             })
             .collect()
+    }
+
+    /// Rolls back a transaction.
+    ///
+    /// This function rolls back, i.e. abandons, an existing, active
+    /// transaction.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
+    ///     transaction is currently active on this connection.
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
+    ///     the transaction.
+    ///
+    pub async fn rollback(&self) -> Result<(), StashError> {
+        let (that_end, this_end) = oneshot::channel();
+        let operation = Operation::RollbackTransaction(Command {
+            channel: Some(that_end),
+            conn_handle: Some(Arc::clone(&self.handle)),
+        });
+        self.queue
+            .send_async(operation)
+            .await
+            .map_err(|err| StashError::QueueError(err.to_string()))?;
+        this_end
+            .await
+            .map_err(|err| StashError::OneShotError(err.to_string()))?
     }
 }
 
@@ -1310,6 +1500,9 @@ impl Worker {
 
             while let Ok(mut operation) = receiver.recv() {
                 let conn_handle = match operation {
+                    Operation::CommitTransaction(ref command)
+                    | Operation::RollbackTransaction(ref command)
+                    | Operation::StartTransaction(ref command) => command.conn_handle.clone(),
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
                     Operation::Query(ref query) => query.conn_handle.clone(),
                 };
@@ -1354,6 +1547,10 @@ impl Worker {
                                 }
                             };
                             let attempt = match operation {
+                                // TODO
+                                Operation::CommitTransaction(_)
+                                | Operation::RollbackTransaction(_)
+                                | Operation::StartTransaction(_) => Ok(()),
                                 Operation::Instruct(mut instruction) => {
                                     // Spawn a blocking task to execute the query. This is necessary because
                                     // rusqlite is synchronous, so we need to tell the Tokio runtime that
@@ -1473,6 +1670,10 @@ impl Worker {
                         }
                         if let Some(ref conn) = connection {
                             match operation {
+                                // TODO
+                                Operation::CommitTransaction(_)
+                                | Operation::RollbackTransaction(_)
+                                | Operation::StartTransaction(_) => {}
                                 Operation::Instruct(mut instruction) => {
                                     let result = instruction.run(conn);
                                     instruction.send_back(result);
