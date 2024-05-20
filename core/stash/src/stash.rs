@@ -397,7 +397,8 @@ use thiserror::Error;
 use tokio::spawn as spawn_async;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
-use tracing::error;
+use tokio::time::Instant;
+use tracing::{debug, error};
 #[cfg(feature = "uniffi")]
 use uniffi::Error as UniffiError;
 
@@ -1232,11 +1233,40 @@ struct Worker {
     /// actual weak reference itself. This is because a `Weak<()>` cannot be a
     /// [`HashMap`] key. Use of a pointer here is safe, as the pointer is unique
     /// to the connection, and is only used for the purpose of identification.
+    ///
+    /// The association between an actual database connection instance, i.e. a
+    /// [`PooledConnection`], and a usage reference, i.e. a [`Tether`], is made
+    /// with a weak reference to a unit, in context to a thread. The strong
+    /// reference, i.e. the [`Arc`] wrapping the unit, is given out, and when it
+    /// is no longer used the [`Weak`] stored in the `tethers` list will expire,
+    /// which can be detected and the connection removed.
+    ///
+    /// This approach has the minor downside of require a garbage-collection
+    /// cycle, but the major upside of avoiding the need to formally issue and
+    /// check connection IDs, which would require error handling and also expose
+    /// the risk of the wrong ID being used. By sharing a reference-counter
+    /// pointer there is no way of side-stepping the association, as the issued
+    /// [`Tether`] is bound to the matching `tethers` list item. The clean-up is
+    /// extremely quick and can happen at suitable intervals, only having to
+    /// check the [`Weak`] pointers and removing any expired connections.
     #[allow(clippy::type_complexity)]
     tethers: HashMap<*const (), (Weak<()>, JoinHandle<()>, QueueSender<Operation>)>,
 }
 
 impl Worker {
+    /// Prunes the list of tethers, removing any that are no longer in use.
+    ///
+    /// This is a garbage-collection function, that iterates over the list of
+    /// tethers, and removes any that are no longer in use. This is determined
+    /// by checking the strong count of the weak reference. If the strong count
+    /// is zero, it means that all uses have been dropped, meaning the
+    /// connection is no longer in use, and so the tether can be removed.
+    ///
+    fn prune_tethers(&mut self) {
+        self.tethers
+            .retain(|_, &mut (ref weak, _, _)| weak.strong_count() > 0);
+    }
+
     /// Starts a new background worker thread.
     ///
     /// This function creates a new [`Worker`] instance with a new SQLite
@@ -1266,6 +1296,8 @@ impl Worker {
         );
         let (sender, receiver) = flume::unbounded();
         let pool = Pool::new(manager).map_err(StashError::TetherError)?;
+        let mut latest_gc = Instant::now();
+        let mut thread_creation_count = 0_usize;
 
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, and will return the results via
@@ -1293,7 +1325,8 @@ impl Worker {
                     // in order to maintain the not-thread-safe PooledConnection context across
                     // the related queries, while allowing calling code to be fully async.
                     Some(handle) => {
-                        if worker.get_worker(&handle).send(operation).is_err() {
+                        let (created, queue) = worker.get_worker(&handle);
+                        if queue.send(operation).is_err() {
                             // In this situation, we cannot send an error back to the caller, as the
                             // oneshot channel was sent to the queue, and is no longer available. This
                             // situation should never occur in reality, as the queue is unbounded, and
@@ -1302,6 +1335,9 @@ impl Worker {
                             error!(
                                 "Queue error: Failed sending message to connection-specific worker"
                             );
+                        }
+                        if created {
+                            let _num = thread_creation_count.saturating_add(1);
                         }
                     }
                     // If no tethered connection handle was specified, it means that this is a
@@ -1346,6 +1382,21 @@ impl Worker {
                         }));
                     }
                 }
+
+                // Run garbage collection
+                if latest_gc.elapsed().as_secs() > 5 || thread_creation_count > 20 {
+                    debug!(
+                        "Garbage collection starting: {} registered tethers",
+                        worker.tethers.len()
+                    );
+                    worker.prune_tethers();
+                    debug!(
+                        "Garbage collection finished: {} registered tethers",
+                        worker.tethers.len()
+                    );
+                    latest_gc = Instant::now();
+                    thread_creation_count = 0;
+                }
             }
         }));
 
@@ -1385,16 +1436,21 @@ impl Worker {
     ///                   will be created and associated if not already
     ///                   registered, and re-used otherwise.
     ///
+    /// # Returns
+    ///
+    /// A tuple containing a boolean indicating whether the worker was created
+    /// by this call, and a reference to the queue sender for the worker.
+    ///
     /// # See also
     ///
     /// * [`Stash::connection()`]
     /// * [`Tether`]
     ///
-    fn get_worker(&mut self, conn_handle: &Arc<()>) -> &QueueSender<Operation> {
+    fn get_worker(&mut self, conn_handle: &Arc<()>) -> (bool, &QueueSender<Operation>) {
         let weak_ref = Arc::downgrade(conn_handle);
         // This code uses the Entry API to avoid double mutable borrow of self.
         match self.tethers.entry(weak_ref.as_ptr()) {
-            Entry::Occupied(entry) => &entry.into_mut().2,
+            Entry::Occupied(entry) => (false, &entry.into_mut().2),
             Entry::Vacant(entry) => {
                 let (sender, receiver) = flume::unbounded::<Operation>();
                 let pool = self.pool.clone();
@@ -1430,7 +1486,7 @@ impl Worker {
                     }
                 });
 
-                &entry.insert((weak_ref, thread_handle, sender)).2
+                (true, &entry.insert((weak_ref, thread_handle, sender)).2)
             }
         }
     }
