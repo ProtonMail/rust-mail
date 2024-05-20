@@ -511,7 +511,7 @@ pub enum StashError {
 struct Instruction {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    channel: OneshotSender<Result<usize, StashError>>,
+    channel: Option<OneshotSender<Result<usize, StashError>>>,
 
     /// The unique handle of the connection to use for the query. If [`Some`] a
     /// database connection will be created and associated if not already
@@ -531,6 +531,10 @@ struct Instruction {
 
 impl OperationLogic for Instruction {
     type Output = usize;
+
+    fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>> {
+        self.channel.take()
+    }
 
     /// Prepares and executes a query, and returns the number of affected rows.
     ///
@@ -588,7 +592,7 @@ impl OperationLogic for Instruction {
 struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    channel: OneshotSender<Result<AnyRecords, StashError>>,
+    channel: Option<OneshotSender<Result<AnyRecords, StashError>>>,
 
     /// The unique handle of the connection to use for the query. If [`Some`] a
     /// database connection will be created and associated if not already
@@ -614,6 +618,10 @@ struct Query {
 
 impl OperationLogic for Query {
     type Output = AnyRecords;
+
+    fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>> {
+        self.channel.take()
+    }
 
     /// Prepares and executes a query, and returns any rows of data emitted.
     ///
@@ -866,7 +874,7 @@ impl Stash {
     ) -> Result<usize, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::Instruct(Instruction {
-            channel: that_end,
+            channel: Some(that_end),
             conn_handle: None,
             query: query.into(),
             params,
@@ -961,7 +969,7 @@ impl Stash {
     {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::Query(Query {
-            channel: that_end,
+            channel: Some(that_end),
             conn_handle: None,
             query: query.into(),
             params,
@@ -1081,7 +1089,7 @@ impl Tether {
     ) -> Result<usize, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::Instruct(Instruction {
-            channel: that_end,
+            channel: Some(that_end),
             conn_handle: Some(Arc::clone(&self.handle)),
             query: query.into(),
             params,
@@ -1135,7 +1143,7 @@ impl Tether {
     {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::Query(Query {
-            channel: that_end,
+            channel: Some(that_end),
             conn_handle: Some(Arc::clone(&self.handle)),
             query: query.into(),
             params,
@@ -1287,52 +1295,40 @@ impl Worker {
                             let connection = match connection_result {
                                 Ok(connection) => connection,
                                 Err(error) => {
-                                    if match operation {
-                                        Operation::Instruct(instruction) => {
-                                            instruction.channel.send(Err(error)).map_err(|_err| ())
+                                    match operation {
+                                        Operation::Instruct(mut instruction) => {
+                                            instruction.send_back(Err(error));
                                         }
-                                        Operation::Query(query) => {
-                                            query.channel.send(Err(error)).map_err(|_err| ())
-                                        }
-                                    }
-                                    .is_err()
-                                    {
-                                        error!(
-                                            "Oneshot error: Failed sending error back to caller"
-                                        );
+                                        Operation::Query(mut query) => query.send_back(Err(error)),
                                     }
                                     return;
                                 }
                             };
                             let attempt = match operation {
-                                Operation::Instruct(instruction) => {
+                                Operation::Instruct(mut instruction) => {
                                     // Spawn a blocking task to execute the query. This is necessary because
                                     // rusqlite is synchronous, so we need to tell the Tokio runtime that
                                     // this task will block.
                                     spawn_blocking(move || {
                                         let result = instruction.run(&connection);
-                                        instruction.channel.send(result).map_err(|_err| ())
+                                        instruction.send_back(result);
                                     })
                                     .await
                                 }
-                                Operation::Query(query) => {
+                                Operation::Query(mut query) => {
                                     // Spawn a blocking task to execute the query. This is necessary because
                                     // rusqlite is synchronous, so we need to tell the Tokio runtime that
                                     // this task will block.
                                     spawn_blocking(move || {
                                         let result = query.run(&connection);
-                                        query.channel.send(result).map_err(|_err| ())
+                                        query.send_back(result);
                                     })
                                     .await
                                 }
                             };
-                            if attempt.is_err() {
-                                // If sending down the oneshot channel fails, send() returns the message to
-                                // us. It's not particularly interesting what that message is, as we never
-                                // expect this to fail, so we erase the error details and just log the error
-                                // event. If we do later want to capture the message in the logs, error!()
-                                // will have to be apply for each case above, as the message types differ.
-                                error!("Oneshot error: Failed sending result back to caller");
+                            if let Err(err) = attempt {
+                                // In theory this should never happen, but we also can't do anything with it
+                                error!("Thread error: Failed to spawn blocking task: {err:?}");
                             }
                         }));
                     }
@@ -1401,43 +1397,28 @@ impl Worker {
                             connection = match connection_result {
                                 Ok(conn) => Some(conn),
                                 Err(error) => {
-                                    if match operation {
-                                        Operation::Instruct(instruction) => {
-                                            instruction.channel.send(Err(error)).map_err(|_err| ())
+                                    match operation {
+                                        Operation::Instruct(mut instruction) => {
+                                            instruction.send_back(Err(error));
                                         }
-                                        Operation::Query(query) => {
-                                            query.channel.send(Err(error)).map_err(|_err| ())
+                                        Operation::Query(mut query) => {
+                                            query.send_back(Err(error));
                                         }
-                                    }
-                                    .is_err()
-                                    {
-                                        error!(
-                                            "Oneshot error: Failed sending error back to caller"
-                                        );
                                     }
                                     return;
                                 }
                             };
                         }
                         if let Some(ref conn) = connection {
-                            if (match operation {
-                                Operation::Instruct(instruction) => {
+                            match operation {
+                                Operation::Instruct(mut instruction) => {
                                     let result = instruction.run(conn);
-                                    instruction.channel.send(result).map_err(|_err| ())
+                                    instruction.send_back(result);
                                 }
-                                Operation::Query(query) => {
+                                Operation::Query(mut query) => {
                                     let result = query.run(conn);
-                                    query.channel.send(result).map_err(|_err| ())
+                                    query.send_back(result);
                                 }
-                            })
-                            .is_err()
-                            {
-                                // If sending down the oneshot channel fails, send() returns the message to
-                                // us. It's not particularly interesting what that message is, as we never
-                                // expect this to fail, so we erase the error details and just log the error
-                                // event. If we do later want to capture the message in the logs, error!()
-                                // will have to be apply for each case above, as the message types differ.
-                                error!("Oneshot error: Failed sending result back to caller");
                             }
                         }
                     }
@@ -1464,6 +1445,9 @@ trait OperationLogic {
     /// The type of the output of the operation, i.e. what is returned by the
     /// [`run()`](OperationLogic::run()) method's implementation.
     type Output;
+
+    /// The oneshot channel used to send the result back to the caller.
+    fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>>;
 
     /// Prepares parameters ready to be used with a query.
     ///
@@ -1510,6 +1494,30 @@ trait OperationLogic {
         &self,
         connection: &PooledConnection<SqliteConnectionManager>,
     ) -> Result<Self::Output, StashError>;
+
+    /// Sends the result back to the caller.
+    ///
+    /// This function sends the result back to the caller via the oneshot
+    /// channel. If this fails, an error is logged. No error is returned from
+    /// this function because there's not anything that can actually be done
+    /// about it.
+    ///
+    /// # Parameters
+    ///
+    /// * `result` - The result to send back to the caller.
+    ///
+    fn send_back(&mut self, result: Result<Self::Output, StashError>) {
+        if let Some(channel) = self.channel().take() {
+            // If sending down the oneshot channel fails, send() returns the message to
+            // us. It's not particularly interesting what that message is, as we never
+            // expect this to fail, so we just log the error event.
+            if channel.send(result).is_err() {
+                error!("Oneshot error: Failed sending result back to caller");
+            }
+        } else {
+            error!("Oneshot error: Sender already used");
+        }
+    }
 }
 
 /// Converts the query results into the desired type.
