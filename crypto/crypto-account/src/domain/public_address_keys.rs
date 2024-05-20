@@ -3,7 +3,8 @@ use futures::future::join_all;
 use crate::errors::AccountCryptoError;
 
 use super::{
-    APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKeySource, KeyFlag, SignedKeyList,
+    APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKey, APIPublicKeySource,
+    APIUnverifiedPublicAddressKeyGroup, KeyFlag, SignedKeyList,
 };
 use proton_crypto::{
     crypto::{AsPublicKeyRef, DataEncoding, PublicKey},
@@ -38,6 +39,12 @@ pub struct PublicAddressKeyGroup<T: PublicKey> {
     pub kt_verification: KTVerificationResult,
 }
 
+/// Represents imported address public keys that are externally provided and cannot support key transparency
+#[derive(Debug, Clone)]
+pub struct UnverifiedPublicAddressKeyGroup<T: PublicKey> {
+    pub keys: Vec<PublicAddressKey<T>>,
+}
+
 impl<T: PublicKey> PublicAddressKeyGroup<T> {
     pub fn as_slice(&self) -> &[PublicAddressKey<T>] {
         self.keys.as_slice()
@@ -50,6 +57,56 @@ impl<T: PublicKey> AsRef<[PublicAddressKey<T>]> for PublicAddressKeyGroup<T> {
     }
 }
 
+fn parse_keys_sync<T: proton_crypto::crypto::PGPProviderSync>(
+    keys: &[APIPublicKey],
+    provider: &T,
+) -> Result<Vec<PublicAddressKey<<T>::PublicKey>>, AccountCryptoError> {
+    let mut public_address_keys = Vec::with_capacity(keys.len());
+    public_address_keys.extend(
+        keys.iter()
+            .map(|api_public_key| {
+                provider
+                    .public_key_import(api_public_key.public_key.as_bytes(), DataEncoding::Armor)
+                    .map_err(AccountCryptoError::KeyImport)
+                    .map(|public_key| PublicAddressKey {
+                        source: api_public_key.source,
+                        flags: api_public_key.flags,
+                        public_keys: public_key,
+                    })
+            })
+            .collect::<Result<Vec<_>, AccountCryptoError>>()?,
+    );
+    Ok(public_address_keys)
+}
+
+async fn async_parse_keys<T: proton_crypto::crypto::PGPProviderAsync>(
+    keys: &[APIPublicKey],
+    provider: &T,
+) -> Result<Vec<PublicAddressKey<<T>::PublicKey>>, AccountCryptoError> {
+    let imported_keys_futures: Vec<_> = keys
+        .iter()
+        .map(|api_public_key| {
+            provider
+                .public_key_import_async(api_public_key.public_key.as_bytes(), DataEncoding::Armor)
+        })
+        .collect();
+    let imported_keys: Vec<_> = join_all(imported_keys_futures).await;
+    let public_address_keys = imported_keys
+        .into_iter()
+        .zip(keys)
+        .map(|(imported_key_result, api_public_key)| {
+            imported_key_result
+                .map_err(AccountCryptoError::KeyImport)
+                .map(|public_key| PublicAddressKey {
+                    source: api_public_key.source,
+                    flags: api_public_key.flags,
+                    public_keys: public_key,
+                })
+        })
+        .collect::<Result<Vec<_>, AccountCryptoError>>()?;
+    Ok(public_address_keys)
+}
+
 impl APIPublicAddressKeyGroup {
     /// Imports the public keys by decoding the pgp public keys with the PGP provider.
     ///
@@ -59,25 +116,7 @@ impl APIPublicAddressKeyGroup {
         &self,
         provider: &T,
     ) -> Result<PublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
-        let mut public_address_keys = Vec::with_capacity(self.keys.len());
-        public_address_keys.extend(
-            self.keys
-                .iter()
-                .map(|api_public_key| {
-                    provider
-                        .public_key_import(
-                            api_public_key.public_key.as_bytes(),
-                            DataEncoding::Armor,
-                        )
-                        .map_err(AccountCryptoError::KeyImport)
-                        .map(|public_key| PublicAddressKey {
-                            source: api_public_key.source,
-                            flags: api_public_key.flags,
-                            public_keys: public_key,
-                        })
-                })
-                .collect::<Result<Vec<_>, AccountCryptoError>>()?,
-        );
+        let public_address_keys = parse_keys_sync(&self.keys, provider)?;
         Ok(PublicAddressKeyGroup {
             keys: public_address_keys,
             signed_key_list: self.signed_key_list.clone(),
@@ -92,34 +131,41 @@ impl APIPublicAddressKeyGroup {
         &self,
         provider: &T,
     ) -> Result<PublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
-        let imported_keys_futures: Vec<_> = self
-            .keys
-            .iter()
-            .map(|api_public_key| {
-                provider.public_key_import_async(
-                    api_public_key.public_key.as_bytes(),
-                    DataEncoding::Armor,
-                )
-            })
-            .collect();
-        let imported_keys: Vec<_> = join_all(imported_keys_futures).await;
-        let public_address_keys = imported_keys
-            .into_iter()
-            .zip(&self.keys)
-            .map(|(imported_key_result, api_public_key)| {
-                imported_key_result
-                    .map_err(AccountCryptoError::KeyImport)
-                    .map(|public_key| PublicAddressKey {
-                        source: api_public_key.source,
-                        flags: api_public_key.flags,
-                        public_keys: public_key,
-                    })
-            })
-            .collect::<Result<Vec<_>, AccountCryptoError>>()?;
+        let public_address_keys = async_parse_keys(&self.keys, provider).await?;
         Ok(PublicAddressKeyGroup {
             keys: public_address_keys,
             signed_key_list: self.signed_key_list.clone(),
             kt_verification: KT_UNVERIFIED,
+        })
+    }
+}
+
+impl APIUnverifiedPublicAddressKeyGroup {
+    /// Imports the public keys by decoding the pgp public keys with the PGP provider.
+    ///
+    /// Returns the successfully imported public keys.
+    /// If the import fails for a public key, the public key is not included in the returned vector.
+    pub fn import<T: proton_crypto::crypto::PGPProviderSync>(
+        &self,
+        provider: &T,
+    ) -> Result<UnverifiedPublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
+        let public_address_keys = parse_keys_sync(&self.keys, provider)?;
+        Ok(UnverifiedPublicAddressKeyGroup {
+            keys: public_address_keys,
+        })
+    }
+    /// Imports the public keys by decoding the pgp public keys with the PGP provider.
+    ///
+    /// Returns the successfully imported public keys.
+    /// If the import fails for a public key, the public key is not included in the returned vector.
+    pub async fn import_async<T: proton_crypto::crypto::PGPProviderAsync>(
+        &self,
+        provider: &T,
+    ) -> Result<UnverifiedPublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
+        let public_address_keys = async_parse_keys(&self.keys, provider).await?;
+        //.collect::<Result<Vec<_>, AccountCryptoError>>()?;
+        Ok(UnverifiedPublicAddressKeyGroup {
+            keys: public_address_keys,
         })
     }
 }
@@ -132,7 +178,7 @@ pub struct PublicAddressKeys<T: PublicKey> {
     /// Information about the catch all address itself, if it exists. This can be null if the address keys are valid
     pub catch_all: Option<PublicAddressKeyGroup<T>>,
     /// Any other key that cannot be verified, such as Proton legacy keys or WKD.
-    pub unverified: Option<PublicAddressKeyGroup<T>>,
+    pub unverified: Option<UnverifiedPublicAddressKeyGroup<T>>,
     /// List of warnings to show to the user related to phishing and message routing.
     pub warnings: Vec<String>,
     /// True when domain has valid proton MX.
