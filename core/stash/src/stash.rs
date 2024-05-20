@@ -442,6 +442,24 @@ enum Operation {
     Query(Query),
 }
 
+impl Operation {
+    /// Sends an error result back to the caller.
+    ///
+    /// This is a convenience function to reduce code boilerplate, sending an
+    /// error result back to the caller via the oneshot channel.
+    ///
+    /// # Parameters
+    ///
+    /// * `error` - The error to send back to the caller.
+    ///
+    fn send_back_error(&mut self, error: StashError) {
+        match *self {
+            Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
+            Self::Query(ref mut query) => query.send_back(Err(error)),
+        }
+    }
+}
+
 /// Error type for the [`Stash`] module.
 #[derive(Debug, Error)]
 #[cfg_attr(feature = "uniffi", derive(UniffiError))]
@@ -1258,7 +1276,7 @@ impl Worker {
                 tethers: HashMap::new(),
             };
 
-            while let Ok(operation) = receiver.recv() {
+            while let Ok(mut operation) = receiver.recv() {
                 let conn_handle = match operation {
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
                     Operation::Query(ref query) => query.conn_handle.clone(),
@@ -1295,12 +1313,7 @@ impl Worker {
                             let connection = match connection_result {
                                 Ok(connection) => connection,
                                 Err(error) => {
-                                    match operation {
-                                        Operation::Instruct(mut instruction) => {
-                                            instruction.send_back(Err(error));
-                                        }
-                                        Operation::Query(mut query) => query.send_back(Err(error)),
-                                    }
+                                    operation.send_back_error(error);
                                     return;
                                 }
                             };
@@ -1383,7 +1396,7 @@ impl Worker {
         match self.tethers.entry(weak_ref.as_ptr()) {
             Entry::Occupied(entry) => &entry.into_mut().2,
             Entry::Vacant(entry) => {
-                let (sender, receiver) = flume::unbounded();
+                let (sender, receiver) = flume::unbounded::<Operation>();
                 let pool = self.pool.clone();
                 let mut connection: Option<PooledConnection<SqliteConnectionManager>> = None;
 
@@ -1391,20 +1404,13 @@ impl Worker {
                 // sequentially, as they are received, on a persistent connection, and will
                 // return the results to the original caller via oneshot channels.
                 let thread_handle = spawn(move || {
-                    while let Ok(operation) = receiver.recv() {
+                    while let Ok(mut operation) = receiver.recv() {
                         if connection.is_none() {
                             let connection_result = pool.get().map_err(StashError::TetherError);
                             connection = match connection_result {
                                 Ok(conn) => Some(conn),
                                 Err(error) => {
-                                    match operation {
-                                        Operation::Instruct(mut instruction) => {
-                                            instruction.send_back(Err(error));
-                                        }
-                                        Operation::Query(mut query) => {
-                                            query.send_back(Err(error));
-                                        }
-                                    }
+                                    operation.send_back_error(error);
                                     return;
                                 }
                             };
