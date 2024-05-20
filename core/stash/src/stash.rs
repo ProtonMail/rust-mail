@@ -43,7 +43,7 @@
 //! connection, in which case it is necessary to separate the steps.
 //!
 //! Connections are provided via lightweight, thread-safe [`Tether`]s, which are
-//! use in place of the "real" connections, as they are not thread-safe. The
+//! use in place of the "real" connections, as those are not thread-safe. The
 //! [`Tether`] struct offers the same query interface as a [`Stash`] instance,
 //! but is tied to a specific connection. It is tied through the issuing of a
 //! unique internal handle, which is immutable, and automatically expires when
@@ -54,6 +54,83 @@
 //! receives its instructions via a queue. This ensures that all operations are
 //! executed sequentially, and that connections are managed and made
 //! thread-safe.
+//!
+//! # Thread structure and management
+//!
+//! It is worth describing the thread structure and management in more detail.
+//! The module as a whole is thread-safe and compatible with both async usage
+//! and multi-threading in general. What this means is that it is possible to
+//! interact with the same [`Stash`] instance from multiple threads.
+//!
+//! Calling code runs on the main Tokio runtime, and issues async requests to
+//! the main interface functions of the [`Stash`] struct (such as
+//! [`Stash::query()`] and [`Stash::execute()`]). These functions will then
+//! send instructions to the background worker via an MPSC queue, and will
+//! obtain their responses via oneshot channels, and pass them back to the
+//! caller. In this way, all of this behaviour is invisible to the caller, and
+//! the interface is simple and easy to use.
+//!
+//! The background worker runs as sync on a dedicated thread, and processes the
+//! incoming instructions from the queue as they arrive. These are the main
+//! points of operation:
+//!
+//!   - Database operation instructions get sent via the central queue. The
+//!     sending is done as async by the sender, with the sender here being the
+//!     public interface methods used by the caller.
+//!
+//!   - A central worker listens to the queue and takes the instructions from
+//!     it. This is sync. It could also be async, but there is no specific need
+//!     for this at present.
+//!
+//!   - The central worker then looks at the instruction it has received:
+//!
+//!       - If it is not associated to any connection then it spawns an async
+//!         thread block to handle it. This will be managed by Tokio. Within the
+//!         spawned async thread the call to the (sync) database operation is
+//!         run with [`spawn_blocking()`].
+//!
+//!       - If it is associated to a connection, and the connection is new, then
+//!         it creates a new dedicated sync thread (non-Tokio) to handle it.
+//!         This is registered with a thread handle for future use, and a
+//!         channel is established for communication.
+//!
+//!       - If it is associated to a connection, and the connection already
+//!         exists, then it sends the instruction down the channel to that
+//!         thread so that it can carry out its instructions. This way, the
+//!         [`PooledConnection`] established inside the thread is preserved and
+//!         re-used.
+//!
+//!     In this way, the central worker is never blocked, and can continue to
+//!     process instructions as they arrive.
+//!
+//!   - Each persistent, connection-specific thread is considered to be active
+//!     when a new instruction is sent to it, and once that action has been
+//!     completed, it should inform the central worker that it has finished.
+//!     This will update a last-active time.
+//!
+//!   - Garbage collection will run at intervals by the central worker. This
+//!     looks for expired connection handlers (tethers), and removes the
+//!     associated thread if it is inactive. Additionally, it looks for threads
+//!     that have been inactive for some time, and prunes them, logging a
+//!     warning.
+//!
+//!   - The maximum number of connection-based threads to spawn is configurable.
+//!     If this limit is hit then more connections will not be created, but
+//!     instead the instructions will be added to a Deque held by the central
+//!     worker, up to a certain limit. Beyond that limit, additional
+//!     instructions will be rejected with errors. Otherwise, the worker will
+//!     resume processing the Deque once spare threads are available again.
+//!
+//!   - The number of active transactions is monitored, and should be less than
+//!     the allowed connection thread limit, otherwise errors will be thrown.
+//!
+//!   - Nested transactions will be detected, and rejected. This is achieved by
+//!     each queued instruction having a thread identifier. If thread X starts a
+//!     transaction, and then later there is another request from thread X to
+//!     start another transaction before the first one has finished (regardless
+//!     of the connection context), then this will be rejected. This mechanism
+//!     is fully-async safe, and the method of identifying threads "follows" the
+//!     logic trail through async/await boundaries.
 //!
 //! # Performance
 //!
@@ -70,15 +147,18 @@
 //! With that said, we can make educated predictions about scalability and where
 //! constraints may occur. The current design is expected to be able to handle
 //! significant volume without issue, but the approach of funnelling all queries
-//! through a single worker thread is an obvious bottleneck. This can be
+//! through a single worker thread is a potential bottleneck. This can be
 //! improved or resolved by adding additional workers to process the queue, but
-//! that may or may not be desirable.
+//! that may or may not be desirable. The fact that the main queue-processing
+//! worker is very lightweight and non-blocking, and simply hands off the actual
+//! query execution to separate threads, means that it is unlikely to become a
+//! source of contention.
 //!
 //! The approach to logic using this module also needs to be thought through
 //! carefully in any situation where transactions are used. As a rule of thumb,
-//! code using transactions should be as close to hand as possible (i.e. to
-//! minimise unseen effects), and should keep the transaction open for as short
-//! a time as possible.
+//! code using transactions should be as close to hand as possible (to minimise
+//! unseen effects), and should keep the transaction open for as short a time as
+//! possible.
 //!
 //! The following points of operation need to generally be considered:
 //!
@@ -194,18 +274,17 @@
 //!      be taken (see question 2 above).
 //!
 //!   4. **Does the synchronous, single-threaded nature of the background worker
-//!      cause any reduction in performance, considering it prevents parallel
-//!      read operations?**
+//!      cause any reduction in performance, and does it prevent parallel read
+//!      operations?**
 //!
 //!      The current design is expected to be more than adequate for the target
-//!      usage. As a general statement, it is indeed quicker to carry out read
-//!      operations in parallel, but this can easily be achieved in future, if
-//!      required, by increasing the number of workers and worker threads
-//!      processing the queue.
+//!      usage. The central background worker that handles the queue hands off
+//!      the actual query execution to separate threads, and so does not itself
+//!      block. Read operations can therefore occur in parallel, as the actual
+//!      query handling is multi-threaded.
 //!
 
 use core::any::Any;
-use core::ops::Deref;
 use flume::Sender as QueueSender;
 use r2d2::{Error as PoolError, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -215,9 +294,11 @@ use serde_rusqlite::{from_rows, Error as DeserializationError};
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::Path;
 use std::sync::{Arc, Weak};
-use std::thread::spawn;
+use std::thread::{spawn, JoinHandle};
 use thiserror::Error;
+use tokio::spawn as spawn_async;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
+use tokio::task::spawn_blocking;
 use tracing::error;
 #[cfg(feature = "uniffi")]
 use uniffi::Error as UniffiError;
@@ -234,36 +315,6 @@ use uniffi::Error as UniffiError;
 /// * [`converter()`]
 ///
 type AnyRecords = Vec<Box<dyn Any + Send>>;
-
-/// A dual-state connection wrapper.
-///
-/// This enum works in similar fashion to [`Cow`](std::borrow::Cow), allowing
-/// the connection to be either borrowed or owned.
-///
-/// It implements [`Deref`] so that it is essentially invisible to the caller.
-///
-enum AgnosticConnection<'a> {
-    /// A borrowed connection.
-    Borrowed(&'a PooledConnection<SqliteConnectionManager>),
-
-    /// An owned connection.
-    Owned(PooledConnection<SqliteConnectionManager>),
-}
-
-impl Deref for AgnosticConnection<'_> {
-    type Target = PooledConnection<SqliteConnectionManager>;
-
-    fn deref(&self) -> &Self::Target {
-        #[allow(clippy::match_same_arms)]
-        match *self {
-            Self::Borrowed(s) => s,
-            // This only actually needs to return s and not &s, as &s would immediately
-            // get dereferenced to s. So, counter-intuitively, these arms do the same
-            // thing - but the key is in the context of usage.
-            Self::Owned(ref s) => s,
-        }
-    }
-}
 
 /// The types of database operation that can be performed by the background
 /// worker.
@@ -414,7 +465,10 @@ impl OperationLogic for Instruction {
     /// * [`Stash::execute()`]
     /// * [`Tether::execute()`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
+    fn run(
+        &self,
+        connection: &PooledConnection<SqliteConnectionManager>,
+    ) -> Result<usize, StashError> {
         connection
             .execute(&self.query, &*Self::prepare_params(&self.params))
             .map_err(StashError::ExecutionError)
@@ -498,7 +552,10 @@ impl OperationLogic for Query {
     /// * [`Stash::query()`]
     /// * [`Tether::query()`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<AnyRecords, StashError> {
+    fn run(
+        &self,
+        connection: &PooledConnection<SqliteConnectionManager>,
+    ) -> Result<AnyRecords, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
@@ -590,10 +647,14 @@ impl OperationLogic for Query {
 /// necessary to provide a thread-safe and async-compatible interface to the
 /// database.
 ///
-/// It is important to use the [`spawn_blocking()`](tokio::task::spawn_blocking)
-/// function to run any blocking synchronous code in a separate thread. This
-/// allows the Tokio runtime to continue running other tasks while the blocking
-/// code is running.
+/// The main worker processes the incoming queries and other database operations
+/// via an MPSC queue. As soon as it picks a query up from the queue it hands it
+/// over to another worker on a separate thread for processing. If the query is
+/// a once-off, i.e. does not need to re-use a database connection, then it is
+/// executed in an async thread, and the [`spawn_blocking()`] function is used
+/// to run the blocking synchronous code in a separate thread. This allows the
+/// Tokio runtime to continue running other tasks while the blocking code is
+/// running.
 ///
 /// This is important because otherwise the executor would be blocked, and Tokio
 /// would not be able to run other tasks. To clarify: the mechanism by which the
@@ -624,19 +685,18 @@ impl OperationLogic for Query {
 /// allowing the runtime to spawn another core thread to handle things while the
 /// blocking code runs. Because the whole thread categorisation is changed,
 /// anything else (i.e. other tasks) associated with the thread are taken with
-/// it. Whereas, [`spawn_blocking()`](tokio::task::spawn_blocking) sends the
-/// *task* to a thread in the blocking category, allowing the other associated
-/// tasks to continue.
+/// it. Whereas, [`spawn_blocking()`] sends the *task* to a thread in the
+/// blocking category, allowing the other associated tasks to continue.
 ///
 /// The two main ways of notifying the Tokio runtime that a task is blocking are
-/// [`block_in_place()`](tokio::task::block_in_place()) and [`spawn_blocking()`](tokio::task::spawn_blocking).
-/// The difference is that [`block_in_place()`](tokio::task::block_in_place())
-/// blocks the current core thread, whereas [`spawn_blocking()`](tokio::task::spawn_blocking)
-/// spawns a new thread *request* to run the blocking code. Both allow the Tokio
-/// runtime to continue running other tasks, and allow the executor to continue
-/// in general, but [`block_in_place()`](tokio::task::block_in_place()) will
-/// hold up any other tasks running on the current thread, and will prevent the
-/// thread from being used for anything else until the work completes.
+/// [`block_in_place()`](tokio::task::block_in_place()) and
+/// [`spawn_blocking()`]. The difference is that [`block_in_place()`](tokio::task::block_in_place())
+/// blocks the current core thread, whereas [`spawn_blocking()`] spawns a new
+/// thread *request* to run the blocking code. Both allow the Tokio runtime to
+/// continue running other tasks, and allow the executor to continue in general,
+/// but [`block_in_place()`](tokio::task::block_in_place()) will hold up any
+/// other tasks running on the current thread, and will prevent the thread from
+/// being used for anything else until the work completes.
 ///
 /// It is always importance to consider performance, efficiency, and resource
 /// availability when designing asynchronous code. Improper use can lead to
@@ -663,13 +723,10 @@ impl OperationLogic for Query {
 /// guidelines are followed, operational issues are rare, and performance is
 /// generally very good.
 ///
-/// However, due to the async-safe implementation, there is currently no need to
-/// use the [`spawn_blocking()`](tokio::task::spawn_blocking) function to run
-/// blocking synchronous code in a separate thread. The background worker
-/// operates synchronously, in its own thread, and all of the interactions with
-/// it via queues and channels are async-safe. Therefore these notes are
-/// provided for general information and context, and to guide future
-/// development.
+/// Note that due to the async-safe implementation, there is no need to use the
+/// [`spawn_blocking()`] function in calling code. It is use where necessary
+/// internally. These notes are provided for general information and context,
+/// and to guide future development.
 ///
 #[derive(Clone, Debug)]
 pub struct Stash {
@@ -1134,9 +1191,12 @@ struct Worker {
 
     /// A map of active connections. This is used to keep track of the
     /// connections that are currently in use, and to associate them with the
-    /// [`Tether`]s that are issued to the caller. The connections are stored as
-    /// [`PooledConnection`]s, which are not thread-safe, and so are not
-    /// directly accessible by the caller.
+    /// [`Tether`]s that are issued to the caller. Persistent connections are
+    /// handled through dedicated workers on their own threads, with their own
+    /// messaging queues. These workers create [`PooledConnection`]s, which are
+    /// not thread-safe, and so are not directly accessible by the caller. The
+    /// join handle for the thread is stored, along with the sender side of the
+    /// worker's queue.
     ///
     /// A weak reference to the connection handle is also stored, so that the
     /// connection can be re-used if it is already registered, but also removed
@@ -1146,7 +1206,8 @@ struct Worker {
     /// actual weak reference itself. This is because a `Weak<()>` cannot be a
     /// [`HashMap`] key. Use of a pointer here is safe, as the pointer is unique
     /// to the connection, and is only used for the purpose of identification.
-    tethers: HashMap<*const (), (Weak<()>, PooledConnection<SqliteConnectionManager>)>,
+    #[allow(clippy::type_complexity)]
+    tethers: HashMap<*const (), (Weak<()>, JoinHandle<()>, QueueSender<Operation>)>,
 }
 
 impl Worker {
@@ -1194,52 +1255,87 @@ impl Worker {
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
                     Operation::Query(ref query) => query.conn_handle.clone(),
                 };
-                let connection_result = match conn_handle {
-                    Some(ref handle) => worker
-                        .get_connection(handle)
-                        .map(AgnosticConnection::Borrowed),
-                    None => worker
-                        .pool
-                        .get()
-                        .map(AgnosticConnection::Owned)
-                        .map_err(StashError::TetherError),
-                };
-                let connection = match connection_result {
-                    Ok(connection) => connection,
-                    Err(error) => {
-                        if match operation {
-                            Operation::Instruct(instruction) => {
-                                instruction.channel.send(Err(error)).map_err(|_err| ())
-                            }
-                            Operation::Query(query) => {
-                                query.channel.send(Err(error)).map_err(|_err| ())
-                            }
+                #[allow(clippy::shadow_unrelated)]
+                let pool = worker.pool.clone();
+                match conn_handle {
+                    // If a tethered connection handle was specified, it means that this query
+                    // is part of a set of related queries which need to be executed against the
+                    // same connection — such as when using transactions. These related queries
+                    // will be carried out on a sync thread, which is not managed by Tokio. If
+                    // this thread has already been spawned, it will be re-used; otherwise a new
+                    // one will be created and registered. This thread persistence is necessary
+                    // in order to maintain the not-thread-safe PooledConnection context across
+                    // the related queries, while allowing calling code to be fully async.
+                    Some(handle) => {
+                        if worker.get_worker(&handle).send(operation).is_err() {
+                            // In this situation, we cannot send an error back to the caller, as the
+                            // oneshot channel was sent to the queue, and is no longer available. This
+                            // situation should never occur in reality, as the queue is unbounded, and
+                            // so should never be full. Additionally, the dedicated worker thread should
+                            // remain alive until we terminate it.
+                            error!(
+                                "Queue error: Failed sending message to connection-specific worker"
+                            );
                         }
-                        .is_err()
-                        {
-                            error!("Oneshot error: Failed sending error back to caller");
-                        }
-                        continue;
                     }
-                };
-                if (match operation {
-                    Operation::Instruct(instruction) => {
-                        let result = instruction.run(&connection);
-                        instruction.channel.send(result).map_err(|_err| ())
+                    // If no tethered connection handle was specified, it means that this is a
+                    // once-off query, and so it will be carried out on a new async thread,
+                    // managed by the Tokio runtime.
+                    None => {
+                        drop(spawn_async(async move {
+                            let connection_result = pool.get().map_err(StashError::TetherError);
+                            let connection = match connection_result {
+                                Ok(connection) => connection,
+                                Err(error) => {
+                                    if match operation {
+                                        Operation::Instruct(instruction) => {
+                                            instruction.channel.send(Err(error)).map_err(|_err| ())
+                                        }
+                                        Operation::Query(query) => {
+                                            query.channel.send(Err(error)).map_err(|_err| ())
+                                        }
+                                    }
+                                    .is_err()
+                                    {
+                                        error!(
+                                            "Oneshot error: Failed sending error back to caller"
+                                        );
+                                    }
+                                    return;
+                                }
+                            };
+                            let attempt = match operation {
+                                Operation::Instruct(instruction) => {
+                                    // Spawn a blocking task to execute the query. This is necessary because
+                                    // rusqlite is synchronous, so we need to tell the Tokio runtime that
+                                    // this task will block.
+                                    spawn_blocking(move || {
+                                        let result = instruction.run(&connection);
+                                        instruction.channel.send(result).map_err(|_err| ())
+                                    })
+                                    .await
+                                }
+                                Operation::Query(query) => {
+                                    // Spawn a blocking task to execute the query. This is necessary because
+                                    // rusqlite is synchronous, so we need to tell the Tokio runtime that
+                                    // this task will block.
+                                    spawn_blocking(move || {
+                                        let result = query.run(&connection);
+                                        query.channel.send(result).map_err(|_err| ())
+                                    })
+                                    .await
+                                }
+                            };
+                            if attempt.is_err() {
+                                // If sending down the oneshot channel fails, send() returns the message to
+                                // us. It's not particularly interesting what that message is, as we never
+                                // expect this to fail, so we erase the error details and just log the error
+                                // event. If we do later want to capture the message in the logs, error!()
+                                // will have to be apply for each case above, as the message types differ.
+                                error!("Oneshot error: Failed sending result back to caller");
+                            }
+                        }));
                     }
-                    Operation::Query(query) => {
-                        let result = query.run(&connection);
-                        query.channel.send(result).map_err(|_err| ())
-                    }
-                })
-                .is_err()
-                {
-                    // If sending down the oneshot channel fails, send() returns the message to
-                    // us. It's not particularly interesting what that message is, as we never
-                    // expect this to fail, so we erase the error details and just log the error
-                    // event. If we do later want to capture the message in the logs, error!()
-                    // will have to be apply for each case above, as the message types differ.
-                    error!("Oneshot error: Failed sending result back to caller");
                 }
             }
         }));
@@ -1247,55 +1343,107 @@ impl Worker {
         Ok(sender)
     }
 
-    /// Gets a connection from the pool.
+    /// Gets a connection-specific worker from the pool.
     ///
-    /// This function gets a connection from the pool, or creates one and
-    /// registers it for re-use.
+    /// This function gets a connection-specific worker from the pool, or
+    /// creates one and registers it for re-use.
     ///
     /// The internal list of associated [`Tether`] connection handles is checked
-    /// to see if the connection is already registered. If it is, the existing
-    /// connection is returned. If it is not, a new connection is created and
-    /// registered, and returned. A registration is made by storing a weak
+    /// to see if the connection-specific worker is already registered. If it
+    /// is, the existing worker's queue sender is returned. If it is not, a new
+    /// worker is created with a dedicated sync thread and registered, and its
+    /// queue sender returned. A registration is made by storing a weak
     /// reference to the connection handle supplied from the [`Tether`]
-    /// instance, against the actual [`PooledConnection`].
+    /// instance, against the join handle for the connection-specific worker's
+    /// thread and queue sender.
     ///
     /// If the specified connection handle is not already registered then it
     /// means that this is a new connection request, as the process of
     /// requesting a new connection is disassociated from the actual acquisition
     /// of the connection itself. This is because the connection is only created
     /// when the first query is executed, and so the [`Tether`] is created and
-    /// returned immediately, with no delay.
+    /// returned immediately, with no delay. Note that the connection-specific
+    /// worker will not actually acquire a connection until it receives its
+    /// first query.
     ///
     /// The connection will be returned to the pool by garbage collection once
     /// the [`Tether`] goes out of scope, as the strong reference will expire.
     ///
     /// # Parameters
     ///
-    /// * `conn_handle` - The handle of the connection to use for the query. A
-    ///                   database connection will be created and associated if
-    ///                   not already registered, and re-used otherwise.
-    ///
-    /// # Errors
-    ///
-    /// A [`StashError::TetherError`] is returned if there is a problem
-    /// obtaining a connection from the pool.
+    /// * `conn_handle` - The handle of the connection to use for the queries. A
+    ///                   connection-specific worker in its own dedicated thread
+    ///                   will be created and associated if not already
+    ///                   registered, and re-used otherwise.
     ///
     /// # See also
     ///
     /// * [`Stash::connection()`]
     /// * [`Tether`]
     ///
-    fn get_connection(
-        &mut self,
-        conn_handle: &Arc<()>,
-    ) -> Result<&PooledConnection<SqliteConnectionManager>, StashError> {
+    fn get_worker(&mut self, conn_handle: &Arc<()>) -> &QueueSender<Operation> {
         let weak_ref = Arc::downgrade(conn_handle);
         // This code uses the Entry API to avoid double mutable borrow of self.
         match self.tethers.entry(weak_ref.as_ptr()) {
-            Entry::Occupied(entry) => Ok(&entry.into_mut().1),
+            Entry::Occupied(entry) => &entry.into_mut().2,
             Entry::Vacant(entry) => {
-                let connection = self.pool.get().map_err(StashError::TetherError)?;
-                Ok(&entry.insert((weak_ref, connection)).1)
+                let (sender, receiver) = flume::unbounded();
+                let pool = self.pool.clone();
+                let mut connection: Option<PooledConnection<SqliteConnectionManager>> = None;
+
+                // Spawn a thread to run the worker. This thread will execute the queries
+                // sequentially, as they are received, on a persistent connection, and will
+                // return the results to the original caller via oneshot channels.
+                let thread_handle = spawn(move || {
+                    while let Ok(operation) = receiver.recv() {
+                        if connection.is_none() {
+                            let connection_result = pool.get().map_err(StashError::TetherError);
+                            connection = match connection_result {
+                                Ok(conn) => Some(conn),
+                                Err(error) => {
+                                    if match operation {
+                                        Operation::Instruct(instruction) => {
+                                            instruction.channel.send(Err(error)).map_err(|_err| ())
+                                        }
+                                        Operation::Query(query) => {
+                                            query.channel.send(Err(error)).map_err(|_err| ())
+                                        }
+                                    }
+                                    .is_err()
+                                    {
+                                        error!(
+                                            "Oneshot error: Failed sending error back to caller"
+                                        );
+                                    }
+                                    return;
+                                }
+                            };
+                        }
+                        if let Some(ref conn) = connection {
+                            if (match operation {
+                                Operation::Instruct(instruction) => {
+                                    let result = instruction.run(conn);
+                                    instruction.channel.send(result).map_err(|_err| ())
+                                }
+                                Operation::Query(query) => {
+                                    let result = query.run(conn);
+                                    query.channel.send(result).map_err(|_err| ())
+                                }
+                            })
+                            .is_err()
+                            {
+                                // If sending down the oneshot channel fails, send() returns the message to
+                                // us. It's not particularly interesting what that message is, as we never
+                                // expect this to fail, so we erase the error details and just log the error
+                                // event. If we do later want to capture the message in the logs, error!()
+                                // will have to be apply for each case above, as the message types differ.
+                                error!("Oneshot error: Failed sending result back to caller");
+                            }
+                        }
+                    }
+                });
+
+                &entry.insert((weak_ref, thread_handle, sender)).2
             }
         }
     }
@@ -1358,7 +1506,10 @@ trait OperationLogic {
     /// * [`Operation`]
     /// * [`Query`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Self::Output, StashError>;
+    fn run(
+        &self,
+        connection: &PooledConnection<SqliteConnectionManager>,
+    ) -> Result<Self::Output, StashError>;
 }
 
 /// Converts the query results into the desired type.
