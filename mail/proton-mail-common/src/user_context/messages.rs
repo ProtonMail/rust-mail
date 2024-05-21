@@ -1,7 +1,8 @@
-use crate::db::{LocalMessageBodyMetadata, LocalMessageId};
+use crate::db::{LocalMessageBodyMetadata, LocalMessageId, LocalMessageMetadata};
 use crate::exports::tracing;
 use crate::exports::tracing::{error, Level};
-use crate::{MailContextError, MailUserContext, MailboxError, MailboxResult};
+use crate::{MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult};
+use proton_api_mail::domain::MessageMetadataFilter;
 use proton_api_mail::exports::anyhow::anyhow;
 use std::path::PathBuf;
 
@@ -64,4 +65,36 @@ impl MailUserContext {
             .mail_cache_path()
             .join(format!("message_body_{id}"))
     }
+
+    /// Filter or Search messages which match the given `filter`.
+    ///
+    /// Note that search results are inserted into the database.
+    ///
+    /// # Errors
+    /// Returns error if the network request or the query failed.
+    pub async fn filter_messages(
+        &self,
+        filter: MessageMetadataFilter,
+    ) -> MailContextResult<FilteredMessages> {
+        let response = self.mail_session().message_metadata(filter).await?;
+
+        let messages = self.db_write(|tx| {
+            let ids = tx.create_messages_from_metadata(response.messages.iter())?;
+            tx.get_messages_metadata(ids.into_iter())
+        })?;
+
+        Ok(FilteredMessages {
+            total: response.total,
+            messages,
+        })
+    }
+}
+
+/// Result of the call to [`MailUserContext::filter_messages`].
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct FilteredMessages {
+    /// Total number of message that match the filter.
+    pub total: u64,
+    /// Returned messages that match the filter.
+    pub messages: Vec<LocalMessageMetadata>,
 }

@@ -1,8 +1,11 @@
 mod actions;
+mod conversations;
 mod events;
 mod images;
 mod initialization;
 mod labels;
+mod messages;
+
 use crate::mail::{map_task_join_error, MailSessionError, MailSessionResult};
 use proton_mail_common as pmc;
 use std::future::Future;

@@ -1,6 +1,7 @@
 use crate::domain::{
     LabelId, Message, MessageCount, MessageId, MessageMetadata, MessageMetadataFilter,
 };
+use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
@@ -25,7 +26,9 @@ pub struct MessageMetadataResponse {
 
 impl GetMessageMetadataRequest {
     #[must_use]
-    pub fn new(filter: MessageMetadataFilter) -> Self {
+    pub fn new(mut filter: MessageMetadataFilter) -> Self {
+        filter.page_size = filter.page_size.max(MAX_PAGE_ELEMENT_COUNT_U64);
+        filter.limit = filter.limit.map(|v| v.max(MAX_LIMIT_VALUE_U64));
         Self { filter }
     }
 }
