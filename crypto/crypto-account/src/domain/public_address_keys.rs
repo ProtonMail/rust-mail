@@ -58,8 +58,8 @@ impl<T: PublicKey> AsRef<[PublicAddressKey<T>]> for PublicAddressKeyGroup<T> {
 }
 
 fn parse_keys_sync<T: proton_crypto::crypto::PGPProviderSync>(
-    keys: &[APIPublicKey],
     provider: &T,
+    keys: &[APIPublicKey],
 ) -> Result<Vec<PublicAddressKey<<T>::PublicKey>>, AccountCryptoError> {
     let mut public_address_keys = Vec::with_capacity(keys.len());
     public_address_keys.extend(
@@ -80,8 +80,8 @@ fn parse_keys_sync<T: proton_crypto::crypto::PGPProviderSync>(
 }
 
 async fn async_parse_keys<T: proton_crypto::crypto::PGPProviderAsync>(
-    keys: &[APIPublicKey],
     provider: &T,
+    keys: &[APIPublicKey],
 ) -> Result<Vec<PublicAddressKey<<T>::PublicKey>>, AccountCryptoError> {
     let imported_keys_futures: Vec<_> = keys
         .iter()
@@ -116,7 +116,7 @@ impl APIPublicAddressKeyGroup {
         &self,
         provider: &T,
     ) -> Result<PublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
-        let public_address_keys = parse_keys_sync(&self.keys, provider)?;
+        let public_address_keys = parse_keys_sync(provider, &self.keys)?;
         Ok(PublicAddressKeyGroup {
             keys: public_address_keys,
             signed_key_list: self.signed_key_list.clone(),
@@ -131,7 +131,7 @@ impl APIPublicAddressKeyGroup {
         &self,
         provider: &T,
     ) -> Result<PublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
-        let public_address_keys = async_parse_keys(&self.keys, provider).await?;
+        let public_address_keys = async_parse_keys(provider, &self.keys).await?;
         Ok(PublicAddressKeyGroup {
             keys: public_address_keys,
             signed_key_list: self.signed_key_list.clone(),
@@ -149,7 +149,7 @@ impl APIUnverifiedPublicAddressKeyGroup {
         &self,
         provider: &T,
     ) -> Result<UnverifiedPublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
-        let public_address_keys = parse_keys_sync(&self.keys, provider)?;
+        let public_address_keys = parse_keys_sync(provider, &self.keys)?;
         Ok(UnverifiedPublicAddressKeyGroup {
             keys: public_address_keys,
         })
@@ -162,8 +162,7 @@ impl APIUnverifiedPublicAddressKeyGroup {
         &self,
         provider: &T,
     ) -> Result<UnverifiedPublicAddressKeyGroup<T::PublicKey>, AccountCryptoError> {
-        let public_address_keys = async_parse_keys(&self.keys, provider).await?;
-        //.collect::<Result<Vec<_>, AccountCryptoError>>()?;
+        let public_address_keys = async_parse_keys(provider, &self.keys).await?;
         Ok(UnverifiedPublicAddressKeyGroup {
             keys: public_address_keys,
         })
