@@ -8,7 +8,10 @@ mod labels;
 mod messages;
 mod settings;
 
+pub use conversations::FilteredConversations;
 pub use initialization::*;
+pub use messages::FilteredMessages;
+
 use proton_action_queue::ActionQueue;
 use proton_api_mail::proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;

@@ -4,6 +4,12 @@ pub mod domain;
 pub mod requests;
 mod session;
 
+pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
+pub const MAX_PAGE_ELEMENT_COUNT_U64: u64 = 200;
+
+pub const MAX_LIMIT_VALUE: usize = 150;
+pub const MAX_LIMIT_VALUE_U64: u64 = 150;
+
 pub mod exports {
     pub use proton_api_core::exports::*;
 }
@@ -27,4 +33,10 @@ mod hidden {
         pub eid: ExternalId,
         pub mime_type: MimeType,
     }
+
+    uniffi::ffi_converter_forward!(
+        proton_api_core::domain::AddressId,
+        proton_api_core::UniFfiTag,
+        crate::UniFfiTag
+    );
 }

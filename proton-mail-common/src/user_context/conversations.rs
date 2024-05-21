@@ -1,7 +1,9 @@
 use crate::db::{DBResult, LocalConversation, LocalConversationId, LocalLabelId};
 use crate::exports::tracing::error;
 use crate::{MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult};
-use proton_api_mail::domain::{ConversationFilterBuilder, LabelId, MessageMetadataFilterBuilder};
+use proton_api_mail::domain::{
+    ConversationFilter, ConversationFilterBuilder, LabelId, MessageMetadataFilterBuilder,
+};
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
 
@@ -129,4 +131,36 @@ impl MailUserContext {
         let connection = self.new_db_connection()?;
         Ok(connection.read(|conn| conn.get_conversations_with_context(local_label_id, count))?)
     }
+
+    /// Filter or Search conversations which match the given `filter`.
+    ///
+    /// Note that search results are inserted into the database.
+    ///
+    /// # Errors
+    /// Returns error if the network request or the query failed.
+    pub async fn filter_conversations(
+        &self,
+        filter: ConversationFilter,
+    ) -> MailContextResult<FilteredConversations> {
+        let response = self.mail_session().conversations(filter).await?;
+
+        let conversations = self.db_write(|tx| {
+            let ids = tx.create_conversations(response.conversations.iter())?;
+            tx.get_conversations(ids.into_iter())
+        })?;
+
+        Ok(FilteredConversations {
+            total: response.total,
+            conversations,
+        })
+    }
+}
+
+/// Result of the call to [`MailUserContext::filter_conversations`].
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct FilteredConversations {
+    /// Total number of conversations that match the filter.
+    pub total: u64,
+    /// Returned conversations that match the filter.
+    pub conversations: Vec<LocalConversation>,
 }
