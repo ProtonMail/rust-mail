@@ -18,11 +18,11 @@ pub enum AccessToOrgKey {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct LockedOrganizationKey {
-    /// OpenPGP organization private key.
+    /// `OpenPGP` organization private key.
     pub private_key: Option<String>,
-    /// OpenPGP encrypted message to access the passwordless organization key.
+    /// `OpenPGP` encrypted message to access the passwordless organization key.
     pub token: Option<String>,
-    /// OpenPGP signature on the token.
+    /// `OpenPGP` signature on the token.
     pub signature: Option<String>,
     /// Address email of the admin that signed the token (if not the user key of the member themself).
     pub signature_address: Option<String>,

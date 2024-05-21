@@ -70,7 +70,7 @@ impl KeyFlag {
 }
 
 crate::string_id! {
-    ///
+    /// Signature of a key token.
     KeyTokenSignature
 }
 
@@ -83,11 +83,11 @@ pub struct LockedKey {
     pub id: KeyId,
     /// Proton version of the key.
     pub version: u32,
-    /// OpenPGP private key armored.
+    /// `OpenPGP` private key armored.
     pub private_key: String,
     /// Token to decrypt a key via another key (e.g., user key).
     pub token: Option<String>,
-    /// OpenPGP Signature to verify the token.
+    /// `OpenPGP` Signature to verify the token.
     pub signature: Option<String>, // Only available for address keys
     /// (Deprecated) Migrated accounts do not have the activation field set.
     pub activation: Option<String>,
@@ -125,7 +125,7 @@ pub struct APIPublicKey {
     pub source: APIPublicKeySource,
     /// Key flags encoded in a bitmap.
     pub flags: KeyFlag,
-    /// OpenPGP armored public key.
+    /// `OpenPGP` armored public key.
     pub public_key: String,
 }
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]

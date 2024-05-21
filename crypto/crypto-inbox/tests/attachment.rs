@@ -1,7 +1,6 @@
 use std::io::{self, Write};
 
 use base64::Engine;
-use proton_crypto_account::proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
 use proton_crypto_inbox::attachment::{
     encrypt, encrypt_and_sign_to_writer, encrypt_to_writer, AttachmentDecryption,
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
@@ -45,21 +44,6 @@ struct TestAttachmentMetdata {
     key_packets: KeyPackets,
     signature: Option<AttachmentSignature>,
     enc_signature: Option<AttachmentEncryptedSignature>,
-}
-
-struct TestAddressKey<T: PrivateKey>(T);
-
-impl<T: PrivateKey> AsRef<T> for TestAddressKey<T> {
-    fn as_ref(&self) -> &T {
-        &self.0
-    }
-}
-struct TestAddressPublicKey<T: PublicKey>(T);
-
-impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
-    fn as_public_key(&self) -> &T {
-        &self.0
-    }
 }
 
 impl AttachmentDecryption for TestAttachmentMetdata {

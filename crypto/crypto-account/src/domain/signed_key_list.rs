@@ -57,13 +57,13 @@ pub struct SignedKeyList {
     #[serde(rename = "ExpectedMinEpochID")]
     /// If epoch is not yet released this will be a future epoch ID.
     pub expected_min_epoch_id: Option<u64>,
-    /// JSON-encoded content of the SKL (`SignedKeyListData`). If None, this SKL contains an ObsolescenceToken
+    /// JSON-encoded content of the SKL (`SignedKeyListData`). If None, this SKL contains an `ObsolescenceToken`
     pub data: Option<String>,
     /// Hex token to prove the obsolescence of the signed key list in the merkle tree or None.
     ///
     /// The first 16 characters are a committed big-endian hex-encoded unix timestamp, remaining is random
     pub obsolescence_token: Option<ObsolescenceToken>,
-    /// Armored OpenPGP signature for the data. If None, proof contains an obsolescenceToken
+    /// Armored `OpenPGP` signature for the data. If None, proof contains an obsolescenceToken
     pub signature: Option<SKLSignature>,
     /// SKL revision version.
     ///
