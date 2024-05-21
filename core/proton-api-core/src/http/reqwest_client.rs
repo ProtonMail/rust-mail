@@ -31,7 +31,7 @@ impl TryFrom<Builder> for ReqwestClient {
     type Error = anyhow::Error;
 
     fn try_from(value: Builder) -> Result<Self, Self::Error> {
-        let mut header_map = reqwest::header::HeaderMap::new();
+        let mut header_map = HeaderMap::new();
         header_map.insert(
             X_PM_APP_VERSION_HEADER,
             reqwest::header::HeaderValue::from_str(&value.api_env_config.app_version)
