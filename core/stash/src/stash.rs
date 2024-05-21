@@ -1381,6 +1381,39 @@ impl Tether {
     }
 }
 
+/// Connection-specific worker for executing queries.
+///
+/// This struct provides a "tethered", i.e. connection-specific, worker for
+/// executing queries. It carries out database operations related to its
+/// established connection in a separate thread. It receives its instructions
+/// from the main worker via a dedicated queue, and sends the results back to
+/// the original caller via a oneshot channel.
+///
+/// There is no `new()` method for this struct, as it is created internally when
+/// a new tethered worker thread is started.
+///
+/// Notably, everything the tethered worker does is synchronous — it does not
+/// use async at all.
+///
+#[derive(Debug)]
+struct TetheredWorker {
+    /// A reference-counted pointer to an immutable internal handle, which is
+    /// used to identify and specify the associated database connection. The
+    /// handle is simply a unit, as the value does not matter, only the unique
+    /// instance. It is stored here as a weak reference to the connection
+    /// handle, so that the connection can be re-used if it is already
+    /// registered, but also removed from the list if it is no longer in use.
+    conn_handle: Weak<()>,
+
+    /// The sender side of the tethered worker's queue.
+    queue: QueueSender<Operation>,
+
+    /// The join handle for the thread in which the tethered worker runs.
+    // TODO
+    #[allow(dead_code)]
+    thread_handle: JoinHandle<()>,
+}
+
 /// Background worker for executing queries.
 ///
 /// This struct provides a background worker for executing queries. It is
@@ -1406,14 +1439,15 @@ struct Worker {
     /// caller.
     pool: Pool<SqliteConnectionManager>,
 
-    /// A map of active connections. This is used to keep track of the
-    /// connections that are currently in use, and to associate them with the
-    /// [`Tether`]s that are issued to the caller. Persistent connections are
-    /// handled through dedicated workers on their own threads, with their own
-    /// messaging queues. These workers create [`PooledConnection`]s, which are
-    /// not thread-safe, and so are not directly accessible by the caller. The
-    /// join handle for the thread is stored, along with the sender side of the
-    /// worker's queue.
+    /// A map of active connections with their tethered workers. This is used to
+    /// keep track of the connections that are currently in use, and to
+    /// associate them with the [`Tether`]s that are issued to the caller.
+    /// Persistent connections are handled through dedicated workers on their
+    /// own threads, with their own messaging queues. These "tethered" workers
+    /// create [`PooledConnection`]s, which are not thread-safe, and so are not
+    /// directly accessible by the caller. The join handle for the thread is
+    /// stored in the [`TetheredWorker`] instance, along with the sender side of
+    /// the tethered worker's queue.
     ///
     /// A weak reference to the connection handle is also stored, so that the
     /// connection can be re-used if it is already registered, but also removed
@@ -1428,19 +1462,18 @@ struct Worker {
     /// [`PooledConnection`], and a usage reference, i.e. a [`Tether`], is made
     /// with a weak reference to a unit, in context to a thread. The strong
     /// reference, i.e. the [`Arc`] wrapping the unit, is given out, and when it
-    /// is no longer used the [`Weak`] stored in the `tethers` list will expire,
-    /// which can be detected and the connection removed.
+    /// is no longer used the [`Weak`] stored in the [`TetheredWorker`] will
+    /// expire, which can be detected and the connection removed.
     ///
     /// This approach has the minor downside of require a garbage-collection
     /// cycle, but the major upside of avoiding the need to formally issue and
     /// check connection IDs, which would require error handling and also expose
-    /// the risk of the wrong ID being used. By sharing a reference-counter
+    /// the risk of the wrong ID being used. By sharing a reference-counted
     /// pointer there is no way of side-stepping the association, as the issued
-    /// [`Tether`] is bound to the matching `tethers` list item. The clean-up is
+    /// [`Tether`] is bound to the matching [`TetheredWorker`]. The clean-up is
     /// extremely quick and can happen at suitable intervals, only having to
     /// check the [`Weak`] pointers and removing any expired connections.
-    #[allow(clippy::type_complexity)]
-    tethers: HashMap<*const (), (Weak<()>, JoinHandle<()>, QueueSender<Operation>)>,
+    tethers: HashMap<*const (), TetheredWorker>,
 }
 
 impl Worker {
@@ -1454,7 +1487,7 @@ impl Worker {
     ///
     fn prune_tethers(&mut self) {
         self.tethers
-            .retain(|_, &mut (ref weak, _, _)| weak.strong_count() > 0);
+            .retain(|_, worker| worker.conn_handle.strong_count() > 0);
     }
 
     /// Starts a new background worker thread.
@@ -1518,8 +1551,8 @@ impl Worker {
                     // in order to maintain the not-thread-safe PooledConnection context across
                     // the related queries, while allowing calling code to be fully async.
                     Some(handle) => {
-                        let (created, queue) = worker.get_worker(&handle);
-                        if queue.send(operation).is_err() {
+                        let (created, tethered_worker) = worker.get_tethered_worker(&handle);
+                        if tethered_worker.queue.send(operation).is_err() {
                             // In this situation, we cannot send an error back to the caller, as the
                             // oneshot channel was sent to the queue, and is no longer available. This
                             // situation should never occur in reality, as the queue is unbounded, and
@@ -1602,14 +1635,14 @@ impl Worker {
 
     /// Gets a connection-specific worker from the pool.
     ///
-    /// This function gets a connection-specific worker from the pool, or
-    /// creates one and registers it for re-use.
+    /// This function gets a connection-specific, i.e. "tethered", worker from
+    /// the pool, or creates one and registers it for re-use.
     ///
     /// The internal list of associated [`Tether`] connection handles is checked
     /// to see if the connection-specific worker is already registered. If it
     /// is, the existing worker's queue sender is returned. If it is not, a new
-    /// worker is created with a dedicated sync thread and registered, and its
-    /// queue sender returned. A registration is made by storing a weak
+    /// tethered worker is created with a dedicated sync thread and registered,
+    /// and its queue sender returned. A registration is made by storing a weak
     /// reference to the connection handle supplied from the [`Tether`]
     /// instance, against the join handle for the connection-specific worker's
     /// thread and queue sender.
@@ -1636,18 +1669,18 @@ impl Worker {
     /// # Returns
     ///
     /// A tuple containing a boolean indicating whether the worker was created
-    /// by this call, and a reference to the queue sender for the worker.
+    /// by this call, and the worker.
     ///
     /// # See also
     ///
     /// * [`Stash::connection()`]
     /// * [`Tether`]
     ///
-    fn get_worker(&mut self, conn_handle: &Arc<()>) -> (bool, &QueueSender<Operation>) {
+    fn get_tethered_worker(&mut self, conn_handle: &Arc<()>) -> (bool, &TetheredWorker) {
         let weak_ref = Arc::downgrade(conn_handle);
         // This code uses the Entry API to avoid double mutable borrow of self.
         match self.tethers.entry(weak_ref.as_ptr()) {
-            Entry::Occupied(entry) => (false, &entry.into_mut().2),
+            Entry::Occupied(entry) => (false, entry.into_mut()),
             Entry::Vacant(entry) => {
                 let (sender, receiver) = flume::unbounded::<Operation>();
                 let pool = self.pool.clone();
@@ -1687,7 +1720,14 @@ impl Worker {
                     }
                 });
 
-                (true, &entry.insert((weak_ref, thread_handle, sender)).2)
+                (
+                    true,
+                    entry.insert(TetheredWorker {
+                        conn_handle: weak_ref,
+                        queue: sender,
+                        thread_handle,
+                    }),
+                )
             }
         }
     }
