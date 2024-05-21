@@ -383,10 +383,11 @@
 //!
 
 use core::any::Any;
+use core::ops::Deref;
 use flume::Sender as QueueSender;
 use r2d2::{Error as PoolError, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{Error as SqliteError, Rows, ToSql};
+use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction};
 use serde::de::DeserializeOwned;
 use serde_rusqlite::{from_rows, Error as DeserializationError};
 use std::collections::{hash_map::Entry, HashMap};
@@ -414,6 +415,33 @@ use uniffi::Error as UniffiError;
 /// * [`converter()`]
 ///
 type AnyRecords = Vec<Box<dyn Any + Send>>;
+
+/// A dual-nature connection wrapper.
+///
+/// This enum allows transparent handling of a connection, whether or not a
+/// transaction is currently active. It is used only for representation of types
+/// owned elsewhere, hence wraps references and borrows those instances.
+///
+/// It implements [`Deref`] so that it is essentially invisible to the caller.
+///
+enum AgnosticConnection<'tx> {
+    /// A connection that is not currently in a transaction.
+    Unbound(&'tx PooledConnection<SqliteConnectionManager>),
+
+    /// A connection that is currently engaged in an active transaction.
+    Engaged(&'tx Transaction<'tx>),
+}
+
+impl Deref for AgnosticConnection<'_> {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        match *self {
+            Self::Unbound(connection) => connection,
+            Self::Engaged(transaction) => transaction,
+        }
+    }
+}
 
 /// The types of database operation that can be performed by the background
 /// worker.
@@ -585,10 +613,7 @@ impl OperationLogic for Command {
     ///
     /// None.
     ///
-    fn run(
-        &self,
-        _connection: &PooledConnection<SqliteConnectionManager>,
-    ) -> Result<(), StashError> {
+    fn run(&self, _connection: &AgnosticConnection<'_>) -> Result<(), StashError> {
         Ok(())
     }
 }
@@ -664,10 +689,7 @@ impl OperationLogic for Instruction {
     /// * [`Stash::execute()`]
     /// * [`Tether::execute()`]
     ///
-    fn run(
-        &self,
-        connection: &PooledConnection<SqliteConnectionManager>,
-    ) -> Result<usize, StashError> {
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
         connection
             .execute(&self.query, &*Self::prepare_params(&self.params))
             .map_err(StashError::ExecutionError)
@@ -756,10 +778,7 @@ impl OperationLogic for Query {
     /// * [`Stash::query()`]
     /// * [`Tether::query()`]
     ///
-    fn run(
-        &self,
-        connection: &PooledConnection<SqliteConnectionManager>,
-    ) -> Result<AnyRecords, StashError> {
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<AnyRecords, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
@@ -1121,7 +1140,7 @@ impl Stash {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
-    pub async fn transaction(&self) -> Result<(), StashError> {
+    pub async fn transaction(&self) -> Result<Tether, StashError> {
         let connection = self.connection();
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command {
@@ -1132,9 +1151,12 @@ impl Stash {
             .send_async(operation)
             .await
             .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))?
+        drop(
+            this_end
+                .await
+                .map_err(|err| StashError::OneShotError(err.to_string()))?,
+        );
+        Ok(connection)
     }
 }
 
@@ -1580,16 +1602,22 @@ impl Worker {
                                 }
                             };
                             let attempt = match operation {
-                                // TODO
-                                Operation::CommitTransaction(_)
-                                | Operation::RollbackTransaction(_)
-                                | Operation::StartTransaction(_) => Ok(()),
+                                Operation::CommitTransaction(mut command)
+                                | Operation::RollbackTransaction(mut command)
+                                | Operation::StartTransaction(mut command) => {
+                                    // Technically, these cannot occur here, as transaction operations need to
+                                    // be run in association to a persistent connection. We should never get
+                                    // here. If we do, it means there is an error in the logic of this module.
+                                    command.send_back(Err(StashError::NoActiveTransaction));
+                                    Ok(())
+                                }
                                 Operation::Instruct(mut instruction) => {
                                     // Spawn a blocking task to execute the query. This is necessary because
                                     // rusqlite is synchronous, so we need to tell the Tokio runtime that
                                     // this task will block.
                                     spawn_blocking(move || {
-                                        let result = instruction.run(&connection);
+                                        let result = instruction
+                                            .run(&AgnosticConnection::Unbound(&connection));
                                         instruction.send_back(result);
                                     })
                                     .await
@@ -1599,7 +1627,8 @@ impl Worker {
                                     // rusqlite is synchronous, so we need to tell the Tokio runtime that
                                     // this task will block.
                                     spawn_blocking(move || {
-                                        let result = query.run(&connection);
+                                        let result =
+                                            query.run(&AgnosticConnection::Unbound(&connection));
                                         query.send_back(result);
                                     })
                                     .await
@@ -1684,36 +1713,85 @@ impl Worker {
             Entry::Vacant(entry) => {
                 let (sender, receiver) = flume::unbounded::<Operation>();
                 let pool = self.pool.clone();
-                let mut connection: Option<PooledConnection<SqliteConnectionManager>> = None;
 
                 // Spawn a thread to run the worker. This thread will execute the queries
                 // sequentially, as they are received, on a persistent connection, and will
                 // return the results to the original caller via oneshot channels.
                 let thread_handle = spawn(move || {
-                    while let Ok(mut operation) = receiver.recv() {
-                        if connection.is_none() {
-                            let connection_result = pool.get().map_err(StashError::TetherError);
-                            connection = match connection_result {
-                                Ok(conn) => Some(conn),
-                                Err(error) => {
-                                    operation.send_back_error(error);
-                                    return;
-                                }
-                            };
+                    // TODO: Return this error to the caller
+                    let connection = match pool.get().map_err(StashError::TetherError) {
+                        Ok(connection) => Some(connection),
+                        Err(_error) => {
+                            // operation.send_back_error(error);
+                            return;
                         }
-                        if let Some(ref conn) = connection {
-                            match operation {
-                                // TODO
-                                Operation::CommitTransaction(_)
-                                | Operation::RollbackTransaction(_)
-                                | Operation::StartTransaction(_) => {}
-                                Operation::Instruct(mut instruction) => {
-                                    let result = instruction.run(conn);
-                                    instruction.send_back(result);
+                    };
+                    let mut transaction: Option<Transaction<'_>> = None;
+                    while let Ok(operation) = receiver.recv() {
+                        match operation {
+                            Operation::CommitTransaction(mut command) => {
+                                if let Some(tx) = transaction.take() {
+                                    let result = tx.commit().map_err(StashError::TransactionError);
+                                    command.send_back(result);
+                                } else {
+                                    command.send_back(Err(StashError::NoActiveTransaction));
                                 }
-                                Operation::Query(mut query) => {
-                                    let result = query.run(conn);
-                                    query.send_back(result);
+                            }
+                            Operation::Instruct(mut instruction) => {
+                                #[allow(clippy::option_if_let_else)]
+                                #[allow(clippy::unwrap_used)]
+                                let conn = match transaction {
+                                    Some(ref tx) => AgnosticConnection::Engaged(tx),
+                                    None => {
+                                        AgnosticConnection::Unbound(connection.as_ref().unwrap())
+                                    }
+                                };
+                                let result = instruction.run(&conn);
+                                instruction.send_back(result);
+                            }
+                            Operation::Query(mut query) => {
+                                #[allow(clippy::option_if_let_else)]
+                                #[allow(clippy::unwrap_used)]
+                                let conn = match transaction {
+                                    Some(ref tx) => AgnosticConnection::Engaged(tx),
+                                    None => {
+                                        AgnosticConnection::Unbound(connection.as_ref().unwrap())
+                                    }
+                                };
+                                let result = query.run(&conn);
+                                query.send_back(result);
+                            }
+                            Operation::RollbackTransaction(mut command) => {
+                                if let Some(tx) = transaction.take() {
+                                    let result =
+                                        tx.rollback().map_err(StashError::TransactionError);
+                                    command.send_back(result);
+                                } else {
+                                    command.send_back(Err(StashError::NoActiveTransaction));
+                                }
+                            }
+                            Operation::StartTransaction(mut command) => {
+                                if transaction.is_none() {
+                                    if let Some(ref conn) = connection {
+                                        match conn
+                                            .unchecked_transaction()
+                                            .map_err(StashError::ExecutionError)
+                                        {
+                                            Ok(tx) => {
+                                                transaction = Some(tx);
+                                                command.send_back(Ok(()));
+                                            }
+                                            Err(error) => {
+                                                command.send_back(Err(error));
+                                            }
+                                        };
+                                    }
+                                } else {
+                                    // The Stash.transaction() function creates a new connection, so it should
+                                    // never be possible to try to start a new transaction when one is already
+                                    // active. If this happens, it means there is a bug in the logic of this
+                                    // module.
+                                    command.send_back(Err(StashError::TransactionAlreadyStarted));
                                 }
                             }
                         }
@@ -1793,10 +1871,7 @@ trait OperationLogic {
     /// * [`Operation`]
     /// * [`Query`]
     ///
-    fn run(
-        &self,
-        connection: &PooledConnection<SqliteConnectionManager>,
-    ) -> Result<Self::Output, StashError>;
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Self::Output, StashError>;
 
     /// Sends the result back to the caller.
     ///
