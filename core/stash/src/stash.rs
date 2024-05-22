@@ -1552,15 +1552,28 @@ impl TetheredWorker {
         // sequentially, as they are received, on a persistent connection, and will
         // return the results to the original caller via oneshot channels.
         let thread_handle = spawn(move || {
-            // TODO: Return this error to the caller
-            let connection = match pool.get().map_err(StashError::TetherError) {
-                Ok(connection) => Some(connection),
-                Err(_error) => {
-                    // operation.send_back_error(error);
-                    return;
-                }
-            };
+            #[allow(unused_assignments)]
+            let mut connection: Option<PooledConnection<SqliteConnectionManager>> = None;
             let mut transaction: Option<Transaction<'_>> = None;
+
+            // The first time an operation is received, we attempt to acquire a database
+            // connection from the pool. This is done lazily so that there is no delay
+            // in creating [`Tether`] instances, and so that any errors can be returned
+            // to the caller. It is important that this happens just once, ahead of the
+            // main loop starting, to avoid borrowing issues (because when transactions
+            // are started, they borrow the underlying connection).
+            if let Ok(mut operation) = receiver.recv() {
+                connection = match pool.get().map_err(StashError::TetherError) {
+                    Ok(conn) => Some(conn),
+                    Err(error) => {
+                        operation.send_back_error(error);
+                        return;
+                    }
+                };
+                transaction = Self::handle_operation(operation, &connection, transaction);
+            } else {
+                return;
+            }
 
             while let Ok(operation) = receiver.recv() {
                 // Ownership of the transaction is sent and returned to avoid borrowing
