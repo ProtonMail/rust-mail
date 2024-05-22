@@ -10,9 +10,9 @@ use crate::{FLAG_EMAIL_NO_ENCRYPT, FLAG_EMAIL_NO_SIGN, FLAG_NOT_COMPROMISED, FLA
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Hash, Clone, Copy)]
 #[repr(u32)]
 pub enum APIPublicKeySource {
-    Proton = 1,
-    WKD = 2,
-    KOO = 3,
+    Proton = 0,
+    WKD = 1,
+    KOO = 2,
 }
 
 crate::string_id! {
