@@ -1,15 +1,15 @@
 [package]
 name = "proton-core-common"
-version = "0.5.9"
+version = "0.5.10"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proton-event-loop = {path = "../proton-event-loop", version = "0.6.11", registry = "proton"}
+proton-event-loop = {path = "../proton-event-loop", version = "0.6.12", registry = "proton"}
 base64 = {workspace=true}
 proton-sqlite3 = {path ="../proton-sqlite3", version = "0.6.2", registry = "proton"}
-proton-api-core= {path ="../proton-api-core", version = "0.5.4", features = ["sql"], registry = "proton"}
+proton-api-core= {path ="../proton-api-core", version = "0.5.5", features = ["sql"], registry = "proton"}
 aes-gcm = {workspace=true}
 zeroize = {workspace=true}
 uniffi = {workspace=true, optional = true}
