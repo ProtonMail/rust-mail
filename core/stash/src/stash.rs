@@ -1437,6 +1437,97 @@ struct TetheredWorker {
 }
 
 impl TetheredWorker {
+    /// Handles a database operation.
+    ///
+    /// This function processes a database operation that the tethered worker
+    /// has received from its connection-specific queue, executing the necessary
+    /// logic against the database connection, and returning the result to the
+    /// original caller. It is the core logic of the tethered worker thread, and
+    /// is responsible for managing the connection and transaction state, and
+    /// executing the queries.
+    ///
+    /// # Parameters
+    ///
+    /// * `operation`   - The database operation to handle.
+    /// * `connection`  - The database connection to use for the operation. This
+    ///                   is used to run queries when there is no transaction
+    ///                   currently active.
+    /// * `transaction` - The active transaction, if any. Notably, ownership is
+    ///                   taken and returned, to avoid borrowing issues in the
+    ///                   main loop that calls this function.
+    ///
+    #[allow(clippy::unwrap_in_result)]
+    fn handle_operation<'tx>(
+        operation: Operation,
+        connection: &'tx Option<PooledConnection<SqliteConnectionManager>>,
+        mut transaction: Option<Transaction<'tx>>,
+    ) -> Option<Transaction<'tx>> {
+        match operation {
+            Operation::CommitTransaction(mut command) => {
+                if let Some(tx) = transaction.take() {
+                    let result = tx.commit().map_err(StashError::TransactionError);
+                    command.send_back(result);
+                } else {
+                    command.send_back(Err(StashError::NoActiveTransaction));
+                }
+            }
+            Operation::Instruct(mut instruction) => {
+                #[allow(clippy::option_if_let_else)]
+                #[allow(clippy::unwrap_used)]
+                let conn = match transaction {
+                    Some(ref tx) => AgnosticConnection::Engaged(tx),
+                    None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
+                };
+                let result = instruction.run(&conn);
+                instruction.send_back(result);
+            }
+            Operation::Query(mut query) => {
+                #[allow(clippy::option_if_let_else)]
+                #[allow(clippy::unwrap_used)]
+                let conn = match transaction {
+                    Some(ref tx) => AgnosticConnection::Engaged(tx),
+                    None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
+                };
+                let result = query.run(&conn);
+                query.send_back(result);
+            }
+            Operation::RollbackTransaction(mut command) => {
+                if let Some(tx) = transaction.take() {
+                    let result = tx.rollback().map_err(StashError::TransactionError);
+                    command.send_back(result);
+                } else {
+                    command.send_back(Err(StashError::NoActiveTransaction));
+                }
+            }
+            Operation::StartTransaction(mut command) => {
+                if transaction.is_none() {
+                    if let Some(conn) = connection.as_ref() {
+                        match conn
+                            .unchecked_transaction()
+                            .map_err(StashError::ExecutionError)
+                        {
+                            Ok(tx) => {
+                                transaction = Some(tx);
+                                command.send_back(Ok(()));
+                            }
+                            Err(error) => {
+                                command.send_back(Err(error));
+                            }
+                        };
+                    }
+                } else {
+                    // The Stash.transaction() function creates a new connection, so it should
+                    // never be possible to try to start a new transaction when one is already
+                    // active. If this happens, it means there is a bug in the logic of this
+                    // module.
+                    command.send_back(Err(StashError::TransactionAlreadyStarted));
+                }
+            }
+        }
+
+        transaction
+    }
+
     /// Starts a new tethered worker thread.
     ///
     /// This function creates a new [`TetheredWorker`] instance associated to a
@@ -1470,69 +1561,12 @@ impl TetheredWorker {
                 }
             };
             let mut transaction: Option<Transaction<'_>> = None;
+
             while let Ok(operation) = receiver.recv() {
-                match operation {
-                    Operation::CommitTransaction(mut command) => {
-                        if let Some(tx) = transaction.take() {
-                            let result = tx.commit().map_err(StashError::TransactionError);
-                            command.send_back(result);
-                        } else {
-                            command.send_back(Err(StashError::NoActiveTransaction));
-                        }
-                    }
-                    Operation::Instruct(mut instruction) => {
-                        #[allow(clippy::option_if_let_else)]
-                        #[allow(clippy::unwrap_used)]
-                        let conn = match transaction {
-                            Some(ref tx) => AgnosticConnection::Engaged(tx),
-                            None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
-                        };
-                        let result = instruction.run(&conn);
-                        instruction.send_back(result);
-                    }
-                    Operation::Query(mut query) => {
-                        #[allow(clippy::option_if_let_else)]
-                        #[allow(clippy::unwrap_used)]
-                        let conn = match transaction {
-                            Some(ref tx) => AgnosticConnection::Engaged(tx),
-                            None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
-                        };
-                        let result = query.run(&conn);
-                        query.send_back(result);
-                    }
-                    Operation::RollbackTransaction(mut command) => {
-                        if let Some(tx) = transaction.take() {
-                            let result = tx.rollback().map_err(StashError::TransactionError);
-                            command.send_back(result);
-                        } else {
-                            command.send_back(Err(StashError::NoActiveTransaction));
-                        }
-                    }
-                    Operation::StartTransaction(mut command) => {
-                        if transaction.is_none() {
-                            if let Some(ref conn) = connection {
-                                match conn
-                                    .unchecked_transaction()
-                                    .map_err(StashError::ExecutionError)
-                                {
-                                    Ok(tx) => {
-                                        transaction = Some(tx);
-                                        command.send_back(Ok(()));
-                                    }
-                                    Err(error) => {
-                                        command.send_back(Err(error));
-                                    }
-                                };
-                            }
-                        } else {
-                            // The Stash.transaction() function creates a new connection, so it should
-                            // never be possible to try to start a new transaction when one is already
-                            // active. If this happens, it means there is a bug in the logic of this
-                            // module.
-                            command.send_back(Err(StashError::TransactionAlreadyStarted));
-                        }
-                    }
-                }
+                // Ownership of the transaction is sent and returned to avoid borrowing
+                // issues - otherwise the borrow checker believes the borrow is still active
+                // on the next loop.
+                transaction = Self::handle_operation(operation, &connection, transaction);
             }
         });
 
@@ -1607,6 +1641,43 @@ struct Worker {
 }
 
 impl Worker {
+    /// Handles a database operation.
+    ///
+    /// This function processes a database operation that the main worker has
+    /// received from its queue, executing the necessary logic against the
+    /// database connection, and returning the result to the original caller. It
+    /// is the core logic of the worker thread, and is responsible for managing
+    /// the connection and transaction state, and executing the queries.
+    ///
+    /// # Parameters
+    ///
+    /// * `operation`   - The database operation to handle.
+    /// * `connection`  - The database connection to use for the operation.
+    ///
+    fn handle_operation(
+        operation: Operation,
+        connection: &PooledConnection<SqliteConnectionManager>,
+    ) {
+        match operation {
+            Operation::CommitTransaction(mut command)
+            | Operation::RollbackTransaction(mut command)
+            | Operation::StartTransaction(mut command) => {
+                // Technically, these cannot occur here, as transaction operations need to
+                // be run in association to a persistent connection. We should never get
+                // here. If we do, it means there is an error in the logic of this module.
+                command.send_back(Err(StashError::NoActiveTransaction));
+            }
+            Operation::Instruct(mut instruction) => {
+                let result = instruction.run(&AgnosticConnection::Unbound(connection));
+                instruction.send_back(result);
+            }
+            Operation::Query(mut query) => {
+                let result = query.run(&AgnosticConnection::Unbound(connection));
+                query.send_back(result);
+            }
+        };
+    }
+
     /// Prunes the list of tethers, removing any that are no longer in use.
     ///
     /// This is a garbage-collection function, that iterates over the list of
@@ -1709,39 +1780,13 @@ impl Worker {
                                     return;
                                 }
                             };
-                            let attempt = match operation {
-                                Operation::CommitTransaction(mut command)
-                                | Operation::RollbackTransaction(mut command)
-                                | Operation::StartTransaction(mut command) => {
-                                    // Technically, these cannot occur here, as transaction operations need to
-                                    // be run in association to a persistent connection. We should never get
-                                    // here. If we do, it means there is an error in the logic of this module.
-                                    command.send_back(Err(StashError::NoActiveTransaction));
-                                    Ok(())
-                                }
-                                Operation::Instruct(mut instruction) => {
-                                    // Spawn a blocking task to execute the query. This is necessary because
-                                    // rusqlite is synchronous, so we need to tell the Tokio runtime that
-                                    // this task will block.
-                                    spawn_blocking(move || {
-                                        let result = instruction
-                                            .run(&AgnosticConnection::Unbound(&connection));
-                                        instruction.send_back(result);
-                                    })
-                                    .await
-                                }
-                                Operation::Query(mut query) => {
-                                    // Spawn a blocking task to execute the query. This is necessary because
-                                    // rusqlite is synchronous, so we need to tell the Tokio runtime that
-                                    // this task will block.
-                                    spawn_blocking(move || {
-                                        let result =
-                                            query.run(&AgnosticConnection::Unbound(&connection));
-                                        query.send_back(result);
-                                    })
-                                    .await
-                                }
-                            };
+                            // Spawn a blocking task to execute the query. This is necessary because
+                            // rusqlite is synchronous, so we need to tell the Tokio runtime that
+                            // this task will block.
+                            let attempt = spawn_blocking(move || {
+                                Self::handle_operation(operation, &connection);
+                            })
+                            .await;
                             if let Err(err) = attempt {
                                 // In theory this should never happen, but we also can't do anything with it
                                 error!("Thread error: Failed to spawn blocking task: {err:?}");
