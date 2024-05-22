@@ -1436,6 +1436,114 @@ struct TetheredWorker {
     thread_handle: JoinHandle<()>,
 }
 
+impl TetheredWorker {
+    /// Starts a new tethered worker thread.
+    ///
+    /// This function creates a new [`TetheredWorker`] instance associated to a
+    /// SQLite connection pool, and starts the worker. This is run in a separate
+    /// thread that is used to run blocking code, so it can execute queries in a
+    /// non-blocking manner. The worker will execute queries sequentially, as
+    /// they are received, and return the results via oneshot channels. In this
+    /// way, it is very similar to the main worker, but is connection-specific.
+    ///
+    /// # Parameters
+    ///
+    /// * `conn_handle` - The handle of the connection to use for the queries. A
+    ///                   connection-specific worker in its own dedicated thread
+    ///                   will be created and associated, storing this weak
+    ///                   reference internally.
+    /// * `pool`        - The SQLite connection pool to use for the queries.
+    ///
+    fn start(conn_handle: Weak<()>, pool: Pool<SqliteConnectionManager>) -> Self {
+        let (sender, receiver) = flume::unbounded::<Operation>();
+
+        // Spawn a thread to run the worker. This thread will execute the queries
+        // sequentially, as they are received, on a persistent connection, and will
+        // return the results to the original caller via oneshot channels.
+        let thread_handle = spawn(move || {
+            // TODO: Return this error to the caller
+            let connection = match pool.get().map_err(StashError::TetherError) {
+                Ok(connection) => Some(connection),
+                Err(_error) => {
+                    // operation.send_back_error(error);
+                    return;
+                }
+            };
+            let mut transaction: Option<Transaction<'_>> = None;
+            while let Ok(operation) = receiver.recv() {
+                match operation {
+                    Operation::CommitTransaction(mut command) => {
+                        if let Some(tx) = transaction.take() {
+                            let result = tx.commit().map_err(StashError::TransactionError);
+                            command.send_back(result);
+                        } else {
+                            command.send_back(Err(StashError::NoActiveTransaction));
+                        }
+                    }
+                    Operation::Instruct(mut instruction) => {
+                        #[allow(clippy::option_if_let_else)]
+                        #[allow(clippy::unwrap_used)]
+                        let conn = match transaction {
+                            Some(ref tx) => AgnosticConnection::Engaged(tx),
+                            None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
+                        };
+                        let result = instruction.run(&conn);
+                        instruction.send_back(result);
+                    }
+                    Operation::Query(mut query) => {
+                        #[allow(clippy::option_if_let_else)]
+                        #[allow(clippy::unwrap_used)]
+                        let conn = match transaction {
+                            Some(ref tx) => AgnosticConnection::Engaged(tx),
+                            None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
+                        };
+                        let result = query.run(&conn);
+                        query.send_back(result);
+                    }
+                    Operation::RollbackTransaction(mut command) => {
+                        if let Some(tx) = transaction.take() {
+                            let result = tx.rollback().map_err(StashError::TransactionError);
+                            command.send_back(result);
+                        } else {
+                            command.send_back(Err(StashError::NoActiveTransaction));
+                        }
+                    }
+                    Operation::StartTransaction(mut command) => {
+                        if transaction.is_none() {
+                            if let Some(ref conn) = connection {
+                                match conn
+                                    .unchecked_transaction()
+                                    .map_err(StashError::ExecutionError)
+                                {
+                                    Ok(tx) => {
+                                        transaction = Some(tx);
+                                        command.send_back(Ok(()));
+                                    }
+                                    Err(error) => {
+                                        command.send_back(Err(error));
+                                    }
+                                };
+                            }
+                        } else {
+                            // The Stash.transaction() function creates a new connection, so it should
+                            // never be possible to try to start a new transaction when one is already
+                            // active. If this happens, it means there is a bug in the logic of this
+                            // module.
+                            command.send_back(Err(StashError::TransactionAlreadyStarted));
+                        }
+                    }
+                }
+            }
+        });
+
+        Self {
+            conn_handle,
+            queue: sender,
+            thread_handle,
+        }
+    }
+}
+
 /// Background worker for executing queries.
 ///
 /// This struct provides a background worker for executing queries. It is
@@ -1704,109 +1812,17 @@ impl Worker {
     ///
     /// * [`Stash::connection()`]
     /// * [`Tether`]
+    /// * [`TetheredWorker::start()`]
     ///
     fn get_tethered_worker(&mut self, conn_handle: &Arc<()>) -> (bool, &TetheredWorker) {
         let weak_ref = Arc::downgrade(conn_handle);
         // This code uses the Entry API to avoid double mutable borrow of self.
         match self.tethers.entry(weak_ref.as_ptr()) {
             Entry::Occupied(entry) => (false, entry.into_mut()),
-            Entry::Vacant(entry) => {
-                let (sender, receiver) = flume::unbounded::<Operation>();
-                let pool = self.pool.clone();
-
-                // Spawn a thread to run the worker. This thread will execute the queries
-                // sequentially, as they are received, on a persistent connection, and will
-                // return the results to the original caller via oneshot channels.
-                let thread_handle = spawn(move || {
-                    // TODO: Return this error to the caller
-                    let connection = match pool.get().map_err(StashError::TetherError) {
-                        Ok(connection) => Some(connection),
-                        Err(_error) => {
-                            // operation.send_back_error(error);
-                            return;
-                        }
-                    };
-                    let mut transaction: Option<Transaction<'_>> = None;
-                    while let Ok(operation) = receiver.recv() {
-                        match operation {
-                            Operation::CommitTransaction(mut command) => {
-                                if let Some(tx) = transaction.take() {
-                                    let result = tx.commit().map_err(StashError::TransactionError);
-                                    command.send_back(result);
-                                } else {
-                                    command.send_back(Err(StashError::NoActiveTransaction));
-                                }
-                            }
-                            Operation::Instruct(mut instruction) => {
-                                #[allow(clippy::option_if_let_else)]
-                                #[allow(clippy::unwrap_used)]
-                                let conn = match transaction {
-                                    Some(ref tx) => AgnosticConnection::Engaged(tx),
-                                    None => {
-                                        AgnosticConnection::Unbound(connection.as_ref().unwrap())
-                                    }
-                                };
-                                let result = instruction.run(&conn);
-                                instruction.send_back(result);
-                            }
-                            Operation::Query(mut query) => {
-                                #[allow(clippy::option_if_let_else)]
-                                #[allow(clippy::unwrap_used)]
-                                let conn = match transaction {
-                                    Some(ref tx) => AgnosticConnection::Engaged(tx),
-                                    None => {
-                                        AgnosticConnection::Unbound(connection.as_ref().unwrap())
-                                    }
-                                };
-                                let result = query.run(&conn);
-                                query.send_back(result);
-                            }
-                            Operation::RollbackTransaction(mut command) => {
-                                if let Some(tx) = transaction.take() {
-                                    let result =
-                                        tx.rollback().map_err(StashError::TransactionError);
-                                    command.send_back(result);
-                                } else {
-                                    command.send_back(Err(StashError::NoActiveTransaction));
-                                }
-                            }
-                            Operation::StartTransaction(mut command) => {
-                                if transaction.is_none() {
-                                    if let Some(ref conn) = connection {
-                                        match conn
-                                            .unchecked_transaction()
-                                            .map_err(StashError::ExecutionError)
-                                        {
-                                            Ok(tx) => {
-                                                transaction = Some(tx);
-                                                command.send_back(Ok(()));
-                                            }
-                                            Err(error) => {
-                                                command.send_back(Err(error));
-                                            }
-                                        };
-                                    }
-                                } else {
-                                    // The Stash.transaction() function creates a new connection, so it should
-                                    // never be possible to try to start a new transaction when one is already
-                                    // active. If this happens, it means there is a bug in the logic of this
-                                    // module.
-                                    command.send_back(Err(StashError::TransactionAlreadyStarted));
-                                }
-                            }
-                        }
-                    }
-                });
-
-                (
-                    true,
-                    entry.insert(TetheredWorker {
-                        conn_handle: weak_ref,
-                        queue: sender,
-                        thread_handle,
-                    }),
-                )
-            }
+            Entry::Vacant(entry) => (
+                true,
+                entry.insert(TetheredWorker::start(weak_ref, self.pool.clone())),
+            ),
         }
     }
 }
