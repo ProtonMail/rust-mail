@@ -28,13 +28,13 @@ registry = "proton"
 version = "0.5"
 
 [dependencies.proton-core-common]
-version = "0.5.4"
+version = "0.5.9"
 registry = "proton"
 #path = "../../proton-api-core/proton-core-common"
 
 [dependencies.proton-mail-common]
 #path = "../mail/proton-mail-common"
-version = "0.5.8"
+version = "0.5.14"
 registry = "proton"
 
 [lints.rust]
