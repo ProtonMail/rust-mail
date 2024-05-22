@@ -3,11 +3,12 @@ use crate::domain::{Address, Event, EventId, User, UserSettings};
 use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
-    AuthRefresh, CaptchaRequest, GetAddressesRequest, GetEventRequest, GetLatestEventRequest,
-    GetUserSaltsRequest, LogoutRequest, PostUserForkSessionRequest, UserInfoRequest,
-    UserSettingsRequest,
+    AuthRefresh, CaptchaRequest, GetAddressesRequest, GetAllActiveKeysRequest, GetEventRequest,
+    GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, PostUserForkSessionRequest,
+    UserInfoRequest, UserSettingsRequest,
 };
 use anyhow::anyhow;
+use proton_crypto_account::domain::APIPublicAddressKeys;
 use proton_crypto_account::salts::Salts;
 
 /// Authenticated Session from which one can access data/functionality restricted to authenticated
@@ -183,6 +184,19 @@ impl Session {
         r: R,
     ) -> Result<<R::Response as FromResponse>::Output, http::RequestError> {
         wrap_session_request(&self.client, self, r).await
+    }
+
+    //// Get all the active public keys for the email address supplied
+    ///
+    /// # Errors
+    /// Returns error if the request failed.
+    pub async fn get_all_active_public_keys(
+        &self,
+        email: String,
+        internal_only: Option<bool>,
+    ) -> Result<APIPublicAddressKeys, http::RequestError> {
+        self.execute_request(GetAllActiveKeysRequest::new(email, internal_only))
+            .await
     }
 }
 
