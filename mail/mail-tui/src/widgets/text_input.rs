@@ -1,3 +1,4 @@
+#![allow(unused, clippy::module_name_repetitions)]
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Flex, Layout, Rect};
 use ratatui::prelude::{Masked, StatefulWidget, Stylize, Text};
@@ -22,7 +23,6 @@ impl TextInputState {
         }
     }
 
-    #[allow(unused)]
     pub fn with_value(v: impl Into<String>) -> Self {
         Self {
             secret: false,
@@ -31,7 +31,6 @@ impl TextInputState {
             frame_cursor: (0, 0),
         }
     }
-    #[allow(unused)]
     pub fn is_selected(&self) -> bool {
         self.selected
     }
@@ -42,10 +41,9 @@ impl TextInputState {
     }
 
     pub fn set_selected(&mut self, selected: bool) {
-        self.selected = selected
+        self.selected = selected;
     }
 
-    #[allow(unused)]
     pub fn is_secret(&self) -> bool {
         self.secret
     }
@@ -55,9 +53,8 @@ impl TextInputState {
         self
     }
 
-    #[allow(unused)]
     pub fn set_secret(&mut self, secret: bool) {
-        self.secret = secret
+        self.secret = secret;
     }
 
     pub fn value(&self) -> &str {
@@ -69,7 +66,7 @@ impl TextInputState {
     }
 
     pub fn reset(&mut self) {
-        self.input.reset()
+        self.input.reset();
     }
 
     pub fn handle_event(

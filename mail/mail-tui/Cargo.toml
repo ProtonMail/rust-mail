@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-tui"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -21,6 +21,8 @@ hex = "0.4"
 tui-logger = { version = "0.11", features = ["tracing-support"] }
 unicode-width = "0.1"
 chrono = { version = "0.4" }
+throbber-widgets-tui = "0.5.0"
+scopeguard = "1.2"
 
 [dependencies.proton-async]
 #path = "../../proton-api-core/proton-async"
@@ -28,13 +30,17 @@ registry = "proton"
 version = "0.5"
 
 [dependencies.proton-core-common]
-version = "0.5.9"
+version = "=0.5.10"
 registry = "proton"
 #path = "../../proton-api-core/proton-core-common"
 
+[dependencies.proton-api-mail]
+version = "=0.3.8"
+registry = "proton"
+
 [dependencies.proton-mail-common]
 #path = "../mail/proton-mail-common"
-version = "0.5.14"
+version = "=0.5.15"
 registry = "proton"
 
 [lints.rust]
@@ -45,6 +51,7 @@ trivial_casts = "warn"
 unused_qualifications = "warn"
 
 [lints.clippy]
+pedantic = { level = "warn", priority = -1 }
 cast_possible_truncation = "warn"
 cast_possible_wrap = "warn"
 cast_precision_loss = "warn"

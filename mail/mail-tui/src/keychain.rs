@@ -1,4 +1,4 @@
-use crate::state::APP_ID;
+use crate::app_model::APP_ID;
 use anyhow::anyhow;
 use proton_mail_common::proton_core_common::db::SessionEncryptionKey;
 use proton_mail_common::proton_core_common::os::{KeyChain, KeyChainError};

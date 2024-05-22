@@ -1,17 +1,22 @@
-mod conversation_widget;
-mod help_view;
-mod label_widget;
-mod message_widget;
+mod conversations;
+mod labels;
+mod messages;
 mod scrollable_list;
-mod session_widget;
+mod scrollable_table;
 mod text_input;
-mod widget_list;
+pub mod utils;
 
-pub use conversation_widget::*;
-pub use help_view::*;
-pub use label_widget::*;
-pub use message_widget::*;
+use ratatui::widgets::{List, Table};
 pub use scrollable_list::*;
-pub use session_widget::*;
+pub use scrollable_table::*;
 pub use text_input::*;
-pub use widget_list::*;
+
+/// Utility trait to convert items into a table.
+pub trait AsTable {
+    fn as_table(&self) -> Table<'_>;
+}
+
+/// Utility trait to convert items into a list.
+pub trait AsList {
+    fn as_list(&self) -> List<'_>;
+}
