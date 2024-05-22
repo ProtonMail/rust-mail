@@ -1499,65 +1499,55 @@ impl TetheredWorker {
     ///                   taken and returned, to avoid borrowing issues in the
     ///                   main loop that calls this function.
     ///
-    #[allow(clippy::unwrap_in_result)]
     fn handle_operation<'tx>(
         operation: Operation,
-        connection: &'tx Option<PooledConnection<SqliteConnectionManager>>,
+        connection: &'tx PooledConnection<SqliteConnectionManager>,
         mut transaction: Option<Transaction<'tx>>,
     ) -> Option<Transaction<'tx>> {
         match operation {
             Operation::CommitTransaction(mut command) => {
                 if let Some(tx) = transaction.take() {
-                    let result = tx.commit().map_err(StashError::TransactionError);
-                    command.send_back(result);
+                    command.send_back(tx.commit().map_err(StashError::TransactionError));
                 } else {
                     command.send_back(Err(StashError::NoActiveTransaction));
                 }
             }
             Operation::Instruct(mut instruction) => {
-                #[allow(clippy::option_if_let_else)]
-                #[allow(clippy::unwrap_used)]
-                let conn = match transaction {
-                    Some(ref tx) => AgnosticConnection::Engaged(tx),
-                    None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
-                };
-                let result = instruction.run(&conn);
-                instruction.send_back(result);
+                instruction.send_back(instruction.run(&transaction.as_ref().map_or(
+                    AgnosticConnection::Unbound(connection),
+                    AgnosticConnection::Engaged,
+                )));
             }
             Operation::Query(mut query) => {
-                #[allow(clippy::option_if_let_else)]
-                #[allow(clippy::unwrap_used)]
-                let conn = match transaction {
-                    Some(ref tx) => AgnosticConnection::Engaged(tx),
-                    None => AgnosticConnection::Unbound(connection.as_ref().unwrap()),
-                };
-                let result = query.run(&conn);
-                query.send_back(result);
+                query.send_back(query.run(&transaction.as_ref().map_or(
+                    AgnosticConnection::Unbound(connection),
+                    AgnosticConnection::Engaged,
+                )));
             }
             Operation::RollbackTransaction(mut command) => {
                 if let Some(tx) = transaction.take() {
-                    let result = tx.rollback().map_err(StashError::TransactionError);
-                    command.send_back(result);
+                    command.send_back(tx.rollback().map_err(StashError::TransactionError));
                 } else {
                     command.send_back(Err(StashError::NoActiveTransaction));
                 }
             }
             Operation::StartTransaction(mut command) => {
                 if transaction.is_none() {
-                    if let Some(conn) = connection.as_ref() {
-                        match conn
-                            .unchecked_transaction()
-                            .map_err(StashError::ExecutionError)
-                        {
-                            Ok(tx) => {
-                                transaction = Some(tx);
-                                command.send_back(Ok(()));
-                            }
-                            Err(error) => {
-                                command.send_back(Err(error));
-                            }
-                        };
-                    }
+                    match connection
+                        // We call unchecked_transaction() here because transaction() requires a
+                        // mutable borrow. Being unchecked does not matter, as we perform the
+                        // necessary checks ourselves.
+                        .unchecked_transaction()
+                        .map_err(StashError::ExecutionError)
+                    {
+                        Ok(tx) => {
+                            transaction = Some(tx);
+                            command.send_back(Ok(()));
+                        }
+                        Err(error) => {
+                            command.send_back(Err(error));
+                        }
+                    };
                 } else {
                     command.send_back(Err(StashError::TransactionAlreadyStarted));
                 }
@@ -1601,6 +1591,7 @@ impl TetheredWorker {
             // to the caller. It is important that this happens just once, ahead of the
             // main loop starting, to avoid borrowing issues (because when transactions
             // are started, they borrow the underlying connection).
+            #[allow(clippy::unwrap_used)]
             if let Ok(mut operation) = receiver.recv() {
                 connection = match pool.get().map_err(StashError::TetherError) {
                     Ok(conn) => Some(conn),
@@ -1609,16 +1600,19 @@ impl TetheredWorker {
                         return;
                     }
                 };
-                transaction = Self::handle_operation(operation, &connection, transaction);
+                transaction =
+                    Self::handle_operation(operation, connection.as_ref().unwrap(), transaction);
             } else {
                 return;
             }
 
+            #[allow(clippy::unwrap_used)]
             while let Ok(operation) = receiver.recv() {
                 // Ownership of the transaction is sent and returned to avoid borrowing
                 // issues - otherwise the borrow checker believes the borrow is still active
                 // on the next loop.
-                transaction = Self::handle_operation(operation, &connection, transaction);
+                transaction =
+                    Self::handle_operation(operation, connection.as_ref().unwrap(), transaction);
             }
         });
 
@@ -1720,12 +1714,10 @@ impl Worker {
                 command.send_back(Err(StashError::NoActiveTransaction));
             }
             Operation::Instruct(mut instruction) => {
-                let result = instruction.run(&AgnosticConnection::Unbound(connection));
-                instruction.send_back(result);
+                instruction.send_back(instruction.run(&AgnosticConnection::Unbound(connection)));
             }
             Operation::Query(mut query) => {
-                let result = query.run(&AgnosticConnection::Unbound(connection));
-                query.send_back(result);
+                query.send_back(query.run(&AgnosticConnection::Unbound(connection)));
             }
         };
     }
