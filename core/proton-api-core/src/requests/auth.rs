@@ -289,6 +289,7 @@ impl<'a> http::RequestDesc for CaptchaRequest<'a> {
 pub struct PostUserForkSessionRequest {
     /// The child client ID, which is always `"web-account-lite"` at present. It
     /// seems like this is an identifier for the caller, but this is not clear.
+    #[serde(rename = "ChildClientID")]
     pub child_client_id: String,
 
     /// It's not currently known what this does, and it's always set to `0`.
