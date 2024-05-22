@@ -130,7 +130,10 @@ impl MailSession {
         })?;
 
         // Creating client.
-        let api_env_config = params.api_env_config.unwrap_or_else(default_api_config);
+        let api_env_config = match params.api_env_config {
+            Some(config) => config,
+            None => APIEnvConfig::default(),
+        };
 
         let mut client = http::Builder::new().api_env_config(api_env_config);
 
@@ -228,23 +231,4 @@ impl From<pmc::MailContextError> for MailSessionError {
 
 fn session_debug_enabled() -> bool {
     std::env::var("PROTON_CORE_CTX_SESSION_DEBUG").is_ok()
-}
-
-#[cfg(target_os = "android")]
-fn default_api_config() -> APIEnvConfig {
-    let mut config = APIEnvConfig::default();
-    config.app_version = "android-mail@5.0.0-dev".to_owned();
-    config
-}
-
-#[cfg(target_os = "ios")]
-fn default_api_config() -> APIEnvConfig {
-    let mut config = APIEnvConfig::default();
-    config.app_version = "ios-mail@5.0.0-dev".to_owned();
-    config
-}
-
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
-fn default_api_config() -> APIEnvConfig {
-    APIEnvConfig::default()
 }
