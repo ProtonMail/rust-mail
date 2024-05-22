@@ -916,6 +916,11 @@ impl Stash {
     /// As query execution requires handling of errors anyway, this does not
     /// introduce any additional burden, and streamlines connection handling.
     ///
+    /// # See also
+    ///
+    /// * [`Stash::transaction()`]
+    /// * [`Tether::transaction()`]
+    ///
     #[must_use]
     pub fn connection(&self) -> Tether {
         Tether {
@@ -1114,7 +1119,7 @@ impl Stash {
             .collect()
     }
 
-    /// Starts a new transaction.
+    /// Starts a new transaction against a new connection.
     ///
     /// This function starts a new transaction on a new database connection. All
     /// queries executed within the transaction must be executed against the
@@ -1123,6 +1128,8 @@ impl Stash {
     ///
     /// Note that under the current design, transactions are not nestable, and
     /// each transaction must be carried out on its own, independent connection.
+    /// It is possible to reuse a connection for multiple transactions, but only
+    /// one transaction can be active at a time on a given connection.
     ///
     /// # Errors
     ///
@@ -1134,28 +1141,17 @@ impl Stash {
     ///     operation to the queue.
     ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
     ///     connection from the pool.
-    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted)
-    ///     - A new transaction cannot be started because one is already active
-    ///     on this connection.
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
+    /// # See also
+    ///
+    /// * [`Stash::connection()`]
+    /// * [`Tether::transaction()`]
+    ///
     pub async fn transaction(&self) -> Result<Tether, StashError> {
         let connection = self.connection();
-        let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::StartTransaction(Command {
-            channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&connection.handle)),
-        });
-        self.queue
-            .send_async(operation)
-            .await
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        drop(
-            this_end
-                .await
-                .map_err(|err| StashError::OneShotError(err.to_string()))?,
-        );
+        connection.transaction().await?;
         Ok(connection)
     }
 }
@@ -1401,6 +1397,53 @@ impl Tether {
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))?
     }
+
+    /// Starts a new transaction against an open connection.
+    ///
+    /// This function starts a new transaction on the current database
+    /// connection. All queries executed within the transaction must be executed
+    /// against the same connection.
+    ///
+    /// Note that under the current design, transactions are not nestable, and
+    /// each transaction must be carried out on its own, independent connection.
+    /// It is possible to reuse a connection for multiple transactions, but only
+    /// one transaction can be active at a time on a given connection.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
+    ///     back to the caller via the oneshot channel.
+    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
+    ///     operation to the queue.
+    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
+    ///     connection from the pool.
+    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted)
+    ///     - A new transaction cannot be started because one is already active
+    ///     on this connection.
+    ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
+    ///     the transaction.
+    ///
+    /// # See also
+    ///
+    /// * [`Stash::connection()`]
+    /// * [`Stash::transaction()`]
+    ///
+    pub async fn transaction(&self) -> Result<(), StashError> {
+        let (that_end, this_end) = oneshot::channel();
+        let operation = Operation::StartTransaction(Command {
+            channel: Some(that_end),
+            conn_handle: Some(Arc::clone(&self.handle)),
+        });
+        self.queue
+            .send_async(operation)
+            .await
+            .map_err(|err| StashError::QueueError(err.to_string()))?;
+        this_end
+            .await
+            .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
 }
 
 /// Connection-specific worker for executing queries.
@@ -1516,10 +1559,6 @@ impl TetheredWorker {
                         };
                     }
                 } else {
-                    // The Stash.transaction() function creates a new connection, so it should
-                    // never be possible to try to start a new transaction when one is already
-                    // active. If this happens, it means there is a bug in the logic of this
-                    // module.
                     command.send_back(Err(StashError::TransactionAlreadyStarted));
                 }
             }
