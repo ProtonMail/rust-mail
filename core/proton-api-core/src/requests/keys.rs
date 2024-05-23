@@ -28,7 +28,7 @@ impl RequestDesc for GetAllActiveKeysRequest {
             RequestData::new(Method::Get, "core/v4/keys/all").query("Email", &self.email);
 
         if let Some(val) = self.internal_keys_only {
-            let internal_only = if val { "1".to_owned() } else { "0".to_owned() };
+            let internal_only = if val { "1" } else { "0" };
             request_data = request_data.query("InternalOnly", &internal_only);
         }
 
