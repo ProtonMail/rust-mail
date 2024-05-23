@@ -21,6 +21,7 @@ base64 = "0.22"
 secrecy = { version = "0.8", features = ["serde"] }
 anyhow = "1.0"
 bytes = "1.4"
+indoc = "2.0.5"
 tracing = "0.1"
 parking_lot = "0.12"
 tokio = {version ="1", features = ["full"]}
@@ -36,6 +37,7 @@ paste = "1"
 mockall = "0.12"
 rand = "0.8"
 tempdir = "0.3"
+uuid = { version = "1.8.0", features = ["serde", "v4"] }
 
 [workspace.dependencies.reqwest]
 version = "0.11"

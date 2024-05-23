@@ -382,7 +382,7 @@
 //!      query handling is multi-threaded.
 //!
 
-use core::any::Any;
+use crate::orm::DbRecords;
 use core::ops::Deref;
 use flume::Sender as QueueSender;
 use r2d2::{Error as PoolError, Pool, PooledConnection};
@@ -402,19 +402,6 @@ use tokio::time::Instant;
 use tracing::{debug, error};
 #[cfg(feature = "uniffi")]
 use uniffi::Error as UniffiError;
-
-/// Shorthand for the converted query results, i.e. the [`Rows`] that have been
-/// converted into the desired type `T`, but boxed as [`Any`] so that they can
-/// be returned via the oneshot channel.
-///
-/// # See also
-///
-/// * [`Query::run()`]
-/// * [`Stash::query()`]
-/// * [`Tether::query()`]
-/// * [`converter()`]
-///
-type AnyRecords = Vec<Box<dyn Any + Send>>;
 
 /// A dual-nature connection wrapper.
 ///
@@ -712,7 +699,7 @@ impl OperationLogic for Instruction {
 struct Query {
     /// The communication channel used to send the result of the operation back
     /// to the caller.
-    channel: Option<OneshotSender<Result<AnyRecords, StashError>>>,
+    channel: Option<OneshotSender<Result<DbRecords, StashError>>>,
 
     /// The unique handle of the connection to use for the query. If [`Some`] a
     /// database connection will be created and associated if not already
@@ -724,7 +711,7 @@ struct Query {
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
     #[allow(clippy::type_complexity)]
-    converter: Box<dyn Fn(Rows<'_>) -> Result<AnyRecords, DeserializationError> + Send>,
+    converter: Box<dyn Fn(Rows<'_>) -> Result<DbRecords, DeserializationError> + Send>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -737,7 +724,7 @@ struct Query {
 }
 
 impl OperationLogic for Query {
-    type Output = AnyRecords;
+    type Output = DbRecords;
 
     fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>> {
         self.channel.take()
@@ -778,11 +765,11 @@ impl OperationLogic for Query {
     /// * [`Stash::query()`]
     /// * [`Tether::query()`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<AnyRecords, StashError> {
+    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<DbRecords, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
-        let rows: Result<AnyRecords, DeserializationError> = (self.converter)(
+        let rows: Result<DbRecords, DeserializationError> = (self.converter)(
             statement
                 .query(&*Self::prepare_params(&self.params))
                 .map_err(StashError::ExecutionError)?,
@@ -1062,7 +1049,7 @@ impl Stash {
     ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
     ///     converting from [`Rows`] to `T`.
     ///   - [`DowncastError`](StashError::DowncastError) - Problem downcasting
-    ///     from [`Any`] to `T`.
+    ///     from [`Any`](std::any::Any) to `T`.
     ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
     ///     the query.
     ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
@@ -1087,7 +1074,7 @@ impl Stash {
     where
         Q: Into<String> + Send,
         T: DeserializeOwned + Send + 'static,
-        Vec<Box<(dyn Any + Send + 'static)>>: FromIterator<Box<T>>,
+        DbRecords: FromIterator<Box<T>>,
     {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::Query(Query {
@@ -1331,7 +1318,7 @@ impl Tether {
     where
         Q: Into<String> + Send,
         T: DeserializeOwned + Send + 'static,
-        Vec<Box<(dyn Any + Send + 'static)>>: FromIterator<Box<T>>,
+        DbRecords: FromIterator<Box<T>>,
     {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::Query(Query {
@@ -2035,10 +2022,10 @@ trait OperationLogic {
 /// the query results. This will then be converted into a
 /// [`StashError::DeserializationError`] by the caller.
 ///
-fn converter<T>(rows: Rows<'_>) -> Result<AnyRecords, DeserializationError>
+fn converter<T>(rows: Rows<'_>) -> Result<DbRecords, DeserializationError>
 where
     T: DeserializeOwned + Send + 'static,
-    AnyRecords: FromIterator<Box<T>>,
+    DbRecords: FromIterator<Box<T>>,
 {
     from_rows::<T>(rows).map(|res| res.map(Box::new)).collect()
 }

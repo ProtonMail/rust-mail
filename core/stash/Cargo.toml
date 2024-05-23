@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 flume = {workspace=true}
+indoc = {workspace=true}
 r2d2 = "0.8.10"
 r2d2_sqlite = { version="0.24.0", features = ["bundled"] }
 rusqlite = { version = "0.31.0", features = ["bundled", "chrono", "functions", "trace", "uuid"] }
@@ -15,4 +16,5 @@ serde_rusqlite = "0.35.0"
 thiserror = {workspace=true}
 tokio = {workspace=true}
 tracing = {workspace=true}
+uuid = {workspace=true}
 
