@@ -455,42 +455,40 @@ impl BackgroundProgress {
     }
 
     fn draw(&mut self, frame: &mut Frame) {
-        let area = centered_rect(60, 10, frame.size());
-
-        frame.render_widget(Clear, area);
-        let block = Block::new().borders(Borders::ALL);
-        let [_, content, _] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Min(1), Constraint::Fill(1)])
-                .areas(area);
-        let [_, content, _] = Layout::horizontal([
-            Constraint::Fill(1),
-            Constraint::Min(10),
-            Constraint::Fill(1),
+        let area = frame.size();
+        let [_, content, _] = Layout::vertical([
+            Constraint::Percentage(50),
+            Constraint::Length(3),
+            Constraint::Percentage(50),
         ])
+        .flex(Flex::SpaceAround)
+        .areas(area);
+        let [_, content, _] = Layout::horizontal([
+            Constraint::Percentage(30),
+            Constraint::Percentage(40),
+            Constraint::Percentage(30),
+        ])
+        .flex(Flex::SpaceAround)
         .areas(content);
 
-        frame.render_widget(block, area);
+        frame.render_widget(Clear, content);
+        let block = Block::new().borders(Borders::ALL);
+        frame.render_widget(block, content);
         self.state.calc_next();
+
+        let [_, spinner_area, _] = Layout::horizontal([
+            Constraint::Percentage(50),
+            Constraint::Min(10),
+            Constraint::Percentage(50),
+        ])
+        .areas(content.inner(&Margin {
+            horizontal: 1,
+            vertical: 1,
+        }));
         let full = throbber_widgets_tui::Throbber::default()
             .label(&self.text)
             .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
             .use_type(throbber_widgets_tui::WhichUse::Spin);
-        frame.render_stateful_widget(full, content, &mut self.state);
+        frame.render_stateful_widget(full, spinner_area, &mut self.state);
     }
-}
-
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::vertical([
-        Constraint::Percentage((100 - percent_y) / 2),
-        Constraint::Percentage(percent_y),
-        Constraint::Percentage((100 - percent_y) / 2),
-    ])
-    .split(r);
-
-    Layout::horizontal([
-        Constraint::Percentage((100 - percent_x) / 2),
-        Constraint::Percentage(percent_x),
-        Constraint::Percentage((100 - percent_x) / 2),
-    ])
-    .split(popup_layout[1])[1]
 }
