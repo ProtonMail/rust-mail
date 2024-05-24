@@ -161,6 +161,6 @@ pub mod stash;
 /// It is here for convenience, so that users of the macros do not need to
 /// import them from the `stash-macros` crate directly.
 ///
-pub mod macros {}
-
-use stash_macros as _;
+pub mod macros {
+    pub use stash_macros::DbRecord;
+}
