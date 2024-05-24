@@ -154,3 +154,13 @@
 // Standard modules
 pub mod orm;
 pub mod stash;
+
+/// Re-exported proc macros.
+///
+/// This module re-exports the proc macros defined in the `stash-macros` crate.
+/// It is here for convenience, so that users of the macros do not need to
+/// import them from the `stash-macros` crate directly.
+///
+pub mod macros {}
+
+use stash_macros as _;
