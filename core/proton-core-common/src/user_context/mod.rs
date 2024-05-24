@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 pub use self::keys::*;
 mod addresses;
+mod contacts;
 mod keys;
 mod user;
 

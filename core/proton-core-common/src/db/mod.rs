@@ -7,10 +7,12 @@ use proton_sqlite3::{new_connection_wrapper, new_tracked_connection_wrapper, Mig
 use std::ops::Deref;
 
 mod addresses;
+mod contacts;
 mod core;
 mod migrations;
 mod session;
 
+pub use contacts::*;
 pub use migrations::*;
 pub use session::*;
 
@@ -37,3 +39,63 @@ fn new_core_test_connection() -> CoreSqliteConnection {
         .expect("failed to acquire connection")
         .into()
 }
+
+#[macro_export]
+macro_rules! new_u64_type {
+    ($name:ident) => {
+        #[derive(
+            Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Deserialize, Serialize,
+        )]
+        #[serde(crate = "self::serde")]
+        #[repr(transparent)]
+        pub struct $name(u64);
+
+        impl $name {
+            #[must_use]
+            pub fn new(v: u64) -> Self {
+                Self(v)
+            }
+
+            #[must_use]
+            pub fn value(&self) -> u64 {
+                self.0
+            }
+        }
+
+        impl From<u64> for $name {
+            fn from(value: u64) -> Self {
+                Self(value)
+            }
+        }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Display::fmt(&self.0, f)
+            }
+        }
+
+        #[allow(unused_qualifications)]
+        impl proton_sqlite3::rusqlite::types::FromSql for $name {
+            fn column_result(
+                value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
+            ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+                u64::column_result(value).map($name)
+            }
+        }
+
+        #[allow(unused_qualifications)]
+        impl proton_sqlite3::rusqlite::types::ToSql for $name {
+            fn to_sql(
+                &self,
+            ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>>
+            {
+                self.0.to_sql()
+            }
+        }
+
+        #[cfg(feature = "uniffi")]
+        uniffi::custom_newtype!($name, u64);
+    };
+}
+
+pub use new_u64_type;

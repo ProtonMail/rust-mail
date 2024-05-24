@@ -1,6 +1,8 @@
 #![allow(clippy::module_name_repetitions)] // is exported in the root of the crate.
 use crate::db::{CoreSqliteConnection, DBResult};
-use proton_api_core::domain::{Address, Event, ProductUsedSpace, User, UserId, UserSettings};
+use proton_api_core::domain::{
+    Address, Contact, ContactEmail, Event, ProductUsedSpace, User, UserId, UserSettings,
+};
 use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
@@ -17,6 +19,10 @@ pub trait CoreEvent: Event {
     fn get_core_event_used_space(&self) -> Option<i64>;
 
     fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace>;
+
+    fn get_core_event_contacts(&self) -> Option<&[Contact]>;
+
+    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmail]>;
 }
 
 /// Since the core database can be embedded into another database, the integrator needs to provide
@@ -82,6 +88,19 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                     tx.create_or_update_addresses(addresses.iter())
                         .map_err(|e| {
                             error!("Failed to update user addresses: {e}");
+                            e
+                        })?;
+                }
+                if let Some(contacts) = event.get_core_event_contacts() {
+                    tx.create_or_update_contacts(contacts.iter()).map_err(|e| {
+                        error!("Failed to update contacts: {e}");
+                        e
+                    })?;
+                }
+                if let Some(contact_emails) = event.get_core_event_contact_emails() {
+                    tx.create_or_update_contact_emails(contact_emails.iter())
+                        .map_err(|e| {
+                            error!("Failed to update contact emails: {e}");
                             e
                         })?;
                 }
