@@ -6,6 +6,7 @@ members = [ "proton-action-queue",
     "proton-sqlite3",
     "proton-event-loop",
     "proton-core-common",
+    "stash",
 ]
 
 [workspace.dependencies]
