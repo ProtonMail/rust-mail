@@ -34,7 +34,8 @@ impl Mailbox {
         let mbox = self.mbox.clone();
         self.uniffi_async(
             async move { Ok(mbox.message_body(LocalMessageId::from(id)).await?.body) },
-        ).await
+        )
+        .await
     }
 }
 
