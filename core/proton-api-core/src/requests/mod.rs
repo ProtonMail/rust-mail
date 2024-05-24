@@ -2,6 +2,7 @@
 
 mod addresses;
 mod auth;
+mod contacts;
 mod errors;
 mod event;
 mod keys;
@@ -11,6 +12,7 @@ mod user_settings;
 
 pub use addresses::*;
 pub use auth::*;
+pub use contacts::*;
 pub use errors::*;
 pub use event::*;
 pub use keys::*;

@@ -1,9 +1,13 @@
 use crate::auth::{ArcAuthStore, UserKeySecret};
-use crate::domain::{Address, Event, EventId, User, UserSettings};
+use crate::domain::{
+    Address, Contact, ContactEmail, ContactFilter, ContactId, ContactPartial, Event, EventId, User,
+    UserSettings,
+};
 use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
-    AuthRefresh, CaptchaRequest, GetAddressesRequest, GetAllActiveKeysRequest, GetEventRequest,
+    AuthRefresh, CaptchaRequest, GetAddressesRequest, GetAllActiveKeysRequest,
+    GetAllContactsPartialRequest, GetContactEmailsRequest, GetEventRequest, GetFullContactRequest,
     GetLatestEventRequest, GetUserSaltsRequest, LogoutRequest, PostUserForkSessionRequest,
     UserInfoRequest, UserSettingsRequest,
 };
@@ -149,6 +153,47 @@ impl Session {
         self.execute_request(UserSettingsRequest {})
             .await
             .map(|v| v.user_settings)
+    }
+
+    /// Returns all contacts of the current user matching the filter.
+    ///
+    /// Returns partial contacts that do not include the contact cards and contact emails.
+    ///
+    /// # Errors
+    /// Any of the [`http::RequestError`] variants could be returned if there is
+    /// a problem with the HTTP request.
+    pub async fn contacts(
+        &self,
+        contact_filter: ContactFilter,
+    ) -> Result<Vec<ContactPartial>, http::RequestError> {
+        self.execute_request(GetAllContactsPartialRequest::new(contact_filter))
+            .await
+            .map(|v| v.contacts)
+    }
+
+    /// Get the full contact including cards and emails for the given contact identifier.
+    ///
+    /// # Errors
+    /// Any of the [`http::RequestError`] variants could be returned if there is
+    /// a problem with the HTTP request.
+    pub async fn contact_with_cards(&self, id: ContactId) -> Result<Contact, http::RequestError> {
+        self.execute_request(GetFullContactRequest::new(id))
+            .await
+            .map(|v| v.contact)
+    }
+
+    /// Get all email contacts for a logged-in user for a given contact filter.
+    ///
+    /// # Errors
+    /// Any of the [`http::RequestError`] variants could be returned if there is
+    /// a problem with the HTTP request.
+    pub async fn contact_emails(
+        &self,
+        contact_email_filter: ContactFilter,
+    ) -> Result<Vec<ContactEmail>, http::RequestError> {
+        self.execute_request(GetContactEmailsRequest::new(contact_email_filter))
+            .await
+            .map(|v: crate::requests::GetContactEmailsResponse| v.contact_emails)
     }
 
     /// Get the event with the given id.
