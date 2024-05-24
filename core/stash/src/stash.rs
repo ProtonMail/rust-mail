@@ -844,6 +844,11 @@ impl OperationLogic for Query {
 ///
 #[derive(Clone, Debug)]
 pub struct Stash {
+    /// A reference-counted pointer to an immutable internal handle, which is
+    /// used to identify an individual stash. The handle is simply a unit, as
+    /// the value does not matter, only the unique instance.
+    handle: Arc<()>,
+
     /// The sender for the stash operations. This is used to send operations to
     /// the worker thread for execution. This is the manner by which the order
     /// of operations is maintained, and how connections are managed and made
@@ -874,6 +879,7 @@ impl Stash {
     ///
     pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
         Ok(Self {
+            handle: Arc::new(()),
             queue: Worker::start(path)?,
         })
     }
@@ -1192,6 +1198,14 @@ impl Stash {
         let connection = self.connection();
         connection.transaction().await?;
         Ok(connection)
+    }
+}
+
+impl Eq for Stash {}
+
+impl PartialEq for Stash {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.handle, &other.handle)
     }
 }
 
@@ -1533,6 +1547,14 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
+}
+
+impl Eq for Tether {}
+
+impl PartialEq for Tether {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.handle, &other.handle)
     }
 }
 
