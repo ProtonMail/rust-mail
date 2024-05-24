@@ -12,7 +12,7 @@
 //! with types that are saved to the database.
 //!
 
-use crate::stash::{Stash, StashError};
+use crate::stash::{Stash, StashError, Tether};
 use core::any::Any;
 use core::fmt::Debug;
 use core::iter::repeat;
@@ -82,6 +82,10 @@ where
     /// See [`Stash::query()`] for a list of possible errors that can occur when
     /// using this function.
     ///
+    /// # See also
+    ///
+    /// * [`DbRecord::load_using()`]
+    ///
     #[must_use]
     async fn load(id: Uuid, stash: &Stash) -> Result<Option<Self>, StashError> {
         let query = formatdoc!(
@@ -110,6 +114,59 @@ where
             }))
     }
 
+    /// Loads a record from the database by ID, using a specific connection.
+    ///
+    /// This function retrieves a single record from the database by its unique
+    /// ID, using a specific [`Tether`], i.e. connection. It is functionally
+    /// equivalent to [`load()`](DbRecord::load()), but allows the query to be
+    /// run against an existing connection rather than using a new one.
+    ///
+    /// For full usage details, see [`load()`](DbRecord::load()).
+    ///
+    /// Note that, unlike [`load()`](DbRecord::load()), this function does not
+    /// set the [`Stash`] on the record instance.
+    ///
+    /// Note also that the [`Tether`] used will not be stored.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`     - The ID of the record to load.
+    /// * `tether` - The database connection, i.e. [`Tether`], to use for
+    ///              loading the record. This allows an existing connection to
+    ///              be used, rather than creating a new one.
+    ///
+    /// # Errors
+    ///
+    /// See [`DbRecord::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`DbRecord::load()`]
+    ///
+    #[must_use]
+    async fn load_using(id: Uuid, tether: &Tether) -> Result<Option<Self>, StashError> {
+        let query = formatdoc!(
+            "
+            SELECT
+                *
+            FROM
+                {}
+            WHERE
+                {} = ?
+            LIMIT
+                1
+        ",
+            Self::id_field_name(),
+            Self::table_name()
+        );
+        #[allow(trivial_casts)]
+        Ok(tether
+            .query::<_, Self>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+            .await?
+            .into_iter()
+            .next())
+    }
+
     /// Saves a record to the database.
     ///
     /// This function saves a single record to the database by its unique ID. It
@@ -127,6 +184,10 @@ where
     ///
     /// See [`Stash::query()`] for a list of possible errors that can occur when
     /// using this function.
+    ///
+    /// # See also
+    ///
+    /// * [`DbRecord::save_using()`]
     ///
     async fn save(&self) -> Result<(), StashError> {
         let fields = Self::field_names();
@@ -155,6 +216,68 @@ where
         );
         let _: usize = self
             .stash()
+            .execute(
+                &query,
+                Self::field_values(self)
+                    .into_iter()
+                    .chain(Self::field_values(self))
+                    .collect(),
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Saves a record to the database, using a specific connection.
+    ///
+    /// This function saves a single record to the database by its unique ID,
+    /// using a specific [`Tether`], i.e. connection. It is functionally
+    /// equivalent to [`save()`](DbRecord::save()), but allows the query to be
+    /// run against an existing connection rather than using a new one.
+    ///
+    /// For full usage details, see [`save()`](DbRecord::save()).
+    ///
+    /// Note that the [`Tether`] used will not be stored.
+    ///
+    /// # Parameters
+    ///
+    /// * `tether` - The database connection, i.e. [`Tether`], to use for
+    ///              loading the record. This allows an existing connection to
+    ///              be used, rather than creating a new one.
+    ///
+    /// # Errors
+    ///
+    /// See [`DbRecord::save()`].
+    ///
+    /// # See also
+    ///
+    /// * [`DbRecord::save()`]
+    ///
+    async fn save_using(&self, tether: &Tether) -> Result<(), StashError> {
+        let fields = Self::field_names();
+        let placeholders = repeat("?")
+            .take(fields.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let update_fields = fields
+            .iter()
+            .map(|field| format!("{field} = ?"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let query = formatdoc!(
+            "
+            INSERT INTO
+                {} ({})
+            VALUES
+                ({})
+            ON CONFLICT ({}) DO UPDATE SET {}
+        ",
+            Self::table_name(),
+            fields.join(", "),
+            placeholders,
+            Self::id_field_name(),
+            update_fields
+        );
+        let _: usize = tether
             .execute(
                 &query,
                 Self::field_values(self)
