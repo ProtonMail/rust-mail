@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-common"
-version = "0.5.15"
+version = "0.5.16"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 proton-core-common = {workspace=true}
 proton-async= {workspace=true}
-proton-api-mail = {version = "0.3",path ="../proton-api-mail", features = ["sql"], registry = "proton"}
+proton-api-mail = {version = "=0.3.8",path ="../proton-api-mail", features = ["sql"], registry = "proton"}
 proton-event-loop = {workspace=true}
 proton-action-queue = {workspace=true}
 uniffi = {optional = true, workspace=true}
