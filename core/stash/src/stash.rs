@@ -382,9 +382,10 @@
 //!      query handling is multi-threaded.
 //!
 
-use crate::orm::DbRecords;
+use crate::orm::{DbRecord, DbRecords};
 use core::ops::Deref;
 use flume::Sender as QueueSender;
+use indoc::formatdoc;
 use r2d2::{Error as PoolError, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction};
@@ -402,6 +403,7 @@ use tokio::time::Instant;
 use tracing::{debug, error};
 #[cfg(feature = "uniffi")]
 use uniffi::Error as UniffiError;
+use uuid::Uuid;
 
 /// A dual-nature connection wrapper.
 ///
@@ -913,6 +915,7 @@ impl Stash {
         Tether {
             handle: Arc::new(()),
             queue: self.queue.clone(),
+            stash: self.clone(),
         }
     }
 
@@ -995,6 +998,55 @@ impl Stash {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
+
+    /// Loads a record from the database by ID, against a new connection.
+    ///
+    /// This function retrieves a single record from the database by its unique
+    /// ID, as an instance of the specified type `T`, where `T` is any concrete
+    /// type implementing the [`DbRecord`] trait.
+    ///
+    /// For full usage details, see [`DbRecord::load()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The ID of the record to load.
+    ///
+    /// # Errors
+    ///
+    /// See [`DbRecord::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`DbRecord::load()`]
+    /// * [`DbRecord::load_using()`]
+    /// * [`Tether::load()`]
+    ///
+    pub async fn load<T: DbRecord>(&self, id: Uuid) -> Result<Option<T>, StashError> {
+        let query = formatdoc!(
+            "
+            SELECT
+                rowid AS rowid, *
+            FROM
+                {}
+            WHERE
+                {} = ?
+            LIMIT
+                1
+        ",
+            T::table_name(),
+            T::id_field_name(),
+        );
+        #[allow(trivial_casts)]
+        Ok(self
+            .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+            .await?
+            .into_iter()
+            .next()
+            .map(|mut record| {
+                record.set_stash(self);
+                record
+            }))
     }
 
     /// Runs a query against a new connection, and returns any rows of data
@@ -1197,6 +1249,9 @@ pub struct Tether {
     /// The queue for the [`Worker`] and [`Stash`] to which the [`Tether`] is
     /// associated. This is used to send queries to the worker for execution.
     queue: QueueSender<Operation>,
+
+    /// The associated [`Stash`] instance.
+    stash: Stash,
 }
 
 impl Tether {
@@ -1280,6 +1335,54 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
+
+    /// Loads a record from the database by ID, against an open connection.
+    ///
+    /// This function retrieves a single record from the database by its unique
+    /// ID, as an instance of the specified type `T`, where `T` is any concrete
+    /// type implementing the [`DbRecord`] trait.
+    ///
+    /// For full usage details, see [`DbRecord::load_using()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The ID of the record to load.
+    ///
+    /// # Errors
+    ///
+    /// See [`DbRecord::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`DbRecord::load()`]
+    /// * [`Tether::load()`]
+    ///
+    pub async fn load<T: DbRecord>(&self, id: Uuid) -> Result<Option<T>, StashError> {
+        let query = formatdoc!(
+            "
+            SELECT
+                *
+            FROM
+                {}
+            WHERE
+                {} = ?
+            LIMIT
+                1
+        ",
+            T::table_name(),
+            T::id_field_name(),
+        );
+        #[allow(trivial_casts)]
+        Ok(self
+            .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+            .await?
+            .into_iter()
+            .next()
+            .map(|mut record| {
+                record.set_stash(&self.stash);
+                record
+            }))
     }
 
     /// Runs a query against an open connection, and returns any rows of data

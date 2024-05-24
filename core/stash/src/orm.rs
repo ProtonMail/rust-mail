@@ -85,33 +85,12 @@ where
     /// # See also
     ///
     /// * [`DbRecord::load_using()`]
+    /// * [`Stash::load()`]
+    /// * [`Tether::load()`]
     ///
     #[must_use]
     async fn load(id: Uuid, stash: &Stash) -> Result<Option<Self>, StashError> {
-        let query = formatdoc!(
-            "
-            SELECT
-                *
-            FROM
-                {}
-            WHERE
-                {} = ?
-            LIMIT
-                1
-        ",
-            Self::table_name(),
-            Self::id_field_name(),
-        );
-        #[allow(trivial_casts)]
-        Ok(stash
-            .query::<_, Self>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
-            .await?
-            .into_iter()
-            .next()
-            .map(|mut record| {
-                record.set_stash(stash);
-                record
-            }))
+        stash.load(id).await
     }
 
     /// Loads a record from the database by ID, using a specific connection.
@@ -123,10 +102,7 @@ where
     ///
     /// For full usage details, see [`load()`](DbRecord::load()).
     ///
-    /// Note that, unlike [`load()`](DbRecord::load()), this function does not
-    /// set the [`Stash`] on the record instance.
-    ///
-    /// Note also that the [`Tether`] used will not be stored.
+    /// Note that the [`Tether`] used will not be stored.
     ///
     /// # Parameters
     ///
@@ -142,29 +118,12 @@ where
     /// # See also
     ///
     /// * [`DbRecord::load()`]
+    /// * [`Stash::load()`]
+    /// * [`Tether::load()`]
     ///
     #[must_use]
     async fn load_using(id: Uuid, tether: &Tether) -> Result<Option<Self>, StashError> {
-        let query = formatdoc!(
-            "
-            SELECT
-                *
-            FROM
-                {}
-            WHERE
-                {} = ?
-            LIMIT
-                1
-        ",
-            Self::id_field_name(),
-            Self::table_name()
-        );
-        #[allow(trivial_casts)]
-        Ok(tether
-            .query::<_, Self>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
-            .await?
-            .into_iter()
-            .next())
+        tether.load(id).await
     }
 
     /// Saves a record to the database.
@@ -275,7 +234,7 @@ where
             fields.join(", "),
             placeholders,
             Self::id_field_name(),
-            update_fields
+            update_fields,
         );
         let _: usize = tether
             .execute(
