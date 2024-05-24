@@ -31,7 +31,10 @@ impl Mailbox {
     /// Returns error if the network request, the database query, reading/writing
     /// the body to the cache or decrypting the body failed.
     pub async fn message_body(&self, id: u64) -> Result<String, MailboxError> {
-        Ok(self.mbox.message_body(LocalMessageId::from(id)).await?.body)
+        let mbox = self.mbox.clone();
+        self.uniffi_async(
+            async move { Ok(mbox.message_body(LocalMessageId::from(id)).await?.body) },
+        ).await
     }
 }
 
