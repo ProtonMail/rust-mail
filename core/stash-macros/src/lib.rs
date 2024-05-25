@@ -11,8 +11,90 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
 /// Automatically derive the `DbRecord` trait for a struct.
 ///
 /// The `DbRecord` trait is used to define a mapping between a struct and a
-/// database record. This macro generates an implementation of the `DbRecord`
-/// trait for the annotated struct.
+/// simple database record. This macro generates an implementation of the
+/// `DbRecord` trait for the annotated struct.
+///
+/// It is important to include the following attributes on the struct:
+///
+///   - `#[DbField]`: Any other field that should be included in the database
+///     record. These can be of any type supported for (de)serialisation from/to
+///     `rusqlite`.
+///
+/// # Example
+///
+/// ```rust
+/// use serde::{Serialize, Deserialize};
+/// use stash::macros::DbRecord;
+/// use stash::orm::DbRecord;
+///
+/// #[derive(Clone, Debug, DbRecord, Deserialize, PartialEq, Serialize)]
+/// struct Foo {
+///     #[DbField]
+///     name: String,
+///
+///     #[DbField]
+///     value: i32,
+/// }
+/// ```
+///
+#[proc_macro_derive(DbRecord, attributes(DbField))]
+pub fn db_record_derive(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let name = &input.ident;
+
+    // Extract attributes
+    let fields = if let Data::Struct(data) = &input.data {
+        if let Fields::Named(fields) = &data.fields {
+            fields.named.iter().collect::<Vec<_>>()
+        } else {
+            panic!("DbRecord can only be derived for structs with named fields")
+        }
+    } else {
+        panic!("DbRecord can only be derived for structs")
+    };
+
+    let db_fields: Vec<&Ident> = fields
+        .iter()
+        .filter_map(|field| {
+            if field
+                .attrs
+                .iter()
+                .any(|attr| attr.path().is_ident("DbField"))
+            {
+                field.ident.as_ref()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Generate trait implementation
+    (quote! {
+        impl stash::orm::DbRecord for #name {
+            fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn rusqlite::ToSql + Send>> {
+                let mut map = std::collections::HashMap::new();
+                #(
+                    map.insert(stringify!(#db_fields), Box::new(self.#db_fields.clone()) as Box<dyn rusqlite::ToSql + Send>);
+                )*
+                map
+            }
+
+            fn field_names() -> Vec<&'static str> {
+                vec![#(stringify!(#db_fields)),*]
+            }
+
+            fn field_values(&self) -> Vec<Box<dyn rusqlite::ToSql + Send>> {
+                vec![#(Box::new(self.#db_fields.clone()) as Box<dyn rusqlite::ToSql + Send>),*]
+            }
+        }
+    }).into()
+}
+
+/// Automatically derive the `Model` trait for a struct.
+///
+/// The `Model` trait is used to define a mapping between a struct and a
+/// fully-modelled database record. This macro generates an implementation of
+/// the `DbRecord` trait for the annotated struct.
 ///
 /// It is important to include the following attributes on the struct:
 ///
@@ -32,12 +114,12 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
 ///
 /// ```rust
 /// use serde::{Serialize, Deserialize};
-/// use stash::macros::DbRecord;
-/// use stash::orm::DbRecord;
+/// use stash::macros::Model;
+/// use stash::orm::Model;
 /// use stash::stash::Stash;
 /// use uuid::Uuid;
 ///
-/// #[derive(Clone, Debug, DbRecord, Deserialize, PartialEq, Serialize)]
+/// #[derive(Clone, Debug, Model, Deserialize, PartialEq, Serialize)]
 /// #[TableName("foo_table")]
 /// struct Foo {
 ///     #[IdField]
@@ -55,8 +137,8 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
 /// }
 /// ```
 ///
-#[proc_macro_derive(DbRecord, attributes(DbField, IdField, StashField, TableName))]
-pub fn db_record_derive(input: TokenStream) -> TokenStream {
+#[proc_macro_derive(Model, attributes(DbField, IdField, StashField, TableName))]
+pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
 
@@ -77,10 +159,10 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
         if let Fields::Named(fields) = &data.fields {
             fields.named.iter().collect::<Vec<_>>()
         } else {
-            panic!("DbRecord can only be derived for structs with named fields")
+            panic!("Model can only be derived for structs with named fields")
         }
     } else {
-        panic!("DbRecord can only be derived for structs")
+        panic!("Model can only be derived for structs")
     };
 
     let id_field = fields
@@ -146,7 +228,9 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
             fn field_values(&self) -> Vec<Box<dyn rusqlite::ToSql + Send>> {
                 vec![#(Box::new(self.#db_fields.clone()) as Box<dyn rusqlite::ToSql + Send>),*]
             }
+        }
 
+        impl stash::orm::Model for #name {
             fn id(&self) -> uuid::Uuid {
                 self.#id_field.clone()
             }

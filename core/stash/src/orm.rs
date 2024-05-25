@@ -24,10 +24,12 @@ use std::collections::HashMap;
 use std::vec::IntoIter;
 use uuid::Uuid;
 
-/// A trait for database records.
+/// A trait for simple database records.
 ///
-/// This trait is used to define the interface for database records. It provides
-/// methods for loading and saving records from the database.
+/// This trait is used to define the interface for simple database records,
+/// based around converting results from a query into a specific type `T`.
+///
+/// For more involved functionality, see [`Model`].
 ///
 /// # Design
 ///
@@ -37,6 +39,10 @@ use uuid::Uuid;
 /// be public on the struct, but the actual method of management is up to the
 /// implementor. Meanwhile, the associated [`Stash`] would usually be stored in
 /// a private `stash` field — but this again is up to the implementor.
+///
+/// # See also
+///
+/// * [`Model`]
 ///
 pub trait DbRecord:
     Clone + Debug + DeserializeOwned + PartialEq + Send + Serialize + Sized + Sync
@@ -51,7 +57,33 @@ where
 
     /// Gets a list of field values for the record.
     fn field_values(&self) -> Vec<Box<dyn ToSql + Send>>;
+}
 
+/// A trait for fully-modelled database records.
+///
+/// This trait is used to define the interface for fully-modelled database
+/// records. It provides methods for loading and saving records from the
+/// database.
+///
+/// For simpler functionality, see [`DbRecord`].
+///
+/// # Design
+///
+/// The intention is that the various data fields for the struct should be
+/// mapped to the database fields using serde, which will be used for
+/// serialisation and deserialisation. A common pattern is for those fields to
+/// be public on the struct, but the actual method of management is up to the
+/// implementor. Meanwhile, the associated [`Stash`] would usually be stored in
+/// a private `stash` field — but this again is up to the implementor.
+///
+/// # See also
+///
+/// * [`DbRecord`]
+///
+pub trait Model: DbRecord
+where
+    Self: 'static,
+{
     /// Gets the record's unique ID.
     fn id(&self) -> Uuid;
 
@@ -84,7 +116,7 @@ where
     ///
     /// # See also
     ///
-    /// * [`DbRecord::load_using()`]
+    /// * [`Model::load_using()`]
     /// * [`Stash::load()`]
     /// * [`Tether::load()`]
     ///
@@ -97,10 +129,10 @@ where
     ///
     /// This function retrieves a single record from the database by its unique
     /// ID, using a specific [`Tether`], i.e. connection. It is functionally
-    /// equivalent to [`load()`](DbRecord::load()), but allows the query to be
-    /// run against an existing connection rather than using a new one.
+    /// equivalent to [`load()`](Model::load()), but allows the query to be run
+    /// against an existing connection rather than using a new one.
     ///
-    /// For full usage details, see [`load()`](DbRecord::load()).
+    /// For full usage details, see [`load()`](Model::load()).
     ///
     /// Note that the [`Tether`] used will not be stored.
     ///
@@ -113,11 +145,11 @@ where
     ///
     /// # Errors
     ///
-    /// See [`DbRecord::load()`].
+    /// See [`Model::load()`].
     ///
     /// # See also
     ///
-    /// * [`DbRecord::load()`]
+    /// * [`Model::load()`]
     /// * [`Stash::load()`]
     /// * [`Tether::load()`]
     ///
@@ -146,7 +178,7 @@ where
     ///
     /// # See also
     ///
-    /// * [`DbRecord::save_using()`]
+    /// * [`Model::save_using()`]
     ///
     async fn save(&self) -> Result<(), StashError> {
         let fields = Self::field_names();
@@ -190,10 +222,10 @@ where
     ///
     /// This function saves a single record to the database by its unique ID,
     /// using a specific [`Tether`], i.e. connection. It is functionally
-    /// equivalent to [`save()`](DbRecord::save()), but allows the query to be
-    /// run against an existing connection rather than using a new one.
+    /// equivalent to [`save()`](Model::save()), but allows the query to be run
+    /// against an existing connection rather than using a new one.
     ///
-    /// For full usage details, see [`save()`](DbRecord::save()).
+    /// For full usage details, see [`save()`](Model::save()).
     ///
     /// Note that the [`Tether`] used will not be stored.
     ///
@@ -205,11 +237,11 @@ where
     ///
     /// # Errors
     ///
-    /// See [`DbRecord::save()`].
+    /// See [`Model::save()`].
     ///
     /// # See also
     ///
-    /// * [`DbRecord::save()`]
+    /// * [`Model::save()`]
     ///
     async fn save_using(&self, tether: &Tether) -> Result<(), StashError> {
         let fields = Self::field_names();
@@ -270,6 +302,9 @@ where
 /// that have been converted into the desired type `T` — but boxed as [`Any`] so
 /// that they can be returned via the oneshot channel. These are downcast
 /// immediately at the other end of the channel.
+///
+/// Note that these can be [`DbRecord`]s or [`Model`]s, as the [`DbRecord`]
+/// trait is a supertrait of [`Model`].
 ///
 /// For more information on how this works, see the documentation for
 /// `stash::converter()` (note: this is not a public function).

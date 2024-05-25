@@ -163,4 +163,5 @@ pub mod stash;
 ///
 pub mod macros {
     pub use stash_macros::DbRecord;
+    pub use stash_macros::Model;
 }

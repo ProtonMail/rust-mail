@@ -382,7 +382,7 @@
 //!      query handling is multi-threaded.
 //!
 
-use crate::orm::{DbRecord, DbRecords};
+use crate::orm::{DbRecords, Model};
 use core::ops::Deref;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
@@ -1054,9 +1054,9 @@ impl Stash {
     ///
     /// This function retrieves a single record from the database by its unique
     /// ID, as an instance of the specified type `T`, where `T` is any concrete
-    /// type implementing the [`DbRecord`] trait.
+    /// type implementing the [`Model`] trait.
     ///
-    /// For full usage details, see [`DbRecord::load()`].
+    /// For full usage details, see [`Model::load()`].
     ///
     /// # Parameters
     ///
@@ -1064,15 +1064,15 @@ impl Stash {
     ///
     /// # Errors
     ///
-    /// See [`DbRecord::load()`].
+    /// See [`Model::load()`].
     ///
     /// # See also
     ///
-    /// * [`DbRecord::load()`]
-    /// * [`DbRecord::load_using()`]
+    /// * [`Model::load()`]
+    /// * [`Model::load_using()`]
     /// * [`Tether::load()`]
     ///
-    pub async fn load<T: DbRecord>(&self, id: Uuid) -> Result<Option<T>, StashError> {
+    pub async fn load<T: Model>(&self, id: Uuid) -> Result<Option<T>, StashError> {
         let query = formatdoc!(
             "
             SELECT
@@ -1489,9 +1489,9 @@ impl Tether {
     ///
     /// This function retrieves a single record from the database by its unique
     /// ID, as an instance of the specified type `T`, where `T` is any concrete
-    /// type implementing the [`DbRecord`] trait.
+    /// type implementing the [`Model`] trait.
     ///
-    /// For full usage details, see [`DbRecord::load_using()`].
+    /// For full usage details, see [`Model::load_using()`].
     ///
     /// # Parameters
     ///
@@ -1499,14 +1499,14 @@ impl Tether {
     ///
     /// # Errors
     ///
-    /// See [`DbRecord::load()`].
+    /// See [`Model::load()`].
     ///
     /// # See also
     ///
-    /// * [`DbRecord::load()`]
+    /// * [`Model::load()`]
     /// * [`Tether::load()`]
     ///
-    pub async fn load<T: DbRecord>(&self, id: Uuid) -> Result<Option<T>, StashError> {
+    pub async fn load<T: Model>(&self, id: Uuid) -> Result<Option<T>, StashError> {
         let query = formatdoc!(
             "
             SELECT
