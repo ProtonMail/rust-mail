@@ -152,6 +152,7 @@
 #![deny(clippy::unconditional_recursion)]
 
 // Standard modules
+pub mod datatypes;
 pub mod orm;
 pub mod stash;
 
