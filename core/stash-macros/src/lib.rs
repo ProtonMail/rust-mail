@@ -178,6 +178,17 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         .as_ref()
         .expect("IdField must have an identifier");
 
+    let id_type = &fields
+        .iter()
+        .find(|field| {
+            field
+                .attrs
+                .iter()
+                .any(|attr| attr.path().is_ident("IdField"))
+        })
+        .expect("IdField attribute is missing")
+        .ty;
+
     let stash_field = fields
         .iter()
         .find(|field| {
@@ -231,7 +242,9 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         }
 
         impl stash::orm::Model for #name {
-            fn id(&self) -> uuid::Uuid {
+            type Id = #id_type;
+
+            fn id(&self) -> Self::Id {
                 self.#id_field.clone()
             }
 

@@ -22,7 +22,6 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::vec::IntoIter;
-use uuid::Uuid;
 
 /// A trait for simple database records.
 ///
@@ -83,9 +82,13 @@ where
 pub trait Model: DbRecord
 where
     Self: 'static,
+    <Self as Model>::Id: Send + Sync + 'static,
 {
+    /// The ID type for the record.
+    type Id: ToSql;
+
     /// Gets the record's unique ID.
-    fn id(&self) -> Uuid;
+    fn id(&self) -> Self::Id;
 
     /// Gets the name of the ID field for the record type.
     fn id_field_name() -> &'static str;
@@ -121,7 +124,7 @@ where
     /// * [`Tether::load()`]
     ///
     #[must_use]
-    async fn load(id: Uuid, stash: &Stash) -> Result<Option<Self>, StashError> {
+    async fn load(id: Self::Id, stash: &Stash) -> Result<Option<Self>, StashError> {
         stash.load(id).await
     }
 
@@ -154,7 +157,7 @@ where
     /// * [`Tether::load()`]
     ///
     #[must_use]
-    async fn load_using(id: Uuid, tether: &Tether) -> Result<Option<Self>, StashError> {
+    async fn load_using(id: Self::Id, tether: &Tether) -> Result<Option<Self>, StashError> {
         tether.load(id).await
     }
 

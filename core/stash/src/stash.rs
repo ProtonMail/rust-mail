@@ -404,7 +404,6 @@ use tokio::time::Instant;
 use tracing::{debug, error, warn};
 #[cfg(feature = "uniffi")]
 use uniffi::Error as UniffiError;
-use uuid::Uuid;
 
 /// A dual-nature connection wrapper.
 ///
@@ -1072,7 +1071,11 @@ impl Stash {
     /// * [`Model::load_using()`]
     /// * [`Tether::load()`]
     ///
-    pub async fn load<T: Model>(&self, id: Uuid) -> Result<Option<T>, StashError> {
+    pub async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        I: ToSql + Send + 'static,
+    {
         let query = formatdoc!(
             "
             SELECT
@@ -1506,7 +1509,11 @@ impl Tether {
     /// * [`Model::load()`]
     /// * [`Tether::load()`]
     ///
-    pub async fn load<T: Model>(&self, id: Uuid) -> Result<Option<T>, StashError> {
+    pub async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        I: ToSql + Send + 'static,
+    {
         let query = formatdoc!(
             "
             SELECT
