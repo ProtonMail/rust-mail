@@ -384,10 +384,11 @@
 
 use crate::orm::{DbRecord, DbRecords};
 use core::ops::Deref;
-use flume::Sender as QueueSender;
+use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
-use r2d2::{Error as PoolError, Pool, PooledConnection};
+use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::hooks::Action;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction};
 use serde::de::DeserializeOwned;
 use serde_rusqlite::{from_rows, Error as DeserializationError};
@@ -400,7 +401,7 @@ use tokio::spawn as spawn_async;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
 use tokio::time::Instant;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 #[cfg(feature = "uniffi")]
 use uniffi::Error as UniffiError;
 use uuid::Uuid;
@@ -445,8 +446,10 @@ impl Deref for AgnosticConnection<'_> {
 ///
 /// * [`Command`]
 /// * [`Instruction`]
+/// * [`Notification`]
 /// * [`OperationLogic`]
 /// * [`Query`]
+/// * [`Subscription`]
 /// * [`Worker`]
 ///
 enum Operation {
@@ -458,6 +461,10 @@ enum Operation {
     /// not enforced.
     Instruct(Instruction),
 
+    /// Publishes a notification of changes made to the database to all
+    /// subscribers.
+    Publish(Notification),
+
     /// A query to be executed, where results are expected. This is typically a
     /// read query, but could be any query where results are expected, such as
     /// an `INSERT` query that returns the ID of the inserted row.
@@ -468,6 +475,9 @@ enum Operation {
 
     /// Starts a new transaction.
     StartTransaction(Command),
+
+    /// Subscribes to notifications of changes made to the database.
+    Subscribe(Subscription),
 }
 
 impl Operation {
@@ -486,7 +496,9 @@ impl Operation {
             | Self::RollbackTransaction(ref mut command)
             | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
             Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
+            Self::Publish(_) => {}
             Self::Query(ref mut query) => query.send_back(Err(error)),
+            Self::Subscribe(ref mut subscription) => subscription.send_back(Err(error)),
         }
     }
 }
@@ -540,6 +552,11 @@ pub enum StashError {
     #[error("Queue error: Sending failed: {0}")]
     QueueError(String),
 
+    /// There was a problem with subscriptions. For some reason the subscription
+    /// has ended up in the wrong place. This should never happen in practice.
+    #[error("Subscription error")]
+    SubscriptionError,
+
     /// There was a problem establishing a tether to the [`Stash`], which could
     /// be to do with creating the actual stash, or connecting to the service.
     #[error("Stash tether error: {0}")]
@@ -561,9 +578,11 @@ pub enum StashError {
 ///
 /// # See also
 ///
-/// * [`Operation`]
 /// * [`Instruction`]
+/// * [`Notification`]
+/// * [`Operation`]
 /// * [`Query`]
+/// * [`Subscription`]
 ///
 struct Command {
     /// The communication channel used to send the result of the operation back
@@ -611,8 +630,10 @@ impl OperationLogic for Command {
 /// # See also
 ///
 /// * [`Command`]
+/// * [`Notification`]
 /// * [`Operation`]
 /// * [`Query`]
+/// * [`Subscription`]
 ///
 struct Instruction {
     /// The communication channel used to send the result of the operation back
@@ -680,6 +701,32 @@ impl OperationLogic for Instruction {
     }
 }
 
+/// A notification that a change has been made to the database.
+///
+/// This struct is used to inform any subscribers that changes have been made to
+/// the database. It is used by the central background worker to notify any
+/// subscribers that have registered interest in such notifications.
+///
+/// # See also
+///
+/// * [`Stash::subscribe()`]
+///
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct Notification {
+    /// The action that has been performed on the table. This can be one of
+    /// `INSERT`, `UPDATE`, or `DELETE`.
+    pub action: Action,
+
+    /// The name of the table that the action was performed on, i.e. that has
+    /// changed.
+    pub table: String,
+
+    /// The row ID of the row that has been acted on, i.e. changed. This may or
+    /// may not be useful.
+    pub row: u64,
+}
+
 /// An operation to be executed by the worker, which returns data.
 ///
 /// This is used for operations such as `SELECT`, where the result is a set of
@@ -691,7 +738,9 @@ impl OperationLogic for Instruction {
 ///
 /// * [`Command`]
 /// * [`Instruction`]
+/// * [`Notification`]
 /// * [`Operation`]
+/// * [`Subscription`]
 ///
 struct Query {
     /// The communication channel used to send the result of the operation back
@@ -1159,6 +1208,45 @@ impl Stash {
             .collect()
     }
 
+    /// Subscribes to notifications of changes to the database.
+    ///
+    /// This function subscribes to notifications of changes to the database. It
+    /// returns a queue receiver which will be sent [`Notification`] instances
+    /// containing information about the changes made.
+    ///
+    /// At present this is a wide-spectrum subscription, and will receive
+    /// notifications for all changes made to the database. In future it will be
+    /// possible to filter this.
+    ///
+    /// # Errors
+    ///
+    /// The following [`StashError`] variants can be returned:
+    ///
+    /// * [`StashError::OneShotError`]
+    /// * [`StashError::QueueError`]
+    /// * [`StashError::SubscriptionError`]
+    ///
+    /// # See alse
+    ///
+    /// * [`Notification`]
+    ///
+    pub async fn subscribe(&self) -> Result<QueueReceiver<Notification>, StashError> {
+        let (that_end, this_end) = oneshot::channel();
+        let (sender, receiver) = flume::unbounded::<Notification>();
+        let operation = Operation::Subscribe(Subscription {
+            channel: Some(that_end),
+            queue: sender,
+        });
+        self.queue
+            .send_async(operation)
+            .await
+            .map_err(|err| StashError::QueueError(err.to_string()))?;
+        this_end
+            .await
+            .map_err(|err| StashError::OneShotError(err.to_string()))??;
+        Ok(receiver)
+    }
+
     /// Starts a new transaction against a new connection.
     ///
     /// This function starts a new transaction on a new database connection. All
@@ -1201,6 +1289,57 @@ impl Eq for Stash {}
 impl PartialEq for Stash {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.handle, &other.handle)
+    }
+}
+
+/// A subscription operation to be executed by the worker.
+///
+/// This is used for subscribing to [`Notification`]s, such as database change
+/// events.
+///
+/// # See also
+///
+/// * [`Command`]
+/// * [`Instruction`]
+/// * [`Notification`]
+/// * [`Operation`]
+/// * [`Query`]
+/// * [`Stash::subscribe()`]
+///
+struct Subscription {
+    /// The communication channel used to send the result of the operation back
+    /// to the caller.
+    channel: Option<OneshotSender<Result<(), StashError>>>,
+
+    /// The queue to which [`Notification`]s will be sent. Note that this is
+    /// for *redistributed* notifications — i.e. after the central worker has
+    /// received them from the database, it will then send them to all
+    /// subscribers, with this being a subscriber-specific queue.
+    queue: QueueSender<Notification>,
+}
+
+impl OperationLogic for Subscription {
+    type Output = ();
+
+    fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>> {
+        self.channel.take()
+    }
+
+    /// Carries out a subscription.
+    ///
+    /// **Note: This function does not actually do anything, as the operational
+    /// context for subscriptions is the [`Subscription`] instance.**
+    ///
+    /// # Parameters
+    ///
+    /// * `connection` - The database connection to use for the operation.
+    ///
+    /// # Errors
+    ///
+    /// None.
+    ///
+    fn run(&self, _connection: &AgnosticConnection<'_>) -> Result<(), StashError> {
+        Ok(())
     }
 }
 
@@ -1625,6 +1764,14 @@ impl TetheredWorker {
                     AgnosticConnection::Engaged,
                 )));
             }
+            Operation::Publish(_) => {
+                // Technically, these cannot occur here, as subscription operations are
+                // global in scope and not connection-specific. We should never get here. If
+                // we do, it means there is an error in the logic of this module. Note that
+                // we cannot return an error to the original caller, as there is no oneshot
+                // channel for notifications, plus the context would not make any sense.
+                warn!("Unexpectedly reached Publish variant in TetheredWorker::handle_operation()");
+            }
             Operation::Query(mut query) => {
                 query.send_back(query.run(&transaction.as_ref().map_or(
                     AgnosticConnection::Unbound(connection),
@@ -1659,6 +1806,12 @@ impl TetheredWorker {
                     command.send_back(Err(StashError::TransactionAlreadyStarted));
                 }
             }
+            Operation::Subscribe(mut subscription) => {
+                // Technically, these cannot occur here, as subscription operations are
+                // global in scope and not connection-specific. We should never get here. If
+                // we do, it means there is an error in the logic of this module.
+                subscription.send_back(Err(StashError::SubscriptionError));
+            }
         }
 
         transaction
@@ -1680,8 +1833,14 @@ impl TetheredWorker {
     ///                   will be created and associated, storing this weak
     ///                   reference internally.
     /// * `pool`        - The SQLite connection pool to use for the queries.
+    /// * `queue`       - The main operations queue, shared with the main
+    ///                   worker and other tethered workers.
     ///
-    fn start(conn_handle: Weak<()>, pool: Pool<SqliteConnectionManager>) -> Self {
+    fn start(
+        conn_handle: Weak<()>,
+        pool: Pool<SqliteConnectionManager>,
+        queue: QueueSender<Operation>,
+    ) -> Self {
         let (sender, receiver) = flume::unbounded::<Operation>();
 
         // Spawn a thread to run the worker. This thread will execute the queries
@@ -1700,7 +1859,7 @@ impl TetheredWorker {
             // are started, they borrow the underlying connection).
             #[allow(clippy::unwrap_used)]
             if let Ok(mut operation) = receiver.recv() {
-                connection = match pool.get().map_err(StashError::TetherError) {
+                connection = match pool.get_and_subscribe(queue) {
                     Ok(conn) => Some(conn),
                     Err(error) => {
                         operation.send_back_error(error);
@@ -1755,6 +1914,13 @@ struct Worker {
     /// connections on the worker, and issue thread-safe [`Tether`]s to the
     /// caller.
     pool: Pool<SqliteConnectionManager>,
+
+    /// The sender side of the main worker's queue.
+    queue: QueueSender<Operation>,
+
+    /// The list of subscribers to the stash. This is used to send notifications
+    /// whenever changes are made to the database.
+    subscribers: Vec<QueueSender<Notification>>,
 
     /// A map of active connections with their tethered workers. This is used to
     /// keep track of the connections that are currently in use, and to
@@ -1832,6 +1998,7 @@ impl Worker {
     ///
     fn handle_operation(&mut self, operation: Operation) {
         let pool = self.pool.clone();
+        let queue = self.queue.clone();
         match operation {
             Operation::CommitTransaction(mut command)
             | Operation::RollbackTransaction(mut command)
@@ -1843,7 +2010,7 @@ impl Worker {
             }
             Operation::Instruct(mut instruction) => {
                 drop(spawn_async(async move {
-                    match pool.get() {
+                    match pool.get_and_subscribe(queue) {
                         Ok(connection) => {
                             // Spawn a blocking task to execute the query. This is necessary because
                             // rusqlite is synchronous, so we need to tell the Tokio runtime that
@@ -1859,13 +2026,29 @@ impl Worker {
                                 error!("Thread error: Failed to spawn blocking task: {err:?}");
                             });
                         }
-                        Err(err) => instruction.send_back(Err(StashError::TetherError(err))),
+                        Err(err) => instruction.send_back(Err(err)),
+                    }
+                }));
+            }
+            Operation::Publish(notification) => {
+                // This is a slight trade-off - it's better to spend a small amount of time
+                // cloning the subscribers list (which is cheap) than to block the main
+                // thread while we loop through them. This way, we can offload the sending
+                // as an async task, plus the subscriber list is a safe snapshot from this
+                // point in time.
+                let subscribers = self.subscribers.clone();
+                drop(spawn_async(async move {
+                    for subscriber in subscribers {
+                        if subscriber.send_async(notification.clone()).await.is_err() {
+                            // In theory this should never happen, but we also can't do anything with it
+                            error!("Queue error: Failed to send a Notification to a subscriber");
+                        }
                     }
                 }));
             }
             Operation::Query(mut query) => {
                 drop(spawn_async(async move {
-                    match pool.get() {
+                    match pool.get_and_subscribe(queue) {
                         Ok(connection) => {
                             // Spawn a blocking task to execute the query. This is necessary because
                             // rusqlite is synchronous, so we need to tell the Tokio runtime that
@@ -1881,9 +2064,16 @@ impl Worker {
                                 error!("Thread error: Failed to spawn blocking task: {err:?}");
                             });
                         }
-                        Err(err) => query.send_back(Err(StashError::TetherError(err))),
+                        Err(err) => query.send_back(Err(err)),
                     }
                 }));
+            }
+            Operation::Subscribe(mut subscription) => {
+                self.subscribers.push(subscription.queue.clone());
+                // Although this operation is infallible, a response still needs to be sent,
+                // as the caller might be waiting on the oneshot channel in order to
+                // continue.
+                subscription.send_back(Ok(()));
             }
         };
     }
@@ -1929,6 +2119,7 @@ impl Worker {
             SqliteConnectionManager::file,
         );
         let (sender, receiver) = flume::unbounded();
+        let sender_clone = sender.clone();
         let pool = Pool::new(manager).map_err(StashError::TetherError)?;
         let mut latest_gc = Instant::now();
         let mut thread_creation_count = 0_usize;
@@ -1939,6 +2130,8 @@ impl Worker {
         drop(spawn(move || {
             let mut worker = Self {
                 pool,
+                queue: sender_clone,
+                subscribers: Vec::new(),
                 tethers: HashMap::new(),
             };
 
@@ -1948,6 +2141,7 @@ impl Worker {
                     | Operation::RollbackTransaction(ref command)
                     | Operation::StartTransaction(ref command) => command.conn_handle.clone(),
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
+                    Operation::Publish(_) | Operation::Subscribe(_) => None,
                     Operation::Query(ref query) => query.conn_handle.clone(),
                 };
                 match conn_handle {
@@ -2054,7 +2248,11 @@ impl Worker {
             Entry::Occupied(entry) => (false, entry.into_mut()),
             Entry::Vacant(entry) => (
                 true,
-                entry.insert(TetheredWorker::start(weak_ref, self.pool.clone())),
+                entry.insert(TetheredWorker::start(
+                    weak_ref,
+                    self.pool.clone(),
+                    self.queue.clone(),
+                )),
             ),
         }
     }
@@ -2067,9 +2265,12 @@ impl Worker {
 ///
 /// # See also
 ///
+/// * [`Command`]
 /// * [`Instruction`]
+/// * [`Notification`]
 /// * [`Operation`]
 /// * [`Query`]
+/// * [`Subscription`]
 ///
 trait OperationLogic {
     /// The type of the output of the operation, i.e. what is returned by the
@@ -2144,6 +2345,71 @@ trait OperationLogic {
         } else {
             error!("Oneshot error: Sender already used");
         }
+    }
+}
+
+/// Extension trait for the connection pool.
+///
+/// This trait provides extensions to the [`r2d2`] connection pool ([`Pool`]),
+/// combining common behaviour and abstracting it away from the main library
+/// code.
+///
+trait PoolExt<M: ManageConnection> {
+    /// Gets a connection from the pool and subscribes to changes.
+    ///
+    /// This function gets a connection from the pool, and then subscribes to
+    /// changes on the connection. Because the way [`rusqlite`] works is that
+    /// its hooks only work in context to the same connection (i.e. any
+    /// notifications of data changes made against a connection will only be
+    /// sent to the registered callback hook for that connection), we need to
+    /// ensure that all connections are subscribed to changes.
+    ///
+    /// By centralising this logic and calling it in preference to the standard
+    /// [`get()`](Pool::get()) method, we ensure that all connections are set up
+    /// to receive notifications of changes.
+    ///
+    /// The notifications are sent to the central worker via its standard
+    /// operations queue, whereupon it will then redistribute them to any
+    /// registered subscribers.
+    ///
+    /// # Parameters
+    ///
+    /// * `queue` - The queue to send the [`Notification`]s to. This is the
+    ///             standard [`Operation`]s queue of the central worker.
+    ///
+    /// # Errors
+    ///
+    /// A [`StashError::TetherError`] is returned if there is a problem getting
+    /// a connection from the pool.
+    ///
+    fn get_and_subscribe(
+        &self,
+        queue: QueueSender<Operation>,
+    ) -> Result<PooledConnection<M>, StashError>;
+}
+
+impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
+    fn get_and_subscribe(
+        &self,
+        queue: QueueSender<Operation>,
+    ) -> Result<PooledConnection<SqliteConnectionManager>, StashError> {
+        let connection = self.get().map_err(StashError::TetherError)?;
+        connection.update_hook(Some(
+            move |action: Action, _db_name: &str, table_name: &str, row_id: i64| {
+                #[allow(clippy::cast_sign_loss)]
+                if queue
+                    .send(Operation::Publish(Notification {
+                        action,
+                        table: table_name.to_owned(),
+                        row: row_id as u64,
+                    }))
+                    .is_err()
+                {
+                    error!("Queue error: Failed to publish a Notification to the worker thread");
+                }
+            },
+        ));
+        Ok(connection)
     }
 }
 
