@@ -165,3 +165,18 @@ pub mod macros {
     pub use stash_macros::DbRecord;
     pub use stash_macros::Model;
 }
+
+/// Re-exported external types.
+///
+/// This module re-exports types from external crates that are used in the
+/// `stash` crate. This is done to make it easier for users of the `stash`
+/// crate to access these types without needing to import them from the
+/// external crates directly.
+///
+/// At present, the only types re-exported here are from the [`rusqlite`](https://crates.io/crates/rusqlite)
+/// crate.
+///
+pub mod exports {
+    pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+    pub use rusqlite::{Error as SqliteError, Row};
+}

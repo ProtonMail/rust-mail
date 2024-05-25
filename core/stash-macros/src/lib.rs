@@ -71,10 +71,10 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
     // Generate trait implementation
     (quote! {
         impl stash::orm::DbRecord for #name {
-            fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn rusqlite::ToSql + Send>> {
+            fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
                 let mut map = std::collections::HashMap::new();
                 #(
-                    map.insert(stringify!(#db_fields), Box::new(self.#db_fields.clone()) as Box<dyn rusqlite::ToSql + Send>);
+                    map.insert(stringify!(#db_fields), Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>);
                 )*
                 map
             }
@@ -83,8 +83,8 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
                 vec![#(stringify!(#db_fields)),*]
             }
 
-            fn field_values(&self) -> Vec<Box<dyn rusqlite::ToSql + Send>> {
-                vec![#(Box::new(self.#db_fields.clone()) as Box<dyn rusqlite::ToSql + Send>),*]
+            fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
+                vec![#(Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>),*]
             }
         }
     }).into()
@@ -213,10 +213,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     // Generate trait implementation
     (quote! {
         impl stash::orm::DbRecord for #name {
-            fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn rusqlite::ToSql + Send>> {
+            fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
                 let mut map = std::collections::HashMap::new();
                 #(
-                    map.insert(stringify!(#db_fields), Box::new(self.#db_fields.clone()) as Box<dyn rusqlite::ToSql + Send>);
+                    map.insert(stringify!(#db_fields), Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>);
                 )*
                 map
             }
@@ -225,8 +225,8 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 vec![#(stringify!(#db_fields)),*]
             }
 
-            fn field_values(&self) -> Vec<Box<dyn rusqlite::ToSql + Send>> {
-                vec![#(Box::new(self.#db_fields.clone()) as Box<dyn rusqlite::ToSql + Send>),*]
+            fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
+                vec![#(Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>),*]
             }
         }
 
