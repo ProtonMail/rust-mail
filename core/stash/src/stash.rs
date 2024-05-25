@@ -545,11 +545,6 @@ pub enum StashError {
     #[error("Stash tether error: {0}")]
     TetherError(#[from] PoolError),
 
-    /// There was a problem with thread handling and management. This should
-    /// never happen in practice.
-    #[error("Thread panic: Join handle failed")]
-    ThreadPanic,
-
     /// An attempt was made to start a transaction, but one is already active.
     #[error("Transaction already started")]
     TransactionAlreadyStarted,
@@ -1807,15 +1802,36 @@ impl Worker {
     /// is the core logic of the worker thread, and is responsible for managing
     /// the connection and transaction state, and executing the queries.
     ///
+    /// It has a fundamental goal of being as quick and lightweight as possible,
+    /// so that it doesn't hold up the main worker thread that called it.
+    ///
     /// # Parameters
     ///
-    /// * `operation`   - The database operation to handle.
-    /// * `connection`  - The database connection to use for the operation.
+    /// * `operation` - The database operation to handle.
     ///
-    fn handle_operation(
-        operation: Operation,
-        connection: &PooledConnection<SqliteConnectionManager>,
-    ) {
+    /// # Errors
+    ///
+    /// If there is a problem obtaining a connection from the pool then the
+    /// error will be returned to the original caller via the oneshot channel.
+    /// As it's not possible to continue in this situation, the function
+    /// returns. The actual [`StashError::TetherError`] is not returned, as it
+    /// has been sent to the original sender, and is not cloneable. This is
+    /// okay, as the function calling this one cannot do anything about it
+    /// anyway.
+    ///
+    /// If there is a problem spawning the blocking task to carry out the
+    /// operation, then the error cannot be returned to the original caller, as
+    /// the operation has by this time been unpacked and sent into the blocking
+    /// thread, so we no longer have it. In this case we could return some kind
+    /// of [`StashError`] variant, but the calling function would not be able to
+    /// actually do anything about it other than log it, plus we would need to
+    /// differentiate between this situation and that of the connection error.
+    /// Therefore we handle this error as best we can by logging it, and so
+    /// there is no current need to return any error as they are already dealt
+    /// with.
+    ///
+    fn handle_operation(&mut self, operation: Operation) {
+        let pool = self.pool.clone();
         match operation {
             Operation::CommitTransaction(mut command)
             | Operation::RollbackTransaction(mut command)
@@ -1826,10 +1842,48 @@ impl Worker {
                 command.send_back(Err(StashError::NoActiveTransaction));
             }
             Operation::Instruct(mut instruction) => {
-                instruction.send_back(instruction.run(&AgnosticConnection::Unbound(connection)));
+                drop(spawn_async(async move {
+                    match pool.get() {
+                        Ok(connection) => {
+                            // Spawn a blocking task to execute the query. This is necessary because
+                            // rusqlite is synchronous, so we need to tell the Tokio runtime that
+                            // this task will block.
+                            spawn_blocking(move || {
+                                instruction.send_back(
+                                    instruction.run(&AgnosticConnection::Unbound(&connection)),
+                                );
+                            })
+                            .await
+                            .unwrap_or_else(|err| {
+                                // In theory this should never happen, but we also can't do anything with it
+                                error!("Thread error: Failed to spawn blocking task: {err:?}");
+                            });
+                        }
+                        Err(err) => instruction.send_back(Err(StashError::TetherError(err))),
+                    }
+                }));
             }
             Operation::Query(mut query) => {
-                query.send_back(query.run(&AgnosticConnection::Unbound(connection)));
+                drop(spawn_async(async move {
+                    match pool.get() {
+                        Ok(connection) => {
+                            // Spawn a blocking task to execute the query. This is necessary because
+                            // rusqlite is synchronous, so we need to tell the Tokio runtime that
+                            // this task will block.
+                            spawn_blocking(move || {
+                                query.send_back(
+                                    query.run(&AgnosticConnection::Unbound(&connection)),
+                                );
+                            })
+                            .await
+                            .unwrap_or_else(|err| {
+                                // In theory this should never happen, but we also can't do anything with it
+                                error!("Thread error: Failed to spawn blocking task: {err:?}");
+                            });
+                        }
+                        Err(err) => query.send_back(Err(StashError::TetherError(err))),
+                    }
+                }));
             }
         };
     }
@@ -1888,7 +1942,7 @@ impl Worker {
                 tethers: HashMap::new(),
             };
 
-            while let Ok(mut operation) = receiver.recv() {
+            while let Ok(operation) = receiver.recv() {
                 let conn_handle = match operation {
                     Operation::CommitTransaction(ref command)
                     | Operation::RollbackTransaction(ref command)
@@ -1896,8 +1950,6 @@ impl Worker {
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
                     Operation::Query(ref query) => query.conn_handle.clone(),
                 };
-                #[allow(clippy::shadow_unrelated)]
-                let pool = worker.pool.clone();
                 match conn_handle {
                     // If a tethered connection handle was specified, it means that this query
                     // is part of a set of related queries which need to be executed against the
@@ -1927,27 +1979,7 @@ impl Worker {
                     // once-off query, and so it will be carried out on a new async thread,
                     // managed by the Tokio runtime.
                     None => {
-                        drop(spawn_async(async move {
-                            let connection_result = pool.get().map_err(StashError::TetherError);
-                            let connection = match connection_result {
-                                Ok(connection) => connection,
-                                Err(error) => {
-                                    operation.send_back_error(error);
-                                    return;
-                                }
-                            };
-                            // Spawn a blocking task to execute the query. This is necessary because
-                            // rusqlite is synchronous, so we need to tell the Tokio runtime that
-                            // this task will block.
-                            let attempt = spawn_blocking(move || {
-                                Self::handle_operation(operation, &connection);
-                            })
-                            .await;
-                            if let Err(err) = attempt {
-                                // In theory this should never happen, but we also can't do anything with it
-                                error!("Thread error: Failed to spawn blocking task: {err:?}");
-                            }
-                        }));
+                        worker.handle_operation(operation);
                     }
                 }
 
