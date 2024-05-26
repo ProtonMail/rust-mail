@@ -2,6 +2,10 @@ use crate::requests::FIDOKey;
 use crate::utils::{bool_from_integer, bool_to_integer};
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_default_from_null;
+use stash::macros::Model;
+use stash::stash::Stash;
+use stash::utils::sql_using_serde;
+use crate::domain::UserId;
 
 new_integer_enum!(u8,TFAStatus {
     None = 0,
@@ -20,6 +24,8 @@ pub struct Email {
     pub reset: u8,
 }
 
+sql_using_serde!(Email);
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct Phone {
@@ -30,6 +36,8 @@ pub struct Phone {
     pub reset: u8,
 }
 
+sql_using_serde!(Phone);
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct TwoFA {
@@ -39,6 +47,8 @@ pub struct TwoFA {
     #[serde(default)]
     pub registered_keys: Vec<FIDOKey>,
 }
+
+sql_using_serde!(TwoFA);
 
 new_integer_enum!(u8, LogAuth {
     Disabled =0,
@@ -91,12 +101,16 @@ pub struct SettingsFlags {
     pub in_app_promos_hidden: bool,
 }
 
+sql_using_serde!(SettingsFlags);
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct Referral {
     pub link: String,
     pub eligible: bool,
 }
+
+sql_using_serde!(Referral);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
@@ -113,6 +127,8 @@ pub struct HighSecurity {
     pub value: bool,
 }
 
+sql_using_serde!(HighSecurity);
+
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct Password {
@@ -120,59 +136,91 @@ pub struct Password {
     pub expiration_time: Option<u64>,
 }
 
+sql_using_serde!(Password);
+
 #[allow(clippy::struct_excessive_bools)]
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[serde(rename_all = "PascalCase")]
+#[TableName("user_settings")]
 pub struct UserSettings {
+    #[IdField]
+    pub id: UserId,
+    #[DbField]
     pub email: Email,
+    #[DbField]
     pub password: Password,
+    #[DbField]
     pub phone: Phone,
-    #[serde(rename = "2FA")]
+    #[DbField]
     pub two_factor_auth: TwoFA,
+    #[DbField]
     pub news: u32,
+    #[DbField]
     pub locale: String,
+    #[DbField]
     pub log_auth: LogAuth,
+    #[DbField]
     pub invoice_text: String,
+    #[DbField]
     pub density: Density,
+    #[DbField]
     pub week_start: WeekStart,
+    #[DbField]
     pub date_format: DateFormat,
+    #[DbField]
     pub time_format: TimeFormat,
+    #[DbField]
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub welcome: bool,
+    #[DbField]
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub early_access: bool,
+    #[DbField]
     pub flags: SettingsFlags,
+    #[DbField]
     pub referral: Option<Referral>,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
+    #[DbField]
     pub device_recovery: bool,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
+    #[DbField]
     pub telemetry: bool,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
+    #[DbField]
     pub crash_reports: bool,
+    #[DbField]
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub hide_side_panel: bool,
+    #[DbField]
     pub high_security: HighSecurity,
+    #[DbField]
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub session_account_recovery: bool,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
 }

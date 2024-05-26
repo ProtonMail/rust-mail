@@ -6,11 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+futures = {workspace=true}
 proton-event-loop = {path = "../proton-event-loop", version = "0.6.0", registry = "proton"}
 base64 = {workspace=true}
 proton-sqlite3 = {path ="../proton-sqlite3", version = "0.6.0", registry = "proton"}
 proton-api-core= {path ="../proton-api-core", version = "0.3.0", features = ["sql"], registry = "proton"}
 aes-gcm = {workspace=true}
+serde = {workspace=true}
+stash = {workspace=true}
+tokio = {workspace=true}
 zeroize = {workspace=true}
 uniffi = {workspace=true, optional = true}
 

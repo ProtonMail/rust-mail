@@ -6,14 +6,15 @@ use proton_sqlite3::rusqlite::types::{
     FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef,
 };
 use proton_sqlite3::rusqlite::ToSql;
-use proton_sqlite3::{rusqlite, SqliteTransaction};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::any::{Any, TypeId};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use uuid::Uuid;
+use proton_sqlite3::rusqlite;
+use stash::stash::Tether;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ActionError {
@@ -30,7 +31,7 @@ pub enum ActionError {
 /// ActionId is a unique identifier for each action type. This is required to construct an
 /// action after it has been serialized to the queue. [`std::any::TypeId`] is not guaranteed to remain
 /// the same between rust releases.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ActionId(pub Uuid);
 
 impl ActionId {
@@ -75,7 +76,7 @@ macro_rules! define_action_id {
 }
 
 /// Defines the priority of a queued action.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[repr(u8)]
 pub enum ActionPriority {
     Highest = 0,
@@ -115,7 +116,7 @@ pub type ActionResult<T> = Result<T, ActionError>;
 
 /// Defines an action in the queue. Action behavior is controlled with the [`LocalActionHandler`]
 /// and the [`RemoteActionHandler`] traits.
-pub trait Action: Any + Serialize + DeserializeOwned + Debug {
+pub trait Action: Any + Serialize + DeserializeOwned + Debug + Clone {
     /// Return the ActionId, generate one with the
     const ID: ActionId;
     const VERSION: u32;
@@ -130,6 +131,10 @@ pub trait Action: Any + Serialize + DeserializeOwned + Debug {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn as_boxed_any(&self) -> Box<dyn Any> {
+        Box::new(self.clone())
     }
 
     fn priority(&self) -> ActionPriority {
@@ -193,19 +198,19 @@ pub trait ActionFactoryInstance: Debug + Send + Sync {
     fn action_id(&self) -> &'static ActionId;
 
     /// Construct a new [`LocalActionHandler`] for an action
-    fn local_handler<'r, 't: 'r>(
+    fn local_handler(
         &self,
-        action: &'r dyn Any,
-        tx: &'r mut SqliteTransaction<'t>,
-    ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError>;
+        action: Box<dyn Any>,
+        tx: Tether,
+    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError>;
 
     /// Construct a new [`RemoteActionHandler`] for a stored action.
-    fn remote_handler<'r, 't: 'r>(
-        &'r self,
-        action: &StoredAction,
-        tx: &'r mut SqliteTransaction<'t>,
+    fn remote_handler(
+        &self,
+        action: StoredAction,
+        tx: Tether,
         session_provider: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError>;
+    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryInstanceError>;
 }
 
 /// Gateway to all [`ActionFactoryInstance`] types. Each action should register their handler
@@ -238,11 +243,11 @@ impl ActionFactory {
     }
 
     /// Get a local handler for a given action.
-    pub fn local_handler<'r, 't: 'r, T: Action>(
+    pub fn local_handler<T: Action>(
         &self,
-        action: &'r T,
-        tx: &'r mut SqliteTransaction<'t>,
-    ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryError> {
+        action: &T,
+        tx: Tether,
+    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryError> {
         let Some(factory) = self.factories.get(action.action_id()) else {
             return Err(ActionFactoryError::UnknownAction(
                 action.action_id().clone(),
@@ -250,17 +255,17 @@ impl ActionFactory {
         };
 
         factory
-            .local_handler(action.as_any(), tx)
+            .local_handler(action.as_boxed_any(), tx)
             .map_err(|e| ActionFactoryError::LocalHandler(action.action_id().clone(), e))
     }
 
     /// Get a remote handler for a stored action.
-    pub fn remote_handler<'r, 't: 'r>(
-        &'r self,
-        action: &StoredAction,
-        tx: &'r mut SqliteTransaction<'t>,
+    pub fn remote_handler(
+        &self,
+        action: StoredAction,
+        tx: Tether,
         session_provider: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryError> {
+    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryError> {
         let Some(factory) = self.factories.get(&action.action_id) else {
             return Err(ActionFactoryError::UnknownStoredAction(
                 action.id,
@@ -269,7 +274,7 @@ impl ActionFactory {
         };
 
         factory
-            .remote_handler(action, tx, session_provider)
+            .remote_handler(action.clone(), tx, session_provider)
             .map_err(|e| ActionFactoryError::RemoteHandler(action.id, action.action_id.clone(), e))
     }
 }

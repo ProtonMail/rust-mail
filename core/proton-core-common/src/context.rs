@@ -1,7 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
 use crate::db::{
     migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey,
-    SessionSqliteConnection,
 };
 use crate::os::{KeyChain, KeyChainError};
 use crate::session::CoreSession;
@@ -10,7 +9,6 @@ use crate::CoreSessionCallback;
 use proton_api_core::auth::new_arc_auth_store;
 use proton_api_core::domain::{ExposeSecret, SecretString, UserId};
 use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::exports::proton_sqlite3::SqliteMode;
 use proton_api_core::exports::tracing::Level;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
@@ -18,10 +16,12 @@ use proton_api_core::http::{Client, RequestError};
 use proton_api_core::login::Flow;
 use proton_api_core::Session;
 use proton_event_loop::proton_async::runtime::MultiThreaded;
-use proton_sqlite3::SqliteConnectionPool;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use proton_sqlite3::MigratorError;
+use stash::orm::Model;
+use stash::stash::{Stash, StashError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreContextError {
@@ -34,11 +34,13 @@ pub enum CoreContextError {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Database Migration Error: {0}")]
-    DBMigration(#[from] crate::db::DBMigrationError),
+    DBMigration(#[from] MigratorError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
     #[error("HTTP Error: {0}")]
     Http(#[from] RequestError),
+    #[error("Stash Error: {0}")]
+    Stash(#[from] StashError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -61,7 +63,7 @@ struct ContextInner {
     runtime: MultiThreaded,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
-    session_db: SqliteConnectionPool,
+    session_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     client: Client,
@@ -85,7 +87,7 @@ impl Context {
     /// # Errors
     /// Returns error if the context failed to initialize correctly.
     ///
-    pub fn new(
+    pub async fn new(
         async_runtime: MultiThreaded,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
@@ -97,38 +99,11 @@ impl Context {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let session_db_path = session_db_path.into();
         let user_db_path = user_db_path.into();
-        Self::_new(
-            async_runtime,
-            &session_db_path,
-            user_db_path,
-            key_chain,
-            initializers,
-            client,
-            network_callback,
-        )
-    }
-    fn _new(
-        async_runtime: MultiThreaded,
-        session_db_path: &Path,
-        user_db_path: PathBuf,
-        key_chain: Arc<dyn KeyChain>,
-        initializers: Vec<Box<dyn UserDatabaseInitializer>>,
-        client: Client,
-        network_callback: Option<Box<dyn NetworkStatusChanged>>,
-    ) -> CoreContextResult<Self> {
-        // create path.
-        std::fs::create_dir_all(session_db_path)?;
+        std::fs::create_dir_all(&session_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
         let session_db_path = get_session_db_path(session_db_path);
-
-        let pool = SqliteConnectionPool::new(
-            SqliteMode::File(session_db_path.clone()),
-            db_debug_enabled(),
-        );
-        {
-            let mut connection = pool.acquire()?;
-            migrate_session_db(&mut connection)?;
-        }
+        let stash = Stash::new(Some(&session_db_path))?;
+        migrate_session_db(&stash).await?;
 
         Ok(Self {
             inner: Arc::new(ContextInner {
@@ -136,7 +111,7 @@ impl Context {
                 network_connected: AtomicBool::new(true),
                 user_db_path,
                 key_chain,
-                session_db: pool,
+                session_stash: stash,
                 user_db_initializers: initializers,
                 client,
                 network_callback,
@@ -154,9 +129,8 @@ impl Context {
     ///
     /// # Errors
     /// Returns error if we fail to retrieve the sessions from the db.
-    pub fn get_sessions(&self) -> CoreContextResult<Vec<EncryptedUserSession>> {
-        let conn = self.get_connection()?;
-        Ok(conn.read(|conn| conn.load_all_sessions())?)
+    pub async fn get_sessions(&self) -> Result<Vec<EncryptedUserSession>, StashError> {
+        EncryptedUserSession::find(String::new(), vec![], &self.inner.session_stash, None).await
     }
 
     /// Create a new login flow for a new user.
@@ -170,7 +144,7 @@ impl Context {
         let _ = self.get_encryption_key()?;
         let core_session = new_arc_auth_store(CoreSession::new(
             None,
-            self.inner.session_db.clone(),
+            self.inner.session_stash.clone(),
             self.inner.key_chain.clone(),
             cb,
         ));
@@ -182,7 +156,7 @@ impl Context {
     /// Create a user context from a login flow. This will fail if the flow is not in the
     /// logged in state.
     #[tracing::instrument(level=Level::DEBUG, skip(self, login_flow))]
-    pub fn user_context_from_login_flow(
+    pub async fn user_context_from_login_flow(
         &self,
         login_flow: &Flow,
     ) -> CoreContextResult<UserContext> {
@@ -195,21 +169,21 @@ impl Context {
         };
 
         debug!("Creating new context for user {}({})", user.email, user.id);
-        let db = self.new_user_db_pool(&user.id)?;
+        let stash = self.new_user_db_pool(&user.id).await?;
 
-        let ctx = UserContext::new(login_flow.session().clone(), db, user.id.clone())?;
+        let ctx = UserContext::new(login_flow.session().clone(), stash, user.id.clone());
 
         Ok(ctx)
     }
 
     /// Get a user context from an existing session.
     #[tracing::instrument(level=Level::DEBUG, skip(self,session, cb), fields(user_id=?session.user_id))]
-    pub fn user_context_from_session(
+    pub async fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> CoreContextResult<UserContext> {
-        let db = self.new_user_db_pool(&session.user_id)?;
+        let stash = self.new_user_db_pool(&session.user_id).await?;
         debug!("decrypting session tokens");
         let key = self.get_encryption_key()?;
         let decrypted_session = session
@@ -218,13 +192,13 @@ impl Context {
         let user_id = session.user_id.clone();
         let core_session = new_arc_auth_store(CoreSession::new(
             Some(decrypted_session),
-            self.inner.session_db.clone(),
+            self.inner.session_stash.clone(),
             self.inner.key_chain.clone(),
             cb,
         ));
         debug!("Creating session");
         let session = Session::new(self.inner.client.clone(), core_session);
-        let ctx = UserContext::new(session, db, user_id)?;
+        let ctx = UserContext::new(session, stash, user_id);
         Ok(ctx)
     }
 
@@ -243,10 +217,6 @@ impl Context {
     pub fn is_network_corrected(&self) -> bool {
         self.inner.network_connected.load(Ordering::Relaxed)
     }
-    fn get_connection(&self) -> CoreContextResult<SessionSqliteConnection> {
-        let conn = self.inner.session_db.acquire()?;
-        Ok(conn.into())
-    }
 
     fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
         let Some(key) = self
@@ -261,22 +231,19 @@ impl Context {
         SessionEncryptionKey::from_base64(key.expose_secret()).ok_or(CoreContextError::Crypto)
     }
 
-    fn new_user_db_pool(&self, user_id: &UserId) -> CoreContextResult<SqliteConnectionPool> {
+    async fn new_user_db_pool(&self, user_id: &UserId) -> Result<Stash, MigratorError> {
         let user_db_path = get_user_db_path(&self.inner.user_db_path, user_id);
-        let pool = SqliteConnectionPool::new(SqliteMode::File(user_db_path), db_debug_enabled());
-        let mut conn = pool.acquire()?;
+        let stash = Stash::new(Some(&user_db_path))?;
         debug!("initializing core database");
         // initialize core db
-        {
-            migrate_core_db(&mut conn)?;
-        }
+        migrate_core_db(&stash).await?;
         debug!("initializing user ");
         // initialize user db
         for initializer in &self.inner.user_db_initializers {
-            initializer.initialize(&mut conn)?;
+            initializer.initialize(&stash)?;
         }
 
-        Ok(pool)
+        Ok(stash)
     }
 }
 
@@ -286,8 +253,4 @@ fn get_session_db_path(path: impl AsRef<Path>) -> PathBuf {
 
 fn get_user_db_path(path: impl AsRef<Path>, user_id: &UserId) -> PathBuf {
     path.as_ref().join(user_id.to_string()).with_extension("db")
-}
-
-fn db_debug_enabled() -> bool {
-    std::env::var("PROTON_CORE_CTX_DB_DEBUG").is_ok()
 }

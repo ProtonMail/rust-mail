@@ -2,11 +2,11 @@ use crate::domain::{SecretString, Uid, UserId};
 use crate::http::RequestError;
 use proton_async::sync::RwLock;
 use secrecy::ExposeSecret;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Authentication scopes for the session.
-#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Scope(pub String);
 
 /// Token used to refresh the active session.

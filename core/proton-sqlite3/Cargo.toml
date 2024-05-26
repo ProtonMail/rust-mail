@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+futures = {workspace=true}
 rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid", "chrono", "functions", "trace"] }
 tracing = {workspace=true}
 thiserror = {workspace=true}
@@ -15,6 +16,8 @@ fixedbitset = "0.5"
 slotmap = "1"
 paste = {workspace=true}
 proton-async = {version = "0.5.0", path = "../proton-async", registry = "proton"}
+stash = {workspace=true}
+tokio = {workspace=true}
 
 [dev-dependencies]
 rand = {workspace=true}

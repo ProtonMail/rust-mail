@@ -1,5 +1,7 @@
 //! Migrations for session based table information.
-use proton_sqlite3::{Migration, Migrator, MigratorError, SqliteConnection};
+use proton_sqlite3::{Migration, Migrator, MigratorError};
+use stash::params;
+use stash::stash::Stash;
 
 pub mod v0;
 
@@ -7,18 +9,16 @@ pub mod v0;
 ///
 /// # Errors
 /// Returns error if the migration failed.
-pub fn migrate_session_db(conn: &mut SqliteConnection) -> Result<usize, MigratorError> {
+pub async fn migrate_session_db(stash: &Stash) -> Result<usize, MigratorError> {
     const VERSION_TABLE_NAME: &str = "proton_session_version";
-    let migrations: Vec<Box<dyn Migration>> = vec![Box::new(v0::V0 {})];
+    let migrations: Vec<Box<dyn Migration>> = params![v0::V0 {}];
 
     let migrator = Migrator::new();
-    migrator.migrate(conn, VERSION_TABLE_NAME, &migrations)
+    migrator.migrate(stash, VERSION_TABLE_NAME, &migrations).await
 }
 
-#[test]
-fn test_core_migration_on_empty_data_set() {
-    let pool =
-        proton_sqlite3::SqliteConnectionPool::new(proton_sqlite3::SqliteMode::InMemory, true);
-    let mut conn = pool.acquire().expect("failed to acquire connection");
-    migrate_session_db(&mut conn).expect("failed to migrate");
+#[tokio::test]
+async fn test_core_migration_on_empty_data_set() {
+    let stash = Stash::new(None).expect("Failed to create Stash");
+    migrate_session_db(&stash).await.expect("failed to migrate");
 }

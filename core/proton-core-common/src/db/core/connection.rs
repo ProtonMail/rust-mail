@@ -1,9 +1,6 @@
 use crate::db::{CoreSqliteConnectionImpl, DBResult};
-use proton_api_core::domain::{
-    Email, Flags, HighSecurity, Password, Phone, ProductUsedSpace, Referral, SettingsFlags, TwoFA,
-    User, UserId, UserSettings,
-};
-use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
+use proton_api_core::domain::{Email, Flags, HighSecurity, Password, Phone, ProductUsedSpace, Referral, SettingsFlags, TwoFA, User, UserId, UserKeys, UserSettings};
+use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
 use proton_sqlite3::utils::{gen_variable_in_argument_list, mapped_rows_to_vec, RowIndexAllocator};
 use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
@@ -50,7 +47,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         let mut key_stmt = self
             .0
             .prepare("INSERT OR REPLACE INTO user_keys VALUES (?,?,?,?,?,?,?,?)")?;
-        for k in &user.keys.0 {
+        for k in &user.keys.0.0 {
             key_stmt.execute((
                 &user.id,
                 k.id.as_ref(),
@@ -84,44 +81,8 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         };
         let mut key_stmt = self.0.prepare(UserKeySelector::query())?;
         let keys = mapped_rows_to_vec(key_stmt.query_map([user_id], UserKeySelector::from_row)?)?;
-        user.keys = UserKeys(keys);
+        user.keys = UserKeys(RealUserKeys(keys));
         Ok(Some(user))
-    }
-
-    /// Update the user total used storage space.
-    ///
-    /// # Errors
-    /// Returns errors if the operation failed.
-    pub fn update_user_used_space(&mut self, user_id: &UserId, used_space: i64) -> DBResult<()> {
-        self.0.execute(
-            "UPDATE users SET used_space=? WHERE id=?",
-            (used_space, user_id),
-        )?;
-        Ok(())
-    }
-
-    /// Update the user product space usage info.
-    ///
-    /// # Errors
-    /// Returns errors if the operation failed.
-    pub fn update_user_product_used_space(
-        &mut self,
-        user_id: &UserId,
-        used_space: &ProductUsedSpace,
-    ) -> DBResult<()> {
-        self.0.execute(
-            "UPDATE users SET pus_calendar=?, pus_contact=?, pus_drive=?, \
-    pus_mail=?, pus_pass=? WHERE id=?",
-            (
-                used_space.calendar,
-                used_space.contact,
-                used_space.drive,
-                used_space.mail,
-                used_space.pass,
-                user_id,
-            ),
-        )?;
-        Ok(())
     }
 
     /// Create or update the user's settings.
@@ -234,7 +195,9 @@ impl UserSelector {
                 mail: r.get(22)?,
                 pass: r.get(23)?,
             },
-            keys: UserKeys(Vec::new()),
+            keys: UserKeys(RealUserKeys(Vec::new())),
+            row_id: Some(1), // Lies! 😅
+            stash: None,
         })
     }
 }
@@ -289,6 +252,7 @@ impl UserSettingsSelector {
         // advance once to skip ove user_id;
         alloc.fetch_and_add();
         Ok(UserSettings {
+            id: UserId::from("USER"),
             email: Email {
                 value: r.get(alloc.fetch_and_add())?,
                 status: r.get(alloc.fetch_and_add())?,
@@ -335,6 +299,8 @@ impl UserSettingsSelector {
                 value: r.get(alloc.fetch_and_add())?,
             },
             session_account_recovery: r.get(alloc.fetch_and_add())?,
+            row_id: Some(1), // Lies! 😅
+            stash: None,
         })
     }
 }

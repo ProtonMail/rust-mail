@@ -1,54 +1,43 @@
-use crate::db::DBResult;
-use proton_api_core::domain::{
-    DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
-    SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserSettings, WeekStart,
-};
-use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
+use proton_api_core::domain::{DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserKeys, UserSettings, WeekStart};
+use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys as RealUserKeys};
+use stash::stash::Stash;
+use stash::orm::Model;
 
 #[cfg(test)]
-fn new_core_test_connection() -> crate::db::CoreSqliteConnection {
+async fn new_core_test_connection() -> Stash {
     use crate::db::migrations::migrate_core_db;
-    use proton_sqlite3::{InProcessTrackerService, SqliteConnectionPool, SqliteMode};
-    let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
-    {
-        let mut conn = pool.acquire().unwrap();
-        migrate_core_db(&mut conn).unwrap();
-    }
-    let tracker = InProcessTrackerService::new(pool).expect("failed to create tracker service");
-    tracker
-        .new_connection()
-        .expect("failed to acquire connection")
-        .into()
+    let stash = Stash::new(None).expect("Failed to create Stash");
+    migrate_core_db(&stash).await.unwrap();
+    stash
 }
 
-#[test]
-fn test_core_store_and_load_user() {
-    let mut conn = new_core_test_connection();
-    let user = new_test_user();
-    conn.tx(|tx| -> DBResult<()> {
-        tx.create_or_update_user(&user)
-            .expect("failed to store user");
-        let db_user = tx
-            .get_user(&user.id)
+#[tokio::test]
+async fn test_core_store_and_load_user() {
+    let stash = new_core_test_connection().await;
+    let mut user = new_test_user(stash.clone());
+    {
+        let tx = stash.transaction().await.expect("failed to start transaction");
+        user.save_using(&tx).await.expect("failed to store user");
+        let db_user = User::load_using(user.id.clone(), &tx)
+            .await
             .expect("failed to load user")
             .expect("should have value");
         assert_eq!(db_user, user);
-        Ok(())
-    })
+        tx.commit().await
+    }
     .unwrap();
 }
 
-#[test]
-fn test_core_user_space_updates() {
-    let mut conn = new_core_test_connection();
-    let mut user = new_test_user();
-    conn.tx(|tx| -> DBResult<()> {
-        tx.create_or_update_user(&user)
-            .expect("failed to store user");
+#[tokio::test]
+async fn test_core_user_space_updates() {
+    let stash = new_core_test_connection().await;
+    let mut user = new_test_user(stash.clone());
+    {
+        let tx = stash.transaction().await.expect("failed to start transaction");
+        user.save_using(&tx).await.expect("failed to store user");
 
         user.used_space = 912314142;
-        tx.update_user_used_space(&user.id, user.used_space)
-            .expect("failed to update used space");
+        user.save_using(&tx).await.expect("failed to update used space");
 
         user.product_used_space = ProductUsedSpace {
             calendar: 234235235235,
@@ -58,25 +47,25 @@ fn test_core_user_space_updates() {
             pass: 1234857671,
         };
 
-        tx.update_user_product_used_space(&user.id, &user.product_used_space)
-            .expect("failed to update used space");
-
-        let db_user = tx
-            .get_user(&user.id)
+        user.save_using(&tx).await.expect("failed to update used space");
+        
+        let db_user = User::load_using(user.id.clone(), &tx)
+            .await
             .expect("failed to load user")
             .expect("should have value");
         assert_eq!(db_user, user);
-        Ok(())
-    })
+        tx.commit().await
+    }
     .unwrap();
 }
-#[test]
-fn test_core_store_and_load_user_settings() {
-    let mut conn = new_core_test_connection();
+#[tokio::test]
+async fn test_core_store_and_load_user_settings() {
+    let stash = new_core_test_connection().await;
 
     let user_id = UserId::from("USER");
 
-    let settings = UserSettings {
+    let mut settings = UserSettings {
+        id: user_id.clone(),
         email: Email {
             value: "FooBar".to_string(),
             status: 1,
@@ -123,22 +112,24 @@ fn test_core_store_and_load_user_settings() {
             value: true,
         },
         session_account_recovery: true,
+        row_id: None,
+        stash: Some(stash.clone()),
     };
 
-    conn.tx(|tx| -> DBResult<()> {
-        tx.create_or_update_user_settings(&user_id, &settings)
-            .expect("failed to store settings");
-        let db_settings = tx
-            .get_user_settings(&user_id)
-            .expect("failed to load settings")
-            .unwrap();
+    {
+        let tx = stash.transaction().await.expect("failed to start transaction");
+        settings.save_using(&tx).await.expect("failed to store settings");
+        let db_settings = UserSettings::load_using(user_id.clone(), &tx)
+            .await
+            .expect("failed to load user")
+            .expect("should have value");
         assert_eq!(db_settings, settings);
-        Ok(())
-    })
+        tx.commit().await
+    }
     .unwrap();
 }
 
-fn new_test_user() -> User {
+fn new_test_user(stash: Stash) -> User {
     User {
         id: UserId::from("my_user_id"),
         name: Some("my_user_name".to_string()),
@@ -151,7 +142,7 @@ fn new_test_user() -> User {
         create_time: 111111,
         credit: 222222,
         currency: "euro".to_string(),
-        keys: UserKeys(vec![LockedKey {
+        keys: UserKeys(RealUserKeys(vec![LockedKey {
             id: KeyId::from("My_key_id"),
             version: 3,
             private_key: "my_private_key".to_string(),
@@ -164,7 +155,7 @@ fn new_test_user() -> User {
             recovery_secret: Some("recovery_secret".to_string()),
             recovery_secret_signature: Some("recovery_signature".to_string()),
             address_forwarding_id: None,
-        }]),
+        }])),
         product_used_space: ProductUsedSpace {
             calendar: 23,
             contact: 44,
@@ -189,5 +180,7 @@ fn new_test_user() -> User {
             sso: false,
             no_proton_address: true,
         },
+        row_id: None,
+        stash: Some(stash),
     }
 }

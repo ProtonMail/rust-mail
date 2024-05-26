@@ -1,10 +1,8 @@
-use crate::db::proton_sqlite3::{
-    InProcessTrackerService, SqliteConnection, SqliteConnectionPool, TrackingConnection,
-};
-use crate::db::{CoreSqliteConnection, DBMigrationError, DBResult};
 use proton_api_core::domain::UserId;
 use proton_api_core::Session;
 use std::fmt::{Debug, Formatter};
+use proton_sqlite3::MigratorError;
+use stash::stash::Stash;
 
 mod settings;
 
@@ -14,14 +12,14 @@ pub trait UserDatabaseInitializer: Send + Sync {
     ///
     /// # Errors
     /// Return error if the migration failed.
-    fn initialize(&self, conn: &mut SqliteConnection) -> Result<(), DBMigrationError>;
+    fn initialize(&self, stash: &Stash) -> Result<(), MigratorError>;
 }
 
 /// Contains all the relevant information to an initialize user session.
 #[derive(Clone)]
 pub struct UserContext {
     session: Session,
-    db_tracker: InProcessTrackerService,
+    stash: Stash,
     user_id: UserId,
 }
 
@@ -34,14 +32,14 @@ impl Debug for UserContext {
 impl UserContext {
     pub(crate) fn new(
         session: Session,
-        db_pool: SqliteConnectionPool,
+        stash: Stash,
         id: UserId,
-    ) -> std::io::Result<Self> {
-        Ok(Self {
+    ) -> Self {
+        Self {
             session,
-            db_tracker: InProcessTrackerService::new(db_pool)?,
+            stash,
             user_id: id,
-        })
+        }
     }
 
     /// Get the network session.
@@ -56,26 +54,10 @@ impl UserContext {
         T::from(self.session.clone())
     }
 
-    /// Get a new core db connection.
-    ///
-    /// # Errors
-    /// Returns error if the connection can not be acquired.
-    pub fn new_db_connection(&self) -> DBResult<CoreSqliteConnection> {
-        self.new_db_connection_as::<CoreSqliteConnection>()
-    }
-
-    /// Get a new db connection of a given type.
-    ///
-    /// # Errors
-    /// Returns error if the connection can not be acquired.
-    pub fn new_db_connection_as<T: From<TrackingConnection>>(&self) -> DBResult<T> {
-        self.db_tracker.new_connection().map(Into::into)
-    }
-
     /// Get the tracker service for database operations.
     #[must_use]
-    pub fn tracker_service(&self) -> &InProcessTrackerService {
-        &self.db_tracker
+    pub fn tracker_service(&self) -> &Stash {
+        &self.stash
     }
 
     /// Get the user id of this context.

@@ -1,10 +1,16 @@
+#![allow(clippy::module_name_repetitions)]
+
+use std::ops::Deref;
 use crate::utils::{bool_from_integer, bool_to_integer};
-use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys};
+use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys as RealUserKeys};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{SaltError as CryptoSaltError, SaltedPassword, Salts};
 use serde;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use stash::macros::Model;
+use stash::stash::Stash;
+use stash::utils::sql_using_serde;
 
 crate::utils::string_id!(Uid);
 impl secrecy::Zeroize for Uid {
@@ -43,6 +49,8 @@ pub struct ProductUsedSpace {
     pub pass: i64,
 }
 
+sql_using_serde!(ProductUsedSpace);
+
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub struct Flags {
@@ -62,38 +70,102 @@ pub struct Flags {
     pub no_proton_address: bool,
 }
 
+sql_using_serde!(Flags);
+
 /// Represents an API user
-#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[serde(rename_all = "PascalCase")]
+#[TableName("users")]
 pub struct User {
+    #[IdField]
     #[serde(rename = "ID")]
     pub id: UserId,
+    #[DbField]
     pub name: Option<String>,
+    #[DbField]
     pub display_name: Option<String>,
+    #[DbField]
     pub email: String,
+    #[DbField]
     pub used_space: i64,
+    #[DbField]
     pub max_space: i64,
+    #[DbField]
     pub max_upload: i64,
+    #[DbField]
     #[serde(rename = "Type")]
     pub user_type: UserType,
+    #[DbField]
     pub create_time: u64,
+    #[DbField]
     pub credit: i64,
+    #[DbField]
     pub currency: String,
+    #[DbField]
     pub keys: UserKeys,
+    #[DbField]
     pub product_used_space: ProductUsedSpace,
+    #[DbField]
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
+    #[DbField]
     pub to_migrate: bool,
+    #[DbField]
     pub mnemonic_status: UserMnemonicStatus,
+    #[DbField]
     pub role: u32,
+    #[DbField]
     pub private: u32,
+    #[DbField]
     pub subscribed: u32,
+    #[DbField]
     pub services: u32,
+    #[DbField]
     pub delinquent: u32,
+    #[DbField]
     pub flags: Flags,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
 }
+
+/// Wrapper type around `RealUserKeys` to implement `FromSql` and `ToSql`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserKeys(pub RealUserKeys);
+
+impl Deref for UserKeys {
+    type Target = RealUserKeys;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for UserKeys {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let real_user_keys = RealUserKeys::deserialize(deserializer)?;
+        Ok(UserKeys(real_user_keys))
+    }
+}
+
+impl Serialize for UserKeys {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+sql_using_serde!(UserKeys);
 
 #[derive(Debug, thiserror::Error)]
 pub enum SaltError {
@@ -117,7 +189,7 @@ impl User {
     /// Get the users primary key.
     #[must_use]
     pub fn get_primary_key(&self) -> Option<&proton_crypto_account::domain::LockedKey> {
-        self.keys.0.iter().find(|&k| k.primary)
+        self.keys.0.0.iter().find(|&k| k.primary)
     }
 
     /// Get the user's display name.

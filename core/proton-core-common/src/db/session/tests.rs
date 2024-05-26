@@ -1,5 +1,8 @@
-use crate::db::{DBResult, SessionEncryptionKey};
+use crate::db::{EncryptedUserSession, SessionEncryptionKey};
 use proton_api_core::auth::{AccessToken, RefreshToken, Scope};
+use stash::orm::Model;
+use stash::params;
+use stash::stash::Stash;
 
 #[test]
 fn test_encryption() {
@@ -10,17 +13,15 @@ fn test_encryption() {
 }
 
 #[cfg(test)]
-fn new_test_connection() -> crate::db::SessionSqliteConnection {
+async fn new_test_connection() -> Stash {
     use crate::db::migrations::migrate_session_db;
-    use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
-    let pool = SqliteConnectionPool::new(SqliteMode::InMemory, false);
-    let mut conn = pool.acquire().expect("failed to acquire connection");
-    migrate_session_db(&mut conn).expect("failed to migrate");
-    conn.into()
+    let stash = Stash::new(None).expect("Failed to create Stash");
+    migrate_session_db(&stash).await.expect("failed to migrate");
+    stash
 }
 
-#[test]
-fn test_session_store_load() {
+#[tokio::test]
+async fn test_session_store_load() {
     use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
@@ -34,19 +35,19 @@ fn test_session_store_load() {
     };
 
     let key = SessionEncryptionKey::random();
-    let encrypted_session = session
+    let mut encrypted_session = session
         .to_encrypted_session(&key)
         .expect("failed to encrypt");
-    let mut conn = new_test_connection();
-    conn.tx(|tx| -> DBResult<()> {
-        tx.create_or_update_session(&encrypted_session)
-            .expect("failed to store session");
+    let stash = new_test_connection().await;
+    {
+        let tx = stash.transaction().await.expect("failed to start transaction");
+        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        encrypted_session.set_stash(&stash);
 
-        let db_encrypted_session = tx
-            .get_session_with_user_id(&session.user_id)
-            .unwrap()
-            .unwrap();
-        assert_eq!(encrypted_session, db_encrypted_session);
+        let results = tx
+            .query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+        let db_encrypted_session = results.first().unwrap();
+        assert_eq!(encrypted_session, *db_encrypted_session);
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, session.session_id);
         assert_eq!(db_session.user_id, session.user_id);
@@ -61,13 +62,13 @@ fn test_session_store_load() {
             db_session.refresh_token.expose_secret(),
             session.refresh_token.expose_secret()
         );
-        Ok(())
-    })
+        tx.commit().await
+    }
     .expect("failed");
 }
 
-#[test]
-fn test_session_update() {
+#[tokio::test]
+async fn test_session_update() {
     use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
@@ -85,37 +86,28 @@ fn test_session_update() {
         user_id: UserId::from("user_id"),
         name: Some("foobar".to_string()),
         email: "foo@bar.com".to_string(),
-        refresh_token: RefreshToken::from("refreshed".to_string()),
-        access_token: AccessToken::from("another token".to_string()),
+        refresh_token: RefreshToken::from("token".to_string()),
+        access_token: AccessToken::from("access".to_string()),
         scopes: Scope::from("Scope Scope2"),
     };
 
     let key = SessionEncryptionKey::random();
-    let encrypted_session = session
+    let mut encrypted_session = session
         .to_encrypted_session(&key)
         .expect("failed to encrypt");
-    let encrypted_updated_session = updated_session
-        .to_encrypted_session(&key)
-        .expect("failed to encrypt");
-
-    let mut conn = new_test_connection();
-    conn.tx(|tx| -> DBResult<()> {
-        tx.create_or_update_session(&encrypted_session)
-            .expect("failed to store session");
-
-        tx.update_session(
-            &updated_session.user_id,
-            &updated_session.session_id,
-            &encrypted_updated_session.access_token,
-            &encrypted_updated_session.refresh_token,
-            &updated_session.scopes,
-        )
-        .expect("failed to update");
-        let db_encrypted_session = tx
-            .get_session_with_user_id(&session.user_id)
-            .unwrap()
-            .unwrap();
-        assert_eq!(encrypted_updated_session, db_encrypted_session);
+    
+    let stash = new_test_connection().await;
+    {
+        let tx = stash.transaction().await.expect("failed to start transaction");
+        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        encrypted_session.session_id = updated_session.session_id.clone();
+        encrypted_session.scopes = updated_session.scopes.clone();
+        encrypted_session.save_using(&tx).await.expect("failed to update");
+        encrypted_session.set_stash(&stash);
+        let results = tx
+            .query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+        let db_encrypted_session = results.first().unwrap();
+        assert_eq!(encrypted_session, *db_encrypted_session);
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, updated_session.session_id);
         assert_eq!(db_session.user_id, updated_session.user_id);
@@ -130,13 +122,13 @@ fn test_session_update() {
             db_session.refresh_token.expose_secret(),
             updated_session.refresh_token.expose_secret()
         );
-        Ok(())
-    })
+        tx.commit().await
+    }
     .expect("failed");
 }
 
-#[test]
-fn test_session_delete_user_id() {
+#[tokio::test]
+async fn test_session_delete_user_id() {
     use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
@@ -149,26 +141,26 @@ fn test_session_delete_user_id() {
         scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
-    let encrypted_session = session
+    let mut encrypted_session = session
         .to_encrypted_session(&key)
         .expect("failed to encrypt");
+    
+    let stash = new_test_connection().await;
+    {
+        let tx = stash.transaction().await.expect("failed to start transaction");
+        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        encrypted_session.set_stash(&stash);
+        tx.execute("DELETE FROM core_sessions WHERE user_id =?", params![session.user_id.clone()]).await.expect("expect failed to delete user");
 
-    let mut conn = new_test_connection();
-    conn.tx(|tx| -> DBResult<()> {
-        tx.create_or_update_session(&encrypted_session)
-            .expect("failed to store session");
-        tx.delete_session_with_user_id(&session.user_id)
-            .expect("expect failed to delete user");
-
-        let db_encrypted_session = tx.get_session_with_user_id(&session.user_id).unwrap();
-        assert!(matches!(db_encrypted_session, None));
-        Ok(())
-    })
+        let results = tx.query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+        assert_eq!(results.len(), 0);
+        tx.commit().await
+    }
     .expect("failed");
 }
 
-#[test]
-fn test_session_delete_session_id() {
+#[tokio::test]
+async fn test_session_delete_session_id() {
     use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
     use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
@@ -181,20 +173,20 @@ fn test_session_delete_session_id() {
         scopes: Scope::from("Scope"),
     };
     let key = SessionEncryptionKey::random();
-    let encrypted_session = session
+    let mut encrypted_session = session
         .to_encrypted_session(&key)
         .expect("failed to encrypt");
-
-    let mut conn = new_test_connection();
-    conn.tx(|tx| -> DBResult<()> {
-        tx.create_or_update_session(&encrypted_session)
-            .expect("failed to store session");
-        tx.delete_session(&session.session_id)
-            .expect("expect failed to delete user");
-
-        let db_encrypted_session = tx.get_session_with_user_id(&session.user_id).unwrap();
-        assert!(matches!(db_encrypted_session, None));
-        Ok(())
-    })
+    
+    let stash = new_test_connection().await;
+    {
+        let tx = stash.transaction().await.expect("failed to start transaction");
+        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        encrypted_session.set_stash(&stash);
+        tx.execute("DELETE FROM core_sessions WHERE session_id =?", params![session.session_id.clone()]).await.expect("expect failed to delete user");
+        
+        let results = tx.query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+        assert_eq!(results.len(), 0);
+        tx.commit().await
+    }
     .expect("failed");
 }

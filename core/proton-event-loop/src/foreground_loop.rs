@@ -61,7 +61,7 @@ impl EventLoop {
 
         debug!("Last Event Id = {last_event_id}");
 
-        let events = self
+        let mut events = self
             .collect_events(provider, &last_event_id)
             .await
             .map_err(|e| {
@@ -89,7 +89,7 @@ impl EventLoop {
                 .collect::<Vec<_>>()
         );
 
-        self.publish_events_to_subscribers(&events, subscribers)
+        self.publish_events_to_subscribers(&mut events, subscribers)
             .await?;
 
         let new_event_id = events
@@ -140,7 +140,7 @@ impl EventLoop {
 
     async fn publish_events_to_subscribers<T: Event>(
         &self,
-        events: &[T],
+        events: &mut [T],
         subscribers: &[Box<dyn Subscriber<T>>],
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {

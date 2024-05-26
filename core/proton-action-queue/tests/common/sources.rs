@@ -4,40 +4,41 @@ use proton_api_core::exports::anyhow;
 use proton_sqlite3::{rusqlite, InProcessTrackerService, SqliteTransaction};
 use rusqlite::{params_from_iter, OptionalExtension};
 use std::str::FromStr;
+use serde::{Deserialize, Serialize};
+use stash::datatypes::{QueryResultString, QueryResultU64};
+use stash::exports::ToSql;
+use stash::macros::DbRecord;
+use stash::params;
+use stash::stash::{Stash, StashError, Tether};
 
 pub struct TestLocalSource {
-    conn: proton_sqlite3::TrackingConnection,
+    stash: Stash,
 }
 
 impl TestLocalSource {
-    pub fn new(connection_pool: &InProcessTrackerService) -> Result<Self, rusqlite::Error> {
-        let conn = connection_pool.new_connection()?;
-        Ok(Self { conn })
+    pub fn new(stash: Stash) -> Result<Self, StashError> {
+        Ok(Self { stash })
     }
 
-    pub fn new_with_init(
-        connection_pool: &InProcessTrackerService,
-    ) -> Result<Self, rusqlite::Error> {
-        let mut conn = connection_pool.new_connection()?;
-        conn.tx(|tx| -> rusqlite::Result<()> {
-            let mut source = TestLocalSourceTransaction::new(tx);
-
-            source.create_tables()?;
-
-            Ok(())
-        })?;
-        Ok(Self { conn })
+    pub async fn new_with_init(
+        stash: Stash,
+    ) -> Result<Self, StashError> {
+                 let tx = stash.transaction().await?;
+                 let mut source = TestLocalSourceTransaction::new(tx.clone());
+            source.create_tables().await?;
+        tx.commit().await?;
+        Ok(Self { stash })
     }
 
-    pub fn tx<R, E: From<rusqlite::Error>, F: Fn(TestLocalSourceTransaction) -> Result<R, E>>(
+    pub async fn tx<R, E: From<StashError>, F: Fn(TestLocalSourceTransaction) -> Result<R, E>>(
         &mut self,
         f: F,
     ) -> Result<R, E> {
-        self.conn.tx(move |tx| {
-            let ttx = TestLocalSourceTransaction::new(tx);
+        let tx = self.stash.transaction().await?;
+            let ttx = TestLocalSourceTransaction::new(tx.clone());
             let r = (f)(ttx)?;
+        tx.commit().await?;
             Ok(r)
-        })
     }
 }
 
@@ -62,24 +63,24 @@ pub trait RemoteSource: Send + Sync {
     fn delete_messages(&self, id: &[MessageId]) -> Result<(), proton_api_core::http::RequestError>;
 }
 
-pub struct TestLocalSourceTransaction<'r, 'c> {
-    tx: &'r mut SqliteTransaction<'c>,
+pub struct TestLocalSourceTransaction {
+    tx: Tether,
 }
 
-impl<'r, 'c> TestLocalSourceTransaction<'r, 'c> {
-    pub fn new(tx: &'r mut SqliteTransaction<'c>) -> Self {
+impl TestLocalSourceTransaction {
+    pub fn new(tx: Tether) -> Self {
         Self { tx }
     }
 
-    fn create_tables(&mut self) -> rusqlite::Result<()> {
+    async fn create_tables(&mut self) -> Result<(), StashError> {
         // Folder table
-        self.tx.execute("CREATE TABLE folders (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)",())?;
-        self.tx.execute("CREATE TABLE labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)",())?;
+        self.tx.execute("CREATE TABLE folders (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)",vec![]).await?;
+        self.tx.execute("CREATE TABLE labels (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE)",vec![]).await?;
         // Message tables
         self.tx.execute(
             "CREATE TABLE messages (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, read INTEGER, deleted INTEGER DEFAULT 0)",
-            (),
-        )?;
+            vec![],
+        ).await?;
         // Message <-> folder
         self.tx.execute("CREATE TABLE message_folders (message INTEGER NOT NULL UNIQUE, folder INTEGER NOT NULL, remote INTEGER NOT NULL,
         PRIMARY KEY (message, folder),
@@ -88,7 +89,7 @@ impl<'r, 'c> TestLocalSourceTransaction<'r, 'c> {
         CONSTRAINT `folder_ref_delete` FOREIGN KEY (`folder`) REFERENCES `folders` (`id`) ON DELETE CASCADE,
         CONSTRAINT `folder_ref_update` FOREIGN KEY (`folder`) REFERENCES `folders` (`id`) ON UPDATE CASCADE,
         CONSTRAINT `remote_ref` FOREIGN KEY (`remote`) REFERENCES `folders` (`id`) ON DELETE CASCADE
-        )",())?;
+        )",vec![]).await?;
 
         // Message <-> labels
         self.tx.execute("CREATE TABLE message_labels (message INTEGER NOT NULL, label INTEGER NOT NULL,
@@ -97,268 +98,182 @@ impl<'r, 'c> TestLocalSourceTransaction<'r, 'c> {
         CONSTRAINT `message_ref_update` FOREIGN KEY (`message`) REFERENCES `messages` (`id`) ON UPDATE CASCADE,
         CONSTRAINT `label_ref_delete` FOREIGN KEY (`label`) REFERENCES `labels` (`id`) ON DELETE CASCADE,
         CONSTRAINT `label_ref_update` FOREIGN KEY (`label`) REFERENCES `labels` (`id`) ON UPDATE CASCADE
-        )",())?;
+        )",vec![]).await?;
 
         Ok(())
     }
-    pub fn create_message(&mut self, read: bool) -> Result<MessageId, anyhow::Error> {
-        let id = self.tx.query_row(
-            "INSERT into messages (read) VALUES (?) RETURNING id",
-            [read],
-            |r| r.get(0),
-        )?;
-
-        Ok(id)
+    pub async fn create_message(&mut self, read: bool) -> Result<MessageId, anyhow::Error> {
+        Ok(MessageId(self.tx.query::<_, QueryResultU64>("INSERT into messages (read) VALUES (?) RETURNING id AS value", params![read]).await?.first().unwrap().value as u32))
     }
 
-    pub fn get_message(&self, id: MessageId) -> Result<Option<Message>, anyhow::Error> {
-        let m = self.tx.query_row("SELECT messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
+    pub async fn get_message(&self, id: MessageId) -> Result<Option<Message>, anyhow::Error> {
+        Ok(self.tx.query::<_, Message>("SELECT messages.rowid AS rowid, messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
 LEFT JOIN message_folders ON messages.id=message_folders.message
 LEFT JOIN message_labels ON messages.id=message_labels.message
 WHERE messages.id = ? GROUP BY messages.id LIMIT 1
-", [id], |v| {
-            let labels = v.get::<usize,Option<String>>(3)?;
-            let labels = if let Some(labels) = labels { labels.split(',').map(|v| LabelId(u32::from_str(v).expect("failed to parse integer"))).collect::<Vec<_>>() } else { Vec::new()};
-            Ok(Message {
-                id: v.get(0)?,
-                folder:v.get(2)?,
-                labels,
-                read: v.get(1)?
-            })
-        }).optional()?;
-        Ok(m)
+", params![id]).await?.into_iter().next())
     }
 
-    pub fn get_messages(&self, ids: &[MessageId]) -> Result<Vec<Message>, anyhow::Error> {
-        let mut stmt = self.tx.prepare(&format!(
-            "SELECT messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
+    pub async fn get_messages(&self, ids: &[MessageId]) -> Result<Vec<Message>, anyhow::Error> {
+        #[allow(trivial_casts)]
+        Ok(self.tx.query::<_, Message>(&format!(
+            "SELECT messages.rowid AS rowid, messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
 LEFT JOIN message_folders ON messages.id=message_folders.message
 LEFT JOIN message_labels ON messages.id=message_labels.message
-WHERE messages.id IN ({}) AND messages.deleted=FALSE GROUP BY messages.id ", gen_variable_args("?", ids.len())))?;
-        let mut messages = Vec::with_capacity(ids.len());
-
-        let sql_messages = stmt.query_map(params_from_iter(ids.iter()), |v| {
-            let labels = v.get::<usize, Option<String>>(3)?;
-            let labels = if let Some(labels) = labels {
-                labels
-                    .split(',')
-                    .map(|v| LabelId(u32::from_str(v).expect("failed to parse integer")))
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-            Ok(Message {
-                id: v.get(0)?,
-                folder: v.get(2)?,
-                labels,
-                read: v.get(1)?,
-            })
-        })?;
-
-        for m in sql_messages {
-            messages.push(m?);
-        }
-        Ok(messages)
+WHERE messages.id IN ({}) AND messages.deleted=FALSE GROUP BY messages.id ", gen_variable_args("?", ids.len())), ids.iter().map(|item| Box::new(*item) as Box<dyn ToSql + Send>).collect()).await?)
     }
 
-    pub fn get_messages_with_deleted(
+    pub async fn get_messages_with_deleted(
         &self,
         ids: &[MessageId],
     ) -> Result<Vec<Message>, anyhow::Error> {
-        let mut stmt = self.tx.prepare(&format!(
-            "SELECT messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
+        #[allow(trivial_casts)]
+        Ok(self.tx.query::<_, Message>(&format!(
+            "SELECT messages.rowid AS rowid, messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
 LEFT JOIN message_folders ON messages.id=message_folders.message
 LEFT JOIN message_labels ON messages.id=message_labels.message
-WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.len())))?;
-        let mut messages = Vec::with_capacity(ids.len());
-
-        let sql_messages = stmt.query_map(params_from_iter(ids.iter()), |v| {
-            let labels = v.get::<usize, Option<String>>(3)?;
-            let labels = if let Some(labels) = labels {
-                labels
-                    .split(',')
-                    .map(|v| LabelId(u32::from_str(v).expect("failed to parse integer")))
-                    .collect::<Vec<_>>()
-            } else {
-                Vec::new()
-            };
-            Ok(Message {
-                id: v.get(0)?,
-                folder: v.get(2)?,
-                labels,
-                read: v.get(1)?,
-            })
-        })?;
-
-        for m in sql_messages {
-            messages.push(m?);
-        }
-        Ok(messages)
+WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.len())), ids.iter().map(|item| Box::new(*item) as Box<dyn ToSql + Send>).collect()).await?)
     }
 
-    pub fn add_message_to_label(
+    pub async fn add_message_to_label(
         &mut self,
         message_ids: &[MessageId],
         label_id: LabelId,
     ) -> Result<(), anyhow::Error> {
-        let mut stmt = self
-            .tx
-            .prepare("INSERT OR IGNORE into message_labels (message,label) VALUES (?,?)")?;
-
         for id in message_ids {
-            stmt.execute((id, label_id))?;
+            self.tx.execute("INSERT OR IGNORE into message_labels (message,label) VALUES (?,?)", params![*id, label_id]).await?;
         }
         Ok(())
     }
 
-    pub fn remove_message_from_label(
+    pub async fn remove_message_from_label(
         &mut self,
         message_ids: &[MessageId],
         label_id: LabelId,
     ) -> Result<(), anyhow::Error> {
-        let mut stmt = self
-            .tx
-            .prepare("DELETE FROM message_labels WHERE message=? AND label=?")?;
-
         for id in message_ids {
-            stmt.execute((id, label_id))?;
+            self.tx.execute("DELETE FROM message_labels WHERE message=? AND label=?", params![*id, label_id]).await?;
         }
         Ok(())
     }
 
-    pub fn move_message_to_folder(
+    pub async fn move_message_to_folder(
         &mut self,
         message_ids: &[MessageId],
         to_folder_id: FolderId,
     ) -> Result<(), anyhow::Error> {
-        let mut stmt = self
-            .tx
-            .prepare("INSERT INTO message_folders(message,folder, remote) VALUES (?,?,?) ON CONFLICT (message) DO UPDATE SET folder=excluded.folder")?;
-
         for id in message_ids {
-            stmt.execute((id, to_folder_id, to_folder_id))?;
+            self.tx.execute("INSERT INTO message_folders(message,folder, remote) VALUES (?,?,?) ON CONFLICT (message) DO UPDATE SET folder=excluded.folder", params![*id, to_folder_id, to_folder_id]).await?;
         }
         Ok(())
     }
 
-    pub fn mark_messages_read(
+    pub async fn mark_messages_read(
         &mut self,
         value: bool,
         ids: &[MessageId],
     ) -> Result<(), anyhow::Error> {
-        let mut stmt = self.tx.prepare("UPDATE messages SET read=? WHERE id=?")?;
         for id in ids {
-            stmt.execute((value, id))?;
+            self.tx.execute("UPDATE messages SET read=? WHERE id=?", params![value, *id]).await?;
         }
         Ok(())
     }
 
-    pub fn mark_messages_deleted(
+    pub async fn mark_messages_deleted(
         &mut self,
         value: bool,
         ids: &[MessageId],
     ) -> Result<(), anyhow::Error> {
-        let mut stmt = self
-            .tx
-            .prepare("UPDATE messages SET deleted=? WHERE id=?")?;
         for id in ids {
-            stmt.execute((value, id))?;
+            self.tx.execute("UPDATE messages SET deleted=? WHERE id=?", params![value, *id]).await?;
         }
         Ok(())
     }
 
-    pub fn delete_message(&mut self, message_ids: &[MessageId]) -> Result<(), anyhow::Error> {
-        let mut stmt = self.tx.prepare("DELETE FROM messages WHERE id=?")?;
+    pub async fn delete_message(&mut self, message_ids: &[MessageId]) -> Result<(), anyhow::Error> {
         for id in message_ids {
-            stmt.execute([id])?;
+            self.tx.execute("DELETE FROM messages WHERE id=?", params![*id]).await?;
         }
         Ok(())
     }
-    pub fn create_folder(&mut self, name: &str) -> Result<FolderId, anyhow::Error> {
-        let folder_id = self.tx.query_row(
-            "INSERT INTO folders (name) VALUES (?) RETURNING id",
-            [name],
-            |v| v.get(0),
-        )?;
-        Ok(folder_id)
+    pub async fn create_folder(&mut self, name: &str) -> Result<FolderId, anyhow::Error> {
+        Ok(FolderId(self.tx.query::<_, QueryResultU64>(
+            "INSERT INTO folders (name) VALUES (?) RETURNING id AS value",
+            params![name.to_owned()]).await?.first().unwrap().value as u32))
     }
 
-    pub fn rename_folder(&mut self, id: FolderId, name: &str) -> Result<(), anyhow::Error> {
+    pub async fn rename_folder(&mut self, id: FolderId, name: &str) -> Result<(), anyhow::Error> {
         self.tx
-            .execute("UPDATE folders SET name=? WHERE id=?", (name, id))?;
+            .execute("UPDATE folders SET name=? WHERE id=?", params![name.to_owned(), Box::new(id)]).await?;
         Ok(())
     }
 
-    pub fn delete_folder(&mut self, id: FolderId) -> Result<(), anyhow::Error> {
-        self.tx.execute("DELETE FROM folders WHERE id=?", [id])?;
-        Ok(())
-    }
-
-    pub fn create_label(&mut self, name: &str) -> Result<LabelId, anyhow::Error> {
-        let label_id = self.tx.query_row(
-            "INSERT INTO labels (name) VALUES (?) RETURNING id",
-            [name],
-            |v| v.get(0),
-        )?;
-        Ok(label_id)
-    }
-
-    pub fn rename_label(&mut self, id: LabelId, name: &str) -> Result<(), anyhow::Error> {
+    pub async fn delete_folder(&mut self, id: FolderId) -> Result<(), anyhow::Error> {
         self.tx
-            .execute("UPDATE label SET name=? WHERE id=?", (name, id))?;
+            .execute("DELETE FROM folders WHERE id=?", params![id]).await?;
         Ok(())
     }
 
-    pub fn delete_label(&mut self, id: LabelId) -> Result<(), anyhow::Error> {
-        self.tx.execute("DELETE FROM labels WHERE id=?", [id])?;
+    pub async fn create_label(&mut self, name: &str) -> Result<LabelId, anyhow::Error> {
+        Ok(LabelId(self.tx.query::<_, QueryResultU64>(
+            "INSERT INTO labels (name) VALUES (?) RETURNING id AS value",
+            params![name.to_owned()]).await?.first().unwrap().value as u32))
+    }
+
+    pub async fn rename_label(&mut self, id: LabelId, name: &str) -> Result<(), anyhow::Error> {
+        self.tx
+            .execute("UPDATE label SET name=? WHERE id=?", params![name.to_owned(), id]).await?;
         Ok(())
     }
 
-    pub fn get_folder_name(&self, id: FolderId) -> Result<Option<String>, anyhow::Error> {
-        let name = self
-            .tx
-            .query_row("SELECT name FROM folders WHERE id = ? LIMIT 1", [id], |r| {
-                r.get(0)
-            })
-            .optional()?;
-        Ok(name)
+    pub async fn delete_label(&mut self, id: LabelId) -> Result<(), anyhow::Error> {
+        self.tx
+            .execute("DELETE FROM labels WHERE id=?", params![id]).await?;
+        Ok(())
+    }
+
+    pub async fn get_folder_name(&self, id: FolderId) -> Result<Option<String>, anyhow::Error> {
+        Ok(self.tx.query::<_, QueryResultString>("SELECT name AS value FROM folders WHERE id = ? LIMIT 1", params![id]).await?.into_iter().next().map(|item| item.value))
     }
 
     // Dep tracking
 
-    pub fn update_move_message_dependency(
+    pub async fn update_move_message_dependency(
         &mut self,
         to: FolderId,
         ids: &[MessageId],
     ) -> Result<(), anyhow::Error> {
-        let mut stmt = self
-            .tx
-            .prepare("UPDATE message_folders SET remote =? WHERE message = ?")?;
         for id in ids {
-            stmt.execute((to, id))?;
+            self.tx
+                .execute("UPDATE message_folders SET remote =? WHERE message = ?", params![*id, to]).await?;
         }
-
         Ok(())
     }
 
-    pub fn get_move_message_state(
+    pub async fn get_move_message_state(
         &self,
         ids: &[MessageId],
     ) -> Result<Vec<(MessageId, FolderId)>, anyhow::Error> {
-        let mut stmt = self.tx.prepare(&format!(
+        #[allow(trivial_casts)]
+        let iter = self.tx.query::<_, MessageFolder>(&format!(
             "SELECT message, remote FROM message_folders WHERE message IN ({})",
             gen_variable_args("?", ids.len())
-        ))?;
-
+        ), ids.iter().map(|item| Box::new(*item) as Box<dyn ToSql + Send>).collect()).await?;
         let mut result = Vec::with_capacity(ids.len());
-        let iter = stmt.query_map(params_from_iter(ids), |row| Ok((row.get(0)?, row.get(1)?)))?;
-
         for item in iter {
-            result.push(item?);
+            result.push((MessageId(item.message), FolderId(item.remote)));
         }
 
         Ok(result)
     }
+}
+
+#[derive(Clone, DbRecord, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub struct MessageFolder {
+    #[DbField]
+    pub message: u32,
+    #[DbField]
+    pub remote: u32,
 }
 
 fn gen_variable_args(input: &str, count: usize) -> String {
