@@ -9,9 +9,10 @@ crate-type = ["staticlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proton-async = { workspace = true }
+futures = { workspace = true }
 proton-mail-common = { workspace = true }
 proton-mail-message-detector = { workspace = true }
+tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 uniffi = { workspace = true }
 

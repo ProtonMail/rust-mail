@@ -5,10 +5,10 @@ use common::TestContext;
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 use proton_mail_common::Mailbox;
 
-#[test]
-fn test_new_mailbox() {
+#[tokio::test]
+async fn test_new_mailbox() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
     params
         .labels
@@ -27,16 +27,14 @@ fn test_new_mailbox() {
             expanded: false,
             order: 0,
         });
-    ctx.async_runtime().block_on(async {
-        let conversations = params.conversations.clone();
-        ctx.setup_user(params.clone()).await;
-        ctx.mock_get_conversations(conversations, 2).await;
-        ctx.catch_all().await;
-        ctx.user_context()
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .expect("failed to initialize");
-    });
+    let conversations = params.conversations.clone();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_conversations(conversations, 2).await;
+    ctx.catch_all().await;
+    ctx.user_context()
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
@@ -53,22 +51,14 @@ fn test_new_mailbox() {
     .unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-    ctx.async_runtime().block_on(async {
-        mailbox1.sync(10).await.unwrap();
-    });
+    mailbox1.sync(10).await.unwrap();
 
     // Sync mailbox 2 - this should also fire a network request
-    ctx.async_runtime().block_on(async {
-        mailbox2.sync(10).await.unwrap();
-    });
+    mailbox2.sync(10).await.unwrap();
 
     // Try syncing mailbox1 again - this should not fire any network requests
-    ctx.async_runtime().block_on(async {
-        mailbox1.sync(10).await.unwrap();
-    });
+    mailbox1.sync(10).await.unwrap();
 
     // Try syncing mailbox2 again - this should not fire any network requests
-    ctx.async_runtime().block_on(async {
-        mailbox2.sync(10).await.unwrap();
-    });
+    mailbox2.sync(10).await.unwrap();
 }

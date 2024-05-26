@@ -1,5 +1,5 @@
 use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
-use crate::{MailUserContext, WeakMailUserContext};
+use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
@@ -69,7 +69,6 @@ impl<'c, 't: 'c> LocalActionHandler for MarkConversationReadLocalHandler<'c, 't>
 }
 
 struct MarkConversationReadRemoteHandler<'t> {
-    ctx: MailUserContext,
     action: UnlabelConversationsAction,
     session: MailSession,
     tx: MailSqliteConnectionMut<'t>,
@@ -111,19 +110,15 @@ impl<'t> RemoteActionHandler for MarkConversationReadRemoteHandler<'t> {
                 error!("Failed to resolve conversation ids: {e}");
                 ActionError::Local(anyhow!(e))
             })?;
-        let responses = self
-            .ctx
-            .mail_context()
-            .async_runtime()
-            .block_on(async {
-                self.session
-                    .unlabel_conversations(label_rid, &conv_ids)
-                    .await
-            })
-            .map_err(|e| {
-                error!("Failed to mark conversations read on API: {e}");
-                e
-            })?;
+        let responses = block_on(async {
+            self.session
+                .unlabel_conversations(label_rid, &conv_ids)
+                .await
+                .map_err(|e| {
+                    error!("Failed to mark conversations read on API: {e}");
+                    e
+                })
+        })?;
 
         let failed_messages = responses
             .into_iter()
@@ -152,13 +147,11 @@ impl<'t> RemoteActionHandler for MarkConversationReadRemoteHandler<'t> {
 }
 
 #[derive(Debug)]
-pub(super) struct UnlabelConversationsActionFactory {
-    ctx: WeakMailUserContext,
-}
+pub(super) struct UnlabelConversationsActionFactory {}
 
 impl UnlabelConversationsActionFactory {
-    pub fn new(ctx: WeakMailUserContext) -> Self {
-        Self { ctx }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -191,12 +184,6 @@ impl ActionFactoryInstance for UnlabelConversationsActionFactory {
         tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ActionFactoryInstanceError::Unknown(anyhow!(
-                "Could not upgrade context"
-            )));
-        };
-
         if action.version != UnlabelConversationsAction::VERSION {
             return Err(ActionFactoryInstanceError::InvalidVersion(action.version));
         }
@@ -205,7 +192,6 @@ impl ActionFactoryInstance for UnlabelConversationsActionFactory {
         let session = session_provider.retrieve_session()?;
 
         Ok(Box::new(MarkConversationReadRemoteHandler {
-            ctx,
             action,
             tx: MailSqliteConnectionMut::new(tx),
             session: MailSession::from(session),

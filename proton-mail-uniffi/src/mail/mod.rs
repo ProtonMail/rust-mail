@@ -7,12 +7,5 @@ mod user_session;
 
 pub use login::*;
 pub use mailbox::*;
-use proton_mail_common::exports::anyhow::anyhow;
 pub use session::*;
 pub use user_session::*;
-
-#[inline]
-#[allow(clippy::needless_pass_by_value)]
-fn map_task_join_error(e: Box<dyn std::error::Error>) -> MailSessionError {
-    MailSessionError::Other(anyhow!("Failed to join task: {e}"))
-}

@@ -20,35 +20,23 @@ pub(crate) fn new_action_factory(mail_user_context: WeakMailUserContext) -> Acti
     let mut factory = ActionFactory::new();
     const ERR_MSG: &str = "Double Factory registration";
     factory
-        .register(Box::new(DeleteConversationsActionFactory::new(
-            mail_user_context.clone(),
-        )))
+        .register(Box::new(DeleteConversationsActionFactory::new()))
         .expect(ERR_MSG);
 
     factory
-        .register(Box::new(MarkConversationsReadActionFactory::new(
-            mail_user_context.clone(),
-        )))
+        .register(Box::new(MarkConversationsReadActionFactory::new()))
         .expect(ERR_MSG);
     factory
-        .register(Box::new(MarkConversationsUnreadActionFactory::new(
-            mail_user_context.clone(),
-        )))
+        .register(Box::new(MarkConversationsUnreadActionFactory::new()))
         .expect(ERR_MSG);
     factory
-        .register(Box::new(LabelConversationsActionFactory::new(
-            mail_user_context.clone(),
-        )))
+        .register(Box::new(LabelConversationsActionFactory::new()))
         .expect(ERR_MSG);
     factory
-        .register(Box::new(UnlabelConversationsActionFactory::new(
-            mail_user_context.clone(),
-        )))
+        .register(Box::new(UnlabelConversationsActionFactory::new()))
         .expect(ERR_MSG);
     factory
-        .register(Box::new(MoveConversationsActionFactory::new(
-            mail_user_context.clone(),
-        )))
+        .register(Box::new(MoveConversationsActionFactory::new()))
         .expect(ERR_MSG);
 
     factory
