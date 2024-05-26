@@ -1,3 +1,4 @@
+use crate::domain::UserId;
 use crate::requests::FIDOKey;
 use crate::utils::{bool_from_integer, bool_to_integer};
 use serde::{Deserialize, Serialize};
@@ -5,7 +6,6 @@ use serde_aux::field_attributes::deserialize_default_from_null;
 use stash::macros::Model;
 use stash::stash::Stash;
 use stash::utils::sql_using_serde;
-use crate::domain::UserId;
 
 new_integer_enum!(u8,TFAStatus {
     None = 0,

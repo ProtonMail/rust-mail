@@ -1,7 +1,5 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
-use crate::db::{
-    migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey,
-};
+use crate::db::{migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey};
 use crate::os::{KeyChain, KeyChainError};
 use crate::session::CoreSession;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
@@ -16,12 +14,12 @@ use proton_api_core::http::{Client, RequestError};
 use proton_api_core::login::Flow;
 use proton_api_core::Session;
 use proton_event_loop::proton_async::runtime::MultiThreaded;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreContextError {

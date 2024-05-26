@@ -11,12 +11,12 @@ use proton_api_core::exports::base64::prelude::BASE64_STANDARD;
 use proton_api_core::exports::base64::Engine;
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
-use std::string::FromUtf8Error;
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
-use zeroize::Zeroize;
 use stash::macros::Model;
 use stash::stash::Stash;
+use std::string::FromUtf8Error;
+use zeroize::Zeroize;
 
 /// Contains the session authentication in a decrypted state, ready to be used by the
 /// http client.

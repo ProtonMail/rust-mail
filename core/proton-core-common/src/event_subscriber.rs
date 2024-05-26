@@ -60,31 +60,26 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                     })?;
                 }
                 if let Some(settings) = event.get_core_event_user_settings_mut() {
-                    settings
-                        .save_using(&tx)
-                        .await
-                        .map_err(|e| {
-                            error!("Failed to update user settings:{e}");
-                            e
-                        })?;
+                    settings.save_using(&tx).await.map_err(|e| {
+                        error!("Failed to update user settings:{e}");
+                        e
+                    })?;
                 }
                 if let Some(used_space) = event.get_core_event_used_space() {
                     let mut user = User::load_using(user_id.clone(), &tx).await?.unwrap();
                     user.used_space = used_space;
-                    user.save_using(&tx).await
-                        .map_err(|e| {
-                            error!("Failed to update used space:{e}");
-                            e
-                        })?;
+                    user.save_using(&tx).await.map_err(|e| {
+                        error!("Failed to update used space:{e}");
+                        e
+                    })?;
                 }
                 if let Some(used_product_space) = event.get_core_event_used_product_space() {
                     let mut user = User::load_using(user_id.clone(), &tx).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
-                    user.save_using(&tx).await
-                        .map_err(|e| {
-                            error!("Failed to update used space:{e}");
-                            e
-                        })?;
+                    user.save_using(&tx).await.map_err(|e| {
+                        error!("Failed to update used space:{e}");
+                        e
+                    })?;
                 }
             }
             Ok(())

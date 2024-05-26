@@ -1,20 +1,20 @@
 use crate::db::{
-    DecryptedUserSession, EncryptedAccessToken, EncryptedRefreshToken,
-    EncryptedUserSession, SessionEncryptionKey,
+    DecryptedUserSession, EncryptedAccessToken, EncryptedRefreshToken, EncryptedUserSession,
+    SessionEncryptionKey,
 };
 use crate::os::{KeyChain, KeyChainError};
+use futures::executor::block_on;
 use proton_api_core::auth::{AccessToken, Auth, RefreshToken, Scope};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{debug, error};
 use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_api_core::http::RequestError;
-use std::error::Error;
-use std::sync::Arc;
-use futures::executor::block_on;
-use stash::stash::Stash;
 use stash::orm::Model;
 use stash::params;
+use stash::stash::Stash;
+use std::error::Error;
+use std::sync::Arc;
 
 /// Receive notifications when the session has been refreshed or deleted.
 pub trait CoreSessionCallback: Send + Sync {
@@ -121,9 +121,7 @@ impl proton_api_core::auth::Store for CoreSession {
             encrypted_access_token,
             encrypted_refresh_token,
         );
-        block_on(async {
-            encrypted_session.save().await
-        })?;
+        block_on(async { encrypted_session.save().await })?;
         self.auth = Some(auth);
         Ok(())
     }
@@ -162,14 +160,16 @@ impl proton_api_core::auth::Store for CoreSession {
                 self.on_error(&e);
                 Box::new(e)
             })?;
-            
+
         block_on(async {
-        let mut session = EncryptedUserSession::load(user_id.clone(), &self.stash).await?.unwrap();
-        session.user_id = user_id;
-        session.access_token = encrypted_access_token;
-        session.refresh_token = encrypted_refresh_token;
-        session.scopes = scope.clone();
-        session.save().await
+            let mut session = EncryptedUserSession::load(user_id.clone(), &self.stash)
+                .await?
+                .unwrap();
+            session.user_id = user_id;
+            session.access_token = encrypted_access_token;
+            session.refresh_token = encrypted_refresh_token;
+            session.scopes = scope.clone();
+            session.save().await
         })?;
 
         if let Some(cur_auth) = &mut self.auth {
@@ -195,7 +195,12 @@ impl proton_api_core::auth::Store for CoreSession {
             || -> Result<(), Box<dyn Error>> {
                 debug!("Deleting session");
                 block_on(async {
-                self.stash.execute("DELETE FROM core_sessions WHERE user_id =?", params![auth.user_id]).await
+                    self.stash
+                        .execute(
+                            "DELETE FROM core_sessions WHERE user_id =?",
+                            params![auth.user_id],
+                        )
+                        .await
                 })?;
                 Ok(())
             },

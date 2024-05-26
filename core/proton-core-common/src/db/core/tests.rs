@@ -1,7 +1,10 @@
-use proton_api_core::domain::{DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserKeys, UserSettings, WeekStart};
+use proton_api_core::domain::{
+    DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
+    SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserKeys, UserSettings, WeekStart,
+};
 use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys as RealUserKeys};
-use stash::stash::Stash;
 use stash::orm::Model;
+use stash::stash::Stash;
 
 #[cfg(test)]
 async fn new_core_test_connection() -> Stash {
@@ -16,7 +19,10 @@ async fn test_core_store_and_load_user() {
     let stash = new_core_test_connection().await;
     let mut user = new_test_user(stash.clone());
     {
-        let tx = stash.transaction().await.expect("failed to start transaction");
+        let tx = stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
         user.save_using(&tx).await.expect("failed to store user");
         let db_user = User::load_using(user.id.clone(), &tx)
             .await
@@ -33,11 +39,16 @@ async fn test_core_user_space_updates() {
     let stash = new_core_test_connection().await;
     let mut user = new_test_user(stash.clone());
     {
-        let tx = stash.transaction().await.expect("failed to start transaction");
+        let tx = stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
         user.save_using(&tx).await.expect("failed to store user");
 
         user.used_space = 912314142;
-        user.save_using(&tx).await.expect("failed to update used space");
+        user.save_using(&tx)
+            .await
+            .expect("failed to update used space");
 
         user.product_used_space = ProductUsedSpace {
             calendar: 234235235235,
@@ -47,8 +58,10 @@ async fn test_core_user_space_updates() {
             pass: 1234857671,
         };
 
-        user.save_using(&tx).await.expect("failed to update used space");
-        
+        user.save_using(&tx)
+            .await
+            .expect("failed to update used space");
+
         let db_user = User::load_using(user.id.clone(), &tx)
             .await
             .expect("failed to load user")
@@ -117,8 +130,14 @@ async fn test_core_store_and_load_user_settings() {
     };
 
     {
-        let tx = stash.transaction().await.expect("failed to start transaction");
-        settings.save_using(&tx).await.expect("failed to store settings");
+        let tx = stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
+        settings
+            .save_using(&tx)
+            .await
+            .expect("failed to store settings");
         let db_settings = UserSettings::load_using(user_id.clone(), &tx)
             .await
             .expect("failed to load user")

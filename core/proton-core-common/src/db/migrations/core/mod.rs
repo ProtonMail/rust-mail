@@ -14,7 +14,9 @@ pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     let migrations: Vec<Box<dyn Migration>> = params![v0::V0 {}];
 
     let migrator = Migrator::new();
-    migrator.migrate(stash, VERSION_TABLE_NAME, &migrations).await
+    migrator
+        .migrate(stash, VERSION_TABLE_NAME, &migrations)
+        .await
 }
 
 #[tokio::test]

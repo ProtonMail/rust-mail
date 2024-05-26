@@ -3,13 +3,13 @@ use crate::common::{FolderId, LabelId, Message, MessageId};
 use proton_api_core::exports::anyhow;
 use proton_sqlite3::{rusqlite, InProcessTrackerService, SqliteTransaction};
 use rusqlite::{params_from_iter, OptionalExtension};
-use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use stash::datatypes::{QueryResultString, QueryResultU64};
 use stash::exports::ToSql;
 use stash::macros::DbRecord;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
+use std::str::FromStr;
 
 pub struct TestLocalSource {
     stash: Stash,
@@ -20,12 +20,10 @@ impl TestLocalSource {
         Ok(Self { stash })
     }
 
-    pub async fn new_with_init(
-        stash: Stash,
-    ) -> Result<Self, StashError> {
-                 let tx = stash.transaction().await?;
-                 let mut source = TestLocalSourceTransaction::new(tx.clone());
-            source.create_tables().await?;
+    pub async fn new_with_init(stash: Stash) -> Result<Self, StashError> {
+        let tx = stash.transaction().await?;
+        let mut source = TestLocalSourceTransaction::new(tx.clone());
+        source.create_tables().await?;
         tx.commit().await?;
         Ok(Self { stash })
     }
@@ -35,10 +33,10 @@ impl TestLocalSource {
         f: F,
     ) -> Result<R, E> {
         let tx = self.stash.transaction().await?;
-            let ttx = TestLocalSourceTransaction::new(tx.clone());
-            let r = (f)(ttx)?;
+        let ttx = TestLocalSourceTransaction::new(tx.clone());
+        let r = (f)(ttx)?;
         tx.commit().await?;
-            Ok(r)
+        Ok(r)
     }
 }
 
@@ -103,7 +101,17 @@ impl TestLocalSourceTransaction {
         Ok(())
     }
     pub async fn create_message(&mut self, read: bool) -> Result<MessageId, anyhow::Error> {
-        Ok(MessageId(self.tx.query::<_, QueryResultU64>("INSERT into messages (read) VALUES (?) RETURNING id AS value", params![read]).await?.first().unwrap().value as u32))
+        Ok(MessageId(
+            self.tx
+                .query::<_, QueryResultU64>(
+                    "INSERT into messages (read) VALUES (?) RETURNING id AS value",
+                    params![read],
+                )
+                .await?
+                .first()
+                .unwrap()
+                .value as u32,
+        ))
     }
 
     pub async fn get_message(&self, id: MessageId) -> Result<Option<Message>, anyhow::Error> {
@@ -141,7 +149,12 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         label_id: LabelId,
     ) -> Result<(), anyhow::Error> {
         for id in message_ids {
-            self.tx.execute("INSERT OR IGNORE into message_labels (message,label) VALUES (?,?)", params![*id, label_id]).await?;
+            self.tx
+                .execute(
+                    "INSERT OR IGNORE into message_labels (message,label) VALUES (?,?)",
+                    params![*id, label_id],
+                )
+                .await?;
         }
         Ok(())
     }
@@ -152,7 +165,12 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         label_id: LabelId,
     ) -> Result<(), anyhow::Error> {
         for id in message_ids {
-            self.tx.execute("DELETE FROM message_labels WHERE message=? AND label=?", params![*id, label_id]).await?;
+            self.tx
+                .execute(
+                    "DELETE FROM message_labels WHERE message=? AND label=?",
+                    params![*id, label_id],
+                )
+                .await?;
         }
         Ok(())
     }
@@ -174,7 +192,9 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         ids: &[MessageId],
     ) -> Result<(), anyhow::Error> {
         for id in ids {
-            self.tx.execute("UPDATE messages SET read=? WHERE id=?", params![value, *id]).await?;
+            self.tx
+                .execute("UPDATE messages SET read=? WHERE id=?", params![value, *id])
+                .await?;
         }
         Ok(())
     }
@@ -185,55 +205,97 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         ids: &[MessageId],
     ) -> Result<(), anyhow::Error> {
         for id in ids {
-            self.tx.execute("UPDATE messages SET deleted=? WHERE id=?", params![value, *id]).await?;
+            self.tx
+                .execute(
+                    "UPDATE messages SET deleted=? WHERE id=?",
+                    params![value, *id],
+                )
+                .await?;
         }
         Ok(())
     }
 
     pub async fn delete_message(&mut self, message_ids: &[MessageId]) -> Result<(), anyhow::Error> {
         for id in message_ids {
-            self.tx.execute("DELETE FROM messages WHERE id=?", params![*id]).await?;
+            self.tx
+                .execute("DELETE FROM messages WHERE id=?", params![*id])
+                .await?;
         }
         Ok(())
     }
     pub async fn create_folder(&mut self, name: &str) -> Result<FolderId, anyhow::Error> {
-        Ok(FolderId(self.tx.query::<_, QueryResultU64>(
-            "INSERT INTO folders (name) VALUES (?) RETURNING id AS value",
-            params![name.to_owned()]).await?.first().unwrap().value as u32))
+        Ok(FolderId(
+            self.tx
+                .query::<_, QueryResultU64>(
+                    "INSERT INTO folders (name) VALUES (?) RETURNING id AS value",
+                    params![name.to_owned()],
+                )
+                .await?
+                .first()
+                .unwrap()
+                .value as u32,
+        ))
     }
 
     pub async fn rename_folder(&mut self, id: FolderId, name: &str) -> Result<(), anyhow::Error> {
         self.tx
-            .execute("UPDATE folders SET name=? WHERE id=?", params![name.to_owned(), Box::new(id)]).await?;
+            .execute(
+                "UPDATE folders SET name=? WHERE id=?",
+                params![name.to_owned(), Box::new(id)],
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn delete_folder(&mut self, id: FolderId) -> Result<(), anyhow::Error> {
         self.tx
-            .execute("DELETE FROM folders WHERE id=?", params![id]).await?;
+            .execute("DELETE FROM folders WHERE id=?", params![id])
+            .await?;
         Ok(())
     }
 
     pub async fn create_label(&mut self, name: &str) -> Result<LabelId, anyhow::Error> {
-        Ok(LabelId(self.tx.query::<_, QueryResultU64>(
-            "INSERT INTO labels (name) VALUES (?) RETURNING id AS value",
-            params![name.to_owned()]).await?.first().unwrap().value as u32))
+        Ok(LabelId(
+            self.tx
+                .query::<_, QueryResultU64>(
+                    "INSERT INTO labels (name) VALUES (?) RETURNING id AS value",
+                    params![name.to_owned()],
+                )
+                .await?
+                .first()
+                .unwrap()
+                .value as u32,
+        ))
     }
 
     pub async fn rename_label(&mut self, id: LabelId, name: &str) -> Result<(), anyhow::Error> {
         self.tx
-            .execute("UPDATE label SET name=? WHERE id=?", params![name.to_owned(), id]).await?;
+            .execute(
+                "UPDATE label SET name=? WHERE id=?",
+                params![name.to_owned(), id],
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn delete_label(&mut self, id: LabelId) -> Result<(), anyhow::Error> {
         self.tx
-            .execute("DELETE FROM labels WHERE id=?", params![id]).await?;
+            .execute("DELETE FROM labels WHERE id=?", params![id])
+            .await?;
         Ok(())
     }
 
     pub async fn get_folder_name(&self, id: FolderId) -> Result<Option<String>, anyhow::Error> {
-        Ok(self.tx.query::<_, QueryResultString>("SELECT name AS value FROM folders WHERE id = ? LIMIT 1", params![id]).await?.into_iter().next().map(|item| item.value))
+        Ok(self
+            .tx
+            .query::<_, QueryResultString>(
+                "SELECT name AS value FROM folders WHERE id = ? LIMIT 1",
+                params![id],
+            )
+            .await?
+            .into_iter()
+            .next()
+            .map(|item| item.value))
     }
 
     // Dep tracking
@@ -245,7 +307,11 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
     ) -> Result<(), anyhow::Error> {
         for id in ids {
             self.tx
-                .execute("UPDATE message_folders SET remote =? WHERE message = ?", params![*id, to]).await?;
+                .execute(
+                    "UPDATE message_folders SET remote =? WHERE message = ?",
+                    params![*id, to],
+                )
+                .await?;
         }
         Ok(())
     }
@@ -255,10 +321,18 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         ids: &[MessageId],
     ) -> Result<Vec<(MessageId, FolderId)>, anyhow::Error> {
         #[allow(trivial_casts)]
-        let iter = self.tx.query::<_, MessageFolder>(&format!(
-            "SELECT message, remote FROM message_folders WHERE message IN ({})",
-            gen_variable_args("?", ids.len())
-        ), ids.iter().map(|item| Box::new(*item) as Box<dyn ToSql + Send>).collect()).await?;
+        let iter = self
+            .tx
+            .query::<_, MessageFolder>(
+                &format!(
+                    "SELECT message, remote FROM message_folders WHERE message IN ({})",
+                    gen_variable_args("?", ids.len())
+                ),
+                ids.iter()
+                    .map(|item| Box::new(*item) as Box<dyn ToSql + Send>)
+                    .collect(),
+            )
+            .await?;
         let mut result = Vec::with_capacity(ids.len());
         for item in iter {
             result.push((MessageId(item.message), FolderId(item.remote)));

@@ -1,5 +1,8 @@
 use crate::db::{CoreSqliteConnectionImpl, DBResult};
-use proton_api_core::domain::{Email, Flags, HighSecurity, Password, Phone, ProductUsedSpace, Referral, SettingsFlags, TwoFA, User, UserId, UserKeys, UserSettings};
+use proton_api_core::domain::{
+    Email, Flags, HighSecurity, Password, Phone, ProductUsedSpace, Referral, SettingsFlags, TwoFA,
+    User, UserId, UserKeys, UserSettings,
+};
 use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row};
 use proton_sqlite3::utils::{gen_variable_in_argument_list, mapped_rows_to_vec, RowIndexAllocator};
@@ -47,7 +50,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         let mut key_stmt = self
             .0
             .prepare("INSERT OR REPLACE INTO user_keys VALUES (?,?,?,?,?,?,?,?)")?;
-        for k in &user.keys.0.0 {
+        for k in &user.keys.0 .0 {
             key_stmt.execute((
                 &user.id,
                 k.id.as_ref(),

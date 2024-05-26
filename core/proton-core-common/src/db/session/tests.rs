@@ -40,12 +40,23 @@ async fn test_session_store_load() {
         .expect("failed to encrypt");
     let stash = new_test_connection().await;
     {
-        let tx = stash.transaction().await.expect("failed to start transaction");
-        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        let tx = stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
+        encrypted_session
+            .save_using(&tx)
+            .await
+            .expect("failed to store session");
         encrypted_session.set_stash(&stash);
 
         let results = tx
-            .query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+            .query::<_, EncryptedUserSession>(
+                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
+                params![session.user_id.clone()],
+            )
+            .await
+            .unwrap();
         let db_encrypted_session = results.first().unwrap();
         assert_eq!(encrypted_session, *db_encrypted_session);
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
@@ -95,17 +106,31 @@ async fn test_session_update() {
     let mut encrypted_session = session
         .to_encrypted_session(&key)
         .expect("failed to encrypt");
-    
+
     let stash = new_test_connection().await;
     {
-        let tx = stash.transaction().await.expect("failed to start transaction");
-        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        let tx = stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
+        encrypted_session
+            .save_using(&tx)
+            .await
+            .expect("failed to store session");
         encrypted_session.session_id = updated_session.session_id.clone();
         encrypted_session.scopes = updated_session.scopes.clone();
-        encrypted_session.save_using(&tx).await.expect("failed to update");
+        encrypted_session
+            .save_using(&tx)
+            .await
+            .expect("failed to update");
         encrypted_session.set_stash(&stash);
         let results = tx
-            .query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+            .query::<_, EncryptedUserSession>(
+                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
+                params![session.user_id.clone()],
+            )
+            .await
+            .unwrap();
         let db_encrypted_session = results.first().unwrap();
         assert_eq!(encrypted_session, *db_encrypted_session);
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
@@ -144,15 +169,32 @@ async fn test_session_delete_user_id() {
     let mut encrypted_session = session
         .to_encrypted_session(&key)
         .expect("failed to encrypt");
-    
+
     let stash = new_test_connection().await;
     {
-        let tx = stash.transaction().await.expect("failed to start transaction");
-        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        let tx = stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
+        encrypted_session
+            .save_using(&tx)
+            .await
+            .expect("failed to store session");
         encrypted_session.set_stash(&stash);
-        tx.execute("DELETE FROM core_sessions WHERE user_id =?", params![session.user_id.clone()]).await.expect("expect failed to delete user");
+        tx.execute(
+            "DELETE FROM core_sessions WHERE user_id =?",
+            params![session.user_id.clone()],
+        )
+        .await
+        .expect("expect failed to delete user");
 
-        let results = tx.query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+        let results = tx
+            .query::<_, EncryptedUserSession>(
+                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
+                params![session.user_id.clone()],
+            )
+            .await
+            .unwrap();
         assert_eq!(results.len(), 0);
         tx.commit().await
     }
@@ -176,15 +218,32 @@ async fn test_session_delete_session_id() {
     let mut encrypted_session = session
         .to_encrypted_session(&key)
         .expect("failed to encrypt");
-    
+
     let stash = new_test_connection().await;
     {
-        let tx = stash.transaction().await.expect("failed to start transaction");
-        encrypted_session.save_using(&tx).await.expect("failed to store session");
+        let tx = stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
+        encrypted_session
+            .save_using(&tx)
+            .await
+            .expect("failed to store session");
         encrypted_session.set_stash(&stash);
-        tx.execute("DELETE FROM core_sessions WHERE session_id =?", params![session.session_id.clone()]).await.expect("expect failed to delete user");
-        
-        let results = tx.query::<_, EncryptedUserSession>("SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(), params![session.user_id.clone()]).await.unwrap();
+        tx.execute(
+            "DELETE FROM core_sessions WHERE session_id =?",
+            params![session.session_id.clone()],
+        )
+        .await
+        .expect("expect failed to delete user");
+
+        let results = tx
+            .query::<_, EncryptedUserSession>(
+                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
+                params![session.user_id.clone()],
+            )
+            .await
+            .unwrap();
         assert_eq!(results.len(), 0);
         tx.commit().await
     }

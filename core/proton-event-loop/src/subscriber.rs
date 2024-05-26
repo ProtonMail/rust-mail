@@ -211,7 +211,9 @@ fn test_channeled_subscriber_handle_and_reply() {
             .expect("failed to handle event");
         });
         let mut events = new_dummy_events();
-        s.on_events(&mut events).await.expect("failed handle events");
+        s.on_events(&mut events)
+            .await
+            .expect("failed handle events");
 
         task.await.expect("expected no error on join");
     })

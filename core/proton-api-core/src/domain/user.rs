@@ -1,6 +1,5 @@
 #![allow(clippy::module_name_repetitions)]
 
-use std::ops::Deref;
 use crate::utils::{bool_from_integer, bool_to_integer};
 use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys as RealUserKeys};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -11,6 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::macros::Model;
 use stash::stash::Stash;
 use stash::utils::sql_using_serde;
+use std::ops::Deref;
 
 crate::utils::string_id!(Uid);
 impl secrecy::Zeroize for Uid {
@@ -189,7 +189,7 @@ impl User {
     /// Get the users primary key.
     #[must_use]
     pub fn get_primary_key(&self) -> Option<&proton_crypto_account::domain::LockedKey> {
-        self.keys.0.0.iter().find(|&k| k.primary)
+        self.keys.0 .0.iter().find(|&k| k.primary)
     }
 
     /// Get the user's display name.

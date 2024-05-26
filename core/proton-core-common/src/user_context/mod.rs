@@ -1,8 +1,8 @@
 use proton_api_core::domain::UserId;
 use proton_api_core::Session;
-use std::fmt::{Debug, Formatter};
 use proton_sqlite3::MigratorError;
 use stash::stash::Stash;
+use std::fmt::{Debug, Formatter};
 
 mod settings;
 
@@ -30,11 +30,7 @@ impl Debug for UserContext {
 }
 
 impl UserContext {
-    pub(crate) fn new(
-        session: Session,
-        stash: Stash,
-        id: UserId,
-    ) -> Self {
+    pub(crate) fn new(session: Session, stash: Stash, id: UserId) -> Self {
         Self {
             session,
             stash,

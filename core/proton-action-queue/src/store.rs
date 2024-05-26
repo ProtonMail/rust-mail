@@ -1,16 +1,16 @@
 use crate::{Action, ActionId, ActionPriority};
+use futures::executor::block_on;
 use proton_sqlite3::{rusqlite, Migration, MigratorError};
 use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use rusqlite::ToSql;
 use serde::de::DeserializeOwned;
-use std::fmt::{Debug, Display, Formatter};
-use tracing::{debug, Level, span};
-use stash::stash::{Stash, StashError, Tether};
-use futures::executor::block_on;
 use serde::{Deserialize, Serialize};
-use stash::macros::Model;
 use stash::datatypes::QueryResultU64;
+use stash::macros::Model;
 use stash::params;
+use stash::stash::{Stash, StashError, Tether};
+use std::fmt::{Debug, Display, Formatter};
+use tracing::{debug, span, Level};
 
 /// Id of an action stored in the queue.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
@@ -126,7 +126,9 @@ impl ActionStore {
             let migrator = proton_sqlite3::Migrator::new();
             let migrations: Vec<Box<dyn Migration>> = params![ActionTableMigrationV1 {}];
 
-            let version = migrator.migrate(stash, ACTION_VERSION_TABLE_NAME, &migrations).await?;
+            let version = migrator
+                .migrate(stash, ACTION_VERSION_TABLE_NAME, &migrations)
+                .await?;
             debug!("Current version={version}");
             Ok(())
         }
@@ -139,9 +141,13 @@ impl ActionStore {
 {ACTION_TABLE_FIELD_DATE_TIME}, {ACTION_TABLE_FIELD_DATA} FROM {ACTION_TABLE_NAME} \
 ORDER BY {ACTION_TABLE_FIELD_PRIORITY} ASC ,{ACTION_TABLE_FIELD_DATE_TIME} ASC"
         );
-        
-        Ok(self.0
-            .query::<_, StoredAction>(query, vec![]).await?.into_iter().next())
+
+        Ok(self
+            .0
+            .query::<_, StoredAction>(query, vec![])
+            .await?
+            .into_iter()
+            .next())
     }
     pub async fn get_stored_actions(&mut self) -> Result<Vec<StoredAction>, StashError> {
         let query = format!(
@@ -149,8 +155,7 @@ ORDER BY {ACTION_TABLE_FIELD_PRIORITY} ASC ,{ACTION_TABLE_FIELD_DATE_TIME} ASC"
 {ACTION_TABLE_FIELD_ACTION_ID}, {ACTION_TABLE_FIELD_PRIORITY}, \
 {ACTION_TABLE_FIELD_DATE_TIME}, {ACTION_TABLE_FIELD_DATA} FROM {ACTION_TABLE_NAME}"
         );
-        let actions = self.0
-            .query::<_, StoredAction>(query, vec![]).await?;
+        let actions = self.0.query::<_, StoredAction>(query, vec![]).await?;
 
         let mut constructed = Vec::new();
         for action in actions {
@@ -177,7 +182,8 @@ ORDER BY {ACTION_TABLE_FIELD_PRIORITY} ASC ,{ACTION_TABLE_FIELD_DATE_TIME} ASC"
 RETURNING {ACTION_TABLE_FIELD_ID} AS value");
         let mut ids = Vec::with_capacity(actions.len());
         for action in actions {
-            let id = self.0
+            let id = self
+                .0
                 .query::<_, QueryResultU64>(
                     &query,
                     vec![
@@ -186,7 +192,11 @@ RETURNING {ACTION_TABLE_FIELD_ID} AS value");
                         Box::new(action.priority),
                         Box::new(action.data.clone()),
                     ],
-                ).await?.first().unwrap().value;
+                )
+                .await?
+                .first()
+                .unwrap()
+                .value;
             ids.push(StoredActionId(id));
         }
         Ok(ids)
@@ -216,7 +226,7 @@ impl Migration for ActionTableMigrationV1 {
 
     fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
         block_on(async {
-        // create actions table
+            // create actions table
             let query = format!(
                 "CREATE TABLE {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_ID} \
 INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, {ACTION_TABLE_FIELD_ACTION_ID} BLOB NOT NULL, \
@@ -226,14 +236,14 @@ INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, {ACTION_TABLE_FIELD_ACTION_ID} BLOB 
             );
             tx.execute(query, vec![]).await?;
 
-        // Create index on Priority & Date
-        let query= format!("CREATE INDEX {ACTION_TABLE_PRIORITY_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_PRIORITY})");
-        tx.execute(query, vec![]).await?;
+            // Create index on Priority & Date
+            let query= format!("CREATE INDEX {ACTION_TABLE_PRIORITY_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_PRIORITY})");
+            tx.execute(query, vec![]).await?;
 
-        let query= format!("CREATE INDEX {ACTION_TABLE_DATE_TIME_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_DATE_TIME})");
-        tx.execute(query, vec![]).await?;
+            let query= format!("CREATE INDEX {ACTION_TABLE_DATE_TIME_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_DATE_TIME})");
+            tx.execute(query, vec![]).await?;
 
-        Ok(())
+            Ok(())
         })
     }
 }
@@ -255,7 +265,7 @@ mod tests {
         const ID: ActionId = TEST_ACTION_ID;
         const VERSION: u32 = TEST_ACTION_VERSION;
     }
-    
+
     #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
     struct TestAction2 {
         pub value: String,
@@ -275,52 +285,60 @@ mod tests {
         let action2 = TestAction2 {
             value: "hello_world!".into(),
         };
-        
+
         let queue = new_queue().await;
         let tx = queue
-            .stash.transaction().await.expect("failed to start transaction");
+            .stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
         let mut store = ActionStore::new(tx.clone());
-            let pending1 =
-                PendingAction::from_action(&action1).expect("failed to create pending action");
-            let pending2 =
-                PendingAction::from_action(&action2).expect("failed to create pending action");
-            let stored_ids = store
-                .store_actions(&[pending1, pending2]).await
-                .expect("failed to store action");
+        let pending1 =
+            PendingAction::from_action(&action1).expect("failed to create pending action");
+        let pending2 =
+            PendingAction::from_action(&action2).expect("failed to create pending action");
+        let stored_ids = store
+            .store_actions(&[pending1, pending2])
+            .await
+            .expect("failed to store action");
 
-            {
-                let stored_action = store
-                    .get_next_action().await
-                    .expect("failed to get next action")
-                    .expect("action must be present");
-                assert_eq!(stored_action.id, stored_ids[0]);
-                assert_eq!(stored_action.action_id, *action1.action_id());
-                assert_eq!(stored_action.version, action1.action_version());
-                let deserialized = stored_action
-                    .deserialize::<TestAction>()
-                    .expect("failed to deserialize");
-                assert_eq!(deserialized, action1);
-                store
-                    .erase_actions(&[stored_ids[0]]).await
-                    .expect("failed to remove stored action");
-            }
+        {
+            let stored_action = store
+                .get_next_action()
+                .await
+                .expect("failed to get next action")
+                .expect("action must be present");
+            assert_eq!(stored_action.id, stored_ids[0]);
+            assert_eq!(stored_action.action_id, *action1.action_id());
+            assert_eq!(stored_action.version, action1.action_version());
+            let deserialized = stored_action
+                .deserialize::<TestAction>()
+                .expect("failed to deserialize");
+            assert_eq!(deserialized, action1);
+            store
+                .erase_actions(&[stored_ids[0]])
+                .await
+                .expect("failed to remove stored action");
+        }
 
-            {
-                let stored_action = store
-                    .get_next_action().await
-                    .expect("failed to get next action")
-                    .expect("action must be present");
-                assert_eq!(stored_action.id, stored_ids[1]);
-                assert_eq!(stored_action.action_id, *action2.action_id());
-                assert_eq!(stored_action.version, action2.action_version());
-                let deserialized = stored_action
-                    .deserialize::<TestAction2>()
-                    .expect("failed to deserialize");
-                assert_eq!(deserialized, action2);
-                store
-                    .erase_actions(&[stored_ids[1]]).await
-                    .expect("failed to remove stored action");
-            }
+        {
+            let stored_action = store
+                .get_next_action()
+                .await
+                .expect("failed to get next action")
+                .expect("action must be present");
+            assert_eq!(stored_action.id, stored_ids[1]);
+            assert_eq!(stored_action.action_id, *action2.action_id());
+            assert_eq!(stored_action.version, action2.action_version());
+            let deserialized = stored_action
+                .deserialize::<TestAction2>()
+                .expect("failed to deserialize");
+            assert_eq!(deserialized, action2);
+            store
+                .erase_actions(&[stored_ids[1]])
+                .await
+                .expect("failed to remove stored action");
+        }
         tx.commit().await.expect("transaction failed");
     }
 
@@ -338,71 +356,83 @@ mod tests {
 
         let queue = new_queue().await;
         let tx = queue
-            .stash.transaction().await.expect("failed to start transaction");
+            .stash
+            .transaction()
+            .await
+            .expect("failed to start transaction");
         let mut store = ActionStore::new(tx.clone());
-            let pending1 = PendingAction::from_action_and_priority(&action1, ActionPriority::Low)
-                .expect("failed to create pending action");
-            let pending2 =
-                PendingAction::from_action_and_priority(&action2, ActionPriority::Highest)
-                    .expect("failed to create pending action");
-            let pending3 =
-                PendingAction::from_action_and_priority(&action3, ActionPriority::Normal)
-                    .expect("failed to create pending action");
-            let pending4 = PendingAction::from_action_and_priority(&action4, ActionPriority::Low)
-                .expect("failed to create pending action");
-            let stored_ids = store
-                .store_actions(&[pending1, pending2, pending3, pending4]).await
-                .expect("failed to store action");
+        let pending1 = PendingAction::from_action_and_priority(&action1, ActionPriority::Low)
+            .expect("failed to create pending action");
+        let pending2 = PendingAction::from_action_and_priority(&action2, ActionPriority::Highest)
+            .expect("failed to create pending action");
+        let pending3 = PendingAction::from_action_and_priority(&action3, ActionPriority::Normal)
+            .expect("failed to create pending action");
+        let pending4 = PendingAction::from_action_and_priority(&action4, ActionPriority::Low)
+            .expect("failed to create pending action");
+        let stored_ids = store
+            .store_actions(&[pending1, pending2, pending3, pending4])
+            .await
+            .expect("failed to store action");
 
-            // Actions should be consumed in the following index order: 1,2,0,3
-            {
-                let stored_action = store
-                    .get_next_action().await
-                    .expect("failed to get next action")
-                    .expect("action must be present");
-                assert_eq!(stored_action.id, stored_ids[1]);
-                store
-                    .erase_actions(&[stored_ids[1]]).await
-                    .expect("failed to remove stored action");
-            }
+        // Actions should be consumed in the following index order: 1,2,0,3
+        {
+            let stored_action = store
+                .get_next_action()
+                .await
+                .expect("failed to get next action")
+                .expect("action must be present");
+            assert_eq!(stored_action.id, stored_ids[1]);
+            store
+                .erase_actions(&[stored_ids[1]])
+                .await
+                .expect("failed to remove stored action");
+        }
 
-            {
-                let stored_action = store
-                    .get_next_action().await
-                    .expect("failed to get next action")
-                    .expect("action must be present");
-                assert_eq!(stored_action.id, stored_ids[2]);
-                store
-                    .erase_actions(&[stored_ids[2]]).await
-                    .expect("failed to remove stored action");
-            }
+        {
+            let stored_action = store
+                .get_next_action()
+                .await
+                .expect("failed to get next action")
+                .expect("action must be present");
+            assert_eq!(stored_action.id, stored_ids[2]);
+            store
+                .erase_actions(&[stored_ids[2]])
+                .await
+                .expect("failed to remove stored action");
+        }
 
-            {
-                let stored_action = store
-                    .get_next_action().await
-                    .expect("failed to get next action")
-                    .expect("action must be present");
-                assert_eq!(stored_action.id, stored_ids[0]);
-                store
-                    .erase_actions(&[stored_ids[0]]).await
-                    .expect("failed to remove stored action");
-            }
-            {
-                let stored_action = store
-                    .get_next_action().await
-                    .expect("failed to get next action")
-                    .expect("action must be present");
-                assert_eq!(stored_action.id, stored_ids[3]);
-                store
-                    .erase_actions(&[stored_ids[3]]).await
-                    .expect("failed to remove stored action");
-            }
+        {
+            let stored_action = store
+                .get_next_action()
+                .await
+                .expect("failed to get next action")
+                .expect("action must be present");
+            assert_eq!(stored_action.id, stored_ids[0]);
+            store
+                .erase_actions(&[stored_ids[0]])
+                .await
+                .expect("failed to remove stored action");
+        }
+        {
+            let stored_action = store
+                .get_next_action()
+                .await
+                .expect("failed to get next action")
+                .expect("action must be present");
+            assert_eq!(stored_action.id, stored_ids[3]);
+            store
+                .erase_actions(&[stored_ids[3]])
+                .await
+                .expect("failed to remove stored action");
+        }
         tx.commit().await.expect("transaction failed");
     }
 
     async fn new_queue() -> crate::ActionQueue {
         let stash = Stash::new(None).expect("Failed to create Stash");
-        ActionStore::init_tables(&stash).await.expect("failed to init store tables");
+        ActionStore::init_tables(&stash)
+            .await
+            .expect("failed to init store tables");
         let factory = crate::ActionFactory::new();
 
         crate::ActionQueue::new(

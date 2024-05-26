@@ -1,4 +1,5 @@
 use crate::common::{FolderId, MessageId, RemoteSource, TestLocalSourceTransaction};
+use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
@@ -6,12 +7,11 @@ use proton_action_queue::{
 };
 use proton_api_core::exports::serde::Serialize;
 use serde::Deserialize;
+use stash::stash::Tether;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
 use std::sync::Arc;
-use futures::executor::block_on;
-use stash::stash::Tether;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct MoveMessageAction {
@@ -49,9 +49,10 @@ pub struct TestLocalActionHandler<T: Action> {
 impl LocalActionHandler for TestLocalActionHandler<MoveMessageAction> {
     fn apply_local(&mut self) -> ActionResult<()> {
         block_on(async {
-        self.tx
-            .move_message_to_folder(&self.action.ids, self.action.to).await
-            .map_err(ActionError::Local)
+            self.tx
+                .move_message_to_folder(&self.action.ids, self.action.to)
+                .await
+                .map_err(ActionError::Local)
         })?;
         Ok(())
     }
@@ -66,26 +67,30 @@ pub struct TestRemoteActionHandler<T: Action> {
 impl RemoteActionHandler for TestRemoteActionHandler<MoveMessageAction> {
     fn revert_local(&mut self) -> ActionResult<()> {
         block_on(async {
-        let cur_message_state = self
-            .tx
-            .get_move_message_state(&self.action.ids).await
-            .map_err(ActionError::Local)?;
-        //TODO: Improve result here;
-
-        for (m, f) in cur_message_state {
-            self.tx
-                .move_message_to_folder(&[m], f).await
+            let cur_message_state = self
+                .tx
+                .get_move_message_state(&self.action.ids)
+                .await
                 .map_err(ActionError::Local)?;
-        }
+            //TODO: Improve result here;
+
+            for (m, f) in cur_message_state {
+                self.tx
+                    .move_message_to_folder(&[m], f)
+                    .await
+                    .map_err(ActionError::Local)?;
+            }
             Ok(())
         })
     }
-    
+
     fn validate_local(&mut self) -> ActionResult<ActionLocalValidationResult> {
-        let local_messages = block_on(async {self
-            .tx
-            .get_messages(&self.action.ids).await
-            .map_err(ActionError::Local)})?;
+        let local_messages = block_on(async {
+            self.tx
+                .get_messages(&self.action.ids)
+                .await
+                .map_err(ActionError::Local)
+        })?;
 
         for msg in &local_messages {
             // Check if message is still in the state we put it in.
@@ -110,13 +115,14 @@ impl RemoteActionHandler for TestRemoteActionHandler<MoveMessageAction> {
         self.remote
             .move_messages(self.action.to, &self.action.ids)
             .map_err(ActionError::Remote)?;
-        
+
         block_on(async {
-        self.tx
-            .update_move_message_dependency(self.action.to, &self.action.ids).await
-            .map_err(ActionError::Local)
+            self.tx
+                .update_move_message_dependency(self.action.to, &self.action.ids)
+                .await
+                .map_err(ActionError::Local)
         })?;
-        
+
         Ok(())
     }
 }
@@ -160,10 +166,7 @@ where
         tx: Tether,
     ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
         let action = *action.downcast::<T>().map_err(|action| {
-            ActionFactoryInstanceError::InvalidType(
-                action.type_id(),
-                std::any::TypeId::of::<T>(),
-            )
+            ActionFactoryInstanceError::InvalidType(action.type_id(), std::any::TypeId::of::<T>())
         })?;
 
         Ok(Box::new(TestLocalActionHandler {
@@ -217,9 +220,10 @@ impl Action for DeleteMessageAction {
 impl LocalActionHandler for TestLocalActionHandler<DeleteMessageAction> {
     fn apply_local(&mut self) -> ActionResult<()> {
         block_on(async {
-        self.tx
-            .mark_messages_deleted(true, &self.action.ids).await
-            .map_err(ActionError::Local)
+            self.tx
+                .mark_messages_deleted(true, &self.action.ids)
+                .await
+                .map_err(ActionError::Local)
         })?;
         Ok(())
     }
@@ -228,18 +232,21 @@ impl LocalActionHandler for TestLocalActionHandler<DeleteMessageAction> {
 impl RemoteActionHandler for TestRemoteActionHandler<DeleteMessageAction> {
     fn revert_local(&mut self) -> ActionResult<()> {
         block_on(async {
-        self.tx
-            .mark_messages_deleted(false, &self.action.ids).await
-            .map_err(ActionError::Local)
+            self.tx
+                .mark_messages_deleted(false, &self.action.ids)
+                .await
+                .map_err(ActionError::Local)
         })?;
         Ok(())
     }
-    
+
     fn validate_local(&mut self) -> ActionResult<ActionLocalValidationResult> {
-        let messages = block_on(async {self
-            .tx
-            .get_messages_with_deleted(&self.action.ids).await
-            .map_err(ActionError::Local)})?;
+        let messages = block_on(async {
+            self.tx
+                .get_messages_with_deleted(&self.action.ids)
+                .await
+                .map_err(ActionError::Local)
+        })?;
         self.action
             .ids
             .retain(|id| messages.iter().find(|m| m.id == *id).is_some());

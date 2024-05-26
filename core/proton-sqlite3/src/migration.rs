@@ -1,11 +1,11 @@
 //! Utilities to facility migration of the database.
 
-use tracing::debug;
 #[allow(unused_imports)]
 use futures::executor::block_on;
+use stash::datatypes::QueryResultU64;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
-use stash::datatypes::QueryResultU64;
+use tracing::debug;
 
 /// Migration Unit.
 pub trait Migration {
@@ -80,26 +80,26 @@ impl Migrator {
         migrations: &[Box<dyn Migration>],
     ) -> Result<usize, MigratorError> {
         let tx = stash.transaction().await?;
-            let expected_version = version_from_migration_list(migrations);
-            // Check if version table exists, if not we are at version 0.
-            let current_version =
-                if let Some(version) = get_current_table_version(&tx, version_table_name).await? {
-                    debug!("Found current version={version}");
-                    if version > expected_version {
-                        return Err(MigratorError::InvalidVersion(version));
-                    }
-                    version
-                } else {
-                    debug!("No version table found, initializing");
-                    create_version_table(&tx).await?;
-                    set_version_table_version(&tx, version_table_name, 0).await?;
-                    0
-                };
+        let expected_version = version_from_migration_list(migrations);
+        // Check if version table exists, if not we are at version 0.
+        let current_version =
+            if let Some(version) = get_current_table_version(&tx, version_table_name).await? {
+                debug!("Found current version={version}");
+                if version > expected_version {
+                    return Err(MigratorError::InvalidVersion(version));
+                }
+                version
+            } else {
+                debug!("No version table found, initializing");
+                create_version_table(&tx).await?;
+                set_version_table_version(&tx, version_table_name, 0).await?;
+                0
+            };
 
-            debug!("Running migrations");
-            run_migrations(&tx, version_table_name, current_version, migrations).await?;
-            debug!("Migrations complete");
-            let version = version_from_migration_list(migrations);
+        debug!("Running migrations");
+        run_migrations(&tx, version_table_name, current_version, migrations).await?;
+        debug!("Migrations complete");
+        let version = version_from_migration_list(migrations);
         tx.commit().await?;
         Ok(version)
     }
@@ -113,7 +113,12 @@ async fn get_current_table_version(
     table_name: &str,
 ) -> Result<Option<usize>, StashError> {
     let query = "SELECT COUNT(DISTINCT `name`) AS value FROM sqlite_master WHERE `type`='table' AND name= ?";
-    let count = tx.query::<_, QueryResultU64>(query, params![VERSION_TABLE_NAME]).await?.first().unwrap().value;
+    let count = tx
+        .query::<_, QueryResultU64>(query, params![VERSION_TABLE_NAME])
+        .await?
+        .first()
+        .unwrap()
+        .value;
     if count == 0 {
         return Ok(None);
     }
@@ -130,7 +135,11 @@ async fn read_current_table_version(tx: &Tether, id: &str) -> Result<usize, Stas
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} AS value FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
-    let version = tx.query::<_, QueryResultU64>(query, params![id.to_owned()]).await?.first().map_or(0, |record| record.value);
+    let version = tx
+        .query::<_, QueryResultU64>(query, params![id.to_owned()])
+        .await?
+        .first()
+        .map_or(0, |record| record.value);
     #[allow(clippy::cast_possible_truncation)]
     Ok(version as usize)
 }
@@ -186,7 +195,8 @@ async fn test_migration() {
 
     // first version
     let version = migrator
-        .migrate(&stash, TEST_TABLE_NAME, &[create_migration_1()]).await
+        .migrate(&stash, TEST_TABLE_NAME, &[create_migration_1()])
+        .await
         .expect("Failed to run migration");
     assert_eq!(version, 1);
 
@@ -196,13 +206,15 @@ async fn test_migration() {
             &stash,
             TEST_TABLE_NAME,
             &[create_migration_1(), create_migration_2()],
-        ).await
+        )
+        .await
         .expect("Failed to run migration");
     assert_eq!(version, 2);
 
     // fail on downgrade
     let err = migrator
-        .migrate(&stash, TEST_TABLE_NAME, &[create_migration_1()]).await
+        .migrate(&stash, TEST_TABLE_NAME, &[create_migration_1()])
+        .await
         .expect_err("Migration should fail");
 
     assert!(matches!(err, MigratorError::InvalidVersion(2)))
@@ -212,19 +224,21 @@ async fn test_migration() {
 async fn test_migration_with_different_table_ids() {
     const TEST_TABLE_NAME_1: &str = "test_table_version_foo";
     const TEST_TABLE_NAME_2: &str = "test_table_version_bar";
-    
+
     let stash = Stash::new(None).expect("failed to create stash");
     let migrator = Migrator::new();
 
     // first version
     let version = migrator
-        .migrate(&stash, TEST_TABLE_NAME_1, &[create_migration_1()]).await
+        .migrate(&stash, TEST_TABLE_NAME_1, &[create_migration_1()])
+        .await
         .expect("Failed to run migration");
     assert_eq!(version, 1);
 
     // second version
     let version = migrator
-        .migrate(&stash, TEST_TABLE_NAME_2, &[create_migration_2()]).await
+        .migrate(&stash, TEST_TABLE_NAME_2, &[create_migration_2()])
+        .await
         .expect("Failed to run migration");
     assert_eq!(version, 1);
 }
@@ -238,9 +252,7 @@ fn create_migration_1() -> Box<dyn Migration> {
             "m1"
         }
         fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
-            block_on(async {
-            tx.execute("CREATE TABLE test1 (ID INTEGER)", vec![]).await
-            })?;
+            block_on(async { tx.execute("CREATE TABLE test1 (ID INTEGER)", vec![]).await })?;
             Ok(())
         }
     }
@@ -256,9 +268,7 @@ fn create_migration_2() -> Box<dyn Migration> {
             "m2"
         }
         fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
-            block_on(async {
-            tx.execute("CREATE TABLE test2 (ID INTEGER)", vec![]).await
-            })?;
+            block_on(async { tx.execute("CREATE TABLE test2 (ID INTEGER)", vec![]).await })?;
             Ok(())
         }
     }
