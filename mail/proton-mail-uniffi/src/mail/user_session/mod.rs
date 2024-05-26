@@ -4,7 +4,7 @@ mod initialization;
 mod labels;
 mod settings;
 
-use crate::mail::{map_task_join_error, MailSessionError};
+use crate::mail::MailSessionError;
 use proton_mail_common as pmc;
 use std::sync::Arc;
 
@@ -37,13 +37,7 @@ impl MailUserSession {
 impl MailUserSession {
     /// Log out a session.
     pub async fn logout(&self) -> Result<(), MailSessionError> {
-        let ctx = self.ctx().clone();
-        let handle = self
-            .ctx
-            .mail_context()
-            .async_runtime()
-            .spawn(async move { ctx.logout().await });
-        handle.await.map_err(map_task_join_error)??;
+        self.ctx().logout().await?;
         Ok(())
     }
 }

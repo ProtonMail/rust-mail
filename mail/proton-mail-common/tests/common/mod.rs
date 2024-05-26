@@ -6,7 +6,6 @@ pub mod init;
 use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope};
 use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
 use proton_api_mail::proton_api_core::http::{APIEnvConfig, Builder};
-use proton_async::runtime::MultiThreaded;
 use proton_core_common::db::proton_sqlite3::{SqliteConnectionPool, SqliteMode};
 use proton_core_common::db::{
     DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
@@ -37,9 +36,8 @@ impl TestContext {
     }
 
     /// Create and initialize test context.
-    pub fn new() -> Self {
-        let runtime = MultiThreaded::new(2).expect("failed to create runtime");
-        let mock_server = runtime.block_on(async { MockServer::start().await });
+    pub async fn new() -> Self {
+        let mock_server = MockServer::start().await;
 
         // Create client with the mock server as the base URL
         let mut api_env_config = APIEnvConfig::default();
@@ -62,15 +60,8 @@ impl TestContext {
             .expect("failed to store in keychain");
 
         // Create mail context
-        let context = MailContext::new(
-            runtime,
-            tmp_dir.path(),
-            tmp_dir.path(),
-            keychain,
-            client,
-            None,
-        )
-        .expect("failed to create mail context");
+        let context = MailContext::new(tmp_dir.path(), tmp_dir.path(), keychain, client, None)
+            .expect("failed to create mail context");
 
         // Generate a fake session and write it to the database
         let pool =
@@ -148,10 +139,5 @@ impl TestContext {
         self.context
             .user_context_from_session(&self.encrypted_user_session, None)
             .expect("failed to create user context")
-    }
-
-    /// Get the async runtime.
-    pub fn async_runtime(&self) -> &MultiThreaded {
-        self.context.async_runtime()
     }
 }

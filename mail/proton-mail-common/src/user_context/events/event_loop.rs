@@ -1,6 +1,7 @@
 use crate::actions::EventLoopAction;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
+use async_trait::async_trait;
 use proton_api_mail::proton_api_core;
 use proton_api_mail::proton_api_core::domain::{
     Event, EventId, ProductUsedSpace, User, UserSettings,
@@ -9,7 +10,6 @@ use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::proton_api_core::exports::tracing::error;
-use proton_async::async_trait::async_trait;
 use proton_core_common::CoreEventSubscriber;
 use proton_event_loop::EventLoopError;
 

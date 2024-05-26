@@ -1,5 +1,5 @@
 use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
-use crate::{MailUserContext, WeakMailUserContext};
+use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
@@ -83,7 +83,6 @@ impl<'c, 't: 'c> LocalActionHandler for MoveConversationsLocalHandler<'c, 't> {
 }
 
 struct MoveConversationsRemoteHandler<'t> {
-    ctx: MailUserContext,
     action: MoveConversationsAction,
     session: MailSession,
     tx: MailSqliteConnectionMut<'t>,
@@ -145,11 +144,8 @@ impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
                 error!("Failed to resolve conversation ids: {e}");
                 ActionError::Local(anyhow!(e))
             })?;
-        let responses = self
-            .ctx
-            .mail_context()
-            .async_runtime()
-            .block_on(async {
+        let responses = block_on(async {
+            {
                 if *dst_rid == *LabelId::trash() {
                     self.session.mark_conversations_read(&conv_ids).await?;
                 }
@@ -161,11 +157,12 @@ impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
                 self.session
                     .label_conversations(dst_rid, &conv_ids, None)
                     .await
-            })
+            }
             .map_err(|e| {
                 error!("Failed to move conversations on API: {e}");
                 e
-            })?;
+            })
+        })?;
 
         let failed_messages = responses
             .into_iter()
@@ -204,13 +201,11 @@ impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
 }
 
 #[derive(Debug)]
-pub(super) struct MoveConversationsActionFactory {
-    ctx: WeakMailUserContext,
-}
+pub(super) struct MoveConversationsActionFactory {}
 
 impl MoveConversationsActionFactory {
-    pub fn new(ctx: WeakMailUserContext) -> Self {
-        Self { ctx }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -243,12 +238,6 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
         tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ActionFactoryInstanceError::Unknown(anyhow!(
-                "Could not upgrade context"
-            )));
-        };
-
         if action.version != MoveConversationsAction::VERSION {
             return Err(ActionFactoryInstanceError::InvalidVersion(action.version));
         }
@@ -257,7 +246,6 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
         let session = session_provider.retrieve_session()?;
 
         Ok(Box::new(MoveConversationsRemoteHandler {
-            ctx,
             action,
             tx: MailSqliteConnectionMut::new(tx),
             session: MailSession::from(session),

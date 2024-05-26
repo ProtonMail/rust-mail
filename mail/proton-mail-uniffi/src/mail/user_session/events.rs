@@ -3,6 +3,7 @@ use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_event_loop::{EventLoopError as ELError, SubscriberError};
 use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
+use tokio::spawn;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -11,7 +12,7 @@ impl MailUserSession {
     /// *NOTE*: do not call this function concurrently.
     pub async fn poll_events(&self) -> Result<(), EventLoopError> {
         let ctx = self.ctx.clone();
-        let handle = self.ctx.mail_context().async_runtime().spawn(async move {
+        let handle = spawn(async move {
             ctx.poll_event_loop().await?;
             Ok(())
         });

@@ -1,5 +1,6 @@
 use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
-use crate::{MailUserContext, WeakMailUserContext};
+use async_trait::async_trait;
+use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
@@ -53,12 +54,12 @@ impl<'c, 't: 'c> LocalActionHandler for DeleteConversationLocalHandler<'c, 't> {
 }
 
 struct DeleteConversationRemoteHandler<'t> {
-    ctx: MailUserContext,
     action: DeleteConversationsAction,
     session: MailSession,
     tx: MailSqliteConnectionMut<'t>,
 }
 
+#[async_trait]
 impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler<'t> {
     fn revert_local(&mut self) -> ActionResult<()> {
         self.tx
@@ -97,19 +98,15 @@ impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler<'t> {
                 error!("Failed to resolve conversation ids: {e}");
                 ActionError::Local(anyhow!(e))
             })?;
-        let responses = self
-            .ctx
-            .mail_context()
-            .async_runtime()
-            .block_on(async {
-                self.session
-                    .delete_conversations(&label_id, &conv_ids)
-                    .await
-            })
-            .map_err(|e| {
-                error!("Failed to delete conversations on API: {e}");
-                e
-            })?;
+        let responses = block_on(async {
+            self.session
+                .delete_conversations(&label_id, &conv_ids)
+                .await
+                .map_err(|e| {
+                    error!("Failed to delete conversations on API: {e}");
+                    e
+                })
+        })?;
 
         let failed_messages = responses
             .into_iter()
@@ -135,13 +132,11 @@ impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler<'t> {
 }
 
 #[derive(Debug)]
-pub(super) struct DeleteConversationsActionFactory {
-    ctx: WeakMailUserContext,
-}
+pub(super) struct DeleteConversationsActionFactory {}
 
 impl DeleteConversationsActionFactory {
-    pub fn new(ctx: WeakMailUserContext) -> Self {
-        Self { ctx }
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
@@ -174,12 +169,6 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
         tx: &'r mut SqliteTransaction<'t>,
         session_provider: &dyn SessionProvider,
     ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
-        let Some(ctx) = self.ctx.upgrade() else {
-            return Err(ActionFactoryInstanceError::Unknown(anyhow!(
-                "Could not upgrade context"
-            )));
-        };
-
         if action.version != DeleteConversationsAction::VERSION {
             return Err(ActionFactoryInstanceError::InvalidVersion(action.version));
         }
@@ -188,7 +177,6 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
         let session = session_provider.retrieve_session()?;
 
         Ok(Box::new(DeleteConversationRemoteHandler {
-            ctx,
             action,
             tx: MailSqliteConnectionMut::new(tx),
             session: MailSession::from(session),

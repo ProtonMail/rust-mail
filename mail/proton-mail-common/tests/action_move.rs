@@ -11,9 +11,9 @@ use proton_mail_common::Mailbox;
 use std::collections::HashMap;
 use velcro::hash_map;
 
-#[test]
-fn test_move_between_folders() {
-    let ctx = TestContext::new();
+#[tokio::test]
+async fn test_move_between_folders() {
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context();
     let folder_id = LabelId::from("myfolder");
     let conv_id = ConversationId::from("conv_id");
@@ -33,17 +33,15 @@ fn test_move_between_folders() {
         }],
     };
 
-    ctx.async_runtime().block_on(async {
-        let init_params = test_init_params_folder(&conv_id, labels);
-        let conversations = init_params.conversations.clone();
-        ctx.setup_user(init_params).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        let cb = NullCallback {};
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &cb)
-            .await
-            .expect("failed to initialize");
-    });
+    let init_params = test_init_params_folder(&conv_id, labels);
+    let conversations = init_params.conversations.clone();
+    ctx.setup_user(init_params).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    let cb = NullCallback {};
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &cb)
+        .await
+        .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
@@ -51,9 +49,7 @@ fn test_move_between_folders() {
         Mailbox::with_remote_id(user_ctx.clone(), &folder_id).expect("failed to create mailbox");
 
     // Sync the mailbox
-    ctx.async_runtime().block_on(async {
-        mailbox_inbox.sync(10).await.unwrap();
-    });
+    mailbox_inbox.sync(10).await.unwrap();
 
     // Get the conversation id
     let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
@@ -70,11 +66,14 @@ fn test_move_between_folders() {
 
     // flush queue to execute on remote
     // mock unlabel
-    ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], []);
+    ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], [])
+        .await;
     // mock for label
-    ctx.mock_label_conversation(&folder_id, [conv_id.clone()], None, []);
+    ctx.mock_label_conversation(&folder_id, [conv_id.clone()], None, [])
+        .await;
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -93,11 +92,14 @@ fn test_move_between_folders() {
 
     // flush queue to execute on remote
     // mock unlabel
-    ctx.mock_unlabel_conversation(&folder_id, [conv_id.clone()], []);
+    ctx.mock_unlabel_conversation(&folder_id, [conv_id.clone()], [])
+        .await;
     // mock for label
-    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, []);
+    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, [])
+        .await;
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -106,24 +108,22 @@ fn test_move_between_folders() {
     assert!(mailbox_folder.conversations(10).unwrap().is_empty());
 }
 
-#[test]
-fn test_move_to_trash_marks_read() {
-    let ctx = TestContext::new();
+#[tokio::test]
+async fn test_move_to_trash_marks_read() {
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context();
     let conv_id = ConversationId::from("conv_id");
     let labels = HashMap::new();
 
-    ctx.async_runtime().block_on(async {
-        let init_params = test_init_params_folder(&conv_id, labels);
-        let conversations = init_params.conversations.clone();
-        ctx.setup_user(init_params).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        let cb = NullCallback {};
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &cb)
-            .await
-            .expect("failed to initialize");
-    });
+    let init_params = test_init_params_folder(&conv_id, labels);
+    let conversations = init_params.conversations.clone();
+    ctx.setup_user(init_params).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    let cb = NullCallback {};
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &cb)
+        .await
+        .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
@@ -131,9 +131,7 @@ fn test_move_to_trash_marks_read() {
         .expect("failed to create mailbox");
 
     // Sync the mailbox
-    ctx.async_runtime().block_on(async {
-        mailbox_inbox.sync(10).await.unwrap();
-    });
+    mailbox_inbox.sync(10).await.unwrap();
 
     // Get the conversation id
     let local_conv_id = mailbox_inbox.conversations(10).unwrap().get(0).unwrap().id;
@@ -149,11 +147,14 @@ fn test_move_to_trash_marks_read() {
     assert!(!mailbox_trash.conversations(10).unwrap().is_empty());
 
     // flush queue to execute on remote
-    ctx.mock_mark_conversation_read([conv_id.clone()], []);
-    ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], []);
-    ctx.mock_label_conversation(LabelId::trash(), [conv_id.clone()], None, []);
+    ctx.mock_mark_conversation_read([conv_id.clone()], []).await;
+    ctx.mock_unlabel_conversation(LabelId::inbox(), [conv_id.clone()], [])
+        .await;
+    ctx.mock_label_conversation(LabelId::trash(), [conv_id.clone()], None, [])
+        .await;
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -172,11 +173,14 @@ fn test_move_to_trash_marks_read() {
 
     // flush queue to execute on remote
     // mock unlabel
-    ctx.mock_unlabel_conversation(LabelId::trash(), [conv_id.clone()], []);
+    ctx.mock_unlabel_conversation(LabelId::trash(), [conv_id.clone()], [])
+        .await;
     // mock for label
-    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, []);
+    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, [])
+        .await;
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -185,9 +189,9 @@ fn test_move_to_trash_marks_read() {
     assert!(mailbox_trash.conversations(10).unwrap().is_empty());
 }
 
-#[test]
-fn test_move_from_label_does_not_unlabel() {
-    let ctx = TestContext::new();
+#[tokio::test]
+async fn test_move_from_label_does_not_unlabel() {
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context();
     let label_id = LabelId::from("mylabel");
     let conv_id = ConversationId::from("conv_id");
@@ -207,17 +211,15 @@ fn test_move_from_label_does_not_unlabel() {
         }],
     };
 
-    ctx.async_runtime().block_on(async {
-        let init_params = test_init_params_label(&conv_id, label_id.clone(), labels);
-        let conversations = init_params.conversations.clone();
-        ctx.setup_user(init_params).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        let cb = NullCallback {};
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &cb)
-            .await
-            .expect("failed to initialize");
-    });
+    let init_params = test_init_params_label(&conv_id, label_id.clone(), labels);
+    let conversations = init_params.conversations.clone();
+    ctx.setup_user(init_params).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    let cb = NullCallback {};
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &cb)
+        .await
+        .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
@@ -225,9 +227,7 @@ fn test_move_from_label_does_not_unlabel() {
         Mailbox::with_remote_id(user_ctx.clone(), &label_id).expect("failed to create mailbox");
 
     // Sync the mailbox
-    ctx.async_runtime().block_on(async {
-        mailbox_inbox.sync(10).await.unwrap();
-    });
+    mailbox_inbox.sync(10).await.unwrap();
 
     // Get the conversation id
     let local_conv_id = mailbox_label.conversations(10).unwrap().get(0).unwrap().id;
@@ -244,9 +244,11 @@ fn test_move_from_label_does_not_unlabel() {
 
     // flush queue to execute on remote
     // mock for label
-    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, []);
+    ctx.mock_label_conversation(LabelId::inbox(), [conv_id.clone()], None, [])
+        .await;
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
