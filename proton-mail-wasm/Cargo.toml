@@ -10,10 +10,10 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-wasm-bindgen = "0.2"
-proton-mail-message-detector= {path = "../proton-mail-message-detector"}
 # We need to overwrite gerandom here to enable the JS feature when compiling for webassebly.
-getrandom = {version = "0.2", features = ["js"]}
+getrandom = { version = "0.2", features = ["js"] }
+proton-mail-message-detector = { workspace = true }
+wasm-bindgen = "0.2"
 
 [lints]
 workspace = true

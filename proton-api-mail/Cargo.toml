@@ -6,22 +6,22 @@ keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
 
 [dependencies]
-proton-api-core = {workspace=true}
-uniffi = {workspace=true, optional = true, features = ["tokio"]}
-lazy_static = "1"
+lazy_static = { workspace = true }
+proton-api-core = { workspace = true }
 serde = { version = "1.0.197", features = ["derive"] }
+uniffi = { workspace = true, optional = true }
 
 [dev-dependencies]
 bytes = "1.6.0"
-proton-async = {workspace=true}
+proton-async = { workspace = true }
 reqwest = { version = "0.12.2", features = ["stream"] }
-tracing-subscriber = {workspace=true, features = ["env-filter"]}
-wiremock = "0.6.0"
+tracing-subscriber = { workspace = true }
+wiremock = { workspace = true }
 
 [features]
 default = []
+sql = ["proton-api-core/sql"]
 uniffi = ["dep:uniffi", "proton-api-core/uniffi"]
-sql =["proton-api-core/sql"]
 
 [lints]
 workspace = true
