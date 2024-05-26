@@ -1,5 +1,5 @@
 [workspace]
-resolver ="2"
+resolver = "2"
 members = [ "proton-action-queue",
     "proton-api-core",
     "proton-async",
@@ -9,57 +9,56 @@ members = [ "proton-action-queue",
 ]
 
 [workspace.dependencies]
-proton-crypto-account = {version = "0.1.0", registry = "proton"}
-uniffi = {version = "0.27"}
-thiserror = "1"
-serde = {version ="1", features=["derive"]}
-serde_repr = "0.1"
-serde_json = "1"
-serde-aux = "4.5"
-base64 = "0.22"
-secrecy = { version = "0.8", features = ["serde"] }
+aes-gcm = { version = "0.10", features = ["zeroize"] }
 anyhow = "1.0"
-bytes = "1.4"
-tracing = "0.1"
-parking_lot = "0.12"
-tokio = {version ="1", features = ["full"]}
-tracing-subscriber = { version="0.3", features = ["env-filter"] }
-tokio-util = "0.7"
 async-trait = "0.1"
+base64 = "0.22"
+bytes = "1.4"
 flume = "0.11"
-pin-project = "1"
 futures = "0.3"
-aes-gcm = {version="0.10", features = ["zeroize"]}
-zeroize = "1.7.0"
-paste = "1"
 mockall = "0.12"
+parking_lot = "0.12"
+paste = "1"
+pin-project = "1"
+proton-crypto-account = { version = "0.1.0", registry = "proton" }
 rand = "0.8"
+secrecy = { version = "0.8", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde-aux = "4.5"
+serde_json = "1"
+serde_repr = "0.1"
 tempdir = "0.3"
+thiserror = "1"
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uniffi = { version = "0.27" }
+zeroize = "1.7.0"
 
 [workspace.dependencies.reqwest]
 version = "0.11"
 default-features = false
-features = ["json", "deflate", "stream", "cookies", "multipart", "rustls","rustls-tls", "socks"]
-
+features = ["json", "deflate", "stream", "cookies", "multipart", "rustls", "rustls-tls", "socks"]
 
 [workspace.lints.rust]
-trivial_numeric_casts= "warn"
-unused_extern_crates ="warn"
-unused_import_braces="warn"
-trivial_casts="warn"
-unused_qualifications="warn"
+trivial_numeric_casts = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+trivial_casts = "warn"
+unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-pedantic="warn"
-cast_possible_truncation="warn"
-cast_possible_wrap="warn"
-cast_precision_loss ="warn"
-cast_sign_loss ="warn"
+pedantic = "warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_precision_loss = "warn"
+cast_sign_loss = "warn"
 # Useful to track missing comments on private items/code.
-# missing_docs_in_private_items ="warn"
-mut_mut="warn"
+# missing_docs_in_private_items = "warn"
+mut_mut = "warn"
 #Disallow `println!`. Use `debug!` for debug output
 # (which is provided by the `log` crate).
 print_stdout = "warn"
-unseparated_literal_suffix ="warn"
-wrong_self_convention ="warn"
+unseparated_literal_suffix = "warn"
+wrong_self_convention = "warn"
