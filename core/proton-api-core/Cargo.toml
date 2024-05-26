@@ -10,9 +10,9 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 parking_lot = { workspace = true }
-proton-async = { version = "0.5.0", path = "../proton-async", registry = "proton" }
+proton-async = { workspace = true }
 proton-crypto-account = { workspace = true }
-proton-sqlite3 = { version = "0.6.0", path = "../proton-sqlite3", registry = "proton", optional = true }
+proton-sqlite3 = { workspace = true, optional = true }
 reqwest = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }

@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 chrono = { version = "0.4" }
 log = "0.4.20"
-proton-api-core = { version = "0.3.0", path = "../proton-api-core", registry = "proton" }
-proton-sqlite3 = { version = "0.6.0", path = "../proton-sqlite3", registry = "proton" }
+proton-api-core = { workspace = true }
+proton-sqlite3 = { workspace = true }
 rmp = "0.8"
 rmp-serde = "1.1"
 serde = { version = "1.0.195", features = ["derive"] }

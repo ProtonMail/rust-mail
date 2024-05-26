@@ -10,7 +10,7 @@ fixedbitset = "0.5"
 notify = { version = "6", default-features  = false, features = ["macos_fsevent"], optional = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
-proton-async = { version = "0.5.0", path = "../proton-async", registry = "proton" }
+proton-async = { workspace = true }
 rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid", "chrono", "functions", "trace"] }
 slotmap = "1"
 thiserror = { workspace = true }

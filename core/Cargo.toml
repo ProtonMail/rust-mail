@@ -20,7 +20,11 @@ mockall = "0.12"
 parking_lot = "0.12"
 paste = "1"
 pin-project = "1"
+proton-api-core = { version = "0.3.0", path = "proton-api-core", registry = "proton" }
+proton-async = { version = "0.5.0", path = "proton-async", registry = "proton" }
 proton-crypto-account = { version = "0.1.0", registry = "proton" }
+proton-event-loop = { version = "0.6.0", path = "proton-event-loop", registry = "proton" }
+proton-sqlite3 = { version = "0.6.0", path = "proton-sqlite3", registry = "proton" }
 rand = "0.8"
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
