@@ -397,7 +397,7 @@ use std::path::Path;
 use std::sync::{Arc, Weak};
 use std::thread::{spawn, JoinHandle};
 use thiserror::Error;
-use tokio::spawn as spawn_async;
+use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
 use tokio::time::Instant;
@@ -1925,6 +1925,10 @@ struct Worker {
     /// The sender side of the main worker's queue.
     queue: QueueSender<Operation>,
 
+    /// The runtime for the worker. This is used to spawn async tasks
+    /// independently of the main application runtime.
+    runtime: Runtime,
+
     /// The list of subscribers to the stash. This is used to send notifications
     /// whenever changes are made to the database.
     subscribers: Vec<QueueSender<Notification>>,
@@ -2016,7 +2020,7 @@ impl Worker {
                 command.send_back(Err(StashError::NoActiveTransaction));
             }
             Operation::Instruct(mut instruction) => {
-                drop(spawn_async(async move {
+                drop(self.runtime.spawn(async move {
                     match pool.get_and_subscribe(queue) {
                         Ok(connection) => {
                             // Spawn a blocking task to execute the query. This is necessary because
@@ -2044,7 +2048,7 @@ impl Worker {
                 // as an async task, plus the subscriber list is a safe snapshot from this
                 // point in time.
                 let subscribers = self.subscribers.clone();
-                drop(spawn_async(async move {
+                drop(self.runtime.spawn(async move {
                     for subscriber in subscribers {
                         if subscriber.send_async(notification.clone()).await.is_err() {
                             // In theory this should never happen, but we also can't do anything with it
@@ -2054,7 +2058,7 @@ impl Worker {
                 }));
             }
             Operation::Query(mut query) => {
-                drop(spawn_async(async move {
+                drop(self.runtime.spawn(async move {
                     match pool.get_and_subscribe(queue) {
                         Ok(connection) => {
                             // Spawn a blocking task to execute the query. This is necessary because
@@ -2135,9 +2139,17 @@ impl Worker {
         // sequentially, as they are received, and will return the results via
         // oneshot channels.
         drop(spawn(move || {
+            let runtime = match Runtime::new() {
+                Ok(runtime) => runtime,
+                Err(err) => {
+                    error!("Thread error: Failed to create Tokio runtime: {err}");
+                    return;
+                }
+            };
             let mut worker = Self {
                 pool,
                 queue: sender_clone,
+                runtime,
                 subscribers: Vec::new(),
                 tethers: HashMap::new(),
             };
