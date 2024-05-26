@@ -17,7 +17,6 @@ use proton_api_core::exports::{anyhow, thiserror, tracing};
 use proton_api_core::http::{Client, RequestError};
 use proton_api_core::login::Flow;
 use proton_api_core::Session;
-use proton_event_loop::proton_async::runtime::MultiThreaded;
 use proton_sqlite3::SqliteConnectionPool;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -58,7 +57,6 @@ pub struct Context {
 }
 
 struct ContextInner {
-    runtime: MultiThreaded,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
     session_db: SqliteConnectionPool,
@@ -86,7 +84,6 @@ impl Context {
     /// Returns error if the context failed to initialize correctly.
     ///
     pub fn new(
-        async_runtime: MultiThreaded,
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -98,7 +95,6 @@ impl Context {
         let session_db_path = session_db_path.into();
         let user_db_path = user_db_path.into();
         Self::_new(
-            async_runtime,
             &session_db_path,
             user_db_path,
             key_chain,
@@ -108,7 +104,6 @@ impl Context {
         )
     }
     fn _new(
-        async_runtime: MultiThreaded,
         session_db_path: &Path,
         user_db_path: PathBuf,
         key_chain: Arc<dyn KeyChain>,
@@ -132,7 +127,6 @@ impl Context {
 
         Ok(Self {
             inner: Arc::new(ContextInner {
-                runtime: async_runtime,
                 network_connected: AtomicBool::new(true),
                 user_db_path,
                 key_chain,
@@ -142,12 +136,6 @@ impl Context {
                 network_callback,
             }),
         })
-    }
-
-    /// Get the async runtime.
-    #[must_use]
-    pub fn async_runtime(&self) -> &MultiThreaded {
-        &self.inner.runtime
     }
 
     /// Get available sessions.

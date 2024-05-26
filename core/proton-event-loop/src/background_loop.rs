@@ -1,13 +1,17 @@
 use crate::provider::Provider;
 use crate::store::Store;
 use crate::{EventLoop, EventLoopError, Subscriber};
+use futures::FutureExt;
+use parking_lot::Mutex;
 use proton_api_core::domain::Event;
 use proton_api_core::exports::tracing::debug;
-use proton_async::futures::FutureExt;
-use proton_async::util::CancellationToken;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::task::JoinHandle;
+use tokio::time::sleep;
+use tokio::{select, spawn};
+use tokio_util::sync::CancellationToken;
 
 /// Response returned by the `LoopErrorHandler` to control the behavior of the event loop after an error occurs.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -43,7 +47,7 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
     pub fn new() -> Self {
         let shared = Arc::new(SharedBackgroundEventLoopState {
             paused: AtomicBool::new(true),
-            pending_subscribers: proton_async::sync::Mutex::new(Vec::new()),
+            pending_subscribers: Mutex::new(Vec::new()),
             token: CancellationToken::new(),
         });
 
@@ -66,7 +70,7 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
         store: Box<dyn Store>,
         provider: Box<dyn Provider<T>>,
         error_handler: Box<dyn EventLoopErrorHandler>,
-    ) -> Result<proton_async::runtime::JoinHandle<()>, EventLoopError> {
+    ) -> Result<JoinHandle<()>, EventLoopError> {
         let event_loop = EventLoop::new();
 
         event_loop
@@ -82,7 +86,7 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
             subscribers: Vec::new(),
         };
 
-        Ok(proton_async::runtime::spawn(async move {
+        Ok(spawn(async move {
             loop_state.run(interval).await;
         }))
     }
@@ -110,14 +114,14 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
     }
 
     /// Add a new subscriber to the event loop.
-    pub async fn subscribe(&self, subscriber: Box<dyn Subscriber<T>>) {
-        let mut accessor = self.inner.pending_subscribers.lock().await;
+    pub fn subscribe(&self, subscriber: Box<dyn Subscriber<T>>) {
+        let mut accessor = self.inner.pending_subscribers.lock();
         accessor.push(SubscriberOperation::Register(subscriber));
     }
 
     /// Remove a subscriber from the event loop.
-    pub async fn unsubscribe(&self, subscriber_name: impl Into<String>) {
-        let mut accessor = self.inner.pending_subscribers.lock().await;
+    pub fn unsubscribe(&self, subscriber_name: impl Into<String>) {
+        let mut accessor = self.inner.pending_subscribers.lock();
         accessor.push(SubscriberOperation::Unregister(subscriber_name.into()));
     }
 }
@@ -137,7 +141,7 @@ enum SubscriberOperation<T: Event> {
 #[doc(hidden)]
 struct SharedBackgroundEventLoopState<T: Event> {
     paused: AtomicBool,
-    pending_subscribers: proton_async::sync::Mutex<Vec<SubscriberOperation<T>>>,
+    pending_subscribers: Mutex<Vec<SubscriberOperation<T>>>,
     token: CancellationToken,
 }
 
@@ -157,13 +161,13 @@ impl<T: Event> BackgroundLoopState<T> {
     async fn run(&mut self, poll_interval: Duration) {
         debug!("Starting loop");
         loop {
-            proton_async::futures::select! {
+            select! {
                 _= self.shared.token.cancelled().fuse()=> {
                     debug!("Cancellation requested, exiting");
                     return;
                 }
 
-                _= proton_async::time::sleep(poll_interval).fuse() => {
+                _= sleep(poll_interval).fuse() => {
                     self.tick().await;
                 }
             }
@@ -173,7 +177,7 @@ impl<T: Event> BackgroundLoopState<T> {
     async fn tick(&mut self) {
         // Process pending subscriber operations
         {
-            let mut accessor = self.shared.pending_subscribers.lock().await;
+            let mut accessor = self.shared.pending_subscribers.lock();
             for operation in accessor.drain(..) {
                 match operation {
                     SubscriberOperation::Register(s) => {

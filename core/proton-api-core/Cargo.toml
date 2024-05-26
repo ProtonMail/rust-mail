@@ -10,7 +10,6 @@ anyhow = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 parking_lot = { workspace = true }
-proton-async = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-sqlite3 = { workspace = true, optional = true }
 reqwest = { workspace = true }
@@ -20,6 +19,7 @@ serde-aux = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace=true}
 tracing = { workspace = true }
 uniffi = { workspace = true, optional = true }
 
