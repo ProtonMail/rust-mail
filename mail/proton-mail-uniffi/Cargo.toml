@@ -9,11 +9,11 @@ crate-type = ["staticlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uniffi = { workspace = true }
-proton-mail-message-detector = { path = "../proton-mail-message-detector" }
-proton-mail-common = { path = "../proton-mail-common", features = ["uniffi"] }
 proton-async = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+proton-mail-common = { workspace = true }
+proton-mail-message-detector = { workspace = true }
+tracing-subscriber = { workspace = true }
+uniffi = { workspace = true }
 
 [lints]
 workspace = true
