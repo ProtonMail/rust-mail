@@ -20,6 +20,14 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
 ///     record. These can be of any type supported for (de)serialisation from/to
 ///     `rusqlite`.
 ///
+/// The `DbField` attribute can also be used to specify a wrapper type for the
+/// field. This is useful when the field type does not directly implement the
+/// `ToSql` and `FromSql` traits. In this case, the attribute should be used as
+/// `#[DbField(WrapperType)]`, where `WrapperType` is the type that should be
+/// used to wrap the field for database operations. The wrapper type should
+/// implement the `From` trait for the field type, and the `ToSql` and `FromSql`
+/// traits for the database operations.
+///
 /// # Example
 ///
 /// ```rust
@@ -34,6 +42,9 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
 ///
 ///     #[DbField]
 ///     value: i32,
+///
+///     #[DbField(via CsvArray)]
+///     values: Vec<i32>,
 /// }
 /// ```
 ///
@@ -53,7 +64,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
         panic!("DbRecord can only be derived for structs")
     };
 
-    let db_fields: Vec<&Ident> = fields
+    let db_fields: Vec<Ident> = fields
         .iter()
         .filter_map(|field| {
             if field
@@ -61,7 +72,22 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
                 .iter()
                 .any(|attr| attr.path().is_ident("DbField"))
             {
-                field.ident.as_ref()
+                field.ident.clone()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let via_attrs: Vec<Option<Ident>> = fields
+        .iter()
+        .filter_map(|field| {
+            if let Some(attr) = field
+                .attrs
+                .iter()
+                .find(|attr| attr.path().is_ident("DbField"))
+            {
+                attr.parse_args().ok()
             } else {
                 None
             }
@@ -74,7 +100,14 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
             fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
                 let mut map = std::collections::HashMap::new();
                 #(
-                    map.insert(stringify!(#db_fields), Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>);
+                    let value: Box<dyn stash::exports::ToSql + Send> = match stringify!(#via_attrs) {
+                        "" => Box::new(self.#db_fields.clone()),
+                        wrapper_type => {
+                            let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
+                            Box::new(wrapper)
+                        }
+                    };
+                    map.insert(stringify!(#db_fields), value);
                 )*
                 map
             }
@@ -84,7 +117,17 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
             }
 
             fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
-                vec![#(Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>),*]
+                vec![
+                    #(
+                        match stringify!(#via_attrs) {
+                            "" => Box::new(self.#db_fields.clone()),
+                            wrapper_type => {
+                                let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
+                                Box::new(wrapper)
+                            }
+                        }
+                    ),*
+                ]
             }
         }
     }).into()
@@ -110,6 +153,14 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     record. These can be of any type supported for (de)serialisation from/to
 ///     `rusqlite`.
 ///
+/// The `DbField` attribute can also be used to specify a wrapper type for the
+/// field. This is useful when the field type does not directly implement the
+/// `ToSql` and `FromSql` traits. In this case, the attribute should be used as
+/// `#[DbField(WrapperType)]`, where `WrapperType` is the type that should be
+/// used to wrap the field for database operations. The wrapper type should
+/// implement the `From` trait for the field type, and the `ToSql` and `FromSql`
+/// traits for the database operations.
+///
 /// # Example
 ///
 /// ```rust
@@ -130,6 +181,9 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///
 ///     #[DbField]
 ///     value: i32,
+///
+///     #[DbField(via CsvArray)]
+///     values: Vec<i32>,
 ///
 ///     #[StashField]
 ///     #[serde(skip)]
@@ -202,7 +256,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         .as_ref()
         .expect("StashField must have an identifier");
 
-    let db_fields: Vec<&Ident> = fields
+    let db_fields: Vec<Ident> = fields
         .iter()
         .filter_map(|field| {
             if field
@@ -214,7 +268,22 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                     .iter()
                     .any(|attr| attr.path().is_ident("IdField"))
             {
-                field.ident.as_ref()
+                field.ident.clone()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let via_attrs: Vec<Option<Ident>> = fields
+        .iter()
+        .filter_map(|field| {
+            if let Some(attr) = field
+                .attrs
+                .iter()
+                .find(|attr| attr.path().is_ident("DbField") || attr.path().is_ident("IdField"))
+            {
+                attr.parse_args().ok()
             } else {
                 None
             }
@@ -227,7 +296,14 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
                 let mut map = std::collections::HashMap::new();
                 #(
-                    map.insert(stringify!(#db_fields), Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>);
+                    let value: Box<dyn stash::exports::ToSql + Send> = match stringify!(#via_attrs) {
+                        "" => Box::new(self.#db_fields.clone()),
+                        wrapper_type => {
+                            let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
+                            Box::new(wrapper)
+                        }
+                    };
+                    map.insert(stringify!(#db_fields), value);
                 )*
                 map
             }
@@ -237,7 +313,17 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             }
 
             fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
-                vec![#(Box::new(self.#db_fields.clone()) as Box<dyn stash::exports::ToSql + Send>),*]
+                vec![
+                    #(
+                        match stringify!(#via_attrs) {
+                            "" => Box::new(self.#db_fields.clone()),
+                            wrapper_type => {
+                                let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
+                                Box::new(wrapper)
+                            }
+                        }
+                    ),*
+                ]
             }
         }
 

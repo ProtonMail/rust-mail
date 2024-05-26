@@ -16,12 +16,95 @@ use crate::stash::{Stash, StashError, Tether};
 use core::any::Any;
 use core::fmt::Debug;
 use core::iter::repeat;
+use core::str::FromStr;
 use indoc::formatdoc;
-use rusqlite::ToSql;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
+use rusqlite::{Error as SqliteError, ToSql};
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::{from_str as from_json, to_string as to_json};
 use std::collections::HashMap;
+use std::error::Error;
 use std::vec::IntoIter;
+
+/// Wrapper type to represent an array of CSV values.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+pub struct CsvArray<T>(Vec<T>);
+
+impl<T> From<CsvArray<T>> for Vec<T> {
+    fn from(value: CsvArray<T>) -> Self {
+        value.0
+    }
+}
+
+impl<T> From<Vec<T>> for CsvArray<T> {
+    fn from(vec: Vec<T>) -> Self {
+        Self(vec)
+    }
+}
+
+impl<T: FromStr> FromSql for CsvArray<T>
+where
+    T::Err: Debug + Error + Send + Sync + 'static,
+{
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        value
+            .as_str()?
+            .split(',')
+            .map(|str| {
+                str.parse()
+                    .map_err(|err| FromSqlError::Other(Box::new(err)))
+            })
+            .collect::<Result<Vec<T>, _>>()
+            .map(CsvArray)
+    }
+}
+
+impl<T: ToString> ToSql for CsvArray<T> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::from(
+            self.0
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<String>>()
+                .join(","),
+        ))
+    }
+}
+
+/// Wrapper type to represent an array of JSON values.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+pub struct JsonArray<T>(Vec<T>);
+
+impl<T> From<JsonArray<T>> for Vec<T> {
+    fn from(value: JsonArray<T>) -> Self {
+        value.0
+    }
+}
+
+impl<T> From<Vec<T>> for JsonArray<T> {
+    fn from(vec: Vec<T>) -> Self {
+        Self(vec)
+    }
+}
+
+impl<T: for<'de> Deserialize<'de>> FromSql for JsonArray<T> {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        Ok(Self(
+            from_json(value.as_str()?).map_err(|err| FromSqlError::Other(Box::new(err)))?,
+        ))
+    }
+}
+
+impl<T: Serialize> ToSql for JsonArray<T> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::from(to_json(&self.0).map_err(|err| {
+            SqliteError::ToSqlConversionFailure(Box::new(err))
+        })?))
+    }
+}
 
 /// A trait for simple database records.
 ///
