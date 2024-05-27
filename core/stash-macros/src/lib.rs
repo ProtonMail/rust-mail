@@ -129,6 +129,17 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
                     ),*
                 ]
             }
+
+            fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
+                Ok(Self {
+                    #(
+                        #db_fields: row.get(
+                            columns.iter().position(|c| c == stringify!(#db_fields))
+                                .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#db_fields).to_owned()))?
+                        )?,
+                    )*
+                })
+            }
         }
     }).into()
 }
@@ -324,6 +335,18 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                         }
                     ),*
                 ]
+            }
+
+            fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
+                Ok(Self {
+                    #(
+                        #db_fields: row.get(
+                            columns.iter().position(|c| c == stringify!(#db_fields))
+                                .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#db_fields).to_owned()))?
+                        )?,
+                    )*
+                    #stash_field: None,
+                })
             }
         }
 

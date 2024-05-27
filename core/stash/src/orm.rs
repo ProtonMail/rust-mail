@@ -14,18 +14,100 @@
 
 use crate::stash::{Stash, StashError, Tether};
 use core::any::Any;
-use core::fmt::Debug;
+use core::fmt::{self, Debug, Display};
 use core::iter::repeat;
 use core::str::FromStr;
 use indoc::formatdoc;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
-use rusqlite::{Error as SqliteError, ToSql};
-use serde::de::DeserializeOwned;
+use rusqlite::{Error as SqliteError, Row, Rows, ToSql};
+use serde::de::Error as DeserializationError;
+use serde::ser::Error as SerializationError;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
 use std::collections::HashMap;
 use std::error::Error;
 use std::vec::IntoIter;
+
+/// Errors for conversion of database row data into record types.
+#[derive(Debug, PartialEq)]
+#[non_exhaustive]
+pub enum ConversionError {
+    /// For some reason it is not possible to obtain a name for a particular
+    /// column. This refers specifically to trying to obtain the information
+    /// from the database query results, and technically should never happen, as
+    /// it would mean there is a column present in the resultset without a name.
+    ColumnNameNotAvailable(usize, SqliteError),
+
+    /// For some reason it is not possible to obtain column names. This refers
+    /// specifically to trying to obtain the information from the database query
+    /// results.
+    ColumnNamesNotAvailable,
+
+    /// Basic deserialisation error from [`serde`].
+    DeserializationError(Option<String>, String),
+
+    /// The row data returned from the database query is missing a column
+    /// according to the expectations of the record type.
+    MissingColumn(String),
+
+    /// SQL-related error from [`rusqlite`].
+    SqliteError(SqliteError),
+
+    /// Basic serialisation error from [`serde`].
+    SerializationError(String),
+}
+
+impl DeserializationError for ConversionError {
+    fn custom<T: Display>(msg: T) -> Self {
+        Self::DeserializationError(None, msg.to_string())
+    }
+}
+
+impl Display for ConversionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+        match *self {
+            Self::ColumnNameNotAvailable(i, ref error) => {
+                write!(f, "Column {i}'s name is not available: {error}")
+            }
+            Self::ColumnNamesNotAvailable => write!(f, "Column names are not available"),
+            Self::DeserializationError(None, ref message) => {
+                write!(f, "Deserialization error: {message}")
+            }
+            Self::DeserializationError(Some(ref column), ref message) => write!(
+                f,
+                r#"Deserialization error for column "{column}": {message}"#
+            ),
+            Self::MissingColumn(ref column) => write!(f, r#"Missing column: "{column}""#),
+            Self::SqliteError(ref error) => write!(f, "SQLite error: {error}"),
+            Self::SerializationError(ref message) => write!(f, "Serialization error: {message}"),
+        }
+    }
+}
+
+impl Error for ConversionError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            Self::SqliteError(ref err) => Some(err),
+            Self::ColumnNameNotAvailable(..)
+            | Self::ColumnNamesNotAvailable
+            | Self::DeserializationError(..)
+            | Self::MissingColumn(_)
+            | Self::SerializationError(_) => None,
+        }
+    }
+}
+
+impl From<SqliteError> for ConversionError {
+    fn from(err: SqliteError) -> Self {
+        Self::SqliteError(err)
+    }
+}
+
+impl SerializationError for ConversionError {
+    fn custom<T: Display>(msg: T) -> Self {
+        Self::SerializationError(msg.to_string())
+    }
+}
 
 /// Wrapper type to represent an array of CSV values.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -126,8 +208,7 @@ impl<T: Serialize> ToSql for JsonArray<T> {
 ///
 /// * [`Model`]
 ///
-pub trait DbRecord:
-    Clone + Debug + DeserializeOwned + PartialEq + Send + Serialize + Sized + Sync
+pub trait DbRecord: Clone + Debug + PartialEq + Send + Sized + Sync
 where
     Self: 'static,
 {
@@ -139,6 +220,24 @@ where
 
     /// Gets a list of field values for the record.
     fn field_values(&self) -> Vec<Box<dyn ToSql + Send>>;
+
+    /// Converts a row from the database into a record.
+    ///
+    /// This function is used to convert a row from the database from primitive
+    /// SQL types into a Rust record type. It is used to convert the results of
+    /// a query into a specific type `T`.
+    ///
+    /// # Parameters
+    ///
+    /// * `row`     - The row from the database to convert into a record.
+    /// * `columns` - The names of the columns in the row.
+    ///
+    /// # Errors
+    ///
+    /// This function will return a [`ConversionError`] if there is a problem
+    /// converting the row.
+    ///
+    fn from_row(row: &Row<'_>, columns: &[String]) -> Result<Self, ConversionError>;
 }
 
 /// A trait for fully-modelled database records.
@@ -384,10 +483,10 @@ where
 /// A collection of database records.
 ///
 /// This struct is used to represent a collection of [`DbRecord`]s returned from
-/// a query — the converted query results, i.e. the [`Rows`](rusqlite::Rows)
-/// that have been converted into the desired type `T` — but boxed as [`Any`] so
-/// that they can be returned via the oneshot channel. These are downcast
-/// immediately at the other end of the channel.
+/// a query — the converted query results, i.e. the [`Rows`] that have been
+/// converted into the desired type `T` — but boxed as [`Any`] so that they can
+/// be returned via the oneshot channel. These are downcast immediately at the
+/// other end of the channel.
 ///
 /// Note that these can be [`DbRecord`]s or [`Model`]s, as the [`DbRecord`]
 /// trait is a supertrait of [`Model`].
@@ -419,4 +518,43 @@ impl IntoIterator for DbRecords {
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
     }
+}
+
+/// Converts [`Rows`] into a [`Vec`] of `T` record types.
+///
+/// This function is used to convert the results of a database query into a set
+/// of records. It expects `T` to be a type that implements the [`DbRecord`]
+/// trait and provides a [`from_row`](DbRecord::from_row()) method. This will be
+/// called for each row in the query results to convert the row into a record.
+/// The key point of this function is to provide contextual information in the
+/// form of columns along with the row data.
+///
+/// # Parameters
+///
+/// * `rows` - The query results to convert into records.
+///
+/// # Errors
+///
+/// This function will return a [`ConversionError`] if there is a problem
+/// converting the row.
+///
+pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionError> {
+    let columns = rows
+        .as_ref()
+        .map(|statement| {
+            (0..statement.column_count())
+                .map(|i| {
+                    statement
+                        .column_name(i)
+                        .map(ToOwned::to_owned)
+                        .map_err(|err| ConversionError::ColumnNameNotAvailable(i, err))
+                })
+                .collect::<Result<Vec<_>, ConversionError>>()
+        })
+        .ok_or(ConversionError::ColumnNamesNotAvailable)??;
+    let mut results = vec![];
+    while let Some(row) = rows.next()? {
+        results.push(T::from_row(row, &columns)?);
+    }
+    Ok(results)
 }

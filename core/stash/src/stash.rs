@@ -382,7 +382,7 @@
 //!      query handling is multi-threaded.
 //!
 
-use crate::orm::{DbRecords, Model};
+use crate::orm::{from_rows, ConversionError, DbRecord, DbRecords, Model};
 use core::ops::Deref;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
@@ -390,8 +390,6 @@ use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction};
-use serde::de::DeserializeOwned;
-use serde_rusqlite::{from_rows, Error as DeserializationError};
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::Path;
 use std::sync::{Arc, Weak};
@@ -512,8 +510,8 @@ pub enum StashError {
     /// that serde failed to convert the query results into the desired type,
     /// which could be due to a mismatch between the query results and the
     /// expected type.
-    #[error("Query results deserialisation error: {0}")]
-    DeserializationError(#[from] DeserializationError),
+    #[error("Query results deserialization error: {0}")]
+    DeserializationError(#[from] ConversionError),
 
     /// A problem was experienced when attempting to downcast a boxed trait
     /// object. This should never happen in practice.
@@ -756,7 +754,7 @@ struct Query {
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
     #[allow(clippy::type_complexity)]
-    converter: Box<dyn Fn(Rows<'_>) -> Result<DbRecords, DeserializationError> + Send>,
+    converter: Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Send>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -814,7 +812,7 @@ impl OperationLogic for Query {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
-        let rows: Result<DbRecords, DeserializationError> = (self.converter)(
+        let rows: Result<DbRecords, ConversionError> = (self.converter)(
             statement
                 .query(&*Self::prepare_params(&self.params))
                 .map_err(StashError::ExecutionError)?,
@@ -1108,7 +1106,7 @@ impl Stash {
     /// This function prepares a query and executes it on the database, and
     /// returns the resulting rows of data as a collection of instances of the
     /// specified `T` type, where `T` is any concrete type implementing the
-    /// [`DeserializeOwned`] trait. The requirement to formalise the return type
+    /// [`DbRecord`] trait. The requirement to formalise the return type
     /// streamlines the process of handling the results.
     ///
     /// # Read vs write
@@ -1178,7 +1176,7 @@ impl Stash {
     ) -> Result<Vec<T>, StashError>
     where
         Q: Into<String> + Send,
-        T: DeserializeOwned + Send + 'static,
+        T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
         let (that_end, this_end) = oneshot::channel();
@@ -1546,7 +1544,7 @@ impl Tether {
     /// This function prepares a query and executes it on the database, and
     /// returns the resulting rows of data as a collection of instances of the
     /// specified `T` type, where `T` is any concrete type implementing the
-    /// [`DeserializeOwned`] trait.
+    /// [`DbRecord`] trait.
     ///
     /// **Note: This function is connection-specific, i.e. the query will be
     /// executed in context to the [`Tether`] instance, against the associated
@@ -1575,7 +1573,7 @@ impl Tether {
     ) -> Result<Vec<T>, StashError>
     where
         Q: Into<String> + Send,
-        T: DeserializeOwned + Send + 'static,
+        T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
         let (that_end, this_end) = oneshot::channel();
@@ -2442,16 +2440,16 @@ impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
 ///
 /// Notably, we cannot really get away from use of `Box<dyn Any>` here, as we
 /// need to be able to return a collection of any type that implements the
-/// [`DeserializeOwned`] trait. We don't want to restrict the caller to a
-/// specific type, or even an enumerated list of types, and neither to we want
-/// to serialise the results into intermediary form to unpack at the other end
-/// of the queue. We therefore use `Box<dyn Any>` for a very short and specific
-/// purpose, which is to send the results back to the caller via the oneshot
-/// channel. They have in fact already been converted at this point, but must be
-/// passed generically and then downcast. This method of transport is therefore
-/// the most efficient option we can choose, and bears a very slight overhead of
-/// type manipulation, but does not introduce any wider dynamic dispatch or
-/// unnecessary byte manipulation (as the deserialisation happens exactly once).
+/// [`DbRecord`] trait. We don't want to restrict the caller to a specific type,
+/// or even an enumerated list of types, and neither to we want to serialise the
+/// results into intermediary form to unpack at the other end of the queue. We
+/// therefore use `Box<dyn Any>` for a very short and specific purpose, which is
+/// to send the results back to the caller via the oneshot channel. They have in
+/// fact already been converted at this point, but must be passed generically
+/// and then downcast. This method of transport is therefore the most efficient
+/// option we can choose, and bears a very slight overhead of type manipulation,
+/// but does not introduce any wider dynamic dispatch or unnecessary byte
+/// manipulation (as the deserialisation happens exactly once).
 ///
 /// # Parameters
 ///
@@ -2460,14 +2458,15 @@ impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
 ///
 /// # Errors
 ///
-/// A [`DeserializationError`] is returned if there is a problem deserialising
-/// the query results. This will then be converted into a
+/// A [`ConversionError`] is returned if there is a problem deserialising the
+/// query results or performing any type conversions as part of the overall
+/// row-deserialisation process. This will then be converted into a
 /// [`StashError::DeserializationError`] by the caller.
 ///
-fn converter<T>(rows: Rows<'_>) -> Result<DbRecords, DeserializationError>
+fn converter<T>(rows: Rows<'_>) -> Result<DbRecords, ConversionError>
 where
-    T: DeserializeOwned + Send + 'static,
+    T: DbRecord + Send + 'static,
     DbRecords: FromIterator<Box<T>>,
 {
-    from_rows::<T>(rows).map(|res| res.map(Box::new)).collect()
+    Ok(from_rows::<T>(rows)?.into_iter().map(Box::new).collect())
 }
