@@ -155,6 +155,7 @@
 pub mod datatypes;
 pub mod orm;
 pub mod stash;
+pub mod utils;
 
 /// Re-exported proc macros.
 ///
