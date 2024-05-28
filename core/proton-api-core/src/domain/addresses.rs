@@ -1,4 +1,4 @@
-use proton_crypto_account::domain::AddressKeys;
+use proton_crypto_account::keys::AddressKeys;
 use serde;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_default_from_null;

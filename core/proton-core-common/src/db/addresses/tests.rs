@@ -4,7 +4,7 @@ use crate::db::{
 use proton_api_core::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType,
 };
-use proton_api_core::exports::crypto::domain::{AddressKeys, KeyId, LockedKey};
+use proton_api_core::exports::crypto::keys::{AddressKeys, KeyId, LockedKey};
 
 pub(crate) fn with_tx(conn: &mut CoreSqliteConnection, f: impl Fn(&mut CoreSqliteConnectionMut)) {
     conn.tx(move |tx| -> DBResult<()> {

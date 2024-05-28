@@ -8,7 +8,7 @@ use crate::requests::{
     UserInfoRequest, UserSettingsRequest,
 };
 use anyhow::anyhow;
-use proton_crypto_account::domain::APIPublicAddressKeys;
+use proton_crypto_account::keys::APIPublicAddressKeys;
 use proton_crypto_account::salts::Salts;
 
 /// Authenticated Session from which one can access data/functionality restricted to authenticated

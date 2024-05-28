@@ -3,7 +3,7 @@ use proton_api_core::domain::{
     DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
     SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserSettings, WeekStart,
 };
-use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys};
+use proton_api_core::exports::crypto::keys::{KeyId, LockedKey, UserKeys};
 
 #[test]
 fn test_core_store_and_load_user() {

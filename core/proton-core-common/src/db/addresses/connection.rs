@@ -1,6 +1,6 @@
 use crate::db::{CoreSqliteConnectionImpl, DBResult};
 use proton_api_core::domain::{Address, AddressId, AddressSignedKeyList};
-use proton_api_core::exports::crypto::domain::{AddressKeys, KeyFlag, KeyId, LockedKey};
+use proton_api_core::exports::crypto::keys::{AddressKeys, KeyFlag, KeyId, LockedKey};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::mapped_rows_to_vec;
 

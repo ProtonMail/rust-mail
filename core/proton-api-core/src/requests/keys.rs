@@ -1,7 +1,7 @@
 use crate::http::{JsonResponse, Method, RequestData, RequestDesc};
 use serde::{self, Serialize};
 
-use proton_crypto_account::domain::APIPublicAddressKeys;
+use proton_crypto_account::keys::APIPublicAddressKeys;
 
 #[derive(Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
