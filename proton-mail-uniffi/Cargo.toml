@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-uniffi"
-version = "0.10.20"
+version = "0.10.21"
 edition = "2021"
 publish = false
 
