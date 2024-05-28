@@ -110,7 +110,6 @@ impl Mailbox {
 }
 
 /// Consists of the message's body metadata and decrypted content.
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct DecryptedMessageBody {
     /// Metadata associated with the message body
     pub metadata: LocalMessageBodyMetadata,

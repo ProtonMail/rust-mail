@@ -689,13 +689,11 @@ WHERE lmc.label_id = dm.label_id
         &self,
         id: LocalMessageId,
     ) -> DBResult<Option<LocalConversationId>> {
-        self.0
-            .query_row(
-                "SELECT conversation_id FROM messages WHERE id=?",
-                [id],
-                |r| r.get(0),
-            )
-            .optional()
+        self.0.query_row(
+            "SELECT conversation_id FROM messages WHERE id=?",
+            [id],
+            |r| r.get(0),
+        )
     }
 
     /// Retrieve the remote id for a message with `id`

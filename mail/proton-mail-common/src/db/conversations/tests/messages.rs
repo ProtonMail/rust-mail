@@ -11,6 +11,7 @@ use crate::db::{
     LocalInlineLabelInfo, LocalMessageBodyMetadata, LocalMessageCount, LocalMessageMetadata,
     MailSqliteConnectionMut,
 };
+use crate::exports::serde_json;
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
     AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType, Message,
@@ -482,8 +483,8 @@ fn test_create_message_and_body() {
                 metadata: test_message_metadata([MY_LABEL_ID1.clone()], []),
                 header: "my headers".to_string(),
                 parsed_headers: velcro::hash_map! {
-                    "foo".to_owned():"bar".to_owned(),
-                    "zeta".to_string():"gama".to_string(),
+                    "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+                    "zeta".to_string():serde_json::Value::String("gama".to_string()),
                 },
                 body: "my_message".to_string(),
                 mime_type: MimeType::TextPlain,
@@ -520,8 +521,8 @@ fn test_update_message_and_body() {
                 metadata: test_message_metadata([MY_LABEL_ID1.clone()], []),
                 header: "my headers".to_string(),
                 parsed_headers: velcro::hash_map! {
-                    "foo".to_owned():"bar".to_owned(),
-                    "zeta".to_string():"gama".to_string(),
+                    "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+                    "zeta".to_string():serde_json::Value::String("gama".to_string()),
                 },
                 body: "my_message".to_string(),
                 mime_type: MimeType::TextPlain,
@@ -533,9 +534,10 @@ fn test_update_message_and_body() {
             tx.create_or_update_message_body(&message).unwrap();
 
             // Update the body
-            message
-                .parsed_headers
-                .insert("marco".to_owned(), "polo".to_owned());
+            message.parsed_headers.insert(
+                "marco".to_owned(),
+                serde_json::Value::String("polo".to_owned()),
+            );
             message.header = "new header".to_owned();
             message.body = "new body type".to_owned();
             message.mime_type = MimeType::TextHTML;
@@ -574,8 +576,8 @@ fn test_create_message_and_body_with_attachments() {
                 ),
                 header: "my headers".to_string(),
                 parsed_headers: velcro::hash_map! {
-                    "foo".to_owned():"bar".to_owned(),
-                    "zeta".to_string():"gama".to_string(),
+                    "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+                    "zeta".to_string():serde_json::Value::String("gama".to_string()),
                 },
                 body: "my_message".to_string(),
                 mime_type: MimeType::TextPlain,

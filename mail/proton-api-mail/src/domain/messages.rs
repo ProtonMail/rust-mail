@@ -1,4 +1,5 @@
 use crate::domain::{AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId};
+use crate::exports::serde_json;
 use crate::MAX_PAGE_ELEMENT_COUNT;
 use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
@@ -120,7 +121,9 @@ pub struct Message {
     #[serde(flatten)]
     pub metadata: MessageMetadata,
     pub header: String,
-    pub parsed_headers: HashMap<String, String>,
+    // Unfortunately, some values returned in this struct are either
+    // arrays or strings.
+    pub parsed_headers: HashMap<String, serde_json::Value>,
     pub body: String,
     #[serde(rename = "MIMEType")]
     pub mime_type: MimeType,
