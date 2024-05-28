@@ -133,6 +133,22 @@ impl AppStateHandler for Model {
         );
     }
 
+    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(
+            Line::from(vec![
+                Span::from("Enter: ").bold(),
+                Span::from("Submit"),
+                Span::from(" ▲: ").bold(),
+                Span::from("Up"),
+                Span::from(" ▼: ").bold(),
+                Span::from("Down"),
+                Span::from(" N: ").bold(),
+                Span::from("New Login"),
+            ]),
+            area,
+        );
+    }
+
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(Text::from("Session Select"), area);
     }

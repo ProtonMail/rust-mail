@@ -261,6 +261,40 @@ impl AppStateHandler for Model {
         self.state.view(frame, area);
     }
 
+    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
+        let spans = vec![
+            Span::from(" ▲: ").bold(),
+            Span::from("Up"),
+            Span::from(" ▼: ").bold(),
+            Span::from("Down"),
+            Span::from(" Enter: ").bold(),
+            Span::from("Open"),
+            Span::from(" Esc: ").bold(),
+            Span::from("Close"),
+            Span::from(" Tab: ").bold(),
+            Span::from("Toggle"),
+            Span::from("S: ").bold(),
+            Span::from("Switch"),
+            Span::from(" M: ").bold(),
+            Span::from("Move"),
+            Span::from(" R: ").bold(),
+            Span::from("Read"),
+            Span::from(" U: ").bold(),
+            Span::from("Unread"),
+            Span::from(" L: ").bold(),
+            Span::from("Label"),
+            Span::from(" K: ").bold(),
+            Span::from("Unlabel"),
+            Span::from(" D: ").bold(),
+            Span::from("Delete"),
+            Span::from(" Shift+▲: ").bold(),
+            Span::from("Msg. Up"),
+            Span::from(" Shift+▼: ").bold(),
+            Span::from("Msg. Down"),
+        ];
+        frame.render_widget(Line::from(spans), area);
+    }
+
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         let label_name = self
             .label

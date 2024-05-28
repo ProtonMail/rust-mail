@@ -83,6 +83,8 @@ pub trait AppStateHandler {
     /// Called to display the current state.
     fn view(&mut self, frame: &mut Frame, area: Rect);
 
+    /// Called to provide contextual help that is displayed at the top.
+    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect);
     /// Called to provide information it the status bar at the bottom.
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect);
 }
@@ -255,8 +257,15 @@ impl Model<Messages> for AppModel {
 
     fn view(&mut self, frame: &mut Frame) {
         let area = frame.size();
-        let [view_area, status_bar_area] =
-            Layout::vertical([Constraint::Percentage(100), Constraint::Length(1)]).areas(area);
+        let [help_area, view_area, status_bar_area] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Percentage(100),
+            Constraint::Length(1),
+        ])
+        .areas(area);
+
+        // Draw help bar
+        frame.render_widget(Block::new().style(Style::new().reversed()), help_area);
 
         // Draw status bar
         frame.render_widget(Block::new().style(Style::new().reversed()), status_bar_area);
@@ -271,6 +280,7 @@ impl Model<Messages> for AppModel {
             frame.render_widget(Text::from("Log"), view_status_area);
             return;
         }
+        self.state.view_help_bar(frame, help_area);
         self.state.view(frame, view_area);
         self.state.view_status_bar(frame, view_status_area);
 
@@ -350,6 +360,16 @@ impl AppStateHandler for AppState {
             AppState::TwoFA(state) => state.view(frame, area),
             AppState::ContextInit(state) => state.view(frame, area),
             AppState::Mailbox(state) => state.view(frame, area),
+        }
+    }
+
+    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
+        match self {
+            AppState::SessionSelect(state) => state.view_help_bar(frame, area),
+            AppState::Login(state) => state.view_help_bar(frame, area),
+            AppState::TwoFA(state) => state.view_help_bar(frame, area),
+            AppState::ContextInit(state) => state.view_help_bar(frame, area),
+            AppState::Mailbox(state) => state.view_help_bar(frame, area),
         }
     }
 

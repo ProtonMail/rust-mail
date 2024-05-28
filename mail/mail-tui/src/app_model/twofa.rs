@@ -140,6 +140,18 @@ impl AppStateHandler for Model {
         frame.set_cursor(x, y);
     }
 
+    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(
+            Line::from(vec![
+                Span::from("Esc: ").bold(),
+                Span::from("Cancel"),
+                Span::from(" Enter: ").bold(),
+                Span::from("Submit"),
+            ]),
+            area,
+        );
+    }
+
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(Text::from("TwoFA"), area);
     }

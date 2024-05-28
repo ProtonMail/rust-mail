@@ -178,6 +178,18 @@ impl AppStateHandler for Model {
         frame.set_cursor(x, y);
     }
 
+    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(
+            Line::from(vec![
+                Span::styled("Enter: ", Style::new().bold()),
+                Span::raw("Submit"),
+                Span::styled(" Tab: ", Style::new().bold()),
+                Span::raw("Switch Input"),
+            ]),
+            area,
+        );
+    }
+
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(Text::from("Login"), area);
     }

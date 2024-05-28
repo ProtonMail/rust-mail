@@ -90,6 +90,8 @@ impl AppStateHandler for Model {
         );
     }
 
+    fn view_help_bar(&mut self, _: &mut Frame, _: Rect) {}
+
     fn view_status_bar(&mut self, _: &mut Frame, _: Rect) {}
 }
 
