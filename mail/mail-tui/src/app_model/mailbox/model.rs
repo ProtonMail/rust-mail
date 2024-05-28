@@ -273,7 +273,7 @@ impl AppStateHandler for Model {
             Span::from("Close"),
             Span::from(" Tab: ").bold(),
             Span::from("Toggle"),
-            Span::from("S: ").bold(),
+            Span::from(" S: ").bold(),
             Span::from("Switch"),
             Span::from(" M: ").bold(),
             Span::from("Move"),
