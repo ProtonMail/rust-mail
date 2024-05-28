@@ -2,7 +2,6 @@ use crate::mail::{MailSessionError, MailUserSession};
 use proton_mail_common::proton_api_mail::domain::ConversationFilter;
 use proton_mail_common::FilteredConversations;
 
-
 #[uniffi::export]
 impl MailUserSession {
     /// Filter or Search conversations which match the given `filter`.
