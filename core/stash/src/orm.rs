@@ -18,7 +18,7 @@ use core::fmt::{self, Debug, Display};
 use core::iter::repeat;
 use core::str::FromStr;
 use indoc::formatdoc;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef};
 use rusqlite::{Error as SqliteError, Row, Rows, ToSql};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
@@ -131,20 +131,28 @@ where
     T::Err: Debug + Error + Send + Sync + 'static,
 {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        value
-            .as_str()?
-            .split(',')
-            .map(|str| {
-                str.parse()
-                    .map_err(|err| FromSqlError::Other(Box::new(err)))
-            })
-            .collect::<Result<Vec<T>, _>>()
-            .map(CsvArray)
+        match value {
+            ValueRef::Null => Ok(Self(vec![])),
+            ValueRef::Blob(_) | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Text(_) => {
+                value
+                    .as_str()?
+                    .split(',')
+                    .map(|str| {
+                        str.parse()
+                            .map_err(|err| FromSqlError::Other(Box::new(err)))
+                    })
+                    .collect::<Result<Vec<T>, _>>()
+                    .map(CsvArray)
+            }
+        }
     }
 }
 
 impl<T: ToString> ToSql for CsvArray<T> {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        if self.0.is_empty() {
+            return Ok(ToSqlOutput::Owned(Value::Null));
+        }
         Ok(ToSqlOutput::from(
             self.0
                 .iter()
@@ -174,14 +182,20 @@ impl<T> From<Vec<T>> for JsonArray<T> {
 
 impl<T: for<'de> Deserialize<'de>> FromSql for JsonArray<T> {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        Ok(Self(
-            from_json(value.as_str()?).map_err(|err| FromSqlError::Other(Box::new(err)))?,
-        ))
+        Ok(Self(match value {
+            ValueRef::Null => vec![],
+            ValueRef::Blob(_) | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Text(_) => {
+                from_json(value.as_str()?).map_err(|err| FromSqlError::Other(Box::new(err)))?
+            }
+        }))
     }
 }
 
 impl<T: Serialize> ToSql for JsonArray<T> {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        if self.0.is_empty() {
+            return Ok(ToSqlOutput::Owned(Value::Null));
+        }
         Ok(ToSqlOutput::from(to_json(&self.0).map_err(|err| {
             SqliteError::ToSqlConversionFailure(Box::new(err))
         })?))

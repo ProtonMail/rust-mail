@@ -5,8 +5,9 @@
 //!
 
 use proc_macro::TokenStream;
-use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
+use quote::{quote, ToTokens};
+use syn::parse::{Parse, ParseStream};
+use syn::{parse_macro_input, Data, DeriveInput, Error as SynError, Fields, Ident, LitStr, Path};
 
 /// Automatically derive the `DbRecord` trait for a struct.
 ///
@@ -33,7 +34,7 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
 /// ```rust
 /// use serde::{Serialize, Deserialize};
 /// use stash::macros::DbRecord;
-/// use stash::orm::DbRecord;
+/// use stash::orm::{CsvArray, DbRecord};
 ///
 /// #[derive(Clone, Debug, DbRecord, Deserialize, PartialEq, Serialize)]
 /// struct Foo {
@@ -43,7 +44,7 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, Ident, LitStr};
 ///     #[DbField]
 ///     value: i32,
 ///
-///     #[DbField(via CsvArray)]
+///     #[DbField(via CsvArray<i32>)]
 ///     values: Vec<i32>,
 /// }
 /// ```
@@ -79,35 +80,85 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let via_attrs: Vec<Option<Ident>> = fields
+    let via_attrs: Vec<Option<ViaIntermediary>> = fields
         .iter()
-        .filter_map(|field| {
-            if let Some(attr) = field
+        .map(|field| {
+            field
                 .attrs
                 .iter()
                 .find(|attr| attr.path().is_ident("DbField"))
-            {
-                attr.parse_args().ok()
-            } else {
-                None
-            }
+                .and_then(|attr| match attr.parse_args::<ViaIntermediary>() {
+                    Ok(via) => Some(via),
+                    Err(err) => {
+                        if err
+                            .to_string()
+                            .contains("expected attribute arguments in parentheses")
+                        {
+                            None
+                        } else {
+                            panic!("Failed to parse attribute: {}", err)
+                        }
+                    }
+                })
         })
         .collect();
 
     // Generate trait implementation
+    let fields_impl = db_fields
+        .iter()
+        .zip(via_attrs.iter())
+        .map(|(db_field, via_attr)| {
+            if let Some(via_type) = via_attr {
+                quote! {
+                    Box::new(<#via_type as From<_>>::from(self.#db_field.clone()))
+                }
+            } else {
+                quote! {
+                    Box::new(self.#db_field.clone())
+                }
+            }
+        });
+
+    let field_values_impl = db_fields
+        .iter()
+        .zip(via_attrs.iter())
+        .map(|(db_field, via_attr)| {
+            if let Some(via_type) = via_attr {
+                quote! {
+                    Box::new(<#via_type as From<_>>::from(self.#db_field.clone()))
+                }
+            } else {
+                quote! {
+                    Box::new(self.#db_field.clone())
+                }
+            }
+        });
+
+    let from_row_impl = fields.iter().zip(via_attrs.iter()).map(|(field, via_attr)| {
+        let field_ident = field.ident.as_ref().expect("All fields must have an identifier");
+        if let Some(via_type) = via_attr {
+            quote! {
+                <#via_type as Into<_>>::into(row.get(
+                    columns.iter().position(|c| c == stringify!(#field_ident))
+                        .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#field_ident).to_owned()))?
+                )?)
+            }
+        } else {
+            quote! {
+                row.get(
+                    columns.iter().position(|c| c == stringify!(#field_ident))
+                        .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#field_ident).to_owned()))?
+                )?
+            }
+        }
+    });
+
     (quote! {
         impl stash::orm::DbRecord for #name {
             fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
                 let mut map = std::collections::HashMap::new();
                 #(
-                    let value: Box<dyn stash::exports::ToSql + Send> = match stringify!(#via_attrs) {
-                        "" => Box::new(self.#db_fields.clone()),
-                        wrapper_type => {
-                            let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
-                            Box::new(wrapper)
-                        }
-                    };
-                    map.insert(stringify!(#db_fields), value);
+                    map.insert(stringify!(#db_fields), #fields_impl as Box<dyn stash::exports::ToSql + Send>);
                 )*
                 map
             }
@@ -118,25 +169,14 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 
             fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
                 vec![
-                    #(
-                        match stringify!(#via_attrs) {
-                            "" => Box::new(self.#db_fields.clone()),
-                            wrapper_type => {
-                                let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
-                                Box::new(wrapper)
-                            }
-                        }
-                    ),*
+                    #(#field_values_impl as Box<dyn stash::exports::ToSql + Send>),*
                 ]
             }
 
             fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
                 Ok(Self {
                     #(
-                        #db_fields: row.get(
-                            columns.iter().position(|c| c == stringify!(#db_fields))
-                                .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#db_fields).to_owned()))?
-                        )?,
+                        #db_fields: #from_row_impl,
                     )*
                 })
             }
@@ -177,7 +217,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// ```rust
 /// use serde::{Serialize, Deserialize};
 /// use stash::macros::Model;
-/// use stash::orm::Model;
+/// use stash::orm::{CsvArray, Model};
 /// use stash::stash::Stash;
 /// use uuid::Uuid;
 ///
@@ -193,7 +233,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[DbField]
 ///     value: i32,
 ///
-///     #[DbField(via CsvArray)]
+///     #[DbField(via CsvArray<i32>)]
 ///     values: Vec<i32>,
 ///
 ///     #[StashField]
@@ -286,35 +326,85 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let via_attrs: Vec<Option<Ident>> = fields
+    let via_attrs: Vec<Option<ViaIntermediary>> = fields
         .iter()
-        .filter_map(|field| {
-            if let Some(attr) = field
+        .map(|field| {
+            field
                 .attrs
                 .iter()
                 .find(|attr| attr.path().is_ident("DbField") || attr.path().is_ident("IdField"))
-            {
-                attr.parse_args().ok()
-            } else {
-                None
-            }
+                .and_then(|attr| match attr.parse_args::<ViaIntermediary>() {
+                    Ok(via) => Some(via),
+                    Err(err) => {
+                        if err
+                            .to_string()
+                            .contains("expected attribute arguments in parentheses")
+                        {
+                            None
+                        } else {
+                            panic!("Failed to parse attribute: {}", err)
+                        }
+                    }
+                })
         })
         .collect();
 
     // Generate trait implementation
+    let fields_impl = db_fields
+        .iter()
+        .zip(via_attrs.iter())
+        .map(|(db_field, via_attr)| {
+            if let Some(via_type) = via_attr {
+                quote! {
+                    Box::new(<#via_type as From<_>>::from(self.#db_field.clone()))
+                }
+            } else {
+                quote! {
+                    Box::new(self.#db_field.clone())
+                }
+            }
+        });
+
+    let field_values_impl = db_fields
+        .iter()
+        .zip(via_attrs.iter())
+        .map(|(db_field, via_attr)| {
+            if let Some(via_type) = via_attr {
+                quote! {
+                    Box::new(<#via_type as From<_>>::from(self.#db_field.clone()))
+                }
+            } else {
+                quote! {
+                    Box::new(self.#db_field.clone())
+                }
+            }
+        });
+
+    let from_row_impl = fields.iter().zip(via_attrs.iter()).map(|(field, via_attr)| {
+        let field_ident = field.ident.as_ref().expect("All fields must have an identifier");
+        if let Some(via_type) = via_attr {
+            quote! {
+                <#via_type as Into<_>>::into(row.get(
+                    columns.iter().position(|c| c == stringify!(#field_ident))
+                        .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#field_ident).to_owned()))?
+                )?)
+            }
+        } else {
+            quote! {
+                row.get(
+                    columns.iter().position(|c| c == stringify!(#field_ident))
+                        .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#field_ident).to_owned()))?
+                )?
+            }
+        }
+    });
+
     (quote! {
         impl stash::orm::DbRecord for #name {
             fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
                 let mut map = std::collections::HashMap::new();
                 #(
-                    let value: Box<dyn stash::exports::ToSql + Send> = match stringify!(#via_attrs) {
-                        "" => Box::new(self.#db_fields.clone()),
-                        wrapper_type => {
-                            let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
-                            Box::new(wrapper)
-                        }
-                    };
-                    map.insert(stringify!(#db_fields), value);
+                    map.insert(stringify!(#db_fields), #fields_impl as Box<dyn stash::exports::ToSql + Send>);
                 )*
                 map
             }
@@ -325,25 +415,14 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
                 vec![
-                    #(
-                        match stringify!(#via_attrs) {
-                            "" => Box::new(self.#db_fields.clone()),
-                            wrapper_type => {
-                                let wrapper: #via_attrs<_> = self.#db_fields.clone().into();
-                                Box::new(wrapper)
-                            }
-                        }
-                    ),*
+                    #(#field_values_impl as Box<dyn stash::exports::ToSql + Send>),*
                 ]
             }
 
             fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
                 Ok(Self {
                     #(
-                        #db_fields: row.get(
-                            columns.iter().position(|c| c == stringify!(#db_fields))
-                                .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#db_fields).to_owned()))?
-                        )?,
+                        #db_fields: #from_row_impl,
                     )*
                     #stash_field: None,
                 })
@@ -374,4 +453,35 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             }
         }
     }).into()
+}
+
+/// Details of the `via` attribute.
+///
+/// This struct is used to parse the `via` attribute, which is used to specify
+/// a wrapper type for a field in the `DbRecord` and `Model` derive macros.
+///
+#[derive(Debug)]
+struct ViaIntermediary(Option<Path>);
+
+impl Parse for ViaIntermediary {
+    fn parse(input: ParseStream) -> Result<Self, SynError> {
+        if input.is_empty() {
+            return Ok(ViaIntermediary(None));
+        }
+        let arg: Ident = input.parse()?;
+        if arg != "via" {
+            return Err(SynError::new(arg.span(), "expected `via`"));
+        }
+        Ok(ViaIntermediary(Some(input.parse()?)))
+    }
+}
+
+impl ToTokens for ViaIntermediary {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        if let Some(identifier) = &self.0 {
+            tokens.extend(quote! {
+                #identifier
+            });
+        }
+    }
 }
