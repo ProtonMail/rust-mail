@@ -61,3 +61,8 @@ impl AsTable for Vec<LocalMessageMetadata> {
             .highlight_style(Style::new().reversed())
     }
 }
+
+// TODO:
+//* Message body widget with scroll bar and paragraph for content (use text.content_length() for height)
+//* conversation messages live query
+//* Use conversation state code to mimic message rendering??

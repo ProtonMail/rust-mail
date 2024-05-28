@@ -1,5 +1,6 @@
 use crate::app_model::{mailbox, AppState, AppStateHandler, BackgroundSender};
 use crate::messages::Messages;
+use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
 use crossterm::event::Event;
 use proton_mail_common::exports::tracing;
@@ -8,7 +9,6 @@ use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
-use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use throbber_widgets_tui::ThrobberState;
 
@@ -79,27 +79,15 @@ impl AppStateHandler for Model {
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let [_, content, _] = Layout::vertical([
-            Constraint::Percentage(50),
-            Constraint::Min(1),
-            Constraint::Percentage(50),
-        ])
-        .flex(Flex::SpaceAround)
-        .areas(area);
-        let [_, content, _] = Layout::horizontal([
-            Constraint::Percentage(50),
-            Constraint::Min(10),
-            Constraint::Percentage(50),
-        ])
-        .flex(Flex::SpaceAround)
-        .areas(content);
-
-        self.throbber_state.calc_next();
-        let full = throbber_widgets_tui::Throbber::default()
+        let throbber = throbber_widgets_tui::Throbber::default()
             .label("Initializing user...")
             .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
             .use_type(throbber_widgets_tui::WhichUse::Spin);
-        frame.render_stateful_widget(full, content, &mut self.throbber_state);
+        frame.render_stateful_widget(
+            CenteredThrobber::new(throbber),
+            area,
+            &mut self.throbber_state,
+        );
     }
 
     fn view_status_bar(&mut self, _: &mut Frame, _: Rect) {}

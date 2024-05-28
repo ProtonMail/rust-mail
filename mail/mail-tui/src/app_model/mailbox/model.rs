@@ -1,16 +1,17 @@
 use crate::app_model::mailbox::conversations::ConversationsState;
-use crate::app_model::mailbox::messages::MessagesState;
+use crate::app_model::mailbox::messages::{MessagesState, MessagesViewState};
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{Item, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{new_live_query, Item, Message, ITEM_LIMIT};
 use crate::app_model::{AppState, AppStateHandler, BackgroundSender};
 use crate::messages::Messages;
+use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
 use crossterm::event::Event;
-use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
-use proton_api_mail::exports::tracing;
-use proton_mail_common::db::{LocalConversationId, LocalLabelId};
-use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
-use ratatui::layout::{Constraint, Flex, Layout, Rect};
+use proton_mail_common::db::{LocalLabel, LocalLabelId};
+use proton_mail_common::exports::tracing;
+use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
+use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult};
+use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
@@ -19,7 +20,7 @@ use throbber_widgets_tui::ThrobberState;
 enum State {
     Syncing(ThrobberState),
     Conversations(ConversationsState),
-    Messages(MessagesState),
+    Messages(MessagesViewState),
 }
 
 impl State {
@@ -27,9 +28,23 @@ impl State {
         Self::Syncing(ThrobberState::default())
     }
 }
+
+pub(super) trait StateHandler {
+    fn handle_event(&mut self, event: Event) -> Option<Messages>;
+
+    fn update(
+        &mut self,
+        ctx: &MailContext,
+        message: Message,
+        mbox: &Mailbox,
+        sender: &BackgroundSender,
+    ) -> Option<Messages>;
+    fn view(&mut self, frame: &mut Frame, area: Rect);
+}
 pub struct Model {
     ctx: MailUserContext,
     mailbox: Mailbox,
+    label: LocalLabel,
     state: State,
     cancel_token: Option<Sender<()>>,
 }
@@ -37,11 +52,14 @@ pub struct Model {
 impl Model {
     pub fn new(ctx: MailUserContext) -> MailboxResult<Self> {
         let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox())?;
-
+        let label = ctx
+            .get_label_with_remote_id(LabelId::inbox())?
+            .ok_or(MailboxError::RemoteLabelNotFound(LabelId::inbox().clone()))?;
         Ok(Self {
             ctx,
             mailbox,
             state: State::new_syncing(),
+            label,
             cancel_token: None,
         })
     }
@@ -65,56 +83,76 @@ impl Model {
         // Create the background worker.
         self.init_background_worker(&sender);
         self.ctx.mail_context().async_runtime().spawn(async move {
+            let label = match mbox.user_context().get_label(mbox.label_id()) {
+                Ok(l) => {
+                    if let Some(l) = l {
+                        l
+                    } else {
+                        let e = anyhow!(
+                            "Failed to get label: {}",
+                            MailboxError::LabelNotFound(mbox.label_id())
+                        );
+                        tracing::error!("{e}");
+                        sender.send(Messages::DisplayError(None, e));
+                        return;
+                    }
+                }
+                Err(e) => {
+                    let e = anyhow!("Failed to get label: {e}");
+                    tracing::error!("{e}");
+                    sender.send(Messages::DisplayError(None, e));
+                    return;
+                }
+            };
             if let Err(e) = mbox.sync(ITEM_LIMIT).await {
                 let e = anyhow!("Failed to sync mailbox: {e}");
                 tracing::error!("{e}");
                 sender.send(Messages::DisplayError(None, e));
+                return;
             };
 
             let msg = if mbox.view_mode() == MailSettingsViewMode::Conversations {
-                Message::OpenConversationView(mbox)
+                Message::OpenConversationView(mbox, label)
             } else {
-                Message::OpenMessageView(mbox)
+                Message::OpenMessageView(mbox, label)
             };
 
             sender.send(msg.into());
         });
     }
 
-    fn open_conversation_view(&mut self, mbox: Mailbox) -> Option<Messages> {
+    fn open_conversation_view(&mut self, mbox: Mailbox, label: LocalLabel) -> Option<Messages> {
         self.mailbox = mbox;
         match ConversationsState::new(&self.mailbox) {
             Ok(state) => {
                 self.state = State::Conversations(state);
+                self.label = label;
                 None
             }
             Err(e) => Some(Messages::from(e)),
         }
     }
 
-    fn open_message_view(&mut self, mbox: Mailbox) -> Option<Messages> {
+    fn open_message_view(&mut self, mbox: Mailbox, label: LocalLabel) -> Option<Messages> {
         self.mailbox = mbox;
-        match MessagesState::new(&self.mailbox) {
-            Ok(state) => {
-                self.state = State::Messages(state);
-                None
+        let query = match self.mailbox.new_messages_query(new_live_query, ITEM_LIMIT) {
+            Ok(query) => query,
+            Err(e) => {
+                return Some(e.into());
             }
-            Err(e) => Some(Messages::from(e)),
-        }
+        };
+        self.label = label;
+        self.state = State::Messages(MessagesState::new(query));
+        None
     }
 
-    fn open_label_select_popup(&mut self) -> Option<Messages> {
-        let label = match &self.state {
-            State::Syncing(_) => return None,
-            State::Conversations(state) => state.label(),
-            State::Messages(state) => state.label(),
-        };
-        match LabelSelectPopup::new(self.mailbox.user_context(), label) {
-            Ok(state) => Some(Messages::RaisePopup(Box::new(state))),
+    fn open_label_select_popup(&mut self) -> Messages {
+        match LabelSelectPopup::new(self.mailbox.user_context(), &self.label) {
+            Ok(state) => Messages::RaisePopup(Box::new(state)),
             Err(e) => {
                 let e = anyhow!("Failed to load labels: {e}");
                 tracing::error!("{e}");
-                Some(Messages::DisplayError(None, e))
+                Messages::DisplayError(None, e)
             }
         }
     }
@@ -174,103 +212,8 @@ impl Model {
             }
         }
     }
-
-    fn mark_conversation_read(&mut self, id: LocalConversationId) -> Option<Messages> {
-        if !matches!(&self.state, State::Conversations(_)) {
-            return None;
-        }
-        match self.mailbox.mark_conversations_read(std::iter::once(id)) {
-            Ok(()) => None,
-            Err(e) => {
-                let e = anyhow!("Failed to mark conversation as read: {e}");
-                tracing::error!("{e}");
-                Some(e.into())
-            }
-        }
-    }
-
-    fn mark_conversation_unread(&mut self, id: LocalConversationId) -> Option<Messages> {
-        if !matches!(&self.state, State::Conversations(_)) {
-            return None;
-        }
-        match self.mailbox.mark_conversations_unread(std::iter::once(id)) {
-            Ok(()) => None,
-            Err(e) => {
-                let e = anyhow!("Failed to mark conversation as read: {e}");
-                tracing::error!("{e}");
-                Some(e.into())
-            }
-        }
-    }
-
-    fn delete_conversation(&mut self, id: LocalConversationId) -> Option<Messages> {
-        if !matches!(&self.state, State::Conversations(_)) {
-            return None;
-        }
-        match self.mailbox.delete_conversations(std::iter::once(id)) {
-            Ok(()) => None,
-            Err(e) => {
-                let e = anyhow!("Failed to delete conversation: {e}");
-                tracing::error!("{e}");
-                Some(e.into())
-            }
-        }
-    }
-
-    fn move_conversation(
-        &mut self,
-        conversation_id: LocalConversationId,
-        label_id: LocalLabelId,
-    ) -> Messages {
-        match self
-            .mailbox
-            .move_conversations(label_id, std::iter::once(conversation_id))
-        {
-            Ok(()) => Messages::DismissPopup,
-            Err(e) => {
-                let e = anyhow!("Failed to move conversation: {e}");
-                tracing::error!("{e}");
-                e.into()
-            }
-        }
-    }
-
-    fn label_conversation(
-        &mut self,
-        conversation_id: LocalConversationId,
-        label_id: LocalLabelId,
-    ) -> Messages {
-        match self
-            .mailbox
-            .label_conversations(label_id, std::iter::once(conversation_id))
-        {
-            Ok(()) => Messages::DismissPopup,
-            Err(e) => {
-                let e = anyhow!("Failed to label conversation: {e}");
-                tracing::error!("{e}");
-                e.into()
-            }
-        }
-    }
-
-    fn unlabel_conversation(
-        &mut self,
-        conversation_id: LocalConversationId,
-        label_id: LocalLabelId,
-    ) -> Messages {
-        match self
-            .mailbox
-            .unlabel_conversations(label_id, std::iter::once(conversation_id))
-        {
-            Ok(()) => Messages::DismissPopup,
-            Err(e) => {
-                let e = anyhow!("Failed to unlabel conversation: {e}");
-                tracing::error!("{e}");
-                e.into()
-            }
-        }
-    }
 }
+
 impl AppStateHandler for Model {
     fn on_state_enter(&mut self) -> Option<Messages> {
         Some(Message::Sync(self.mailbox.clone()).into())
@@ -281,14 +224,14 @@ impl AppStateHandler for Model {
                 // Do nothing
                 None
             }
-            State::Conversations(state) => state.on_event(&event),
-            State::Messages(state) => state.on_event(&event),
+            State::Conversations(state) => state.handle_event(event),
+            State::Messages(state) => state.handle_event(event),
         }
     }
 
     fn update(
         &mut self,
-        _: &MailContext,
+        ctx: &MailContext,
         message: Messages,
         sender: &BackgroundSender,
     ) -> Option<Messages> {
@@ -301,69 +244,81 @@ impl AppStateHandler for Model {
                 self.sync_mailbox(mbox, sender.clone());
                 None
             }
-            Message::OpenConversationView(mbox) => self.open_conversation_view(mbox),
-            Message::OpenMessageView(mbox) => self.open_message_view(mbox),
-            Message::OpenLabelSelectPopup => self.open_label_select_popup(),
+            Message::OpenConversationView(mbox, label) => self.open_conversation_view(mbox, label),
+            Message::OpenMessageView(mbox, label) => self.open_message_view(mbox, label),
+            Message::OpenLabelSelectPopup => Some(self.open_label_select_popup()),
             Message::SelectLabel(label_id) => Some(self.select_label(label_id)),
-            Message::MarkConversationRead(id) => self.mark_conversation_read(id),
-            Message::MarkConversationUnread(id) => self.mark_conversation_unread(id),
-            Message::DeleteConversation(id) => self.delete_conversation(id),
             Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
-            Message::MoveConversation(conversation_id, label_id) => {
-                Some(self.move_conversation(conversation_id, label_id))
-            }
-            Message::LabelConversation(conversation_id, label_id) => {
-                Some(self.label_conversation(conversation_id, label_id))
-            }
-            Message::UnlabelConversation(conversation_id, label_id) => {
-                Some(self.unlabel_conversation(conversation_id, label_id))
-            }
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
             Message::OpenUnlabelItemPopup(item) => self.open_unlabel_popup(item),
+            Message::ConversationState(_) | Message::MessageState(_) => {
+                self.state.update(ctx, message, &self.mailbox, sender)
+            }
         }
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
-        match &mut self.state {
-            State::Syncing(state) => {
-                let [_, content, _] = Layout::vertical([
-                    Constraint::Percentage(50),
-                    Constraint::Min(1),
-                    Constraint::Percentage(50),
-                ])
-                .flex(Flex::SpaceAround)
-                .areas(area);
-                let [_, content, _] = Layout::horizontal([
-                    Constraint::Percentage(50),
-                    Constraint::Min(10),
-                    Constraint::Percentage(50),
-                ])
-                .flex(Flex::SpaceAround)
-                .areas(content);
+        self.state.view(frame, area);
+    }
 
-                state.calc_next();
-                let full = throbber_widgets_tui::Throbber::default()
+    fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
+        let label_name = self
+            .label
+            .path
+            .as_deref()
+            .unwrap_or(self.label.name.as_str());
+
+        let [label_area, other_area] = Layout::horizontal([
+            Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
+            Constraint::Percentage(100),
+        ])
+        .flex(Flex::Start)
+        .areas(area);
+        let text = Text::from(label_name);
+        frame.render_widget(text, label_area);
+        if let State::Conversations(state) = &mut self.state {
+            state.draw_status_bar(frame, other_area);
+        }
+    }
+}
+
+impl StateHandler for State {
+    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+        match self {
+            State::Syncing(_) => None,
+            State::Conversations(state) => state.handle_event(event),
+            State::Messages(state) => state.handle_event(event),
+        }
+    }
+
+    fn update(
+        &mut self,
+        ctx: &MailContext,
+        message: Message,
+        mbox: &Mailbox,
+        sender: &BackgroundSender,
+    ) -> Option<Messages> {
+        match self {
+            State::Syncing(_) => None,
+            State::Conversations(state) => state.update(ctx, message, mbox, sender),
+            State::Messages(state) => state.update(ctx, message, mbox, sender),
+        }
+    }
+
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        match self {
+            State::Syncing(state) => {
+                let throbber = throbber_widgets_tui::Throbber::default()
                     .label("Loading...")
                     .throbber_set(throbber_widgets_tui::BRAILLE_SIX)
                     .use_type(throbber_widgets_tui::WhichUse::Spin);
-                frame.render_stateful_widget(full, content, state);
+                frame.render_stateful_widget(CenteredThrobber::new(throbber), area, state);
             }
             State::Conversations(state) => {
-                state.draw(frame, area);
+                state.view(frame, area);
             }
             State::Messages(state) => {
-                state.draw(frame, area);
-            }
-        }
-    }
-    fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
-        match &mut self.state {
-            State::Syncing(_) => {}
-            State::Conversations(state) => {
-                state.draw_status_bar(frame, area);
-            }
-            State::Messages(state) => {
-                state.draw_status_bar(frame, area);
+                state.view(frame, area);
             }
         }
     }

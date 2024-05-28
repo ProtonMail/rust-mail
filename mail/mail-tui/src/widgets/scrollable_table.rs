@@ -8,7 +8,6 @@ use ratatui::widgets::{List, ListState, Scrollbar, ScrollbarState, Table, TableS
 pub struct ScrollableTableState {
     table_state: TableState,
     scroll_state: ScrollbarState,
-    element_len: usize,
 }
 
 impl ScrollableTableState {
@@ -16,7 +15,6 @@ impl ScrollableTableState {
         Self {
             table_state: TableState::default().with_selected(selected),
             scroll_state: ScrollbarState::default(),
-            element_len: 0,
         }
     }
 
@@ -33,39 +31,29 @@ impl ScrollableTableState {
     }
 
     pub fn next(&mut self) {
-        if self.element_len == 0 {
-            return;
-        }
         if let Some(index) = self.table_state.selected() {
-            let next_index = (self.element_len - 1).min(index + 1);
-            self.table_state.select(Some(next_index));
+            self.table_state.select(Some(index.saturating_add(1)));
         }
     }
 
     pub fn prev(&mut self) {
-        if self.element_len == 0 {
-            return;
-        }
         if let Some(index) = self.table_state.selected() {
-            let next_index = index.saturating_sub(1);
-            self.table_state.select(Some(next_index));
+            self.table_state.select(Some(index.saturating_sub(1)));
         }
-    }
-
-    pub fn set_len(&mut self, len: usize) {
-        self.element_len = len;
-    }
-
-    pub fn len(&mut self) -> usize {
-        self.element_len
     }
 }
 
-pub struct ScrollableTable<'a>(Table<'a>);
+pub struct ScrollableTable<'a> {
+    widget: Table<'a>,
+    num_rows: usize,
+}
 
 impl<'a> ScrollableTable<'a> {
-    pub fn new(table: Table<'a>) -> Self {
-        Self(table)
+    pub fn new(table: Table<'a>, num_rows: usize) -> Self {
+        Self {
+            widget: table,
+            num_rows,
+        }
     }
 }
 
@@ -76,8 +64,12 @@ impl<'a> StatefulWidget for ScrollableTable<'a> {
         let [main_area, scroll_area] =
             Layout::horizontal([Constraint::Fill(10), Length(1)]).areas(area);
 
-        let total_height = state.element_len;
+        let total_height = self.num_rows;
         let visible_area = main_area.height as usize;
+
+        if let Some(index) = state.selected() {
+            state.select(Some(index.min(self.num_rows.saturating_sub(1))));
+        }
 
         let draw_scroll_bar = if total_height >= visible_area {
             let content_length = total_height - visible_area;
@@ -92,8 +84,7 @@ impl<'a> StatefulWidget for ScrollableTable<'a> {
         };
 
         let main_area = if draw_scroll_bar { main_area } else { area };
-        let mut table = self.0;
-        StatefulWidget::render(table, main_area, buf, &mut state.table_state);
+        StatefulWidget::render(self.widget, main_area, buf, &mut state.table_state);
         if draw_scroll_bar {
             Scrollbar::new(VerticalRight)
                 .symbols(scrollbar::VERTICAL)

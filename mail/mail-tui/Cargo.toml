@@ -23,6 +23,7 @@ unicode-width = "0.1"
 chrono = { version = "0.4" }
 throbber-widgets-tui = "0.5.0"
 scopeguard = "1.2"
+html2text = "0.12.5"
 
 [dependencies.proton-async]
 #path = "../../proton-api-core/proton-async"
@@ -34,13 +35,9 @@ version = "=0.5.10"
 registry = "proton"
 #path = "../../proton-api-core/proton-core-common"
 
-[dependencies.proton-api-mail]
-version = "=0.3.8"
-registry = "proton"
-
 [dependencies.proton-mail-common]
 #path = "../mail/proton-mail-common"
-version = "=0.5.15"
+version = "=0.5.17"
 registry = "proton"
 
 [lints.rust]

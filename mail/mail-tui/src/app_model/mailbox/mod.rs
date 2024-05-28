@@ -5,31 +5,62 @@ mod popups;
 
 pub use model::Model;
 
+use crate::app_model::mailbox::conversations::ConversationMessagesState;
+use crate::app_model::mailbox::messages::DecryptedMessage;
 use crate::messages::Messages;
 use proton_core_common::db::proton_sqlite3::{
     InProcessTrackerService, Live, LiveQueryBuilder, Observable,
 };
-use proton_mail_common::db::{LocalConversationId, LocalLabelId, LocalMessageId};
+use proton_mail_common::db::{LocalConversationId, LocalLabel, LocalLabelId, LocalMessageId};
 use proton_mail_common::Mailbox;
 
 const ITEM_LIMIT: usize = 50;
 
 pub enum Message {
     Sync(Mailbox),
-    OpenConversationView(Mailbox),
-    OpenMessageView(Mailbox),
+    OpenConversationView(Mailbox, LocalLabel),
+    OpenMessageView(Mailbox, LocalLabel),
     OpenLabelSelectPopup,
     OpenMoveItemPopup(Item),
     OpenLabelItemPopup(Item),
     OpenUnlabelItemPopup(Item),
     SelectLabel(LocalLabelId),
+    ConversationState(ConversationMessage),
+    #[allow(clippy::enum_variant_names)]
+    MessageState(MessageMessage),
+}
+/// Messages related to conversation actions.
+pub enum ConversationMessage {
     MarkConversationRead(LocalConversationId),
     MarkConversationUnread(LocalConversationId),
     DeleteConversation(LocalConversationId),
     MoveConversation(LocalConversationId, LocalLabelId),
     LabelConversation(LocalConversationId, LocalLabelId),
     UnlabelConversation(LocalConversationId, LocalLabelId),
+    OpenConversation(LocalConversationId),
+    OpenConversationResult(anyhow::Result<Box<ConversationMessagesState>>),
+    CloseConversation,
 }
+
+impl From<ConversationMessage> for Messages {
+    fn from(value: ConversationMessage) -> Self {
+        Message::ConversationState(value).into()
+    }
+}
+
+/// Messages related to message actions.
+pub enum MessageMessage {
+    OpenMessageBody,
+    OpenMessageBodyResult(anyhow::Result<Box<DecryptedMessage>>),
+    CloseMessageBody,
+}
+
+impl From<MessageMessage> for Messages {
+    fn from(value: MessageMessage) -> Self {
+        Message::MessageState(value).into()
+    }
+}
+
 pub enum Item {
     Conversation(LocalConversationId),
     //TODO:message actions

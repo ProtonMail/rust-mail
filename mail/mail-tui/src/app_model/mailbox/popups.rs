@@ -1,11 +1,11 @@
-use crate::app_model::mailbox::{Item, Message};
+use crate::app_model::mailbox::{ConversationMessage, Item, Message};
 use crate::messages::Messages;
 use crate::widgets::{AsList, ScrollableList, ScrollableListState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use proton_api_mail::domain::LabelType;
 use proton_core_common::db::DBResult;
 use proton_mail_common::db::{LocalLabel, LocalLabelId, LocalLabelWithCount};
+use proton_mail_common::proton_api_mail::domain::LabelType;
 use proton_mail_common::{MailContextResult, MailUserContext};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::widgets::{Block, Borders, List, ListItem, Tabs};
@@ -52,7 +52,9 @@ impl crate::app_model::Popup for MoveItemPopup {
                 None
             }
             KeyCode::Enter => self.selected_label_id().map(|id| match self.item {
-                Item::Conversation(item_id) => Message::MoveConversation(item_id, id).into(),
+                Item::Conversation(item_id) => {
+                    ConversationMessage::MoveConversation(item_id, id).into()
+                }
                 Item::Message(_) => Messages::DisplayError(None, anyhow!("Not Yet Implemented")),
             }),
             _ => None,
@@ -114,9 +116,9 @@ impl crate::app_model::Popup for LabelItemPopup {
             KeyCode::Enter => self.selected_label_id().map(|id| match self.item {
                 Item::Conversation(item_id) => {
                     if self.apply {
-                        Message::LabelConversation(item_id, id).into()
+                        ConversationMessage::LabelConversation(item_id, id).into()
                     } else {
-                        Message::UnlabelConversation(item_id, id).into()
+                        ConversationMessage::UnlabelConversation(item_id, id).into()
                     }
                 }
                 Item::Message(_) => Messages::DisplayError(None, anyhow!("Not Yet Implemented")),

@@ -1,13 +1,17 @@
+mod centered_throbber;
 mod conversations;
 mod labels;
 mod messages;
 mod scrollable_list;
+mod scrollable_paragraph;
 mod scrollable_table;
 mod text_input;
 pub mod utils;
 
+pub use centered_throbber::*;
 use ratatui::widgets::{List, Table};
 pub use scrollable_list::*;
+pub use scrollable_paragraph::*;
 pub use scrollable_table::*;
 pub use text_input::*;
 
