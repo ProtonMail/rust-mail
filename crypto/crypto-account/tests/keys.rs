@@ -1,6 +1,6 @@
 use proton_crypto::crypto::{DataEncoding, PGPProviderSync};
 use proton_crypto::{new_pgp_provider, new_srp_provider};
-use proton_crypto_account::domain::{
+use proton_crypto_account::keys::{
     AddressKeys, DecryptedUserKey, KeyFlag, KeyId, LockedKey, UserKeys,
 };
 use proton_crypto_account::salts::{Salt, Salts};

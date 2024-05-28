@@ -1,6 +1,6 @@
 use proton_crypto::{crypto::PGPProviderSync, new_pgp_provider};
 
-use proton_crypto_account::domain::{
+use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicKey, APIPublicKeySource, KeyFlag, PublicAddressKeyGroup,
     SKLSignature, SignedKeyList,
 };

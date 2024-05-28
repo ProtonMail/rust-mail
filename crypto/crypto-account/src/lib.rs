@@ -5,8 +5,8 @@ use constants::{
     FLAG_EMAIL_NO_ENCRYPT, FLAG_EMAIL_NO_SIGN, FLAG_NOT_COMPROMISED, FLAG_NOT_OBSOLETE,
 };
 mod crypto;
-pub mod domain;
 pub mod errors;
+pub mod keys;
 pub mod salts;
 
 // re-export crypto crate;

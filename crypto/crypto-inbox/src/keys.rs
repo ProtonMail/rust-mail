@@ -1,4 +1,4 @@
-use proton_crypto_account::domain::{APIPublicKeySource, PublicAddressKey, PublicAddressKeys};
+use proton_crypto_account::keys::{APIPublicKeySource, PublicAddressKey, PublicAddressKeys};
 use proton_crypto_account::proton_crypto::{
     crypto::PublicKey,
     keytransparency::{KTVerificationResult, KT_UNVERIFIED},

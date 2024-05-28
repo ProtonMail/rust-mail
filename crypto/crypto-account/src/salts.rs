@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::domain::KeyId;
+use crate::keys::KeyId;
 use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
 use proton_crypto::{srp::SRPProvider, CryptoError};
 use serde::{Deserialize, Serialize};

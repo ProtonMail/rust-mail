@@ -1,4 +1,4 @@
-use proton_crypto_account::domain::{
+use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKey, APIPublicKeySource, KeyFlag,
     SKLSignature, SignedKeyList,
 };

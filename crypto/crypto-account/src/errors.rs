@@ -1,6 +1,6 @@
 use proton_crypto::{crypto::VerificationError, CryptoError};
 
-use crate::domain::KeyId;
+use crate::keys::KeyId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum KeyError {
