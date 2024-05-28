@@ -1,9 +1,11 @@
 use crate::exports::serde::{self, Deserialize, Deserializer, Serialize};
-use proton_api_core::exports::proton_sqlite3;
 use proton_api_core::new_integer_enum;
 use proton_api_core::utils::{
     bool_from_integer, bool_to_integer, opt_bool_from_integer, opt_bool_to_integer,
 };
+
+#[cfg(feature = "sql")]
+use proton_api_core::exports::proton_sqlite3;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]

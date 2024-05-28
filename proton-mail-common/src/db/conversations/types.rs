@@ -1,5 +1,6 @@
 use crate::avatar::AvatarInformation;
 use crate::db::{LabelColor, LocalAttachmentMetadata, LocalLabelId};
+use crate::exports::serde_json;
 use crate::new_u64_type;
 use proton_api_mail::domain::{
     Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageId,
@@ -220,12 +221,11 @@ impl LocalMessageMetadata {
 ///
 /// For metadata associated with a message see [`LocalMessageMetadata`].
 #[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalMessageBodyMetadata {
     pub id: LocalMessageId,
     pub rid: Option<MessageId>,
     pub header: String,
-    pub parsed_headers: HashMap<String, String>,
+    pub parsed_headers: HashMap<String, serde_json::Value>,
     pub mime_type: MimeType,
     pub address_id: AddressId,
 }
