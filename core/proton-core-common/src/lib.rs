@@ -1,4 +1,5 @@
 //! Common features of the core domain, such user session management and per user settings.
+pub mod cache;
 mod context;
 pub mod db;
 mod event_subscriber;
