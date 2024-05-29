@@ -3,7 +3,7 @@ mod conversation;
 mod messages;
 
 pub use attachments::DecryptedAttachment;
-pub use messages::DecryptedMessageBody;
+pub use messages::{DecryptedMessageBody, ParsedHeaderValue};
 
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::{LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId, LocalMessageId};

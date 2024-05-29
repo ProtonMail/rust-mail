@@ -1,5 +1,7 @@
+use crate::db::serde_json::Value;
 use crate::db::{LocalMessageBodyMetadata, LocalMessageId, LocalMessageMetadata, MessageQuery};
 use crate::exports::crypto::proton_crypto::new_pgp_provider;
+use crate::exports::tracing;
 use crate::exports::tracing::error;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
@@ -115,6 +117,44 @@ pub struct DecryptedMessageBody {
     pub metadata: LocalMessageBodyMetadata,
     /// The decrypted message contents.
     pub body: String,
+}
+
+/// A message parsed header value can either be a string or an array of strings.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ParsedHeaderValue {
+    String(String),
+    Array(Vec<String>),
+}
+
+impl DecryptedMessageBody {
+    /// Retrieve a parsed header value for a given `key`.
+    pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
+        let value = self.metadata.parsed_headers.get(key)?;
+        match value {
+            Value::String(s) => Some(ParsedHeaderValue::String(s.clone())),
+            Value::Array(array) => {
+                let mut result = Vec::with_capacity(array.len());
+                for (idx, item) in array.iter().enumerate() {
+                    if let Value::String(str) = item {
+                        result.push(str.clone());
+                    } else {
+                        tracing::warn!(
+                            "Header array value {key}[{idx}] of message {} has invalid value type",
+                            self.metadata.id
+                        );
+                    }
+                }
+                Some(ParsedHeaderValue::Array(result))
+            }
+            _ => {
+                tracing::warn!(
+                    "Header value {key} of message {} has invalid value type",
+                    self.metadata.id
+                );
+                None
+            }
+        }
+    }
 }
 
 struct EncryptedMessageBody {
