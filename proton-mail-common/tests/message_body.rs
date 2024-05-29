@@ -6,7 +6,7 @@ use proton_api_mail::domain::{
     ConversationId, LabelId, MailSettings, MailSettingsViewMode, Message, MessageId,
     MessageMetadata, MimeType,
 };
-use proton_api_mail::exports::crypto::domain::{AddressKeys, KeyId, LockedKey, UserKeys};
+use proton_api_mail::exports::crypto::keys::{AddressKeys, KeyId, LockedKey, UserKeys};
 use proton_api_mail::exports::crypto::proton_crypto::new_srp_provider;
 use proton_api_mail::exports::crypto::salts::{Salt, Salts};
 use proton_api_mail::proton_api_core::auth::UserKeySecret;
@@ -14,7 +14,7 @@ use proton_api_mail::proton_api_core::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType, Flags, ProductUsedSpace,
     User, UserId, UserMnemonicStatus, UserType,
 };
-use proton_crypto_inbox::proton_crypto_account::domain::KeyFlag;
+use proton_crypto_inbox::proton_crypto_account::keys::KeyFlag;
 use proton_mail_common::Mailbox;
 use std::iter;
 

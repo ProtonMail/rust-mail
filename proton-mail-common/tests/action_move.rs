@@ -6,7 +6,7 @@ use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
     MessageCount,
 };
-use proton_api_mail::exports::crypto::domain::AddressKeys;
+use proton_api_mail::exports::crypto::keys::AddressKeys;
 use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus, AddressType};
 use proton_mail_common::db::LocalConversationId;
 use proton_mail_common::Mailbox;

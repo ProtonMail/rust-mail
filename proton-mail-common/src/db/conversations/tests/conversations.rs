@@ -17,7 +17,7 @@ use proton_api_mail::domain::{
     AttachmentId, AttachmentMetadata, Conversation, ConversationCount, ConversationId,
     ConversationLabels, Disposition, Label, LabelId, LabelType, MessageAddress,
 };
-use proton_api_mail::exports::crypto::domain::AddressKeys;
+use proton_api_mail::exports::crypto::keys::AddressKeys;
 use proton_api_mail::exports::tracing;
 use proton_api_mail::proton_api_core::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType,
