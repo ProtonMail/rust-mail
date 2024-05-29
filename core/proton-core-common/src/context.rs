@@ -1,7 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
 use crate::db::{
     migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey,
-    SessionSqliteConnection,
+    SessionSqliteConnection, SessionSqliteConnectionMut,
 };
 use crate::os::{KeyChain, KeyChainError};
 use crate::session::CoreSession;
@@ -239,6 +239,34 @@ impl Context {
                 cb.on_network_status_changed(value);
             }
         }
+    }
+
+    /// Removes a user session and deletes all associated data.
+    ///
+    /// # Errors
+    /// Returns error if data can not be removed or the db operation failed.
+    pub fn delete_session(&self, session: &EncryptedUserSession) -> CoreContextResult<()> {
+        let db_path = get_user_db_path(&self.inner.user_db_path, &session.user_id);
+        std::fs::remove_file(db_path).map_err(|e| {
+            let e = anyhow!("Failed to erase user database: {e}");
+            error!("{e}");
+            CoreContextError::Other(e)
+        })?;
+
+        //TODO(ET-231): User cache paths.
+
+        self.inner
+            .session_db
+            .transaction(|tx| {
+                let mut tx = SessionSqliteConnectionMut::new(tx);
+                tx.delete_session_with_user_id(&session.user_id)
+            })
+            .map_err(|e| {
+                error!("Failed to delete session from db: {e}");
+                e
+            })?;
+
+        Ok(())
     }
 
     /// Check whether a network connection is available.

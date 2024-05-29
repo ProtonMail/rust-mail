@@ -108,7 +108,7 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
     ///
     /// # Errors
     /// Returns error if the operation failed.
-    pub fn delete_session(&self, session_id: &Uid) -> DBResult<()> {
+    pub fn delete_session(&mut self, session_id: &Uid) -> DBResult<()> {
         self.0
             .execute("DELETE FROM core_sessions WHERE id =?", [session_id])?;
         Ok(())
@@ -118,7 +118,7 @@ impl<'c> SessionSqliteConnectionImpl<'c> {
     ///
     /// # Errors
     /// Returns error if the operation failed.
-    pub fn delete_session_with_user_id(&self, user_id: &UserId) -> DBResult<()> {
+    pub fn delete_session_with_user_id(&mut self, user_id: &UserId) -> DBResult<()> {
         self.0
             .execute("DELETE FROM core_sessions WHERE user_id =?", [user_id])?;
         Ok(())
