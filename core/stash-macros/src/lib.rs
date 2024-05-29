@@ -173,7 +173,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
                 ]
             }
 
-            fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
+            fn from_row(row: &stash::exports::Row, columns: &[String], stash: stash::stash::Stash) -> Result<Self, stash::orm::ConversionError> {
                 Ok(Self {
                     #(
                         #db_fields: #from_row_impl,
@@ -419,12 +419,12 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 ]
             }
 
-            fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
+            fn from_row(row: &stash::exports::Row, columns: &[String], stash: stash::stash::Stash) -> Result<Self, stash::orm::ConversionError> {
                 Ok(Self {
                     #(
                         #db_fields: #from_row_impl,
                     )*
-                    #stash_field: None,
+                    #stash_field: Some(stash.clone()),
                 })
             }
         }

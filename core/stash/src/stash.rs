@@ -609,12 +609,13 @@ impl OperationLogic for Command {
     /// # Parameters
     ///
     /// * `connection` - The database connection to use for the operation.
+    /// * `stash`      - The associated [`Stash`] instance for the operation.
     ///
     /// # Errors
     ///
     /// None.
     ///
-    fn run(&self, _connection: &AgnosticConnection<'_>) -> Result<(), StashError> {
+    fn run(&self, _connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<(), StashError> {
         Ok(())
     }
 }
@@ -676,6 +677,7 @@ impl OperationLogic for Instruction {
     /// # Parameters
     ///
     /// * `connection` - The database connection to use for the operation.
+    /// * `stash`      - The associated [`Stash`] instance for the operation.
     ///
     /// # Errors
     ///
@@ -692,7 +694,7 @@ impl OperationLogic for Instruction {
     /// * [`Stash::execute()`]
     /// * [`Tether::execute()`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<usize, StashError> {
+    fn run(&self, connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<usize, StashError> {
         connection
             .execute(&self.query, &*Self::prepare_params(&self.params))
             .map_err(StashError::ExecutionError)
@@ -755,7 +757,7 @@ struct Query {
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
     #[allow(clippy::type_complexity)]
-    converter: Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Send>,
+    converter: Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -789,6 +791,7 @@ impl OperationLogic for Query {
     /// # Parameters
     ///
     /// * `connection` - The database connection to use for the operation.
+    /// * `stash`      - The associated [`Stash`] instance for the operation.
     ///
     /// # Errors
     ///
@@ -809,7 +812,11 @@ impl OperationLogic for Query {
     /// * [`Stash::query()`]
     /// * [`Tether::query()`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<DbRecords, StashError> {
+    fn run(
+        &self,
+        connection: &AgnosticConnection<'_>,
+        stash: Stash,
+    ) -> Result<DbRecords, StashError> {
         let mut statement = connection
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
@@ -817,6 +824,7 @@ impl OperationLogic for Query {
             statement
                 .query(&*Self::prepare_params(&self.params))
                 .map_err(StashError::ExecutionError)?,
+            stash,
         );
         rows.map_err(StashError::DeserializationError)
     }
@@ -920,10 +928,13 @@ impl Stash {
     /// the database or connection pool.
     ///
     pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
-        Ok(Self {
+        let (sender, receiver) = flume::unbounded();
+        let stash = Self {
             handle: Arc::new(()),
-            queue: Worker::start(path)?,
-        })
+            queue: sender,
+        };
+        Worker::start(path, receiver, stash.clone())?;
+        Ok(stash)
     }
 
     /// Gets a connection from the pool.
@@ -1094,11 +1105,7 @@ impl Stash {
             .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
             .await?
             .into_iter()
-            .next()
-            .map(|mut record| {
-                record.set_stash(self);
-                record
-            }))
+            .next())
     }
 
     /// Runs a query against a new connection, and returns any rows of data
@@ -1335,12 +1342,13 @@ impl OperationLogic for Subscription {
     /// # Parameters
     ///
     /// * `connection` - The database connection to use for the operation.
+    /// * `stash`      - The associated [`Stash`] instance for the operation.
     ///
     /// # Errors
     ///
     /// None.
     ///
-    fn run(&self, _connection: &AgnosticConnection<'_>) -> Result<(), StashError> {
+    fn run(&self, _connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<(), StashError> {
         Ok(())
     }
 }
@@ -1401,6 +1409,8 @@ pub struct Tether {
     queue: QueueSender<Operation>,
 
     /// The associated [`Stash`] instance.
+    // TODO
+    #[allow(dead_code)]
     stash: Stash,
 }
 
@@ -1532,11 +1542,7 @@ impl Tether {
             .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
             .await?
             .into_iter()
-            .next()
-            .map(|mut record| {
-                record.set_stash(&self.stash);
-                record
-            }))
+            .next())
     }
 
     /// Runs a query against an open connection, and returns any rows of data
@@ -1750,11 +1756,13 @@ impl TetheredWorker {
     /// * `transaction` - The active transaction, if any. Notably, ownership is
     ///                   taken and returned, to avoid borrowing issues in the
     ///                   main loop that calls this function.
+    /// * `stash`       - The associated [`Stash`] instance for the operation.
     ///
     fn handle_operation<'tx>(
         operation: Operation,
         connection: &'tx PooledConnection<SqliteConnectionManager>,
         mut transaction: Option<Transaction<'tx>>,
+        stash: Stash,
     ) -> Option<Transaction<'tx>> {
         match operation {
             Operation::CommitTransaction(mut command) => {
@@ -1773,10 +1781,13 @@ impl TetheredWorker {
                     "Tether ({:p}): Instruction to execute",
                     instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
                 );
-                instruction.send_back(instruction.run(&transaction.as_ref().map_or(
-                    AgnosticConnection::Unbound(connection),
-                    AgnosticConnection::Engaged,
-                )));
+                instruction.send_back(instruction.run(
+                    &transaction.as_ref().map_or(
+                        AgnosticConnection::Unbound(connection),
+                        AgnosticConnection::Engaged,
+                    ),
+                    stash,
+                ));
             }
             Operation::Publish(_) => {
                 // Technically, these cannot occur here, as subscription operations are
@@ -1791,10 +1802,13 @@ impl TetheredWorker {
                     "Tether ({:p}): Query to run",
                     query.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
                 );
-                query.send_back(query.run(&transaction.as_ref().map_or(
-                    AgnosticConnection::Unbound(connection),
-                    AgnosticConnection::Engaged,
-                )));
+                query.send_back(query.run(
+                    &transaction.as_ref().map_or(
+                        AgnosticConnection::Unbound(connection),
+                        AgnosticConnection::Engaged,
+                    ),
+                    stash,
+                ));
             }
             Operation::RollbackTransaction(mut command) => {
                 debug!(
@@ -1861,11 +1875,13 @@ impl TetheredWorker {
     /// * `pool`        - The SQLite connection pool to use for the queries.
     /// * `queue`       - The main operations queue, shared with the main
     ///                   worker and other tethered workers.
+    /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
     fn start(
         conn_handle: Weak<()>,
         pool: Pool<SqliteConnectionManager>,
         queue: QueueSender<Operation>,
+        stash: Stash,
     ) -> Self {
         let (sender, receiver) = flume::unbounded::<Operation>();
 
@@ -1892,8 +1908,12 @@ impl TetheredWorker {
                         return;
                     }
                 };
-                transaction =
-                    Self::handle_operation(operation, connection.as_ref().unwrap(), transaction);
+                transaction = Self::handle_operation(
+                    operation,
+                    connection.as_ref().unwrap(),
+                    transaction,
+                    stash.clone(),
+                );
             } else {
                 return;
             }
@@ -1903,8 +1923,12 @@ impl TetheredWorker {
                 // Ownership of the transaction is sent and returned to avoid borrowing
                 // issues - otherwise the borrow checker believes the borrow is still active
                 // on the next loop.
-                transaction =
-                    Self::handle_operation(operation, connection.as_ref().unwrap(), transaction);
+                transaction = Self::handle_operation(
+                    operation,
+                    connection.as_ref().unwrap(),
+                    transaction,
+                    stash.clone(),
+                );
             }
         });
 
@@ -1951,6 +1975,9 @@ struct Worker {
     /// The list of subscribers to the stash. This is used to send notifications
     /// whenever changes are made to the database.
     subscribers: Vec<QueueSender<Notification>>,
+
+    /// The [`Stash] instance that the worker belongs to.
+    stash: Stash,
 
     /// A map of active connections with their tethered workers. This is used to
     /// keep track of the connections that are currently in use, and to
@@ -2029,6 +2056,7 @@ impl Worker {
     fn handle_operation(&mut self, operation: Operation) {
         let pool = self.pool.clone();
         let queue = self.queue.clone();
+        let stash = self.stash.clone();
         match operation {
             Operation::CommitTransaction(mut command)
             | Operation::RollbackTransaction(mut command)
@@ -2048,7 +2076,8 @@ impl Worker {
                             // this task will block.
                             spawn_blocking(move || {
                                 instruction.send_back(
-                                    instruction.run(&AgnosticConnection::Unbound(&connection)),
+                                    instruction
+                                        .run(&AgnosticConnection::Unbound(&connection), stash),
                                 );
                             })
                             .await
@@ -2088,7 +2117,7 @@ impl Worker {
                             // this task will block.
                             spawn_blocking(move || {
                                 query.send_back(
-                                    query.run(&AgnosticConnection::Unbound(&connection)),
+                                    query.run(&AgnosticConnection::Unbound(&connection), stash),
                                 );
                             })
                             .await
@@ -2139,21 +2168,25 @@ impl Worker {
     ///
     /// # Parameters
     ///
-    /// * `path` - The path to the SQLite database file. If `None`, an in-memory
-    ///            database is created.
+    /// * `path`     - The path to the SQLite database file. If `None`, an
+    ///                in-memory database is created.
+    /// * `receiver` - The receiving side of the worker's queue.
+    /// * `stash`    - The [`Stash`] instance that the worker belongs to.
     ///
     /// # Errors
     ///
     /// A [`StashError::TetherError`] is returned if there is a problem creating
     /// the database or connection pool.
     ///
-    fn start(path: Option<&Path>) -> Result<QueueSender<Operation>, StashError> {
+    fn start(
+        path: Option<&Path>,
+        receiver: QueueReceiver<Operation>,
+        stash: Stash,
+    ) -> Result<(), StashError> {
         let manager = path.map_or_else(
             SqliteConnectionManager::memory,
             SqliteConnectionManager::file,
         );
-        let (sender, receiver) = flume::unbounded();
-        let sender_clone = sender.clone();
         let pool = Pool::new(manager).map_err(StashError::TetherError)?;
         let mut latest_gc = Instant::now();
         let mut thread_creation_count = 0_usize;
@@ -2171,9 +2204,10 @@ impl Worker {
             };
             let mut worker = Self {
                 pool,
-                queue: sender_clone,
+                queue: stash.queue.clone(),
                 runtime,
                 subscribers: Vec::new(),
+                stash,
                 tethers: HashMap::new(),
             };
 
@@ -2236,7 +2270,7 @@ impl Worker {
             }
         }));
 
-        Ok(sender)
+        Ok(())
     }
 
     /// Gets a connection-specific worker from the pool.
@@ -2294,6 +2328,7 @@ impl Worker {
                     weak_ref,
                     self.pool.clone(),
                     self.queue.clone(),
+                    self.stash.clone(),
                 )),
             ),
         }
@@ -2351,6 +2386,7 @@ trait OperationLogic {
     /// # Parameters
     ///
     /// * `connection` - The database connection to use for the operation.
+    /// * `stash`      - The associated [`Stash`] instance for the operation.
     ///
     /// # Errors
     ///
@@ -2363,7 +2399,11 @@ trait OperationLogic {
     /// * [`Operation`]
     /// * [`Query`]
     ///
-    fn run(&self, connection: &AgnosticConnection<'_>) -> Result<Self::Output, StashError>;
+    fn run(
+        &self,
+        connection: &AgnosticConnection<'_>,
+        stash: Stash,
+    ) -> Result<Self::Output, StashError>;
 
     /// Sends the result back to the caller.
     ///
@@ -2478,8 +2518,10 @@ impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
 ///
 /// # Parameters
 ///
-/// * `rows` - The rows of data returned by the query. These will be converted
-///            to the type specified by `T`.
+/// * `rows`  - The rows of data returned by the query. These will be converted
+///             to the type specified by `T`.
+/// * `stash` - The associated [`Stash`] instance from which the rows were
+///             obtained.
 ///
 /// # Errors
 ///
@@ -2488,10 +2530,14 @@ impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
 /// row-deserialisation process. This will then be converted into a
 /// [`StashError::DeserializationError`] by the caller.
 ///
-fn converter<T>(rows: Rows<'_>) -> Result<DbRecords, ConversionError>
+#[allow(clippy::needless_pass_by_value)]
+fn converter<T>(rows: Rows<'_>, stash: Stash) -> Result<DbRecords, ConversionError>
 where
     T: DbRecord + Send + 'static,
     DbRecords: FromIterator<Box<T>>,
 {
-    Ok(from_rows::<T>(rows)?.into_iter().map(Box::new).collect())
+    Ok(from_rows::<T>(rows, &stash)?
+        .into_iter()
+        .map(Box::new)
+        .collect())
 }

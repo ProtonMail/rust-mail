@@ -245,13 +245,14 @@ where
     ///
     /// * `row`     - The row from the database to convert into a record.
     /// * `columns` - The names of the columns in the row.
+    /// * `stash`   - The associated [`Stash`] instance for the operation.
     ///
     /// # Errors
     ///
     /// This function will return a [`ConversionError`] if there is a problem
     /// converting the row.
     ///
-    fn from_row(row: &Row<'_>, columns: &[String]) -> Result<Self, ConversionError>;
+    fn from_row(row: &Row<'_>, columns: &[String], stash: Stash) -> Result<Self, ConversionError>;
 }
 
 /// A trait for fully-modelled database records.
@@ -545,14 +546,18 @@ impl IntoIterator for DbRecords {
 ///
 /// # Parameters
 ///
-/// * `rows` - The query results to convert into records.
+/// * `rows`  - The query results to convert into records.
+/// * `stash` - The associated [`Stash`] instance for the operation.
 ///
 /// # Errors
 ///
 /// This function will return a [`ConversionError`] if there is a problem
 /// converting the row.
 ///
-pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionError> {
+pub fn from_rows<T: DbRecord>(
+    mut rows: Rows<'_>,
+    stash: &Stash,
+) -> Result<Vec<T>, ConversionError> {
     let columns = rows
         .as_ref()
         .map(|statement| {
@@ -568,7 +573,7 @@ pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionEr
         .ok_or(ConversionError::ColumnNamesNotAvailable)??;
     let mut results = vec![];
     while let Some(row) = rows.next()? {
-        results.push(T::from_row(row, &columns)?);
+        results.push(T::from_row(row, &columns, stash.clone())?);
     }
     Ok(results)
 }
