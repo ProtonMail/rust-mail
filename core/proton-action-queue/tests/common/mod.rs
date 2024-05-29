@@ -10,7 +10,14 @@ use proton_action_queue::{
 use proton_api_core::Session;
 pub use sources::*;
 use stash::stash::Stash;
+use std::io::stdout;
 use std::sync::Arc;
+use tracing::subscriber::set_global_default;
+use tracing::Level;
+use tracing_subscriber::fmt::layer;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{registry, EnvFilter};
 
 pub struct PanicSessionProvider {}
 
@@ -23,21 +30,19 @@ impl SessionProvider for PanicSessionProvider {
 pub struct TestCtx {
     stash: Stash,
     _file: tempfile::NamedTempFile,
-    _tracing_guard: tracing::dispatcher::DefaultGuard,
 }
 
 impl TestCtx {
     pub async fn new() -> TestCtx {
         let tmp_file = tempfile::NamedTempFile::new().expect("failed to create tempfile");
-        // a builder for `FmtSubscriber`.
-        let subscriber = tracing_subscriber::FmtSubscriber::builder()
-            // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
-            // will be written to stdout.
-            .with_max_level(tracing::Level::TRACE)
-            // completes the builder.
-            .finish();
+        drop(set_global_default(
+            registry()
+                .with(EnvFilter::new(
+                    "debug,proton_action_queue=trace,stash=debug",
+                ))
+                .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
+        ));
 
-        let guard = tracing::subscriber::set_default(subscriber);
         tracing::info!("DB crated at {:?}", tmp_file.path());
 
         let stash = Stash::new(Some(tmp_file.path())).expect("failed to create stash");
@@ -52,7 +57,6 @@ impl TestCtx {
         TestCtx {
             stash,
             _file: tmp_file,
-            _tracing_guard: guard,
         }
     }
 
