@@ -384,6 +384,7 @@
 
 use crate::orm::{from_rows, ConversionError, DbRecord, DbRecords, Model};
 use core::ops::Deref;
+use core::ptr::null;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use indoc::formatdoc;
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
@@ -1757,6 +1758,10 @@ impl TetheredWorker {
     ) -> Option<Transaction<'tx>> {
         match operation {
             Operation::CommitTransaction(mut command) => {
+                debug!(
+                    "Tether ({:p}): CommitTransaction Command",
+                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                );
                 if let Some(tx) = transaction.take() {
                     command.send_back(tx.commit().map_err(StashError::TransactionError));
                 } else {
@@ -1764,6 +1769,10 @@ impl TetheredWorker {
                 }
             }
             Operation::Instruct(mut instruction) => {
+                debug!(
+                    "Tether ({:p}): Instruction to execute",
+                    instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                );
                 instruction.send_back(instruction.run(&transaction.as_ref().map_or(
                     AgnosticConnection::Unbound(connection),
                     AgnosticConnection::Engaged,
@@ -1778,12 +1787,20 @@ impl TetheredWorker {
                 warn!("Unexpectedly reached Publish variant in TetheredWorker::handle_operation()");
             }
             Operation::Query(mut query) => {
+                debug!(
+                    "Tether ({:p}): Query to run",
+                    query.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                );
                 query.send_back(query.run(&transaction.as_ref().map_or(
                     AgnosticConnection::Unbound(connection),
                     AgnosticConnection::Engaged,
                 )));
             }
             Operation::RollbackTransaction(mut command) => {
+                debug!(
+                    "Tether ({:p}): RollbackTransaction Command",
+                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                );
                 if let Some(tx) = transaction.take() {
                     command.send_back(tx.rollback().map_err(StashError::TransactionError));
                 } else {
@@ -1791,6 +1808,10 @@ impl TetheredWorker {
                 }
             }
             Operation::StartTransaction(mut command) => {
+                debug!(
+                    "Tether ({:p}): StartTransaction Command",
+                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                );
                 if transaction.is_none() {
                     match connection
                         // We call unchecked_transaction() here because transaction() requires a
@@ -2018,6 +2039,7 @@ impl Worker {
                 command.send_back(Err(StashError::NoActiveTransaction));
             }
             Operation::Instruct(mut instruction) => {
+                debug!("Stash (ad-hoc conn): Instruction to execute");
                 drop(self.runtime.spawn(async move {
                     match pool.get_and_subscribe(queue) {
                         Ok(connection) => {
@@ -2040,6 +2062,7 @@ impl Worker {
                 }));
             }
             Operation::Publish(notification) => {
+                debug!("Stash: Notification to publish");
                 // This is a slight trade-off - it's better to spend a small amount of time
                 // cloning the subscribers list (which is cheap) than to block the main
                 // thread while we loop through them. This way, we can offload the sending
@@ -2056,6 +2079,7 @@ impl Worker {
                 }));
             }
             Operation::Query(mut query) => {
+                debug!("Stash (ad-hoc conn): Query to run");
                 drop(self.runtime.spawn(async move {
                     match pool.get_and_subscribe(queue) {
                         Ok(connection) => {
@@ -2078,6 +2102,7 @@ impl Worker {
                 }));
             }
             Operation::Subscribe(mut subscription) => {
+                debug!("Stash: Subscription request");
                 self.subscribers.push(subscription.queue.clone());
                 // Although this operation is infallible, a response still needs to be sent,
                 // as the caller might be waiting on the oneshot channel in order to
