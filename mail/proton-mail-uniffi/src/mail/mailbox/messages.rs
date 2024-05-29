@@ -4,8 +4,10 @@ use crate::mail::{Mailbox, MailboxError, MailboxLiveQueryUpdatedCallback};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::InProcessTrackerService;
 use proton_mail_common::db::{LocalMessageId, MessageQuery};
-use proton_mail_common::MailboxObservableQueryBuilder;
+use proton_mail_common::proton_api_mail::domain::MimeType;
+use proton_mail_common::{MailboxObservableQueryBuilder, ParsedHeaderValue};
 use std::sync::Arc;
+
 #[uniffi::export]
 impl Mailbox {
     /// Create a live query for messages for the currently selected label.
@@ -30,12 +32,47 @@ impl Mailbox {
     /// # Errors
     /// Returns error if the network request, the database query, reading/writing
     /// the body to the cache or decrypting the body failed.
-    pub async fn message_body(&self, id: u64) -> Result<String, MailboxError> {
+    pub async fn message_body(&self, id: u64) -> Result<DecryptedMessageBody, MailboxError> {
         let mbox = self.mbox.clone();
-        self.uniffi_async(
-            async move { Ok(mbox.message_body(LocalMessageId::from(id)).await?.body) },
-        )
+        self.uniffi_async(async move {
+            Ok(DecryptedMessageBody {
+                message: mbox.message_body(LocalMessageId::from(id)).await?,
+            })
+        })
         .await
+    }
+}
+
+/// Contains the decrypted and parsed message body from a message.
+#[derive(uniffi::Object)]
+pub struct DecryptedMessageBody {
+    message: proton_mail_common::DecryptedMessageBody,
+}
+
+#[uniffi::export]
+impl DecryptedMessageBody {
+    /// The message id of which this body belongs to.
+    pub fn id(&self) -> u64 {
+        self.message.metadata.id.value()
+    }
+
+    /// The mime type of the message.
+    pub fn mime_type(&self) -> MimeType {
+        self.message.metadata.mime_type
+    }
+    /// Returns the decrypted body of the message.
+    pub fn body(&self) -> String {
+        self.message.body.clone()
+    }
+
+    /// Returns the header strings associated with the message.
+    pub fn header_string(&self) -> String {
+        self.message.metadata.header.clone()
+    }
+
+    /// Retrieve a parsed header value for a given `key`.
+    pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
+        self.message.parsed_header_value(key)
     }
 }
 
