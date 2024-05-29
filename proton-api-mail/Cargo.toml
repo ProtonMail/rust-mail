@@ -1,6 +1,6 @@
 [package]
 name = "proton-api-mail"
-version = "0.3.9"
+version = "0.3.10"
 edition = "2021"
 keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
