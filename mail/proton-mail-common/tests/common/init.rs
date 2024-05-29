@@ -4,7 +4,7 @@ use proton_api_mail::domain::{
     LabelId, LabelType, MailSettings, MessageAddress, MessageCount, MessageId, MessageMetadata,
     ALL_LABEL_TYPES,
 };
-use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
+use proton_api_mail::exports::crypto::keys::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
     Address, AddressId, AddressStatus, AddressType, DateFormat, Density, Email, EventId, Flags,
     HighSecurity, LogAuth, Password, Phone, ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat,

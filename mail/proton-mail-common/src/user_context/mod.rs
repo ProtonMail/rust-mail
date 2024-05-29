@@ -15,7 +15,7 @@ pub use messages::FilteredMessages;
 use proton_action_queue::ActionQueue;
 use proton_api_mail::proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_inbox::proton_crypto_account::domain::{UnlockedAddressKeys, UnlockedUserKeys};
+use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use std::sync::{Arc, Weak};
 
 use crate::db::{MailSqliteConnection, MailSqliteConnectionMut, MailSqliteConnectionRef};

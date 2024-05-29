@@ -4,7 +4,7 @@ use proton_api_mail::proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::{
     proton_crypto::new_srp_provider,
     proton_crypto_account::{
-        domain::{AddressKeys, KeyFlag, KeyId, LockedKey, UserKeys},
+        keys::{AddressKeys, KeyFlag, KeyId, LockedKey, UserKeys},
         salts::{KeySecret, Salt, Salts},
     },
 };

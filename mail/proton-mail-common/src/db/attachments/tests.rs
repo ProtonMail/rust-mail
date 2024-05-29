@@ -2,7 +2,7 @@ use crate::db::{
     with_file_sqlite_db, DBResult, LocalAttachment, LocalAttachmentId, LocalConversationId,
     LocalMessageId, MailSqliteConnection,
 };
-use crate::exports::crypto::domain::AddressKeys;
+use crate::exports::crypto::keys::AddressKeys;
 use proton_api_mail::domain::{
     Attachment, AttachmentId, AttachmentMetadata, Conversation, ConversationId, Disposition,
     MessageAddress, MessageId, MessageMetadata,
