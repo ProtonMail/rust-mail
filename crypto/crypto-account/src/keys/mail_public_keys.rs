@@ -1,8 +1,9 @@
-use proton_crypto_account::keys::{APIPublicKeySource, PublicAddressKey, PublicAddressKeys};
-use proton_crypto_account::proton_crypto::{
+use proton_crypto::{
     crypto::PublicKey,
     keytransparency::{KTVerificationResult, KT_UNVERIFIED},
 };
+
+use super::{APIPublicKeySource, PublicAddressKey, PublicAddressKeys};
 
 /// Recipient type is either `External` or `Internal`.
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
@@ -18,12 +19,9 @@ pub enum AddressType {
     CatchAll,
 }
 
-/// Wrapper type for public keys imported `InboxImportedPublicKeys`
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub struct InboxImportedPublicKeys<Pub: PublicKey>(pub PublicAddressKeys<Pub>);
-
 /// The inbox public keys for an e-mail address.
+///
+/// Represents the filtered address keys form the `keys_all` route.
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub struct InboxPublicKeys<Pub: PublicKey> {
@@ -45,7 +43,7 @@ pub struct InboxPublicKeys<Pub: PublicKey> {
     pub key_transparency_verification: KTVerificationResult,
 }
 
-impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
+impl<Pub: PublicKey> PublicAddressKeys<Pub> {
     /// Transforms publ keys fetched and imported from the `keys/all` route into
     /// public keys used by inbox for mail encryption and signature verification.
     ///
@@ -55,18 +53,17 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
         self,
         include_internal_keys_with_e2ee_disabled: bool,
     ) -> InboxPublicKeys<Pub> {
-        let imported_api_keys = self.0;
-        let valid_proton_mx = imported_api_keys.proton_mx;
+        let valid_proton_mx = self.proton_mx;
 
-        if !imported_api_keys.address.keys.is_empty() {
-            let internal_address_keys = imported_api_keys.address.keys;
+        if !self.address.keys.is_empty() {
+            let internal_address_keys = self.address.keys;
             if let Some(mut inbox_key) = handle_address_keys(
                 internal_address_keys,
-                imported_api_keys.address.kt_verification,
+                self.address.kt_verification,
                 include_internal_keys_with_e2ee_disabled,
                 valid_proton_mx,
             ) {
-                inbox_key.warnings = imported_api_keys.warnings;
+                inbox_key.warnings = self.warnings;
                 return inbox_key;
             }
             // else, the recipient is believed external, and no address keys are returned
@@ -74,7 +71,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
 
         // Then we check if there are unverified internal address keys
         let mut mail_capable_external_keys_option: Option<Vec<PublicAddressKey<Pub>>> = None;
-        if let Some(unverified_keys_group) = imported_api_keys.unverified {
+        if let Some(unverified_keys_group) = self.unverified {
             let mut mail_capable_internal_keys = Vec::new();
             let mut mail_capable_external_keys = Vec::new();
             for key in unverified_keys_group.keys {
@@ -91,7 +88,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
                     public_keys: mail_capable_internal_keys, // we checked `addressKeysForMailEncryption` to determine if the recipient is internal, but we return all keys as that's requested by the caller
                     recipient_type: RecipientType::Internal, // as e2ee-disabled flags are ignored, then from the perspective of the caller, this is an internal recipient
                     address_type: AddressType::Normal, // unused, could also be set to undefined
-                    warnings: imported_api_keys.warnings,
+                    warnings: self.warnings,
                     is_internal_with_disabled_e2ee: false,
                     key_transparency_verification: KT_UNVERIFIED, // TODO: might want to return failure if one verification address/catch-all failed
                 };
@@ -99,7 +96,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
         }
 
         // Then we check if there are internal catchall keys
-        if let Some(catch_all_keys_group) = imported_api_keys.catch_all {
+        if let Some(catch_all_keys_group) = self.catch_all {
             let mail_capable_catch_all_keys: Vec<_> = catch_all_keys_group
                 .keys
                 .into_iter()
@@ -110,7 +107,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
                     public_keys: mail_capable_catch_all_keys,
                     recipient_type: RecipientType::Internal,
                     address_type: AddressType::CatchAll,
-                    warnings: imported_api_keys.warnings,
+                    warnings: self.warnings,
                     is_internal_with_disabled_e2ee: false,
                     key_transparency_verification: catch_all_keys_group.kt_verification,
                 };
@@ -124,7 +121,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
                     public_keys: vec![key],
                     recipient_type: RecipientType::External,
                     address_type: AddressType::Normal,
-                    warnings: imported_api_keys.warnings,
+                    warnings: self.warnings,
                     is_internal_with_disabled_e2ee: false,
                     key_transparency_verification: KT_UNVERIFIED, // TODO: might want to return failure if one verification address/catch-all failed
                 };
@@ -135,7 +132,7 @@ impl<Pub: PublicKey> InboxImportedPublicKeys<Pub> {
             public_keys: Vec::new(),
             recipient_type: RecipientType::External,
             address_type: AddressType::Normal,
-            warnings: imported_api_keys.warnings,
+            warnings: self.warnings,
             is_internal_with_disabled_e2ee: false,
             key_transparency_verification: KT_UNVERIFIED, // TODO: might want to return failure if one verification address/catch-all failed
         }

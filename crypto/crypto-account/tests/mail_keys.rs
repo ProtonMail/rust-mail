@@ -1,11 +1,11 @@
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKey, APIPublicKeySource, KeyFlag,
-    SKLSignature, SignedKeyList,
+    PublicAddressKeys, SKLSignature, SignedKeyList,
 };
-use proton_crypto_inbox::keys::{AddressType, InboxImportedPublicKeys, RecipientType};
-use proton_crypto_inbox::proton_crypto::{crypto::PGPProviderSync, new_pgp_provider};
+use proton_crypto_account::keys::{AddressType, RecipientType};
+use proton_crypto_account::proton_crypto::{crypto::PGPProviderSync, new_pgp_provider};
 
-fn get_test_public_key<T: PGPProviderSync>(provider: &T) -> InboxImportedPublicKeys<T::PublicKey> {
+fn get_test_public_key<T: PGPProviderSync>(provider: &T) -> PublicAddressKeys<T::PublicKey> {
     let address_keys = vec![APIPublicKey {
         source: APIPublicKeySource::Proton,
         flags: KeyFlag::from(3_u32),
@@ -32,18 +32,15 @@ fn get_test_public_key<T: PGPProviderSync>(provider: &T) -> InboxImportedPublicK
         proton_mx: true,
         is_proton: false,
     };
-    api_keys
-        .import(provider)
-        .map(InboxImportedPublicKeys)
-        .unwrap()
+    api_keys.import(provider).unwrap()
 }
 
 #[test]
 fn test_api_keys_to_inbox() {
     let provider = new_pgp_provider();
     let test_api_imported_keys = get_test_public_key(&provider);
-    let expected_num_keys = test_api_imported_keys.0.address.keys.len();
-    let expected_warnings = test_api_imported_keys.0.warnings.clone();
+    let expected_num_keys = test_api_imported_keys.address.keys.len();
+    let expected_warnings = test_api_imported_keys.warnings.clone();
     let inbox_keys = test_api_imported_keys.into_inbox_keys(false);
     assert_eq!(inbox_keys.public_keys.len(), expected_num_keys);
     assert_eq!(inbox_keys.warnings, expected_warnings);

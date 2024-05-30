@@ -13,6 +13,8 @@ mod signed_key_list;
 pub use signed_key_list::*;
 mod organization_keys;
 pub use organization_keys::*;
+mod mail_public_keys;
+pub use mail_public_keys::*;
 
 use crate::errors::KeyError;
 
