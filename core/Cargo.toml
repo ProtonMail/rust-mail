@@ -36,6 +36,7 @@ mockall = "0.12"
 rand = "0.8"
 tempdir = "0.3"
 chrono = "0.4"
+wiremock = "0.6.0"
 
 [workspace.dependencies.reqwest]
 version = "0.11"

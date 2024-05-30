@@ -16,7 +16,8 @@ new_u64_type!(LocalContactEmailId);
 
 /// Represents a local contact the includes all information except the contact `v-cards`.
 ///
-/// The reason for excluding the cards is that it is expensive to sync them from the backend.
+/// The reason for excluding the cards is that it is more expensive to sync them from the backend.
+/// I.e., syncing cards for a contact requires a unique call to the backend.
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(crate = "self::serde")]
@@ -51,7 +52,7 @@ pub struct LocalContactEmail {
     pub contact_labels: Vec<ContactLabelId>,
 }
 
-/// Represents a ful contact including its `v-cards`.
+/// Represents a complete contact including its `v-cards`.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LocalContactWithCards {
     pub local_contact: LocalContact,
@@ -61,12 +62,16 @@ pub struct LocalContactWithCards {
 utils::string_id!(VCardData);
 utils::string_id!(EncryptedVCardData);
 
-/// Represent a `v-cards` that can be encrypted or signed.
+/// Represent a contacts `v-cards` that can be encrypted or signed.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LocalContactCard {
+    /// No encryption, just the v-card.
     ClearText(VCardData),
+    /// The v-card is encrypted, but is not signed.
     Encrypted(EncryptedVCardData),
+    /// No encryption, but the v-card is signed with a detached signature.
     Signed(VCardData, CardSignature),
+    /// The v-card is encrypted and signed with a detached signature.
     EncryptedAndSigned(EncryptedVCardData, CardSignature),
 }
 

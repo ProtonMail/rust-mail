@@ -9,7 +9,7 @@ use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
 use super::{LocalContact, LocalContactCard, LocalContactEmail, LocalContactWithCards};
 
 impl<'c> CoreSqliteConnectionImpl<'c> {
-    /// Updates the contact in the database with its emails and v-cards.
+    /// Updates the complete contact in the database with its emails and v-cards.
     ///
     /// # Errors
     /// Returns an error if the DB transaction fails.
@@ -67,7 +67,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(local_id)
     }
 
-    /// Updates the multiple contacts in the database with its emails and v-cards.
+    /// Updates multiple complete contacts in the database with its emails and v-cards.
     ///
     /// # Errors
     /// Returns an error if one of the DB transaction fails.
@@ -82,7 +82,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(ids)
     }
 
-    /// Updates the contacts in the database without its emails and v-cards.
+    /// Updates the contacts partially not including contact emails and v-cards.
     ///
     /// # Errors
     /// Returns an error if the DB transaction fails.
