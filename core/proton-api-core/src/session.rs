@@ -49,14 +49,19 @@ impl Session {
     /// If successful, this will return the "Selector" string for the new
     /// session.
     ///
+    /// # Parameters
+    ///
+    /// * `client_id` - The client ID to use for the new session. If `None`, it
+    ///                 will default to "Other".
+    ///
     /// # Errors
     ///
     /// Any of the [`http::RequestError`] variants could be returned if there is
     /// a problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> Result<String, http::RequestError> {
+    pub async fn fork(&self, client_id: Option<&str>) -> Result<String, http::RequestError> {
         self.execute_request(PostUserForkSessionRequest {
-            child_client_id: "web-account-lite".to_owned(),
+            child_client_id: client_id.unwrap_or("Other").to_owned(),
             independent: 0,
         })
         .await
