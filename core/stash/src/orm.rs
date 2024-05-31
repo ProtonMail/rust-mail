@@ -227,12 +227,28 @@ where
     Self: 'static,
 {
     /// Gets a list of fields with names and associated values for the record.
+    ///
+    /// The field values are returned in a form that is compatible with
+    /// conversion to SQL type, but pre-conversion.
+    ///
+    /// Note: Any fields using an intermediary type (i.e. specified with the
+    /// `via` attribute argument) will be converted to that type before being
+    /// returned.
+    ///
     fn fields(&self) -> HashMap<&'static str, Box<dyn ToSql + Send>>;
 
     /// Gets a list of field names for the record type.
     fn field_names() -> Vec<&'static str>;
 
     /// Gets a list of field values for the record.
+    ///
+    /// The field values are returned in a form that is compatible with
+    /// conversion to SQL type, but pre-conversion.
+    ///
+    /// Note: Any fields using an intermediary type (i.e. specified with the
+    /// `via` attribute argument) will be converted to that type before being
+    /// returned.
+    ///
     fn field_values(&self) -> Vec<Box<dyn ToSql + Send>>;
 
     /// Converts a row from the database into a record.
