@@ -3,16 +3,21 @@ use std::sync::Arc;
 use account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use proton_api_core::{
     auth::{AccessToken, RefreshToken, Scope, UserKeySecret},
-    domain::{SecretString, Uid, UserId},
+    domain::{
+        Address, ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, SecretString,
+        Uid, User, UserId, UserSettings,
+    },
+    exports::serde::{self, Deserialize, Serialize},
     http::{APIEnvConfig, Builder},
 };
 use proton_core_common::{
     db::{
-        DBMigrationError, DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey,
-        SessionSqliteConnection,
+        CoreSqliteConnection, DBMigrationError, DecryptedUserSession, EncryptedUserSession,
+        SessionEncryptionKey, SessionSqliteConnection,
     },
     os::{InMemoryKeyChain, KeyChain},
-    Context, UserContext, UserDatabaseInitializer,
+    Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
+    UserDatabaseInitializer,
 };
 use proton_event_loop::proton_async::runtime::MultiThreaded;
 use proton_sqlite3::{SqliteConnection, SqliteConnectionPool, SqliteMode};
@@ -179,5 +184,87 @@ impl TestContext {
     /// Get the async runtime.
     pub fn async_runtime(&self) -> &MultiThreaded {
         self.context.async_runtime()
+    }
+}
+
+impl Default for TestContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CoreEventSubscriberConnectionProvider for &TestContext {
+    fn get_user_id_and_db_connection(
+        &self,
+    ) -> proton_api_core::exports::anyhow::Result<(UserId, CoreSqliteConnection)> {
+        let user_ctx = self.user_context();
+        Ok((
+            user_ctx.user_id().clone(),
+            user_ctx.new_db_connection_as::<CoreSqliteConnection>()?,
+        ))
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[serde(crate = "self::serde")]
+pub struct TestCoreEvent {
+    pub event_id: EventId,
+    pub user: Option<User>,
+    pub user_settings: Option<UserSettings>,
+    pub address: Option<Vec<Address>>,
+    pub contacts: Option<Vec<ContactEvent>>,
+    pub contact_emails: Option<Vec<ContactEmailEvent>>,
+}
+
+impl Event for TestCoreEvent {
+    fn event_id(&self) -> &EventId {
+        &self.event_id
+    }
+
+    fn has_more(&self) -> bool {
+        false
+    }
+}
+
+impl CoreEvent for TestCoreEvent {
+    fn get_core_event_user(&self) -> Option<&User> {
+        self.user.as_ref()
+    }
+
+    fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
+        self.user_settings.as_ref()
+    }
+
+    fn get_core_event_addresses(&self) -> Option<&[Address]> {
+        self.address.as_deref()
+    }
+
+    fn get_core_event_used_space(&self) -> Option<i64> {
+        None
+    }
+
+    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
+        None
+    }
+
+    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
+        self.contacts.as_deref()
+    }
+
+    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
+        self.contact_emails.as_deref()
+    }
+}
+
+impl Default for TestCoreEvent {
+    fn default() -> Self {
+        Self {
+            event_id: EventId::from("test_event"),
+            user: Option::default(),
+            user_settings: Option::default(),
+            address: Option::default(),
+            contacts: Option::default(),
+            contact_emails: Option::default(),
+        }
     }
 }

@@ -1,7 +1,11 @@
+use std::collections::HashSet;
+
 use crate::db::contacts::{LocalContactEmailId, LocalContactId};
 use crate::db::{CoreSqliteConnectionImpl, DBResult};
 use crate::json::deserialize_json_from_row;
-use proton_api_core::domain::{Contact, ContactCard, ContactEmail, ContactLabelId, ContactPartial};
+use proton_api_core::domain::{
+    Contact, ContactCard, ContactEmail, ContactEmailId, ContactId, ContactLabelId, ContactPartial,
+};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::{mapped_rows_into_vec, mapped_rows_to_vec};
 use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
@@ -11,13 +15,18 @@ use super::{LocalContact, LocalContactCard, LocalContactEmail, LocalContactWithC
 impl<'c> CoreSqliteConnectionImpl<'c> {
     /// Updates the complete contact in the database with its emails and v-cards.
     ///
+    /// Removes old emails and vcards in the database that are not included in the contact to sync.
+    ///
     /// # Errors
     /// Returns an error if the DB transaction fails.
     pub fn create_or_update_contact(&mut self, contact: &Contact) -> DBResult<LocalContactId> {
         let mut insert_contact_stmt = self.prepare_sql_statement_insert_contact()?;
-        let mut insert_card_stmt = self.prepare_sql_statement_insert_card()?;
+        let mut insert_card_stmt = self.prepare_sql_statement_contact_insert_card()?;
         let mut insert_email_stmt = self.prepare_sql_statement_contact_insert_mail()?;
-        let mut insert_email_label_stmt = self.prepare_sql_statement_contact_mail_insert_label()?;
+        let mut insert_email_label_stmt = self.prepare_sql_statement_contact_insert_mail_label()?;
+        let mut query_existing_emails_stmt = self.prepare_sql_contact_query_email_ids()?;
+        let mut delete_existing_emails_stmt =
+            self.prepare_sql_statement_delete_by_id("contact_emails", "contact_emails.id")?;
 
         // Insert or update the contact.
         let insert_params = (
@@ -33,6 +42,12 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             .next()?
             .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
             .and_then(|r| r.get(0))?;
+
+        // Query existing emails for this contact that have not been updated yet.
+        let email_id_rows =
+            query_existing_emails_stmt.query_map([local_id], |r| r.get::<usize, u64>(0))?;
+        let mut no_update_email_ids: HashSet<u64> = HashSet::new();
+        no_update_email_ids.extend(email_id_rows.flatten());
 
         // Insert or update the contact's emails.
         for contact_email in &contact.contact_emails {
@@ -54,13 +69,26 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
                 .next()?
                 .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
                 .and_then(|r| r.get(0))?;
+            self.prepare_sql_statement_delete_by_id(
+                "contact_email_labels",
+                "contact_email_labels.contact_emails_id",
+            )?
+            .execute([&local_email_id.0])?;
             for label_id in &contact_email.label_ids {
                 insert_email_label_stmt.execute((local_email_id, label_id))?;
             }
+            no_update_email_ids.remove(&local_email_id.0);
         }
         // Insert or update the contact's cards.
+        self.prepare_sql_statement_delete_by_id("contact_cards", "contact_cards.contact_id")?
+            .execute([local_id])?;
         for card in &contact.cards {
             insert_card_stmt.execute((local_id, card.card_type, &card.data, &card.signature))?;
+        }
+
+        // Remove old contact emails
+        for to_delete_mail_id in no_update_email_ids {
+            delete_existing_emails_stmt.execute([to_delete_mail_id])?;
         }
 
         Ok(local_id)
@@ -113,6 +141,9 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
 
     /// Updates the contact emails in the database.
     ///
+    /// Note that this function does not delete existing emails that are
+    /// not updated by this function.
+    ///
     /// # Errors
     /// Returns an error if the DB transaction fails.
     pub fn create_or_update_contact_emails<'i>(
@@ -121,8 +152,9 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
     ) -> DBResult<Vec<LocalContactEmailId>> {
         let mut insert_contact_mail_stmt =
             self.prepare_sql_statement_contact_insert_mail_with_contact_rid()?;
-        let mut insert_email_label_stmt = self.prepare_sql_statement_contact_mail_insert_label()?;
+        let mut insert_email_label_stmt = self.prepare_sql_statement_contact_insert_mail_label()?;
         let mut local_ids = Vec::with_capacity(contact_emails.size_hint().1.unwrap_or(0));
+
         // Insert or update the email contacts.
         for contact_email in contact_emails {
             bind_list_indexed!(
@@ -144,6 +176,11 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
                 .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
                 .and_then(|r| r.get(0))?;
             local_ids.push(local_id);
+            self.prepare_sql_statement_delete_by_id(
+                "contact_email_labels",
+                "contact_email_labels.contact_emails_id",
+            )?
+            .execute([&local_id.0])?;
             for label_id in &contact_email.label_ids {
                 insert_email_label_stmt.execute((local_id, label_id))?;
             }
@@ -238,6 +275,43 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             )
             .optional()
     }
+
+    /// Deletes all contact data from the database.
+    ///
+    /// # Errors
+    /// Returns an error if the DB transaction fails.
+    pub fn delete_all_contact_data(&self) -> DBResult<()> {
+        let truncate_statements = [
+            self.prepare_sql_statement_truncate("contacts")?,
+            self.prepare_sql_statement_truncate("contact_emails")?,
+            self.prepare_sql_statement_truncate("contact_cards")?,
+            self.prepare_sql_statement_truncate("contact_email_labels")?,
+        ];
+        for mut stmt in truncate_statements {
+            stmt.execute([])?;
+        }
+        Ok(())
+    }
+
+    /// Deletes the contact with the given remote contact id.
+    ///
+    /// # Errors
+    /// Returns an error if the DB transaction fails.
+    pub fn delete_contact_with_id(&self, contact_id: &ContactId) -> DBResult<()> {
+        self.prepare_sql_statement_delete_by_id("contacts", "contacts.rid")?
+            .execute([contact_id])?;
+        Ok(())
+    }
+
+    /// Deletes the contact with the given remote contact id.
+    ///
+    /// # Errors
+    /// Returns an error if the DB transaction fails.
+    pub fn delete_contact_mail_with_id(&self, contact_email_id: &ContactEmailId) -> DBResult<()> {
+        self.prepare_sql_statement_delete_by_id("contact_emails", "contact_emails.rid")?
+            .execute([contact_email_id])?;
+        Ok(())
+    }
 }
 
 impl<'c> CoreSqliteConnectionImpl<'c> {
@@ -276,11 +350,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             ) VALUES (?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT (rid) DO UPDATE SET
                 id=id,
+                rid=rid,
                 name=excluded.name,
-                email=excluded.email,
                 defaults=excluded.defaults,
                 `order`=excluded.`order`,
-                canonical_email=excluded.canonical_email,
                 last_used_time=excluded.last_used_time,
                 is_proton=excluded.is_proton
             RETURNING id";
@@ -303,6 +376,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             ) VALUES (?,?,?,?,?,(SELECT id FROM contacts WHERE contacts.rid = ?),?,?,?,?)
             ON CONFLICT (rid) DO UPDATE SET
                 id=id,
+                rid=rid,
                 name=excluded.name,
                 email=excluded.email,
                 defaults=excluded.defaults,
@@ -313,7 +387,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         self.0.prepare(INSERT_EMAIL_SQL)
     }
 
-    fn prepare_sql_statement_insert_card(&self) -> DBResult<Statement> {
+    fn prepare_sql_statement_contact_insert_card(&self) -> DBResult<Statement> {
         const INSERT_CARD_SQL: &str = r"
             INSERT OR REPLACE INTO contact_cards (
                 contact_id, 
@@ -324,13 +398,35 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         self.0.prepare(INSERT_CARD_SQL)
     }
 
-    fn prepare_sql_statement_contact_mail_insert_label(&self) -> DBResult<Statement> {
+    fn prepare_sql_statement_contact_insert_mail_label(&self) -> DBResult<Statement> {
         const INSERT_EMAIL_LABEL_SQL: &str = r"
             INSERT OR REPLACE INTO contact_email_labels (
                 contact_emails_id, 
                 value
             ) VALUES (?,?)";
         self.0.prepare(INSERT_EMAIL_LABEL_SQL)
+    }
+
+    fn prepare_sql_contact_query_email_ids(&self) -> DBResult<Statement> {
+        const QUERY_CONTACT_EMAIL_IDS: &str = r"
+            SELECT contact_emails.id 
+            FROM contact_emails 
+            WHERE contact_emails.contact_id=?";
+        self.0.prepare(QUERY_CONTACT_EMAIL_IDS)
+    }
+
+    fn prepare_sql_statement_truncate(&self, table_name: &str) -> DBResult<Statement> {
+        let truncate_sql = format!("DELETE FROM {table_name}");
+        self.0.prepare(&truncate_sql)
+    }
+
+    fn prepare_sql_statement_delete_by_id(
+        &self,
+        table_name: &str,
+        col_name: &str,
+    ) -> DBResult<Statement> {
+        let delete_by_id = format!("DELETE FROM {table_name} WHERE {col_name}=?");
+        self.0.prepare(&delete_by_id)
     }
 }
 

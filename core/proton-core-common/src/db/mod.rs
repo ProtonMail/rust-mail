@@ -48,7 +48,7 @@ macro_rules! new_u64_type {
         )]
         #[serde(crate = "self::serde")]
         #[repr(transparent)]
-        pub struct $name(u64);
+        pub struct $name(pub u64);
 
         impl $name {
             #[must_use]

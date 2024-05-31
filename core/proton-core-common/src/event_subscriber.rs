@@ -1,11 +1,14 @@
-#![allow(clippy::module_name_repetitions)] // is exported in the root of the crate.
-use crate::db::{CoreSqliteConnection, DBResult};
+#![allow(clippy::module_name_repetitions)]
+
+// is exported in the root of the crate.
+use crate::db::{CoreSqliteConnection, CoreSqliteConnectionMut, DBResult};
 use proton_api_core::domain::{
-    Address, Contact, ContactEmail, Event, ProductUsedSpace, User, UserId, UserSettings,
+    Action, Address, ContactEmailEvent, ContactEvent, Event, ProductUsedSpace, User, UserId,
+    UserSettings,
 };
-use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::exports::tracing::error;
+use proton_api_core::exports::tracing::{debug, error, Level};
+use proton_api_core::exports::{anyhow, tracing};
 use proton_event_loop::proton_async::async_trait::async_trait;
 use proton_event_loop::SubscriberError;
 
@@ -20,9 +23,9 @@ pub trait CoreEvent: Event {
 
     fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace>;
 
-    fn get_core_event_contacts(&self) -> Option<&[Contact]>;
+    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]>;
 
-    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmail]>;
+    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]>;
 }
 
 /// Since the core database can be embedded into another database, the integrator needs to provide
@@ -50,6 +53,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
         "proton-core-subscriber"
     }
 
+    #[tracing::instrument(level = Level::DEBUG, skip(self))]
     async fn on_events(&self, events: &[E]) -> Result<(), SubscriberError> {
         let (user_id, mut conn) = self.0.get_user_id_and_db_connection().map_err(|e| {
             error!("Failed to get DB connection :{e}");
@@ -58,12 +62,14 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
         conn.tx(|tx| -> DBResult<()> {
             for event in events {
                 if let Some(user) = event.get_core_event_user() {
+                    debug!("Handling user event");
                     tx.create_or_update_user(user).map_err(|e| {
                         error!("Failed to update user: {e}");
                         e
                     })?;
                 }
                 if let Some(settings) = event.get_core_event_user_settings() {
+                    debug!("Handling user setting event");
                     tx.create_or_update_user_settings(&user_id, settings)
                         .map_err(|e| {
                             error!("Failed to update user settings:{e}");
@@ -71,6 +77,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         })?;
                 }
                 if let Some(used_space) = event.get_core_event_used_space() {
+                    debug!("Handling user space event");
                     tx.update_user_used_space(&user_id, used_space)
                         .map_err(|e| {
                             error!("Failed to update used space:{e}");
@@ -78,6 +85,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         })?;
                 }
                 if let Some(used_product_space) = event.get_core_event_used_product_space() {
+                    debug!("Handling user product space event");
                     tx.update_user_product_used_space(&user_id, used_product_space)
                         .map_err(|e| {
                             error!("Failed to update used product space: {e}");
@@ -85,6 +93,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         })?;
                 }
                 if let Some(addresses) = event.get_core_event_addresses() {
+                    debug!("Handling address event");
                     tx.create_or_update_addresses(addresses.iter())
                         .map_err(|e| {
                             error!("Failed to update user addresses: {e}");
@@ -92,21 +101,65 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         })?;
                 }
                 if let Some(contacts) = event.get_core_event_contacts() {
-                    tx.create_or_update_contacts(contacts.iter()).map_err(|e| {
-                        error!("Failed to update contacts: {e}");
-                        e
-                    })?;
+                    debug!("Handling contact events");
+                    handle_contact_event(tx, contacts)?;
                 }
                 if let Some(contact_emails) = event.get_core_event_contact_emails() {
-                    tx.create_or_update_contact_emails(contact_emails.iter())
-                        .map_err(|e| {
-                            error!("Failed to update contact emails: {e}");
-                            e
-                        })?;
+                    debug!("Handling contact email events");
+                    handle_contact_email_event(tx, contact_emails)?;
                 }
             }
             Ok(())
         })
         .map_err(|e| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))
     }
+}
+
+fn handle_contact_event(
+    tx: &mut CoreSqliteConnectionMut,
+    contact_events: &[ContactEvent],
+) -> DBResult<()> {
+    for event in contact_events {
+        match event.action {
+            Action::Delete => tx.delete_contact_with_id(&event.id).map_err(|e| {
+                error!("Failed to delete contact: {e}");
+                e
+            })?,
+            Action::Create | Action::Update => {
+                if let Some(contact) = &event.contact {
+                    tx.create_or_update_contact(contact).map_err(|e| {
+                        error!("Failed to create or update contact: {e}");
+                        e
+                    })?;
+                }
+            }
+            Action::UpdateFlags => (),
+        }
+    }
+    Ok(())
+}
+
+fn handle_contact_email_event(
+    tx: &mut CoreSqliteConnectionMut,
+    contact_email_events: &[ContactEmailEvent],
+) -> DBResult<()> {
+    for event in contact_email_events {
+        match event.action {
+            Action::Delete => tx.delete_contact_mail_with_id(&event.id).map_err(|e| {
+                error!("Failed to delete contact mail: {e}");
+                e
+            })?,
+            Action::Create | Action::Update => {
+                if let Some(contact) = &event.contact_email {
+                    tx.create_or_update_contact_emails(std::iter::once(contact))
+                        .map_err(|e| {
+                            error!("Failed to create or update contact mail: {e}");
+                            e
+                        })?;
+                }
+            }
+            Action::UpdateFlags => (),
+        }
+    }
+    Ok(())
 }
