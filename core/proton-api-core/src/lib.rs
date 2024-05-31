@@ -35,5 +35,7 @@ mod hidden {
         pub cs: crate::domain::CardSignature,
         pub cd: crate::domain::CardData,
         pub cdl: crate::domain::ContactLabelId,
+        pub ct: crate::domain::ContactType,
+        pub cu: crate::domain::ContactUid,
     }
 }

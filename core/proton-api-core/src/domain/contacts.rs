@@ -1,29 +1,28 @@
 use serde;
 use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
 
 use crate::utils::{bool_from_integer, bool_to_integer};
 use crate::MAX_PAGE_ELEMENT_COUNT;
-
-#[cfg(feature = "sql")]
-use proton_sqlite3::rusqlite;
 
 crate::utils::string_id!(ContactEmailId);
 crate::utils::string_id!(ContactId);
 crate::utils::string_id!(CardSignature);
 crate::utils::string_id!(CardData);
 crate::utils::string_id!(ContactLabelId);
+crate::utils::string_id!(ContactType);
+crate::utils::string_id!(ContactUid);
 
-/// Sending preferences information in a contact.
-#[derive(Debug, Deserialize_repr, Serialize_repr, Eq, PartialEq, Copy, Clone, Hash)]
-#[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum ContactSendingPreferences {
-    /// The contact email has custom sending preferences.
+new_integer_enum!(u8, ContactSendingPreferences {
     Custom = 0,
-    /// The contact email has default sending preferences.
     Default = 1,
-}
+});
+
+new_integer_enum!(u8, CardType {
+    ClearText = 0,
+    Encrypted = 1,
+    Signed = 2,
+    EncryptedAndSigned = 3,
+});
 
 /// Models the contact email addresses for a contact returned by the API.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -35,7 +34,7 @@ pub struct ContactEmail {
     pub name: String,
     pub email: String,
     #[serde(rename = "Type")]
-    pub contact_type: Vec<String>,
+    pub contact_type: Vec<ContactType>,
     pub defaults: ContactSendingPreferences,
     pub order: u32,
     #[serde(rename = "ContactID")]
@@ -49,21 +48,6 @@ pub struct ContactEmail {
         serialize_with = "bool_to_integer"
     )]
     pub is_proton: bool,
-}
-
-/// Describes possible versions of contact cards.
-#[derive(Debug, Deserialize_repr, Serialize_repr, Eq, PartialEq, Copy, Clone, Hash)]
-#[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum CardType {
-    /// No encryption, just the v-card.
-    ClearText = 0,
-    /// The v-card is encrypted, but is not signed.
-    Encrypted = 1,
-    /// No encryption, but the v-card is signed with a detached signature.
-    Signed = 2,
-    /// The v-card is encrypted and signed with a detached signature.
-    EncryptedAndSigned = 3,
 }
 
 /// Represents a contact card returned by the API.
@@ -90,7 +74,7 @@ pub struct ContactPartial {
     pub id: ContactId,
     pub name: String,
     #[serde(rename = "UID")]
-    pub uid: String,
+    pub uid: ContactUid,
     pub size: u64,
     pub create_time: u64,
     pub modify_time: u64,
@@ -109,7 +93,7 @@ pub struct Contact {
     pub id: ContactId,
     pub name: String,
     #[serde(rename = "UID")]
-    pub uid: String,
+    pub uid: ContactUid,
     pub size: u64,
     pub create_time: u64,
     pub modify_time: u64,
@@ -193,67 +177,29 @@ impl ContactFilter {
 pub struct ContactFilterBuilder(ContactFilter);
 
 impl ContactFilterBuilder {
+    /// Creates new [`ContactFilterBuilder`].
     #[must_use]
     pub fn new(page_index: usize, page_size: usize) -> Self {
         Self(ContactFilter::new(page_index, page_size))
     }
 
+    /// Filters the contacts by e-mail address.
     #[must_use]
-    pub fn with_email(mut self, email: String) -> ContactFilterBuilder {
-        self.0.email = Some(email);
+    pub fn with_email(mut self, email_address: String) -> ContactFilterBuilder {
+        self.0.email = Some(email_address);
         self
     }
 
+    /// Filters the contacts by label identifier.
     #[must_use]
     pub fn with_label_id(mut self, label_id: ContactLabelId) -> ContactFilterBuilder {
         self.0.label_id = Some(label_id);
         self
     }
 
+    /// Creates a new [`ContactFilter`] from the given builder.
     #[must_use]
     pub fn build(self) -> ContactFilter {
         self.0
-    }
-}
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::FromSql for ContactSendingPreferences {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(ContactSendingPreferences::Custom),
-            1 => Ok(ContactSendingPreferences::Default),
-            v => Err(rusqlite::types::FromSqlError::OutOfRange(i64::from(v))),
-        }
-    }
-}
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::ToSql for ContactSendingPreferences {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Owned(
-            rusqlite::types::Value::Integer(*self as i64),
-        ))
-    }
-}
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::FromSql for CardType {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(CardType::ClearText),
-            1 => Ok(CardType::Encrypted),
-            2 => Ok(CardType::Signed),
-            3 => Ok(CardType::EncryptedAndSigned),
-            v => Err(rusqlite::types::FromSqlError::OutOfRange(i64::from(v))),
-        }
-    }
-}
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::ToSql for CardType {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Owned(
-            rusqlite::types::Value::Integer(*self as i64),
-        ))
     }
 }
