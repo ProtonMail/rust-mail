@@ -1,7 +1,7 @@
 use crate::store::PendingAction;
 use crate::{
     Action, ActionError, ActionFactory, ActionFactoryError, ActionLocalValidationResult,
-    ActionStore, SessionProvider, SqliteConnectionProviderError, StoredActionId,
+    ActionStore, SessionProvider, StoredActionId,
 };
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite;
@@ -17,8 +17,6 @@ pub enum QueueError {
     Store(#[from] rusqlite::Error),
     #[error("Factory: {0}")]
     Factory(#[from] ActionFactoryError),
-    #[error("DB Connection: {0}")]
-    SqlConnectionProvider(#[from] SqliteConnectionProviderError),
     #[error("Stash: {0}")]
     Stash(#[from] StashError),
 }

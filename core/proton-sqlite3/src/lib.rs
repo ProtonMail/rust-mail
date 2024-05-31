@@ -23,7 +23,6 @@
 //! }
 //! ```
 
-mod macros;
 mod migration;
 mod query;
 mod tracker;
