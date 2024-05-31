@@ -3,7 +3,7 @@ use crate::db::{CoreSqliteConnectionImpl, DBResult};
 use crate::json::deserialize_json_from_row;
 use proton_api_core::domain::{Contact, ContactCard, ContactEmail, ContactLabelId, ContactPartial};
 use proton_sqlite3::rusqlite::{OptionalExtension, Row, Statement};
-use proton_sqlite3::utils::mapped_rows_to_vec;
+use proton_sqlite3::utils::{mapped_rows_into_vec, mapped_rows_to_vec};
 use proton_sqlite3::{bind_list_indexed, bind_list_indexed_recursive};
 
 use super::{LocalContact, LocalContactCard, LocalContactEmail, LocalContactWithCards};
@@ -20,8 +20,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         let mut insert_email_label_stmt = self.prepare_sql_statement_contact_mail_insert_label()?;
 
         // Insert or update the contact.
-        bind_list_indexed!(
-            &mut insert_contact_stmt,
+        let insert_params = (
             &contact.id,
             &contact.name,
             &contact.uid,
@@ -30,7 +29,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             contact.modify_time,
         );
         let local_id: LocalContactId = insert_contact_stmt
-            .raw_query()
+            .query(insert_params)?
             .next()?
             .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
             .and_then(|r| r.get(0))?;
@@ -75,7 +74,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         &mut self,
         contacts: impl Iterator<Item = &'i Contact>,
     ) -> DBResult<Vec<LocalContactId>> {
-        let mut ids = Vec::new();
+        let mut ids = Vec::with_capacity(contacts.size_hint().1.unwrap_or(0));
         for contact in contacts {
             ids.push(self.create_or_update_contact(contact)?);
         }
@@ -91,11 +90,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         contacts: impl Iterator<Item = &'i ContactPartial>,
     ) -> DBResult<Vec<LocalContactId>> {
         let mut insert_contact_stmt = self.prepare_sql_statement_insert_contact()?;
-        let mut local_ids = Vec::new();
+        let mut local_ids = Vec::with_capacity(contacts.size_hint().1.unwrap_or(0));
         // Insert or update the partial contacts.
         for contact in contacts {
-            bind_list_indexed!(
-                &mut insert_contact_stmt,
+            let insert_params = (
                 &contact.id,
                 &contact.name,
                 &contact.uid,
@@ -104,7 +102,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
                 contact.modify_time,
             );
             let local_id: LocalContactId = insert_contact_stmt
-                .raw_query()
+                .query(insert_params)?
                 .next()?
                 .ok_or(proton_sqlite3::rusqlite::Error::QueryReturnedNoRows)
                 .and_then(|r| r.get(0))?;
@@ -124,7 +122,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         let mut insert_contact_mail_stmt =
             self.prepare_sql_statement_contact_insert_mail_with_contact_rid()?;
         let mut insert_email_label_stmt = self.prepare_sql_statement_contact_mail_insert_label()?;
-        let mut local_ids = Vec::new();
+        let mut local_ids = Vec::with_capacity(contact_emails.size_hint().1.unwrap_or(0));
         // Insert or update the email contacts.
         for contact_email in contact_emails {
             bind_list_indexed!(
@@ -153,7 +151,7 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         Ok(local_ids)
     }
 
-    /// Queries teh database for the contact emails matching the provided email.
+    /// Queries the database for the contact emails matching the provided email.
     ///
     /// The the provided email must be in canonical form.
     ///
@@ -164,9 +162,8 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         canonical_email: &str,
     ) -> DBResult<Vec<LocalContactEmail>> {
         let mut query_statement = self.0.prepare(&ContactMailSelector::query_with_email())?;
-        query_statement.raw_bind_parameter(1, canonical_email)?;
         let rows = query_statement
-            .raw_query()
+            .query([canonical_email])?
             .mapped(ContactMailSelector::from_row);
         mapped_rows_to_vec(rows)
     }
@@ -186,12 +183,12 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
         let mut query_statement = self
             .0
             .prepare(&ContactMailSelector::query_all_with_limit())?;
-        query_statement.raw_bind_parameter(1, limit)?;
-        query_statement.raw_bind_parameter(2, offset)?;
         let rows = query_statement
-            .raw_query()
+            .query([limit, offset])?
             .mapped(ContactMailSelector::from_row);
-        mapped_rows_to_vec(rows)
+        let mut contact_buffer = Vec::with_capacity(usize::try_from(limit).unwrap_or(0));
+        mapped_rows_into_vec(&mut contact_buffer, rows)?;
+        Ok(contact_buffer)
     }
 
     /// Queries all contacts with its emails but no v-cards.
@@ -203,12 +200,12 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
     /// Returns an error if the DB transaction fails.
     pub fn query_contacts(&self, offset: u64, limit: u64) -> DBResult<Vec<LocalContact>> {
         let mut query_statement = self.0.prepare(&ContactSelector::query_all_with_limit())?;
-        query_statement.raw_bind_parameter(1, limit)?;
-        query_statement.raw_bind_parameter(2, offset)?;
         let rows = query_statement
-            .raw_query()
+            .query([limit, offset])?
             .mapped(ContactSelector::from_row);
-        mapped_rows_to_vec(rows)
+        let mut contact_buffer = Vec::with_capacity(usize::try_from(limit).unwrap_or(0));
+        mapped_rows_into_vec(&mut contact_buffer, rows)?;
+        Ok(contact_buffer)
     }
 
     /// Queries a single contact with its emails but no v-cards.
@@ -255,7 +252,10 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
                 modify_time 
             ) VALUES (?,?,?,?,?,?)
             ON CONFLICT (rid) DO UPDATE SET
-                id=id
+                id=id,
+                name=excluded.name,
+                size=excluded.size,
+                modify_time=excluded.modify_time
             RETURNING id";
         self.0.prepare(INSERT_CONTACT_SQL)
     }
@@ -276,7 +276,13 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             ) VALUES (?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT (rid) DO UPDATE SET
                 id=id,
-                contact_id=excluded.contact_id
+                name=excluded.name,
+                email=excluded.email,
+                defaults=excluded.defaults,
+                `order`=excluded.`order`,
+                canonical_email=excluded.canonical_email,
+                last_used_time=excluded.last_used_time,
+                is_proton=excluded.is_proton
             RETURNING id";
         self.0.prepare(INSERT_EMAIL_SQL)
     }
@@ -297,7 +303,12 @@ impl<'c> CoreSqliteConnectionImpl<'c> {
             ) VALUES (?,?,?,?,?,(SELECT id FROM contacts WHERE contacts.rid = ?),?,?,?,?)
             ON CONFLICT (rid) DO UPDATE SET
                 id=id,
-                contact_id=excluded.contact_id
+                name=excluded.name,
+                email=excluded.email,
+                defaults=excluded.defaults,
+                `order`=excluded.`order`,
+                canonical_email=excluded.canonical_email,
+                last_used_time=excluded.last_used_time
             RETURNING id";
         self.0.prepare(INSERT_EMAIL_SQL)
     }
@@ -355,11 +366,11 @@ impl ContactMailSelector {
         ";
 
     fn query_with_email() -> String {
-        format!(r"{}WHERE C.canonical_email = ?", Self::QUERY_PREFIX)
+        format!(r"{} WHERE C.canonical_email = ?", Self::QUERY_PREFIX)
     }
 
     fn query_all_with_limit() -> String {
-        format!("{}LIMIT ? OFFSET ?", Self::QUERY_PREFIX)
+        format!("{} LIMIT ? OFFSET ?", Self::QUERY_PREFIX)
     }
 
     fn from_row(r: &Row) -> DBResult<LocalContactEmail> {
@@ -432,11 +443,11 @@ impl ContactSelector {
         ";
 
     fn query_all_with_limit() -> String {
-        format!("{}LIMIT ? OFFSET ?", Self::QUERY_PREFIX)
+        format!("{} LIMIT ? OFFSET ?", Self::QUERY_PREFIX)
     }
 
     fn query_single_with_id() -> String {
-        format!("{}WHERE C.id=?", Self::QUERY_PREFIX)
+        format!("{} WHERE C.id=?", Self::QUERY_PREFIX)
     }
     fn from_row(r: &Row) -> DBResult<LocalContact> {
         Ok({
@@ -519,7 +530,7 @@ impl ContactWithCardsSelector {
         ";
 
     fn query_single_with_id() -> String {
-        format!("{}WHERE C.id=?", Self::QUERY_PREFIX)
+        format!("{} WHERE C.id=?", Self::QUERY_PREFIX)
     }
 
     fn from_row(r: &Row) -> DBResult<LocalContactWithCards> {

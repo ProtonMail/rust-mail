@@ -1,7 +1,7 @@
 use common::TestContext;
 use proton_api_core::domain::{
     CardData, CardSignature, CardType, Contact, ContactCard, ContactEmail, ContactEmailId,
-    ContactId, ContactLabelId, ContactPartial, ContactSendingPreferences,
+    ContactId, ContactLabelId, ContactPartial, ContactSendingPreferences, ContactType, ContactUid,
 };
 use proton_core_common::db::{
     CoreSqliteConnection, LocalContact, LocalContactEmail, LocalContactEmailId, LocalContactId,
@@ -15,18 +15,16 @@ fn create_test_partial_contacts() -> Vec<ContactPartial> {
         ContactPartial {
             id: ContactId::from("a29olIjFv0rnXxBhSMw=="),
             name: "contact_name".to_owned(),
-            uid: "proton-legacy-139892c2-f691-4118-8c29-061196013e04".to_owned(),
+            uid: ContactUid::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
             size: 1443,
             create_time: 1_503_815_366,
             modify_time: 1_503_815_366,
-            label_ids: vec![ContactLabelId::from(
-                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
-            )],
+            label_ids: vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
         },
         ContactPartial {
             id: ContactId::from("z29olIjFv0rnXxBhSMz=="),
             name: "contact_name2".to_owned(),
-            uid: "proton-legacy-139892c2-f691-4118-8c29-061196013e01".to_owned(),
+            uid: ContactUid::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
             size: 1445,
             create_time: 1_503_815_367,
             modify_time: 1_503_815_367,
@@ -43,7 +41,7 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
             id: ContactEmailId::from("aefew4323jFv0BhSMw=="),
             name: "contact_email_name_1".to_owned(),
             email: "contact_email_1@contact.test".to_owned(),
-            contact_type: vec!["work".to_owned()],
+            contact_type: vec![ContactType::from("work")],
             defaults: ContactSendingPreferences::Default,
             order: 1,
             contact_id: ContactId::from("a29olIjFv0rnXxBhSMw=="),
@@ -58,13 +56,11 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
             id: ContactEmailId::from("aefew4323jFv0BhSMz=="),
             name: "contact_email_name_2".to_owned(),
             email: "contact_email_2@contact.test".to_owned(),
-            contact_type: vec!["work".to_owned()],
+            contact_type: vec![ContactType::from("work")],
             defaults: ContactSendingPreferences::Default,
             order: 1,
             contact_id: ContactId::from("a29olIjFv0rnXxBhSMw=="),
-            label_ids: vec![ContactLabelId::from(
-                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
-            )],
+            label_ids: vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
             canonical_email: "contact_email_2@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,
@@ -73,13 +69,11 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
             id: ContactEmailId::from("oZfew4323jFv0BhSMz=="),
             name: "contact_email_name_3".to_owned(),
             email: "contact_email_3@contact.test".to_owned(),
-            contact_type: vec!["work".to_owned()],
+            contact_type: vec![ContactType::from("work")],
             defaults: ContactSendingPreferences::Custom,
             order: 1,
             contact_id: ContactId::from("z29olIjFv0rnXxBhSMz=="),
-            label_ids: vec![ContactLabelId::from(
-                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
-            )],
+            label_ids: vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")],
             canonical_email: "contact_email_3@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,

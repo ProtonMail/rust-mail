@@ -1,4 +1,4 @@
-use proton_api_core::domain::CardData;
+use proton_api_core::domain::{CardData, ContactUid};
 use proton_api_core::utils::bool_from_integer;
 use proton_api_core::{
     domain::{
@@ -25,7 +25,7 @@ pub struct LocalContact {
     pub id: LocalContactId,
     pub rid: Option<ContactId>,
     pub name: String,
-    pub uid: String,
+    pub uid: ContactUid,
     pub size: u64,
     pub create_time: u64,
     pub modify_time: u64,

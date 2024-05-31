@@ -33,4 +33,9 @@ mod hidden {
         proton_api_core::UniFfiTag,
         crate::UniFfiTag
     );
+    uniffi::ffi_converter_forward!(
+        proton_api_core::domain::ContactUid,
+        proton_api_core::UniFfiTag,
+        crate::UniFfiTag
+    );
 }
