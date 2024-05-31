@@ -33,4 +33,3 @@ notify= ["dep:notify"]
 
 [[test]]
 name = "main"
-required-features = ["notify"]

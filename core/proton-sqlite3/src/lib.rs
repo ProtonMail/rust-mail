@@ -27,8 +27,6 @@ mod migration;
 mod query;
 mod tracker;
 pub mod utils;
-#[cfg(feature = "notify")]
-mod watcher;
 
 pub use migration::*;
 pub use query::*;
@@ -44,9 +42,6 @@ use tracing::error;
 // re-export;
 pub use paste;
 pub use rusqlite;
-
-#[cfg(feature = "notify")]
-pub use watcher::*;
 
 pub const DEFAULT_OPEN_CONNECTION_LIMIT: usize = 8;
 
@@ -287,17 +282,6 @@ impl SqliteConnectionPool {
             })
     }
 
-    /// Create a watcher for the database which will invoke the handler once an update to the db
-    /// has been detected.
-    #[cfg_attr(doc, features = "notify")]
-    #[cfg(feature = "notify")]
-    pub fn watch<T: SqliteWatcherHandler>(
-        &self,
-        handler: T,
-    ) -> Result<SqliteWatcher, SqliteWatcherError> {
-        self.inner.watch(handler)
-    }
-
     /// Close all connections in the pool. If a connection can't be closed, it will be put back into the pool
     /// and the error is returned.
     ///
@@ -453,48 +437,6 @@ impl ConnectionPoolInner {
         }
 
         Ok(())
-    }
-
-    #[cfg(feature = "notify")]
-    fn get_wal_path(&self) -> Result<PathBuf, SqliteWatcherError> {
-        let SqliteMode::File(path) = &self.mode else {
-            return Err(SqliteWatcherError::InvalidMode);
-        };
-
-        let mut wal_file = path.clone().into_os_string();
-        wal_file.push("-wal");
-        Ok(wal_file.into())
-    }
-
-    #[cfg(feature = "notify")]
-    fn watch<T: SqliteWatcherHandler>(
-        &self,
-        mut handler: T,
-    ) -> Result<SqliteWatcher, SqliteWatcherError> {
-        use notify::{Config, EventKind, RecursiveMode, Watcher};
-        let wal_path = self.get_wal_path()?;
-        let config = Config::default();
-
-        let mut watcher = notify::RecommendedWatcher::new(
-            move |event: notify::Result<notify::Event>| {
-                let converted = match event {
-                    Ok(event) => {
-                        match event.kind {
-                            EventKind::Create(_) | EventKind::Modify(_) => Ok(()),
-                            EventKind::Remove(_) => Err(SqliteWatcherError::WatcherClosed),
-                            // We don't handle the other events
-                            _ => return,
-                        }
-                    }
-                    Err(e) => Err(e.into()),
-                };
-                handler.on_db_update(converted)
-            },
-            config,
-        )?;
-
-        watcher.watch(wal_path.as_ref(), RecursiveMode::NonRecursive)?;
-        Ok(SqliteWatcher::new(watcher))
     }
 
     #[cfg(test)]
