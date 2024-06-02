@@ -12,21 +12,27 @@
 //! with types that are saved to the database.
 //!
 
-use crate::stash::{Stash, StashError, Tether};
+use crate::stash::{Notification, Stash, StashError, Tether};
 use core::any::Any;
 use core::fmt::{self, Debug, Display};
+use core::future::Future;
 use core::iter::repeat;
 use core::str::FromStr;
+use flume::Sender as QueueSender;
 use indoc::formatdoc;
+use rusqlite::hooks::Action;
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef};
 use rusqlite::{Error as SqliteError, Row, Rows, ToSql};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::error::Error;
 use std::vec::IntoIter;
+use tokio::spawn as spawn_async;
+use tracing::{error, warn};
 
 /// Errors for conversion of database row data into record types.
 #[derive(Debug, PartialEq)]
@@ -107,6 +113,20 @@ impl SerializationError for ConversionError {
     fn custom<T: Display>(msg: T) -> Self {
         Self::SerializationError(msg.to_string())
     }
+}
+
+/// Notification of changes to a resultset.
+#[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
+pub enum ResultsetChange<T: Model, I: ToSql> {
+    /// A record has been deleted from the resultset.
+    Deleted(I),
+
+    /// A new record has been added to the resultset.
+    Inserted(T),
+
+    /// A record has been updated in the resultset.
+    Updated(T),
 }
 
 /// Wrapper type to represent an array of CSV values.
@@ -298,7 +318,7 @@ where
     <Self as Model>::Id: Send + Sync + 'static,
 {
     /// The ID type for the record.
-    type Id: ToSql;
+    type Id: Clone + ToSql;
 
     /// Finds records in the database using specific query logic.
     ///
@@ -330,6 +350,23 @@ where
     /// This approach makes it possible for the "find" functionality to provide
     /// the ability to extract whichever fields it needs, which is important
     /// when subscribing to live resultset changes.
+    ///
+    /// # Live change feed
+    ///
+    /// When listening for changes, the "find" functionality will handle them
+    /// efficiently. Adding or changing data will trigger the re-running of the
+    /// original query, BUT only the IDs will be returned, instead of all record
+    /// data. This is therefore efficient and performant. Those IDs will then be
+    /// compared with the original resultset, and any changes will be sent to
+    /// the caller via the supplied queue.
+    ///
+    /// It is not possible to avoid re-running the query for an `INSERT` or
+    /// `UPDATE`, but a `DELETE` will not re-run the query. Instead, if it is on
+    /// the list of original IDs, a notification will be sent. Note that it is
+    /// technically possible to restrict the scope of re-running the query to
+    /// check only the record ID indicated in the database change event, but
+    /// this has been left for a future optimisation step in order to avoid
+    /// adding manipulation of the provided query logic for now.
     ///
     /// # Caveats
     ///
@@ -370,6 +407,10 @@ where
     ///                   match with any expectations set in the query logic.
     /// * `stash`       - The database, i.e. [`Stash`], to use for finding the
     ///                   records.
+    /// * `queue`       - An optional queue to send changes to. If this is
+    ///                   provided, the function will listen for changes to the
+    ///                   result set and send them to the queue. This is useful
+    ///                   for live updates.
     ///
     /// # Errors
     ///
@@ -385,6 +426,7 @@ where
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         stash: &Stash,
+        queue: Option<QueueSender<ResultsetChange<Self, Self::Id>>>,
     ) -> Result<Vec<Self>, StashError> {
         let query = formatdoc!(
             "
@@ -397,7 +439,66 @@ where
             Self::table_name(),
             query_logic.into(),
         );
-        stash.query(query, params).await
+        let records = stash.query(query, params).await?;
+
+        // Set up listener for changes to the result set, if requested.
+        #[allow(clippy::shadow_reuse)]
+        if let Some(queue) = queue {
+            let mut ids: HashMap<u64, Self::Id> = records
+                .iter()
+                .map(|record: &Self| {
+                    record
+                        .row_id()
+                        .map(|row_id| (row_id, record.id()))
+                        .ok_or(StashError::MissingRowId)
+                })
+                .collect::<Result<HashMap<u64, Self::Id>, StashError>>()?;
+            let receiver = stash.subscribe().await?;
+            let stash_clone = stash.clone();
+
+            // Spawn a thread to listen for notifications
+            drop(spawn_async(async move {
+                let changed_query = formatdoc!(
+                    "
+                    SELECT
+                        rowid AS rowid, *
+                    FROM
+                        {}
+                    WHERE
+                        rowid = ?
+                    LIMIT
+                        1
+                ",
+                    Self::table_name(),
+                );
+                loop {
+                    match receiver.recv_async().await {
+                        Ok(notification) => {
+                            if let Some(change) = Self::handle_notification(
+                                notification,
+                                &mut ids,
+                                &stash_clone,
+                                &changed_query,
+                            )
+                            .await
+                            {
+                                if queue.send_async(change).await.is_err() {
+                                    // In theory this should never happen, but we also can't do anything with it
+                                    error!("Queue error: Failed to send a ResultsetChange to a subscriber");
+                                }
+                            }
+                        }
+                        Err(error) => {
+                            // In theory this should never happen, but we also can't do anything with it
+                            error!("Lost connection to change feed: {error}");
+                            break;
+                        }
+                    }
+                }
+            }));
+        }
+
+        Ok(records)
     }
 
     /// Finds the first record in a result set using specific query logic.
@@ -406,8 +507,9 @@ where
     /// and then taking the first result. It is useful when only one result is
     /// expected.
     ///
-    /// It behaves in the same way as [`find()`](Model::find()) otherwise. For
-    /// more information, see the documentation for that function.
+    /// It behaves in the same way as [`find()`](Model::find()) otherwise
+    /// (except that it does not support listening for changes). For more
+    /// information, see the documentation for that function.
     ///
     /// # Parameters
     ///
@@ -438,10 +540,97 @@ where
         params: Vec<Box<dyn ToSql + Send>>,
         stash: &Stash,
     ) -> Result<Option<Self>, StashError> {
-        Ok(Self::find(query_logic, params, stash)
+        Ok(Self::find(query_logic, params, stash, None)
             .await?
             .into_iter()
             .next())
+    }
+
+    /// Handles a change notification for a result set.
+    ///
+    /// This function is used to handle a change notification for a result set,
+    /// in a case where [`find()`](Model::find()) has been asked to listen for
+    /// such changes. It checks the details of the [`Notification`] received,
+    /// and returns a [`ResultsetChange`] to be sent to the listener's queue if
+    /// relevant.
+    ///
+    /// # Parameters
+    ///
+    /// * `notification` - The change [`Notification`] to handle.
+    /// * `ids`          - A map of row IDs to record IDs, used to track which
+    ///                    records are in the result set. These are updated as
+    ///                    records are added, updated, or removed, and are used
+    ///                    to determine relevance.
+    /// * `stash`        - The [`Stash`] instance to use for loading records.
+    /// * `query`        - The query used to find the records.
+    ///
+    /// # Errors
+    ///
+    /// At present this function does not return any errors, because there is
+    /// nothing that can be done with them. Therefore they are just logged.
+    ///
+    /// # See also
+    ///
+    /// * [`Model::find()`]
+    ///
+    fn handle_notification<Q: AsRef<str> + Send + Sync>(
+        notification: Notification,
+        ids: &mut HashMap<u64, Self::Id>,
+        stash: &Stash,
+        query: &Q,
+    ) -> impl Future<Output = Option<ResultsetChange<Self, Self::Id>>> + Send {
+        async move {
+            #[allow(clippy::wildcard_enum_match_arm)]
+            match notification.action {
+                Action::SQLITE_DELETE => {
+                    if let Entry::Occupied(entry) = ids.entry(notification.row) {
+                        return Some(ResultsetChange::Deleted(entry.remove()));
+                    }
+                }
+                Action::SQLITE_INSERT => {
+                    match stash
+                        .query::<_, Self>(query.as_ref(), vec![Box::new(notification.row)])
+                        .await
+                    {
+                        Ok(records) => {
+                            if let Some(record) = records.into_iter().next() {
+                                drop(ids.insert(notification.row, record.id()));
+                                return Some(ResultsetChange::Inserted(record));
+                            }
+                            // This could happen, in which case we log it and carry on
+                            warn!("No record found for the rowid said to have changed");
+                        }
+                        Err(error) => {
+                            // In theory this should never happen, but we also can't do anything with it
+                            error!("Failed to execute changes query: {error:?}");
+                        }
+                    }
+                }
+                Action::SQLITE_UPDATE => {
+                    match stash
+                        .query(query.as_ref(), vec![Box::new(notification.row)])
+                        .await
+                    {
+                        Ok(records) => {
+                            if let Some(record) = records.into_iter().next() {
+                                return Some(ResultsetChange::Updated(record));
+                            }
+                            // This could happen, in which case we log it and carry on
+                            warn!("No record found for the rowid said to have changed");
+                        }
+                        Err(error) => {
+                            // In theory this should never happen, but we also can't do anything with it
+                            error!("Failed to execute changes query: {error:?}");
+                        }
+                    }
+                }
+                _ => {
+                    // In theory this should never happen, but we also can't do anything with it
+                    warn!("Received unknown change notification");
+                }
+            }
+            None
+        }
     }
 
     /// Gets the record's unique ID.

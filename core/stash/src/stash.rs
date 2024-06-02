@@ -525,6 +525,13 @@ pub enum StashError {
     #[error("Statement execution error: {0}")]
     ExecutionError(SqliteError),
 
+    /// The row ID was missing from the query results. This should never happen
+    /// in practice as the only places that rely on it are responsible for
+    /// specifying it in the queries that get run. Manual queries may not
+    /// specify it, but that doesn't matter.
+    #[error("Missing row ID")]
+    MissingRowId,
+
     /// An operation requiring a transaction was attempted, such as a commit or
     /// rollback, but no active transaction was found.
     #[error("No active transaction")]
