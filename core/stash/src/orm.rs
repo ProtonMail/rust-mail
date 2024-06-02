@@ -389,7 +389,7 @@ where
         let query = formatdoc!(
             "
             SELECT
-                *
+                rowid AS rowid, *
             FROM
                 {}
             {}
@@ -445,9 +445,28 @@ where
     }
 
     /// Gets the record's unique ID.
+    ///
+    /// This is the primary key for the record as defined when creating the
+    /// table. It may or may not be the same as the internal "row ID" used by
+    /// SQLite.
+    ///
+    /// # See also
+    ///
+    /// * [`Model::id_field_name()`]
+    /// * [`Model::row_id()`]
+    ///
     fn id(&self) -> Self::Id;
 
     /// Gets the name of the ID field for the record type.
+    ///
+    /// This is the primary key column name for the record as defined when
+    /// creating the table.
+    ///
+    /// # See also
+    ///
+    /// * [`Model::id()`]
+    /// * [`Model::row_id()`]
+    ///
     fn id_field_name() -> &'static str;
 
     /// Loads a record from the database by ID.
@@ -517,6 +536,22 @@ where
     async fn load_using(id: Self::Id, tether: &Tether) -> Result<Option<Self>, StashError> {
         tether.load(id).await
     }
+
+    /// Gets the record's unique row ID.
+    ///
+    /// This is the internal "row ID" used by SQLite. It may or may not be the
+    /// same as the primary key for the record as defined when creating the
+    /// table.
+    ///
+    /// If the record has not been saved to the database, this will return
+    /// [`None`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::id()`]
+    /// * [`Model::id_field_name()`]
+    ///
+    fn row_id(&self) -> Option<u64>;
 
     /// Saves a record to the database.
     ///

@@ -1526,7 +1526,7 @@ impl Tether {
         let query = formatdoc!(
             "
             SELECT
-                *
+                rowid AS rowid, *
             FROM
                 {}
             WHERE

@@ -94,6 +94,11 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///   - `#[TableName("table_name")]`: The name of the table in the database.
 ///     Notably, this is applied as a struct-level annotation, rather than being
 ///     applied to a struct field.
+///   - `#[RowIdField]`: The field that contains the associated internal SQLite
+///     row ID (a [`u64`] value) for the record. Note that it is important to
+///     apply `#[serde(skip)]` to this field to avoid it being included in the
+///     serialisation requirements. It is a special internal field, and not
+///     included in the list of database fields.
 ///   - `#[StashField]`: The field that contains the associated `Stash` for the
 ///     record. Note that it is important to apply `#[serde(skip)]` to this
 ///     field to avoid it being included in the serialisation requirements.
@@ -135,13 +140,17 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     #[DbField(via CsvArray<i32>)]
 ///     values: Vec<i32>,
 ///
+///     #[RowIdField]
+///     #[serde(skip)]
+///     row_id: Option<u64>,
+///
 ///     #[StashField]
 ///     #[serde(skip)]
 ///     stash: Option<Stash>,
 /// }
 /// ```
 ///
-#[proc_macro_derive(Model, attributes(DbField, IdField, StashField, TableName))]
+#[proc_macro_derive(Model, attributes(DbField, IdField, RowIdField, StashField, TableName))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -150,6 +159,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let table_name = extract_table_name(&input);
     let fields = extract_fields(&input, "Model");
     let (id_field, id_type) = extract_id_field(&fields);
+    let row_id_field = extract_row_id_field(&fields);
     let stash_field = extract_stash_field(&fields);
     let db_fields = extract_db_fields(&fields, true);
     let via_attrs = extract_via_attrs(&fields, true);
@@ -161,8 +171,11 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let fn_fields_impl = generate_fn_fields_impl(&db_fields, &db_fields_impl);
     let fn_field_names_impl = generate_fn_field_names_impl(&db_fields);
     let fn_field_values_impl = generate_fn_field_values_impl(&db_field_values_impl);
-    let fn_from_row_impl =
-        generate_fn_from_row_impl(&db_fields, &from_row_values_impl, Some(&stash_field));
+    let fn_from_row_impl = generate_fn_from_row_impl(
+        &db_fields,
+        &from_row_values_impl,
+        Some((&row_id_field, &stash_field)),
+    );
 
     (quote! {
         impl stash::orm::DbRecord for #name {
@@ -181,6 +194,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             fn id_field_name() -> &'static str {
                 stringify!(#id_field)
+            }
+
+            fn row_id(&self) -> Option<u64> {
+                self.#row_id_field
             }
 
             fn stash(&self) -> &stash::stash::Stash {
@@ -324,6 +341,41 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type) {
             .expect("IdField must have an identifier"),
         id_field.ty.clone(),
     )
+}
+
+/// Extract the field that is marked as the `row_id` field.
+///
+/// This function extracts the field that is marked as the `row_id` field from
+/// the struct fields. It is expected that there is exactly one field marked
+/// with the `RowIdField` attribute.
+///
+/// The `row_id` field is the field that contains the associated internal SQLite
+/// row ID (a [`u64`]) for the record. This is not the same as the primary key
+/// field represented by the `IdField` attribute.
+///
+/// # Parameters
+///
+/// * `fields` - The fields of the struct. Specifically, *all* the fields that
+///              the struct has.
+///
+/// # Panics
+///
+/// This function panics if the `RowIdField` attribute is missing, or does not
+/// have an identifier.
+///
+fn extract_row_id_field(fields: &[&Field]) -> Ident {
+    fields
+        .iter()
+        .find(|field| {
+            field
+                .attrs
+                .iter()
+                .any(|attr| attr.path().is_ident("RowIdField"))
+        })
+        .expect("RowIdField attribute is missing")
+        .ident
+        .clone()
+        .expect("RowIdField must have an identifier")
 }
 
 /// Extract the field that is marked as the `stash` field.
@@ -530,17 +582,23 @@ fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> Token
 /// * `from_row_values_impl` - The code implementation to convert the values
 ///                            from the database row to the appropriate struct
 ///                            field types.
-/// * `stash_field`          - The field that contains the associated `Stash`.
-///                            If [`None`], then this will be excluded from the
+/// * `internal_fields`      - Internal-used fields for `Model`s: firstly the
+///                            field that contains the internal row ID, and then
+///                            the field that contains the associated `Stash`.
+///                            If [`None`], then these will be excluded from the
 ///                            generated code.
 ///
 fn generate_fn_from_row_impl(
     db_fields: &[Ident],
     from_row_values_impl: &[TokenStream2],
-    stash_field: Option<&Ident>,
+    internal_fields: Option<(&Ident, &Ident)>,
 ) -> TokenStream2 {
-    let stash_field_impl = if let Some(stash_field) = stash_field {
+    let internal_fields_impl = if let Some((row_id_field, stash_field)) = internal_fields {
         quote! {
+            #row_id_field: Some(row.get(
+                columns.iter().position(|c| c == "rowid")
+                    .ok_or_else(|| stash::orm::ConversionError::MissingColumn("rowid".to_owned()))?
+            )?),
             #stash_field: Some(stash.clone()),
         }
     } else {
@@ -553,7 +611,7 @@ fn generate_fn_from_row_impl(
                 #(
                     #db_fields: #from_row_values_impl,
                 )*
-                #stash_field_impl
+                #internal_fields_impl
             })
         }
     }
