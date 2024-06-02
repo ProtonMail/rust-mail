@@ -300,6 +300,150 @@ where
     /// The ID type for the record.
     type Id: ToSql;
 
+    /// Finds records in the database using specific query logic.
+    ///
+    /// This function bridges the gap between ORM-level handling of formalised
+    /// records and the extended functionality that is available when
+    /// interacting directly with the underlying database service layer. The
+    /// primary ambition is to build on what is possible with the [`query()`](Stash::query())
+    /// function and combine common actions to reduce boilerplate code.
+    ///
+    /// Notably, the most important aspect of its use is that it accepts "query
+    /// logic" in order to find results. Query logic is NOT a full query, and
+    /// has the following expectations:
+    ///
+    ///   1. The fields returned will be managed by the "find" subsystem, and
+    ///      will only ever be in context to one database table. Joins are not
+    ///      supported — for anything involving joins or more complex queries,
+    ///      the [`query()`](Stash::query()) function should be used directly.
+    ///
+    ///   2. The query logic is therefore everything from the `WHERE` clause in
+    ///      the resulting SQL query, which can include conditions, ordering,
+    ///      offset, and limit. It is essentially a full query but with the
+    ///      restrictions noted in point 1.
+    ///
+    ///   3. All parameters given in the query logic should have a corresponding
+    ///      value in the `params` argument. This is not managed in any
+    ///      particularly-sophisticated way, and is simply a list of values that
+    ///      will be passed to the query in the order they are given.
+    ///
+    /// This approach makes it possible for the "find" functionality to provide
+    /// the ability to extract whichever fields it needs, which is important
+    /// when subscribing to live resultset changes.
+    ///
+    /// # Caveats
+    ///
+    /// This function is somewhat of a compromise in a number of ways:
+    ///
+    ///   1. It would be nice to be able to have a single "find" method that
+    ///      allows finding many results, the first result, or a single result
+    ///      by ID. However, this would lead to a difference in the return type,
+    ///      which would be problematic. Instead, "find by ID" is handled via
+    ///      the [`load()`](Model::load()) method, "find the first result" is
+    ///      handled via the [`find_first()`](Model::find_first()) method, and
+    ///      "find many results" is handled via this method.
+    ///
+    ///   2. The manner of specifying options for the search is crude. A more
+    ///      sophisticated ORM implementation would allow for formal
+    ///      representation of conditions, ordering, offset, limit, and so on.
+    ///      But then we might as well just go and use one of those ORMs. As
+    ///      this ORM is minimal by design, and targeted at specific use cases,
+    ///      the functionality implemented here is carefully crafted to satisfy
+    ///      the requirements of those use cases while keeping things easy to
+    ///      use and performant.
+    ///
+    /// Notably, the "find" functionality has only been implemented for the
+    /// [`Model`] trait, and not the [`DbRecord`] trait. This is because much of
+    /// the benefit of using it comes from IDs, and the [`DbRecord`] trait does
+    /// not require an ID field.
+    ///
+    /// # Parameters
+    ///
+    /// * `query_logic` - The query logic to use for finding the records. This
+    ///                   should be a string that represents the conditions,
+    ///                   ordering, offset, and limit for the query, as may be
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
+    /// * `params`      - The parameters to use in the query. These should be in
+    ///                   the order they are expected in the query logic, and
+    ///                   match with any expectations set in the query logic.
+    /// * `stash`       - The database, i.e. [`Stash`], to use for finding the
+    ///                   records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Stash::query()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::find_first()`]
+    /// * [`Model::load()`]
+    /// * [`Stash::query()`]
+    ///
+    async fn find<Q: Into<String> + Send>(
+        query_logic: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+        stash: &Stash,
+    ) -> Result<Vec<Self>, StashError> {
+        let query = formatdoc!(
+            "
+            SELECT
+                *
+            FROM
+                {}
+            {}
+        ",
+            Self::table_name(),
+            query_logic.into(),
+        );
+        stash.query(query, params).await
+    }
+
+    /// Finds the first record in a result set using specific query logic.
+    ///
+    /// This function is syntactic sugar for calling [`find()`](Model::find())
+    /// and then taking the first result. It is useful when only one result is
+    /// expected.
+    ///
+    /// It behaves in the same way as [`find()`](Model::find()) otherwise. For
+    /// more information, see the documentation for that function.
+    ///
+    /// # Parameters
+    ///
+    /// * `query_logic` - The query logic to use for finding the records. This
+    ///                   should be a string that represents the conditions,
+    ///                   ordering, offset, and limit for the query, as may be
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
+    /// * `params`      - The parameters to use in the query. These should be in
+    ///                   the order they are expected in the query logic, and
+    ///                   match with any expectations set in the query logic.
+    /// * `stash`       - The database, i.e. [`Stash`], to use for finding the
+    ///                   records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Stash::query()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::find()`]
+    /// * [`Model::load()`]
+    /// * [`Stash::query()`]
+    ///
+    async fn find_first<Q: Into<String> + Send>(
+        query_logic: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+        stash: &Stash,
+    ) -> Result<Option<Self>, StashError> {
+        Ok(Self::find(query_logic, params, stash)
+            .await?
+            .into_iter()
+            .next())
+    }
+
     /// Gets the record's unique ID.
     fn id(&self) -> Self::Id;
 
