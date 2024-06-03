@@ -179,6 +179,7 @@ pub mod macros {
 /// crate.
 ///
 pub mod exports {
+    pub use rusqlite::hooks::Action;
     pub use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
     pub use rusqlite::{Error as SqliteError, Row};
 }

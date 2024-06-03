@@ -718,9 +718,14 @@ impl OperationLogic for Instruction {
 ///
 /// * [`Stash::subscribe()`]
 ///
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 pub struct Notification {
+    /// The handle of the associated connection. This is a strong reference in
+    /// order to ensure the connection is not dropped while the notification is
+    /// being processed. If the query was ad-hoc, then this will be [`None`].
+    pub conn_handle: Option<Arc<()>>,
+
     /// The action that has been performed on the table. This can be one of
     /// `INSERT`, `UPDATE`, or `DELETE`.
     pub action: Action,
@@ -732,6 +737,23 @@ pub struct Notification {
     /// The row ID of the row that has been acted on, i.e. changed. This may or
     /// may not be useful.
     pub row: u64,
+}
+
+impl Eq for Notification {}
+
+impl PartialEq for Notification {
+    fn eq(&self, other: &Self) -> bool {
+        #[allow(clippy::pattern_type_mismatch)]
+        let conn_handle_equal = match (&self.conn_handle, &other.conn_handle) {
+            (Some(self_handle), Some(other_handle)) => Arc::ptr_eq(self_handle, other_handle),
+            (None, None) => true,
+            _ => false,
+        };
+        conn_handle_equal
+            && self.action == other.action
+            && self.table == other.table
+            && self.row == other.row
+    }
 }
 
 /// An operation to be executed by the worker, which returns data.
@@ -1764,12 +1786,15 @@ impl TetheredWorker {
     ///                   taken and returned, to avoid borrowing issues in the
     ///                   main loop that calls this function.
     /// * `stash`       - The associated [`Stash`] instance for the operation.
+    /// * `queue`       - The main operations queue for the central worker.
     ///
+    #[allow(clippy::too_many_lines)]
     fn handle_operation<'tx>(
         operation: Operation,
         connection: &'tx PooledConnection<SqliteConnectionManager>,
         mut transaction: Option<Transaction<'tx>>,
         stash: Stash,
+        queue: &QueueSender<Operation>,
     ) -> Option<Transaction<'tx>> {
         match operation {
             Operation::CommitTransaction(mut command) => {
@@ -1779,6 +1804,16 @@ impl TetheredWorker {
                 );
                 if let Some(tx) = transaction.take() {
                     command.send_back(tx.commit().map_err(StashError::TransactionError));
+                    // Notify the main worker that the transaction has been committed
+                    if queue
+                        .send(Operation::CommitTransaction(Command {
+                            channel: None,
+                            conn_handle: None,
+                        }))
+                        .is_err()
+                    {
+                        error!("Failed to send CommitTransaction operation to main queue");
+                    }
                 } else {
                     command.send_back(Err(StashError::NoActiveTransaction));
                 }
@@ -1824,6 +1859,16 @@ impl TetheredWorker {
                 );
                 if let Some(tx) = transaction.take() {
                     command.send_back(tx.rollback().map_err(StashError::TransactionError));
+                    // Notify the main worker that the transaction has been rolled back.
+                    if queue
+                        .send(Operation::RollbackTransaction(Command {
+                            channel: None,
+                            conn_handle: None,
+                        }))
+                        .is_err()
+                    {
+                        error!("Failed to send RollbackTransaction operation to main queue");
+                    }
                 } else {
                     command.send_back(Err(StashError::NoActiveTransaction));
                 }
@@ -1844,6 +1889,16 @@ impl TetheredWorker {
                         Ok(tx) => {
                             transaction = Some(tx);
                             command.send_back(Ok(()));
+                            // Notify the main worker that a transaction has started.
+                            if queue
+                                .send(Operation::StartTransaction(Command {
+                                    channel: None,
+                                    conn_handle: None,
+                                }))
+                                .is_err()
+                            {
+                                error!("Failed to send StartTransaction operation to main queue");
+                            }
                         }
                         Err(error) => {
                             command.send_back(Err(error));
@@ -1890,6 +1945,7 @@ impl TetheredWorker {
         queue: QueueSender<Operation>,
         stash: Stash,
     ) -> Self {
+        let conn_handle_clone = Weak::clone(&conn_handle);
         let (sender, receiver) = flume::unbounded::<Operation>();
 
         // Spawn a thread to run the worker. This thread will execute the queries
@@ -1908,7 +1964,7 @@ impl TetheredWorker {
             // are started, they borrow the underlying connection).
             #[allow(clippy::unwrap_used)]
             if let Ok(mut operation) = receiver.recv() {
-                connection = match pool.get_and_subscribe(queue) {
+                connection = match pool.get_and_subscribe(queue.clone(), Some(conn_handle_clone)) {
                     Ok(conn) => Some(conn),
                     Err(error) => {
                         operation.send_back_error(error);
@@ -1920,6 +1976,7 @@ impl TetheredWorker {
                     connection.as_ref().unwrap(),
                     transaction,
                     stash.clone(),
+                    &queue,
                 );
             } else {
                 return;
@@ -1935,6 +1992,7 @@ impl TetheredWorker {
                     connection.as_ref().unwrap(),
                     transaction,
                     stash.clone(),
+                    &queue,
                 );
             }
         });
@@ -1965,6 +2023,11 @@ impl TetheredWorker {
 ///
 #[derive(Debug)]
 struct Worker {
+    /// If a transaction is active, associated notifications will be held back
+    /// in this buffer until the transaction is committed or rolled back, at
+    /// which point they will be sent or discarded.
+    notifications_buffer: HashMap<*const (), Vec<Notification>>,
+
     /// A pool of SQLite connections. Although the pool itself is thread-safe,
     /// being `Pool<M>(Arc<SharedPool<M>>)` underneath, the connections are not.
     /// Therefore we store the pool centrally on the worker, keep the created
@@ -2060,23 +2123,46 @@ impl Worker {
     /// there is no current need to return any error as they are already dealt
     /// with.
     ///
+    #[allow(clippy::too_many_lines)]
     fn handle_operation(&mut self, operation: Operation) {
         let pool = self.pool.clone();
         let queue = self.queue.clone();
         let stash = self.stash.clone();
         match operation {
-            Operation::CommitTransaction(mut command)
-            | Operation::RollbackTransaction(mut command)
-            | Operation::StartTransaction(mut command) => {
-                // Technically, these cannot occur here, as transaction operations need to
-                // be run in association to a persistent connection. We should never get
-                // here. If we do, it means there is an error in the logic of this module.
-                command.send_back(Err(StashError::NoActiveTransaction));
+            Operation::CommitTransaction(command) => {
+                debug!("Stash: Publishing deferred Notification list for committed transaction");
+                if let Some(notifications) = self
+                    .notifications_buffer
+                    .remove(&command.conn_handle.as_ref().map_or(null(), Arc::as_ptr))
+                {
+                    for notification in notifications {
+                        debug!("Stash: Notification to publish (deferred)");
+                        // This is a slight trade-off - it's better to spend a small amount of time
+                        // cloning the subscribers list (which is cheap) than to block the main
+                        // thread while we loop through them. This way, we can offload the sending
+                        // as an async task, plus the subscriber list is a safe snapshot from this
+                        // point in time.
+                        let subscribers = self.subscribers.clone();
+                        drop(self.runtime.spawn(async move {
+                            for subscriber in subscribers {
+                                if subscriber.send_async(notification.clone()).await.is_err() {
+                                    // In theory this should never happen, but we also can't do anything with it
+                                    error!("Queue error: Failed to send a Notification to a subscriber");
+                                }
+                            }
+                        }));
+                    }
+                } else {
+                    // In theory this should never happen, but we also can't do anything with it
+                    error!(
+                        "Queue error: Failed to obtain Notification list for committed transaction"
+                    );
+                }
             }
             Operation::Instruct(mut instruction) => {
                 debug!("Stash (ad-hoc conn): Instruction to execute");
                 drop(self.runtime.spawn(async move {
-                    match pool.get_and_subscribe(queue) {
+                    match pool.get_and_subscribe(queue, None) {
                         Ok(connection) => {
                             // Spawn a blocking task to execute the query. This is necessary because
                             // rusqlite is synchronous, so we need to tell the Tokio runtime that
@@ -2098,6 +2184,16 @@ impl Worker {
                 }));
             }
             Operation::Publish(notification) => {
+                if let Some(notifications) = self.notifications_buffer.get_mut(
+                    &notification
+                        .conn_handle
+                        .as_ref()
+                        .map_or(null(), Arc::as_ptr),
+                ) {
+                    debug!("Stash: Notification to publish (deferring)");
+                    notifications.push(notification);
+                    return;
+                }
                 debug!("Stash: Notification to publish");
                 // This is a slight trade-off - it's better to spend a small amount of time
                 // cloning the subscribers list (which is cheap) than to block the main
@@ -2117,7 +2213,7 @@ impl Worker {
             Operation::Query(mut query) => {
                 debug!("Stash (ad-hoc conn): Query to run");
                 drop(self.runtime.spawn(async move {
-                    match pool.get_and_subscribe(queue) {
+                    match pool.get_and_subscribe(queue, None) {
                         Ok(connection) => {
                             // Spawn a blocking task to execute the query. This is necessary because
                             // rusqlite is synchronous, so we need to tell the Tokio runtime that
@@ -2136,6 +2232,20 @@ impl Worker {
                         Err(err) => query.send_back(Err(err)),
                     }
                 }));
+            }
+            Operation::RollbackTransaction(command) => {
+                debug!("Stash: Clearing deferred Notification list for aborted transaction");
+                drop(
+                    self.notifications_buffer
+                        .remove(&command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)),
+                );
+            }
+            Operation::StartTransaction(command) => {
+                debug!("Stash: Initializing deferred Notification list for transaction");
+                drop(self.notifications_buffer.insert(
+                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                    vec![],
+                ));
             }
             Operation::Subscribe(mut subscription) => {
                 debug!("Stash: Subscription request");
@@ -2210,6 +2320,7 @@ impl Worker {
                 }
             };
             let mut worker = Self {
+                notifications_buffer: HashMap::new(),
                 pool,
                 queue: stash.queue.clone(),
                 runtime,
@@ -2463,8 +2574,14 @@ trait PoolExt<M: ManageConnection> {
     ///
     /// # Parameters
     ///
-    /// * `queue` - The queue to send the [`Notification`]s to. This is the
-    ///             standard [`Operation`]s queue of the central worker.
+    /// * `queue`       - The queue to send the [`Notification`]s to. This is
+    ///                   the standard [`Operation`]s queue of the central
+    ///                   worker.
+    /// * `conn_handle` - The handle of the associated connection. This is used
+    ///                   here to provide context to the notifications. It is
+    ///                   passed in as a weak reference so that the closure does
+    ///                   not prevent clean-up. Ad-hoc queries will not have an
+    ///                   associated connection handle.
     ///
     /// # Errors
     ///
@@ -2474,6 +2591,7 @@ trait PoolExt<M: ManageConnection> {
     fn get_and_subscribe(
         &self,
         queue: QueueSender<Operation>,
+        conn_handle: Option<Weak<()>>,
     ) -> Result<PooledConnection<M>, StashError>;
 }
 
@@ -2481,13 +2599,26 @@ impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
     fn get_and_subscribe(
         &self,
         queue: QueueSender<Operation>,
+        conn_handle: Option<Weak<()>>,
     ) -> Result<PooledConnection<SqliteConnectionManager>, StashError> {
         let connection = self.get().map_err(StashError::TetherError)?;
         connection.update_hook(Some(
             move |action: Action, _db_name: &str, table_name: &str, row_id: i64| {
+                let conn_handle_clone = match conn_handle {
+                    #[allow(clippy::single_match_else)]
+                    Some(ref weak_handle) => match weak_handle.upgrade() {
+                        Some(handle) => Some(handle),
+                        None => {
+                            error!("Queue error: Failed to upgrade connection handle");
+                            return;
+                        }
+                    },
+                    None => None,
+                };
                 #[allow(clippy::cast_sign_loss)]
                 if queue
                     .send(Operation::Publish(Notification {
+                        conn_handle: conn_handle_clone,
                         action,
                         table: table_name.to_owned(),
                         row: row_id as u64,
