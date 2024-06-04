@@ -15,8 +15,8 @@ use crate::exports::serde_json;
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
     AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType, Message,
-    MessageAddress, MessageAttachment, MessageAttachmentHeaders, MessageCount, MessageId,
-    MessageMetadata, MimeType,
+    MessageAddress, MessageAttachment, MessageAttachmentHeaders, MessageCount, MessageFlags,
+    MessageId, MessageMetadata, MimeType,
 };
 use proton_core_common::db::CoreSqliteConnectionMut;
 use proton_crypto_inbox::attachment::KeyPackets;
@@ -677,7 +677,7 @@ fn test_message_metadata(
         cc_list: vec![],
         bcc_list: vec![],
         reply_tos: vec![],
-        flags: 30,
+        flags: MessageFlags::AUTO | MessageFlags::PHISHING_AUTO,
         time: 100,
         size: 1024,
         unread: Default::default(),

@@ -22,7 +22,7 @@ uniffi::setup_scaffolding!();
 
 #[cfg(feature = "uniffi")]
 mod hidden {
-    use crate::domain::{ConversationId, ExternalId, MessageId, MimeType};
+    use crate::domain::{ConversationId, ExternalId, MessageFlags, MessageId, MimeType};
 
     // Note: We need to generate at least on uniffi type which includes custom types
     // declared in this crate or it will lead to linking issues in the binding code.
@@ -32,6 +32,7 @@ mod hidden {
         pub mid: MessageId,
         pub eid: ExternalId,
         pub mime_type: MimeType,
+        pub msg_flags: MessageFlags,
     }
 
     uniffi::ffi_converter_forward!(
