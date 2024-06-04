@@ -143,6 +143,9 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         &self,
         ids: impl ExactSizeIterator<Item = LocalMessageId>,
     ) -> DBResult<Vec<LocalMessageMetadata>> {
+        if ids.len() == 0 {
+            return Ok(Vec::new());
+        }
         let mut result = Vec::with_capacity(ids.len());
         let mut stmt = self
             .0

@@ -78,10 +78,14 @@ impl MailUserContext {
     ) -> MailContextResult<FilteredMessages> {
         let response = self.mail_session().message_metadata(filter).await?;
 
-        let messages = self.db_write(|tx| {
-            let ids = tx.create_messages_from_metadata(response.messages.iter())?;
-            tx.get_messages_metadata(ids.into_iter())
-        })?;
+        let messages = if !response.messages.is_empty() {
+            self.db_write(|tx| {
+                let ids = tx.create_messages_from_metadata(response.messages.iter())?;
+                tx.get_messages_metadata(ids.into_iter())
+            })?
+        } else {
+            Vec::new()
+        };
 
         Ok(FilteredMessages {
             total: response.total,
