@@ -205,6 +205,10 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         &self,
         ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<Vec<LocalConversation>> {
+        if ids.len() == 0 {
+            return Ok(Vec::new());
+        }
+
         let mut stmt = self
             .0
             .prepare(&ConversationSelector::query_with_id_in(ids.len()))?;

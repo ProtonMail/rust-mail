@@ -144,10 +144,14 @@ impl MailUserContext {
     ) -> MailContextResult<FilteredConversations> {
         let response = self.mail_session().conversations(filter).await?;
 
-        let conversations = self.db_write(|tx| {
-            let ids = tx.create_conversations(response.conversations.iter())?;
-            tx.get_conversations(ids.into_iter())
-        })?;
+        let conversations = if !response.conversations.is_empty() {
+            self.db_write(|tx| {
+                let ids = tx.create_conversations(response.conversations.iter())?;
+                tx.get_conversations(ids.into_iter())
+            })?
+        } else {
+            Vec::new()
+        };
 
         Ok(FilteredConversations {
             total: response.total,
