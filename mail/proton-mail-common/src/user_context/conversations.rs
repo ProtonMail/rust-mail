@@ -132,6 +132,18 @@ impl MailUserContext {
         Ok(connection.read(|conn| conn.get_conversations_with_context(local_label_id, count))?)
     }
 
+    /// Get a conversation with a given `id` in the context of `label_id`.
+    ///
+    /// # Errors
+    /// Returns error if the data could not be retrieved from the database.
+    pub fn conversation_with_id(
+        &self,
+        id: LocalConversationId,
+        label_id: LocalLabelId,
+    ) -> MailContextResult<Option<LocalConversation>> {
+        Ok(self.db_read(|conn| conn.get_conversation_with_context(id, label_id))?)
+    }
+
     /// Filter or Search conversations which match the given `filter`.
     ///
     /// Note that search results are inserted into the database.

@@ -5,7 +5,7 @@ use crate::db::{
 use crate::exports::crypto::keys::AddressKeys;
 use proton_api_mail::domain::{
     Attachment, AttachmentId, AttachmentMetadata, Conversation, ConversationId, Disposition,
-    MessageAddress, MessageId, MessageMetadata,
+    MessageAddress, MessageFlags, MessageId, MessageMetadata,
 };
 use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus, AddressType};
 use proton_core_common::db::CoreSqliteConnection;
@@ -182,7 +182,7 @@ fn create_attachment_dependencies(
             cc_list: vec![],
             bcc_list: vec![],
             reply_tos: vec![],
-            flags: 0,
+            flags: MessageFlags::empty(),
             time: 0,
             size: 0,
             unread: false,

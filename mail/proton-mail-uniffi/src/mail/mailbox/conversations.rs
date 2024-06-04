@@ -12,6 +12,7 @@ use proton_mail_common::db::{ConversationMessagesQuery, LocalConversationId, Loc
 use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
+use uniffi::deps::anyhow::anyhow;
 
 #[uniffi::export]
 impl Mailbox {
@@ -138,7 +139,8 @@ impl Mailbox {
         Ok(())
     }
 
-    /// Create a live query for a conversation with `id`'s messages.
+    /// Create a new live query for a conversation with `id` 's messages and return the first id of
+    /// the first unread message that should be displayed to the user, if any.
     ///
     /// If this is the first time it is called for this conversation, the messages will
     /// be retrieved from the server.
@@ -149,15 +151,36 @@ impl Mailbox {
         &self,
         id: u64,
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
-    ) -> Result<Arc<MailboxConversationMessagesLiveQuery>, MailboxError> {
+    ) -> Result<ConversationMessagesLiveQueryResult, MailboxError> {
         let mbox = self.mbox.clone();
         self.uniffi_async(async move {
             let id = LocalConversationId::from(id);
             let builder = FFIObservableConversationMessagesQueryBuilder(cb);
-            Ok(mbox.new_conversation_message_query(builder, id).await?)
+            let query = mbox.new_conversation_message_query(builder, id).await?;
+
+            let id = match query.value().as_ref() {
+                Err(e) => {
+                    return Err(MailboxError::Other(anyhow!("Live query failed: {e}")));
+                }
+                Ok(v) => mbox.first_unread_message_in_conversation(v.as_slice())?,
+            };
+
+            Ok(ConversationMessagesLiveQueryResult {
+                message_id_to_open: id.map(|v| v.value()),
+                query,
+            })
         })
         .await
     }
+}
+
+/// Result type for [`Mailbox::new_conversation_messages_live_query`],
+#[derive(uniffi::Record)]
+pub struct ConversationMessagesLiveQueryResult {
+    /// Id of the message that should be opened and displayed to the user.
+    pub message_id_to_open: Option<u64>,
+    /// Live query instance.
+    pub query: Arc<MailboxConversationMessagesLiveQuery>,
 }
 
 new_live_query!(

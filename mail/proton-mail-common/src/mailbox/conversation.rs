@@ -4,14 +4,14 @@ use crate::actions::{
 };
 use crate::db::{
     ConversationMessagesQuery, ConversationQuery, LocalConversation, LocalConversationId,
-    LocalLabelId, LocalMessageMetadata,
+    LocalLabel, LocalLabelId, LocalMessageId, LocalMessageMetadata,
 };
 use crate::exports::anyhow::anyhow;
 use crate::exports::tracing::error;
 use crate::{
     MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
 };
-use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
+use proton_api_mail::domain::{LabelId, LabelType, MailSettingsViewMode};
 
 impl Mailbox {
     /// Create a new live query for conversations.
@@ -155,7 +155,8 @@ impl Mailbox {
         Ok(())
     }
 
-    /// Retrieve the conversation with `id`'s messages.
+    /// Retrieve the conversation with `id`'s messages and the first id of the first unread message
+    /// that should be displayed to the user, if any.
     ///
     /// If this is the first time this is called, the messages will be downloaded from the server.
     ///
@@ -164,15 +165,25 @@ impl Mailbox {
     pub async fn conversation_messages(
         &self,
         id: LocalConversationId,
-    ) -> MailboxResult<Vec<LocalMessageMetadata>> {
+    ) -> MailboxResult<(Option<LocalMessageId>, Vec<LocalMessageMetadata>)> {
         self.user_context().sync_conversation_messages(id).await?;
-        Ok(self
-            .user_ctx
-            .db_read(|conn| conn.messages_metadata_for_conversation(id))
-            .map_err(MailContextError::from)?)
+        let (label, messages) = self.user_ctx.db_read(
+            |conn| -> MailboxResult<(LocalLabel, Vec<LocalMessageMetadata>)> {
+                let Some(label) = conn.label_with_id(self.label_id)? else {
+                    return Err(MailboxError::LabelNotFound(self.label_id));
+                };
+                let messages = conn.messages_metadata_for_conversation(id)?;
+                Ok((label, messages))
+            },
+        )?;
+
+        let id_to_open = first_unread_message_in_conversation(&label, &messages);
+
+        Ok((id_to_open, messages))
     }
 
-    /// Create a new live query for a conversation with `id` 's messages.
+    /// Create a new live query for a conversation with `id` 's messages and return the first id of
+    /// the first unread message that should be displayed to the user, if any.
     ///
     /// If this is the first time this is called, the messages will be downloaded from the server.
     ///
@@ -185,12 +196,26 @@ impl Mailbox {
         builder: Builder,
         id: LocalConversationId,
     ) -> Result<Builder::Output, MailboxError> {
-        self.user_ctx.sync_conversation_messages(id).await?;
-
+        // TODO: Right now there is no good way to apply this to the live query results since
+        // we do not know if they are loaded in the foreground or the background. We have to
+        // handle this on the call site. We should revisit this after db refactors.
         Ok(builder.build(
             self.user_ctx.tracker_service().clone(),
             ConversationMessagesQuery::new(id),
         ))
+    }
+
+    /// Retrieve the first unread message that should be displayed to the user from the conversation's
+    /// `messages` in the current mailbox.
+    pub fn first_unread_message_in_conversation(
+        &self,
+        messages: &[LocalMessageMetadata],
+    ) -> MailboxResult<Option<LocalMessageId>> {
+        let Some(label) = self.label()? else {
+            return Err(MailboxError::LabelNotFound(self.label_id()));
+        };
+
+        Ok(first_unread_message_in_conversation(&label, messages))
     }
 
     fn starred_label_id(&self) -> MailboxResult<LocalLabelId> {
@@ -201,4 +226,55 @@ impl Mailbox {
                 LabelId::starred().clone(),
             ))
     }
+}
+
+/// Retrieve the first unread message that should be displayed to the user from the conversation's
+/// `messages`.
+///
+/// The returned message will depend on the `label` where the conversation is returned.
+pub fn first_unread_message_in_conversation(
+    label: &LocalLabel,
+    messages: &[LocalMessageMetadata],
+) -> Option<LocalMessageId> {
+    if messages.is_empty() {
+        return None;
+    }
+
+    if label.label_type == LabelType::Label
+        || label.label_type == LabelType::Folder
+        || label.rid.as_ref() == Some(LabelId::starred())
+    {
+        // last consecutive that is not a draft
+        let mut last_unread = None;
+
+        for msg in messages.iter().rev() {
+            if msg.unread && !msg.flags.is_draft() {
+                last_unread = Some(msg.id);
+            } else if last_unread.is_some() {
+                break;
+            }
+        }
+
+        return last_unread;
+    };
+
+    // In any other location check if the last message is unread.
+    let mut iter = messages.iter().rev();
+    let msg = iter.next()?;
+    if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
+        return Some(msg.id);
+    }
+
+    let mut last_unread = None;
+
+    // last consecutive message that is not a draft or sent auto-reply
+    for msg in iter {
+        if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
+            last_unread = Some(msg.id);
+        } else if last_unread.is_some() {
+            break;
+        }
+    }
+
+    last_unread
 }

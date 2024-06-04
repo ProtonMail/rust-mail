@@ -40,6 +40,125 @@ pub struct MessageAddress {
     pub bimi_selector: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
+#[serde(crate = "self::serde", transparent)]
+#[repr(transparent)]
+pub struct MessageFlags(u64);
+
+#[cfg(feature = "uniffi")]
+uniffi::custom_newtype!(MessageFlags, u64);
+
+bitflags::bitflags! {
+    impl MessageFlags:u64 {
+        /// Whether a message is received.
+        const RECEIVED = 1;
+        /// Whether a message is sent.
+        const SENT = 1 << 1;
+        /// Whether the message is between Proton Mail Recipients.
+        const INTERNAL = 1<< 2;
+        /// Whether the message is end-to-end encrypted.
+        const E2E = 1 << 3;
+        /// Whether the message is an auto response.
+        const AUTO = 1 << 4;
+        /// Whether the message is replied to.
+        const REPLIED = 1 << 5;
+        /// Whether the message is replied to all.
+        const REPLIED_ALL = 1 << 6;
+        /// Whether the message is forwarded.
+        const FORWARDED = 1 << 7;
+        /// Whether the message has been responded with an auto response.
+        const AUTO_REPLIED = 1 << 8;
+        /// Whether the message is an import.
+        const IMPORTED = 1 << 9;
+        /// Whether the message has ever been opened by the user.
+        const OPENED = 1 << 10;
+        /// Whether a read receipt has been sent in response to the message.
+        const RECEIPT_SENT = 1 << 11;
+        /// Whether the message is a receipt.
+        const RECEIPT = 1 <<14;
+        /// Whether the message is from proton.
+        const PROTON = 1 << 15;
+        /// Whether to request a read receipt for the message.
+        const RECEIPT_REQUEST = 1 << 16;
+        /// Whether to attach public key.
+        const PUBLIC_KEY = 1 << 17;
+        /// Whether to sing the message.
+        const SIGN = 1 << 18;
+        /// Unsubscribed from newsletter.
+        const UNSUBSCRIBED = 1 << 19;
+        /// Messages that been scheduled to send at a later time.
+        const SCHEDULED_SEND = 1 << 20;
+        /// Whether the message was synced from gmail.
+        const SYNCED_FROM_GMAIL = 1 << 22;
+        /// Whether DMARC authentication passed.
+        const DMARC_PASS = 1 << 23;
+        /// Whether message failed SPF check.
+        const SPF_FAIL = 1 << 24;
+        /// Whether message failed DKIM check.
+        const DKIM_FAIL = 1 << 25;
+        /// Whether incoming message failed DMARC authentication.
+        const DMARC_FAIL = 1  << 26;
+        /// Whether the message is in spam and the user moves it to a new location that is not
+        /// spam or trash (e.g. inbox or archive).
+        const HAM_MANUAL = 1 << 27;
+        /// Whether the message is marked as spam by anti-spam filters.
+        const SPAM_AUTO = 1 << 28;
+        /// Whether the message has been manually marked as spam.
+        const SPAM_MANUAL = 1 <<29;
+        /// Whether the message is marked as phishing by anti-spam filters.
+        const PHISHING_AUTO = 1 << 30;
+        /// Whether the message has been manually marked as phishing.
+        const PHISHING_MANUAL = 1 << 31;
+        /// Messages where the expiration time cannot be changed.
+        const FROZEN_EXPIRATION= 1 << 32;
+        /// Whether the message has been flagged as suspicious by the system.
+        const FLAG_SUSPICIOUS = 1 << 33;
+        /// Whether message is auto-forwarded.
+        const FLAG_AUTO_FORWARDER = 1 << 34;
+        /// Whether message is auto-forwarded.
+        const FLAG_AUTO_FORWARDEE = 1 << 35;
+    }
+}
+
+impl MessageFlags {
+    /// Check whether this message is an auto-sent reply.
+    #[must_use]
+    pub fn is_sent_auto(&self) -> bool {
+        if !self.intersects(MessageFlags::SENT) {
+            return false;
+        }
+
+        self.intersects(MessageFlags::AUTO)
+    }
+
+    /// Check whether this message is a draft.
+    #[must_use]
+    pub fn is_draft(&self) -> bool {
+        !self.intersects(MessageFlags::SENT | MessageFlags::RECEIVED)
+    }
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::ToSql for MessageFlags {
+    fn to_sql(
+        &self,
+    ) -> crate::exports::proton_sqlite3::rusqlite::Result<
+        crate::exports::proton_sqlite3::rusqlite::types::ToSqlOutput<'_>,
+    > {
+        self.0.to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MessageFlags {
+    fn column_result(
+        value: crate::exports::proton_sqlite3::rusqlite::types::ValueRef<'_>,
+    ) -> crate::exports::proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        let value = u64::column_result(value)?;
+        MessageFlags::from_bits(value)
+            .ok_or(crate::exports::proton_sqlite3::rusqlite::types::FromSqlError::InvalidType)
+    }
+}
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
@@ -68,7 +187,7 @@ pub struct MessageMetadata {
     pub bcc_list: Vec<MessageAddress>,
     #[serde(default)]
     pub reply_tos: Vec<MessageAddress>,
-    pub flags: u64,
+    pub flags: MessageFlags,
     pub time: u64,
     pub size: u64,
     #[serde(

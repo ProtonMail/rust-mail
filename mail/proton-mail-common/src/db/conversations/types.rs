@@ -3,8 +3,8 @@ use crate::db::{LabelColor, LocalAttachmentMetadata, LocalLabelId};
 use crate::exports::serde_json;
 use crate::new_u64_type;
 use proton_api_mail::domain::{
-    Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageId,
-    MessageMetadata, MimeType,
+    Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageFlags,
+    MessageId, MessageMetadata, MimeType,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::proton_api_core::domain::AddressId;
@@ -170,7 +170,7 @@ pub struct LocalMessageMetadata {
     pub is_forwarded: bool,
     pub external_id: Option<ExternalId>,
     pub num_attachments: u32,
-    pub flags: u64,
+    pub flags: MessageFlags,
     pub starred: bool,
     pub attachments: Option<Vec<LocalAttachmentMetadata>>,
     pub labels: Option<Vec<LocalInlineLabelInfo>>,

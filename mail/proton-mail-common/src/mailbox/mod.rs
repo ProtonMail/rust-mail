@@ -2,6 +2,9 @@ mod attachments;
 mod conversation;
 mod messages;
 
+#[cfg(test)]
+mod tests;
+
 pub use attachments::DecryptedAttachment;
 pub use messages::{DecryptedMessageBody, ParsedHeaderValue};
 
@@ -168,6 +171,16 @@ impl Mailbox {
     }
     pub fn label_id(&self) -> LocalLabelId {
         self.label_id
+    }
+
+    /// Get the label details associated with this mailbox.
+    ///
+    /// # Errors
+    /// Returns error if db query failed.
+    pub fn label(&self) -> MailboxResult<Option<LocalLabel>> {
+        Ok(self
+            .user_context()
+            .db_read(|c| c.label_with_id(self.label_id))?)
     }
 
     /// The mailbox's current view mode.

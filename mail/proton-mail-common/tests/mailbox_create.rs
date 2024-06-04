@@ -3,7 +3,8 @@ mod common;
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{
-    Label, LabelId, LabelType, MailSettings, MailSettingsViewMode, MessageId, MessageMetadata,
+    Label, LabelId, LabelType, MailSettings, MailSettingsViewMode, MessageFlags, MessageId,
+    MessageMetadata,
 };
 use proton_mail_common::Mailbox;
 
@@ -96,7 +97,7 @@ fn test_new_mailbox_sync_messages() {
         cc_list: vec![],
         bcc_list: vec![],
         reply_tos: vec![],
-        flags: 0,
+        flags: MessageFlags::empty(),
         time: 0,
         size: 0,
         unread: false,
@@ -194,7 +195,7 @@ fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         cc_list: vec![],
         bcc_list: vec![],
         reply_tos: vec![],
-        flags: 0,
+        flags: MessageFlags::empty(),
         time: 0,
         size: 0,
         unread: false,

@@ -28,6 +28,7 @@ url = "2.5.0"
 wiremock = "0.6.0"
 indoc = "2"
 proton-crypto-inbox = { version = "=0.3.0", registry = "proton"}
+bitflags = { version="2.5.0" }
 
 #[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
 #proton-api-core= {path = "../../proton-api-core/proton-api-core"}

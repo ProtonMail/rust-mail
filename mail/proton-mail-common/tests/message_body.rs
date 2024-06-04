@@ -3,7 +3,7 @@ mod common;
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{
-    ConversationId, LabelId, MailSettings, MailSettingsViewMode, Message, MessageId,
+    ConversationId, LabelId, MailSettings, MailSettingsViewMode, Message, MessageFlags, MessageId,
     MessageMetadata, MimeType,
 };
 use proton_api_mail::exports::crypto::keys::{AddressKeys, KeyId, LockedKey, UserKeys};
@@ -221,7 +221,7 @@ fn message_body_test_message_simple() -> Message {
            cc_list: vec![],
            bcc_list: vec![],
            reply_tos: vec![],
-           flags: 13,
+           flags: MessageFlags::DKIM_FAIL,
            time:  1715863508,
            size: 333,
            unread: false,

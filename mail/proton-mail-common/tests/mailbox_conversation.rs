@@ -2,7 +2,9 @@ mod common;
 
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
-use proton_api_mail::domain::{Label, LabelId, LabelType, MessageId, MessageMetadata};
+use proton_api_mail::domain::{
+    Label, LabelId, LabelType, MessageFlags, MessageId, MessageMetadata,
+};
 use proton_mail_common::Mailbox;
 
 #[test]
@@ -45,7 +47,7 @@ fn test_new_mailbox_sync_conversations() {
             cc_list: vec![],
             bcc_list: vec![],
             reply_tos: vec![],
-            flags: 0,
+            flags: MessageFlags::empty(),
             time: 100,
             size: 0,
             unread: false,
@@ -70,7 +72,7 @@ fn test_new_mailbox_sync_conversations() {
             cc_list: vec![],
             bcc_list: vec![],
             reply_tos: vec![],
-            flags: 0,
+            flags: MessageFlags::empty(),
             time: 200,
             size: 0,
             unread: false,
@@ -109,7 +111,7 @@ fn test_new_mailbox_sync_conversations() {
     let conversations = mailbox.conversations(1).unwrap();
 
     // Get the message for a conversation.
-    let messages = ctx.async_runtime().block_on(async {
+    let (_, messages) = ctx.async_runtime().block_on(async {
         mailbox
             .conversation_messages(conversations[0].id)
             .await
