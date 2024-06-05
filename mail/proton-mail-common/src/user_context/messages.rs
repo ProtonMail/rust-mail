@@ -2,7 +2,7 @@ use crate::db::{LocalMessageBodyMetadata, LocalMessageId, LocalMessageMetadata};
 use crate::exports::tracing;
 use crate::exports::tracing::{error, Level};
 use crate::{MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult};
-use proton_api_mail::domain::MessageMetadataFilter;
+use proton_api_mail::domain::{MessageId, MessageMetadataFilter};
 use proton_api_mail::exports::anyhow::anyhow;
 use std::path::PathBuf;
 
@@ -91,6 +91,33 @@ impl MailUserContext {
             total: response.total,
             messages,
         })
+    }
+
+    /// Retrieve the message metadata from id.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_metadata(
+        &self,
+        id: LocalMessageId,
+    ) -> MailContextResult<Option<LocalMessageMetadata>> {
+        Ok(self.db_read(|conn| conn.get_message_metadata(id))?)
+    }
+
+    /// Retrieve the message metadata from `remote_id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_metadata_with_remote_id(
+        &self,
+        remote_id: &MessageId,
+    ) -> MailContextResult<Option<LocalMessageMetadata>> {
+        Ok(self.db_read(|conn| {
+            let Some(local_id) = conn.message_id_from_remote_id(remote_id)? else {
+                return Ok(None);
+            };
+            conn.get_message_metadata(local_id)
+        })?)
     }
 }
 

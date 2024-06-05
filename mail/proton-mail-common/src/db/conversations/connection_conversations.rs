@@ -18,6 +18,22 @@ use proton_sqlite3::utils::{
 use std::collections::BTreeSet;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
+    /// Retrieve the local id for a conversation with `remote_id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn conversation_id_from_remote_id(
+        &self,
+        remote_id: &ConversationId,
+    ) -> DBResult<Option<LocalConversationId>> {
+        self.0
+            .query_row(
+                "SELECT id FROM conversation WHERE rid=?",
+                [remote_id],
+                |r| r.get(0),
+            )
+            .optional()
+    }
     pub fn create_conversation(
         &mut self,
         conversation: &Conversation,
