@@ -2,7 +2,8 @@ use crate::db::{DBResult, LocalConversation, LocalConversationId, LocalLabelId};
 use crate::exports::tracing::error;
 use crate::{MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult};
 use proton_api_mail::domain::{
-    ConversationFilter, ConversationFilterBuilder, LabelId, MessageMetadataFilterBuilder,
+    ConversationFilter, ConversationFilterBuilder, ConversationId, LabelId,
+    MessageMetadataFilterBuilder,
 };
 use proton_api_mail::proton_api_core::exports::tracing;
 use proton_api_mail::proton_api_core::exports::tracing::{debug, Level};
@@ -169,6 +170,55 @@ impl MailUserContext {
             total: response.total,
             conversations,
         })
+    }
+
+    /// Retrieve a conversation by `id` in the All Mail context.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
+    pub fn conversation_with_id_with_all_mail_context(
+        &self,
+        id: LocalConversationId,
+    ) -> MailContextResult<Option<LocalConversation>> {
+        Ok(self.db_read(|conn| {
+            // ALL Mail label is always there, this unlikely to fail.
+            let Some(label_id) = conn.resolve_remote_label_id(LabelId::all_mail())? else {
+                return Ok(None);
+            };
+            conn.get_conversation_with_context(id, label_id)
+        })?)
+    }
+
+    /// Retrieve a conversation by remote `id` in the All Mail context.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
+    pub fn conversation_with_remote_id(
+        &self,
+        id: &ConversationId,
+    ) -> MailContextResult<Option<LocalConversation>> {
+        Ok(self.db_read(|conn| {
+            let Some(conv_id) = conn.conversation_id_from_remote_id(id)? else {
+                return Ok(None);
+            };
+            // ALL Mail label is always there, this unlikely to fail.
+            let Some(label_id) = conn.resolve_remote_label_id(LabelId::all_mail())? else {
+                return Ok(None);
+            };
+            conn.get_conversation_with_context(conv_id, label_id)
+        })?)
+    }
+
+    /// Retrieve a conversation by `id` in the `label_id` context.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
+    pub fn conversation_with_id_and_context(
+        &self,
+        id: LocalConversationId,
+        label_id: LocalLabelId,
+    ) -> MailContextResult<Option<LocalConversation>> {
+        Ok(self.db_read(|conn| conn.get_conversation_with_context(id, label_id))?)
     }
 }
 

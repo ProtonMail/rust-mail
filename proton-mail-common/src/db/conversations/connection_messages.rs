@@ -709,6 +709,21 @@ WHERE lmc.label_id = dm.label_id
             .optional()
     }
 
+    /// Retrieve the local id for a message with `remote_id`
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn message_id_from_remote_id(
+        &self,
+        remote_id: &MessageId,
+    ) -> DBResult<Option<LocalMessageId>> {
+        self.0
+            .query_row("SELECT id FROM messages WHERE rid=?", [remote_id], |r| {
+                r.get(0)
+            })
+            .optional()
+    }
+
     /// Get the message body for a message with `id`.
     ///
     /// # Errors
