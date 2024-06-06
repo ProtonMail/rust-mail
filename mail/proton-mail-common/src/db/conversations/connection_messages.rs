@@ -801,10 +801,12 @@ fn create_or_update_message_query() -> String {
     external_id,
     num_attachments,
     flags,
-    snooze_time
+    snooze_time,
+    conversation_rid
 ) VALUES ((SELECT id FROM conversations WHERE rid=?),{})
 ON CONFLICT(rid) DO UPDATE SET
     conversation_id = excluded.conversation_id,
+    conversation_rid = excluded.conversation_rid,
     address_id=excluded.address_id,
     `order`=excluded.`order`,
     subject=excluded.subject,
@@ -829,7 +831,7 @@ ON CONFLICT(rid) DO UPDATE SET
     flags=excluded.flags,
     snooze_time=excluded.snooze_time
 RETURNING id",
-        gen_variable_in_argument_list(24)
+        gen_variable_in_argument_list(25)
     )
 }
 
@@ -871,6 +873,7 @@ fn bind_message_metadata_create(
         m.num_attachments,
         m.flags,
         m.snooze_time,
+        &m.conversation_id,
     }
 
     Ok(())
