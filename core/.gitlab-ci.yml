@@ -86,14 +86,14 @@ deploy-proton-async:
   extends: .deploy_to_protonvpn_repository
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-async"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-async/Cargo.toml"
   when: manual
 
 deploy-proton-sqlite3:
   extends: .deploy_to_protonvpn_repository
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-sqlite3"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-sqlite3/Cargo.toml"
   when: manual
 
 deploy-proton-api-core:
@@ -102,7 +102,7 @@ deploy-proton-api-core:
     - shared-medium
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-api-core"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-api-core/Cargo.toml"
   when: manual
 
 deploy-proton-action-queue:
@@ -111,7 +111,7 @@ deploy-proton-action-queue:
   tags:
     - shared-medium
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-action-queue"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-action-queue/Cargo.toml"
   when: manual
 
 deploy-proton-event-loop:
@@ -120,7 +120,7 @@ deploy-proton-event-loop:
   tags:
     - shared-medium
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-event-loop"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-event-loop/Cargo.toml"
   when: manual
 
 deploy-proton-core-common:
@@ -129,5 +129,5 @@ deploy-proton-core-common:
   tags:
     - shared-medium
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-core-common"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-core-common/Cargo.toml"
   when: manual
