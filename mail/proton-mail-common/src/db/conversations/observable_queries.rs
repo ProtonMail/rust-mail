@@ -1,7 +1,8 @@
 use crate::db::{
-    LocalConversation, LocalConversationId, LocalLabelId, LocalMessageMetadata,
-    MailSqliteConnectionImpl,
+    LocalConversation, LocalConversationCount, LocalConversationId, LocalLabelId,
+    LocalMessageCount, LocalMessageMetadata, MailSqliteConnectionImpl,
 };
+use proton_api_mail::domain::MailSettingsViewMode;
 use proton_sqlite3::{Observable, SqliteConnection};
 
 /// Observable query which observers a limited number of conversations in a label.
@@ -116,5 +117,80 @@ impl Observable for ConversationMessagesQuery {
         let conn = MailSqliteConnectionImpl::new(connection.rusqlite_connection());
         let messages = conn.messages_metadata_for_conversation(self.id)?;
         Ok(messages)
+    }
+}
+
+/// Observable query for label total and unread counts.
+#[derive(Clone)]
+pub struct LabelCountsQuery {
+    id: LocalLabelId,
+    view_mode: MailSettingsViewMode,
+}
+
+impl LabelCountsQuery {
+    pub fn new(id: LocalLabelId, view_mode: MailSettingsViewMode) -> Self {
+        Self { id, view_mode }
+    }
+}
+
+/// Conversation/message statistic for a label.
+#[derive(Default, Copy, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct LabelItemCount {
+    /// Number of unread messages or conversations.
+    pub unread: u64,
+    /// Number of messages or conversations.
+    pub total: u64,
+}
+
+impl From<LocalConversationCount> for LabelItemCount {
+    fn from(value: LocalConversationCount) -> Self {
+        Self {
+            unread: value.unread,
+            total: value.total,
+        }
+    }
+}
+
+impl From<LocalMessageCount> for LabelItemCount {
+    fn from(value: LocalMessageCount) -> Self {
+        Self {
+            unread: value.unread,
+            total: value.total,
+        }
+    }
+}
+
+impl Observable for LabelCountsQuery {
+    type Output = LabelItemCount;
+
+    fn debug_name(&self) -> &'static str {
+        "label_counts"
+    }
+
+    fn tables(&self) -> Vec<String> {
+        match self.view_mode {
+            MailSettingsViewMode::Conversations => {
+                vec!["labels".to_owned(), "label_conversation_count".to_owned()]
+            }
+            MailSettingsViewMode::Messages => {
+                vec!["labels".to_owned(), "label_message_count".to_owned()]
+            }
+        }
+    }
+
+    fn execute(
+        &self,
+        connection: &SqliteConnection,
+    ) -> proton_sqlite3::rusqlite::Result<Self::Output> {
+        let conn = MailSqliteConnectionImpl::new(connection.rusqlite_connection());
+        match self.view_mode {
+            MailSettingsViewMode::Conversations => Ok(conn
+                .conversation_count_for_label(self.id)?
+                .map_or(LabelItemCount::default(), From::from)),
+            MailSettingsViewMode::Messages => Ok(conn
+                .message_count_for_label(self.id)?
+                .map_or(LabelItemCount::default(), From::from)),
+        }
     }
 }

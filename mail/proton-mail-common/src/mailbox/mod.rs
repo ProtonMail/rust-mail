@@ -9,7 +9,10 @@ pub use attachments::DecryptedAttachment;
 pub use messages::{DecryptedMessageBody, ParsedHeaderValue};
 
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
-use crate::db::{LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId, LocalMessageId};
+use crate::db::{
+    LabelCountsQuery, LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId,
+    LocalMessageId,
+};
 use crate::exports::tracing;
 use crate::exports::tracing::debug;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
@@ -171,6 +174,24 @@ impl Mailbox {
     }
     pub fn label_id(&self) -> LocalLabelId {
         self.label_id
+    }
+
+    /// Create a new live query which track the total number and unread number of items present
+    /// in the current mailbox.
+    ///
+    /// The returned values will track either messages or conversations depending on the
+    /// current mailbox's view mode.
+    ///
+    /// # Errors
+    /// Return error if the database operation failed.
+    pub fn new_label_item_count_query<Builder: MailboxObservableQueryBuilder<LabelCountsQuery>>(
+        &self,
+        builder: Builder,
+    ) -> Result<Builder::Output, MailboxError> {
+        Ok(builder.build(
+            self.user_ctx.tracker_service().clone(),
+            LabelCountsQuery::new(self.label_id, self.view_mode),
+        ))
     }
 
     /// Get the label details associated with this mailbox.

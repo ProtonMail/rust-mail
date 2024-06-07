@@ -225,7 +225,11 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         Ok(())
     }
 
-    pub fn get_message_counts(&self) -> DBResult<Vec<LocalMessageCount>> {
+    /// Get all message counts.
+    ///
+    /// # Errors
+    /// Return error if the query fails.
+    pub fn message_counts(&self) -> DBResult<Vec<LocalMessageCount>> {
         let mut stmt = self.0.prepare("SELECT * FROM label_message_count")?;
         let r = mapped_rows_to_vec(stmt.query_map((), |r| {
             Ok(LocalMessageCount {
@@ -235,6 +239,26 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             })
         })?)?;
         Ok(r)
+    }
+
+    /// Get message counts for label with `id`.
+    ///
+    /// # Errors
+    /// Returns error if the query fails.
+    pub fn message_count_for_label(&self, id: LocalLabelId) -> DBResult<Option<LocalMessageCount>> {
+        self.0
+            .query_row(
+                "SELECT * FROM label_message_count WHERE label_id = ?",
+                [id],
+                |r| {
+                    Ok(LocalMessageCount {
+                        id: r.get(0)?,
+                        total: r.get(1)?,
+                        unread: r.get(2)?,
+                    })
+                },
+            )
+            .optional()
     }
 
     pub fn delete_remote_message(&mut self, id: &MessageId) -> DBResult<()> {

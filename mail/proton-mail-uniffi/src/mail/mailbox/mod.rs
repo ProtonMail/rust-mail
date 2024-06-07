@@ -1,5 +1,6 @@
 mod attachments;
 mod conversations;
+mod labels;
 mod messages;
 
 use crate::mail::{MailSessionError, MailUserSession};
