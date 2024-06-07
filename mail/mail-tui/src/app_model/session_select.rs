@@ -15,6 +15,7 @@ pub enum Message {
     Submit,
     NewAccount,
     Init,
+    Delete,
 }
 
 pub struct Model {
@@ -24,7 +25,7 @@ pub struct Model {
 
 impl Model {
     pub fn new(ctx: &MailContext) -> Result<Self, MailContextError> {
-        let sessions = ctx.get_sessions()?;
+        let sessions = ctx.sessions()?;
 
         Ok(Self {
             sessions,
@@ -44,6 +45,7 @@ impl AppStateHandler for Model {
 
         match key.code {
             KeyCode::Char('n') => Some(Message::NewAccount.into()),
+            KeyCode::Char('d') => Some(Message::Delete.into()),
             KeyCode::Up => {
                 self.session_list_state.prev();
                 None
@@ -67,6 +69,29 @@ impl AppStateHandler for Model {
             return None;
         };
         match message {
+            Message::Delete => {
+                let Some(index) = self.session_list_state.selected() else {
+                    return Some(Messages::DisplayError(None, anyhow!("No session selected")));
+                };
+
+                {
+                    let Some(session) = self.sessions.get(index) else {
+                        return Some(Messages::DisplayError(
+                            None,
+                            anyhow!("Invalid session index",),
+                        ));
+                    };
+
+                    if let Err(e) = ctx.delete_session(session) {
+                        let e = anyhow!("Failed to delete session: {e}");
+                        tracing::error!("{e}");
+                        return Some(Messages::DisplayError(None, e));
+                    }
+                };
+
+                self.sessions.remove(index);
+                None
+            }
             Message::Submit => {
                 let Some(index) = self.session_list_state.selected() else {
                     return Some(Messages::DisplayError(None, anyhow!("No session selected")));
@@ -144,6 +169,8 @@ impl AppStateHandler for Model {
                 Span::from("Down"),
                 Span::from(" N: ").bold(),
                 Span::from("New Login"),
+                Span::from(" D: ").bold(),
+                Span::from("Delete"),
             ]),
             area,
         );

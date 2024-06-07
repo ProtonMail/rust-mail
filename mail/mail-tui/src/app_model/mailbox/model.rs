@@ -7,7 +7,8 @@ use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
 use crossterm::event::Event;
-use proton_mail_common::db::{LocalLabel, LocalLabelId};
+use proton_mail_common::db::proton_sqlite3::Live;
+use proton_mail_common::db::{LabelCountsQuery, LabelItemCount, LocalLabel, LocalLabelId};
 use proton_mail_common::exports::tracing;
 use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult};
@@ -45,6 +46,7 @@ pub struct Model {
     ctx: MailUserContext,
     mailbox: Mailbox,
     label: LocalLabel,
+    item_count_query: Option<Live<LabelCountsQuery>>,
     state: State,
     cancel_token: Option<Sender<()>>,
 }
@@ -60,6 +62,7 @@ impl Model {
             mailbox,
             state: State::new_syncing(),
             label,
+            item_count_query: None,
             cancel_token: None,
         })
     }
@@ -121,13 +124,23 @@ impl Model {
         });
     }
 
+    fn build_item_count_query(&mut self) -> Option<Messages> {
+        match self.mailbox.new_label_item_count_query(new_live_query) {
+            Ok(q) => {
+                self.item_count_query = Some(q);
+                None
+            }
+            Err(e) => Some(e.into()),
+        }
+    }
+
     fn open_conversation_view(&mut self, mbox: Mailbox, label: LocalLabel) -> Option<Messages> {
         self.mailbox = mbox;
         match ConversationsState::new(&self.mailbox) {
             Ok(state) => {
                 self.state = State::Conversations(state);
                 self.label = label;
-                None
+                self.build_item_count_query()
             }
             Err(e) => Some(Messages::from(e)),
         }
@@ -143,7 +156,7 @@ impl Model {
         };
         self.label = label;
         self.state = State::Messages(MessagesState::new(query));
-        None
+        self.build_item_count_query()
     }
 
     fn open_label_select_popup(&mut self) -> Messages {
@@ -302,14 +315,30 @@ impl AppStateHandler for Model {
             .as_deref()
             .unwrap_or(self.label.name.as_str());
 
-        let [label_area, other_area] = Layout::horizontal([
+        let counters = self.item_count_query.as_ref().map(|v| {
+            let counts = match &*v.value() {
+                Ok(v) => *v,
+                Err(_) => LabelItemCount::default(),
+            };
+            format!("T:{:4} U:{:4}", counts.total, counts.unread)
+        });
+        let [label_area, _, count_area, other_area] = Layout::horizontal([
             Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
+            Constraint::Length(1),
+            if counters.is_some() {
+                Constraint::Length(13)
+            } else {
+                Constraint::Length(1)
+            },
             Constraint::Percentage(100),
         ])
         .flex(Flex::Start)
         .areas(area);
         let text = Text::from(label_name);
         frame.render_widget(text, label_area);
+        if let Some(counters) = counters {
+            frame.render_widget(Text::from(counters), count_area);
+        }
         if let State::Conversations(state) = &mut self.state {
             state.draw_status_bar(frame, other_area);
         }

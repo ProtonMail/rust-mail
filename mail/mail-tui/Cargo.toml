@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-tui"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -31,13 +31,13 @@ registry = "proton"
 version = "0.5"
 
 [dependencies.proton-core-common]
-version = "=0.5.10"
+version = "=0.5.11"
 registry = "proton"
 #path = "../../proton-api-core/proton-core-common"
 
 [dependencies.proton-mail-common]
 #path = "../mail/proton-mail-common"
-version = "=0.5.17"
+version = "=0.5.22"
 registry = "proton"
 
 [lints.rust]
