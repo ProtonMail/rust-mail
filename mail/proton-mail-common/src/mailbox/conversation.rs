@@ -196,6 +196,7 @@ impl Mailbox {
         builder: Builder,
         id: LocalConversationId,
     ) -> Result<Builder::Output, MailboxError> {
+        self.user_context().sync_conversation_messages(id).await?;
         // TODO: Right now there is no good way to apply this to the live query results since
         // we do not know if they are loaded in the foreground or the background. We have to
         // handle this on the call site. We should revisit this after db refactors.
