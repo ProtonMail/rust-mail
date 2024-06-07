@@ -175,9 +175,12 @@ impl MailSession {
         Ok(LoginFlow::new(flow, self.ctx.clone()))
     }
 
-    /// Retrieve the currently stored sessions.
+    /// Return the list of active session.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
     pub fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
-        let sessions = self.ctx.get_sessions()?;
+        let sessions = self.ctx.sessions()?;
         Ok(sessions
             .into_iter()
             .map(StoredSession::new)
@@ -196,6 +199,14 @@ impl MailSession {
             .ctx
             .user_context_from_session(session.encrypted_session(), session_cb)?;
         Ok(MailUserSession::new(ctx))
+    }
+
+    /// Removes a user session and deletes all associated data.
+    ///
+    /// # Errors
+    /// Returns error if data can not be removed or the db operation failed.
+    pub fn delete_session(&self, session: &StoredSession) -> MailSessionResult<()> {
+        Ok(self.ctx.delete_session(session.encrypted_session())?)
     }
 
     /// Check whether the network is connected/online.

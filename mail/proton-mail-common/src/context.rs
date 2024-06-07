@@ -128,9 +128,20 @@ impl MailContext {
         let ctx = self.core_context.user_context_from_session(session, cb)?;
         Ok(MailUserContext::new(self.clone(), ctx))
     }
-    pub fn get_sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
-        let s = self.core_context.get_sessions()?;
-        Ok(s)
+    /// Return the list of active session.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
+    pub fn sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
+        Ok(self.core_context.get_sessions()?)
+    }
+
+    /// Removes a user session and deletes all associated data.
+    ///
+    /// # Errors
+    /// Returns error if data can not be removed or the db operation failed.
+    pub fn delete_session(&self, session: &EncryptedUserSession) -> MailContextResult<()> {
+        Ok(self.core_context.delete_session(session)?)
     }
     pub fn set_network_connected(&self, value: bool) {
         self.core_context.set_network_connected(value)
