@@ -117,6 +117,8 @@ fn test_update_message() {
             metadata_updated.order = 20;
             metadata_updated.unread = true;
             metadata_updated.label_ids.push(LabelId::starred().clone());
+            // This value contains unused flags.
+            metadata_updated.flags = MessageFlags::from_bits(8397841).unwrap();
             let id = tx
                 .create_message_from_metadata(&metadata)
                 .expect("failed to create message");

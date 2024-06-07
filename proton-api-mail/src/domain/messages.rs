@@ -74,6 +74,12 @@ bitflags::bitflags! {
         const OPENED = 1 << 10;
         /// Whether a read receipt has been sent in response to the message.
         const RECEIPT_SENT = 1 << 11;
+        /// No longer used.
+        const UNUSED_1 = 1 << 11;
+        /// No longer used.
+        const UNUSED_2 = 1 << 12;
+        /// No longer used.
+        const UNUSED_3 = 1 << 13;
         /// Whether the message is a receipt.
         const RECEIPT = 1 <<14;
         /// Whether the message is from proton.
@@ -88,6 +94,8 @@ bitflags::bitflags! {
         const UNSUBSCRIBED = 1 << 19;
         /// Messages that been scheduled to send at a later time.
         const SCHEDULED_SEND = 1 << 20;
+        /// No longer used.
+        const UNUSED_4 = 1 << 21;
         /// Whether the message was synced from gmail.
         const SYNCED_FROM_GMAIL = 1 << 22;
         /// Whether DMARC authentication passed.
