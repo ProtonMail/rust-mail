@@ -451,6 +451,10 @@ impl Deref for AgnosticConnection<'_> {
 /// * [`Worker`]
 ///
 enum Operation {
+    /// Closes a connection. This will also cause the associated
+    /// [`TetheredWorker`] to exit.
+    CloseConnection(Command),
+
     /// Commits a transaction, i.e. finalises it.
     CommitTransaction(Command),
 
@@ -490,7 +494,8 @@ impl Operation {
     ///
     fn send_back_error(&mut self, error: StashError) {
         match *self {
-            Self::CommitTransaction(ref mut command)
+            Self::CloseConnection(ref mut command)
+            | Self::CommitTransaction(ref mut command)
             | Self::RollbackTransaction(ref mut command)
             | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
             Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
@@ -1725,6 +1730,27 @@ impl Tether {
     }
 }
 
+impl Drop for Tether {
+    fn drop(&mut self) {
+        // If the last reference to the Tether was in this variable being dropped,
+        // then we will close the connection.
+        if Arc::strong_count(&self.handle) > 1 {
+            // There are still other references to this Tether
+            return;
+        }
+        if self
+            .queue
+            .send(Operation::CloseConnection(Command {
+                channel: None,
+                conn_handle: Some(Arc::clone(&self.handle)),
+            }))
+            .is_err()
+        {
+            error!("Failed to send CloseConnection operation to tethered queue");
+        }
+    }
+}
+
 impl Eq for Tether {}
 
 impl PartialEq for Tether {
@@ -1761,9 +1787,7 @@ struct TetheredWorker {
     queue: QueueSender<Operation>,
 
     /// The join handle for the thread in which the tethered worker runs.
-    // TODO
-    #[allow(dead_code)]
-    thread_handle: JoinHandle<()>,
+    thread_handle: Option<JoinHandle<()>>,
 }
 
 impl TetheredWorker {
@@ -1797,6 +1821,14 @@ impl TetheredWorker {
         queue: &QueueSender<Operation>,
     ) -> Option<Transaction<'tx>> {
         match operation {
+            Operation::CloseConnection(_) => {
+                // This is a special case, which is handled outside of this function. We
+                // should never get here. If we do, it means there is an error in the logic
+                // of this module. Note that we cannot return an error to the original
+                // caller, as there is no oneshot channel for notifications, plus the
+                // context would not make any sense.
+                warn!("Unexpectedly reached CloseConnection variant in TetheredWorker::handle_operation()");
+            }
             Operation::CommitTransaction(mut command) => {
                 debug!(
                     "Tether ({:p}): CommitTransaction Command",
@@ -1964,6 +1996,9 @@ impl TetheredWorker {
             // are started, they borrow the underlying connection).
             #[allow(clippy::unwrap_used)]
             if let Ok(mut operation) = receiver.recv() {
+                if let Operation::CloseConnection(_) = operation {
+                    return;
+                }
                 connection = match pool.get_and_subscribe(queue.clone(), Some(conn_handle_clone)) {
                     Ok(conn) => Some(conn),
                     Err(error) => {
@@ -1987,6 +2022,28 @@ impl TetheredWorker {
                 // Ownership of the transaction is sent and returned to avoid borrowing
                 // issues - otherwise the borrow checker believes the borrow is still active
                 // on the next loop.
+                if let Operation::CloseConnection(command) = operation {
+                    debug!(
+                        "Tether ({:p}): Close connection",
+                        command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                    );
+                    if let Some(tx) = transaction.take() {
+                        if tx.rollback().is_err() {
+                            error!("Failed to roll back transaction upon connection closure");
+                        }
+                        // Notify the main worker that the transaction has been rolled back.
+                        if queue
+                            .send(Operation::RollbackTransaction(Command {
+                                channel: None,
+                                conn_handle: None,
+                            }))
+                            .is_err()
+                        {
+                            error!("Failed to send RollbackTransaction operation to main queue");
+                        }
+                    }
+                    return;
+                }
                 transaction = Self::handle_operation(
                     operation,
                     connection.as_ref().unwrap(),
@@ -2000,7 +2057,29 @@ impl TetheredWorker {
         Self {
             conn_handle,
             queue: sender,
-            thread_handle,
+            thread_handle: Some(thread_handle),
+        }
+    }
+}
+
+impl Drop for TetheredWorker {
+    fn drop(&mut self) {
+        if self
+            .queue
+            .send(Operation::CloseConnection(Command {
+                channel: None,
+                conn_handle: None,
+            }))
+            .is_err()
+        {
+            error!("Failed to send CloseConnection operation to tethered queue");
+        }
+
+        if let Some(thread_handle) = self.thread_handle.take() {
+            // Wait for the thread to complete its work
+            if let Err(err) = thread_handle.join() {
+                error!("Failed to join tethered worker thread: {:?}", err);
+            }
         }
     }
 }
@@ -2129,6 +2208,14 @@ impl Worker {
         let queue = self.queue.clone();
         let stash = self.stash.clone();
         match operation {
+            Operation::CloseConnection(_) => {
+                // At present this can only be sent directly to the tethered worker's queue.
+                // We should never get here. If we do, it means there is an error in the
+                // logic of this module. Note that we cannot return an error to the original
+                // caller, as there is no oneshot channel for notifications, plus the
+                // context would not make any sense.
+                warn!("Unexpectedly reached CloseConnection variant in Worker::handle_operation()");
+            }
             Operation::CommitTransaction(command) => {
                 debug!("Stash: Publishing deferred Notification list for committed transaction");
                 if let Some(notifications) = self
@@ -2331,7 +2418,8 @@ impl Worker {
 
             while let Ok(operation) = receiver.recv() {
                 let conn_handle = match operation {
-                    Operation::CommitTransaction(ref command)
+                    Operation::CloseConnection(ref command)
+                    | Operation::CommitTransaction(ref command)
                     | Operation::RollbackTransaction(ref command)
                     | Operation::StartTransaction(ref command) => command.conn_handle.clone(),
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
