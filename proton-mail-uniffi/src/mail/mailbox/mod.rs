@@ -50,6 +50,8 @@ pub enum MailboxError {
     ConversationError(LocalConversationId),
     #[error("Message '{0}' does not have a remote id")]
     MessageDoesNotHaveRemoteId(LocalMessageId),
+    #[error("Conversation '{0}' has no messages")]
+    ConversationHasNoMessages(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
     #[error("Mailbox is not in the right view mode for the current operation")]
@@ -210,6 +212,9 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             }
             proton_mail_common::MailboxError::MessageDecryption(e) => {
                 Self::MessageDecryption(anyhow!("{e}"))
+            }
+            proton_mail_common::MailboxError::ConversationHasNoMessages(e) => {
+                Self::ConversationHasNoMessages(e)
             }
         }
     }

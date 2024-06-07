@@ -140,13 +140,14 @@ impl Mailbox {
     }
 
     /// Create a new live query for a conversation with `id` 's messages and return the first id of
-    /// the first unread message that should be displayed to the user, if any.
+    /// the  message that should be displayed to the user.
     ///
     /// If this is the first time it is called for this conversation, the messages will
     /// be retrieved from the server.
     ///
     /// # Errors
-    /// Returns error if the request or the db query
+    /// Returns error if the db queries failed, the network request failed or the conversation
+    /// has no messages.
     pub async fn new_conversation_messages_live_query(
         &self,
         id: u64,
@@ -162,11 +163,16 @@ impl Mailbox {
                 Err(e) => {
                     return Err(MailboxError::Other(anyhow!("Live query failed: {e}")));
                 }
-                Ok(v) => mbox.first_unread_message_in_conversation(v.as_slice())?,
-            };
+                // If no unread message is returned, use last message id.
+                Ok(v) => match mbox.first_unread_message_in_conversation(v.as_slice())? {
+                    Some(id) => Some(id),
+                    None => v.last().map(|v| v.id),
+                },
+            }
+            .ok_or(MailboxError::ConversationHasNoMessages(id))?;
 
             Ok(ConversationMessagesLiveQueryResult {
-                message_id_to_open: id.map(|v| v.value()),
+                message_id_to_open: id.value(),
                 query,
             })
         })
@@ -178,7 +184,7 @@ impl Mailbox {
 #[derive(uniffi::Record)]
 pub struct ConversationMessagesLiveQueryResult {
     /// Id of the message that should be opened and displayed to the user.
-    pub message_id_to_open: Option<u64>,
+    pub message_id_to_open: u64,
     /// Live query instance.
     pub query: Arc<MailboxConversationMessagesLiveQuery>,
 }

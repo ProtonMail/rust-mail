@@ -155,17 +155,18 @@ impl Mailbox {
         Ok(())
     }
 
-    /// Retrieve the conversation with `id`'s messages and the first id of the first unread message
-    /// that should be displayed to the user, if any.
+    /// Retrieve the conversation with `id`'s messages and the first id of the first message
+    /// that should be displayed to the user.
     ///
     /// If this is the first time this is called, the messages will be downloaded from the server.
     ///
     /// # Errors
-    /// Returns error if the db queries failed or the network request failed.
+    /// Returns error if the db queries failed, the network request failed or the conversation
+    /// has no messages.
     pub async fn conversation_messages(
         &self,
         id: LocalConversationId,
-    ) -> MailboxResult<(Option<LocalMessageId>, Vec<LocalMessageMetadata>)> {
+    ) -> MailboxResult<(LocalMessageId, Vec<LocalMessageMetadata>)> {
         self.user_context().sync_conversation_messages(id).await?;
         let (label, messages) = self.user_ctx.db_read(
             |conn| -> MailboxResult<(LocalLabel, Vec<LocalMessageMetadata>)> {
@@ -177,7 +178,12 @@ impl Mailbox {
             },
         )?;
 
-        let id_to_open = first_unread_message_in_conversation(&label, &messages);
+        // If no unread message is returned, use last message id.
+        let id_to_open = match first_unread_message_in_conversation(&label, &messages) {
+            Some(id) => Some(id),
+            None => messages.last().map(|v| v.id),
+        }
+        .ok_or(MailboxError::ConversationHasNoMessages(id))?;
 
         Ok((id_to_open, messages))
     }

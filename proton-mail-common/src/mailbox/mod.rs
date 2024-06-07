@@ -47,6 +47,8 @@ pub enum MailboxError {
     MessageDoesNotHaveRemoteId(LocalMessageId),
     #[error("Problem with conversation with local ID: '{0}'")]
     ConversationError(LocalConversationId),
+    #[error("Conversation '{0}' has no messages")]
+    ConversationHasNoMessages(LocalConversationId),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
     #[error("{0}")]
