@@ -1,6 +1,7 @@
 use crate::db::{
     DBResult, LabelColor, LocalLabel, LocalLabelId, LocalLabelWithCount, MailSqliteConnectionImpl,
 };
+use indoc::indoc;
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 pub use proton_api_mail::proton_api_core::exports::serde_json;
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
@@ -57,7 +58,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         let mut result = Vec::with_capacity(8);
         let mut stmt = self
             .0
-            .prepare(LocalLabelSelectWithCount::query_conversation())?;
+            .prepare(&LocalLabelSelectWithCount::query_conversation_by_type())?;
         mapped_rows_into_vec(
             &mut result,
             stmt.query_map([label_type], LocalLabelSelectWithCount::from_row)?,
@@ -70,7 +71,9 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         label_type: LabelType,
     ) -> DBResult<Vec<LocalLabelWithCount>> {
         let mut result = Vec::with_capacity(8);
-        let mut stmt = self.0.prepare(LocalLabelSelectWithCount::query_message())?;
+        let mut stmt = self
+            .0
+            .prepare(&LocalLabelSelectWithCount::query_message_by_type())?;
         mapped_rows_into_vec(
             &mut result,
             stmt.query_map([label_type], LocalLabelSelectWithCount::from_row)?,
@@ -103,6 +106,40 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                 &LocalLabelSelect::query_with_rid(),
                 [label_id],
                 LocalLabelSelect::from_row,
+            )
+            .optional()
+    }
+
+    /// Retrieve label with `label_id` and conversation counts.
+    ///
+    /// # Errors
+    /// Returns error if the query fails.
+    pub fn label_with_id_and_conversation_count(
+        &self,
+        label_id: LocalLabelId,
+    ) -> DBResult<Option<LocalLabelWithCount>> {
+        self.0
+            .query_row(
+                &LocalLabelSelectWithCount::query_conversation_by_id(),
+                [label_id],
+                LocalLabelSelectWithCount::from_row,
+            )
+            .optional()
+    }
+
+    /// Retrieve label with `label_id` and message counts.
+    ///
+    /// # Errors
+    /// Returns error if the query fails.
+    pub fn label_with_id_and_message_count(
+        &self,
+        label_id: LocalLabelId,
+    ) -> DBResult<Option<LocalLabelWithCount>> {
+        self.0
+            .query_row(
+                &LocalLabelSelectWithCount::query_message_by_id(),
+                [label_id],
+                LocalLabelSelectWithCount::from_row,
             )
             .optional()
     }
@@ -362,19 +399,58 @@ impl LocalLabelSelect {
 }
 
 struct LocalLabelSelectWithCount {}
+const SELECT_LABEL_WITH_COUNT_PRELUDE: &str = indoc! { "
+SELECT
+    l.id,
+    l.rid,
+    l.parent_id,
+    l.type,
+    l.`order`,
+    l.name,
+    l.path,
+    l.color,
+    l.notified,
+    l.expanded,
+    l.sticky,
+    IFNULL(lc.total,0),
+    IFNULL(lc.unread,0)
+FROM labels as l"
+};
+
+const SELECT_LABEL_WITH_COUNT_CONVERSATIONS_CLAUSE: &str = "LEFT JOIN label_conversation_count AS \
+lc ON l.id = lc.label_id";
+
+const SELECT_LABEL_WITH_COUNT_MESSAGES_CLAUSE: &str =
+    "LEFT JOIN label_message_count AS lc ON l.id=lc.label_id";
+
+const SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE: &str = "WHERE deleted=0";
+
+const SELECT_LABEL_WITH_COUNT_ORDER_CLAUSE: &str = "ORDER BY `order`";
 
 impl LocalLabelSelectWithCount {
-    fn query_conversation() -> &'static str {
-        "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
-        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
-        LEFT JOIN label_conversation_count AS lc ON l.id = lc.label_id \
-        WHERE deleted=0 AND type=? ORDER BY `order`"
+    fn query_conversation_by_type() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_CONVERSATIONS_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND type=? {SELECT_LABEL_WITH_COUNT_ORDER_CLAUSE}"
+        )
     }
-    fn query_message() -> &'static str {
-        "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
-        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
-        LEFT JOIN label_message_count AS lc ON l.id = lc.label_id \
-        WHERE deleted=0 AND type=? ORDER BY `order`"
+    fn query_message_by_type() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_MESSAGES_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND type=? {SELECT_LABEL_WITH_COUNT_ORDER_CLAUSE}"
+        )
+    }
+    fn query_conversation_by_id() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_CONVERSATIONS_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND id=? LIMIT 1"
+        )
+    }
+    fn query_message_by_id() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_MESSAGES_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND id=? LIMIT 1"
+        )
     }
 
     fn from_row(r: &Row) -> DBResult<LocalLabelWithCount> {

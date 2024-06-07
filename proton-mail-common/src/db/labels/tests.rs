@@ -1,7 +1,7 @@
 use crate::db::{
     new_test_connection, with_tx, LabelColor, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
 };
-use proton_api_mail::domain::{Label, LabelId, LabelType};
+use proton_api_mail::domain::{ConversationCount, Label, LabelId, LabelType, MessageCount};
 
 #[test]
 fn test_remote_label_add() {
@@ -88,6 +88,67 @@ fn test_delete_remote() {
         assert_eq!(tx.labels().unwrap().len(), 12);
 
         compare_remote_labels_with_local(&tx, remote_labels.iter());
+    });
+}
+
+#[test]
+fn label_with_counts() {
+    let (_, mut conn, _) = new_test_connection();
+    with_tx(&mut conn, |tx| {
+        let label = Label {
+            id: LabelId::from("label"),
+            parent_id: None,
+            name: "Label".to_owned(),
+            path: None,
+            color: "00".to_owned(),
+            label_type: LabelType::Label,
+            notify: false,
+            display: false,
+            sticky: false,
+            expanded: false,
+            order: 0,
+        };
+
+        let total_conv = 20u64;
+        let unread_conv = 40u64;
+        let total_msg = 200u64;
+        let unread_msg = 600u64;
+
+        let local_id = tx.create_remote_label(&label).unwrap();
+
+        tx.create_or_update_conversation_counts(
+            [ConversationCount {
+                label_id: label.id.clone(),
+                total: total_conv,
+                unread: unread_conv,
+            }]
+            .iter(),
+        )
+        .unwrap();
+
+        tx.create_or_update_message_counts(
+            [MessageCount {
+                label_id: label.id.clone(),
+                total: total_msg,
+                unread: unread_msg,
+            }]
+            .iter(),
+        )
+        .unwrap();
+
+        let conv_count = tx
+            .label_with_id_and_conversation_count(local_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(conv_count.unread_count, unread_conv);
+        assert_eq!(conv_count.total_count, total_conv);
+
+        let msg_count = tx
+            .label_with_id_and_message_count(local_id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(msg_count.unread_count, unread_msg);
+        assert_eq!(msg_count.total_count, total_msg);
     });
 }
 

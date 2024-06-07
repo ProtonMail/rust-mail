@@ -246,7 +246,7 @@ pub(in crate::db::conversations) fn conv_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
 ) -> BTreeMap<LocalLabelId, LocalConversationCount> {
     BTreeMap::from_iter(
-        tx.get_conversation_counts()
+        tx.conversation_counts()
             .unwrap()
             .into_iter()
             .map(|c| (c.id.clone(), c)),
@@ -257,7 +257,7 @@ pub(in crate::db::conversations) fn msg_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
 ) -> BTreeMap<LocalLabelId, LocalMessageCount> {
     BTreeMap::from_iter(
-        tx.get_message_counts()
+        tx.message_counts()
             .unwrap()
             .into_iter()
             .map(|c| (c.id.clone(), c)),

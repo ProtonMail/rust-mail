@@ -570,7 +570,7 @@ fn test_conversation_delete_all_mail() {
             tx.mark_conversation_as_deleted(all_mail_label, local_conv_id)
                 .expect("failed to mark conv as deleted");
 
-            for count in tx.get_message_counts().unwrap() {
+            for count in tx.message_counts().unwrap() {
                 assert_eq!(
                     count.total, 0,
                     "Label {:?} does not have 0 total count",
@@ -583,7 +583,7 @@ fn test_conversation_delete_all_mail() {
                 );
             }
 
-            for count in tx.get_conversation_counts().unwrap() {
+            for count in tx.conversation_counts().unwrap() {
                 assert_eq!(
                     count.total, 0,
                     "Label {:?} does not have 0 total count",
@@ -882,11 +882,12 @@ fn test_conversation_counts() {
 
             tx.create_or_update_conversation_counts(counts.iter())
                 .expect("failed to creat counters");
-            let db_counters = tx
-                .get_conversation_counts()
-                .expect("failed to get counters");
+            let db_counters = tx.conversation_counts().expect("failed to get counters");
             assert!(db_counters.contains(&expected_counts[0]));
             assert!(db_counters.contains(&expected_counts[1]));
+
+            let label_conv_counter = tx.conversation_count_for_label(labels[0]).unwrap().unwrap();
+            assert!(db_counters.contains(&label_conv_counter));
 
             let labels_with_counts = tx
                 .label_by_type_ordered_with_conversation_count(LabelType::Label)

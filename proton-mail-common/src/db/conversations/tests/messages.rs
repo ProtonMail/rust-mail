@@ -174,9 +174,12 @@ fn test_message_counts() {
 
             tx.create_or_update_message_counts(counts.iter())
                 .expect("failed to creat counters");
-            let db_counters = tx.get_message_counts().expect("failed to get counters");
+            let db_counters = tx.message_counts().expect("failed to get counters");
             assert!(db_counters.contains(&expected_counts[0]));
             assert!(db_counters.contains(&expected_counts[1]));
+
+            let label_msg_count = tx.message_count_for_label(labels[0]).unwrap().unwrap();
+            assert!(db_counters.contains(&label_msg_count));
 
             let labels_with_counts = tx
                 .label_by_type_ordered_with_message_count(LabelType::Label)
