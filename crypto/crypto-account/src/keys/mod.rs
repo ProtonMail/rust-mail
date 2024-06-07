@@ -15,6 +15,8 @@ mod organization_keys;
 pub use organization_keys::*;
 mod mail_public_keys;
 pub use mail_public_keys::*;
+mod pinned_keys;
+pub use pinned_keys::*;
 
 use crate::errors::KeyError;
 
