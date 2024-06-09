@@ -24,14 +24,11 @@
 //! ```
 
 mod migration;
-mod query;
 mod tracker;
 pub mod utils;
 
 pub use migration::*;
-pub use query::*;
 use std::cell::Cell;
-pub use tracker::*;
 
 use parking_lot::{Mutex, ReentrantMutex, ReentrantMutexGuard};
 use rusqlite::{Connection, OpenFlags, Params, Row, Transaction};

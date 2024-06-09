@@ -1,7 +1,7 @@
 #![allow(unused)]
 use crate::common::{FolderId, LabelId, Message, MessageId};
 use proton_api_core::exports::anyhow;
-use proton_sqlite3::{rusqlite, InProcessTrackerService, SqliteTransaction};
+use proton_sqlite3::{rusqlite, SqliteTransaction};
 use rusqlite::{params_from_iter, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use stash::datatypes::{QueryResultString, QueryResultU64};
