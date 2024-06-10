@@ -14,7 +14,7 @@
 
 use crate::stash::{Notification, Stash, StashError, Tether};
 use core::any::Any;
-use core::fmt::{self, Debug, Display};
+use core::fmt::{Debug, Display};
 use core::future::Future;
 use core::iter::repeat;
 use core::str::FromStr;
@@ -31,81 +31,48 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::error::Error;
 use std::vec::IntoIter;
+use thiserror::Error;
 use tokio::spawn as spawn_async;
 use tracing::{error, warn};
 
 /// Errors for conversion of database row data into record types.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Error, PartialEq)]
 #[non_exhaustive]
 pub enum ConversionError {
     /// For some reason it is not possible to obtain a name for a particular
     /// column. This refers specifically to trying to obtain the information
     /// from the database query results, and technically should never happen, as
     /// it would mean there is a column present in the resultset without a name.
+    #[error("Column {0}'s name is not available: {1}")]
     ColumnNameNotAvailable(usize, SqliteError),
 
     /// For some reason it is not possible to obtain column names. This refers
     /// specifically to trying to obtain the information from the database query
     /// results.
+    #[error("Column names are not available")]
     ColumnNamesNotAvailable,
 
     /// Basic deserialisation error from [`serde`].
+    #[error("Deserialization error{}: {1}", .0.as_ref().map(|column| format!(r#" for column "{column}""#)).unwrap_or_default())]
     DeserializationError(Option<String>, String),
 
     /// The row data returned from the database query is missing a column
     /// according to the expectations of the record type.
+    #[error("Missing column: \"{0}\"")]
     MissingColumn(String),
 
     /// SQL-related error from [`rusqlite`].
-    SqliteError(SqliteError),
+    #[error("SQLite error: {0}")]
+    SqliteError(#[from] SqliteError),
 
     /// Basic serialisation error from [`serde`].
+    #[error("Serialization error: {0}")]
     SerializationError(String),
 }
 
 impl DeserializationError for ConversionError {
     fn custom<T: Display>(msg: T) -> Self {
         Self::DeserializationError(None, msg.to_string())
-    }
-}
-
-impl Display for ConversionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match *self {
-            Self::ColumnNameNotAvailable(i, ref error) => {
-                write!(f, "Column {i}'s name is not available: {error}")
-            }
-            Self::ColumnNamesNotAvailable => write!(f, "Column names are not available"),
-            Self::DeserializationError(None, ref message) => {
-                write!(f, "Deserialization error: {message}")
-            }
-            Self::DeserializationError(Some(ref column), ref message) => write!(
-                f,
-                r#"Deserialization error for column "{column}": {message}"#
-            ),
-            Self::MissingColumn(ref column) => write!(f, r#"Missing column: "{column}""#),
-            Self::SqliteError(ref error) => write!(f, "SQLite error: {error}"),
-            Self::SerializationError(ref message) => write!(f, "Serialization error: {message}"),
-        }
-    }
-}
-
-impl Error for ConversionError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match *self {
-            Self::SqliteError(ref err) => Some(err),
-            Self::ColumnNameNotAvailable(..)
-            | Self::ColumnNamesNotAvailable
-            | Self::DeserializationError(..)
-            | Self::MissingColumn(_)
-            | Self::SerializationError(_) => None,
-        }
-    }
-}
-
-impl From<SqliteError> for ConversionError {
-    fn from(err: SqliteError) -> Self {
-        Self::SqliteError(err)
     }
 }
 
