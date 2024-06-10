@@ -1,11 +1,11 @@
-use stash::datatypes::QueryResultI64;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
+use stash::datatypes::QueryResultI64;
 use stash::macros::DbRecord;
+use stash::params;
 use stash::stash::{Stash, StashError};
 use tokio::spawn as spawn_async;
-use stash::params;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -64,33 +64,40 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
             }
             1 => {
                 conn.transaction().await?;
-                    let mut nums: Vec<u8> = (1..20).collect();
-                    nums.shuffle(&mut rng);
-                    let me = Person {
-                        id: 0,
-                        name: format!("{:?}", nums),
-                        data: Some(nums.clone()),
-                    };
+                let mut nums: Vec<u8> = (1..20).collect();
+                nums.shuffle(&mut rng);
+                let me = Person {
+                    id: 0,
+                    name: format!("{:?}", nums),
+                    data: Some(nums.clone()),
+                };
 
-                    let id: i32 = conn.query::<_, QueryResultI64>(
+                let id: i32 = conn
+                    .query::<_, QueryResultI64>(
                         "INSERT INTO person (name, data) VALUES (?1, ?2) RETURNING `id` AS value",
                         params![me.name, me.data],
-                    ).await?.first().unwrap().value as i32;
+                    )
+                    .await?
+                    .first()
+                    .unwrap()
+                    .value as i32;
 
-                    nums.shuffle(&mut rng);
-                
-                    conn.execute(
-                        "INSERT INTO person_map (person, data2) VALUES (?1, ?2)",
-                        params![id, format!("{:?}", nums)],
-                    ).await?;
+                nums.shuffle(&mut rng);
+
+                conn.execute(
+                    "INSERT INTO person_map (person, data2) VALUES (?1, ?2)",
+                    params![id, format!("{:?}", nums)],
+                )
+                .await?;
                 conn.commit().await.unwrap();
             }
 
             2 => {
-                    conn.execute(
-                        "DELETE FROM person WHERE id=(SELECT id FROM person ORDER BY RANDOM() LIMIT 1)",
-                        vec![],
-                    ).await?;
+                conn.execute(
+                    "DELETE FROM person WHERE id=(SELECT id FROM person ORDER BY RANDOM() LIMIT 1)",
+                    vec![],
+                )
+                .await?;
             }
             _ => {
                 panic!("Unhandled");
@@ -110,18 +117,20 @@ async fn run_random_command_test() {
 
     let stash = Stash::new(Some(&db_path)).expect("Failed to create Stash");
 
-        // Create db tables.
-        stash.execute(
+    // Create db tables.
+    stash
+        .execute(
             "CREATE TABLE person (
             id   INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             data BLOB
         )",
             vec![], // empty list of parameters.
-        ).await
+        )
+        .await
         .expect("failed to run create query");
 
-        stash.execute(
+    stash.execute(
             "CREATE TABLE person_map (
             person INTEGER,
             data2 TEXT NOT NULL,
@@ -141,7 +150,9 @@ async fn run_random_command_test() {
     for _ in 0..10 {
         let stash_clone = stash.clone();
         handles.push(spawn_async(async move {
-            run_tasks(stash_clone, 100).await.expect("Failed to execute");
+            run_tasks(stash_clone, 100)
+                .await
+                .expect("Failed to execute");
         }));
     }
 

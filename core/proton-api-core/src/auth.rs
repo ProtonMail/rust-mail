@@ -241,18 +241,14 @@ impl<T: Into<String>> From<T> for Scope {
 
 #[cfg(feature = "sql")]
 impl stash::exports::ToSql for Scope {
-    fn to_sql(
-        &self,
-    ) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
+    fn to_sql(&self) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
         self.0.to_sql()
     }
 }
 
 #[cfg(feature = "sql")]
 impl stash::exports::FromSql for Scope {
-    fn column_result(
-        value: stash::exports::ValueRef<'_>,
-    ) -> stash::exports::FromSqlResult<Self> {
+    fn column_result(value: stash::exports::ValueRef<'_>) -> stash::exports::FromSqlResult<Self> {
         String::column_result(value).map(Self)
     }
 }
