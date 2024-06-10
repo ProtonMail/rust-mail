@@ -382,11 +382,10 @@
 //!      query handling is multi-threaded.
 //!
 
-use crate::orm::{from_rows, ConversionError, DbRecord, DbRecords, Model};
+use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
 use core::ops::Deref;
 use core::ptr::null;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
-use indoc::formatdoc;
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
@@ -1124,26 +1123,7 @@ impl Stash {
         T: Model,
         I: ToSql + Send + 'static,
     {
-        let query = formatdoc!(
-            "
-            SELECT
-                rowid AS rowid, *
-            FROM
-                {}
-            WHERE
-                {} = ?
-            LIMIT
-                1
-        ",
-            T::table_name(),
-            T::id_field_name(),
-        );
-        #[allow(trivial_casts)]
-        Ok(self
-            .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
-            .await?
-            .into_iter()
-            .next())
+        perform_load(id, self, None).await
     }
 
     /// Runs a query against a new connection, and returns any rows of data
@@ -1564,26 +1544,7 @@ impl Tether {
         T: Model,
         I: ToSql + Send + 'static,
     {
-        let query = formatdoc!(
-            "
-            SELECT
-                rowid AS rowid, *
-            FROM
-                {}
-            WHERE
-                {} = ?
-            LIMIT
-                1
-        ",
-            T::table_name(),
-            T::id_field_name(),
-        );
-        #[allow(trivial_casts)]
-        Ok(self
-            .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
-            .await?
-            .into_iter()
-            .next())
+        perform_load(id, &self.stash, Some(self)).await
     }
 
     /// Runs a query against an open connection, and returns any rows of data

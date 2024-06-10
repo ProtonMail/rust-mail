@@ -662,7 +662,7 @@ where
     ///
     #[must_use]
     async fn load(id: Self::Id, stash: &Stash) -> Result<Option<Self>, StashError> {
-        stash.load(id).await
+        perform_load(id, stash, None).await
     }
 
     /// Loads a record from the database by ID, using a specific connection.
@@ -695,7 +695,7 @@ where
     ///
     #[must_use]
     async fn load_using(id: Self::Id, tether: &Tether) -> Result<Option<Self>, StashError> {
-        tether.load(id).await
+        perform_load(id, tether.stash(), Some(tether)).await
     }
 
     /// Gets the record's unique row ID.
@@ -737,41 +737,7 @@ where
     /// * [`Model::save_using()`]
     ///
     async fn save(&self) -> Result<(), StashError> {
-        let fields = Self::field_names();
-        let placeholders = repeat("?")
-            .take(fields.len())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let update_fields = fields
-            .iter()
-            .map(|field| format!("{field} = ?"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let query = formatdoc!(
-            "
-            INSERT INTO
-                {} ({})
-            VALUES
-                ({})
-            ON CONFLICT ({}) DO UPDATE SET {}
-        ",
-            Self::table_name(),
-            fields.join(", "),
-            placeholders,
-            Self::id_field_name(),
-            update_fields,
-        );
-        let _: usize = self
-            .stash()
-            .execute(
-                &query,
-                Self::field_values(self)
-                    .into_iter()
-                    .chain(Self::field_values(self))
-                    .collect(),
-            )
-            .await?;
-        Ok(())
+        perform_save(self, None).await
     }
 
     /// Saves a record to the database, using a specific connection.
@@ -800,40 +766,7 @@ where
     /// * [`Model::save()`]
     ///
     async fn save_using(&self, tether: &Tether) -> Result<(), StashError> {
-        let fields = Self::field_names();
-        let placeholders = repeat("?")
-            .take(fields.len())
-            .collect::<Vec<_>>()
-            .join(", ");
-        let update_fields = fields
-            .iter()
-            .map(|field| format!("{field} = ?"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let query = formatdoc!(
-            "
-            INSERT INTO
-                {} ({})
-            VALUES
-                ({})
-            ON CONFLICT ({}) DO UPDATE SET {}
-        ",
-            Self::table_name(),
-            fields.join(", "),
-            placeholders,
-            Self::id_field_name(),
-            update_fields,
-        );
-        let _: usize = tether
-            .execute(
-                &query,
-                Self::field_values(self)
-                    .into_iter()
-                    .chain(Self::field_values(self))
-                    .collect(),
-            )
-            .await?;
-        Ok(())
+        perform_save(self, Some(tether)).await
     }
 
     /// Gets a reference to the database-handling [`Stash`] for the record.
@@ -932,4 +865,141 @@ pub fn from_rows<T: DbRecord>(
         results.push(T::from_row(row, &columns, stash.clone())?);
     }
     Ok(results)
+}
+
+/// Loads a record from the database by ID.
+///
+/// This function retrieves a single record from the database by its unique ID,
+/// as an instance of the specified type `T`, where `T` is any concrete type
+/// implementing the [`Model`] trait. It is the internal function that actually
+/// does the loading for the public interface methods [`Model::load()`],
+/// [`Model::load_using()`], [`Stash::load()`] and [`Tether::load()`].
+///
+/// For full usage details, see [`Model::load()`] and [`Model::load_using()`].
+///
+/// # Parameters
+///
+/// * `id`     - The ID of the record to load.
+/// * `stash`  - The [`Stash`] instance. This will only be used if there is no
+///              [`Tether`] supplied.
+/// * `tether` - The database connection, i.e. [`Tether`], to use for
+///              loading the record. This allows an existing connection to
+///              be used, rather than creating a new one. If [`None`], an ad-hoc
+///              connection will be used, i.e. a persistent [`Tether`] will not
+///              be created.
+///
+/// # Errors
+///
+/// See [`Model::load()`].
+///
+/// # See also
+///
+/// * [`Model::load()`]
+/// * [`Model::load_using()`]
+/// * [`Stash::load()`]
+/// * [`Tether::load()`]
+///
+pub(crate) async fn perform_load<T, I>(
+    id: I,
+    stash: &Stash,
+    tether: Option<&Tether>,
+) -> Result<Option<T>, StashError>
+where
+    T: Model,
+    I: ToSql + Send + 'static,
+{
+    let query = formatdoc!(
+        "
+        SELECT
+            rowid AS rowid, *
+        FROM
+            {}
+        WHERE
+            {} = ?
+        LIMIT
+            1
+    ",
+        T::table_name(),
+        T::id_field_name(),
+    );
+    #[allow(trivial_casts)]
+    #[allow(clippy::shadow_reuse)]
+    Ok(match tether {
+        Some(tether) => {
+            tether
+                .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+                .await?
+        }
+        None => {
+            stash
+                .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+                .await?
+        }
+    }
+    .into_iter()
+    .next())
+}
+
+/// Saves a record to the database.
+///
+/// This function saves a single record to the database by its unique ID, either
+/// ad-hoc or using a specific [`Tether`], i.e. connection. It is the internal
+/// function that actually does the saving for the public interface methods
+/// [`save()`](Model::save()) and [`save_using()`](Model::save_using()).
+///
+/// For full usage details, see [`save()`](Model::save()).
+///
+/// # Parameters
+///
+/// * `model`  - The [`Model`] instance.
+/// * `tether` - The database connection, i.e. [`Tether`], to use for
+///              loading the record. This allows an existing connection to
+///              be used, rather than creating a new one. If [`None`], an ad-hoc
+///              connection will be used, i.e. a persistent [`Tether`] will not
+///              be created.
+///
+/// # Errors
+///
+/// See [`Model::save()`].
+///
+/// # See also
+///
+/// * [`Model::save()`]
+/// * [`Model::save_using()`]
+///
+async fn perform_save<M: Model>(model: &M, tether: Option<&Tether>) -> Result<(), StashError> {
+    let fields = M::field_names();
+    let placeholders = repeat("?")
+        .take(fields.len())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let update_fields = fields
+        .iter()
+        .map(|field| format!("{field} = ?"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let query = formatdoc!(
+        "
+        INSERT INTO
+            {} ({})
+        VALUES
+            ({})
+        ON CONFLICT ({}) DO UPDATE SET {}
+    ",
+        M::table_name(),
+        fields.join(", "),
+        placeholders,
+        M::id_field_name(),
+        update_fields,
+    );
+    let field_values = M::field_values(model)
+        .into_iter()
+        .chain(M::field_values(model))
+        .collect();
+    #[allow(clippy::shadow_reuse)]
+    let _: usize = match tether {
+        Some(tether) => tether.execute(&query, field_values).await?,
+        None => model.stash().execute(&query, field_values).await?,
+    };
+    Ok(())
 }
