@@ -1,6 +1,6 @@
 use proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, PGPProviderSync, VerifiedData,
-    Verifier, VerifierSync,
+    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
+    PGPProviderSync, VerifiedData, Verifier, VerifierSync,
 };
 
 use crate::errors::CardCryptoError;
@@ -64,15 +64,14 @@ pub trait CardCryptography {
                 let decrypted_card = provider
                     .new_decryptor()
                     .with_decryption_key_refs(decryption_keys)
+                    .with_detached_signature_ref(
+                        self.card_signature(),
+                        DetachedSignatureVariant::Plaintext,
+                        true,
+                    )
                     .decrypt(self.card_data(), DataEncoding::Armor)
                     .map_err(CardCryptoError::DecryptionError)?
                     .into_vec();
-
-                provider
-                    .new_verifier()
-                    .with_verification_key_refs(verification_keys)
-                    .verify_detached(&decrypted_card, self.card_signature(), DataEncoding::Armor)
-                    .map_err(CardCryptoError::SignatureVerificationError)?;
 
                 Ok(decrypted_card)
             }
