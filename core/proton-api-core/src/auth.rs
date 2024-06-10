@@ -240,19 +240,19 @@ impl<T: Into<String>> From<T> for Scope {
 }
 
 #[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::ToSql for Scope {
+impl stash::exports::ToSql for Scope {
     fn to_sql(
         &self,
-    ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
+    ) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
         self.0.to_sql()
     }
 }
 
 #[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::FromSql for Scope {
+impl stash::exports::FromSql for Scope {
     fn column_result(
-        value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
-    ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        value: stash::exports::ValueRef<'_>,
+    ) -> stash::exports::FromSqlResult<Self> {
         String::column_result(value).map(Self)
     }
 }
