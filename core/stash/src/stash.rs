@@ -1021,6 +1021,9 @@ impl Stash {
     /// emitted, and is designed for situations where no data is expected, such
     /// as `INSERT`, `UPDATE`, or `DELETE` queries.
     ///
+    /// Note that the [`params!`](crate::utils::params) macro is available to
+    /// help shorten the syntax for passing in the query parameters.
+    ///
     /// # Read vs write
     ///
     /// Although this function is *designed* for write queries, this is implied
@@ -1071,6 +1074,7 @@ impl Stash {
     ///
     /// * [`Stash::query()`]
     /// * [`Tether::execute()`]
+    /// * [`params!`](crate::utils::params)
     ///
     pub async fn execute<Q: Into<String> + Send>(
         &self,
@@ -1151,6 +1155,9 @@ impl Stash {
     /// [`DbRecord`] trait. The requirement to formalise the return type
     /// streamlines the process of handling the results.
     ///
+    /// Note that the [`params!`](crate::utils::params) macro is available to
+    /// help shorten the syntax for passing in the query parameters.
+    ///
     /// # Read vs write
     ///
     /// Although this function is *designed* for read queries, this is implied
@@ -1210,6 +1217,7 @@ impl Stash {
     ///
     /// * [`Stash::execute()`]
     /// * [`Tether::query()`]
+    /// * [`params!`](crate::utils::params)
     ///
     pub async fn query<Q, T>(
         &self,
@@ -1509,6 +1517,7 @@ impl Tether {
     ///
     /// * [`Stash::execute()`]
     /// * [`Tether::query()`]
+    /// * [`params!`](crate::utils::params)
     ///
     pub async fn execute<Q: Into<String> + Send>(
         &self,
@@ -1606,6 +1615,7 @@ impl Tether {
     ///
     /// * [`Stash::query()`]
     /// * [`Tether::execute()`]
+    /// * [`params!`](crate::utils::params)
     ///
     pub async fn query<Q, T>(
         &self,

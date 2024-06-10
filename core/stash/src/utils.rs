@@ -10,6 +10,22 @@ use rusqlite::Error as SqliteError;
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
 
+/// Boxes up a list of types, making them suitable for use as query parameters.
+///
+/// This is a convenience macro, allowing the creation of a boxed vector of
+/// types to be shortened. Instead of wrapping each parameter in `Box::new()`,
+/// they can instead be passed bare to this macro, which will box them and
+/// return a [`Vec`] of boxed parameters.
+///
+#[macro_export]
+macro_rules! params {
+    ($($param:expr),+) => {
+        vec![$(Box::new($param)),+]
+    };
+}
+
+pub use params;
+
 /// Implements [`ToSql`](rusqlite::types::ToSql) and [`FromSql`](rusqlite::types::FromSql)
 /// for a type using [`serde`].
 ///

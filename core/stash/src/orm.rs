@@ -351,6 +351,9 @@ where
     /// the ability to extract whichever fields it needs, which is important
     /// when subscribing to live resultset changes.
     ///
+    /// Note that the [`params!`](crate::utils::params) macro is available to
+    /// help shorten the syntax for passing in the query parameters.
+    ///
     /// # Live change feed
     ///
     /// When listening for changes, the "find" functionality will handle them
@@ -421,6 +424,7 @@ where
     /// * [`Model::find_first()`]
     /// * [`Model::load()`]
     /// * [`Stash::query()`]
+    /// * [`params!`](crate::utils::params)
     ///
     async fn find<Q: Into<String> + Send>(
         query_logic: Q,
@@ -534,6 +538,7 @@ where
     /// * [`Model::find()`]
     /// * [`Model::load()`]
     /// * [`Stash::query()`]
+    /// * [`params!`](crate::utils::params)
     ///
     async fn find_first<Q: Into<String> + Send>(
         query_logic: Q,
