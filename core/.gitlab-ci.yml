@@ -87,6 +87,7 @@ deploy-proton-async:
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-async/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-async/Cargo.toml"
   when: manual
 
 deploy-proton-sqlite3:
@@ -94,6 +95,7 @@ deploy-proton-sqlite3:
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-sqlite3/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-sqlite3/Cargo.toml"
   when: manual
 
 deploy-proton-api-core:
@@ -103,6 +105,7 @@ deploy-proton-api-core:
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-api-core/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-api-core/Cargo.toml"
   when: manual
 
 deploy-proton-action-queue:
@@ -112,6 +115,7 @@ deploy-proton-action-queue:
     - shared-medium
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-action-queue/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-action-queue/Cargo.toml"
   when: manual
 
 deploy-proton-event-loop:
@@ -121,6 +125,7 @@ deploy-proton-event-loop:
     - shared-medium
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-event-loop/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-event-loop/Cargo.toml"
   when: manual
 
 deploy-proton-core-common:
@@ -130,4 +135,5 @@ deploy-proton-core-common:
     - shared-medium
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-core-common/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-core-common/Cargo.toml"
   when: manual
