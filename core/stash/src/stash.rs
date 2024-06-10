@@ -1451,8 +1451,6 @@ pub struct Tether {
     queue: QueueSender<Operation>,
 
     /// The associated [`Stash`] instance.
-    // TODO
-    #[allow(dead_code)]
     stash: Stash,
 }
 
@@ -1690,6 +1688,12 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
+
+    /// Get the associated [`Stash`] for the [`Tether`].
+    #[must_use]
+    pub const fn stash(&self) -> &Stash {
+        &self.stash
     }
 
     /// Starts a new transaction against an open connection.
