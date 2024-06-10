@@ -4,6 +4,7 @@ mod constants;
 use constants::{
     FLAG_EMAIL_NO_ENCRYPT, FLAG_EMAIL_NO_SIGN, FLAG_NOT_COMPROMISED, FLAG_NOT_OBSOLETE,
 };
+pub mod contacts;
 mod crypto;
 pub mod errors;
 pub mod keys;
