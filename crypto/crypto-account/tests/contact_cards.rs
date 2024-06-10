@@ -1,14 +1,6 @@
-/* Trait needs:
-fn card_type(&self) -> ContactCardType;
-
-fn card_data(&self) -> &[u8];
-
-fn card_signature(&self) -> &[u8];
- */
-use proton_crypto::crypto::{DataEncoding, PGPProviderSync, PrivateKey, PublicKey};
-use proton_crypto_account::contacts::{CardCryptography, ContactCardType};
-//use proton_crypto_account::proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
+use proton_crypto::crypto::{DataEncoding, PGPProviderSync, PrivateKey};
 use proton_crypto::new_pgp_provider;
+use proton_crypto_account::contacts::{CardCryptography, ContactCardType};
 
 const PRIVATE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -32,6 +24,8 @@ qnK1SNfocPNfh//OecgiqA4=
 
 const ENCRYPTED_AND_SIGNED_DATA: &str = "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4D+/QBrSbx5h0SAQdAo85FIPb2zNkcGaXxLgeGr7JDeyt7oRNedt91nrMQ\nXh8w4FyEVqfVgYWg/NJ16UHUplqk8QMfZ7MDGloj3UynrmfiMB4D61IusigX\nPBbOC4R00ncBe3t89HKRigE/OJPDfERNQUPHHQDDxD+5TZ4zo6IWTuM7Sywk\nyYtNSezc15HYX/Y2dMuCc8ihIJNJQgJ0H5hGLflDZVWMwtWSqUCzZ/M/MZ6V\n/eju7buxvpBKV76ONVEMm0wJ7MbeizhNDiwjvaS0W4SpdewSww==\n=zhyX\n-----END PGP MESSAGE-----\n";
 const ENCRYPTED_AND_SIGNED_SIGNATURE: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwnUEARYKACcFgmZPSJAJkEgK5SmxgQZlFiEEIXnfcHDXe6RYq00hSArlKbGB\nBmUAAOyWAP0SKaiJJx8XzBKWGwBph8MtQDKkiSmPpf+3UnZJNHtnLQD+KeCq\ncCSz/TrhSygmJuiwSUqN7DcUeqOrmAK87GmAYw4=\n=bg4m\n-----END PGP SIGNATURE-----\n";
+
+const ENCRYPTED_AND_SIGNED_SIGNATURE_INVALID: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwnUEARYKACcFgmZPSJAJkEgK5SmxgQZlFiEEIXnfcHDXe6RYq00hWONTPASS\nBmUAAOyWAP0SKaiJJx8XzBKWGwBph8MtQDKkiSmPpf+3UnZJNHtnLQD+KeCq\ncCSz/TrhSygmJuiwSUqN7DcUeqOrmAK87GmAYw4=\n=bg4m\n-----END PGP SIGNATURE-----\n";
 
 const ENCRYPTED_AND_SIGNED_DATA_PLAINTEXT: &str =
     "BEGIN:VCARD\r\nVERSION:4.0\r\nN:;;;;\r\nBDAY:20080523\r\nNOTE:hello\r\nEND:VCARD";
@@ -175,4 +169,30 @@ fn test_signed_and_encrypted_card() {
     assert!(!test_result.is_err());
     let test_result = test_result.unwrap();
     assert_eq!(&test_result, ENCRYPTED_AND_SIGNED_DATA_PLAINTEXT);
+}
+
+#[test]
+fn test_signed_and_encrypted_card_invalid_signature() {
+    let provider = new_pgp_provider();
+    let private_key = provider
+        .private_key_import(
+            PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let verification_key = provider.private_key_to_public_key(&private_key).unwrap();
+
+    let card = TestCard(
+        ContactCardType::EncryptedAndSigned,
+        ENCRYPTED_AND_SIGNED_DATA.to_owned(),
+        ENCRYPTED_AND_SIGNED_SIGNATURE_INVALID.to_owned(),
+    );
+    let test_result = card.decrypt_and_verify_sync(
+        &provider,
+        &vec![TestAddressKey(private_key)],
+        &vec![verification_key],
+    );
+
+    assert!(test_result.is_err());
 }
