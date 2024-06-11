@@ -1,9 +1,9 @@
 use crate::common::TestContext;
-use proton_api_mail::domain::{ConversationId, LabelId};
+use proton_api_mail::domain::{Conversation, ConversationId, LabelId, MessageMetadata};
 use proton_api_mail::proton_api_core::APIErrorDesc;
 use proton_api_mail::requests::{
-    ConversationsResponseObject, LabelConversationRequest, LabelConversationsResponse,
-    MarkConversationsReadRequest, UnlabelConversationRequest,
+    ConversationsResponseObject, GetConversationResponse, LabelConversationRequest,
+    LabelConversationsResponse, MarkConversationsReadRequest, UnlabelConversationRequest,
 };
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};
@@ -106,6 +106,30 @@ impl TestContext {
         Mock::given(method("PUT"))
             .and(path("/api/mail/v4/conversations/read"))
             .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving a `conversation` and associated `messages`'s
+    /// metadata.
+    ///
+    pub async fn mock_get_conversation(
+        &self,
+        conversation: Conversation,
+        messages: Vec<MessageMetadata>,
+    ) {
+        let resp = GetConversationResponse {
+            conversation,
+            messages,
+        };
+
+        Mock::given(method("GET"))
+            .and(path(format!(
+                "/api/mail/v4/conversations/{}",
+                resp.conversation.id
+            )))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
             .mount(self.mock_server())

@@ -151,8 +151,7 @@ new_u64_type!(LocalMessageId);
 pub struct LocalMessageMetadata {
     pub id: LocalMessageId,
     pub rid: Option<MessageId>,
-    //TODO: ET-223 - We can sync messages without syncing conversations
-    pub conversation_id: Option<LocalConversationId>,
+    pub conversation_id: LocalConversationId,
     pub address_id: AddressId,
     pub order: u64,
     pub subject: String,
@@ -189,7 +188,7 @@ impl LocalMessageMetadata {
             id,
             rid: Some(message.id),
             address_id: message.address_id,
-            conversation_id: Some(conv_id),
+            conversation_id: conv_id,
             order: message.order,
             subject: message.subject,
             unread: message.unread,

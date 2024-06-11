@@ -1,5 +1,7 @@
 use crate::avatar::AvatarInformation;
-use crate::db::{LabelColor, LocalLabel, LocalLabelId, LocalMessageId, LocalMessageMetadata};
+use crate::db::{
+    LabelColor, LocalConversationId, LocalLabel, LocalLabelId, LocalMessageId, LocalMessageMetadata,
+};
 use crate::mailbox::conversation::first_unread_message_in_conversation;
 use proton_api_mail::domain::{LabelId, LabelType, MessageFlags};
 use proton_api_mail::proton_api_core::domain::AddressId;
@@ -175,7 +177,7 @@ fn message_metadata_with_flags(
     LocalMessageMetadata {
         id,
         rid: None,
-        conversation_id: None,
+        conversation_id: LocalConversationId::new(0),
         address_id: AddressId::from(""),
         order: 0,
         subject: String::new(),

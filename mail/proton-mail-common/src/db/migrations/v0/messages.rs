@@ -8,8 +8,7 @@ pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rid TEXT UNIQUE,
                 address_id TEXT NOT NULL,
-                conversation_id INTEGER DEFAULT NULL,
-                conversation_rid TEXT DEFAULT NULL,
+                conversation_id INTEGER NOT NULL,
                 `order` INTEGER NOT NULL,
                 subject TEXT NOT NULL,
                 unread INTEGER NOT NULL,
@@ -53,11 +52,6 @@ pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<
     )?;
     tx.execute(
         "CREATE INDEX index_messages_cid ON messages (conversation_id)",
-        (),
-    )?;
-
-    tx.execute(
-        "CREATE INDEX index_messages_conv_rid ON messages (conversation_rid)",
         (),
     )?;
 

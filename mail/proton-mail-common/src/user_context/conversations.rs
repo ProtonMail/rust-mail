@@ -1,4 +1,5 @@
 use crate::db::{DBResult, LocalConversation, LocalConversationId, LocalLabelId};
+use crate::exports::anyhow::anyhow;
 use crate::exports::tracing::error;
 use crate::{MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult};
 use proton_api_mail::domain::{
@@ -120,6 +121,76 @@ impl MailUserContext {
         Ok(())
     }
 
+    /// Sync conversation with `id`.
+    ///
+    /// If this is the first time this is called, the conversation will be downloaded from the
+    /// server.
+    ///
+    #[tracing::instrument(level = Level::DEBUG, skip(self))]
+    pub async fn sync_conversation(&self, id: LocalConversationId) -> MailboxResult<()> {
+        let (is_known, rid) = self
+            .db_read(|conn| conn.is_conversation_known(id))
+            .map_err(MailContextError::from)?;
+        if is_known {
+            debug!("Conversation is known, syncing messages only");
+            // if known sync messages.
+            return self.sync_conversation_messages(id).await;
+        }
+
+        let Some(rid) = rid else {
+            return Err(MailboxError::ConversationDoesNotHaveRemoteId(id));
+        };
+
+        debug!("Conversation is not known, syncing");
+        self.sync_conversation_impl(&rid).await
+    }
+
+    /// Sync conversation with remote `id`.
+    ///
+    /// If this is the first time this is called, the conversation will be downloaded from the
+    /// server.
+    ///
+    #[tracing::instrument(level = Level::DEBUG, skip(self))]
+    pub async fn sync_conversation_with_remote_id(&self, id: &ConversationId) -> MailboxResult<()> {
+        let is_known = self
+            .db_read(|conn| conn.is_conversation_known_with_remote_id(id))
+            .map_err(MailContextError::from)?;
+        if is_known {
+            debug!("Conversation is known, syncing messages only");
+            // if known sync messages.
+            let Some(local_id) = self.db_read(|conn| conn.conversation_id_from_remote_id(id))?
+            else {
+                return Err(MailContextError::Other(anyhow!(
+                    "Failed to find conversation with remote id {id}"
+                ))
+                .into());
+            };
+            return self.sync_conversation_messages(local_id).await;
+        }
+
+        debug!("Conversation is not known, syncing");
+        self.sync_conversation_impl(id).await
+    }
+
+    async fn sync_conversation_impl(&self, id: &ConversationId) -> MailboxResult<()> {
+        let conversation = self.mail_session().conversation(id).await.map_err(|e| {
+            error!("failed to download conversation: {e}");
+            MailContextError::from(e)
+        })?;
+
+        self.db_write(|tx| {
+            let conv_id = tx.create_conversation(&conversation.conversation)?;
+            tx.create_messages_from_metadata(conversation.messages.iter())?;
+            tx.set_conversation_has_messages(conv_id, true)
+        })
+        .map_err(|e| {
+            error!("Failed to create conversation: {e}");
+            e
+        })?;
+
+        Ok(())
+    }
+
     /// Get `count` conversations for `local_label_id`.
     ///
     /// # Errors
@@ -131,18 +202,6 @@ impl MailUserContext {
     ) -> MailContextResult<Vec<LocalConversation>> {
         let connection = self.new_db_connection()?;
         Ok(connection.read(|conn| conn.get_conversations_with_context(local_label_id, count))?)
-    }
-
-    /// Get a conversation with a given `id` in the context of `label_id`.
-    ///
-    /// # Errors
-    /// Returns error if the data could not be retrieved from the database.
-    pub fn conversation_with_id(
-        &self,
-        id: LocalConversationId,
-        label_id: LocalLabelId,
-    ) -> MailContextResult<Option<LocalConversation>> {
-        Ok(self.db_read(|conn| conn.get_conversation_with_context(id, label_id))?)
     }
 
     /// Filter or Search conversations which match the given `filter`.
@@ -174,12 +233,15 @@ impl MailUserContext {
 
     /// Retrieve a conversation by `id` in the All Mail context.
     ///
+    /// If the conversation does not exist, it will be retrieved from the server.
+    ///
     /// # Errors
-    /// Returns error if the db query failed.
-    pub fn conversation_with_id_with_all_mail_context(
+    /// Returns error if the db query or the network request failed.
+    pub async fn conversation_with_id_with_all_mail_context(
         &self,
         id: LocalConversationId,
-    ) -> MailContextResult<Option<LocalConversation>> {
+    ) -> MailboxResult<Option<LocalConversation>> {
+        self.sync_conversation(id).await?;
         Ok(self.db_read(|conn| {
             // ALL Mail label is always there, this unlikely to fail.
             let Some(label_id) = conn.resolve_remote_label_id(LabelId::all_mail())? else {
@@ -191,12 +253,16 @@ impl MailUserContext {
 
     /// Retrieve a conversation by remote `id` in the All Mail context.
     ///
+    /// If the conversation does not exist, it will be retrieved from the server.
+    ///
     /// # Errors
-    /// Returns error if the db query failed.
-    pub fn conversation_with_remote_id(
+    /// Returns error if the db query or the network request failed.
+    pub async fn conversation_with_remote_id(
         &self,
         id: &ConversationId,
-    ) -> MailContextResult<Option<LocalConversation>> {
+    ) -> MailboxResult<Option<LocalConversation>> {
+        self.sync_conversation_with_remote_id(id).await?;
+
         Ok(self.db_read(|conn| {
             let Some(conv_id) = conn.conversation_id_from_remote_id(id)? else {
                 return Ok(None);
@@ -211,13 +277,17 @@ impl MailUserContext {
 
     /// Retrieve a conversation by `id` in the `label_id` context.
     ///
+    /// If the conversation does not exist, it will be retrieved from the server.
+    ///
     /// # Errors
     /// Returns error if the db query failed.
-    pub fn conversation_with_id_and_context(
+    pub async fn conversation_with_id_and_context(
         &self,
         id: LocalConversationId,
         label_id: LocalLabelId,
-    ) -> MailContextResult<Option<LocalConversation>> {
+    ) -> MailboxResult<Option<LocalConversation>> {
+        self.sync_conversation(id).await?;
+
         Ok(self.db_read(|conn| conn.get_conversation_with_context(id, label_id))?)
     }
 }
