@@ -716,9 +716,16 @@ impl OperationLogic for Instruction {
     /// * [`Tether::execute()`]
     ///
     fn run(&self, connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<usize, StashError> {
-        connection
-            .execute(&self.query, &*Self::prepare_params(&self.params))
-            .map_err(StashError::ExecutionError)
+        let mut statement = connection
+            .prepare(&self.query)
+            .map_err(StashError::PreparationError)?;
+        let affected = statement
+            .execute(&*Self::prepare_params(&self.params))
+            .map_err(StashError::ExecutionError)?;
+        if let Some(query) = statement.expanded_sql() {
+            debug!("Query: {query}");
+        }
+        Ok(affected)
     }
 }
 
@@ -869,6 +876,9 @@ impl OperationLogic for Query {
                 .map_err(StashError::ExecutionError)?,
             stash,
         );
+        if let Some(query) = statement.expanded_sql() {
+            debug!("Query: {query}");
+        }
         rows.map_err(StashError::DeserializationError)
     }
 }
