@@ -60,6 +60,59 @@ fn test_create_message() {
 }
 
 #[test]
+fn test_create_message_without_synced_conversation() {
+    // Validate that we can create messages without having fetch the conversation.
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            create_labels(tx);
+            let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
+            let id = tx
+                .create_message_from_metadata(&metadata)
+                .expect("failed to create message");
+            let db_metadata = tx
+                .get_message_metadata(id)
+                .expect("failed to get message")
+                .expect("must have a value");
+
+            // ensure we can't access this conversation
+            let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
+            assert!(conv.is_none());
+            let (is_known, rid) = tx
+                .is_conversation_known(db_metadata.conversation_id)
+                .unwrap();
+            assert!(!is_known);
+            assert_eq!(rid, Some(metadata.conversation_id.clone()));
+
+            // create the conversation
+            let conversation = test_conversation(
+                [ConversationLabels {
+                    id: MY_LABEL_ID1.clone(),
+                    context_num_unread: 0,
+                    context_num_messages: 0,
+                    context_time: 0,
+                    context_size: 0,
+                    context_num_attachments: 0,
+                    context_expiration_time: 0,
+                    context_snooze_time: 0,
+                }],
+                [],
+            );
+            tx.create_conversation(&conversation)
+                .expect("failed to create conversation");
+
+            let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
+            assert!(conv.is_some());
+            let (is_known, rid) = tx
+                .is_conversation_known(db_metadata.conversation_id)
+                .unwrap();
+            assert!(is_known);
+            assert_eq!(rid, Some(metadata.conversation_id.clone()));
+        });
+    });
+}
+
+#[test]
 fn test_create_message_with_attachments() {
     with_file_sqlite_db(|mut core_conn, mut conn, _| {
         with_tx_core(&mut core_conn, test_create_message_dependencies_core);

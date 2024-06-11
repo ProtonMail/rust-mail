@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+
+- Message conversation id is no longer optional.
+- The following functions now download their respective content if not available
+  - `MailUserContext::conversation_with_remote_id`
+  - `MailUserContext::conversation_with_id_and_context`
+  - `MailUserContext::conversation_with_id_with_all_mail_context`
+  - `MailUserContext::message_metadata_with_remote_id`
 
 ## [0.5.23] - 2024-06-10
 

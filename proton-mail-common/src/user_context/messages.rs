@@ -4,6 +4,7 @@ use crate::exports::tracing::{error, Level};
 use crate::{MailContextError, MailContextResult, MailUserContext, MailboxError, MailboxResult};
 use proton_api_mail::domain::{MessageId, MessageMetadataFilter};
 use proton_api_mail::exports::anyhow::anyhow;
+use proton_api_mail::exports::tracing::debug;
 use std::path::PathBuf;
 
 impl MailUserContext {
@@ -32,7 +33,6 @@ impl MailUserContext {
                 return Err(MailboxError::MessageDoesNotHaveRemoteId(message_id));
             };
 
-            // sync the message body
             let message = self.mail_session().message(&remote_id).await.map_err(|e| {
                 error!("Failed to retrieve message: {e}");
                 MailContextError::from(e)
@@ -57,6 +57,40 @@ impl MailUserContext {
         };
 
         Ok(metadata)
+    }
+
+    /// Sync the message metadata and body from the severs if they do not exist.
+    #[tracing::instrument(level = Level::DEBUG, skip(self))]
+    pub async fn sync_message_with_remote_id(&self, id: &MessageId) -> MailboxResult<()> {
+        if let Some(local_id) = self.db_read(|conn| conn.message_id_from_remote_id(id))? {
+            debug!("Message with id {id} already synced");
+            self.sync_message_body(local_id).await?;
+            return Ok(());
+        };
+
+        // sync the message body
+        let message = self.mail_session().message(id).await.map_err(|e| {
+            error!("Failed to retrieve message: {e}");
+            MailContextError::from(e)
+        })?;
+
+        // create message in the database and store body in the cache.
+        self.db_write(|tx| -> MailboxResult<()> {
+            let id = tx.create_message_from_metadata(&message.metadata)?;
+            let cache_path = self.message_cache_path(id);
+            let _ = tx.create_or_update_message_body(&message).map_err(|e| {
+                error!("Failed to store message body in db: {e}");
+                e
+            })?;
+
+            // TODO(ET-231): Write to cache.
+            std::fs::write(cache_path, &message.body).map_err(|e| {
+                error!("Failed to write message body: {e}");
+                MailboxError::Context(MailContextError::Other(anyhow!("{e}")))
+            })?;
+
+            Ok(())
+        })
     }
 
     /// Get the cache path for a message body with `id`.
@@ -106,12 +140,15 @@ impl MailUserContext {
 
     /// Retrieve the message metadata from `remote_id`.
     ///
+    /// If the data does not exist it is fetched from the servers.
+    ///
     /// # Errors
-    /// Returns error if the query failed.
-    pub fn message_metadata_with_remote_id(
+    /// Returns error if the query or the request failed.
+    pub async fn message_metadata_with_remote_id(
         &self,
         remote_id: &MessageId,
-    ) -> MailContextResult<Option<LocalMessageMetadata>> {
+    ) -> MailboxResult<Option<LocalMessageMetadata>> {
+        self.sync_message_with_remote_id(remote_id).await?;
         Ok(self.db_read(|conn| {
             let Some(local_id) = conn.message_id_from_remote_id(remote_id)? else {
                 return Ok(None);

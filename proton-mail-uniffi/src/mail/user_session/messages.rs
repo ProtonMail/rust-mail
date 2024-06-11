@@ -1,4 +1,4 @@
-use crate::mail::{MailSessionError, MailUserSession};
+use crate::mail::{MailSessionError, MailUserSession, MailboxError};
 use proton_mail_common::db::{LocalMessageId, LocalMessageMetadata};
 use proton_mail_common::proton_api_mail::domain::{MessageId, MessageMetadataFilter};
 use proton_mail_common::FilteredMessages;
@@ -33,12 +33,18 @@ impl MailUserSession {
 
     /// Retrieve the message metadata from `remote_id`.
     ///
+    /// If the data does not exist it is fetched from the servers.
+    ///
     /// # Errors
-    /// Returns error if the query failed.
-    pub fn message_metadata_with_remote_id(
+    /// Returns error if the query or the request failed.
+    pub async fn message_metadata_with_remote_id(
         &self,
-        remote_id: &MessageId,
-    ) -> Result<Option<LocalMessageMetadata>, MailSessionError> {
-        Ok(self.ctx.message_metadata_with_remote_id(remote_id)?)
+        remote_id: MessageId,
+    ) -> Result<Option<LocalMessageMetadata>, MailboxError> {
+        let ctx = self.ctx.clone();
+        self.uniffi_async_mbox(
+            async move { Ok(ctx.message_metadata_with_remote_id(&remote_id).await?) },
+        )
+        .await
     }
 }

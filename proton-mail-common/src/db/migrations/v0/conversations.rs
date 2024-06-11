@@ -16,7 +16,8 @@ pub fn create_conversation_tables(tx: &mut SqliteTransaction) -> crate::db::DBRe
                 expiration_time INTEGER NOT NULL,
                 size INTEGER NOT NULL,
                 deleted INTEGER NOT NULL DEFAULT 0,
-                has_messages INTEGER NOT NULL DEFAULT 0
+                has_messages INTEGER NOT NULL DEFAULT 0,
+                is_known INTEGER NOT NULL
             )
         "#,
         (),

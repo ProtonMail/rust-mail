@@ -1,4 +1,4 @@
-use crate::mail::{MailSessionError, MailUserSession};
+use crate::mail::{MailSessionError, MailUserSession, MailboxError};
 use proton_mail_common::db::{LocalConversation, LocalConversationId, LocalLabelId};
 use proton_mail_common::proton_api_mail::domain::{ConversationFilter, ConversationId};
 use proton_mail_common::FilteredConversations;
@@ -23,39 +23,51 @@ impl MailUserSession {
     /// Retrieve a conversation by remote `id` in the All Mail context.
     ///
     /// # Errors
-    /// Returns error if the db query failed.
-    pub fn conversation_with_remote_id(
+    /// Returns error if the db query or network request failed.
+    pub async fn conversation_with_remote_id(
         &self,
-        id: &ConversationId,
-    ) -> Result<Option<LocalConversation>, MailSessionError> {
-        Ok(self.ctx.conversation_with_remote_id(id)?)
+        id: ConversationId,
+    ) -> Result<Option<LocalConversation>, MailboxError> {
+        let ctx = self.ctx.clone();
+        self.uniffi_async_mbox(async move { Ok(ctx.conversation_with_remote_id(&id).await?) })
+            .await
     }
 
     /// Retrieve a conversation by `id` in the `label_id` context.
     ///
     /// # Errors
-    /// Returns error if the db query failed.
-    pub fn conversation_with_id_and_context(
+    /// Returns error if the db query or network request failed.
+    pub async fn conversation_with_id_and_context(
         &self,
         id: u64,
         label_id: u64,
-    ) -> Result<Option<LocalConversation>, MailSessionError> {
-        Ok(self.ctx.conversation_with_id_and_context(
-            LocalConversationId::from(id),
-            LocalLabelId::from(label_id),
-        )?)
+    ) -> Result<Option<LocalConversation>, MailboxError> {
+        let ctx = self.ctx.clone();
+        self.uniffi_async_mbox(async move {
+            Ok(ctx
+                .conversation_with_id_and_context(
+                    LocalConversationId::from(id),
+                    LocalLabelId::from(label_id),
+                )
+                .await?)
+        })
+        .await
     }
 
     /// Retrieve a conversation by `id` in the All Mail context.
     ///
     /// # Errors
-    /// Returns error if the db query failed.
-    pub fn conversation_with_id_with_all_mail_context(
+    /// Returns error if the db query or network request failed.
+    pub async fn conversation_with_id_with_all_mail_context(
         &self,
         id: u64,
-    ) -> Result<Option<LocalConversation>, MailSessionError> {
-        Ok(self
-            .ctx
-            .conversation_with_id_with_all_mail_context(LocalConversationId::from(id))?)
+    ) -> Result<Option<LocalConversation>, MailboxError> {
+        let ctx = self.ctx.clone();
+        self.uniffi_async_mbox(async move {
+            Ok(ctx
+                .conversation_with_id_with_all_mail_context(LocalConversationId::from(id))
+                .await?)
+        })
+        .await
     }
 }

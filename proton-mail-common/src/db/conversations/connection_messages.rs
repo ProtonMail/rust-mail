@@ -62,7 +62,30 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             .prepare("INSERT OR IGNORE into message_attachments VALUES (?,?)")?;
         let mut attachment_stmt = self.create_message_attachment_ref_statement()?;
 
+        let mut gen_unknown_conversation_stmt = self.0.prepare(indoc! {
+            "INSERT INTO conversations(
+                rid,
+                `order`,
+                subject,
+                senders,
+                recipients,
+                num_messages,
+                num_unread,
+                num_attachments,
+                expiration_time,
+                size,
+                is_known
+            ) VALUES (?,0,'','','', 0, 0, 0,0,0,0)
+            ON CONFLICT(rid) DO NOTHING
+            "
+        })?;
+
         for metadata in metadata {
+            // Create a dummy conversation if it has not been synced before, so we can resolve
+            // to a local id that is valid. Retrieving the conversation from remote or events
+            // will initialize all the missing fields.
+            gen_unknown_conversation_stmt.execute([&metadata.conversation_id])?;
+
             bind_message_metadata_create(
                 &mut msg_stmt,
                 metadata,
@@ -825,12 +848,10 @@ fn create_or_update_message_query() -> String {
     external_id,
     num_attachments,
     flags,
-    snooze_time,
-    conversation_rid
+    snooze_time
 ) VALUES ((SELECT id FROM conversations WHERE rid=?),{})
 ON CONFLICT(rid) DO UPDATE SET
     conversation_id = excluded.conversation_id,
-    conversation_rid = excluded.conversation_rid,
     address_id=excluded.address_id,
     `order`=excluded.`order`,
     subject=excluded.subject,
@@ -855,7 +876,7 @@ ON CONFLICT(rid) DO UPDATE SET
     flags=excluded.flags,
     snooze_time=excluded.snooze_time
 RETURNING id",
-        gen_variable_in_argument_list(25)
+        gen_variable_in_argument_list(24)
     )
 }
 
@@ -897,7 +918,6 @@ fn bind_message_metadata_create(
         m.num_attachments,
         m.flags,
         m.snooze_time,
-        &m.conversation_id,
     }
 
     Ok(())

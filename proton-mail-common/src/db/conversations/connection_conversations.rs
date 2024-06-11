@@ -28,7 +28,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ) -> DBResult<Option<LocalConversationId>> {
         self.0
             .query_row(
-                "SELECT id FROM conversation WHERE rid=?",
+                "SELECT id FROM conversations WHERE rid=?",
                 [remote_id],
                 |r| r.get(0),
             )
@@ -77,14 +77,19 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                 num_unread,
                 num_attachments,
                 expiration_time,
-                size
-        ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                size,
+                is_known
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,1)
         ON CONFLICT(rid) DO UPDATE SET
+            subject=excluded.subject,
+            senders=excluded.senders,
+            recipients=excluded.recipients,
             num_messages=excluded.num_messages,
             num_attachments=excluded.num_attachments,
             num_unread=excluded.num_unread,
             expiration_time=excluded.expiration_time,
-            size=excluded.size
+            size=excluded.size,
+            is_known=1
        RETURNING id",
         )?;
 
@@ -1210,6 +1215,51 @@ ON CONFLICT(label_id) DO UPDATE SET total=total-excluded.total, unread=unread-ex
         )?;
         Ok(())
     }
+
+    /// Check whether a conversation with `id` is known.
+    ///
+    /// A known conversation is a conversation that has directly been created through user
+    /// interaction. Under certain circumstances we need to create a fake entry so we can
+    /// assign a local id to this conversation. One of these cases is when we are syncing
+    /// messages without their respective conversations.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn is_conversation_known(
+        &self,
+        id: LocalConversationId,
+    ) -> DBResult<(bool, Option<ConversationId>)> {
+        let value = self
+            .0
+            .query_row(
+                "SELECT is_known,rid FROM conversations WHERE id = ? LIMIT 1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        Ok(value.unwrap_or((false, None)))
+    }
+
+    /// Check whether a conversation with remote `id` is known.
+    ///
+    /// A known conversation is a conversation that has directly been created through user
+    /// interaction. Under certain circumstances we need to create a fake entry so we can
+    /// assign a local id to this conversation. One of these cases is when we are syncing
+    /// messages without their respective conversations.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn is_conversation_known_with_remote_id(&self, id: &ConversationId) -> DBResult<bool> {
+        let value = self
+            .0
+            .query_row(
+                "SELECT is_known FROM conversations WHERE rid = ? LIMIT 1",
+                [id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(value.unwrap_or(false))
+    }
 }
 
 const RESOLVE_LABEL_ID_STATEMENT: &str = "SELECT id FROM labels WHERE rid = ?";
@@ -1268,7 +1318,7 @@ FROM conversations AS C
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
 LEFT JOIN json_conv_attachments AS CA ON CA.cid = C.id
 LEFT JOIN conversation_labels AS CF ON C.id = CF.conversation_id AND CF.label_id = (SELECT id FROM labels WHERE rid='10')
-WHERE deleted=0"
+WHERE C.deleted=0 AND C.is_known=1"
     }
 
     fn query_with_id() -> String {
@@ -1375,7 +1425,7 @@ INNER JOIN conversation_labels AS CL ON CL.conversation_id=C.id AND CL.label_id=
 LEFT JOIN json_conversation_labels AS CLJ ON CLJ.cid = C.id
 LEFT JOIN json_conv_attachments AS CA ON CA.cid = C.id
 LEFT JOIN conversation_labels AS CF ON C.id = CF.conversation_id AND CF.label_id = (SELECT id FROM labels WHERE rid='10')
-WHERE C.deleted=0"
+WHERE C.deleted=0 AND C.is_known=1"
     }
 
     fn query() -> String {

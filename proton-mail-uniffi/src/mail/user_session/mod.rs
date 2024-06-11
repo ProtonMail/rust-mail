@@ -6,8 +6,9 @@ mod initialization;
 mod labels;
 mod messages;
 
-use crate::mail::{map_task_join_error, MailSessionError, MailSessionResult};
+use crate::mail::{map_task_join_error, MailSessionError, MailSessionResult, MailboxError};
 use proton_mail_common as pmc;
+use proton_mail_common::exports::anyhow::anyhow;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -48,6 +49,22 @@ impl MailUserSession {
             .spawn(f)
             .await
             .map_err(map_task_join_error)?
+    }
+
+    // TODO: Remove when mail error types get merged.
+    /// Helper function to hide implementation details of how to run async code with
+    /// uniffi.
+    pub(crate) async fn uniffi_async_mbox<T, F>(&self, f: F) -> Result<T, MailboxError>
+    where
+        T: Send + 'static,
+        F: Future<Output = Result<T, MailboxError>> + Send + 'static,
+    {
+        self.ctx
+            .mail_context()
+            .async_runtime()
+            .spawn(f)
+            .await
+            .map_err(|e| MailboxError::Other(anyhow!("Failed to join task: {e}")))?
     }
 }
 
