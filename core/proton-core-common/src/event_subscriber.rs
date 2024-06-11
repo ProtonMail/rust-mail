@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
-use proton_api_core::domain::{Event, ProductUsedSpace, User, UserId, UserSettings};
+use proton_api_core::domain::{Address, Event, ProductUsedSpace, User, UserId, UserSettings};
 use proton_api_core::exports::anyhow;
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::error;
@@ -15,6 +15,8 @@ pub trait CoreEvent: Event {
 
     fn get_core_event_user_settings(&self) -> Option<&UserSettings>;
     fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings>;
+
+    fn get_core_event_addresses(&self) -> Option<&[Address]>;
 
     fn get_core_event_used_space(&self) -> Option<i64>;
 
@@ -82,6 +84,13 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         e
                     })?;
                 }
+				if let Some(addresses) = event.get_core_event_addresses() {
+					tx.create_or_update_addresses(addresses.iter())
+						.map_err(|e| {
+							error!("Failed to update user addresses: {e}");
+							e
+						})?;
+				}
             }
             Ok(())
         }

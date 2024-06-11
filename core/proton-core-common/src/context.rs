@@ -4,6 +4,7 @@ use crate::os::{KeyChain, KeyChainError};
 use crate::session::CoreSession;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
 use crate::CoreSessionCallback;
+use crate::KeyHandlingError;
 use proton_api_core::auth::new_arc_auth_store;
 use proton_api_core::domain::{ExposeSecret, SecretString, UserId};
 use proton_api_core::exports::anyhow::anyhow;
@@ -36,6 +37,8 @@ pub enum CoreContextError {
     KeyChainHasNoKey,
     #[error("HTTP Error: {0}")]
     Http(#[from] RequestError),
+    #[error("Failed to access PGP keys: {0}")]
+    PGPKeyAccess(#[from] KeyHandlingError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
     #[error("{0}")]

@@ -1,10 +1,11 @@
-use crate::auth::ArcAuthStore;
-use crate::domain::{Event, EventId, User, UserSettings};
+use crate::auth::{ArcAuthStore, UserKeySecret};
+use crate::domain::{Address, Event, EventId, User, UserSettings};
 use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};
 use crate::requests::{
-    AuthRefresh, CaptchaRequest, GetEventRequest, GetLatestEventRequest, GetUserSaltsRequest,
-    LogoutRequest, UserInfoRequest, UserSettingsRequest,
+    AuthRefresh, CaptchaRequest, GetAddressesRequest, GetEventRequest, GetLatestEventRequest,
+    GetUserSaltsRequest, LogoutRequest, PostUserForkSessionRequest, UserInfoRequest,
+    UserSettingsRequest,
 };
 use anyhow::anyhow;
 use proton_crypto_account::salts::Salts;
@@ -34,6 +35,29 @@ impl Session {
         &self.client.info().env_config
     }
 
+    /// Fork the current session.
+    ///
+    /// This call has to be made from a parent session, and forks the current
+    /// logged-in user session in order to provide a new session for the same
+    /// user.
+    ///
+    /// If successful, this will return the "Selector" string for the new
+    /// session.
+    ///
+    /// # Errors
+    ///
+    /// Any of the [`http::RequestError`] variants could be returned if there is
+    /// a problem with the HTTP request.
+    ///
+    pub async fn fork(&self) -> Result<String, http::RequestError> {
+        self.execute_request(PostUserForkSessionRequest {
+            child_client_id: "web-account-lite".to_owned(),
+            independent: 0,
+        })
+        .await
+        .map(|r| r.selector)
+    }
+
     /// Get the user details.
     ///
     /// # Errors
@@ -44,6 +68,16 @@ impl Session {
             .map(|r| r.user)
     }
 
+    /// Get the addresses for a user.
+    ///
+    /// # Errors
+    /// Returns error if the request failed.
+    pub async fn addresses(&self) -> Result<Vec<Address>, http::RequestError> {
+        self.execute_request(GetAddressesRequest {})
+            .await
+            .map(|v| v.addresses)
+    }
+
     /// Get the user salts.
     ///
     /// # Errors
@@ -52,6 +86,17 @@ impl Session {
         self.execute_request(GetUserSaltsRequest {})
             .await
             .map(|v| v.key_salts)
+    }
+
+    /// Exposes the user key secret from the auth store to unlock user keys.
+    ///
+    /// Returns None if the auth store is not available or no key secret is stored.
+    pub async fn expose_key_secret(&self) -> Option<UserKeySecret> {
+        self.auth_store
+            .read()
+            .await
+            .get_auth()
+            .and_then(|auth| auth.key_secret.clone())
     }
 
     /// Logout the user and invalidate the current session.

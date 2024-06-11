@@ -1,10 +1,10 @@
 use crate::db::{
-    DecryptedUserSession, EncryptedAccessToken, EncryptedRefreshToken, EncryptedUserSession,
-    SessionEncryptionKey,
+    DecryptedUserSession, EncryptedAccessToken, EncryptedKeySecret, EncryptedRefreshToken,
+    EncryptedUserSession, SessionEncryptionKey,
 };
 use crate::os::{KeyChain, KeyChainError};
 use futures::executor::block_on;
-use proton_api_core::auth::{AccessToken, Auth, RefreshToken, Scope};
+use proton_api_core::auth::{AccessToken, Auth, RefreshToken, Scope, UserKeySecret};
 use proton_api_core::domain::{ExposeSecret, SecretString, Uid};
 use proton_api_core::exports::anyhow::anyhow;
 use proton_api_core::exports::tracing::{debug, error};
@@ -22,10 +22,8 @@ pub trait CoreSessionCallback: Send + Sync {
     fn on_session_refresh(&self);
     /// Triggered when the session has been destroyed.
     fn on_session_deleted(&self);
-
     /// Triggered when the refresh operation fails.
     fn on_refresh_failed(&self, e: &RequestError);
-
     /// Triggers if any error occurs while persisting the session data.
     fn on_error(&self, err: &CoreSessionError);
 }
@@ -87,6 +85,14 @@ impl CoreSession {
             EncryptedRefreshToken::new(refresh, key).map_err(|_| CoreSessionError::Crypto)?;
         Ok((access, refresh))
     }
+
+    fn encrypt_key_secret(
+        key: &SessionEncryptionKey,
+        key_secret: &UserKeySecret,
+    ) -> Result<EncryptedKeySecret, CoreSessionError> {
+        EncryptedKeySecret::new(key_secret, key).map_err(|_| CoreSessionError::Crypto)
+    }
+
     fn on_error(&self, error: &CoreSessionError) {
         if let Some(cb) = &self.cb {
             cb.on_error(error);
@@ -115,11 +121,18 @@ impl proton_api_core::auth::Store for CoreSession {
                     Box::new(e)
                 },
             )?;
-
-        let mut encrypted_session = auth_to_encrypted_session(
+		
+		let encrypted_key_secret = auth
+			.key_secret
+			.as_ref()
+			.map(|key_secret| Self::encrypt_key_secret(&session_key, key_secret))
+			.transpose()?;
+		
+		let mut encrypted_session = auth_to_encrypted_session(
             auth.clone(),
             encrypted_access_token,
             encrypted_refresh_token,
+            encrypted_key_secret,
         );
         block_on(async { encrypted_session.save().await })?;
         self.auth = Some(auth);
@@ -182,6 +195,48 @@ impl proton_api_core::auth::Store for CoreSession {
         Ok(())
     }
 
+    fn refresh_user_key_secret(
+        &mut self,
+        user_key_secret: UserKeySecret,
+    ) -> Result<(), Box<dyn Error>> {
+        let user_id = {
+            let Some(auth) = &self.auth else {
+                return Err(Box::new(CoreSessionError::Other(anyhow!(
+                    "no auth info found to refresh"
+                ))));
+            };
+            auth.user_id.clone()
+        };
+        let session_key = self.get_encryption_key().map_err(|e| {
+            error!("Failed to retrieve encryption key from the keychain: {e}");
+            self.on_error(&e);
+            e
+        })?;
+
+        let encrypted_key_secret = Self::encrypt_key_secret(&session_key, &user_key_secret)?;
+
+        let mut conn = self.new_connection().map_err(|e| {
+            error!("Failed to get a database connection:{e}");
+            self.on_error(&e);
+            e
+        })?;
+        {
+            conn.tx(|tx| -> DBResult<()> {
+                tx.update_user_key_secret(&user_id, &encrypted_key_secret)
+            })
+            .map_err(|e| {
+                let e = CoreSessionError::DB(e);
+                error!("Failed write auth to the database:{e}");
+                self.on_error(&e);
+                e
+            })?;
+        }
+        if let Some(auth) = &mut self.auth {
+            auth.key_secret = Some(user_key_secret);
+        }
+        Ok(())
+    }
+
     fn set_scopes(&mut self, _: Scope) -> Result<Option<&Auth>, Box<dyn Error>> {
         todo!()
     }
@@ -216,6 +271,7 @@ fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
         refresh_token: session.refresh_token,
         access_token: session.access_token,
         scope: session.scopes,
+        key_secret: session.key_secret,
     }
 }
 
@@ -223,6 +279,7 @@ fn auth_to_encrypted_session(
     auth: Auth,
     encrypted_access_token: EncryptedAccessToken,
     encrypted_refresh_token: EncryptedRefreshToken,
+    encrypted_key_secret: Option<EncryptedKeySecret>,
 ) -> EncryptedUserSession {
     EncryptedUserSession {
         session_id: auth.uid,
@@ -231,6 +288,7 @@ fn auth_to_encrypted_session(
         email: auth.email,
         refresh_token: encrypted_refresh_token,
         access_token: encrypted_access_token,
+        key_secret: encrypted_key_secret,
         scopes: auth.scope,
         row_id: None,
         stash: None,

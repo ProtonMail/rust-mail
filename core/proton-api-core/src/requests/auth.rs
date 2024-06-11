@@ -2,7 +2,9 @@
 use crate::auth::{AccessToken, RefreshToken, Scope};
 use crate::domain::{LoginData, TFAStatus, Uid, UserId};
 use crate::http;
-use crate::http::{RequestData, X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE};
+use crate::http::{
+    JsonResponse, RequestData, X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE,
+};
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 
@@ -14,7 +16,7 @@ pub struct AuthInfo<'a> {
 }
 
 impl<'a> http::RequestDesc for AuthInfo<'a> {
-    type Response = http::JsonResponse<AuthInfoResponse>;
+    type Response = JsonResponse<AuthInfoResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Post, "auth/v4/info").json(self)
@@ -25,7 +27,7 @@ impl<'a> http::RequestDesc for AuthInfo<'a> {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct AuthInfoResponse {
-    pub version: i32,
+    pub version: u8,
     pub modulus: String,
     pub server_ephemeral: String,
     pub salt: String,
@@ -47,7 +49,7 @@ pub struct Auth<'a> {
 }
 
 impl<'a> http::RequestDesc for Auth<'a> {
-    type Response = http::JsonResponse<AuthResponse>;
+    type Response = JsonResponse<AuthResponse>;
 
     fn build(&self) -> RequestData {
         let mut request = RequestData::new(http::Method::Post, "auth/v4").json(self);
@@ -210,7 +212,7 @@ impl<'a> AuthRefresh<'a> {
 }
 
 impl<'a> http::RequestDesc for AuthRefresh<'a> {
-    type Response = http::JsonResponse<AuthRefreshResponse>;
+    type Response = JsonResponse<AuthRefreshResponse>;
 
     fn build(&self) -> RequestData {
         RequestData::new(http::Method::Post, "auth/v4/refresh").json(AuthRefreshBody {
@@ -256,4 +258,66 @@ impl<'a> http::RequestDesc for CaptchaRequest<'a> {
 
         data.query("Token", &self.token)
     }
+}
+
+/// Fork session request.
+///
+/// This request is used to fork a user's session, providing a new session for
+/// the same user.
+///
+/// The general documentation for this can currently be found here:
+///
+///   - [Feature documentation](https://confluence.protontech.ch/display/CP/How+to+generate+a+session+fork+selector+for+testing+the+lite+account+application)
+///
+/// The required POST request is described as being:
+///
+///   - `POST /api/auth/sessions/forks`
+///   - `{ ChildClientID: "web-account-lite", Independent: 0 }`
+///
+/// The headers should be taken care of by the general request-response process.
+/// Therefore all this action needs to do is call the endpoint with the required
+/// JSON body.
+///
+/// The relevant API documentation is here:
+///
+///   - [API docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/auth/#tag/Authentication-Sessions/operation/post_auth-%7B_version%7D-sessions-forks)
+///
+/// The fields in the JSON body are not currently documented.
+///
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostUserForkSessionRequest {
+    /// The child client ID, which is always `"web-account-lite"` at present. It
+    /// seems like this is an identifier for the caller, but this is not clear.
+    #[serde(rename = "ChildClientID")]
+    pub child_client_id: String,
+
+    /// It's not currently known what this does, and it's always set to `0`.
+    pub independent: u8,
+}
+
+impl http::RequestDesc for PostUserForkSessionRequest {
+    type Response = JsonResponse<UserForkSessionResponse>;
+
+    fn build(&self) -> RequestData {
+        RequestData::new(http::Method::Post, "auth/sessions/forks").json(self)
+    }
+}
+
+/// Fork session response.
+///
+/// This is the "selector" that is returned when a session is forked.
+///
+/// The relevant API documentation is here:
+///
+///   - [API docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/auth/#tag/Authentication-Sessions/operation/post_auth-%7B_version%7D-sessions-forks)
+///
+/// The fields in the JSON response are not currently documented.
+///
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UserForkSessionResponse {
+    /// The selector that is returned when a session is forked. It's not clear
+    /// exactly what this is at present.
+    pub selector: String,
 }

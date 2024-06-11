@@ -3,8 +3,12 @@ use proton_api_core::Session;
 use proton_sqlite3::MigratorError;
 use stash::stash::Stash;
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 
-mod settings;
+pub use self::keys::*;
+mod addresses;
+mod keys;
+mod user;
 
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
@@ -21,6 +25,7 @@ pub struct UserContext {
     session: Session,
     stash: Stash,
     user_id: UserId,
+    pub(self) key_manager: Arc<CryptoKeyManager>,
 }
 
 impl Debug for UserContext {
@@ -35,6 +40,7 @@ impl UserContext {
             session,
             stash,
             user_id: id,
+            key_manager: Arc::new(CryptoKeyManager::new()),
         }
     }
 

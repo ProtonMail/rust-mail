@@ -1,5 +1,6 @@
 #![allow(clippy::module_name_repetitions)] // to avoid issue with collisions in the http namespace
 use crate::http::{FromResponse, Result};
+use base64::{engine::general_purpose, Engine as _};
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
 use tracing::debug;
@@ -12,7 +13,7 @@ impl FromResponse for NoResponse {
 
     const NEEDS_BODY: bool = false;
 
-    fn from_response<T: AsRef<[u8]>>(_: T, _: bool) -> Result<Self::Output> {
+    fn from_response(_: bytes::Bytes, _: bool) -> Result<Self::Output> {
         Ok(())
     }
 }
@@ -24,7 +25,7 @@ impl<T: DeserializeOwned> FromResponse for JsonResponse<T> {
 
     const NEEDS_BODY: bool = true;
 
-    fn from_response<R: AsRef<[u8]>>(response: R, debug: bool) -> Result<Self::Output> {
+    fn from_response(response: bytes::Bytes, debug: bool) -> Result<Self::Output> {
         // uncomment for debug.
         if debug {
             debug!(
@@ -45,11 +46,30 @@ impl FromResponse for StringResponse {
 
     const NEEDS_BODY: bool = true;
 
-    fn from_response<R: AsRef<[u8]>>(response: R, debug: bool) -> Result<Self::Output> {
+    fn from_response(response: bytes::Bytes, debug: bool) -> Result<Self::Output> {
         let v = String::from_utf8_lossy(response.as_ref()).to_string();
         if debug {
             debug!("StringResponse: {}", v);
         }
         Ok(String::from_utf8_lossy(response.as_ref()).to_string())
+    }
+}
+
+pub struct ByteResponse {}
+
+impl FromResponse for ByteResponse {
+    type Output = bytes::Bytes;
+
+    const NEEDS_BODY: bool = true;
+
+    fn from_response(response: bytes::Bytes, debug: bool) -> Result<Self::Output> {
+        if debug {
+            debug!(
+                "ByteResponse (encoded into base64 for your convenience): {}",
+                general_purpose::STANDARD.encode(&response)
+            );
+        }
+
+        Ok(response)
     }
 }

@@ -1,3 +1,4 @@
+use crate::db::new_core_test_connection;
 use proton_api_core::domain::{
     DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
     SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserKeys, UserSettings, WeekStart,
@@ -45,17 +46,17 @@ async fn test_core_user_space_updates() {
             .expect("failed to start transaction");
         user.save_using(&tx).await.expect("failed to store user");
 
-        user.used_space = 912314142;
+        user.used_space = 912_314_142;
         user.save_using(&tx)
             .await
             .expect("failed to update used space");
 
         user.product_used_space = ProductUsedSpace {
-            calendar: 234235235235,
-            contact: 2342342111231,
-            drive: 32423487767455,
-            mail: 10202042014,
-            pass: 1234857671,
+            calendar: 234_235_235_235,
+            contact: 2_342_342_111_231,
+            drive: 32_423_487_767_455,
+            mail: 10_202_042_014,
+            pass: 1_234_857_671,
         };
 
         user.save_using(&tx)
@@ -158,23 +159,39 @@ fn new_test_user(stash: Stash) -> User {
         max_space: 4096,
         max_upload: 512,
         user_type: proton_api_core::domain::UserType::Proton,
-        create_time: 111111,
-        credit: 222222,
+        create_time: 111_111,
+        credit: 222_222,
         currency: "euro".to_string(),
-        keys: UserKeys(RealUserKeys(vec![LockedKey {
-            id: KeyId::from("My_key_id"),
-            version: 3,
-            private_key: "my_private_key".to_string(),
-            token: None,
-            signature: None,
-            activation: None,
-            primary: true,
-            active: false,
-            flags: None,
-            recovery_secret: Some("recovery_secret".to_string()),
-            recovery_secret_signature: Some("recovery_signature".to_string()),
-            address_forwarding_id: None,
-        }])),
+        keys: UserKeys(RealUserKeys(vec![
+            LockedKey {
+                id: KeyId::from("My_key_id"),
+                version: 3,
+                private_key: "my_private_key".to_string(),
+                token: None,
+                signature: None,
+                activation: None,
+                primary: true,
+                active: false,
+                flags: None,
+                recovery_secret: Some("recovery_secret".to_string()),
+                recovery_secret_signature: Some("recovery_signature".to_string()),
+                address_forwarding_id: None,
+            },
+            LockedKey {
+                id: KeyId::from("My_key_id2"),
+                version: 3,
+                private_key: "my_private_key2".to_string(),
+                token: None,
+                signature: None,
+                activation: None,
+                primary: true,
+                active: false,
+                flags: None,
+                recovery_secret: Some("recovery_secret2".to_string()),
+                recovery_secret_signature: Some("recovery_signature2".to_string()),
+                address_forwarding_id: None,
+            },
+        ])),
         product_used_space: ProductUsedSpace {
             calendar: 23,
             contact: 44,
@@ -185,9 +202,9 @@ fn new_test_user(stash: Stash) -> User {
         to_migrate: Default::default(),
         mnemonic_status: proton_api_core::domain::UserMnemonicStatus::Disabled,
         role: 12345,
-        private: 442424,
-        subscribed: 3234234,
-        services: 23123123,
+        private: 442_424,
+        subscribed: 3_234_234,
+        services: 23_123_123,
         delinquent: 4,
         flags: Flags {
             protected: false,

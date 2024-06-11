@@ -107,5 +107,5 @@ pub trait FromResponse {
     ///
     /// # Errors
     /// Returns error on failure.
-    fn from_response<T: AsRef<[u8]>>(response: T, debug: bool) -> Result<Self::Output>;
+    fn from_response(response: bytes::Bytes, debug: bool) -> Result<Self::Output>;
 }

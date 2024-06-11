@@ -28,7 +28,7 @@ async fn main() {
     let app_version = std::env::var("PAPI_APP_VERSION").unwrap();
 
     let api_env_config = APIEnvConfig {
-        app_version: app_version,
+        app_version,
         ..Default::default()
     };
 
@@ -71,6 +71,37 @@ async fn main() {
                     }
                     Err(e) => {
                         eprintln!("Failed to submit totp: {e}");
+                        continue;
+                    }
+                }
+            }
+        };
+    }
+
+    if login_flow.is_awaiting_mailbox_password() {
+        let mut stdout = tokio::io::stdout();
+        let mut line_reader = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+        {
+            for _ in 0..3 {
+                stdout
+                    .write_all("Please type the mailbox password:".as_bytes())
+                    .await
+                    .unwrap();
+                stdout.flush().await.unwrap();
+
+                let Some(line) = line_reader.next_line().await.unwrap() else {
+                    eprintln!("Failed to read mailbox password");
+                    return;
+                };
+
+                let mailbox_pw = line.trim_end_matches('\n');
+
+                match login_flow.submit_mailbox_password(mailbox_pw).await {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to submit maibix password: {e}");
                         continue;
                     }
                 }

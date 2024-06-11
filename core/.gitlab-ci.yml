@@ -1,17 +1,12 @@
-image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
 
 include:
   - project: "rust/shared/registry"
     file: "upload_template.yml"
 
-# sccache location to speed up compilation.
 default:
   tags:
     - shared-medium
-  cache: &global_cache
-    key: sccache
-    paths:
-      - /tmp/cache
 
 # Config git acccess to other repos
 .script-config-git:
@@ -66,7 +61,7 @@ build-android:
 build-macos:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.77.0"
+  image: "inbox-rust:1.78.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
@@ -76,7 +71,7 @@ build-macos:
 build-ios:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.77.0"
+  image: "inbox-rust:1.78.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
@@ -89,7 +84,7 @@ build-ios:
 
 deploy-proton-sqlite3:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
     CARGO_PACKAGE_OPTIONS: "--package proton-sqlite3"
   when: manual
@@ -98,14 +93,14 @@ deploy-proton-api-core:
   extends: .deploy_to_protonvpn_repository
   tags:
     - shared-medium
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   variables:
     CARGO_PACKAGE_OPTIONS: "--package proton-api-core"
   when: manual
 
 deploy-proton-action-queue:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   tags:
     - shared-medium
   variables:
@@ -114,7 +109,7 @@ deploy-proton-action-queue:
 
 deploy-proton-event-loop:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   tags:
     - shared-medium
   variables:
@@ -123,7 +118,7 @@ deploy-proton-event-loop:
 
 deploy-proton-core-common:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   tags:
     - shared-medium
   variables:

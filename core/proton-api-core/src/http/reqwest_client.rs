@@ -1,12 +1,17 @@
 use std::sync::Arc;
 
 use super::ClientInfo;
+use crate::crypto_clock::{init_server_crypto_clock, server_crypto_clock};
 use crate::http::{
     Builder, ClientRequest, ClientRequestBuilder, FromResponse, Method, Request, RequestData,
     RequestError, X_PM_APP_VERSION_HEADER,
 };
 use crate::requests::APIError;
+use chrono::DateTime;
+use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
 use reqwest;
+use reqwest::header::HeaderMap;
+use tracing::error;
 
 #[derive(Debug, Clone)]
 pub struct ReqwestClient {
@@ -26,7 +31,7 @@ impl TryFrom<Builder> for ReqwestClient {
     type Error = anyhow::Error;
 
     fn try_from(value: Builder) -> Result<Self, Self::Error> {
-        let mut header_map = reqwest::header::HeaderMap::new();
+        let mut header_map = HeaderMap::new();
         header_map.insert(
             X_PM_APP_VERSION_HEADER,
             reqwest::header::HeaderValue::from_str(&value.api_env_config.app_version)
@@ -65,6 +70,9 @@ impl TryFrom<Builder> for ReqwestClient {
             env_config: value.api_env_config,
             debug: value.debug,
         };
+
+        // Set the server crypto clock as provider in proton crypto.
+        init_server_crypto_clock();
 
         Ok(Self {
             client: builder.build()?,
@@ -155,6 +163,12 @@ impl ReqwestClient {
 
         let status = response.status().as_u16();
 
+        // Tries to read the server time from the header and update the server clock.
+        // The server clock is used for crypto operations.
+        if let Some(server_time) = parse_server_time(response.headers()) {
+            server_crypto_clock().update_clock(server_time);
+        }
+
         if status >= 400 {
             let body = response
                 .bytes()
@@ -168,7 +182,7 @@ impl ReqwestClient {
         }
 
         if !R::NEEDS_BODY {
-            return R::from_response([], self.info.debug);
+            return R::from_response(bytes::Bytes::new(), self.info.debug);
         }
 
         let bytes = response.bytes().await?;
@@ -200,4 +214,27 @@ impl ReqwestClient {
     ) -> crate::http::Result<R::Output> {
         self.direct_exec::<R>(request).await
     }
+}
+
+/// Parses the server time from the headers of an http response.
+fn parse_server_time(headers: &HeaderMap) -> Option<UnixTimestamp> {
+    let response_time_opt = headers
+        .get("date")
+        .and_then(|response_time_header| response_time_header.to_str().ok());
+    let Some(response_time) = response_time_opt else {
+        error!("parse_server_time: failed to retrieve the date http response header");
+        return None;
+    };
+    let parsed_server_time = match DateTime::parse_from_rfc2822(response_time) {
+        Ok(parsed_server_time) => parsed_server_time,
+        Err(err) => {
+            error!("parse_server_time: failed to parse the date from the date http response header: {err}");
+            return None;
+        }
+    };
+    let Ok(unix_timestamp) = parsed_server_time.timestamp().try_into().map(UnixTimestamp) else {
+        error!("parse_server_time: failed to extract the unix timestamp from the date http response header");
+        return None;
+    };
+    Some(unix_timestamp)
 }

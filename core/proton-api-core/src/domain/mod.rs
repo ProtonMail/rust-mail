@@ -1,10 +1,12 @@
 //! Domain Types.
 
+mod addresses;
 mod event;
 mod human_verification;
 mod user;
 mod user_settings;
 
+pub use addresses::*;
 pub use event::*;
 pub use human_verification::*;
 pub use user::*;

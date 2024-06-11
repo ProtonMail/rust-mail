@@ -16,6 +16,7 @@ anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.22"
 bytes = "1.4"
+chrono = { version = "0.4", features = ["default", "serde"] }
 flume = "0.11"
 futures = "0.3"
 indoc = "2.0.5"
@@ -26,7 +27,7 @@ pin-project = "1"
 proton-api-core = { version = "0.3.0", path = "proton-api-core", registry = "proton" }
 proton-async = { version = "0.5.0", path = "proton-async", registry = "proton" }
 proton-core-common = { version = "0.3.0", path = "proton-core-common" }
-proton-crypto-account = { version = "0.1.0", registry = "proton" }
+proton-crypto-account = { version = "0.2.3", registry = "proton" }
 proton-event-loop = { version = "0.6.0", path = "proton-event-loop", registry = "proton" }
 proton-sqlite3 = { version = "0.6.0", path = "proton-sqlite3", registry = "proton" }
 rand = "0.8"
