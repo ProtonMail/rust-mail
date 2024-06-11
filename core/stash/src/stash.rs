@@ -1080,20 +1080,7 @@ impl Stash {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::Instruct(Instruction {
-            channel: Some(that_end),
-            conn_handle: None,
-            query: query.into(),
-            params,
-        });
-        self.queue
-            .send_async(operation)
-            .await
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))?
+        perform_execute(query, params, None, &self.queue).await
     }
 
     /// Loads a record from the database by ID, against a new connection.
@@ -1209,34 +1196,7 @@ impl Stash {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::Query(Query {
-            channel: Some(that_end),
-            conn_handle: None,
-            query: query.into(),
-            params,
-            // The converter function picks up the nature of the generic T here, which
-            // allows Worker.query() to perform the deserialisation and return the
-            // desired type.
-            converter: Box::new(converter::<T>),
-        });
-        self.queue
-            .send_async(operation)
-            .await
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))??
-            .into_iter()
-            .map(|item| {
-                // The type we receive back is described as Any so that it can pass through
-                // the channel without introducing unnecessary type constraints, but is in
-                // fact already known to be of type T, so we can downcast it safely.
-                item.downcast::<T>()
-                    .map(|boxed| *boxed)
-                    .map_err(|_err| StashError::DowncastError)
-            })
-            .collect()
+        perform_query(query, params, None, &self.queue).await
     }
 
     /// Subscribes to notifications of changes to the database.
@@ -1502,20 +1462,7 @@ impl Tether {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::Instruct(Instruction {
-            channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.handle)),
-            query: query.into(),
-            params,
-        });
-        self.queue
-            .send_async(operation)
-            .await
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))?
+        perform_execute(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
 
     /// Loads a record from the database by ID, against an open connection.
@@ -1586,34 +1533,7 @@ impl Tether {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::Query(Query {
-            channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.handle)),
-            query: query.into(),
-            params,
-            // The converter function picks up the nature of the generic T here, which
-            // allows Worker.query() to perform the deserialisation and return the
-            // desired type.
-            converter: Box::new(converter::<T>),
-        });
-        self.queue
-            .send_async(operation)
-            .await
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))??
-            .into_iter()
-            .map(|item| {
-                // The type we receive back is described as Any so that it can pass through
-                // the channel without introducing unnecessary type constraints, but is in
-                // fact already known to be of type T, so we can downcast it safely.
-                item.downcast::<T>()
-                    .map(|boxed| *boxed)
-                    .map_err(|_err| StashError::DowncastError)
-            })
-            .collect()
+        perform_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
 
     /// Rolls back a transaction.
@@ -2741,4 +2661,120 @@ where
         .into_iter()
         .map(Box::new)
         .collect())
+}
+
+/// Runs a query and returns the affected row count.
+///
+/// This function prepares a query and executes it on the database, and then
+/// indicates whether it was successful, returning the number of affected rows.
+/// It is the internal function that actually does the querying for the public
+/// interface methods [`Stash::execute()`] and [`Tether::execute()`].
+///
+/// For full usage details, see [`Stash::execute()`].
+///
+/// # Parameters
+///
+/// * `query`       - The query to execute.
+/// * `params`      - The parameters to pass to the query.
+/// * `conn_handle` - The handle of the connection to use for the query.
+/// * `queue`       - The queue to send the query to.
+///
+/// # Errors
+///
+/// See [`Stash::execute()`].
+///
+/// # See also
+///
+/// * [`Stash::execute()`]
+/// * [`Tether::query()`]
+/// * [`params!`](crate::utils::params)
+///
+async fn perform_execute<Q: Into<String> + Send>(
+    query: Q,
+    params: Vec<Box<dyn ToSql + Send>>,
+    conn_handle: Option<Arc<()>>,
+    queue: &QueueSender<Operation>,
+) -> Result<usize, StashError> {
+    let (that_end, this_end) = oneshot::channel();
+    let operation = Operation::Instruct(Instruction {
+        channel: Some(that_end),
+        conn_handle,
+        query: query.into(),
+        params,
+    });
+    queue
+        .send_async(operation)
+        .await
+        .map_err(|err| StashError::QueueError(err.to_string()))?;
+    this_end
+        .await
+        .map_err(|err| StashError::OneShotError(err.to_string()))?
+}
+
+/// Runs a query and returns any rows of data emitted.
+///
+/// This function prepares a query and executes it on the database, and returns
+/// the resulting rows of data as a collection of instances of the specified `T`
+/// type, where `T` is any concrete type implementing the [`DbRecord`] trait. It
+/// is the internal function that actually does the querying for the public
+/// interface methods [`Stash::query()`] and [`Tether::query()`].
+///
+/// For full usage details, see [`Stash::query()`].
+///
+/// # Parameters
+///
+/// * `query`       - The query to execute.
+/// * `params`      - The parameters to pass to the query.
+/// * `conn_handle` - The handle of the connection to use for the query.
+/// * `queue`       - The queue to send the query to.
+///
+/// # Errors
+///
+/// See [`Stash::query()`].
+///
+/// # See also
+///
+/// * [`Stash::query()`]
+/// * [`Tether::query()`]
+/// * [`params!`](crate::utils::params)
+///
+async fn perform_query<Q, T>(
+    query: Q,
+    params: Vec<Box<dyn ToSql + Send>>,
+    conn_handle: Option<Arc<()>>,
+    queue: &QueueSender<Operation>,
+) -> Result<Vec<T>, StashError>
+where
+    Q: Into<String> + Send,
+    T: DbRecord + Send + 'static,
+    DbRecords: FromIterator<Box<T>>,
+{
+    let (that_end, this_end) = oneshot::channel();
+    let operation = Operation::Query(Query {
+        channel: Some(that_end),
+        conn_handle,
+        query: query.into(),
+        params,
+        // The converter function picks up the nature of the generic T here, which
+        // allows Worker.query() to perform the deserialisation and return the
+        // desired type.
+        converter: Box::new(converter::<T>),
+    });
+    queue
+        .send_async(operation)
+        .await
+        .map_err(|err| StashError::QueueError(err.to_string()))?;
+    this_end
+        .await
+        .map_err(|err| StashError::OneShotError(err.to_string()))??
+        .into_iter()
+        .map(|item| {
+            // The type we receive back is described as Any so that it can pass through
+            // the channel without introducing unnecessary type constraints, but is in
+            // fact already known to be of type T, so we can downcast it safely.
+            item.downcast::<T>()
+                .map(|boxed| *boxed)
+                .map_err(|_err| StashError::DowncastError)
+        })
+        .collect()
 }
