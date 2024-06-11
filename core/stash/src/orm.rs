@@ -12,6 +12,7 @@
 //! with types that are saved to the database.
 //!
 
+use crate::datatypes::QueryResultU64;
 use crate::stash::{Notification, Stash, StashError, Tether};
 use core::any::Any;
 use core::fmt::{Debug, Display};
@@ -737,7 +738,7 @@ where
     ///
     /// * [`Model::save_using()`]
     ///
-    async fn save(&self) -> Result<(), StashError> {
+    async fn save(&mut self) -> Result<(), StashError> {
         perform_save(self, None).await
     }
 
@@ -766,12 +767,20 @@ where
     ///
     /// * [`Model::save()`]
     ///
-    async fn save_using(&self, tether: &Tether) -> Result<(), StashError> {
+    async fn save_using(&mut self, tether: &Tether) -> Result<(), StashError> {
         perform_save(self, Some(tether)).await
     }
 
     /// Gets a reference to the database-handling [`Stash`] for the record.
     fn stash(&self) -> &Stash;
+
+    /// Sets the record's unique row ID.
+    ///
+    /// # Parameters
+    ///
+    /// * `stash` - The row id to set for the record.
+    ///
+    fn set_row_id(&mut self, id: Option<u64>);
 
     /// Sets the database-handling [`Stash`] for the record.
     ///
@@ -968,11 +977,11 @@ where
 /// * [`Model::save()`]
 /// * [`Model::save_using()`]
 ///
-async fn perform_save<M: Model>(model: &M, tether: Option<&Tether>) -> Result<(), StashError> {
+async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Result<(), StashError> {
     let fields = M::field_names();
     #[allow(clippy::option_if_let_else)]
     #[allow(clippy::single_match_else)]
-    let (query, field_values) = match model.row_id() {
+    match model.row_id() {
         Some(_) => {
             let update_fields = fields
                 .iter()
@@ -997,7 +1006,14 @@ async fn perform_save<M: Model>(model: &M, tether: Option<&Tether>) -> Result<()
                 .into_iter()
                 .chain(once(Box::new(model.id()) as Box<dyn ToSql + Send>))
                 .collect();
-            (query, field_values)
+            #[allow(clippy::shadow_reuse)]
+            let affected: usize = match tether {
+                Some(tether) => tether.execute(&query, field_values).await?,
+                None => model.stash().execute(&query, field_values).await?,
+            };
+            if affected == 0 {
+                return Err(StashError::NoRowsUpdated);
+            }
         }
         None => {
             let placeholders = repeat("?")
@@ -1010,6 +1026,8 @@ async fn perform_save<M: Model>(model: &M, tether: Option<&Tether>) -> Result<()
                     {} ({})
                 VALUES
                     ({})
+                RETURNING
+                    rowid AS value
             ",
                 M::table_name(),
                 fields.join(", "),
@@ -1017,13 +1035,26 @@ async fn perform_save<M: Model>(model: &M, tether: Option<&Tether>) -> Result<()
             );
             let field_values: Vec<Box<dyn ToSql + Send>> =
                 M::field_values(model).into_iter().collect();
-            (query, field_values)
+            #[allow(clippy::shadow_reuse)]
+            let rows = match tether {
+                Some(tether) => {
+                    tether
+                        .query::<_, QueryResultU64>(&query, field_values)
+                        .await?
+                }
+                None => {
+                    model
+                        .stash()
+                        .query::<_, QueryResultU64>(&query, field_values)
+                        .await?
+                }
+            };
+            if let Some(row) = rows.into_iter().next() {
+                model.set_row_id(Some(row.value));
+            } else {
+                return Err(StashError::NoRowIdReturned);
+            }
         }
-    };
-    #[allow(clippy::shadow_reuse)]
-    let _: usize = match tether {
-        Some(tether) => tether.execute(&query, field_values).await?,
-        None => model.stash().execute(&query, field_values).await?,
     };
     Ok(())
 }

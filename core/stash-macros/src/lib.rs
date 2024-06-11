@@ -204,6 +204,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 &self.#stash_field.as_ref().expect("Stash field is not set")
             }
 
+            fn set_row_id(&mut self, id: Option<u64>) {
+                self.#row_id_field = id;
+            }
+
             fn set_stash(&mut self, stash: &stash::stash::Stash) {
                 self.#stash_field = Some(stash.clone());
             }

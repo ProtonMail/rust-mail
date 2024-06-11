@@ -546,6 +546,16 @@ pub enum StashError {
     #[error("Statement preparation error: {0}")]
     PreparationError(SqliteError),
 
+    /// No row ID was returned after saving a record. This should never happen.
+    #[error("No row ID returned after saving record")]
+    NoRowIdReturned,
+
+    /// No rows were updated upon saving a record. This can happen if the record  
+    /// data hasn't changed, in which case it's not an error — but in other  
+    /// situations, it would signify a problem.  
+    #[error("No rows updated upon saving record")]
+    NoRowsUpdated,
+
     /// There was a problem with receiving from a oneshot channel. This should
     /// never happen in practice. Note that this only indicates a problem with
     /// receiving, and not with sending — it is not possible to return an error
