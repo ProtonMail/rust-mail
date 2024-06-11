@@ -16,6 +16,7 @@ use crate::stash::{Notification, Stash, StashError, Tether};
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
+use core::iter::once;
 use core::iter::repeat;
 use core::str::FromStr;
 use flume::Sender as QueueSender;
@@ -969,33 +970,56 @@ where
 ///
 async fn perform_save<M: Model>(model: &M, tether: Option<&Tether>) -> Result<(), StashError> {
     let fields = M::field_names();
-    let placeholders = repeat("?")
-        .take(fields.len())
-        .collect::<Vec<_>>()
-        .join(", ");
-    let update_fields = fields
-        .iter()
-        .map(|field| format!("{field} = ?"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let query = formatdoc!(
-        "
-        INSERT INTO
-            {} ({})
-        VALUES
-            ({})
-        ON CONFLICT ({}) DO UPDATE SET {}
-    ",
-        M::table_name(),
-        fields.join(", "),
-        placeholders,
-        M::id_field_name(),
-        update_fields,
-    );
-    let field_values = M::field_values(model)
-        .into_iter()
-        .chain(M::field_values(model))
-        .collect();
+    #[allow(clippy::option_if_let_else)]
+    #[allow(clippy::single_match_else)]
+    let (query, field_values) = match model.row_id() {
+        Some(_) => {
+            let update_fields = fields
+                .iter()
+                .map(|field| format!("{field} = ?"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let query = formatdoc!(
+                "
+                UPDATE
+                    {}
+                SET
+                    {}
+                WHERE
+                    {} = ?
+            ",
+                M::table_name(),
+                update_fields,
+                M::id_field_name(),
+            );
+            #[allow(trivial_casts)]
+            let field_values: Vec<Box<dyn ToSql + Send>> = M::field_values(model)
+                .into_iter()
+                .chain(once(Box::new(model.id()) as Box<dyn ToSql + Send>))
+                .collect();
+            (query, field_values)
+        }
+        None => {
+            let placeholders = repeat("?")
+                .take(fields.len())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let query = formatdoc!(
+                "
+                INSERT INTO
+                    {} ({})
+                VALUES
+                    ({})
+            ",
+                M::table_name(),
+                fields.join(", "),
+                placeholders,
+            );
+            let field_values: Vec<Box<dyn ToSql + Send>> =
+                M::field_values(model).into_iter().collect();
+            (query, field_values)
+        }
+    };
     #[allow(clippy::shadow_reuse)]
     let _: usize = match tether {
         Some(tether) => tether.execute(&query, field_values).await?,
