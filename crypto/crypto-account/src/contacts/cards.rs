@@ -28,23 +28,13 @@ pub trait CardCryptography {
     ) -> Result<Vec<u8>, CardCryptoError> {
         match self.card_type() {
             ContactCardType::ClearText => Ok(self.card_data().to_owned()),
-            ContactCardType::Encrypted => {
-                if decryption_keys.is_empty() {
-                    return Err(CardCryptoError::MissingDecryptionKey());
-                }
-
-                Ok(provider
-                    .new_decryptor()
-                    .with_decryption_key_refs(decryption_keys)
-                    .decrypt(self.card_data(), DataEncoding::Armor)
-                    .map_err(CardCryptoError::DecryptionError)?
-                    .into_vec())
-            }
+            ContactCardType::Encrypted => Ok(provider
+                .new_decryptor()
+                .with_decryption_key_refs(decryption_keys)
+                .decrypt(self.card_data(), DataEncoding::Armor)
+                .map_err(CardCryptoError::DecryptionError)?
+                .into_vec()),
             ContactCardType::Signed => {
-                if verification_keys.is_empty() {
-                    return Err(CardCryptoError::MissingVerificationKey());
-                }
-
                 provider
                     .new_verifier()
                     .with_verification_key_refs(verification_keys)
@@ -54,13 +44,6 @@ pub trait CardCryptography {
                 return Ok(self.card_data().to_owned());
             }
             ContactCardType::EncryptedAndSigned => {
-                if decryption_keys.is_empty() {
-                    return Err(CardCryptoError::MissingDecryptionKey());
-                }
-                if verification_keys.is_empty() {
-                    return Err(CardCryptoError::MissingVerificationKey());
-                }
-
                 let decrypted_card = provider
                     .new_decryptor()
                     .with_decryption_key_refs(decryption_keys)

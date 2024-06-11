@@ -36,14 +36,8 @@ pub enum SKLError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CardCryptoError {
-    #[error("No verification key provided")]
-    MissingVerificationKey(),
-    #[error("No decryption key provided")]
-    MissingDecryptionKey(),
     #[error("Error decrypting card: {0}")]
     DecryptionError(CryptoError),
     #[error("Error verifying card signature: {0}")]
     SignatureVerificationError(#[from] VerificationError),
-    #[error("Server is on fire")]
-    ServerIsOnFire(CryptoError),
 }
