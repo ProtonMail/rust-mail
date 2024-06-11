@@ -11,6 +11,10 @@ use proton_api_core::exports::base64::prelude::BASE64_STANDARD;
 use proton_api_core::exports::base64::Engine;
 use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+use serde::{Deserialize, Serialize};
+use stash::exports::SqliteError;
+use stash::macros::Model;
+use stash::stash::Stash;
 use std::string::FromUtf8Error;
 use zeroize::Zeroize;
 
@@ -50,20 +54,36 @@ impl DecryptedUserSession {
             refresh_token: encrypted_refresh_token,
             access_token: encrypted_access_token,
             scopes: self.scopes.clone(),
+            row_id: None,
+            stash: None,
         })
     }
 }
 
 /// Encrypted session authentication data, can safely be stored on disk.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Model, Deserialize, Eq, PartialEq, Serialize)]
+#[TableName("core_sessions")]
 pub struct EncryptedUserSession {
+    #[DbField]
     pub session_id: Uid,
+    #[IdField]
     pub user_id: UserId,
+    #[DbField]
     pub name: Option<String>,
+    #[DbField]
     pub email: String,
+    #[DbField]
     pub refresh_token: EncryptedRefreshToken,
+    #[DbField]
     pub access_token: EncryptedAccessToken,
+    #[DbField]
     pub scopes: Scope,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
 }
 
 impl EncryptedUserSession {
@@ -106,13 +126,13 @@ pub enum DecryptionError {
     String(#[from] FromUtf8Error),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EncryptedData {
     ciphertext_nonce: Vec<u8>,
 }
 
 /// Encrypted Access token wrapper.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EncryptedAccessToken(pub(crate) EncryptedData);
 
 impl EncryptedAccessToken {
@@ -129,9 +149,21 @@ impl AsRef<[u8]> for EncryptedAccessToken {
         self.0.as_ref()
     }
 }
+impl FromSql for EncryptedAccessToken {
+    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
+        Ok(Self(EncryptedData {
+            ciphertext_nonce: Vec::<u8>::column_result(value)?,
+        }))
+    }
+}
+impl ToSql for EncryptedAccessToken {
+    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+        self.0.to_sql()
+    }
+}
 
 /// Encrypted refresh token wrapper.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EncryptedRefreshToken(pub(crate) EncryptedData);
 
 impl EncryptedRefreshToken {
@@ -146,6 +178,18 @@ impl EncryptedRefreshToken {
 impl AsRef<[u8]> for EncryptedRefreshToken {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
+    }
+}
+impl FromSql for EncryptedRefreshToken {
+    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
+        Ok(Self(EncryptedData {
+            ciphertext_nonce: Vec::<u8>::column_result(value)?,
+        }))
+    }
+}
+impl ToSql for EncryptedRefreshToken {
+    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+        self.0.to_sql()
     }
 }
 

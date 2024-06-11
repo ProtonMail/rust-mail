@@ -5,13 +5,19 @@ mod sources;
 pub use actions::*;
 pub use domain::*;
 use proton_action_queue::{
-    ActionFactory, ActionQueue, ActionStore, DefaultSqlConnectionProvider, SessionProvider,
-    SessionProviderError,
+    ActionFactory, ActionQueue, ActionStore, SessionProvider, SessionProviderError,
 };
 use proton_api_core::Session;
-use proton_sqlite3::{InProcessTrackerService, SqliteConnectionPool, SqliteMode};
 pub use sources::*;
+use stash::stash::Stash;
+use std::io::stdout;
 use std::sync::Arc;
+use tracing::subscriber::set_global_default;
+use tracing::Level;
+use tracing_subscriber::fmt::layer;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{registry, EnvFilter};
 
 pub struct PanicSessionProvider {}
 
@@ -22,48 +28,40 @@ impl SessionProvider for PanicSessionProvider {
 }
 
 pub struct TestCtx {
-    tracker: InProcessTrackerService,
+    stash: Stash,
     _file: tempfile::NamedTempFile,
-    _tracing_guard: tracing::dispatcher::DefaultGuard,
 }
 
 impl TestCtx {
-    pub fn new() -> TestCtx {
+    pub async fn new() -> TestCtx {
         let tmp_file = tempfile::NamedTempFile::new().expect("failed to create tempfile");
-        // a builder for `FmtSubscriber`.
-        let subscriber = tracing_subscriber::FmtSubscriber::builder()
-            // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
-            // will be written to stdout.
-            .with_max_level(tracing::Level::TRACE)
-            // completes the builder.
-            .finish();
+        drop(set_global_default(
+            registry()
+                .with(EnvFilter::new(
+                    "debug,proton_action_queue=trace,stash=debug",
+                ))
+                .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
+        ));
 
-        let guard = tracing::subscriber::set_default(subscriber);
         tracing::info!("DB crated at {:?}", tmp_file.path());
 
-        let pool = SqliteConnectionPool::new(SqliteMode::File(tmp_file.path().to_path_buf()), true);
-        let tracker = InProcessTrackerService::new(pool).expect("failed to create tracker");
+        let stash = Stash::new(Some(tmp_file.path())).expect("failed to create stash");
 
-        {
-            let mut conn = tracker.new_connection().unwrap();
-            ActionStore::init_tables(conn.as_mut()).expect("failed to init store tables");
-        }
+        ActionStore::init_tables(&stash)
+            .await
+            .expect("failed to init store tables");
 
-        let _ = TestLocalSource::new_with_init(&tracker).expect("failed to crease local source");
+        let _ = TestLocalSource::new_with_init(stash.clone())
+            .await
+            .expect("failed to crease local source");
         TestCtx {
-            tracker,
+            stash,
             _file: tmp_file,
-            _tracing_guard: guard,
         }
     }
 
-    pub fn tx<R, F: Fn(TestLocalSourceTransaction) -> R>(&mut self, f: F) -> R {
-        let mut source =
-            TestLocalSource::new(&self.tracker).expect("failed to create local source");
-        let r = source
-            .tx(move |tx| -> Result<R, proton_sqlite3::rusqlite::Error> { Ok((f)(tx)) })
-            .expect("failed to execute");
-        r
+    pub fn stash(&self) -> Stash {
+        self.stash.clone()
     }
 
     pub fn new_action_queue(&self, remote: Arc<dyn RemoteSource>) -> ActionQueue {
@@ -73,7 +71,7 @@ impl TestCtx {
 
         let factory = build_factory(remote);
         ActionQueue::new(
-            Box::new(DefaultSqlConnectionProvider::new(self.tracker.clone())),
+            self.stash.clone(),
             Box::new(PanicSessionProvider {}),
             factory,
         )
@@ -104,149 +102,193 @@ pub fn new_mock_remote<F: FnOnce(&mut MockRemoteSource)>(f: F) -> Arc<dyn Remote
     Arc::new(mock)
 }
 
-#[test]
-fn test_local_source() {
+#[tokio::test]
+async fn test_local_source() {
     // Sanity Check local source implementation to ensure tests will work reliably
-    let mut test_ctx = TestCtx::new();
+    let test_ctx = TestCtx::new().await;
+    let transaction = test_ctx
+        .stash()
+        .transaction()
+        .await
+        .expect("failed to start transaction");
+    let mut tx = TestLocalSourceTransaction::new(transaction.clone());
+    let folder_id1 = tx
+        .create_folder("foo")
+        .await
+        .expect("failed to create folder");
+    let folder_id2 = tx
+        .create_folder("bar")
+        .await
+        .expect("failed to create folder");
+    let folder_id3 = tx
+        .create_folder("xxx")
+        .await
+        .expect("failed to create folder");
 
-    test_ctx
-        .tx(|mut tx| -> Result<(), proton_sqlite3::rusqlite::Error> {
-            let folder_id1 = tx.create_folder("foo").expect("failed to create folder");
-            let folder_id2 = tx.create_folder("bar").expect("failed to create folder");
-            let folder_id3 = tx.create_folder("xxx").expect("failed to create folder");
+    let label_id1 = tx.create_label("l1").await.expect("failed to create label");
+    let label_id2 = tx.create_label("l2").await.expect("failed to create label");
 
-            let label_id1 = tx.create_label("l1").expect("failed to create label");
-            let label_id2 = tx.create_label("l2").expect("failed to create label");
+    let message_id1 = tx
+        .create_message(false)
+        .await
+        .expect("failed to create message");
+    let message_id2 = tx
+        .create_message(false)
+        .await
+        .expect("failed to create message");
+    let message_id3 = tx
+        .create_message(true)
+        .await
+        .expect("failed to create message");
 
-            let message_id1 = tx.create_message(false).expect("failed to create message");
-            let message_id2 = tx.create_message(false).expect("failed to create message");
-            let message_id3 = tx.create_message(true).expect("failed to create message");
+    tx.move_message_to_folder(&[message_id2], folder_id1)
+        .await
+        .expect("failed to move");
+    tx.move_message_to_folder(&[message_id3], folder_id2)
+        .await
+        .expect("failed to move");
+    {
+        let message = tx
+            .get_message(message_id1)
+            .await
+            .expect("failed to get message")
+            .expect("message should be found");
+        assert_eq!(message.id, message_id1);
+        assert!(!message.read);
+        assert!(message.folder.is_none());
+    }
+    {
+        let message = tx
+            .get_message(message_id2)
+            .await
+            .expect("failed to get message")
+            .expect("message should be found");
+        assert_eq!(message.id, message_id2);
+        assert!(!message.read);
+        assert_eq!(message.folder, Some(folder_id1));
+    }
+    {
+        let messages = tx
+            .get_messages(&[message_id1, message_id2, message_id3])
+            .await
+            .expect("failed to get messages");
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[0].id, message_id1);
+        assert_eq!(messages[1].id, message_id2);
+        assert_eq!(messages[2].id, message_id3);
+    }
 
-            tx.move_message_to_folder(&[message_id2], folder_id1)
-                .expect("failed to move");
-            tx.move_message_to_folder(&[message_id3], folder_id2)
-                .expect("failed to move");
-            {
-                let message = tx
-                    .get_message(message_id1)
-                    .expect("failed to get message")
-                    .expect("message should be found");
-                assert_eq!(message.id, message_id1);
-                assert!(!message.read);
-                assert!(message.folder.is_none());
-            }
-            {
-                let message = tx
-                    .get_message(message_id2)
-                    .expect("failed to get message")
-                    .expect("message should be found");
-                assert_eq!(message.id, message_id2);
-                assert!(!message.read);
-                assert_eq!(message.folder, Some(folder_id1));
-            }
-            {
-                let messages = tx
-                    .get_messages(&[message_id1, message_id2, message_id3])
-                    .expect("failed to get messages");
-                assert_eq!(messages.len(), 3);
-                assert_eq!(messages[0].id, message_id1);
-                assert_eq!(messages[1].id, message_id2);
-                assert_eq!(messages[2].id, message_id3);
-            }
+    {
+        assert!(tx
+            .get_message(MessageId(25))
+            .await
+            .expect("failed to get message")
+            .is_none());
+    }
+    {
+        let name = tx
+            .get_folder_name(folder_id1)
+            .await
+            .expect("failed to get folder")
+            .expect("folder should be found");
+        assert_eq!(name, "foo");
+    }
+    {
+        let name = tx
+            .get_folder_name(folder_id2)
+            .await
+            .expect("failed to get folder")
+            .expect("folder should be found");
+        assert_eq!(name, "bar");
+    }
+    {
+        let name = tx
+            .get_folder_name(folder_id3)
+            .await
+            .expect("failed to get folder")
+            .expect("folder should be found");
+        assert_eq!(name, "xxx");
+    }
 
-            {
-                assert!(tx
-                    .get_message(MessageId(25))
-                    .expect("failed to get message")
-                    .is_none());
-            }
-            {
-                let name = tx
-                    .get_folder_name(folder_id1)
-                    .expect("failed to get folder")
-                    .expect("folder should be found");
-                assert_eq!(name, "foo");
-            }
-            {
-                let name = tx
-                    .get_folder_name(folder_id2)
-                    .expect("failed to get folder")
-                    .expect("folder should be found");
-                assert_eq!(name, "bar");
-            }
-            {
-                let name = tx
-                    .get_folder_name(folder_id3)
-                    .expect("failed to get folder")
-                    .expect("folder should be found");
-                assert_eq!(name, "xxx");
-            }
+    {
+        tx.rename_folder(folder_id3, "renamed")
+            .await
+            .expect("failed to rename folder");
+        let name = tx
+            .get_folder_name(folder_id3)
+            .await
+            .expect("failed to get folder")
+            .expect("folder should be found");
+        assert_eq!(name, "renamed");
+    }
 
-            {
-                tx.rename_folder(folder_id3, "renamed")
-                    .expect("failed to rename folder");
-                let name = tx
-                    .get_folder_name(folder_id3)
-                    .expect("failed to get folder")
-                    .expect("folder should be found");
-                assert_eq!(name, "renamed");
-            }
+    //delete folder
+    {
+        tx.delete_folder(folder_id3)
+            .await
+            .expect("failed to delete folder");
+        let message = tx
+            .get_message(message_id3)
+            .await
+            .expect("failed to get message")
+            .expect("message should be found");
+        assert_eq!(message.folder, Some(folder_id2));
+    }
 
-            //delete folder
-            {
-                tx.delete_folder(folder_id3)
-                    .expect("failed to delete folder");
-                let message = tx
-                    .get_message(message_id3)
-                    .expect("failed to get message")
-                    .expect("message should be found");
-                assert_eq!(message.folder, Some(folder_id2));
-            }
+    // add labels
+    {
+        tx.add_message_to_label(&[message_id3], label_id1)
+            .await
+            .expect("failed to add to folder");
+        tx.add_message_to_label(&[message_id3], label_id2)
+            .await
+            .expect("failed to add to folder");
+        let message = tx
+            .get_message(message_id3)
+            .await
+            .expect("failed to get message")
+            .expect("message should be found");
+        assert_eq!(message.labels, [label_id1, label_id2]);
+    }
 
-            // add labels
-            {
-                tx.add_message_to_label(&[message_id3], label_id1)
-                    .expect("failed to add to folder");
-                tx.add_message_to_label(&[message_id3], label_id2)
-                    .expect("failed to add to folder");
-                let message = tx
-                    .get_message(message_id3)
-                    .expect("failed to get message")
-                    .expect("message should be found");
-                assert_eq!(message.labels, [label_id1, label_id2]);
-            }
+    // remove folder
+    {
+        tx.remove_message_from_label(&[message_id2], label_id2)
+            .await
+            .expect("failed to remove from folder");
+        tx.remove_message_from_label(&[message_id2], label_id1)
+            .await
+            .expect("failed to remove from folder");
+        let message = tx
+            .get_message(message_id2)
+            .await
+            .expect("failed to get message")
+            .expect("message should be found");
+        assert!(message.labels.is_empty());
+    }
 
-            // remove folder
-            {
-                tx.remove_message_from_label(&[message_id2], label_id2)
-                    .expect("failed to remove from folder");
-                tx.remove_message_from_label(&[message_id2], label_id1)
-                    .expect("failed to remove from folder");
-                let message = tx
-                    .get_message(message_id2)
-                    .expect("failed to get message")
-                    .expect("message should be found");
-                assert!(message.labels.is_empty());
-            }
+    // Read unread
+    {
+        tx.mark_messages_read(true, &[message_id1])
+            .await
+            .expect("failed to mark messages as read");
+        let message = tx
+            .get_message(message_id1)
+            .await
+            .expect("failed to get message")
+            .expect("message should be found");
+        assert!(message.read);
+    }
 
-            // Read unread
-            {
-                tx.mark_messages_read(true, &[message_id1])
-                    .expect("failed to mark messages as read");
-                let message = tx
-                    .get_message(message_id1)
-                    .expect("failed to get message")
-                    .expect("message should be found");
-                assert!(message.read);
-            }
+    // Delete messages
+    {
+        tx.delete_message(&[message_id1, message_id2])
+            .await
+            .expect("failed to delete messages");
+    }
 
-            // Delete messages
-            {
-                tx.delete_message(&[message_id1, message_id2])
-                    .expect("failed to delete messages");
-            }
-
-            Ok(())
-        })
+    transaction
+        .commit()
+        .await
         .expect("Failed to execute transaction");
 }

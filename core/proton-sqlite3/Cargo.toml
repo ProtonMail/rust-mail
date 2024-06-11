@@ -7,11 +7,15 @@ edition = "2021"
 
 [dependencies]
 fixedbitset = "0.5"
+flume = { workspace = true }
+futures = { workspace = true }
 notify = { version = "6", default-features  = false, features = ["macos_fsevent"], optional = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
 rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid", "chrono", "functions", "trace"] }
+serde = { workspace = true}
 slotmap = "1"
+stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -30,4 +34,3 @@ notify = ["dep:notify"]
 
 [[test]]
 name = "main"
-required-features = ["notify"]

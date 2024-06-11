@@ -10,6 +10,7 @@ use proton_api_core::exports::serde;
 #[cfg(test)]
 use proton_api_core::exports::serde::{Deserialize, Serialize};
 use proton_api_core::exports::thiserror;
+use stash::stash::StashError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubscriberError {
@@ -25,6 +26,9 @@ pub enum SubscriberError {
     /// Failed to receive data from subscriber.
     #[error("Failed to receive data from subscriber")]
     Receive,
+    /// Stash error, i.e. database error.
+    #[error("{0}")]
+    StashError(#[from] StashError),
 }
 
 /// Subscriber traits allow anyone to access the events from the event loop.
@@ -35,7 +39,7 @@ pub trait Subscriber<T: Event + Send + Sync>: Send + Sync {
     fn name(&self) -> &str;
 
     /// Handle incoming events.
-    async fn on_events(&self, event: &[T]) -> Result<(), SubscriberError>;
+    async fn on_events(&self, event: &mut [T]) -> Result<(), SubscriberError>;
 }
 
 /// A Subscriber in which all event communication is performed via channels. This may be useful if your subscribe is
@@ -52,7 +56,7 @@ impl<T: Event + Send + Sync> Subscriber<T> for ChannelledSubscriber<T> {
         &self.name
     }
 
-    async fn on_events(&self, event: &[T]) -> Result<(), SubscriberError> {
+    async fn on_events(&self, event: &mut [T]) -> Result<(), SubscriberError> {
         if self.sender.send_async(Vec::from(event)).await.is_err() {
             return Err(SubscriberError::Send);
         }
@@ -207,8 +211,10 @@ async fn test_channeled_subscriber_handle_and_reply() {
         .await
         .expect("failed to handle event");
     });
-    let events = new_dummy_events();
-    s.on_events(&events).await.expect("failed handle events");
+    let mut events = new_dummy_events();
+    s.on_events(&mut events)
+        .await
+        .expect("failed handle events");
 
     task.await.expect("expected no error on join");
 }
@@ -220,9 +226,9 @@ async fn test_channeled_subscriber_failed_to_send() {
         s
     };
 
-    let events = new_dummy_events();
+    let mut events = new_dummy_events();
     assert!(matches!(
-        s.on_events(&events).await.expect_err("expected error"),
+        s.on_events(&mut events).await.expect_err("expected error"),
         SubscriberError::Send
     ));
 }
@@ -238,9 +244,9 @@ async fn test_channeled_subscriber_failed_to_receive() {
             .expect("expected to receive data");
         drop(h);
     });
-    let events = new_dummy_events();
+    let mut events = new_dummy_events();
     assert!(matches!(
-        s.on_events(&events).await.expect_err("expected error"),
+        s.on_events(&mut events).await.expect_err("expected error"),
         SubscriberError::Receive
     ));
 

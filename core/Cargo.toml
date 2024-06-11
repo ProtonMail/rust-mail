@@ -25,6 +25,7 @@ paste = "1"
 pin-project = "1"
 proton-api-core = { version = "0.3.0", path = "proton-api-core", registry = "proton" }
 proton-async = { version = "0.5.0", path = "proton-async", registry = "proton" }
+proton-core-common = { version = "0.3.0", path = "proton-core-common" }
 proton-crypto-account = { version = "0.1.0", registry = "proton" }
 proton-event-loop = { version = "0.6.0", path = "proton-event-loop", registry = "proton" }
 proton-sqlite3 = { version = "0.6.0", path = "proton-sqlite3", registry = "proton" }
@@ -35,6 +36,7 @@ serde = { version = "1", features = ["derive"] }
 serde-aux = "4.5"
 serde_json = "1"
 serde_repr = "0.1"
+stash = { version = "0.1.0", path = "stash" }
 tempdir = "0.3"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }

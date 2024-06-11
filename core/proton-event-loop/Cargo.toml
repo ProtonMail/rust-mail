@@ -5,14 +5,15 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-async-trait = {workspace=true}
-flume = {workspace=true}
-futures = {workspace=true}
-parking_lot = {workspace=true}
+async-trait = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+parking_lot = { workspace = true }
 paste = { workspace = true }
 proton-api-core = { workspace = true }
-tokio = {workspace=true}
-tokio-util = {workspace=true}
+stash = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
 
 [dev-dependencies]
 mockall = { workspace = true }

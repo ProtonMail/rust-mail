@@ -1,6 +1,11 @@
-use proton_sqlite3::rusqlite::Result;
-use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
-use rand::prelude::*;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::{Rng, SeedableRng};
+use stash::datatypes::QueryResultI64;
+use stash::macros::DbRecord;
+use stash::params;
+use stash::stash::{Stash, StashError};
+use tokio::spawn as spawn_async;
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -10,18 +15,22 @@ struct Person {
     data: Option<Vec<u8>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, DbRecord, PartialEq)]
 #[allow(dead_code)]
 struct Person2 {
+    #[DbField]
     id: i32,
+    #[DbField]
     name: String,
+    #[DbField]
     data: Option<Vec<u8>>,
-    data2: Option<Vec<u8>>,
+    #[DbField]
+    data2: String,
 }
 
-fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
-    let mut conn = pool.acquire()?;
-    let mut rng = thread_rng();
+async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
+    let conn = stash.connection();
+    let mut rng = StdRng::from_entropy();
 
     //conn.busy_timeout(Duration::from_secs(10))?;
 
@@ -51,51 +60,44 @@ fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
     for _ in 0..count {
         match rng.gen::<u32>() % 3 {
             0 => {
-                let mut stmt = conn.prepare("SELECT person.id, person.name, person.data , person_map.data2 FROM person JOIN person_map ON person.id=person_map.person")?;
-                let person_iter = stmt.query_map([], |row| {
-                    Ok(Person2 {
-                        id: row.get(0)?,
-                        name: row.get(1)?,
-                        data: row.get(2)?,
-                        data2: row.get(3)?,
-                    })
-                })?;
-                let _count = person_iter.into_iter().count();
+                conn.query::<_, Person2>("SELECT person.id, person.name, person.data , person_map.data2 FROM person JOIN person_map ON person.id=person_map.person", vec![]).await?;
             }
             1 => {
-                conn.tx(|tx| -> Result<()> {
-                    let mut nums: Vec<u8> = (1..20).collect();
-                    nums.shuffle(&mut rng);
-                    let me = Person {
-                        id: 0,
-                        name: format!("{:?}", nums),
-                        data: Some(nums.clone()),
-                    };
+                conn.transaction().await?;
+                let mut nums: Vec<u8> = (1..20).collect();
+                nums.shuffle(&mut rng);
+                let me = Person {
+                    id: 0,
+                    name: format!("{:?}", nums),
+                    data: Some(nums.clone()),
+                };
 
-                    let id: i32 = tx.query_row(
-                        "INSERT INTO person (name, data) VALUES (?1, ?2) RETURNING `id`",
-                        (&me.name, &me.data),
-                        |row| row.get(0),
-                    )?;
+                let id: i32 = conn
+                    .query::<_, QueryResultI64>(
+                        "INSERT INTO person (name, data) VALUES (?1, ?2) RETURNING `id` AS value",
+                        params![me.name, me.data],
+                    )
+                    .await?
+                    .first()
+                    .unwrap()
+                    .value as i32;
 
-                    nums.shuffle(&mut rng);
+                nums.shuffle(&mut rng);
 
-                    tx.execute(
-                        "INSERT INTO person_map (person, data2) VALUES (?1, ?2)",
-                        (id, format!("{:?}", nums)),
-                    )?;
-                    Ok(())
-                })?;
+                conn.execute(
+                    "INSERT INTO person_map (person, data2) VALUES (?1, ?2)",
+                    params![id, format!("{:?}", nums)],
+                )
+                .await?;
+                conn.commit().await.unwrap();
             }
 
             2 => {
-                conn.tx(|tx| -> Result<()> {
-                    tx.execute(
-                        "DELETE FROM person WHERE id=(SELECT id FROM person ORDER BY RANDOM() LIMIT 1)",
-                        (),
-                    )?;
-                    Ok(())
-                })?;
+                conn.execute(
+                    "DELETE FROM person WHERE id=(SELECT id FROM person ORDER BY RANDOM() LIMIT 1)",
+                    vec![],
+                )
+                .await?;
             }
             _ => {
                 panic!("Unhandled");
@@ -106,69 +108,55 @@ fn run_tasks(pool: SqliteConnectionPool, count: usize) -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn run_random_command_test() {
+#[tokio::test]
+async fn run_random_command_test() {
     // Simple execution test that spawns a couple of threads that executes a create, select or delete
     // command at random.
     let dir = tempdir::TempDir::new("sqlite3_test").expect("failed to create temp dir");
     let db_path = dir.path().join("sqlite.db");
 
-    let connection_pool = SqliteConnectionPool::new(SqliteMode::File(db_path), false);
+    let stash = Stash::new(Some(&db_path)).expect("Failed to create Stash");
 
-    {
-        // Create db tables.
-        let conn = connection_pool
-            .acquire()
-            .expect("Failed to acquire connection");
-
-        conn.execute(
+    // Create db tables.
+    stash
+        .execute(
             "CREATE TABLE person (
             id   INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             data BLOB
         )",
-            (), // empty list of parameters.
+            vec![], // empty list of parameters.
         )
+        .await
         .expect("failed to run create query");
 
-        conn.execute(
+    stash.execute(
             "CREATE TABLE person_map (
             person INTEGER,
             data2 TEXT NOT NULL,
             CONSTRAINT `person_ref` FOREIGN KEY (`person`) REFERENCES `person` (`id`) ON DELETE SET NULL
         )",
-            (), // empty list of parameters.
-        ).expect("failed to run create query");
-    }
+            vec![], // empty list of parameters.
+        ).await.expect("failed to run create query");
 
-    let rdonly = connection_pool
-        .acquire()
-        .expect("failed to acquire read only");
-
-    let _watcher = connection_pool.watch(move |event| match event {
-        Err(e) => {
-            eprintln!("failed to watch: {e}");
-            return;
-        }
-        Ok(_) => {
-            let version = rdonly.data_version().expect("failed to get version");
-            println!("Change detected {version}");
+    let watcher = stash.subscribe().await.expect("Failed to watch");
+    let _watcher_handle = spawn_async(async move {
+        while let Ok(notification) = watcher.recv_async().await {
+            println!("Change detected {:?}", notification);
         }
     });
 
     let mut handles = Vec::new();
     for _ in 0..10 {
-        let pool = connection_pool.clone();
-        handles.push(std::thread::spawn(move || {
-            run_tasks(pool, 100).expect("Failed to execute");
+        let stash_clone = stash.clone();
+        handles.push(spawn_async(async move {
+            run_tasks(stash_clone, 100)
+                .await
+                .expect("Failed to execute");
         }));
     }
 
     for h in handles {
-        h.join().expect("thread panicked");
+        h.await.expect("thread panicked");
     }
-
-    connection_pool
-        .close_all()
-        .expect("Failed to close all connections");
 }

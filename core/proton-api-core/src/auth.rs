@@ -1,12 +1,12 @@
 use crate::domain::{SecretString, Uid, UserId};
 use crate::http::RequestError;
 use secrecy::ExposeSecret;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Authentication scopes for the session.
-#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Scope(pub String);
 
 /// Token used to refresh the active session.
@@ -240,19 +240,15 @@ impl<T: Into<String>> From<T> for Scope {
 }
 
 #[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::ToSql for Scope {
-    fn to_sql(
-        &self,
-    ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
+impl stash::exports::ToSql for Scope {
+    fn to_sql(&self) -> Result<stash::exports::ToSqlOutput<'_>, stash::exports::SqliteError> {
         self.0.to_sql()
     }
 }
 
 #[cfg(feature = "sql")]
-impl proton_sqlite3::rusqlite::types::FromSql for Scope {
-    fn column_result(
-        value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
-    ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+impl stash::exports::FromSql for Scope {
+    fn column_result(value: stash::exports::ValueRef<'_>) -> stash::exports::FromSqlResult<Self> {
         String::column_result(value).map(Self)
     }
 }

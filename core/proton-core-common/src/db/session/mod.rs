@@ -1,4 +1,3 @@
-mod connection;
 mod types;
 
 #[cfg(test)]

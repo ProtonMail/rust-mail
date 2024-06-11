@@ -36,27 +36,3 @@ pub enum SqliteConnectionProviderError {
     #[error("{0}")]
     Other(#[source] anyhow::Error),
 }
-
-/// Provider of SQL connections.
-pub trait SqlConnectionProvider: Send + Sync {
-    fn new_connection(
-        &self,
-    ) -> Result<proton_sqlite3::TrackingConnection, SqliteConnectionProviderError>;
-}
-
-/// Default provider which directly interacts with [`proton_sqlite3::InProcessTrackerService`].
-pub struct DefaultSqlConnectionProvider(proton_sqlite3::InProcessTrackerService);
-impl DefaultSqlConnectionProvider {
-    pub fn new(tracker: proton_sqlite3::InProcessTrackerService) -> Self {
-        Self(tracker)
-    }
-}
-
-impl SqlConnectionProvider for DefaultSqlConnectionProvider {
-    fn new_connection(
-        &self,
-    ) -> Result<proton_sqlite3::TrackingConnection, SqliteConnectionProviderError> {
-        let conn = self.0.new_connection()?;
-        Ok(conn)
-    }
-}
