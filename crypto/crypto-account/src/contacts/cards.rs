@@ -20,6 +20,11 @@ pub trait CardCryptography {
 
     fn card_signature(&self) -> &[u8];
 
+    /// Returns the plain text data from the card.  If the card has been encrypted, it is decrypted.  If the card
+    /// is signed, the signature is verified.
+    ///
+    /// Errors
+    /// When decryption or signature verification fail
     fn decrypt_and_verify_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
