@@ -3,7 +3,7 @@ use proton_api_core::domain::{Address, User};
 use proton_api_core::{
     auth::UserKeySecret,
     exports::crypto::{
-        domain::{
+        keys::{
             DecryptedAddressKey, KeyFlag, UnlockedAddressKey, UnlockedAddressKeys, UnlockedUserKey,
             UnlockedUserKeys,
         },
@@ -14,7 +14,7 @@ use proton_api_core::{
     domain::AddressId,
     exports::{
         crypto::{
-            domain::{DecryptedUserKey, KeyId},
+            keys::{DecryptedUserKey, KeyId},
             proton_crypto::CryptoError,
         },
         parking_lot::RwLock,

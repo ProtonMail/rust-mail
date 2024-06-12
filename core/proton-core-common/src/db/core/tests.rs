@@ -3,7 +3,7 @@ use proton_api_core::domain::{
     DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
     SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserKeys, UserSettings, WeekStart,
 };
-use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys as RealUserKeys};
+use proton_api_core::exports::crypto::keys::{KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
 use stash::stash::Stash;
 

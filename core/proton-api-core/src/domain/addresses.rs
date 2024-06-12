@@ -1,5 +1,5 @@
 use crate::utils::{self, bool_from_integer, bool_to_integer};
-use proton_crypto_account::domain::AddressKeys as RealAddressKeys;
+use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 #[cfg(feature = "sql")]
 use proton_sqlite3::rusqlite;
 use serde;

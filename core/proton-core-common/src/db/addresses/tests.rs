@@ -3,7 +3,7 @@ use proton_api_core::domain::addresses::AddressKeys;
 use proton_api_core::domain::{
     Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType,
 };
-use proton_api_core::exports::crypto::domain::{AddressKeys as RealAddressKeys, KeyId, LockedKey};
+use proton_api_core::exports::crypto::keys::{AddressKeys as RealAddressKeys, KeyId, LockedKey};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;

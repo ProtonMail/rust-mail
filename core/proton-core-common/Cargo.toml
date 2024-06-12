@@ -1,6 +1,6 @@
 [package]
 name = "proton-core-common"
-version = "0.5.10"
+version = "0.5.11"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -19,6 +19,10 @@ stash = { workspace = true }
 tokio = { workspace = true }
 uniffi = { workspace = true, optional = true }
 zeroize = { workspace = true }
+
+[dev-dependencies]
+tempdir = {workspace=true}
+wiremock = {workspace=true}
 
 [lints]
 workspace = true

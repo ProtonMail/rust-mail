@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use crate::utils::{bool_from_integer, bool_to_integer};
-use proton_crypto_account::domain::{DecryptedUserKey, UnlockResult, UserKeys as RealUserKeys};
+use proton_crypto_account::keys::{DecryptedUserKey, UnlockResult, UserKeys as RealUserKeys};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{KeySecret, SaltError as CryptoSaltError, Salts};
@@ -188,7 +188,7 @@ pub enum SaltError {
 impl User {
     /// Get the users primary key.
     #[must_use]
-    pub fn get_primary_key(&self) -> Option<&proton_crypto_account::domain::LockedKey> {
+    pub fn get_primary_key(&self) -> Option<&proton_crypto_account::keys::LockedKey> {
         self.keys.0 .0.iter().find(|&k| k.primary)
     }
 
