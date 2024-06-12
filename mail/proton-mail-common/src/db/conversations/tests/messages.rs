@@ -2,7 +2,9 @@ use crate::db::conversations::tests::conversations::{
     create_labels, test_conversation, test_label1, test_starred_label, MY_ADDRESS_ID,
     MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
-use crate::db::conversations::tests::db_states::new_test_delete_db_state;
+use crate::db::conversations::tests::db_states::{
+    new_test_delete_db_state, new_test_unread_db_state,
+};
 use crate::db::conversations::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
 };
@@ -20,6 +22,7 @@ use proton_api_mail::domain::{
 };
 use proton_core_common::db::CoreSqliteConnectionMut;
 use proton_crypto_inbox::attachment::KeyPackets;
+use tracing_test::traced_test;
 
 use super::conversations::create_address;
 use super::utils::prepare_db_state_core;
@@ -680,6 +683,234 @@ fn test_create_message_and_body_with_attachments() {
                 local_attachment.pm_image_height,
                 message.attachments[0].headers.image_height
             );
+        });
+    });
+}
+
+#[test]
+fn messages_mark_read() {
+    // Mark conversation as read and update all conversation / message counts
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        let state = new_test_unread_db_state();
+        with_tx_core(&mut core_conn, |core_tx| {
+            prepare_db_state_core(core_tx, &state.addresses)
+        });
+        with_tx(&mut conn, |tx| {
+            let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+
+            let local_conv_id = *state_map
+                .conversations
+                .get(&state.conversations[0].id)
+                .unwrap();
+            let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
+            let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
+            let local_msg_id4 = *state_map.messages.get(&state.messages[3].id).unwrap();
+            let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+            let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+
+            let check_counters = |tx: &mut MailSqliteConnectionMut,
+                                  label_1_msg_diff: u64,
+                                  label_1_conv_diff: u64| {
+                // Check conversation counts
+                {
+                    let conv_counts = conv_counts_as_map(tx);
+                    // Check conversation label1 values, values should be unchanged.
+                    {
+                        let start_label_counts =
+                            state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                        let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                        assert_eq!(
+                            label_counts.unread,
+                            start_label_counts.unread - label_1_conv_diff
+                        );
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                    // Check conversation label2 values - should be unchanged.
+                    {
+                        let start_label_counts =
+                            state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                        let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                        assert_eq!(label_counts.unread, start_label_counts.unread);
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                }
+
+                // Check message counts
+                {
+                    let message_counts = msg_counts_as_map(tx);
+
+                    // Check label1
+                    {
+                        let start_label_counts =
+                            state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+                        let label_counts = message_counts.get(&local_label_id1).unwrap();
+                        assert_eq!(
+                            label_counts.unread,
+                            start_label_counts.unread - label_1_msg_diff
+                        );
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                    // Check label2 - should be unchanged.
+                    {
+                        let start_label_counts =
+                            state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+                        let label_counts = message_counts.get(&local_label_id2).unwrap();
+                        assert_eq!(label_counts.unread, start_label_counts.unread);
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                }
+            };
+
+            tx.mark_message_read(local_msg_id1)
+                .expect("failed to mark as read");
+            let db_message = tx
+                .get_message_metadata(local_msg_id1)
+                .expect("failed to get message")
+                .unwrap();
+
+            // Msg is read.
+            assert_eq!(db_message.unread, false);
+
+            let db_conv = tx
+                .get_conversation_with_context(local_conv_id, local_label_id1)
+                .unwrap()
+                .unwrap();
+            assert_eq!(db_conv.num_unread, 2);
+
+            check_counters(tx, 1, 0);
+            tx.mark_message_read(local_msg_id3)
+                .expect("failed to mark as read");
+            check_counters(tx, 2, 0);
+            tx.mark_message_read(local_msg_id4)
+                .expect("failed to mark as read");
+            // All conversation messages on label_1 have been marked as read, we should now see an
+            // updated
+            // conversation count.
+            check_counters(tx, 3, 1);
+
+            let db_conv = tx
+                .get_conversation_with_context(local_conv_id, local_label_id1)
+                .unwrap()
+                .unwrap();
+            assert_eq!(db_conv.num_unread, 0);
+        });
+    });
+}
+
+use proton_api_mail::exports::tracing;
+#[test]
+#[traced_test]
+fn messages_mark_unread() {
+    // Mark conversation as read and update all conversation / message counts
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        let state = new_test_unread_db_state();
+        with_tx_core(&mut core_conn, |core_tx| {
+            prepare_db_state_core(core_tx, &state.addresses)
+        });
+        with_tx(&mut conn, |tx| {
+            let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+
+            let local_conv_id = *state_map
+                .conversations
+                .get(&state.conversations[0].id)
+                .unwrap();
+
+            let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
+            let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
+            let local_msg_id4 = *state_map.messages.get(&state.messages[3].id).unwrap();
+            let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+            let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+
+            // mark messages read (also servers as bulk test).
+            tx.mark_messages_read([local_msg_id1, local_msg_id3, local_msg_id4])
+                .expect("failed to mark as read");
+
+            let check_counters = |tx: &mut MailSqliteConnectionMut,
+                                  label_1_msg_diff: u64,
+                                  label_1_conv_diff: u64| {
+                // Check conversation counts
+                {
+                    let conv_counts = conv_counts_as_map(tx);
+                    // Check conversation label1 values, values should be unchanged.
+                    {
+                        let start_label_counts =
+                            state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+                        let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                        assert_eq!(
+                            label_counts.unread,
+                            start_label_counts.unread - label_1_conv_diff
+                        );
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                    // Check conversation label2 values - should be unchanged.
+                    {
+                        let start_label_counts =
+                            state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+                        let label_counts = conv_counts.get(&local_label_id2).unwrap();
+                        assert_eq!(label_counts.unread, start_label_counts.unread);
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                }
+
+                // Check message counts
+                {
+                    let message_counts = msg_counts_as_map(tx);
+
+                    // Check label1
+                    {
+                        let start_label_counts =
+                            state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+                        let label_counts = message_counts.get(&local_label_id1).unwrap();
+                        assert_eq!(
+                            label_counts.unread,
+                            start_label_counts.unread - label_1_msg_diff
+                        );
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                    // Check label2 - should be unchanged.
+                    {
+                        let start_label_counts =
+                            state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+                        let label_counts = message_counts.get(&local_label_id2).unwrap();
+                        assert_eq!(label_counts.unread, start_label_counts.unread);
+                        assert_eq!(label_counts.total, start_label_counts.total);
+                    }
+                }
+            };
+
+            check_counters(tx, 3, 1);
+
+            tx.mark_message_unread(local_msg_id1)
+                .expect("failed to mark as read");
+            let db_message = tx
+                .get_message_metadata(local_msg_id1)
+                .expect("failed to get message")
+                .unwrap();
+            // Msg is unread.
+            assert_eq!(db_message.unread, true);
+
+            let db_conv = tx
+                .get_conversation_with_context(local_conv_id, local_label_id1)
+                .unwrap()
+                .unwrap();
+            assert_eq!(db_conv.num_unread, 1);
+
+            check_counters(tx, 2, 0);
+            tx.mark_message_unread(local_msg_id3)
+                .expect("failed to mark as read");
+            check_counters(tx, 1, 0);
+            tx.mark_message_unread(local_msg_id4)
+                .expect("failed to mark as read");
+            // All conversation messages on label_1 have been marked as read, we should now see an
+            // updated
+            // conversation count.
+            check_counters(tx, 0, 0);
+
+            let db_conv = tx
+                .get_conversation_with_context(local_conv_id, local_label_id1)
+                .unwrap()
+                .unwrap();
+            assert_eq!(db_conv.num_unread, 3);
         });
     });
 }
