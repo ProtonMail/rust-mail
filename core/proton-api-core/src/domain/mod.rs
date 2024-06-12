@@ -1,6 +1,6 @@
 //! Domain Types.
 
-mod addresses;
+pub mod addresses;
 mod event;
 mod human_verification;
 mod user;

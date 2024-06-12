@@ -17,6 +17,7 @@ pub trait CoreEvent: Event {
     fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings>;
 
     fn get_core_event_addresses(&self) -> Option<&[Address]>;
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]>;
 
     fn get_core_event_used_space(&self) -> Option<i64>;
 
@@ -84,12 +85,14 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         e
                     })?;
                 }
-				if let Some(addresses) = event.get_core_event_addresses() {
-					tx.create_or_update_addresses(addresses.iter())
+				if let Some(addresses) = event.get_core_event_addresses_mut() {
+                    for address in addresses {
+                        address.save().await
 						.map_err(|e| {
 							error!("Failed to update user addresses: {e}");
 							e
 						})?;
+                    }
 				}
             }
             Ok(())

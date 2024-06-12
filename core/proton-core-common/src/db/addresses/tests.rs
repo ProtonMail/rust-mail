@@ -1,85 +1,75 @@
-use crate::db::{
-    new_core_test_connection, CoreSqliteConnection, CoreSqliteConnectionMut, DBResult,
-};
-use proton_api_core::domain::{
-    Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType,
-};
-use proton_api_core::exports::crypto::domain::{AddressKeys, KeyId, LockedKey};
+use crate::db::new_core_test_connection;
+use proton_api_core::domain::{Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType};
+use proton_api_core::domain::addresses::AddressKeys;
+use proton_api_core::exports::crypto::domain::{AddressKeys as RealAddressKeys, KeyId, LockedKey};
+use stash::orm::Model;
+use stash::params;
+use stash::stash::Stash;
 
-pub(crate) fn with_tx(conn: &mut CoreSqliteConnection, f: impl Fn(&mut CoreSqliteConnectionMut)) {
-    conn.tx(move |tx| -> DBResult<()> {
-        (f)(tx);
-        Ok(())
-    })
-    .expect("failed transaction");
-}
-
-#[test]
-fn test_address_create() {
-    let mut conn = new_core_test_connection();
-    with_tx(&mut conn, |tx| {
-        let address = create_test_address();
-        tx.create_or_update_address(&address)
+#[tokio::test]
+async fn test_address_create() {
+    let conn = new_core_test_connection().await;
+    let tx = conn.transaction().await.expect("Failed to start transaction");
+        let mut address = create_test_address(&conn);
+        address.save().await
             .expect("failed to create address");
-        let db_address = tx
-            .get_address(&address.id)
+        let db_address = Address::load_using(address.id.clone(), &tx).await
             .expect("failed to get address")
             .expect("should exist");
         assert_eq!(address, db_address);
-    });
+    tx.commit().await.expect("Failed to commit transaction");
 }
 
-#[test]
-fn test_address_create_duplicate() {
-    let mut conn = new_core_test_connection();
-    with_tx(&mut conn, |tx| {
-        let mut address = create_test_address();
-        tx.create_or_update_address(&address)
+#[tokio::test]
+async fn test_address_create_duplicate() {
+    let conn = new_core_test_connection().await;
+    let tx = conn.transaction().await.expect("Failed to start transaction");
+        let mut address = create_test_address(&conn);
+        address.save().await
             .expect("failed to create address");
-        address.order = 10;
-        tx.create_or_update_address(&address)
+        let mut address2 = create_test_address(&conn);
+        address2.display_order = 10;
+        assert!(address2.save().await.is_err());
+        let db_address = Address::load_using(address.id.clone(), &tx).await
+            .expect("failed to get address")
+            .expect("should exist");
+        assert_eq!(address, db_address);
+    tx.commit().await.expect("Failed to commit transaction");
+}
+
+#[tokio::test]
+async fn test_address_update() {
+    let conn = new_core_test_connection().await;
+    let tx = conn.transaction().await.expect("Failed to start transaction");
+        let mut address = create_test_address(&conn);
+        address.save().await
+            .expect("failed to create address");
+        let mut address2 = create_test_address_updated(&conn);
+        address2.save().await
             .expect("failed to create duplicate");
-        let db_address = tx
-            .get_address(&address.id)
+        let db_address = Address::load_using(address.id.clone(), &tx).await
             .expect("failed to get address")
             .expect("should exist");
         assert_eq!(address, db_address);
-    });
+    tx.commit().await.expect("Failed to commit transaction");
 }
 
-#[test]
-fn test_address_update() {
-    let mut conn = new_core_test_connection();
-    with_tx(&mut conn, |tx| {
-        let address = create_test_address();
-        tx.create_or_update_address(&address)
+#[tokio::test]
+async fn test_address_delete() {
+    let conn = new_core_test_connection().await;
+    let tx = conn.transaction().await.expect("Failed to start transaction");
+        let mut address = create_test_address(&conn);
+        address.save().await
             .expect("failed to create address");
-        let address = create_test_address_updated();
-        tx.update_address(&address)
-            .expect("failed to create duplicate");
-        let db_address = tx
-            .get_address(&address.id)
-            .expect("failed to get address")
-            .expect("should exist");
-        assert_eq!(address, db_address);
-    });
-}
-
-#[test]
-fn test_address_delete() {
-    let mut conn = new_core_test_connection();
-    with_tx(&mut conn, |tx| {
-        let address = create_test_address();
-        tx.create_or_update_address(&address)
-            .expect("failed to create address");
-        tx.delete_address(&address.id)
+        tx.execute("DELETE FROM addresses WHERE id=?", params![address.id.clone()]).await
             .expect("failed to delete address");
-        let db_address = tx.get_address(&address.id).expect("failed to get address");
+        let db_address = Address::load_using(address.id.clone(), &tx).await
+            .expect("failed to get address");
         assert_eq!(db_address, None);
-    });
+    tx.commit().await.expect("Failed to commit transaction");
 }
 
-fn create_test_address() -> Address {
+fn create_test_address(stash: &Stash) -> Address {
     Address {
         id: AddressId::from("address_id"),
         email: "hello@mail.com".into(),
@@ -88,10 +78,10 @@ fn create_test_address() -> Address {
         status: AddressStatus::Enabled,
         domain_id: Some("id".into()),
         address_type: AddressType::Original,
-        order: 0,
+        display_order: 0,
         display_name: String::new(),
         signature: String::new(),
-        keys: AddressKeys(vec![
+        keys: AddressKeys(RealAddressKeys(vec![
             LockedKey {
                 id: KeyId::from("key_id"),
                 version: 0,
@@ -148,7 +138,7 @@ fn create_test_address() -> Address {
                 recovery_secret_signature: None,
                 address_forwarding_id: None,
             },
-        ]),
+        ])),
         catch_all: false,
         proton_mx: false,
         signed_key_list: AddressSignedKeyList {
@@ -160,20 +150,22 @@ fn create_test_address() -> Address {
             signature: None,
             revision: 20,
         },
+        row_id: None,
+        stash: Some(stash.clone()),
     }
 }
 
-fn create_test_address_updated() -> Address {
-    let old_address = create_test_address();
+fn create_test_address_updated(stash: &Stash) -> Address {
+    let old_address = create_test_address(stash);
     Address {
-        id: AddressId::from("address_id"),
+        id: AddressId::from("address_id2"),
         email: "hello_bar@mail.com".into(),
         send: false,
         receive: true,
         status: AddressStatus::Enabled,
         domain_id: Some("SOME OTHER ID".into()),
         address_type: AddressType::Original,
-        order: 0,
+        display_order: 0,
         display_name: "My Display Name".to_string(),
         signature: "Some Signature".to_string(),
         keys: old_address.keys.clone(),
@@ -188,5 +180,7 @@ fn create_test_address_updated() -> Address {
             signature: None,
             revision: 20,
         },
+        row_id: None,
+        stash: Some(stash.clone()),
     }
 }

@@ -45,6 +45,7 @@ pub enum CoreSessionError {
 /// Core session retrieves the session
 pub(crate) struct CoreSession {
     auth: Option<Auth>,
+    encrypted_session: Option<EncryptedUserSession>,
     stash: Stash,
     cb: Option<Box<dyn CoreSessionCallback>>,
     keychain: Arc<dyn KeyChain>,
@@ -57,8 +58,10 @@ impl CoreSession {
         keychain: Arc<dyn KeyChain>,
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> Self {
+        let auth = session.map(decrypted_session_to_auth);
         Self {
-            auth: session.map(decrypted_session_to_auth),
+            auth: auth.clone(),
+            encrypted_session: None,
             stash,
             cb,
             keychain,
@@ -136,6 +139,7 @@ impl proton_api_core::auth::Store for CoreSession {
         );
         block_on(async { encrypted_session.save().await })?;
         self.auth = Some(auth);
+        self.encrypted_session = Some(encrypted_session);
         Ok(())
     }
 
@@ -199,41 +203,25 @@ impl proton_api_core::auth::Store for CoreSession {
         &mut self,
         user_key_secret: UserKeySecret,
     ) -> Result<(), Box<dyn Error>> {
-        let user_id = {
-            let Some(auth) = &self.auth else {
+        if self.auth.is_none() || self.encrypted_session.is_none() {
                 return Err(Box::new(CoreSessionError::Other(anyhow!(
                     "no auth info found to refresh"
                 ))));
             };
-            auth.user_id.clone()
-        };
         let session_key = self.get_encryption_key().map_err(|e| {
             error!("Failed to retrieve encryption key from the keychain: {e}");
             self.on_error(&e);
             e
         })?;
 
+        // Unwrap is safe here as we have checked for None above
+        let encrypted_session = self.encrypted_session.as_mut().unwrap();
         let encrypted_key_secret = Self::encrypt_key_secret(&session_key, &user_key_secret)?;
+        encrypted_session.key_secret = Some(encrypted_key_secret.clone());
+        block_on(async { encrypted_session.save().await })?;
 
-        let mut conn = self.new_connection().map_err(|e| {
-            error!("Failed to get a database connection:{e}");
-            self.on_error(&e);
-            e
-        })?;
-        {
-            conn.tx(|tx| -> DBResult<()> {
-                tx.update_user_key_secret(&user_id, &encrypted_key_secret)
-            })
-            .map_err(|e| {
-                let e = CoreSessionError::DB(e);
-                error!("Failed write auth to the database:{e}");
-                self.on_error(&e);
-                e
-            })?;
-        }
-        if let Some(auth) = &mut self.auth {
-            auth.key_secret = Some(user_key_secret);
-        }
+        // Unwrap is safe here as we have checked for None above
+        self.auth.as_mut().unwrap().key_secret = Some(user_key_secret);
         Ok(())
     }
 

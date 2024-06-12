@@ -7,14 +7,6 @@ use proton_api_core::exports::crypto::domain::{KeyId, LockedKey, UserKeys as Rea
 use stash::orm::Model;
 use stash::stash::Stash;
 
-#[cfg(test)]
-async fn new_core_test_connection() -> Stash {
-    use crate::db::migrations::migrate_core_db;
-    let stash = Stash::new(None).expect("Failed to create Stash");
-    migrate_core_db(&stash).await.unwrap();
-    stash
-}
-
 #[tokio::test]
 async fn test_core_store_and_load_user() {
     let stash = new_core_test_connection().await;

@@ -17,6 +17,7 @@ use stash::macros::Model;
 use stash::stash::Stash;
 use std::string::FromUtf8Error;
 use zeroize::Zeroize;
+use stash::sql_using_serde;
 
 /// Contains the session authentication in a decrypted state, ready to be used by the
 /// http client.
@@ -96,6 +97,8 @@ pub struct EncryptedUserSession {
     #[serde(skip)]
     pub stash: Option<Stash>,
 }
+
+sql_using_serde!(EncryptedKeySecret);
 
 impl EncryptedUserSession {
     /// Decrypt the session data so that it can be used.
@@ -235,7 +238,7 @@ impl FromSql for EncryptedData {
 }
 
 /// Encrypted key secret wrapper.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct EncryptedKeySecret(pub(crate) EncryptedData);
 
 impl EncryptedKeySecret {

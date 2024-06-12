@@ -1,6 +1,8 @@
-use proton_sqlite3::SqliteTransaction;
+use futures::executor::block_on;
+use stash::stash::{StashError, Tether};
 
-pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
+pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
+    block_on(async {
     tx.execute(
         r"
         CREATE TABLE users (
@@ -10,7 +12,7 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
             email TEXT NOT NULL,
             currency TEXT NOT NULL,
             credit INTEGER NOT NULL,
-            `type` INTEGER NOT NULL,
+            user_type INTEGER NOT NULL,
             create_time INTEGER,
             max_space INTEGER NOT NULL,
             max_upload INTEGER NOT NULL,
@@ -27,10 +29,13 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
             pus_contact INTEGER NOT NULL DEFAULT 0,
             pus_drive INTEGER NOT NULL DEFAULT 0,
             pus_mail INTEGER NOT NULL DEFAULT 0,
-            pus_pass INTEGER NOT NULL DEFAULT 0
+            pus_pass INTEGER NOT NULL DEFAULT 0,
+            keys TEXT,
+            product_used_space TEXT
         )",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"
@@ -48,13 +53,16 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                 FOREIGN KEY (user_id)
                 REFERENCES users (id)
         )",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         "CREATE INDEX index_user_keys_userid ON user_keys(user_id)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     Ok(())
+    })
 }

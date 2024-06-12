@@ -1,6 +1,8 @@
-use proton_sqlite3::SqliteTransaction;
+use futures::executor::block_on;
+use stash::stash::{StashError, Tether};
 
-pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
+pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
+    block_on(async {
     tx.execute(
         r"
             CREATE TABLE addresses (
@@ -10,28 +12,25 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                 send INTEGER NOT NULL,
                 receive INTEGER NOT NULL,
                 status INTEGER NOT NULL,
-                type INTEGER NOT NULL,
-                `order` INTEGER NOT NULL,
+                address_type INTEGER NOT NULL,
+                display_order INTEGER NOT NULL,
                 display_name TEXT NOT NULL,
                 signature TEXT NOT NULL,
                 catch_all INTEGER NOT NULL,
                 proton_mx INTEGER NOT NULL,
-                signed_key_list_min_epoch_id INTEGER,
-                signed_key_list_expected_min_epoch_id INTEGER,
-                signed_key_list_max_epoch_id INTEGER,
-                signed_key_list_data TEXT,
-                signed_key_obsolescence_token TEXT,
-                signed_key_signature TEXT,
-                signed_key_revision INTEGER NOT NULL
+                signed_key_list TEXT,
+                keys TEXT
             )
         ",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         "CREATE UNIQUE INDEX index_addresses_email ON addresses(email)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"
@@ -58,13 +57,16 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                     ON DELETE SET NULL
             )
         ",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         "CREATE INDEX index_address_keys_addr_id ON address_keys (address_id)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     Ok(())
+    })
 }

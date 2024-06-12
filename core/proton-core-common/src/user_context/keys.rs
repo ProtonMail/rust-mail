@@ -3,8 +3,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-
-use crate::{db::CoreSqliteConnection, CoreContextResult, UserContext};
+use crate::{CoreContextResult, UserContext};
 use proton_api_core::{
     auth::UserKeySecret,
     exports::crypto::{
@@ -27,6 +26,8 @@ use proton_api_core::{
     },
 };
 use secrecy::{ExposeSecret, SecretVec};
+use proton_api_core::domain::{Address, User};
+use stash::orm::Model;
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;
@@ -178,7 +179,7 @@ impl CryptoKeyManager {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub fn user_keys<Provider: PGPProviderSync>(
+    pub async fn user_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         secret_load: &impl LoadKeySecret,
@@ -187,7 +188,7 @@ impl CryptoKeyManager {
         let cached_keys = self.user_keys.read().get(self.user_key_lifetime);
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_user_keys_cache(pgp_provider, cached_keys.as_ref())?,
-            None => self.load_user_keys_db(pgp_provider, secret_load, user_ctx)?,
+            None => self.load_user_keys_db(pgp_provider, secret_load, user_ctx).await?,
         };
         Ok(unlocked_keys)
     }
@@ -198,7 +199,7 @@ impl CryptoKeyManager {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub fn address_keys<Provider: PGPProviderSync>(
+    pub async fn address_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         secret_load: &impl LoadKeySecret,
@@ -212,7 +213,7 @@ impl CryptoKeyManager {
             .and_then(|opt| opt.get(self.address_key_lifetime));
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_address_keys_cache(pgp_provider, cached_keys.as_ref())?,
-            None => self.load_address_keys_db(pgp_provider, secret_load, user_ctx, address_id)?,
+            None => self.load_address_keys_db(pgp_provider, secret_load, user_ctx, address_id).await?,
         };
         Ok(unlocked_keys)
     }
@@ -312,7 +313,7 @@ impl CryptoKeyManager {
     /// Helper function to load and unlock user address keys from the DB.
     ///
     /// This function acquires a write lock on `self.address_keys` to update the cache.
-    fn load_address_keys_db<Provider: PGPProviderSync>(
+    async fn load_address_keys_db<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         secret_load_fn: &impl LoadKeySecret,
@@ -320,12 +321,10 @@ impl CryptoKeyManager {
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         // Load the address from the DB.
-        let mut connection = user_ctx.new_db_connection_as::<CoreSqliteConnection>()?;
-        let address = connection
-            .tx(|tx| tx.get_address(address_id))?
+        let address = Address::load(address_id.clone(), &user_ctx.stash).await?
             .ok_or(KeyHandlingError::NoAddress(address_id.clone()))?;
         // Load the user keys.
-        let user_keys = self.user_keys(pgp_provider, secret_load_fn, user_ctx)?;
+        let user_keys = self.user_keys(pgp_provider, secret_load_fn, user_ctx).await?;
         // Unlock the address keys.
         let unlock_result = address.keys.unlock(pgp_provider, &user_keys);
         if unlock_result.unlocked_keys.is_empty() {
@@ -339,16 +338,14 @@ impl CryptoKeyManager {
     /// Helper function to load and unlock user keys from the DB.
     ///
     /// This function acquires a write lock on `self.user_keys` to update the cache.
-    fn load_user_keys_db<Provider: PGPProviderSync>(
+    async fn load_user_keys_db<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         secret_loader: &impl LoadKeySecret,
         user_ctx: &UserContext,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         // Load the user from the DB.
-        let mut connection = user_ctx.new_db_connection_as::<CoreSqliteConnection>()?;
-        let user = connection
-            .tx(|tx| tx.get_user(user_ctx.user_id()))?
+        let user = User::load(user_ctx.user_id().clone(), &user_ctx.stash).await?
             .ok_or(KeyHandlingError::NoUser)?;
         // Load the user secret to unlock the key.
         let pw = secret_loader
@@ -373,13 +370,13 @@ impl UserContext {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub fn user_keys_unlocked<Provider: PGPProviderSync, Secret: LoadKeySecret>(
+    pub async fn user_keys_unlocked<Provider: PGPProviderSync, Secret: LoadKeySecret>(
         &self,
         pgp_provider: &Provider,
         secret_loader: &Secret,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         self.key_manager
-            .user_keys(pgp_provider, secret_loader, self)
+            .user_keys(pgp_provider, secret_loader, self).await
     }
 
     /// Returns the unlocked address keys of this user for the given address.
@@ -388,14 +385,14 @@ impl UserContext {
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub fn address_keys_unlocked<Provider: PGPProviderSync>(
+    pub async fn address_keys_unlocked<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         secret_load_fn: &impl LoadKeySecret,
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         self.key_manager
-            .address_keys(pgp_provider, secret_load_fn, self, address_id)
+            .address_keys(pgp_provider, secret_load_fn, self, address_id).await
     }
 }
 

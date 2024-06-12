@@ -1,4 +1,4 @@
-use crate::db::{migrate_session_db, EncryptedUserSession, SessionEncryptionKey};
+use crate::db::{EncryptedUserSession, SessionEncryptionKey};
 use proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
 use stash::orm::Model;
 use stash::params;
