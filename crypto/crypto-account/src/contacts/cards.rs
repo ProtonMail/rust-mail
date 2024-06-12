@@ -52,6 +52,7 @@ pub trait CardCryptography {
                 let decrypted_card = provider
                     .new_decryptor()
                     .with_decryption_key_refs(decryption_keys)
+                    .with_verification_key_refs(verification_keys)
                     .with_detached_signature_ref(
                         self.card_signature(),
                         DetachedSignatureVariant::Plaintext,

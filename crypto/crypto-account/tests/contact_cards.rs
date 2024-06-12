@@ -196,3 +196,57 @@ fn test_signed_and_encrypted_card_invalid_signature() {
 
     assert!(test_result.is_err());
 }
+
+#[test]
+fn test_signed_and_encrypted_card_no_verification_keys() {
+    let provider = new_pgp_provider();
+    let private_key = provider
+        .private_key_import(
+            PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let mut verification_keys = vec![provider.private_key_to_public_key(&private_key).unwrap()];
+    _ = verification_keys;
+    verification_keys = Vec::new();
+
+    let card = TestCard(
+        ContactCardType::EncryptedAndSigned,
+        ENCRYPTED_AND_SIGNED_DATA.to_owned(),
+        ENCRYPTED_AND_SIGNED_SIGNATURE.to_owned(),
+    );
+    let test_result = card.decrypt_and_verify_sync(
+        &provider,
+        &vec![TestAddressKey(private_key)],
+        &verification_keys,
+    );
+
+    assert!(test_result.is_err());
+}
+
+#[test]
+fn test_signed_and_encrypted_card_no_decryption_keys() {
+    let provider = new_pgp_provider();
+    let private_key = provider
+        .private_key_import(
+            PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let verification_keys = vec![provider.private_key_to_public_key(&private_key).unwrap()];
+
+    let mut decryption_keys = vec![TestAddressKey(private_key)];
+    _ = decryption_keys;
+    decryption_keys = Vec::new();
+
+    let card = TestCard(
+        ContactCardType::EncryptedAndSigned,
+        ENCRYPTED_AND_SIGNED_DATA.to_owned(),
+        ENCRYPTED_AND_SIGNED_SIGNATURE.to_owned(),
+    );
+    let test_result = card.decrypt_and_verify_sync(&provider, &decryption_keys, &verification_keys);
+
+    assert!(test_result.is_err());
+}
