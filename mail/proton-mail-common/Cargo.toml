@@ -1,17 +1,20 @@
 [package]
 name = "proton-mail-common"
-version = "0.4.0"
+version = "0.5.23"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 async-trait = { workspace = true }
+bytes = { workspace = true }
 futures = { workspace = true }
-proton-action-queue = { workspace = true}
+indoc = { workspace = true }
+proton-action-queue = { workspace = true }
 proton-api-mail = { workspace = true }
 proton-core-common = { workspace = true }
-proton-event-loop = { workspace = true}
+proton-crypto-inbox = { workspace = true }
+proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
 tokio = { workspace = true }
 uniffi = { workspace = true, optional = true }
@@ -21,6 +24,7 @@ uuid = { version = "1.7", features = ["v4"] }
 lazy_static = { workspace = true }
 tempdir = "0.3.1"
 # anotate your tests with traced_test attribute to see log outputs.
+tempfile = "3.10.1"
 tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 velcro = "0.5.4"
 wiremock = { workspace = true }

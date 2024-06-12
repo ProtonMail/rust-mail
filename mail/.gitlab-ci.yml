@@ -1,29 +1,20 @@
-image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
 
 include:
   - project: "rust/shared/registry"
     file: "upload_template.yml"
+  - project: "rust/rust-build"
+    file: "rust-ci.yml"
 
 workflow:
   rules:
     - if: $CI_DEFAULT_BRANCH == $CI_COMMIT_BRANCH
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
 
-# sccache location to speed up compilation.
 default:
   tags:
     - shared-medium
-  cache: &global_cache
-    key: sccache
-    paths:
-      - /tmp/cache
-
-
-# Config git acccess to other repos
-.script-config-git:
-  script:
-    - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}.insteadOf https://${CI_SERVER_HOST}
-    - git submodule update --init --recursive
 
 stages:
   - lint
@@ -31,21 +22,9 @@ stages:
   - doc
   - deploy
 
-
-.do_fmt_check:
-   script:
-     - !reference [.script-config-git, script]
-     - cargo fmt --check
-
-.do_clippy_check:
-   script:
-     - !reference [.script-config-git, script]
-     - cargo clippy -- -D warnings
-
 .do_proton_mail_uniffi_version:
   script:
     - cd proton_mail_uniffi
-
 
 format:
   stage: lint
@@ -57,23 +36,28 @@ clippy:
   script:
     - !reference [.do_clippy_check, script]
 
+gopenpgp:
+  stage: lint
+  script:
+    - !reference [.do_gopenpgp_sys_check, script]
+
 build:
   tags:
     - shared-large
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cargo build --release
-    - cargo test
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo build
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo test
 
 build-macos:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.77.0"
+  image: "inbox-rust:1.78.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - cargo build --release
+    - cargo build
     - cargo test
 
 build-wasm:
@@ -81,8 +65,7 @@ build-wasm:
   script:
     - !reference [.script-config-git, script]
     - cd proton-mail-wasm
-    - CRATE_VERSION=$(cargo pkgid | cut -d "#" -f2)
-    - wasm-pack build -d "./web_pkg/$CRATE_VERSION"
+    - wasm-pack build -d "./web_pkg"
   artifacts:
     name: proton-mail-wasm
     paths:
@@ -93,13 +76,13 @@ build-wasm:
 build-ios:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.77.0"
+  image: "inbox-rust:1.78.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
-    - CRATE_VERSION=$(cargo pkgid -p proton-mail-uniffi | cut -d "#" -f2)
-    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework/$CRATE_VERSION"
-    - cd "./tmp/ios-framework/$CRATE_VERSION/package" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
+    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework"
+    - CRATE_VERSION=$(cargo pkgid --manifest-path=proton-mail-uniffi/Cargo.toml | cut -d "#" -f2)
+    - cd "./tmp/ios-framework/$CRATE_VERSION" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
 
   artifacts:
     name: proton-mail-ios
@@ -152,8 +135,8 @@ publish-android:
   tags:
     - xlarge-k8s
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      when: manual
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: always
       allow_failure: true
   script:
     - ./proton-mail-uniffi/android/publish.sh
@@ -168,38 +151,64 @@ publish-android:
     when: always
     expire_in: 4 hrs
 
+publish-ios:
+  stage: deploy
+  tags:
+    - xlarge-k8s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: always
+      allow_failure: true
+  script:
+    - ./proton-mail-uniffi/ios/publish.sh
+  dependencies:
+    - build-ios
+  needs:
+    - build-ios
 
 # ------------ Crate Publishing -----------------------------------------------------------------------------------
 # Crates are listed in the order they should be published
 
 deploy-proton-api-mail:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   tags:
     - shared-medium
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-api-mail"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-api-mail/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-api-mail/Cargo.toml"
   when: manual
 
 deploy-proton-mail-message-detector:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-mail-message-detector"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-mail-message-detector/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-mail-message-detector/Cargo.toml"
   when: manual
 
 deploy-proton-mail-utm-stripper:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-mail-utm-stripper"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-mail-utm-stripper/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-mail-utm-stripper/Cargo.toml"
   when: manual
 
 deploy-proton-mail-common:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.77.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
+  rules:
+    - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   tags:
     - shared-medium
   variables:
-    CARGO_PACKAGE_OPTIONS: "--package proton-mail-common"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-mail-common/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-mail-common/Cargo.toml"
   when: manual

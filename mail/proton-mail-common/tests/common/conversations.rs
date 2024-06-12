@@ -111,6 +111,15 @@ impl TestContext {
             .mount(self.mock_server())
             .await;
     }
+
+    pub async fn mock_get_image_for_conversation(&self, response: Vec<u8>) {
+        Mock::given(method("GET"))
+            .and(path("/api/core/v4/images/logo"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(response))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
 }
 
 /// Build a list of conversation responses.
@@ -135,7 +144,7 @@ fn build_conv_responses(
     let failed: HashSet<ConversationId> = HashSet::from_iter(failed);
     ids.iter()
         .map(|id| {
-            let code = if failed.contains(&id) {
+            let code = if failed.contains(id) {
                 CODE_FAIL
             } else {
                 CODE_SUCCESS

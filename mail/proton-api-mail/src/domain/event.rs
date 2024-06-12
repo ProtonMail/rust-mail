@@ -1,8 +1,8 @@
 use crate::domain::{
-    Address, Conversation, ConversationId, Label, LabelId, MailSettings, MessageId, MessageMetadata,
+    Conversation, ConversationId, Label, LabelId, MailSettings, MessageId, MessageMetadata,
 };
 use crate::domain::{ConversationCount, MessageCount};
-use proton_api_core::domain::{Action, ProductUsedSpace, User, UserSettings};
+use proton_api_core::domain::{Action, Address, ProductUsedSpace, User, UserSettings};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::exports::serde_repr::Deserialize_repr;
 

@@ -1,24 +1,32 @@
 mod action_queue;
-mod addresses;
+mod attachment;
 mod conversations;
 mod events;
+mod images;
 mod initialization;
 mod labels;
+mod messages;
 mod settings;
 
+pub use conversations::FilteredConversations;
 pub use initialization::*;
+pub use messages::FilteredMessages;
+
 use proton_action_queue::ActionQueue;
+use proton_api_mail::proton_api_core::auth::UserKeySecret;
+use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use std::sync::{Arc, Weak};
 
-use crate::db::MailSqliteConnection;
+use crate::db::{MailSqliteConnection, MailSqliteConnectionMut, MailSqliteConnectionRef};
 use crate::user_context::action_queue::new_action_queue;
 use crate::{MailContext, MailContextResult};
-use proton_api_mail::proton_api_core::domain::UserId;
+use proton_api_mail::proton_api_core::domain::{AddressId, UserId};
 use proton_api_mail::proton_api_core::exports::proton_sqlite3::InProcessTrackerService;
 use proton_api_mail::proton_api_core::Session;
 use proton_api_mail::MailSession;
 use proton_core_common::db::DBResult;
-use proton_core_common::UserContext;
+use proton_core_common::{LoadKeySecret, UserContext};
 use proton_event_loop::EventLoop;
 
 #[derive(Clone)]
@@ -71,7 +79,7 @@ impl MailUserContext {
         }
     }
 
-    pub(crate) fn session(&self) -> &Session {
+    pub fn session(&self) -> &Session {
         self.inner.user_context.session()
     }
 
@@ -89,12 +97,128 @@ impl MailUserContext {
         self.inner.user_context.tracker_service()
     }
 
+    /// Read from the user database.
+    ///
+    /// # Errors
+    /// Returns error if we failed to acquire a connection or the read closure returned error.
+    pub fn db_read<R, E, F>(&self, f: F) -> Result<R, E>
+    where
+        E: From<proton_sqlite3::rusqlite::Error>,
+        F: FnMut(&MailSqliteConnectionRef) -> Result<R, E>,
+    {
+        let conn = self.new_db_connection()?;
+        conn.read(f)
+    }
+
+    // TODO: this currently cant be enabled to due to incorrect api in the proton-sqlite3 crate.
+    /*/// Write on the user database in a transaction from an asynchronous context.
+    ///
+    /// # Errors
+    /// Returns error if we failed to acquire a connection, the closure return and error or the
+    /// transaction failed to commit.
+    pub async fn db_write_async<R,E,F>(&self, mut f:F) -> Result<R,E> where
+        R: Send + 'static,
+        E: From<proton_sqlite3::rusqlite::Error> + Send + 'static,
+        F: FnMut(&mut MailSqliteConnectionMut) -> Result<R,E> + Send + 'static{
+        self.tracker_service().new_connection_async(move |tx| {
+            let mut tx = MailSqliteConnectionMut::new(tx);
+            f(&mut tx)
+        }).await
+    }*/
+
+    /// Perform a write on the user database in a transaction.
+    ///
+    /// # Errors
+    /// Returns error if we failed to acquire a connection, the closure return and error or the
+    /// transaction failed to commit.
+    pub fn db_write<R, E, F>(&self, f: F) -> Result<R, E>
+    where
+        E: From<proton_sqlite3::rusqlite::Error>,
+        F: FnMut(&mut MailSqliteConnectionMut) -> Result<R, E>,
+    {
+        let mut conn = self.new_db_connection()?;
+        conn.tx(f)
+    }
+
     pub fn mail_context(&self) -> &MailContext {
         &self.inner.mail_context
     }
 
     pub fn user_id(&self) -> &UserId {
         self.inner.user_context.user_id()
+    }
+
+    /// Returns the unlocked user keys of this user.
+    ///
+    /// # Warning
+    /// Cannot be called from an async context as it uses the runtime to block.
+    /// Use [`MailUserContext::user_keys_unlocked_async`] instead.
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub fn unlocked_user_keys<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> MailContextResult<UnlockedUserKeys<Provider>> {
+        let keys = self
+            .inner
+            .user_context
+            .user_keys_unlocked(pgp_provider, self)?;
+        Ok(keys)
+    }
+
+    /// Returns the unlocked user keys of this user from an async context..
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub async fn unlocked_user_keys_async<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> MailContextResult<UnlockedUserKeys<Provider>> {
+        let secret_loader = CloneSecretLoader(self.session().expose_key_secret().await);
+        let keys = self
+            .inner
+            .user_context
+            .user_keys_unlocked(pgp_provider, &secret_loader)?;
+        Ok(keys)
+    }
+
+    /// Returns the unlocked address keys for this user.
+    ///
+    /// # Warning
+    /// Cannot be called from an async context as it uses the runtime to block.
+    /// Use [`MailUserContext::address_keys_unlocked_async`] instead.
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub fn unlocked_address_keys<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        address_id: &AddressId,
+    ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
+        let keys = self
+            .inner
+            .user_context
+            .address_keys_unlocked(pgp_provider, self, address_id)?;
+        Ok(keys)
+    }
+
+    /// Returns the unlocked address keys for this user from an async context.
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub async fn unlocked_address_keys_async<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        address_id: &AddressId,
+    ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
+        // TODO: This should not be necessary and handled by the UserContext
+        let secret = CloneSecretLoader(self.session().expose_key_secret().await);
+        let keys =
+            self.inner
+                .user_context
+                .address_keys_unlocked(pgp_provider, &secret, address_id)?;
+        Ok(keys)
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {
@@ -106,5 +230,21 @@ impl MailUserContext {
     pub async fn ping(&self) -> MailContextResult<()> {
         self.inner.user_context.session().ping().await?;
         Ok(())
+    }
+}
+
+struct CloneSecretLoader(Option<UserKeySecret>);
+
+impl LoadKeySecret for CloneSecretLoader {
+    fn key_secret(&self) -> Option<UserKeySecret> {
+        self.0.clone()
+    }
+}
+
+impl LoadKeySecret for MailUserContext {
+    fn key_secret(&self) -> Option<UserKeySecret> {
+        self.mail_context()
+            .async_runtime()
+            .block_on(self.session().expose_key_secret())
     }
 }

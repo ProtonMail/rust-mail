@@ -12,16 +12,20 @@ members = [
 
 [workspace.dependencies]
 async-trait = "0.1"
+bitflags = { version = "2.5.0" }
+bytes = "1.4"
 futures = "0.3.30"
+indoc = "2"
 lazy_static = "1"
-proton-action-queue = { version = "0.5", registry = "proton" }
-proton-api-core = { version = "0.3.0", registry = "proton", features = ["sql"] }
-proton-api-mail = { version = "0.3", path = "proton-api-mail", features = ["sql"] }
-proton-core-common = { version = "0.3", registry = "proton" }
-proton-event-loop = { version = "0.6", registry = "proton" }
+proton-action-queue = { version = "=0.5.13", registry = "proton" }
+proton-api-core = { version = "=0.5.7", registry = "proton", features = ["sql", "uniffi"] }
+proton-api-mail = { version = "=0.3.12", path = "proton-api-mail", features = ["sql"] }
+proton-core-common = { version = "=0.5.11", registry = "proton" }
+proton-crypto-inbox = { version = "=0.3.0", registry = "proton" }
+proton-event-loop = { version = "=0.6.13", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common", features = ["uniffi"] }
 proton-mail-message-detector = { path = "proton-mail-message-detector" }
-proton-sqlite3 = { version = "0.6", registry = "proton" }
+proton-sqlite3 = { version = "=0.6.2", registry = "proton" }
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uniffi = { version = "0.27.1", features = ["tokio"] }

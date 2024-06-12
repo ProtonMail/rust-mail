@@ -1,6 +1,7 @@
 use crate::domain::{
     Conversation, ConversationCount, ConversationFilter, ConversationId, LabelId, MessageMetadata,
 };
+use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
@@ -12,7 +13,9 @@ pub struct GetConversationsRequest {
 
 impl GetConversationsRequest {
     #[must_use]
-    pub fn new(filter: ConversationFilter) -> Self {
+    pub fn new(mut filter: ConversationFilter) -> Self {
+        filter.page_size = filter.page_size.max(MAX_PAGE_ELEMENT_COUNT_U64);
+        filter.limit = filter.limit.map(|v| v.max(MAX_LIMIT_VALUE_U64));
         Self { filter }
     }
 }
@@ -46,12 +49,24 @@ impl http::RequestDesc for GetConversationsRequest {
             data = data.query("Subject", subject);
         }
 
+        if let Some(from) = &self.filter.from {
+            data = data.query("From", from);
+        }
+
+        if let Some(recipients) = &self.filter.recipients {
+            data = data.query_array("Recipients", recipients);
+        }
+
+        if let Some(keyword) = &self.filter.keyword {
+            data = data.query("Keyword", keyword);
+        }
+
         if let Some(addr_id) = &self.filter.address_id {
             data = data.query("AddressID", addr_id);
         }
 
-        if let Some(label_ids) = &self.filter.label_id {
-            data = data.query_array("LabelID", label_ids);
+        if let Some(label_id) = &self.filter.label_id {
+            data = data.query("LabelID", label_id);
         }
 
         if let Some(external_id) = &self.filter.external_id {
@@ -62,11 +77,43 @@ impl http::RequestDesc for GetConversationsRequest {
             data = data.query("EndID", end_id);
         }
 
+        if let Some(begin_id) = &self.filter.begin_id {
+            data = data.query("BeginID", begin_id);
+        }
+
+        if let Some(end) = &self.filter.end {
+            data = data.query("End", end);
+        }
+
+        if let Some(begin) = &self.filter.begin {
+            data = data.query("Begin", begin);
+        }
+
+        if let Some(desc) = self.filter.desc {
+            data = data.query("Desc", if desc { &1 } else { &0 });
+        }
+
+        if let Some(attachments) = self.filter.attachments {
+            data = data.query("Attachments", if attachments { &1 } else { &0 });
+        }
+
+        if let Some(unread) = self.filter.unread {
+            data = data.query("Unread", if unread { &1 } else { &0 });
+        }
+
         if let Some(sort) = &self.filter.sort {
             data = data.query("Sort", sort);
         }
 
-        data.query("Desc", if self.filter.desc { &1 } else { &0 })
+        if let Some(limit) = &self.filter.limit {
+            data = data.query("Limit", limit);
+        }
+
+        if let Some(wildcard) = self.filter.auto_wildcard {
+            data = data.query("AutoWildcard", if wildcard { &1 } else { &0 });
+        }
+
+        data
     }
 }
 
@@ -81,7 +128,7 @@ impl<'a> GetConversationRequest<'a> {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetConversationResponse {
     pub conversation: Conversation,

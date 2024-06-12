@@ -5,7 +5,6 @@ use proton_action_queue::{
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
     SessionProvider, StoredAction,
 };
-use proton_api_mail::domain::LabelType;
 use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
@@ -46,6 +45,12 @@ struct MarkConversationReadLocalHandler<'c, 't: 'c> {
 
 impl<'c, 't: 'c> LocalActionHandler for MarkConversationReadLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
+        if self.action.ids.is_empty() {
+            return Err(ActionError::Local(anyhow!(
+                "No conversations in this action"
+            )));
+        }
+
         let Some(label) = self
             .tx
             .label_with_id(self.action.label_id)
@@ -56,7 +61,7 @@ impl<'c, 't: 'c> LocalActionHandler for MarkConversationReadLocalHandler<'c, 't>
             return Err(ActionError::Local(err));
         };
 
-        if label.label_type != LabelType::Label {
+        if !label.is_applicable_label() {
             let err = anyhow!("Invalid label type");
             error!("{err}");
             return Err(ActionError::Local(err));

@@ -48,6 +48,12 @@ struct MarkConversationUnreadLocalHandler<'c, 't: 'c> {
 
 impl<'c, 't: 'c> LocalActionHandler for MarkConversationUnreadLocalHandler<'c, 't> {
     fn apply_local(&mut self) -> ActionResult<()> {
+        if self.action.ids.is_empty() {
+            return Err(ActionError::Local(anyhow!(
+                "No conversations in this action"
+            )));
+        }
+
         self.tx
             .mark_conversations_unread(self.action.active_label_id, self.action.ids.iter().cloned())
             .map_err(|e| ActionError::Local(anyhow!(e)))?;

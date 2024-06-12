@@ -2,7 +2,6 @@ use crate::db::DBResult;
 use crate::exports::tracing;
 use crate::exports::tracing::{debug, Level};
 use crate::{MailContextResult, MailUserContext};
-use proton_api_mail::domain::MailSettings;
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -15,10 +14,5 @@ impl MailUserContext {
         debug!("Storing labels into database");
         connection.tx(|tx| -> DBResult<()> { tx.create_or_update_mail_settings(&settings) })?;
         Ok(())
-    }
-
-    pub fn mail_settings(&self) -> MailContextResult<MailSettings> {
-        let conn = self.new_db_connection()?;
-        Ok(conn.read(|conn| conn.get_mail_settings())?)
     }
 }

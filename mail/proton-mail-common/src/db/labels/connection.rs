@@ -1,6 +1,7 @@
 use crate::db::{
     DBResult, LabelColor, LocalLabel, LocalLabelId, LocalLabelWithCount, MailSqliteConnectionImpl,
 };
+use indoc::indoc;
 use proton_api_mail::domain::{Label, LabelId, LabelType};
 pub use proton_api_mail::proton_api_core::exports::serde_json;
 use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
@@ -57,7 +58,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         let mut result = Vec::with_capacity(8);
         let mut stmt = self
             .0
-            .prepare(LocalLabelSelectWithCount::query_conversation())?;
+            .prepare(&LocalLabelSelectWithCount::query_conversation_by_type())?;
         mapped_rows_into_vec(
             &mut result,
             stmt.query_map([label_type], LocalLabelSelectWithCount::from_row)?,
@@ -70,7 +71,9 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         label_type: LabelType,
     ) -> DBResult<Vec<LocalLabelWithCount>> {
         let mut result = Vec::with_capacity(8);
-        let mut stmt = self.0.prepare(LocalLabelSelectWithCount::query_message())?;
+        let mut stmt = self
+            .0
+            .prepare(&LocalLabelSelectWithCount::query_message_by_type())?;
         mapped_rows_into_vec(
             &mut result,
             stmt.query_map([label_type], LocalLabelSelectWithCount::from_row)?,
@@ -103,6 +106,40 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                 &LocalLabelSelect::query_with_rid(),
                 [label_id],
                 LocalLabelSelect::from_row,
+            )
+            .optional()
+    }
+
+    /// Retrieve label with `label_id` and conversation counts.
+    ///
+    /// # Errors
+    /// Returns error if the query fails.
+    pub fn label_with_id_and_conversation_count(
+        &self,
+        label_id: LocalLabelId,
+    ) -> DBResult<Option<LocalLabelWithCount>> {
+        self.0
+            .query_row(
+                &LocalLabelSelectWithCount::query_conversation_by_id(),
+                [label_id],
+                LocalLabelSelectWithCount::from_row,
+            )
+            .optional()
+    }
+
+    /// Retrieve label with `label_id` and message counts.
+    ///
+    /// # Errors
+    /// Returns error if the query fails.
+    pub fn label_with_id_and_message_count(
+        &self,
+        label_id: LocalLabelId,
+    ) -> DBResult<Option<LocalLabelWithCount>> {
+        self.0
+            .query_row(
+                &LocalLabelSelectWithCount::query_message_by_id(),
+                [label_id],
+                LocalLabelSelectWithCount::from_row,
             )
             .optional()
     }
@@ -186,11 +223,11 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         self.mark_labels_as_deleted(deleted, std::iter::once(id))
     }
 
-    /// Check if a label has been initialised.
+    /// Check if a label's conversations have been initialised.
     ///
-    /// This simply checks whether a given label has been marked as initialised.
+    /// This simply checks whether a given label's conversations have been marked as initialised.
     /// For more information on the behaviour of this flag, see
-    /// [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized()).
+    /// [`mark_label_as_initialized_conversations()`](MailSqliteConnectionImpl::mark_label_as_initialized_conversations()).
     ///
     /// # Parameters
     ///
@@ -202,53 +239,20 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ///
     /// # See also
     ///
-    /// * [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
-    /// * [`mark_labels_as_initialized()`](MailSqliteConnectionImpl::mark_labels_as_initialized())
+    /// * [`mark_label_as_initialized_conversations()`](MailSqliteConnectionImpl::mark_label_as_initialized_conversations())
     ///
-    pub fn check_if_label_is_initialized(&self, id: LocalLabelId) -> DBResult<bool> {
+    pub fn check_if_label_is_initialized_conversations(&self, id: LocalLabelId) -> DBResult<bool> {
         self.0
-            .prepare("SELECT 1 FROM labels WHERE id = ? AND initialized = 1")?
+            .prepare("SELECT 1 FROM labels WHERE id = ? AND initialized_conv = 1")?
             .query([id])?
             .next()
             .map(|r| r.is_some())
     }
 
-    /// Mark labels as initialised.
-    ///
-    /// This is a convenience function to mark multiple labels as initialised.
-    /// See [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
-    /// for more information.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids` - The list of label ids to mark as initialised. Typically only
-    ///           one will need to be updated, in which case see
-    ///           [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized()).
-    ///
-    /// # Errors
-    ///
-    /// If any of the database operations fail, the associated error will be
-    /// returned unmodified.
-    ///
-    /// # See also
-    ///
-    /// * [`check_if_label_is_initialized()`](MailSqliteConnectionImpl::check_if_label_is_initialized())
-    /// * [`mark_label_as_initialized()`](MailSqliteConnectionImpl::mark_label_as_initialized())
-    ///
-    pub fn mark_labels_as_initialized(
-        &mut self,
-        ids: impl Iterator<Item = LocalLabelId>,
-    ) -> DBResult<()> {
-        for id in ids {
-            self.mark_label_as_initialized(id)?;
-        }
-        Ok(())
-    }
-
-    /// Mark a label as initialised.
+    /// Mark a label's conversations as initialised.
     ///
     /// This is used to mark a label that has been initialised — in other words,
-    /// which has had its initial load of data. It is undesirable to repeat the
+    /// which has had its initial load of conversations. It is undesirable to repeat the
     /// initial data load if we already have it, hence this flag. Once a label
     /// has been marked as initialised, the initial data load will not be
     /// repeated.
@@ -263,12 +267,64 @@ impl<'c> MailSqliteConnectionImpl<'c> {
     ///
     /// # See also
     ///
-    /// * [`check_if_label_is_initialized()`](MailSqliteConnectionImpl::check_if_label_is_initialized())
-    /// * [`mark_labels_as_initialized()`](MailSqliteConnectionImpl::mark_labels_as_initialized())
+    /// * [`check_if_label_is_initialized_conversations()`](MailSqliteConnectionImpl::check_if_label_is_initialized_conversations())
     ///
-    pub fn mark_label_as_initialized(&mut self, id: LocalLabelId) -> DBResult<()> {
+    pub fn mark_label_as_initialized_conversations(&mut self, id: LocalLabelId) -> DBResult<()> {
         self.0
-            .prepare("UPDATE labels SET initialized = 1 WHERE id = ?")?
+            .prepare("UPDATE labels SET initialized_conv = 1 WHERE id = ?")?
+            .execute([id])?;
+        Ok(())
+    }
+
+    /// Check if a label's messages have been initialised.
+    ///
+    /// This simply checks whether a given label's messages have been marked as initialised.
+    /// For more information on the behaviour of this flag, see
+    /// [`mark_label_as_initialized_messages()`](MailSqliteConnectionImpl::mark_label_as_initialized_messages()).
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The id of the label to check.
+    ///
+    /// # Errors
+    ///
+    /// If the database operation fails, the error will be returned unmodified.
+    ///
+    /// # See also
+    ///
+    /// * [`mark_label_as_initialized_messages()`](MailSqliteConnectionImpl::mark_label_as_initialized_messages())
+    ///
+    pub fn check_if_label_is_initialized_messages(&self, id: LocalLabelId) -> DBResult<bool> {
+        self.0
+            .prepare("SELECT 1 FROM labels WHERE id = ? AND initialized_msg = 1")?
+            .query([id])?
+            .next()
+            .map(|r| r.is_some())
+    }
+
+    /// Mark a label's messages as initialised.
+    ///
+    /// This is used to mark a label that has been initialised — in other words,
+    /// which has had its initial load of messages. It is undesirable to repeat the
+    /// initial data load if we already have it, hence this flag. Once a label
+    /// has been marked as initialised, the initial data load will not be
+    /// repeated.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The id of the label to mark as initialised.
+    ///
+    /// # Errors
+    ///
+    /// If the database operation fails, the error will be returned unmodified.
+    ///
+    /// # See also
+    ///
+    /// * [`check_if_label_is_initialized_messages()`](MailSqliteConnectionImpl::check_if_label_is_initialized_messages())
+    ///
+    pub fn mark_label_as_initialized_messages(&mut self, id: LocalLabelId) -> DBResult<()> {
+        self.0
+            .prepare("UPDATE labels SET initialized_msg = 1 WHERE id = ?")?
             .execute([id])?;
         Ok(())
     }
@@ -343,19 +399,58 @@ impl LocalLabelSelect {
 }
 
 struct LocalLabelSelectWithCount {}
+const SELECT_LABEL_WITH_COUNT_PRELUDE: &str = indoc! { "
+SELECT
+    l.id,
+    l.rid,
+    l.parent_id,
+    l.type,
+    l.`order`,
+    l.name,
+    l.path,
+    l.color,
+    l.notified,
+    l.expanded,
+    l.sticky,
+    IFNULL(lc.total,0),
+    IFNULL(lc.unread,0)
+FROM labels as l"
+};
+
+const SELECT_LABEL_WITH_COUNT_CONVERSATIONS_CLAUSE: &str = "LEFT JOIN label_conversation_count AS \
+lc ON l.id = lc.label_id";
+
+const SELECT_LABEL_WITH_COUNT_MESSAGES_CLAUSE: &str =
+    "LEFT JOIN label_message_count AS lc ON l.id=lc.label_id";
+
+const SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE: &str = "WHERE deleted=0";
+
+const SELECT_LABEL_WITH_COUNT_ORDER_CLAUSE: &str = "ORDER BY `order`";
 
 impl LocalLabelSelectWithCount {
-    fn query_conversation() -> &'static str {
-        "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
-        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
-        LEFT JOIN label_conversation_count AS lc ON l.id = lc.label_id \
-        WHERE deleted=0 AND type=? ORDER BY `order`"
+    fn query_conversation_by_type() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_CONVERSATIONS_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND type=? {SELECT_LABEL_WITH_COUNT_ORDER_CLAUSE}"
+        )
     }
-    fn query_message() -> &'static str {
-        "SELECT l.id, l.rid, l.parent_id, l.type, l.`order`, l.name, l.path, l.color, l.notified, \
-        l.expanded, l.sticky, IFNULL(lc.total,0), IFNULL(lc.unread,0) FROM labels as l \
-        LEFT JOIN label_message_count AS lc ON l.id = lc.label_id \
-        WHERE deleted=0 AND type=? ORDER BY `order`"
+    fn query_message_by_type() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_MESSAGES_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND type=? {SELECT_LABEL_WITH_COUNT_ORDER_CLAUSE}"
+        )
+    }
+    fn query_conversation_by_id() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_CONVERSATIONS_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND id=? LIMIT 1"
+        )
+    }
+    fn query_message_by_id() -> String {
+        format!(
+            "{SELECT_LABEL_WITH_COUNT_PRELUDE} {SELECT_LABEL_WITH_COUNT_MESSAGES_CLAUSE} \
+         {SELECT_LABEL_WITH_COUNT_WHERE_CLAUSE} AND id=? LIMIT 1"
+        )
     }
 
     fn from_row(r: &Row) -> DBResult<LocalLabelWithCount> {
@@ -470,6 +565,19 @@ expanded=?, notified=?, sticky=? WHERE rid=?",
     pub fn resolve_remote_label_id(&self, id: &LabelId) -> DBResult<Option<LocalLabelId>> {
         self.0
             .query_row("SELECT id FROM labels WHERE rid=?", [id], |r| r.get(0))
+            .optional()
+    }
+
+    /// Get the remote id for a label with `id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn remote_label_id_from_local_id(
+        &self,
+        id: LocalLabelId,
+    ) -> DBResult<Option<Option<LabelId>>> {
+        self.0
+            .query_row("SELECT rid FROM labels WHERE id=?", [id], |r| r.get(0))
             .optional()
     }
 

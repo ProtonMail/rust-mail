@@ -1,3 +1,8 @@
+use proton_mail_common::db::proton_sqlite3::rusqlite::Error;
+use proton_mail_common::exports::anyhow;
+use proton_mail_common::exports::anyhow::anyhow;
+use proton_mail_common::exports::thiserror;
+
 #[macro_export]
 macro_rules! new_live_query {
     ($name:ident, $query:ident) => {
@@ -18,8 +23,15 @@ macro_rules! new_live_query {
         #[uniffi::export]
         impl $name {
             /// Get the latest value for this Query.
-            pub fn value(&self) -> <$query as Observable>::Output {
-                self.0.value().clone()
+            pub fn value(
+                &self,
+            ) -> Result<<$query as Observable>::Output, $crate::macros::LiveQueryError> {
+                use std::ops::Deref;
+                let value = self.0.value();
+                match value.deref() {
+                    Ok(v) => Ok(v.clone()),
+                    Err(e) => Err($crate::macros::LiveQueryError::from_error(e)),
+                }
             }
 
             /// Terminate the observer for this query and stop receiving updates.
@@ -29,6 +41,7 @@ macro_rules! new_live_query {
         }
 
         impl $name {
+            #[allow(unused)]
             fn new(
                 tracker: InProcessTrackerService,
                 query: $query,
@@ -41,6 +54,38 @@ macro_rules! new_live_query {
                         .build(query),
                 ))
             }
+
+            #[allow(unused)]
+            fn new_foreground(
+                tracker: InProcessTrackerService,
+                query: $query,
+                cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
+            ) -> Arc<Self> {
+                Arc::new(Self(
+                    SharedLiveQueryBuilder::new(tracker)
+                        .with_foreground_initializer()
+                        .with_callback(cb)
+                        .build(query),
+                ))
+            }
         }
     };
+}
+
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi(flat_error)]
+pub enum LiveQueryError {
+    #[error("Observed resource not found")]
+    DataNotFound,
+    #[error("{0}")]
+    Error(anyhow::Error),
+}
+
+impl LiveQueryError {
+    pub fn from_error(value: &Error) -> Self {
+        match value {
+            Error::QueryReturnedNoRows => Self::DataNotFound,
+            _ => Self::Error(anyhow!("{value}")),
+        }
+    }
 }

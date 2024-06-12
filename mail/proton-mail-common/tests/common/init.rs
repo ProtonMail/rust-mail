@@ -1,21 +1,21 @@
 use crate::common::TestContext;
 use proton_api_mail::domain::{
-    Address, AddressId, AddressStatus, AddressType, Conversation, ConversationCount,
-    ConversationId, ConversationLabels, Label, LabelId, LabelType, MailSettings, MessageCount,
+    Attachment, Conversation, ConversationCount, ConversationId, ConversationLabels, Label,
+    LabelId, LabelType, MailSettings, MessageAddress, MessageCount, MessageId, MessageMetadata,
     ALL_LABEL_TYPES,
 };
-use proton_api_mail::exports::crypto::domain::{AddressKeys, UserKeys};
+use proton_api_mail::exports::crypto::keys::{AddressKeys, UserKeys};
 use proton_api_mail::proton_api_core::domain::{
-    DateFormat, Density, Email, EventId, Flags, HighSecurity, LogAuth, Password, Phone,
-    ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId,
-    UserMnemonicStatus, UserSettings, UserType, WeekStart,
+    Address, AddressId, AddressStatus, AddressType, DateFormat, Density, Email, EventId, Flags,
+    HighSecurity, LogAuth, Password, Phone, ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat,
+    TwoFA, User, UserId, UserMnemonicStatus, UserSettings, UserType, WeekStart,
 };
 use proton_api_mail::proton_api_core::requests::{
-    LatestEventResponse, UserInfoResponse, UserSettingsResponse,
+    GetAddressesResponse, LatestEventResponse, UserInfoResponse, UserSettingsResponse,
 };
 use proton_api_mail::requests::{
-    GetAddressesResponse, GetConversationCountsResponse, GetConversationsResponse,
-    GetLabelsResponse, GetMessageCountsResponse, MailSettingsResponse,
+    GetConversationCountsResponse, GetConversationResponse, GetConversationsResponse,
+    GetLabelsResponse, GetMessageCountsResponse, MailSettingsResponse, MessageMetadataResponse,
 };
 use proton_mail_common::{
     MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
@@ -24,6 +24,12 @@ use std::collections::HashMap;
 use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
+
+use super::account::{
+    testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
+    TEST_ADDRESS_KEY_SIGNATURE, TEST_ADDRESS_KEY_TOKEN, TEST_USER_ID, TEST_USER_MAIL,
+};
+use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 
 /// Mail user context init callback that does nothing.
 pub struct NullCallback {}
@@ -46,17 +52,20 @@ pub struct Params {
     /// User settings. If `None`, some default values will be set.
     pub user_settings: Option<UserSettings>,
 
+    /// List of user addresses.
+    pub addresses: Vec<Address>,
+
     /// Mail settings. If `None`, some default values will be set.
     pub mail_settings: Option<MailSettings>,
 
     /// List of labels by type.
     pub labels: HashMap<LabelType, Vec<Label>>,
 
-    /// List of user addresses.
-    pub addresses: Vec<Address>,
-
     /// List of conversations.
     pub conversations: Vec<Conversation>,
+
+    /// List of attachments.
+    pub attachments: Vec<Attachment>,
 
     /// List of conversation counts.
     pub conversation_count: Vec<ConversationCount>,
@@ -94,8 +103,8 @@ impl Params {
                 }]
             },
             addresses: vec![Address {
-                id: AddressId::from("myaddress"),
-                email: "foo@bar.com".to_string(),
+                id: AddressId::from(TEST_ADDRESS_ID),
+                email: TEST_USER_MAIL.to_owned(),
                 send: true,
                 receive: true,
                 status: AddressStatus::Enabled,
@@ -103,8 +112,8 @@ impl Params {
                 address_type: AddressType::Original,
                 order: 0,
                 display_name: "".to_string(),
-                signature: "".to_string(),
-                keys: AddressKeys(vec![]),
+                signature: TEST_ADDRESS_KEY_SIGNATURE.to_owned(),
+                keys: testdata_address_keys_for_user_address(),
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: Default::default(),
@@ -113,7 +122,14 @@ impl Params {
                 id: ConversationId::from("myconv"),
                 order: 0,
                 subject: "Hello".to_string(),
-                senders: vec![],
+                senders: vec![MessageAddress {
+                    address: "jsmith@test.com".to_owned(),
+                    name: "John Smith".to_owned(),
+                    is_proton: true,
+                    display_sender_image: true,
+                    is_simple_login: false,
+                    bimi_selector: None,
+                }],
                 recipients: vec![],
                 num_messages: 1,
                 num_unread: 0,
@@ -131,9 +147,13 @@ impl Params {
                     context_snooze_time: 0,
                 }],
                 display_snooze_reminder: false,
-                attachments_metadata: vec![],
+                attachments_metadata: vec![testdata_attachment_metadata()],
                 attachment_info: Default::default(),
             }],
+            attachments: vec![testdata_attachment_metadata_complete(
+                MessageId::from("mymessage "),
+                ConversationId::from("myconv"),
+            )],
             conversation_count: vec![ConversationCount {
                 label_id: LabelId::inbox().clone(),
                 total: 1,
@@ -176,10 +196,10 @@ impl TestContext {
             .and(path("/api/core/v4/users"))
             .respond_with(ResponseTemplate::new(200).set_body_json(UserInfoResponse {
                 user: params.user_info.unwrap_or(User {
-                    id: UserId::from("user"),
+                    id: UserId::from(TEST_USER_ID),
                     name: None,
                     display_name: None,
-                    email: "".to_string(),
+                    email: TEST_USER_MAIL.to_owned(),
                     used_space: 0,
                     max_space: 0,
                     max_upload: 0,
@@ -187,7 +207,7 @@ impl TestContext {
                     create_time: 0,
                     credit: 0,
                     currency: "".to_string(),
-                    keys: UserKeys(vec![]),
+                    keys: testdata_user_keys(),
                     product_used_space: ProductUsedSpace {
                         calendar: 0,
                         contact: 0,
@@ -398,6 +418,62 @@ impl TestContext {
                     conversations,
                     stale: false,
                     total: 1,
+                }),
+            )
+            .expect(expect)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving message metadata.
+    ///
+    /// This function will mock the response for the given message metadata.
+    ///
+    /// # Parameters
+    ///
+    /// * `metadata` - The list of message to respond with.
+    /// * `expect`   - How many times the endpoint should be called.
+    ///
+    pub async fn mock_get_message_metadata(&self, metadata: Vec<MessageMetadata>, expect: u64) {
+        Mock::given(method("POST"))
+            .and(path("/api/mail/v4/messages"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(MessageMetadataResponse {
+                    messages: metadata,
+                    stale: false,
+                    total: 1,
+                }),
+            )
+            .expect(expect)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving conversation's messages.
+    ///
+    /// This function will mock the response for the given conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `conversation` - Requested Conversation
+    /// * `messages`     -
+    /// * `expect`       - How many times the endpoint should be called.
+    ///
+    pub async fn mock_get_conversation_messages(
+        &self,
+        conversation: Conversation,
+        messages: Vec<MessageMetadata>,
+        expect: u64,
+    ) {
+        Mock::given(method("GET"))
+            .and(path(format!(
+                "/api/mail/v4/conversations/{}",
+                conversation.id
+            )))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationResponse {
+                    conversation,
+                    messages,
                 }),
             )
             .expect(expect)

@@ -1,13 +1,14 @@
-use crate::db::{
-    conversations::initials, conversations::proton_color, LabelColor, LocalAttachmentMetadata,
-    LocalLabelId,
-};
+use crate::avatar::AvatarInformation;
+use crate::db::{LabelColor, LocalAttachmentMetadata, LocalLabelId};
+use crate::exports::serde_json;
 use crate::new_u64_type;
 use proton_api_mail::domain::{
-    AddressId, Conversation, ConversationId, ExternalId, LabelId, MessageAddress, MessageId,
-    MessageMetadata,
+    Conversation, ConversationId, ExternalId, Label, LabelId, MessageAddress, MessageFlags,
+    MessageId, MessageMetadata, MimeType,
 };
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
+use proton_api_mail::proton_api_core::domain::AddressId;
+use std::collections::HashMap;
 
 new_u64_type!(LocalConversationId);
 
@@ -27,44 +28,6 @@ pub struct LocalMessageCount {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct ConversationAvatarInformation {
-    pub text: String,
-    pub color: String,
-    pub sender_image_url: String,
-}
-
-/// ConversationAvatarInformation contains the details used for the avatar shown for a conversation.
-///
-/// It contains:
-///     - the text to display in the avatar,
-///     - the color to use for the avatar,
-///     - and the url of the sender image if a valid BIMI image is available.
-impl ConversationAvatarInformation {
-    /// build takes a display name and email address and uses these to determine the text and color the avatar should be
-    pub fn build(display_name: &str, email: &str) -> ConversationAvatarInformation {
-        ConversationAvatarInformation {
-            text: initials::avatar_text(display_name, email),
-            color: proton_color::proton_color(display_name).to_string(),
-            sender_image_url: "".to_string(),
-        }
-    }
-
-    /// from_message_addresses creates a ConversationAvatarInformation struct using the details of the first MessageAddress in the provided slice
-    pub fn from_message_addresses(
-        address_list: &[MessageAddress],
-    ) -> ConversationAvatarInformation {
-        let first_sender = address_list.first();
-        let display_name_email = match first_sender {
-            Some(first_sender) => (first_sender.name.as_str(), first_sender.address.as_str()),
-            None => ("", ""),
-        };
-
-        ConversationAvatarInformation::build(display_name_email.0, display_name_email.1)
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalConversation {
     pub id: LocalConversationId,
     pub remote_id: Option<ConversationId>,
@@ -80,20 +43,19 @@ pub struct LocalConversation {
     pub snooze_time: u64,
     pub size: u64,
     pub time: u64,
-    pub labels: Option<Vec<LocalConversationLabel>>,
+    pub labels: Option<Vec<LocalInlineLabelInfo>>,
     pub starred: bool,
     pub attachments: Option<Vec<LocalAttachmentMetadata>>,
-    pub avatar_information: ConversationAvatarInformation,
+    pub avatar_information: AvatarInformation,
 }
 
 impl LocalConversation {
     pub fn from_conversation(
         id: LocalConversationId,
         conversation: Conversation,
-        labels: Option<Vec<LocalConversationLabel>>,
+        labels: Option<Vec<LocalInlineLabelInfo>>,
     ) -> Self {
-        let avatar_information =
-            ConversationAvatarInformation::from_message_addresses(&conversation.senders);
+        let avatar_information = AvatarInformation::from_message_addresses(&conversation.senders);
 
         Self {
             id,
@@ -121,10 +83,9 @@ impl LocalConversation {
         id: LocalConversationId,
         label_id: &LabelId,
         conversation: Conversation,
-        labels: Option<Vec<LocalConversationLabel>>,
+        labels: Option<Vec<LocalInlineLabelInfo>>,
     ) -> Self {
-        let avatar_information =
-            ConversationAvatarInformation::from_message_addresses(&conversation.senders);
+        let avatar_information = AvatarInformation::from_message_addresses(&conversation.senders);
 
         let mut result = Self {
             id,
@@ -164,19 +125,34 @@ impl LocalConversation {
 #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(crate = "self::serde")]
-pub struct LocalConversationLabel {
+pub struct LocalInlineLabelInfo {
     pub id: LocalLabelId,
     pub name: String,
     pub color: LabelColor,
 }
 
+impl LocalInlineLabelInfo {
+    pub fn from_label(id: LocalLabelId, label: &Label) -> Self {
+        Self {
+            id,
+            name: label.name.clone(),
+            color: LabelColor::from(label.color.clone()),
+        }
+    }
+}
+
 new_u64_type!(LocalMessageId);
 
+/// Contains all the metadata associated with a message.
+///
+/// For the message body see [`LocalMessageBodyMetadata`].
 #[derive(Debug, Clone, Eq, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct LocalMessageMetadata {
     pub id: LocalMessageId,
     pub rid: Option<MessageId>,
-    pub conversation_id: LocalConversationId,
+    //TODO: ET-223 - We can sync messages without syncing conversations
+    pub conversation_id: Option<LocalConversationId>,
     pub address_id: AddressId,
     pub order: u64,
     pub subject: String,
@@ -194,8 +170,11 @@ pub struct LocalMessageMetadata {
     pub is_forwarded: bool,
     pub external_id: Option<ExternalId>,
     pub num_attachments: u32,
-    pub flags: u64,
+    pub flags: MessageFlags,
     pub starred: bool,
+    pub attachments: Option<Vec<LocalAttachmentMetadata>>,
+    pub labels: Option<Vec<LocalInlineLabelInfo>>,
+    pub avatar_information: AvatarInformation,
 }
 
 impl LocalMessageMetadata {
@@ -203,12 +182,14 @@ impl LocalMessageMetadata {
         id: LocalMessageId,
         conv_id: LocalConversationId,
         message: MessageMetadata,
+        labels: Option<Vec<LocalInlineLabelInfo>>,
     ) -> Self {
+        let avatar_information = AvatarInformation::from_message_address(&message.sender);
         Self {
             id,
             rid: Some(message.id),
             address_id: message.address_id,
-            conversation_id: conv_id,
+            conversation_id: Some(conv_id),
             order: message.order,
             subject: message.subject,
             unread: message.unread,
@@ -227,6 +208,38 @@ impl LocalMessageMetadata {
             flags: message.flags,
             starred: message.label_ids.contains(LabelId::starred()),
             snooze_time: message.snooze_time,
+            attachments: None,
+            labels,
+            avatar_information,
+        }
+    }
+}
+
+/// Metadata associated with the Body of a message.
+///
+/// Message bodies are not stored in the database.
+///
+/// For metadata associated with a message see [`LocalMessageMetadata`].
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct LocalMessageBodyMetadata {
+    pub id: LocalMessageId,
+    pub rid: Option<MessageId>,
+    pub header: String,
+    pub parsed_headers: HashMap<String, serde_json::Value>,
+    pub mime_type: MimeType,
+    pub address_id: AddressId,
+}
+
+#[cfg(test)]
+impl LocalMessageBodyMetadata {
+    pub fn from_message(id: LocalMessageId, message: &proton_api_mail::domain::Message) -> Self {
+        Self {
+            id,
+            rid: Some(message.metadata.id.clone()),
+            header: message.header.clone(),
+            parsed_headers: message.parsed_headers.clone(),
+            mime_type: message.mime_type,
+            address_id: message.metadata.address_id.clone(),
         }
     }
 }
