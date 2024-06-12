@@ -74,20 +74,20 @@ async fn test_session_store_load() {
             db_session.refresh_token.expose_secret(),
             session.refresh_token.expose_secret()
         );
-		assert_eq!(
-			db_session
-				.key_secret
-				.as_ref()
-				.expect("key secret must be there")
-				.expose_secret()
-				.as_bytes(),
-			session
-				.key_secret
-				.as_ref()
-				.expect("key secret must be there")
-				.expose_secret()
-				.as_bytes()
-		);
+        assert_eq!(
+            db_session
+                .key_secret
+                .as_ref()
+                .expect("key secret must be there")
+                .expose_secret()
+                .as_bytes(),
+            session
+                .key_secret
+                .as_ref()
+                .expect("key secret must be there")
+                .expose_secret()
+                .as_bytes()
+        );
         tx.commit().await
     }
     .expect("failed");
@@ -115,7 +115,7 @@ async fn test_session_update() {
         email: "foo@bar.com".to_string(),
         refresh_token: RefreshToken::from("token".to_string()),
         access_token: AccessToken::from("access".to_string()),
-		key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
+        key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
         scopes: Scope::from("Scope Scope2"),
     };
 
@@ -163,9 +163,9 @@ async fn test_session_update() {
             db_session.refresh_token.expose_secret(),
             updated_session.refresh_token.expose_secret()
         );
-		db_session
-			.key_secret
-			.expect("Key secret should still be there after update");
+        db_session
+            .key_secret
+            .expect("Key secret should still be there after update");
         tx.commit().await
     }
     .expect("failed");

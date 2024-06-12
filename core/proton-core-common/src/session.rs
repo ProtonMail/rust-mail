@@ -124,14 +124,14 @@ impl proton_api_core::auth::Store for CoreSession {
                     Box::new(e)
                 },
             )?;
-		
-		let encrypted_key_secret = auth
-			.key_secret
-			.as_ref()
-			.map(|key_secret| Self::encrypt_key_secret(&session_key, key_secret))
-			.transpose()?;
-		
-		let mut encrypted_session = auth_to_encrypted_session(
+
+        let encrypted_key_secret = auth
+            .key_secret
+            .as_ref()
+            .map(|key_secret| Self::encrypt_key_secret(&session_key, key_secret))
+            .transpose()?;
+
+        let mut encrypted_session = auth_to_encrypted_session(
             auth.clone(),
             encrypted_access_token,
             encrypted_refresh_token,
@@ -204,10 +204,10 @@ impl proton_api_core::auth::Store for CoreSession {
         user_key_secret: UserKeySecret,
     ) -> Result<(), Box<dyn Error>> {
         if self.auth.is_none() || self.encrypted_session.is_none() {
-                return Err(Box::new(CoreSessionError::Other(anyhow!(
-                    "no auth info found to refresh"
-                ))));
-            };
+            return Err(Box::new(CoreSessionError::Other(anyhow!(
+                "no auth info found to refresh"
+            ))));
+        };
         let session_key = self.get_encryption_key().map_err(|e| {
             error!("Failed to retrieve encryption key from the keychain: {e}");
             self.on_error(&e);

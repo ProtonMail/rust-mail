@@ -85,15 +85,14 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         e
                     })?;
                 }
-				if let Some(addresses) = event.get_core_event_addresses_mut() {
+                if let Some(addresses) = event.get_core_event_addresses_mut() {
                     for address in addresses {
-                        address.save().await
-						.map_err(|e| {
-							error!("Failed to update user addresses: {e}");
-							e
-						})?;
+                        address.save().await.map_err(|e| {
+                            error!("Failed to update user addresses: {e}");
+                            e
+                        })?;
                     }
-				}
+                }
             }
             Ok(())
         }

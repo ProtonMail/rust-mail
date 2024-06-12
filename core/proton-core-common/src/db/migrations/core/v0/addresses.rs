@@ -3,8 +3,8 @@ use stash::stash::{StashError, Tether};
 
 pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
     block_on(async {
-    tx.execute(
-        r"
+        tx.execute(
+            r"
             CREATE TABLE addresses (
                 id TEXT PRIMARY KEY,
                 domain_id TEXT DEFAULT NULL,
@@ -22,18 +22,18 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                 keys TEXT
             )
         ",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        "CREATE UNIQUE INDEX index_addresses_email ON addresses(email)",
-        vec![],
-    )
-    .await?;
+        tx.execute(
+            "CREATE UNIQUE INDEX index_addresses_email ON addresses(email)",
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"
+        tx.execute(
+            r"
             CREATE TABLE address_keys (
                 id TEXT PRIMARY KEY,
                 address_id TEXT NOT NULL,
@@ -57,16 +57,16 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                     ON DELETE SET NULL
             )
         ",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        "CREATE INDEX index_address_keys_addr_id ON address_keys (address_id)",
-        vec![],
-    )
-    .await?;
+        tx.execute(
+            "CREATE INDEX index_address_keys_addr_id ON address_keys (address_id)",
+            vec![],
+        )
+        .await?;
 
-    Ok(())
+        Ok(())
     })
 }

@@ -1,9 +1,5 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use crate::{CoreContextResult, UserContext};
+use proton_api_core::domain::{Address, User};
 use proton_api_core::{
     auth::UserKeySecret,
     exports::crypto::{
@@ -26,8 +22,12 @@ use proton_api_core::{
     },
 };
 use secrecy::{ExposeSecret, SecretVec};
-use proton_api_core::domain::{Address, User};
 use stash::orm::Model;
+use std::{
+    collections::HashMap,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;
@@ -188,7 +188,10 @@ impl CryptoKeyManager {
         let cached_keys = self.user_keys.read().get(self.user_key_lifetime);
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_user_keys_cache(pgp_provider, cached_keys.as_ref())?,
-            None => self.load_user_keys_db(pgp_provider, secret_load, user_ctx).await?,
+            None => {
+                self.load_user_keys_db(pgp_provider, secret_load, user_ctx)
+                    .await?
+            }
         };
         Ok(unlocked_keys)
     }
@@ -213,7 +216,10 @@ impl CryptoKeyManager {
             .and_then(|opt| opt.get(self.address_key_lifetime));
         let unlocked_keys = match cached_keys {
             Some(cached_keys) => Self::load_address_keys_cache(pgp_provider, cached_keys.as_ref())?,
-            None => self.load_address_keys_db(pgp_provider, secret_load, user_ctx, address_id).await?,
+            None => {
+                self.load_address_keys_db(pgp_provider, secret_load, user_ctx, address_id)
+                    .await?
+            }
         };
         Ok(unlocked_keys)
     }
@@ -321,10 +327,13 @@ impl CryptoKeyManager {
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         // Load the address from the DB.
-        let address = Address::load(address_id.clone(), &user_ctx.stash).await?
+        let address = Address::load(address_id.clone(), &user_ctx.stash)
+            .await?
             .ok_or(KeyHandlingError::NoAddress(address_id.clone()))?;
         // Load the user keys.
-        let user_keys = self.user_keys(pgp_provider, secret_load_fn, user_ctx).await?;
+        let user_keys = self
+            .user_keys(pgp_provider, secret_load_fn, user_ctx)
+            .await?;
         // Unlock the address keys.
         let unlock_result = address.keys.unlock(pgp_provider, &user_keys);
         if unlock_result.unlocked_keys.is_empty() {
@@ -345,7 +354,8 @@ impl CryptoKeyManager {
         user_ctx: &UserContext,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         // Load the user from the DB.
-        let user = User::load(user_ctx.user_id().clone(), &user_ctx.stash).await?
+        let user = User::load(user_ctx.user_id().clone(), &user_ctx.stash)
+            .await?
             .ok_or(KeyHandlingError::NoUser)?;
         // Load the user secret to unlock the key.
         let pw = secret_loader
@@ -376,7 +386,8 @@ impl UserContext {
         secret_loader: &Secret,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         self.key_manager
-            .user_keys(pgp_provider, secret_loader, self).await
+            .user_keys(pgp_provider, secret_loader, self)
+            .await
     }
 
     /// Returns the unlocked address keys of this user for the given address.
@@ -392,7 +403,8 @@ impl UserContext {
         address_id: &AddressId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         self.key_manager
-            .address_keys(pgp_provider, secret_load_fn, self, address_id).await
+            .address_keys(pgp_provider, secret_load_fn, self, address_id)
+            .await
     }
 }
 

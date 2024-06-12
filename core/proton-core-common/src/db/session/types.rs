@@ -14,10 +14,10 @@ use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
+use stash::sql_using_serde;
 use stash::stash::Stash;
 use std::string::FromUtf8Error;
 use zeroize::Zeroize;
-use stash::sql_using_serde;
 
 /// Contains the session authentication in a decrypted state, ready to be used by the
 /// http client.
@@ -86,7 +86,7 @@ pub struct EncryptedUserSession {
     pub refresh_token: EncryptedRefreshToken,
     #[DbField]
     pub access_token: EncryptedAccessToken,
-	#[DbField]
+    #[DbField]
     pub key_secret: Option<EncryptedKeySecret>,
     #[DbField]
     pub scopes: Scope,

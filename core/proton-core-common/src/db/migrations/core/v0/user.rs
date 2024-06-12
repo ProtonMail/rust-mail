@@ -3,8 +3,8 @@ use stash::stash::{StashError, Tether};
 
 pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
     block_on(async {
-    tx.execute(
-        r"
+        tx.execute(
+            r"
         CREATE TABLE users (
             id TEXT PRIMARY KEY,
             name TEXT,
@@ -33,12 +33,12 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
             keys TEXT,
             product_used_space TEXT
         )",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"
+        tx.execute(
+            r"
         CREATE TABLE user_keys (
             user_id TEXT NOT NULL,
             key_id TEXT PRIMARY KEY NOT NULL,
@@ -53,16 +53,16 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                 FOREIGN KEY (user_id)
                 REFERENCES users (id)
         )",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        "CREATE INDEX index_user_keys_userid ON user_keys(user_id)",
-        vec![],
-    )
-    .await?;
+        tx.execute(
+            "CREATE INDEX index_user_keys_userid ON user_keys(user_id)",
+            vec![],
+        )
+        .await?;
 
-    Ok(())
+        Ok(())
     })
 }
