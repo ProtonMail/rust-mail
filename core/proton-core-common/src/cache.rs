@@ -26,11 +26,9 @@ use std::fs::{
 use std::hash::Hash;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
-use std::num::{ParseIntError, TryFromIntError};
 #[cfg(target_family = "unix")]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::PathBuf;
-use std::string::String;
 
 /// Name of the file containing data needed by cache to load from disk
 const CACHE_METADATA_FILE: &str = ".proton.cache.metadata";
@@ -39,25 +37,36 @@ const CACHE_METADATA_FILE: &str = ".proton.cache.metadata";
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::module_name_repetitions)]
 pub enum CacheError {
-    #[error("Invalid key: {0}")]
-    InvalidKey(String),
+    /// Error from IO
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
-    #[error("Parse Int Error: {0}")]
-    ParseInt(#[from] ParseIntError),
-    #[error("Try From Int Error: {0}")]
-    TryFromIntError(#[from] TryFromIntError),
-    #[error("{0}")]
-    Other(anyhow::Error),
+
+    /// Error from `QuickCache`
+    #[error("QuickCache Error: {0}")]
+    QuickCache(anyhow::Error),
 }
 
 type Result<T> = std::result::Result<T, CacheError>;
+
+/// Selection of available strategy for weighting
+pub enum WeightingStrategy {
+    /// Use size of the stored item
+    Size,
+    /// No eviction
+    Zero,
+}
 
 /// Trait defining a Key usable by the cache
 #[allow(clippy::module_name_repetitions)]
 pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq {
     /// Convert the Key into a filename
     fn to_filename(&self) -> OsString;
+
+    /// Strategy used to determine weight of an item
+    #[must_use]
+    fn weighting_strategy() -> WeightingStrategy {
+        WeightingStrategy::Size
+    }
 }
 
 /// Metadata about one value, stored in memory
@@ -76,14 +85,14 @@ pub struct Metadata {
 /// If the sum of the weight of the items go above that threshold, some items are evicted.
 /// In `ProtonCache` case, the weight is the size of the item stored in file system.
 #[derive(Clone)]
-pub struct ProtonWeighter<Key>
+pub struct DefaultWeighter<Key>
 where
     Key: CacheKey,
 {
     phantom_data: PhantomData<Key>,
 }
 
-impl<Key> ProtonWeighter<Key>
+impl<Key> DefaultWeighter<Key>
 where
     Key: CacheKey,
 {
@@ -94,16 +103,18 @@ where
     }
 }
 
-impl<Key> Weighter<Key, Metadata> for ProtonWeighter<Key>
+impl<Key> Weighter<Key, Metadata> for DefaultWeighter<Key>
 where
     Key: CacheKey,
 {
     #[allow(clippy::cast_possible_truncation)]
     fn weight(&self, _key: &Key, val: &Metadata) -> u32 {
-        // Warning:
-        //   * 0 is unweighted i.e. live forever
-        //   * value more than u32::MAX bytes will be counted as u32::MAX (4GB)
-        val.size.clamp(1, u64::from(u32::MAX)) as u32
+        match Key::weighting_strategy() {
+            // Value more than u32::MAX bytes will be counted as u32::MAX (4GB)
+            WeightingStrategy::Size => val.size.clamp(1, u64::from(u32::MAX)) as u32,
+            // 0 is unweighted i.e. live forever
+            WeightingStrategy::Zero => 0,
+        }
     }
 }
 
@@ -113,14 +124,14 @@ where
 /// I.e. on request (before/after insert/replace) and on eviction (before/on)
 /// In our case, we want to remove file from file system on eviction.
 #[derive(Clone, Default)]
-pub struct ProtonLifecycle<Key>
+pub struct DefaultLifecycle<Key>
 where
     Key: CacheKey,
 {
     phantom_data: PhantomData<Key>,
 }
 
-impl<Key> ProtonLifecycle<Key>
+impl<Key> DefaultLifecycle<Key>
 where
     Key: CacheKey,
 {
@@ -131,7 +142,7 @@ where
     }
 }
 
-impl<Key> Lifecycle<Key, Metadata> for ProtonLifecycle<Key>
+impl<Key> Lifecycle<Key, Metadata> for DefaultLifecycle<Key>
 where
     Key: CacheKey,
 {
@@ -162,7 +173,7 @@ where
     Key: CacheKey,
 {
     /// `QuickCache` structure
-    cache: Cache<Key, Metadata, ProtonWeighter<Key>, DefaultHashBuilder, ProtonLifecycle<Key>>,
+    cache: Cache<Key, Metadata, DefaultWeighter<Key>, DefaultHashBuilder, DefaultLifecycle<Key>>,
     /// Path to the root of the cache
     cache_buf: PathBuf,
 }
@@ -187,10 +198,10 @@ where
                 .estimated_items_capacity(size as usize)
                 .weight_capacity(u64::from(size))
                 .build()
-                .map_err(|e| CacheError::Other(e.into()))?,
-            ProtonWeighter::new(),
+                .map_err(|e| CacheError::QuickCache(e.into()))?,
+            DefaultWeighter::new(),
             DefaultHashBuilder::default(),
-            ProtonLifecycle::new(),
+            DefaultLifecycle::new(),
         );
 
         // create file directory

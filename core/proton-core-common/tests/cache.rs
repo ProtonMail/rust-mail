@@ -1,4 +1,4 @@
-use proton_core_common::cache::{CacheKey, ProtonCache};
+use proton_core_common::cache::{CacheKey, ProtonCache, WeightingStrategy};
 use std::ffi::OsString;
 use std::fs::{read_dir, File};
 use std::io::Read;
@@ -10,6 +10,19 @@ struct TestKey(OsString);
 impl CacheKey for TestKey {
     fn to_filename(&self) -> OsString {
         self.0.clone()
+    }
+}
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+struct TestWeightlessKey(OsString);
+
+impl CacheKey for TestWeightlessKey {
+    fn to_filename(&self) -> OsString {
+        self.0.clone()
+    }
+
+    fn weighting_strategy() -> WeightingStrategy {
+        WeightingStrategy::Zero
     }
 }
 
@@ -122,6 +135,33 @@ fn eviction() {
     let cache_count = cache.len();
     assert_eq!(file_count, cache_count + 1);
     assert_eq!(cache_count, 6); // (6+1) * 15 = 105 => maximum 6 values of 15 bytes
+}
+
+#[test]
+fn weightless() {
+    // Setup:
+    //   * Create a cache
+    let dir = TempDir::new("test").unwrap();
+    let dir = dir.into_path();
+    let cache = ProtonCache::<TestWeightlessKey>::new(dir.clone(), 100).unwrap();
+    let value = "A very big file".as_bytes(); // 15 bytes
+    let to_create = 100;
+
+    // Actions:
+    //   * Add many items
+    for i in 0..to_create {
+        cache
+            .add_item(TestWeightlessKey(format!("{i}").into()), value)
+            .unwrap();
+    }
+
+    // Validation:
+    //   * Only a few items are still in cache
+    let dir = read_dir(dir).unwrap();
+    let file_count = dir.count();
+    let cache_count = cache.len();
+    assert_eq!(file_count, cache_count + 1);
+    assert_eq!(cache_count, 100);
 }
 
 #[test]
