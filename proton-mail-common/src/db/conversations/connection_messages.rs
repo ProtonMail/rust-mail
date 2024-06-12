@@ -802,6 +802,144 @@ WHERE lmc.label_id = dm.label_id
             })
             .optional()
     }
+
+    /// Mark a message with `id` as read.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn mark_message_read(&mut self, id: LocalMessageId) -> DBResult<()> {
+        self.mark_messages_read(std::iter::once(id))
+    }
+
+    /// Mark messages with `ids` as read.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn mark_messages_read(
+        &mut self,
+        ids: impl IntoIterator<Item = LocalMessageId>,
+    ) -> DBResult<()> {
+        self.mark_messages_read_or_unread(true, ids)
+    }
+
+    /// Mark a message with `id` as unread.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn mark_message_unread(&mut self, id: LocalMessageId) -> DBResult<()> {
+        self.mark_messages_unread(std::iter::once(id))
+    }
+
+    /// Mark messages with `ids` as unread.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn mark_messages_unread(
+        &mut self,
+        ids: impl IntoIterator<Item = LocalMessageId>,
+    ) -> DBResult<()> {
+        self.mark_messages_read_or_unread(false, ids)
+    }
+
+    fn mark_messages_read_or_unread(
+        &mut self,
+        read: bool,
+        ids: impl IntoIterator<Item = LocalMessageId>,
+    ) -> DBResult<()> {
+        let (operator, update_value) = if read { ("-", "0") } else { ("+", "1") };
+        let ids = ids.into_iter();
+
+        let mut updated: Vec<(LocalMessageId, LocalConversationId)> =
+            Vec::with_capacity(ids.size_hint().1.unwrap_or(0));
+
+        // update unread flag
+        let mut stmt = self.0.prepare(&format!(
+            "UPDATE messages SET unread={update_value} WHERE id =? RETURNING id, conversation_id"
+        ))?;
+        for id in ids {
+            if let Some(r) = stmt
+                .query_row([id], |r| Ok((r.get(0)?, r.get(1)?)))
+                .optional()?
+            {
+                updated.push(r);
+            }
+        }
+        drop(stmt);
+
+        if updated.is_empty() {
+            // Nothing was changed.
+            return Ok(());
+        }
+
+        // Publish updates for all affected ids.
+
+        // Messages Counters
+        let mut stmt = self.0.prepare(&format!(
+            indoc! {
+            "UPDATE label_message_count SET
+                unread=unread{}1
+            WHERE label_id IN (
+                SELECT label_id FROM message_labels WHERE message_id=?
+            )
+            "},
+            operator
+        ))?;
+
+        for (id, _) in &updated {
+            stmt.execute([id])?;
+        }
+        drop(stmt);
+
+        let mut label_ids = BTreeSet::new();
+        // Update conversation labels
+        let mut stmt = self.0.prepare(&format!(
+            indoc! {
+               "UPDATE conversation_labels SET
+                ctx_num_unread=ctx_num_unread{}1
+            WHERE conversation_id=? AND label_id IN (
+                SELECT label_id FROM message_labels WHERE message_id=?
+            )
+            RETURNING label_id, ctx_num_unread
+           "
+            },
+            operator
+        ))?;
+        for (message_id, conversation_id) in &updated {
+            let rows = stmt.query_map(
+                (conversation_id, message_id),
+                |r| -> DBResult<(LocalLabelId, u64)> { Ok((r.get(0)?, r.get(1)?)) },
+            )?;
+
+            for row in rows {
+                let (label_id, num_unread) = row?;
+                if read {
+                    if num_unread == 0 {
+                        label_ids.insert(label_id);
+                    }
+                } else if num_unread == 1 {
+                    label_ids.insert(label_id);
+                }
+            }
+        }
+        drop(stmt);
+
+        // Update conversation label counts.
+        let mut stmt = self.0.prepare(&format!(
+            indoc! {
+                "UPDATE label_conversation_count SET
+                unread=unread{}1
+            WHERE label_id =?
+            "
+            },
+            operator
+        ))?;
+        for label_id in &label_ids {
+            stmt.execute([label_id])?;
+        }
+        drop(stmt);
+
+        Ok(())
+    }
 }
 
 macro_rules! bind_list {
