@@ -1,14 +1,16 @@
 [package]
 name = "proton-api-mail"
-version = "0.3.0"
+version = "0.3.12"
 edition = "2021"
 keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
 
 [dependencies]
+bitflags = {workspace = true }
+bytes = { workspace = true }
 lazy_static = { workspace = true }
 proton-api-core = { workspace = true }
-serde = { version = "1.0.197", features = ["derive"] }
+proton-crypto-inbox = { workspace = true }
 tokio = { workspace = true }
 uniffi = { workspace = true, optional = true }
 

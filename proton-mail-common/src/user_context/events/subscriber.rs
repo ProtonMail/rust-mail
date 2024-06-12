@@ -1,5 +1,4 @@
 use crate::db::DBResult;
-use crate::user_context::events::addresses::handle_address_event;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
@@ -39,12 +38,6 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         conn.tx(|tx| -> DBResult<()> {
             for event in events {
                 let event = &event.event;
-
-                if let Some(addresses) = &event.addresses {
-                    debug!("Handling address events");
-                    handle_address_event(tx, addresses)?;
-                }
-
                 if let Some(labels) = &event.labels {
                     debug!("Handling label events");
                     handle_label_events(tx, labels)?;

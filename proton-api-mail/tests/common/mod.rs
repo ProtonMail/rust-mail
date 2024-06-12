@@ -23,7 +23,7 @@ pub async fn request(url: String) -> (StatusCode, Option<String>, Option<usize>,
         .headers()
         .get(CONTENT_TYPE)
         .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_owned());
+        .map(ToOwned::to_owned);
     let content_len = response
         .headers()
         .get(CONTENT_LENGTH)

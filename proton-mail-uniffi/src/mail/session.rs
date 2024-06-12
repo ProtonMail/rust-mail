@@ -10,6 +10,7 @@ use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, RequestError};
 use pmc::proton_core_common::db::SessionEncryptionKey;
 use proton_mail_common as pmc;
 use proton_mail_common::exports::anyhow::anyhow;
+use proton_mail_common::proton_api_mail::domain::AddressDomainLogoError;
 use proton_mail_common::proton_api_mail::proton_api_core::http;
 use proton_mail_common::proton_core_common::CoreSessionCallback;
 use std::path::PathBuf;
@@ -47,44 +48,66 @@ pub enum MailSessionError {
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
+    #[error("Failed to access PGP keys: {0}")]
+    PGPKeyAccess(anyhow::Error),
+    #[error("Invalid mode: '{0}'")]
+    InvalidImageMode(String),
+    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
+    AddressDomainLogoError(#[from] AddressDomainLogoError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
 pub type MailSessionResult<T> = Result<T, MailSessionError>;
 
+/// Configuration parameters for the [`MailSession`]
+#[derive(uniffi::Record)]
+pub struct MailSessionParams {
+    /// Directory where the session database should be stored.
+    pub session_dir: String,
+    /// Directory where the user databases should be stored.
+    pub user_dir: String,
+    /// Directory where the mail cache should be stored.
+    pub mail_cache_dir: String,
+    /// Directory where the logs should be stored.
+    pub log_dir: String,
+    /// Whether to enable debug and trace logs.
+    pub log_debug: bool,
+    /// API Environment configuration.
+    pub api_env_config: Option<APIEnvConfig>,
+}
+
 #[uniffi::export]
 impl MailSession {
-    /// Create a new mail context:
-    /// * `session_dir`: Directory where the session db should be stored.
-    /// * `user_dri`: Directory where the user db should be stored.
-    /// * `log_dir:`: Directory where the log file should be stored.
-    /// * `log_debug`: Whether to enable debug and trace logs
-    /// * `api_env_config`: The API environment configuration.
-    /// * `key_chain`: `KeyChain` implementation
-    /// * `network_callback`: Optional network status changed callback
+    // NOTE: Callbacks can not be stored in record types, which is why they are still in the
+    // constructor.
+    /// Create a new mail session.
+    ///
+    /// # Params
+    /// * `params`: See [`MailSessionParams`] for parameter details.
+    /// * `key_chain`: Keychain implementation.
+    /// * `network_callback`: Optional network status changes callback.
+    ///
     #[uniffi::constructor]
     pub fn create(
-        session_dir: String,
-        user_dir: String,
-        log_dir: String,
-        log_debug: bool,
+        params: MailSessionParams,
         key_chain: Box<dyn OSKeyChain>,
-        api_env_config: Option<APIEnvConfig>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> MailSessionResult<Self> {
-        let mut log_path = PathBuf::from(log_dir);
+        let mut log_path = PathBuf::from(params.log_dir);
         std::fs::create_dir_all(&log_path)?;
         log_path.push("proton-mail-uniffi.log");
 
-        init_log(&log_path, log_debug)?;
+        init_log(&log_path, params.log_debug)?;
 
-        let session_path = PathBuf::from(session_dir);
-        let user_path = PathBuf::from(user_dir);
+        let session_path = PathBuf::from(params.session_dir);
+        let user_path = PathBuf::from(params.user_dir);
+        let mail_cache_path = PathBuf::from(params.mail_cache_dir);
 
         // create directories.
         tracing::debug!("Creating directories");
         std::fs::create_dir_all(&session_path)?;
         std::fs::create_dir_all(&user_path)?;
+        std::fs::create_dir_all(&mail_cache_path)?;
 
         // Generate session key;
         tracing::debug!("Checking keychain");
@@ -102,7 +125,7 @@ impl MailSession {
         }
 
         // Creating client.
-        let api_env_config = match api_env_config {
+        let api_env_config = match params.api_env_config {
             Some(config) => config,
             None => APIEnvConfig::default(),
         };
@@ -121,6 +144,7 @@ impl MailSession {
         let mail_ctx = pmc::MailContext::new(
             session_path,
             user_path,
+            mail_cache_path,
             Arc::from(FFIKeyChain::from(key_chain)),
             client,
             network_callback.map(
@@ -145,9 +169,12 @@ impl MailSession {
         Ok(LoginFlow::new(flow, self.ctx.clone()))
     }
 
-    /// Retrieve the currently stored sessions.
+    /// Return the list of active session.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
     pub fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
-        let sessions = self.ctx.get_sessions()?;
+        let sessions = self.ctx.sessions()?;
         Ok(sessions
             .into_iter()
             .map(StoredSession::new)
@@ -158,14 +185,22 @@ impl MailSession {
     pub fn user_context_from_session(
         &self,
         session: &StoredSession,
-        cb: Option<Box<dyn SessionCallback>>,
+        session_cb: Option<Box<dyn SessionCallback>>,
     ) -> MailSessionResult<Arc<MailUserSession>> {
-        let cb =
-            cb.map(|cb| -> Box<dyn CoreSessionCallback> { Box::new(FFISessionCallback::from(cb)) });
+        let session_cb = session_cb
+            .map(|cb| -> Box<dyn CoreSessionCallback> { Box::new(FFISessionCallback::from(cb)) });
         let ctx = self
             .ctx
-            .user_context_from_session(session.encrypted_session(), cb)?;
+            .user_context_from_session(session.encrypted_session(), session_cb)?;
         Ok(MailUserSession::new(ctx))
+    }
+
+    /// Removes a user session and deletes all associated data.
+    ///
+    /// # Errors
+    /// Returns error if data can not be removed or the db operation failed.
+    pub fn delete_session(&self, session: &StoredSession) -> MailSessionResult<()> {
+        Ok(self.ctx.delete_session(session.encrypted_session())?)
     }
 
     /// Check whether the network is connected/online.
@@ -193,6 +228,8 @@ impl From<pmc::MailContextError> for MailSessionError {
             pmc::MailContextError::EventLoop(err) => MailSessionError::EventLoop(err),
             pmc::MailContextError::Other(err) => MailSessionError::Other(err),
             pmc::MailContextError::ActionQueue(e) => Self::ActionQueue(e),
+            pmc::MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
+            pmc::MailContextError::AddressDomainLogoError(e) => Self::AddressDomainLogoError(e),
         }
     }
 }

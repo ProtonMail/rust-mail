@@ -3,6 +3,11 @@ mod actions;
 mod context;
 pub mod db;
 mod mailbox;
+
+pub mod avatar;
+
+mod proton_color;
+pub mod settings;
 mod user_context;
 
 pub use context::*;

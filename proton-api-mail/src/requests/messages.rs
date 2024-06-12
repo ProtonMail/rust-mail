@@ -1,28 +1,34 @@
 use crate::domain::{
     LabelId, Message, MessageCount, MessageId, MessageMetadata, MessageMetadataFilter,
 };
-use crate::exports::serde::Serialize;
-use proton_api_core::exports::serde::{self, Deserialize};
+use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
+use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::http;
 use proton_api_core::http::{JsonResponse, Method, RequestData};
-use proton_api_core::utils::bool_from_integer;
+use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 
 pub struct GetMessageMetadataRequest {
     filter: MessageMetadataFilter,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct MessageMetadataResponse {
     pub messages: Vec<MessageMetadata>,
-    #[serde(default, deserialize_with = "bool_from_integer")]
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
     pub stale: bool,
     pub total: u64,
 }
 
 impl GetMessageMetadataRequest {
     #[must_use]
-    pub fn new(filter: MessageMetadataFilter) -> Self {
+    pub fn new(mut filter: MessageMetadataFilter) -> Self {
+        filter.page_size = filter.page_size.max(MAX_PAGE_ELEMENT_COUNT_U64);
+        filter.limit = filter.limit.map(|v| v.max(MAX_LIMIT_VALUE_U64));
         Self { filter }
     }
 }
@@ -37,7 +43,7 @@ impl http::RequestDesc for GetMessageMetadataRequest {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct GetMessageResponse {
     pub message: Message,

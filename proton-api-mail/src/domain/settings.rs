@@ -1,9 +1,11 @@
 use crate::exports::serde::{self, Deserialize, Deserializer, Serialize};
-use proton_api_core::exports::proton_sqlite3;
 use proton_api_core::new_integer_enum;
 use proton_api_core::utils::{
     bool_from_integer, bool_to_integer, opt_bool_from_integer, opt_bool_to_integer,
 };
+
+#[cfg(feature = "sql")]
+use proton_api_core::exports::proton_sqlite3;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
@@ -140,6 +142,53 @@ pub struct MailSettings {
     pub hide_sender_images: bool,
 }
 
+impl Default for MailSettings {
+    fn default() -> Self {
+        Self {
+            display_name: String::new(),
+            signature: String::new(),
+            theme: String::new(),
+            auto_save_contacts: true,
+            composer_mode: MailSettingsComposerMode::default(),
+            message_buttons: MailSettingsMessageButtons::default(),
+            show_images: MailSettingsShowImages::default(),
+            show_moved: MailSettingsShowMoved::default(),
+            auto_delete_spam_and_trash_days: None,
+            almost_all_mail: MailSettingsAlmostAllMail::default(),
+            next_message_on_move: Some(MailSettingsNextMessageOnMove::DisabledExplicit),
+            view_mode: MailSettingsViewMode::default(),
+            view_layout: MailSettingsViewLayout::default(),
+            swipe_left: MailSettingsSwipeAction::default(),
+            swipe_right: MailSettingsSwipeAction::default(),
+            shortcuts: true,
+            pm_signature: MailSettingsPMSignature::default(),
+            pm_signature_referral_link: false,
+            image_proxy: 0,
+            num_message_per_page: 0,
+            draft_mime_type: "text/html".to_owned(),
+            receive_mime_type: "text/html".to_owned(),
+            show_mime_type: "text/html".to_owned(),
+            enable_folder_color: false,
+            inherit_parent_folder_color: true,
+            submission_access: false,
+            right_to_left: MailSettingsComposerDirection::LeftToRight,
+            attach_public_key: false,
+            sign: false,
+            pgp_scheme: MailSettingsPGPScheme::Mime,
+            prompt_pin: false,
+            sticky_labels: false,
+            confirm_link: true,
+            delay_send_seconds: 0,
+            font_face: None,
+            spam_action: None,
+            block_sender_confirmation: None,
+            mobile_settings: None,
+            hide_remote_images: false,
+            hide_sender_images: false,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 pub struct MailSettingsAutoResponder {
@@ -209,7 +258,7 @@ new_integer_enum!(u8, MailSettingsAlmostAllMail {
 
 impl Default for MailSettingsAlmostAllMail {
     fn default() -> Self {
-        Self::AllMail
+        Self::AlmostAllMail
     }
 }
 

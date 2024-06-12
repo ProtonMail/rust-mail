@@ -1,11 +1,12 @@
+use crate::avatar::AvatarInformation;
 use crate::db::attachments::LocalAttachmentMetadataSelector;
 use crate::db::conversations::types::{LocalConversation, LocalConversationId};
 use crate::db::json::{
     deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer,
 };
 use crate::db::{
-    ConversationAvatarInformation, DBResult, LocalAttachmentMetadata, LocalConversationCount,
-    LocalConversationLabel, LocalLabelId, LocalMessageId, MailSqliteConnectionImpl,
+    DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalInlineLabelInfo, LocalLabelId,
+    LocalMessageId, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
@@ -17,6 +18,22 @@ use proton_sqlite3::utils::{
 use std::collections::BTreeSet;
 
 impl<'c> MailSqliteConnectionImpl<'c> {
+    /// Retrieve the local id for a conversation with `remote_id`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn conversation_id_from_remote_id(
+        &self,
+        remote_id: &ConversationId,
+    ) -> DBResult<Option<LocalConversationId>> {
+        self.0
+            .query_row(
+                "SELECT id FROM conversation WHERE rid=?",
+                [remote_id],
+                |r| r.get(0),
+            )
+            .optional()
+    }
     pub fn create_conversation(
         &mut self,
         conversation: &Conversation,
@@ -93,7 +110,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
             .0
             .prepare("INSERT OR IGNORE into conversation_attachments VALUES (?, ?)")?;
 
-        let mut attachments_stmt = self.create_attachment_ref_statement()?;
+        let mut attachments_stmt = self.create_conversation_attachment_ref_statement()?;
 
         let mut senders_buffer = JsonWriteBuffer::new();
         let mut receives_buffers = JsonWriteBuffer::new();
@@ -181,7 +198,7 @@ impl<'c> MailSqliteConnectionImpl<'c> {
                 )?;
             }
             for attachment in &conv.attachments_metadata {
-                let attachment_id = attachments_stmt.insert(None, attachment)?;
+                let attachment_id = attachments_stmt.insert(None, attachment, conv_id)?;
                 attachment_to_conv_stmt.execute((conv_id, attachment_id))?;
             }
 
@@ -204,6 +221,10 @@ impl<'c> MailSqliteConnectionImpl<'c> {
         &self,
         ids: impl ExactSizeIterator<Item = LocalConversationId>,
     ) -> DBResult<Vec<LocalConversation>> {
+        if ids.len() == 0 {
+            return Ok(Vec::new());
+        }
+
         let mut stmt = self
             .0
             .prepare(&ConversationSelector::query_with_id_in(ids.len()))?;
@@ -292,14 +313,37 @@ conversation_attachments.conversation_id=?", LocalAttachmentMetadataSelector::qu
         );
 
         let mut stmt = self.0.prepare(&query)?;
-        let Some(rows) = stmt
-            .query_map([id], LocalAttachmentMetadataSelector::from_row)
-            .optional()?
-        else {
-            return Ok(None);
-        };
+        let rows = stmt.query_map([id], LocalAttachmentMetadataSelector::from_row)?;
 
-        Ok(Some(mapped_rows_to_vec(rows)?))
+        let r = mapped_rows_to_vec(rows)?;
+
+        if r.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(r))
+    }
+
+    /// Get all label ids associated with a conversation
+    ///
+    /// # Errors
+    /// Returns error on query failure
+    pub fn conversation_label_ids(
+        &self,
+        conv_id: LocalConversationId,
+    ) -> DBResult<Option<Vec<LocalLabelId>>> {
+        let mut stmt = self
+            .0
+            .prepare("SELECT (label_id) FROM conversation_labels WHERE conversation_id=?")?;
+
+        let rows = stmt.query_map([conv_id], |r| r.get(0))?;
+        let rows = mapped_rows_to_vec(rows)?;
+
+        if rows.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(rows))
+        }
     }
 
     pub fn mark_conversation_as_deleted(
@@ -619,7 +663,11 @@ FROM (
         Ok(())
     }
 
-    pub fn get_conversation_counts(&self) -> DBResult<Vec<LocalConversationCount>> {
+    /// Get all conversation counts
+    ///
+    /// # Errors
+    /// Returns error if thq query fails.
+    pub fn conversation_counts(&self) -> DBResult<Vec<LocalConversationCount>> {
         let mut stmt = self.0.prepare("SELECT * FROM label_conversation_count")?;
         let r = mapped_rows_to_vec(stmt.query_map((), |r| {
             Ok(LocalConversationCount {
@@ -629,6 +677,29 @@ FROM (
             })
         })?)?;
         Ok(r)
+    }
+
+    /// Get conversation counts for label with `id`.
+    ///
+    /// # Errors
+    /// Returns error if the query fails.
+    pub fn conversation_count_for_label(
+        &self,
+        id: LocalLabelId,
+    ) -> DBResult<Option<LocalConversationCount>> {
+        self.0
+            .query_row(
+                "SELECT * FROM label_conversation_count WHERE label_id = ?",
+                [id],
+                |r| {
+                    Ok(LocalConversationCount {
+                        id: r.get(0)?,
+                        total: r.get(1)?,
+                        unread: r.get(2)?,
+                    })
+                },
+            )
+            .optional()
     }
 
     pub fn local_to_remote_conversation_ids(
@@ -1003,10 +1074,25 @@ ON CONFLICT(label_id) DO UPDATE SET total=total+excluded.total, unread=unread+ex
                     )?;
                 }
             } else {
-                // Fallback without message metadata
+                // Fallback without message metadata. We should grab the highest time values from
+                // all the remaining labels assigned to this conversation. All conversations
+                // messages will at the minimum, always assigned the All Mail label.
                 self.0.execute(
-                    r"INSERT OR IGNORE INTO conversation_labels
- VALUES (?,?,0,0,0,0,0,0,0)",
+                    r"
+INSERT OR IGNORE INTO conversation_labels
+SELECT
+    ?1,
+    ?2,
+    IFNULL(MAX(ctx_time),0) AS time,
+    IFNULL(MAX(ctx_size),0) AS size,
+    IFNULL(MAX(ctx_num_messages),0) AS num_messages,
+    IFNULL(MAX(ctx_num_unread),0) AS num_unread,
+    IFNULL(MAX(ctx_num_attachments),0) AS num_attachments,
+    IFNULL(MAX(ctx_expiration_time),0) AS expiration_time,
+    IFNULL(MAX(ctx_snooze_time),0) AS snooze_time
+FROM conversation_labels
+WHERE conversation_id=?1
+",
                     (id, label_id),
                 )?;
 
@@ -1084,6 +1170,46 @@ ON CONFLICT(label_id) DO UPDATE SET total=total-excluded.total, unread=unread-ex
 
         Ok(())
     }
+
+    /// Check whether we already downloaded the messages for a conversation with `id`.
+    ///
+    /// This function also returns the remote id, since it will be necessary to retrieve the
+    /// data later.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn conversation_has_messages(
+        &self,
+        id: LocalConversationId,
+    ) -> DBResult<Option<(bool, Option<ConversationId>)>> {
+        self.0
+            .query_row(
+                "SELECT has_messages, rid FROM conversations WHERE id =?",
+                [id],
+                |r| {
+                    let has_messages = r.get(0)?;
+                    let rid = r.get(1)?;
+                    Ok((has_messages, rid))
+                },
+            )
+            .optional()
+    }
+
+    /// Mark messages for a conversation with `id` as downloaded.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn set_conversation_has_messages(
+        &self,
+        id: LocalConversationId,
+        value: bool,
+    ) -> DBResult<()> {
+        self.0.execute(
+            "UPDATE conversations SET has_messages = ? WHERE id = ?",
+            (value, id),
+        )?;
+        Ok(())
+    }
 }
 
 const RESOLVE_LABEL_ID_STATEMENT: &str = "SELECT id FROM labels WHERE rid = ?";
@@ -1159,7 +1285,7 @@ WHERE deleted=0"
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
-        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
+        let avatar_information = AvatarInformation::from_message_addresses(&senders);
 
         Ok({
             LocalConversation {
@@ -1176,7 +1302,7 @@ WHERE deleted=0"
                 expiration_time: r.get(9)?,
                 size: r.get(10)?,
                 starred: r.get(11)?,
-                labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 12)?,
+                labels: deserialize_optional_json_from_row::<Vec<LocalInlineLabelInfo>>(r, 12)?,
                 time: 0,
                 snooze_time: 0,
                 attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(
@@ -1283,7 +1409,7 @@ WHERE C.deleted=0"
 
     fn from_row(r: &Row) -> DBResult<LocalConversation> {
         let senders = deserialize_json_from_row::<Vec<MessageAddress>>(r, 4)?;
-        let avatar_information = ConversationAvatarInformation::from_message_addresses(&senders);
+        let avatar_information = AvatarInformation::from_message_addresses(&senders);
 
         Ok(LocalConversation {
             id: r.get(0)?,
@@ -1298,7 +1424,7 @@ WHERE C.deleted=0"
             num_unread: r.get(10)?,
             num_attachments: r.get(11)?,
             starred: r.get(12)?,
-            labels: deserialize_optional_json_from_row::<Vec<LocalConversationLabel>>(r, 13)?,
+            labels: deserialize_optional_json_from_row::<Vec<LocalInlineLabelInfo>>(r, 13)?,
             attachments: deserialize_optional_json_from_row::<Vec<LocalAttachmentMetadata>>(r, 14)?,
             num_messages: r.get(15)?,
             expiration_time: r.get(16)?,

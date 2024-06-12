@@ -1,10 +1,16 @@
-use crate::domain::{AddressId, ConversationId, LabelId};
+use crate::domain::{AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId};
+use crate::exports::serde_json;
+use crate::MAX_PAGE_ELEMENT_COUNT;
+use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
-use proton_api_core::utils::{bool_from_integer, bool_to_integer};
+use proton_api_core::utils::{bool_from_integer, bool_to_integer, opt_bool_to_integer};
+use proton_crypto_inbox::attachment::{
+    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+};
+use std::collections::HashMap;
 
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
-proton_api_core::utils::string_id!(AttachmentId);
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Default)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
@@ -34,9 +40,133 @@ pub struct MessageAddress {
     pub bimi_selector: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
+#[serde(crate = "self::serde", transparent)]
+#[repr(transparent)]
+pub struct MessageFlags(u64);
+
+#[cfg(feature = "uniffi")]
+uniffi::custom_newtype!(MessageFlags, u64);
+
+bitflags::bitflags! {
+    impl MessageFlags:u64 {
+        /// Whether a message is received.
+        const RECEIVED = 1;
+        /// Whether a message is sent.
+        const SENT = 1 << 1;
+        /// Whether the message is between Proton Mail Recipients.
+        const INTERNAL = 1<< 2;
+        /// Whether the message is end-to-end encrypted.
+        const E2E = 1 << 3;
+        /// Whether the message is an auto response.
+        const AUTO = 1 << 4;
+        /// Whether the message is replied to.
+        const REPLIED = 1 << 5;
+        /// Whether the message is replied to all.
+        const REPLIED_ALL = 1 << 6;
+        /// Whether the message is forwarded.
+        const FORWARDED = 1 << 7;
+        /// Whether the message has been responded with an auto response.
+        const AUTO_REPLIED = 1 << 8;
+        /// Whether the message is an import.
+        const IMPORTED = 1 << 9;
+        /// Whether the message has ever been opened by the user.
+        const OPENED = 1 << 10;
+        /// Whether a read receipt has been sent in response to the message.
+        const RECEIPT_SENT = 1 << 11;
+        /// No longer used.
+        const UNUSED_1 = 1 << 12;
+        /// No longer used.
+        const UNUSED_2 = 1 << 13;
+        /// Whether the message is a receipt.
+        const RECEIPT = 1 <<14;
+        /// Whether the message is from proton.
+        const PROTON = 1 << 15;
+        /// Whether to request a read receipt for the message.
+        const RECEIPT_REQUEST = 1 << 16;
+        /// Whether to attach public key.
+        const PUBLIC_KEY = 1 << 17;
+        /// Whether to sing the message.
+        const SIGN = 1 << 18;
+        /// Unsubscribed from newsletter.
+        const UNSUBSCRIBED = 1 << 19;
+        /// Messages that been scheduled to send at a later time.
+        const SCHEDULED_SEND = 1 << 20;
+        /// No longer used.
+        const UNUSED_3 = 1 << 21;
+        /// Whether the message was synced from gmail.
+        const SYNCED_FROM_GMAIL = 1 << 22;
+        /// Whether DMARC authentication passed.
+        const DMARC_PASS = 1 << 23;
+        /// Whether message failed SPF check.
+        const SPF_FAIL = 1 << 24;
+        /// Whether message failed DKIM check.
+        const DKIM_FAIL = 1 << 25;
+        /// Whether incoming message failed DMARC authentication.
+        const DMARC_FAIL = 1  << 26;
+        /// Whether the message is in spam and the user moves it to a new location that is not
+        /// spam or trash (e.g. inbox or archive).
+        const HAM_MANUAL = 1 << 27;
+        /// Whether the message is marked as spam by anti-spam filters.
+        const SPAM_AUTO = 1 << 28;
+        /// Whether the message has been manually marked as spam.
+        const SPAM_MANUAL = 1 <<29;
+        /// Whether the message is marked as phishing by anti-spam filters.
+        const PHISHING_AUTO = 1 << 30;
+        /// Whether the message has been manually marked as phishing.
+        const PHISHING_MANUAL = 1 << 31;
+        /// Messages where the expiration time cannot be changed.
+        const FROZEN_EXPIRATION= 1 << 32;
+        /// Whether the message has been flagged as suspicious by the system.
+        const FLAG_SUSPICIOUS = 1 << 33;
+        /// Whether message is auto-forwarded.
+        const FLAG_AUTO_FORWARDER = 1 << 34;
+        /// Whether message is auto-forwarded.
+        const FLAG_AUTO_FORWARDEE = 1 << 35;
+    }
+}
+
+impl MessageFlags {
+    /// Check whether this message is an auto-sent reply.
+    #[must_use]
+    pub fn is_sent_auto(&self) -> bool {
+        if !self.intersects(MessageFlags::SENT) {
+            return false;
+        }
+
+        self.intersects(MessageFlags::AUTO)
+    }
+
+    /// Check whether this message is a draft.
+    #[must_use]
+    pub fn is_draft(&self) -> bool {
+        !self.intersects(MessageFlags::SENT | MessageFlags::RECEIVED)
+    }
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::ToSql for MessageFlags {
+    fn to_sql(
+        &self,
+    ) -> crate::exports::proton_sqlite3::rusqlite::Result<
+        crate::exports::proton_sqlite3::rusqlite::types::ToSqlOutput<'_>,
+    > {
+        self.0.to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MessageFlags {
+    fn column_result(
+        value: crate::exports::proton_sqlite3::rusqlite::types::ValueRef<'_>,
+    ) -> crate::exports::proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        let value = u64::column_result(value)?;
+        MessageFlags::from_bits(value)
+            .ok_or(crate::exports::proton_sqlite3::rusqlite::types::FromSqlError::InvalidType)
+    }
+}
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MessageMetadata {
     #[serde(rename = "ID")]
@@ -63,7 +193,7 @@ pub struct MessageMetadata {
     pub bcc_list: Vec<MessageAddress>,
     #[serde(default)]
     pub reply_tos: Vec<MessageAddress>,
-    pub flags: u64,
+    pub flags: MessageFlags,
     pub time: u64,
     pub size: u64,
     #[serde(
@@ -94,6 +224,7 @@ pub struct MessageMetadata {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 #[serde(crate = "self::serde")]
 pub enum MimeType {
     #[serde(rename = "text/plain")]
@@ -108,110 +239,26 @@ pub enum MimeType {
     MessageRFC822,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-#[serde(crate = "self::serde", rename_all = "snake_case")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum Disposition {
-    Inline,
-    Attachment,
-}
-
-#[cfg(feature = "sql")]
-use proton_api_core::exports::proton_sqlite3::rusqlite;
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::FromSql for Disposition {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
-        match value.as_str()? {
-            "inline" => Ok(Disposition::Inline),
-            "attachment" => Ok(Disposition::Attachment),
-            _ => Err(rusqlite::types::FromSqlError::Other(
-                "Invalid enum value".into(),
-            )),
-        }
-    }
-}
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::ToSql for Disposition {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Borrowed(
-            rusqlite::types::ValueRef::Text(match self {
-                Disposition::Inline => "inline".as_bytes(),
-                Disposition::Attachment => "attachment".as_bytes(),
-            }),
-        ))
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Message {
-    #[serde(rename = "ID")]
-    pub id: MessageId,
-    #[serde(rename = "ConversationID")]
-    pub conversation_id: ConversationId,
-    #[serde(rename = "AddressID")]
-    pub address_id: AddressId,
-    pub order: u64,
-    #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<LabelId>,
-    #[serde(rename = "ExternalID")]
-    pub external_id: Option<ExternalId>,
-    #[serde(default)]
-    pub subject: String,
-    #[serde(default)]
-    pub sender: MessageAddress,
-    #[serde(default)]
-    pub to_list: Vec<MessageAddress>,
-    #[serde(rename = "CCList")]
-    //TODO: Doesn't have to be default, but fails with GPA otherwise
-    pub cc_list: Option<Vec<MessageAddress>>,
-    #[serde(rename = "BCCList")]
-    //TODO: Doesn't have to be default, but fails with GPA otherwise
-    pub bcc_list: Option<Vec<MessageAddress>>,
-    #[serde(default)]
-    pub reply_tos: Vec<MessageAddress>,
-    pub flags: u64,
-    pub time: u64,
-    pub size: u64,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub unread: bool,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub is_replied: bool,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub is_replied_all: bool,
-    #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
-    )]
-    pub is_forwarded: bool,
-
-    pub num_attachments: u32,
-
-    pub header: Option<String>,
-    //TODO:
-    //pub parsed_headers: Headers,
-    pub body: Option<String>,
+    #[serde(flatten)]
+    pub metadata: MessageMetadata,
+    pub header: String,
+    // Unfortunately, some values returned in this struct are either
+    // arrays or strings.
+    pub parsed_headers: HashMap<String, serde_json::Value>,
+    pub body: String,
     #[serde(rename = "MIMEType")]
-    pub mime_type: Option<MimeType>,
+    pub mime_type: MimeType,
     #[serde(default)]
-    pub attachments: Vec<Attachment>,
+    pub attachments: Vec<MessageAttachment>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
-pub struct Attachment {
+pub struct MessageAttachment {
     #[serde(rename = "ID")]
     pub id: AttachmentId,
     pub name: String,
@@ -219,22 +266,25 @@ pub struct Attachment {
     #[serde(rename = "MIMEType")]
     pub mime_type: String,
     pub disposition: Disposition,
-    pub key_packets: Option<String>,
-    pub signature: Option<String>,
+    pub key_packets: KeyPackets,
+    pub signature: Option<AttachmentSignature>,
+    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    pub headers: MessageAttachmentHeaders,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
-pub struct AttachmentMetadata {
-    #[serde(rename = "ID")]
-    pub id: AttachmentId,
-    pub size: u64,
-    #[serde(default)]
-    pub name: String,
-    #[serde(rename = "MIMEType")]
-    pub mime_type: String,
-    pub disposition: Disposition,
+#[serde(crate = "self::serde")]
+pub struct MessageAttachmentHeaders {
+    #[serde(rename = "content-disposition")]
+    pub content_disposition: String,
+    #[serde(rename = "content-id")]
+    pub content_id: Option<String>,
+    #[serde(rename = "content-transfer-encoding")]
+    pub content_transfer_encoding: Option<String>,
+    #[serde(rename = "x-pm-image-width")]
+    pub image_width: Option<String>,
+    #[serde(rename = "x-pm-image-height")]
+    pub image_height: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Copy)]
@@ -247,6 +297,7 @@ pub struct MessageAttachmentInfo {
 }
 
 #[derive(Debug, Copy, Clone)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageMetadataSortMode {
     Time,
     Size,
@@ -282,30 +333,81 @@ impl Serialize for MessageMetadataSortMode {
     }
 }
 
+/// Parameters to filter/search messages with a given criteria.
 #[derive(Debug, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MessageMetadataFilter {
-    #[serde(rename = "ID")]
-    ids: Option<Vec<MessageId>>,
-    subject: Option<String>,
-    #[serde(rename = "AddressID")]
-    address_id: Option<AddressId>,
+    /// Page index.
+    pub page: u64,
+    /// Number of elements per page.
+    pub page_size: u64,
+    /// The number of messages to return.
+    pub limit: Option<u64>,
+    /// Label ids to filter on.
     #[serde(rename = "LabelID")]
-    label_id: Option<Vec<LabelId>>,
-    #[serde(rename = "ExternalID")]
-    external_id: Option<ExternalId>,
-    #[serde(rename = "EndID")]
-    end_id: Option<MessageId>,
+    pub label_id: Option<Vec<LabelId>>,
+    /// Result sort mode.
+    pub sort: Option<MessageMetadataSortMode>,
+    /// If true sort results descending. If false, sort ascending.
     #[serde(
-        deserialize_with = "bool_from_integer",
-        serialize_with = "bool_to_integer"
+        deserialize_with = "opt_bool_from_integer",
+        serialize_with = "opt_bool_to_integer"
     )]
-    desc: bool,
-    sort: Option<MessageMetadataSortMode>,
+    pub desc: Option<bool>,
+    /// UNIX timestamp to filter messages at or later than timestamp.
+    pub begin: Option<u64>,
+    /// UNIX timestamp to filter messages at or earlier than timestamp.
+    pub end: Option<u64>,
+    /// Return only messages newer, in creation time (NOT timestamp), than `begin_id`.
+    #[serde(rename = "BeginID")]
+    pub begin_id: Option<MessageId>,
+    /// Return only messages older, in creation time (NOT timestamp), than `end_id`.
+    #[serde(rename = "EndID")]
+    pub end_id: Option<MessageId>,
+    /// Keyword search of To, CC, BCC, From and Subject fields.
+    pub keyword: Option<String>,
+    /// Keyword search of To, CC and BCC fields.
+    pub recipients: Option<Vec<String>>,
+    /// Keyword search of To field.
+    pub to: Option<String>,
+    /// Keyword search of CC field.
+    #[serde(rename = "CC")]
+    pub cc: Option<String>,
+    /// Keyword search of BCC field.
+    #[serde(rename = "BCC")]
+    pub bcc: Option<String>,
+    /// Keyword search From field.
+    pub from: Option<String>,
+    /// Keyword search Subject field.
+    pub subject: Option<String>,
+    /// If true return only messages which have attachments. If false return only messages which
+    /// have no attachments.
+    #[serde(
+        deserialize_with = "opt_bool_from_integer",
+        serialize_with = "opt_bool_to_integer"
+    )]
+    pub attachments: Option<bool>,
+    /// If true return only messages which are unread. If false return only messages which are read.
+    #[serde(
+        deserialize_with = "opt_bool_from_integer",
+        serialize_with = "opt_bool_to_integer"
+    )]
+    pub unread: Option<bool>,
+    /// Filter messages by `conversation_id`.
     #[serde(rename = "ConversationID")]
-    conversation_id: Option<ConversationId>,
-    page: usize,
-    page_size: usize,
+    pub conversation_id: Option<ConversationId>,
+    /// Filter on address id.
+    #[serde(rename = "AddressID")]
+    pub address_id: Option<AddressId>,
+    /// Filter on external id.
+    #[serde(rename = "ExternalID")]
+    pub external_id: Option<ExternalId>,
+    #[serde(rename = "ID")]
+    /// Filter on the given message ids.
+    ids: Option<Vec<MessageId>>,
+    /// If true automatically convert simple queries to wildcarded versions, such as `test` to `*test*`.
+    pub auto_wildcard: Option<bool>,
 }
 
 impl MessageMetadataFilter {
@@ -313,89 +415,228 @@ impl MessageMetadataFilter {
         Self {
             ids: None,
             subject: None,
+            attachments: None,
             address_id: None,
             external_id: None,
             end_id: None,
+            keyword: None,
+            recipients: None,
+            to: None,
+            cc: None,
+            bcc: None,
             label_id: None,
             sort: None,
-            desc: false,
+            desc: None,
+            begin: None,
+            end: None,
             conversation_id: None,
-            page_size,
-            page: page_number,
+            page_size: page_size.max(MAX_PAGE_ELEMENT_COUNT) as u64,
+            page: page_number as u64,
+            limit: None,
+            begin_id: None,
+            from: None,
+            unread: None,
+            auto_wildcard: None,
         }
     }
 }
 
+/// Builder for [`MessageMetadataFilter`].
 #[derive(Debug)]
 pub struct MessageMetadataFilterBuilder(MessageMetadataFilter);
 
 impl MessageMetadataFilterBuilder {
+    /// Create a new builder for `page_index` and with a `page_size` number of elements.
     #[must_use]
-    pub fn new(page_number: usize, page_size: usize) -> Self {
-        Self(MessageMetadataFilter::new(page_number, page_size))
+    pub fn new(page_index: usize, page_size: usize) -> Self {
+        Self(MessageMetadataFilter::new(page_index, page_size))
     }
 
+    /// The number of messages to return.
     #[must_use]
-    pub fn with_message_ids(mut self, ids: impl IntoIterator<Item = MessageId>) -> Self {
-        self.0.ids = Some(ids.into_iter().collect());
+    pub fn with_limit(mut self, limit: usize) -> Self {
+        self.0.limit = Some(limit as u64);
         self
     }
 
+    /// The `label_ids` to filter on.
+    ///
+    /// This function is cumulative and does not reset previous values.
     #[must_use]
-    pub fn with_subject(mut self, subject: impl Into<String>) -> Self {
-        self.0.subject = Some(subject.into());
-        self
-    }
-
-    #[must_use]
-    pub fn with_external_id(mut self, id: impl Into<ExternalId>) -> Self {
-        self.0.external_id = Some(id.into());
-        self
-    }
-
-    #[must_use]
-    pub fn with_address_id(mut self, id: impl Into<AddressId>) -> Self {
-        self.0.address_id = Some(id.into());
-        self
-    }
-
-    #[must_use]
-    pub fn with_conversation_id(mut self, id: impl Into<ConversationId>) -> Self {
-        self.0.conversation_id = Some(id.into());
-        self
-    }
-
-    #[must_use]
-    pub fn with_label_id(mut self, id: impl Into<LabelId>) -> Self {
+    pub fn with_label_id(mut self, label_ids: impl Into<LabelId>) -> Self {
         match &mut self.0.label_id {
             None => {
-                self.0.label_id = Some(vec![id.into()]);
+                self.0.label_id = Some(vec![label_ids.into()]);
             }
             Some(v) => {
-                v.push(id.into());
+                v.push(label_ids.into());
             }
         };
         self
     }
 
-    #[must_use]
-    pub fn with_end_id(mut self, id: impl Into<MessageId>) -> Self {
-        self.0.end_id = Some(id.into());
-        self
-    }
-
-    #[must_use]
-    pub fn descending(mut self) -> Self {
-        self.0.desc = true;
-        self
-    }
-
+    /// Result sort `mode`.
     #[must_use]
     pub fn with_sort_mode(mut self, mode: MessageMetadataSortMode) -> Self {
         self.0.sort = Some(mode);
         self
     }
 
+    /// Sort the results descending.
+    #[must_use]
+    pub fn descending(mut self) -> Self {
+        self.0.desc = Some(true);
+        self
+    }
+
+    /// Sort the results ascending.
+    #[must_use]
+    pub fn ascending(mut self) -> Self {
+        self.0.desc = Some(false);
+        self
+    }
+
+    /// UNIX timestamp to filter messages at or later than `timestamp`.
+    #[must_use]
+    pub fn with_begin(mut self, timestamp: u64) -> Self {
+        self.0.begin = Some(timestamp);
+        self
+    }
+
+    /// UNIX timestamp to filter messages at or earlier than `timestamp`.
+    #[must_use]
+    pub fn with_end(mut self, timestamp: u64) -> Self {
+        self.0.end = Some(timestamp);
+        self
+    }
+
+    /// Return only messages newer, in creation time (NOT timestamp), than `begin_id`.
+    #[must_use]
+    pub fn with_begin_id(mut self, begin_id: impl Into<MessageId>) -> Self {
+        self.0.begin_id = Some(begin_id.into());
+        self
+    }
+
+    /// Return only messages older, in creation time (NOT timestamp), than `end_id`.
+    #[must_use]
+    pub fn with_end_id(mut self, end_id: impl Into<MessageId>) -> Self {
+        self.0.end_id = Some(end_id.into());
+        self
+    }
+
+    /// Keyword search of To, CC, BCC, From and Subject fields.
+    #[must_use]
+    pub fn with_keyword(mut self, keyword: impl Into<String>) -> Self {
+        self.0.keyword = Some(keyword.into());
+        self
+    }
+
+    /// Keyword search of To, CC and BCC fields.
+    #[must_use]
+    pub fn with_recipients(mut self, recipients: impl IntoIterator<Item = String>) -> Self {
+        self.0.recipients = Some(recipients.into_iter().collect());
+        self
+    }
+
+    /// Keyword search of To field.
+    #[must_use]
+    pub fn with_to(mut self, keyword: impl Into<String>) -> Self {
+        self.0.to = Some(keyword.into());
+        self
+    }
+
+    /// Keyword search of CC field.
+    #[must_use]
+    pub fn with_cc(mut self, keyword: impl Into<String>) -> Self {
+        self.0.cc = Some(keyword.into());
+        self
+    }
+
+    /// Keyword search of CC field.
+    #[must_use]
+    pub fn with_bcc(mut self, keyword: impl Into<String>) -> Self {
+        self.0.bcc = Some(keyword.into());
+        self
+    }
+
+    /// Keyword search of From field.
+    #[must_use]
+    pub fn with_from(mut self, keyword: impl Into<String>) -> Self {
+        self.0.from = Some(keyword.into());
+        self
+    }
+
+    /// Keyword search of Subject field.
+    #[must_use]
+    pub fn with_subject(mut self, keyword: impl Into<String>) -> Self {
+        self.0.subject = Some(keyword.into());
+        self
+    }
+
+    /// Return only message which have attachments.
+    #[must_use]
+    pub fn with_attachments(mut self) -> Self {
+        self.0.attachments = Some(true);
+        self
+    }
+
+    /// Return only message which have no attachments.
+    #[must_use]
+    pub fn without_attachments(mut self) -> Self {
+        self.0.attachments = Some(false);
+        self
+    }
+
+    /// Return only messages that are unread.
+    #[must_use]
+    pub fn with_unread(mut self) -> Self {
+        self.0.unread = Some(true);
+        self
+    }
+
+    /// Return only messages that are read.
+    #[must_use]
+    pub fn with_read(mut self) -> Self {
+        self.0.unread = Some(false);
+        self
+    }
+
+    /// Filter message by `conversation_id`.
+    #[must_use]
+    pub fn with_conversation_id(mut self, conversation_id: impl Into<ConversationId>) -> Self {
+        self.0.conversation_id = Some(conversation_id.into());
+        self
+    }
+
+    /// Filter on `address_id`.
+    #[must_use]
+    pub fn with_address_id(mut self, address_id: impl Into<AddressId>) -> Self {
+        self.0.address_id = Some(address_id.into());
+        self
+    }
+
+    /// Filter on `external_id`.
+    #[must_use]
+    pub fn with_external_id(mut self, external_id: impl Into<ExternalId>) -> Self {
+        self.0.external_id = Some(external_id.into());
+        self
+    }
+
+    /// Filter on `message_ids`.
+    #[must_use]
+    pub fn with_message_ids(mut self, message_ids: impl IntoIterator<Item = MessageId>) -> Self {
+        self.0.ids = Some(message_ids.into_iter().collect());
+        self
+    }
+
+    /// If true automatically convert simple queries to wildcarded versions, such as `test` to `*test*`.
+    #[must_use]
+    pub fn with_auto_wildcard(mut self, enabled: bool) -> Self {
+        self.0.auto_wildcard = Some(enabled);
+        self
+    }
+
+    /// Create the filter.
     #[must_use]
     pub fn build(self) -> MessageMetadataFilter {
         self.0
@@ -409,4 +650,45 @@ pub struct MessageCount {
     pub label_id: LabelId,
     pub total: u64,
     pub unread: u64,
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::ToSql for MimeType {
+    fn to_sql(
+        &self,
+    ) -> crate::exports::proton_sqlite3::rusqlite::Result<
+        crate::exports::proton_sqlite3::rusqlite::types::ToSqlOutput<'_>,
+    > {
+        match self {
+            MimeType::TextPlain => "text/plain",
+            MimeType::TextHTML => "text/html",
+            MimeType::MultipartMixed => "multipart/mixed",
+            MimeType::MultipartRelated => "multipart/related",
+            MimeType::MessageRFC822 => "message/rfc822",
+        }
+        .to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MimeType {
+    fn column_result(
+        value: crate::exports::proton_sqlite3::rusqlite::types::ValueRef<'_>,
+    ) -> crate::exports::proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        let value = value.as_str()?;
+        Ok(match value {
+            "text/plain" => MimeType::TextPlain,
+            "text/html" => MimeType::TextHTML,
+            "multipart/mixed" => MimeType::MultipartMixed,
+            "multipart/related" => MimeType::MultipartRelated,
+            "message/rfc822" => MimeType::MessageRFC822,
+            _ => {
+                return Err(
+                    crate::exports::proton_sqlite3::rusqlite::types::FromSqlError::Other(
+                        format!("invalid mime type value:{value}").into(),
+                    ),
+                )
+            }
+        })
+    }
 }

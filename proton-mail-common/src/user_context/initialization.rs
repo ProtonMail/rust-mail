@@ -64,9 +64,9 @@ impl MailUserContext {
 
         trace!("Syncing Addresses");
         cb.on_stage(MailUserContextLoadingStage::Addresses);
-        if let Err(e) = ctx.sync_addresses().await {
+        if let Err(e) = ctx.inner.user_context.sync_addresses().await {
             error!("Failed to sync addresses :{e}");
-            return Err((MailUserContextLoadingStage::Addresses, e));
+            return Err((MailUserContextLoadingStage::Addresses, e.into()));
         }
 
         // load labels

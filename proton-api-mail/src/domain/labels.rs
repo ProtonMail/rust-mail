@@ -104,6 +104,7 @@ impl SysLabelId {
     pub const OUTBOX: SysLabelId = SysLabelId("9");
     pub const STARRED: SysLabelId = SysLabelId("10");
     pub const ALL_SCHEDULED: SysLabelId = SysLabelId("12");
+    pub const ALMOST_ALL_MAIL: SysLabelId = SysLabelId("15");
 }
 
 lazy_static! {
@@ -119,6 +120,7 @@ lazy_static! {
     static ref LABEL_ID_OUTBOX: LabelId = SysLabelId::OUTBOX.into();
     static ref LABEL_ID_STARRED: LabelId = SysLabelId::STARRED.into();
     static ref LABEL_ID_ALL_SCHEDULED: LabelId = SysLabelId::ALL_SCHEDULED.into();
+    static ref LABEL_ID_ALMOST_ALL_MAIL: LabelId = SysLabelId::ALMOST_ALL_MAIL.into();
 }
 
 impl LabelId {
@@ -180,6 +182,11 @@ impl LabelId {
     #[must_use]
     pub fn all_scheduled() -> &'static Self {
         &LABEL_ID_ALL_SCHEDULED
+    }
+
+    #[must_use]
+    pub fn almost_all_mail() -> &'static Self {
+        &LABEL_ID_ALMOST_ALL_MAIL
     }
 }
 

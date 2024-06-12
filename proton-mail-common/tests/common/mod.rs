@@ -1,9 +1,13 @@
 #![allow(unused)]
 
+pub mod account;
+pub mod attachment;
 pub mod conversations;
 pub mod init;
+mod messages;
 
-use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope};
+use proton_api_mail::exports::crypto::salts::KeySecret;
+use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
 use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
 use proton_api_mail::proton_api_core::http::{APIEnvConfig, Builder};
 use proton_core_common::db::proton_sqlite3::{SqliteConnectionPool, SqliteMode};
@@ -16,6 +20,8 @@ use std::sync::Arc;
 use tempdir::TempDir;
 use wiremock::matchers::any;
 use wiremock::{Mock, MockServer, Request};
+
+use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 
 /// Test context for mail tests.
 ///
@@ -37,13 +43,24 @@ impl TestContext {
 
     /// Create and initialize test context.
     pub async fn new() -> Self {
+        Self::_new(None, None).await
+    }
+
+    /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
+    pub async fn with_user_secret_and_user_id(user_key_secret: UserKeySecret, user_id: UserId) -> Self {
+        Self::_new(Some(user_key_secret), Some(user_id)).await
+    }
+
+    async fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<UserId>) -> Self {
         let mock_server = MockServer::start().await;
 
         // Create client with the mock server as the base URL
-        let mut api_env_config = APIEnvConfig::default();
-        api_env_config.base_url = format!("{}/api", mock_server.uri());
-        api_env_config.allow_http = true;
-        api_env_config.skip_srp_proof_validation = true;
+        let mut api_env_config = APIEnvConfig {
+            base_url: format!("{}/api", mock_server.uri()),
+            allow_http: true,
+            skip_srp_proof_validation: true,
+            ..Default::default()
+        };
         let client = Builder::new()
             .api_env_config(api_env_config)
             .build()
@@ -53,6 +70,9 @@ impl TestContext {
         let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
         let keychain = Arc::new(InMemoryKeyChain::default());
 
+        let cache_path = tmp_dir.path().join("mail-cache");
+        std::fs::create_dir_all(&cache_path).expect("failed to create mail cache dir");
+
         // Generate a random encryption key and store it in the keychain
         let encryption_key = SessionEncryptionKey::random();
         keychain
@@ -60,8 +80,15 @@ impl TestContext {
             .expect("failed to store in keychain");
 
         // Create mail context
-        let context = MailContext::new(tmp_dir.path(), tmp_dir.path(), keychain, client, None)
-            .expect("failed to create mail context");
+        let context = MailContext::new(
+            tmp_dir.path(),
+            tmp_dir.path(),
+            cache_path,
+            keychain,
+            client,
+            None,
+        )
+        .expect("failed to create mail context");
 
         // Generate a fake session and write it to the database
         let pool =
@@ -72,11 +99,12 @@ impl TestContext {
         // Create a fake session
         let session = DecryptedUserSession {
             session_id: Self::test_uid(),
-            user_id: UserId::from("TEST_USER_ID"),
+            user_id: user_id.unwrap_or(UserId::from(TEST_USER_ID)),
             name: None,
-            email: "test@foo.bar".to_string(),
+            email: TEST_USER_MAIL.to_owned(),
             refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
             access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
+            key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
             scopes: Scope(String::new()),
         }
         .to_encrypted_session(&encryption_key)

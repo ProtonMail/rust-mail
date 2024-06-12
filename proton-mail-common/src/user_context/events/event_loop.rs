@@ -46,6 +46,10 @@ impl proton_core_common::CoreEvent for MailEvent {
     fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
         self.event.product_used_space.as_ref()
     }
+
+    fn get_core_event_addresses(&self) -> Option<&[proton_api_core::domain::Address]> {
+        self.event.addresses.as_deref()
+    }
 }
 
 const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";

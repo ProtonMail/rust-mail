@@ -1,6 +1,6 @@
 use crate::db::ids::new_u64_type;
 use crate::db::labels::movable_sys_folder_list;
-use proton_api_mail::domain::{Label, LabelId, LabelType};
+use proton_api_mail::domain::{Label, LabelId, LabelType, MailSettingsViewMode};
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use proton_sqlite3::rusqlite::ToSql;
@@ -63,6 +63,34 @@ impl LocalLabel {
                 .rid
                 .as_ref()
                 .map_or(false, |rid| movable_sys_folder_list().contains(&rid))
+    }
+
+    /// Check whether this label is a "labelable" label. This includes all labels of type `Label`
+    /// and the Starred system label.
+    pub fn is_applicable_label(&self) -> bool {
+        self.label_type == LabelType::Label
+            || self
+                .rid
+                .as_ref()
+                .map_or(false, |rid| rid == LabelId::starred())
+    }
+
+    /// Return the preferred view mode for this label.
+    ///
+    /// If this function returns `None` we should use the [`MailSettingsViewMode`] defined
+    /// in the user's [`MailSettings`], otherwise the returned value should be used.
+    pub fn mail_settings_view_mode(&self) -> Option<MailSettingsViewMode> {
+        let remote_id = self.rid.as_ref()?;
+
+        if remote_id == LabelId::drafts()
+            || remote_id == LabelId::sent()
+            || remote_id == LabelId::all_drafts()
+            || remote_id == LabelId::all_sent()
+        {
+            return Some(MailSettingsViewMode::Messages);
+        }
+
+        None
     }
 }
 

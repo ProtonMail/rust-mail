@@ -2,13 +2,17 @@ use crate::db::{
     LocalConversationCount, LocalConversationId, LocalLabelId, LocalMessageCount, LocalMessageId,
     MailSqliteConnectionMut,
 };
-use proton_api_mail::domain::{
-    Address, Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId,
-    MessageAddress, MessageCount, MessageId, MessageMetadata,
+use proton_api_mail::{
+    domain::{
+        Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId,
+        MessageAddress, MessageCount, MessageId, MessageMetadata,
+    },
+    proton_api_core::domain::Address,
 };
+use proton_core_common::db::CoreSqliteConnectionMut;
 use std::collections::{BTreeMap, HashMap};
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(in crate::db::conversations) struct TestDBState {
     pub addresses: Vec<Address>,
     pub labels: Vec<Label>,
@@ -23,6 +27,15 @@ pub(in crate::db::conversations) struct TestDBStateMap {
     pub messages: HashMap<MessageId, LocalMessageId>,
     pub conversation_counts: HashMap<LabelId, ConversationCount>,
     pub message_counts: HashMap<LabelId, MessageCount>,
+}
+
+pub(in crate::db::conversations) fn prepare_db_state_core(
+    tx: &mut CoreSqliteConnectionMut,
+    env: &[Address],
+) {
+    // create addresses
+    tx.create_or_update_addresses(env.iter())
+        .expect("failed to create addresses");
 }
 
 pub(in crate::db::conversations) fn prepare_and_patch_db_state(
@@ -40,9 +53,6 @@ pub(in crate::db::conversations) fn prepare_and_patch_db_state_and_skip(
     let mut result = TestDBStateMap {
         ..Default::default()
     };
-    // create addresses
-    tx.create_or_update_addresses(env.addresses.iter())
-        .expect("failed to create addresses");
 
     // create labels
     let local_label_ids = tx
@@ -236,7 +246,7 @@ pub(in crate::db::conversations) fn conv_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
 ) -> BTreeMap<LocalLabelId, LocalConversationCount> {
     BTreeMap::from_iter(
-        tx.get_conversation_counts()
+        tx.conversation_counts()
             .unwrap()
             .into_iter()
             .map(|c| (c.id.clone(), c)),
@@ -247,7 +257,7 @@ pub(in crate::db::conversations) fn msg_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
 ) -> BTreeMap<LocalLabelId, LocalMessageCount> {
     BTreeMap::from_iter(
-        tx.get_message_counts()
+        tx.message_counts()
             .unwrap()
             .into_iter()
             .map(|c| (c.id.clone(), c)),

@@ -1,6 +1,5 @@
 //! Mapping of Mail domain into a Sqlite Database.
 
-mod addresses;
 mod attachments;
 mod conversations;
 mod events;
@@ -13,11 +12,15 @@ mod settings;
 pub use attachments::*;
 pub use conversations::*;
 pub use labels::*;
+pub use settings::*;
 
 use proton_sqlite3::{
     new_tracked_connection_wrapper, InProcessTrackerService, MigratorError, TrackingConnection,
 };
 use std::ops::Deref;
+
+#[cfg(test)]
+use proton_core_common::db::{CoreSqliteConnection, CoreSqliteConnectionMut};
 
 pub type DBResult<T> = proton_sqlite3::rusqlite::Result<T>;
 pub type DBError = proton_sqlite3::rusqlite::Error;
@@ -51,19 +54,66 @@ impl MailSqliteConnectionPool {
 }
 
 #[cfg(test)]
-pub(crate) fn new_test_connection() -> (MailSqliteConnection, MailSqliteConnectionPool) {
+pub(crate) fn new_test_connection() -> (
+    CoreSqliteConnection,
+    MailSqliteConnection,
+    MailSqliteConnectionPool,
+) {
     use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
 
     let pool = SqliteConnectionPool::new(SqliteMode::InMemory, true);
     let service = InProcessTrackerService::new(pool).expect("failed to create tracker service");
-
+    {
+        let mut conn = service.db_pool().acquire().unwrap();
+        proton_core_common::db::migrate_core_db(&mut conn).unwrap();
+    }
+    let core_conn: CoreSqliteConnection = service
+        .new_connection()
+        .expect("failed to acquire connection")
+        .into();
     let pool = MailSqliteConnectionPool::new(service).expect("failed to create pool");
     let conn = pool.acquire().expect("failed to acquire connection");
-    (conn, pool)
+    (core_conn, conn, pool)
+}
+
+#[cfg(test)]
+pub(crate) fn with_file_sqlite_db(
+    f: impl Fn(CoreSqliteConnection, MailSqliteConnection, MailSqliteConnectionPool),
+) {
+    use proton_sqlite3::{SqliteConnectionPool, SqliteMode};
+    let db_dir = tempfile::tempdir().unwrap();
+
+    let pool = SqliteConnectionPool::new(SqliteMode::File(db_dir.path().join("test")), true);
+    let service = InProcessTrackerService::new(pool).expect("failed to create tracker service");
+    {
+        let mut conn = service.db_pool().acquire().unwrap();
+        proton_core_common::db::migrate_core_db(&mut conn).unwrap();
+    }
+    let core_conn: CoreSqliteConnection = service
+        .new_connection()
+        .expect("failed to acquire connection")
+        .into();
+    let pool = MailSqliteConnectionPool::new(service).expect("failed to create pool");
+    let conn = pool.acquire().expect("failed to acquire connection");
+    f(core_conn, conn, pool);
+    // Check that the temporary dir removal works.
+    db_dir.close().unwrap();
 }
 
 #[cfg(test)]
 pub(crate) fn with_tx(conn: &mut MailSqliteConnection, f: impl Fn(&mut MailSqliteConnectionMut)) {
+    conn.tx(move |tx| -> DBResult<()> {
+        (f)(tx);
+        Ok(())
+    })
+    .expect("failed transaction");
+}
+
+#[cfg(test)]
+pub(crate) fn with_tx_core(
+    conn: &mut CoreSqliteConnection,
+    f: impl Fn(&mut CoreSqliteConnectionMut),
+) {
     conn.tx(move |tx| -> DBResult<()> {
         (f)(tx);
         Ok(())
@@ -96,6 +146,24 @@ mod type_forwarding {
     uniffi::ffi_converter_forward!(
         proton_api_mail::domain::MessageId,
         proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::domain::ExternalId,
+        proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::domain::MessageFlags,
+        proton_api_mail::UniFfiTag,
+        crate::UniFfiTag
+    );
+
+    uniffi::ffi_converter_forward!(
+        proton_api_mail::proton_api_core::domain::AddressId,
+        proton_api_mail::proton_api_core::UniFfiTag,
         crate::UniFfiTag
     );
 }

@@ -1,5 +1,4 @@
 //! V0 Initial db creation
-mod addresses;
 mod attachments;
 mod conversations;
 mod events;
@@ -19,7 +18,6 @@ impl proton_sqlite3::Migration for MigrationV0 {
 
     fn migrate(&self, tx: &mut SqliteTransaction) -> proton_sqlite3::rusqlite::Result<()> {
         tracing::debug_span!("labels").in_scope(|| labels::create_labels_tables(tx))?;
-        tracing::debug_span!("labels").in_scope(|| addresses::create_addresses_tables(tx))?;
         tracing::debug_span!("attachments")
             .in_scope(|| attachments::create_attachment_tables(tx))?;
         tracing::debug_span!("conversations")
