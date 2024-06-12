@@ -14,16 +14,19 @@ pub enum ContactCardType {
 }
 
 pub trait CardCryptography {
+    /// Returns the card's crypto type.
     fn card_type(&self) -> ContactCardType;
 
+    /// Returns the raw card data, which is either encrypted or in plain text.
     fn card_data(&self) -> &[u8];
 
-    fn card_signature(&self) -> &[u8];
+    /// Returns the raw detached signature of the card if any.
+    fn card_signature(&self) -> Option<&[u8]>;
 
     /// Returns the plain text data from the card.  If the card has been encrypted, it is decrypted.  If the card
     /// is signed, the signature is verified.
     ///
-    /// Errors
+    /// # Errors
     /// When decryption or signature verification fail
     fn decrypt_and_verify_sync<T: PGPProviderSync>(
         &self,
@@ -43,7 +46,11 @@ pub trait CardCryptography {
                 provider
                     .new_verifier()
                     .with_verification_key_refs(verification_keys)
-                    .verify_detached(self.card_data(), self.card_signature(), DataEncoding::Armor)
+                    .verify_detached(
+                        self.card_data(),
+                        self.card_signature().ok_or(CardCryptoError::NoSignature)?,
+                        DataEncoding::Armor,
+                    )
                     .map_err(CardCryptoError::SignatureVerificationError)?;
 
                 return Ok(self.card_data().to_owned());
@@ -54,7 +61,7 @@ pub trait CardCryptography {
                     .with_decryption_key_refs(decryption_keys)
                     .with_verification_key_refs(verification_keys)
                     .with_detached_signature_ref(
-                        self.card_signature(),
+                        self.card_signature().ok_or(CardCryptoError::NoSignature)?,
                         DetachedSignatureVariant::Plaintext,
                         true,
                     )

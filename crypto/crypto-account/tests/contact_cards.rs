@@ -46,8 +46,8 @@ impl CardCryptography for TestCard {
         self.1.as_bytes()
     }
 
-    fn card_signature(&self) -> &[u8] {
-        self.2.as_bytes()
+    fn card_signature(&self) -> Option<&[u8]> {
+        Some(self.2.as_bytes())
     }
 }
 
@@ -197,7 +197,6 @@ fn test_signed_and_encrypted_card_no_decryption_keys() {
         )
         .unwrap();
     let verification_keys = vec![provider.private_key_to_public_key(&private_key).unwrap()];
-
     let decryption_keys = provider.empty_private_keys();
 
     let card = TestCard(

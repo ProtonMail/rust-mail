@@ -40,4 +40,6 @@ pub enum CardCryptoError {
     DecryptionError(CryptoError),
     #[error("Error verifying card signature: {0}")]
     SignatureVerificationError(#[from] VerificationError),
+    #[error("No signature found for a signed card")]
+    NoSignature,
 }
