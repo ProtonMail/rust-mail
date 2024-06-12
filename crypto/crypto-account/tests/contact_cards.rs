@@ -1,4 +1,4 @@
-use proton_crypto::crypto::{DataEncoding, PGPProviderSync, PrivateKey};
+use proton_crypto::crypto::{DataEncoding, PGPProvider, PGPProviderSync, PrivateKey};
 use proton_crypto::new_pgp_provider;
 use proton_crypto_account::contacts::{CardCryptography, ContactCardType};
 
@@ -74,17 +74,17 @@ fn test_encrypted_card() {
     let card = TestCard(
         ContactCardType::Encrypted,
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
-        "".to_owned(),
+        String::default(),
     );
     let test_result = card.decrypt_and_verify_sync(
         &provider,
-        &vec![TestAddressKey(private_key)],
-        &vec![verification_key],
+        &[TestAddressKey(private_key)],
+        &[verification_key],
     );
 
-    assert!(!test_result.is_err());
+    assert!(test_result.is_ok());
     let test_result = String::from_utf8(test_result.unwrap());
-    assert!(!test_result.is_err());
+    assert!(test_result.is_ok());
     let test_result = test_result.unwrap();
     assert_eq!(&test_result, ENCRYPTED_AND_SIGNED_DATA_PLAINTEXT);
 }
@@ -108,11 +108,11 @@ fn test_signed_card() {
     );
     let test_result = card.decrypt_and_verify_sync(
         &provider,
-        &vec![TestAddressKey(private_key)],
-        &vec![verification_key],
+        &[TestAddressKey(private_key)],
+        &[verification_key],
     );
 
-    assert!(!test_result.is_err());
+    assert!(test_result.is_ok());
 }
 
 #[test]
@@ -134,8 +134,8 @@ fn test_signed_card_invalid_signature() {
     );
     let test_result = card.decrypt_and_verify_sync(
         &provider,
-        &vec![TestAddressKey(private_key)],
-        &vec![verification_key],
+        &[TestAddressKey(private_key)],
+        &[verification_key],
     );
 
     assert!(test_result.is_err());
@@ -160,13 +160,13 @@ fn test_signed_and_encrypted_card() {
     );
     let test_result = card.decrypt_and_verify_sync(
         &provider,
-        &vec![TestAddressKey(private_key)],
-        &vec![verification_key],
+        &[TestAddressKey(private_key)],
+        &[verification_key],
     );
 
-    assert!(!test_result.is_err());
+    assert!(test_result.is_ok());
     let test_result = String::from_utf8(test_result.unwrap());
-    assert!(!test_result.is_err());
+    assert!(test_result.is_ok());
     let test_result = test_result.unwrap();
     assert_eq!(&test_result, ENCRYPTED_AND_SIGNED_DATA_PLAINTEXT);
 }
@@ -190,8 +190,8 @@ fn test_signed_and_encrypted_card_invalid_signature() {
     );
     let test_result = card.decrypt_and_verify_sync(
         &provider,
-        &vec![TestAddressKey(private_key)],
-        &vec![verification_key],
+        &[TestAddressKey(private_key)],
+        &[verification_key],
     );
 
     assert!(test_result.is_err());
@@ -207,9 +207,7 @@ fn test_signed_and_encrypted_card_no_verification_keys() {
             DataEncoding::Armor,
         )
         .unwrap();
-    let mut verification_keys = vec![provider.private_key_to_public_key(&private_key).unwrap()];
-    _ = verification_keys;
-    verification_keys = Vec::new();
+    let verification_keys = provider.empty_public_keys();
 
     let card = TestCard(
         ContactCardType::EncryptedAndSigned,
@@ -218,7 +216,7 @@ fn test_signed_and_encrypted_card_no_verification_keys() {
     );
     let test_result = card.decrypt_and_verify_sync(
         &provider,
-        &vec![TestAddressKey(private_key)],
+        &[TestAddressKey(private_key)],
         &verification_keys,
     );
 
@@ -237,9 +235,7 @@ fn test_signed_and_encrypted_card_no_decryption_keys() {
         .unwrap();
     let verification_keys = vec![provider.private_key_to_public_key(&private_key).unwrap()];
 
-    let mut decryption_keys = vec![TestAddressKey(private_key)];
-    _ = decryption_keys;
-    decryption_keys = Vec::new();
+    let decryption_keys = provider.empty_private_keys();
 
     let card = TestCard(
         ContactCardType::EncryptedAndSigned,

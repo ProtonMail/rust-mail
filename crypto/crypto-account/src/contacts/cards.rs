@@ -49,7 +49,7 @@ pub trait CardCryptography {
                 return Ok(self.card_data().to_owned());
             }
             ContactCardType::EncryptedAndSigned => {
-                let decrypted_card = provider
+                let decrypted_card_result = provider
                     .new_decryptor()
                     .with_decryption_key_refs(decryption_keys)
                     .with_verification_key_refs(verification_keys)
@@ -59,10 +59,9 @@ pub trait CardCryptography {
                         true,
                     )
                     .decrypt(self.card_data(), DataEncoding::Armor)
-                    .map_err(CardCryptoError::DecryptionError)?
-                    .into_vec();
-
-                Ok(decrypted_card)
+                    .map_err(CardCryptoError::DecryptionError)?;
+                decrypted_card_result.verification_result()?;
+                Ok(decrypted_card_result.into_vec())
             }
         }
     }
