@@ -1,4 +1,4 @@
-use proton_crypto::crypto::{DataEncoding, PGPProvider, PGPProviderSync, PrivateKey};
+use proton_crypto::crypto::{DataEncoding, PGPProvider, PGPProviderSync};
 use proton_crypto::new_pgp_provider;
 use proton_crypto_account::contacts::{CardCryptography, ContactCardType};
 
@@ -35,14 +35,6 @@ const SIGNED_SIGNATURE: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMa
 
 const SIGNED_SIGNATURE_INVALID: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwnUEARYKACcFgmZPSJAJkEgK5SmxgQZlFiEEIXnfcHDXe6RYq00hWONTPASS\nBmUAAN4YAQDw6/SL9HvDQ1xAbDqiIWFMLlIeu3xrqdjKr0Lr2J7ZXgEA4Bi+\nPVzWDK4s9zMO5FUjt5iWpAMm9Xsu5N0aHahWDQc=\n=NSAd\n-----END PGP SIGNATURE-----\n";
 
-pub struct TestAddressKey<T: PrivateKey>(T);
-
-impl<T: PrivateKey> AsRef<T> for TestAddressKey<T> {
-    fn as_ref(&self) -> &T {
-        &self.0
-    }
-}
-
 struct TestCard(pub ContactCardType, pub String, pub String);
 
 impl CardCryptography for TestCard {
@@ -76,11 +68,7 @@ fn test_encrypted_card() {
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
         String::default(),
     );
-    let test_result = card.decrypt_and_verify_sync(
-        &provider,
-        &[TestAddressKey(private_key)],
-        &[verification_key],
-    );
+    let test_result = card.decrypt_and_verify_sync(&provider, &[private_key], &[verification_key]);
 
     assert!(test_result.is_ok());
     let test_result = String::from_utf8(test_result.unwrap());
@@ -106,11 +94,7 @@ fn test_signed_card() {
         SIGNED_DATA.to_owned(),
         SIGNED_SIGNATURE.to_owned(),
     );
-    let test_result = card.decrypt_and_verify_sync(
-        &provider,
-        &[TestAddressKey(private_key)],
-        &[verification_key],
-    );
+    let test_result = card.decrypt_and_verify_sync(&provider, &[private_key], &[verification_key]);
 
     assert!(test_result.is_ok());
 }
@@ -132,11 +116,7 @@ fn test_signed_card_invalid_signature() {
         SIGNED_DATA.to_owned(),
         SIGNED_SIGNATURE_INVALID.to_owned(),
     );
-    let test_result = card.decrypt_and_verify_sync(
-        &provider,
-        &[TestAddressKey(private_key)],
-        &[verification_key],
-    );
+    let test_result = card.decrypt_and_verify_sync(&provider, &[private_key], &[verification_key]);
 
     assert!(test_result.is_err());
 }
@@ -158,11 +138,7 @@ fn test_signed_and_encrypted_card() {
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
         ENCRYPTED_AND_SIGNED_SIGNATURE.to_owned(),
     );
-    let test_result = card.decrypt_and_verify_sync(
-        &provider,
-        &[TestAddressKey(private_key)],
-        &[verification_key],
-    );
+    let test_result = card.decrypt_and_verify_sync(&provider, &[private_key], &[verification_key]);
 
     assert!(test_result.is_ok());
     let test_result = String::from_utf8(test_result.unwrap());
@@ -188,36 +164,23 @@ fn test_signed_and_encrypted_card_invalid_signature() {
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
         ENCRYPTED_AND_SIGNED_SIGNATURE_INVALID.to_owned(),
     );
-    let test_result = card.decrypt_and_verify_sync(
-        &provider,
-        &[TestAddressKey(private_key)],
-        &[verification_key],
-    );
+    let test_result = card.decrypt_and_verify_sync(&provider, &[private_key], &[verification_key]);
 
     assert!(test_result.is_err());
 }
 
 #[test]
-fn test_signed_and_encrypted_card_no_verification_keys() {
+fn test_signed_card_no_verification_keys() {
     let provider = new_pgp_provider();
-    let private_key = provider
-        .private_key_import(
-            PRIVATE_KEY.as_bytes(),
-            "password".as_bytes(),
-            DataEncoding::Armor,
-        )
-        .unwrap();
-    let verification_keys = provider.empty_public_keys();
-
     let card = TestCard(
-        ContactCardType::EncryptedAndSigned,
-        ENCRYPTED_AND_SIGNED_DATA.to_owned(),
-        ENCRYPTED_AND_SIGNED_SIGNATURE.to_owned(),
+        ContactCardType::Signed,
+        SIGNED_DATA.to_owned(),
+        SIGNED_SIGNATURE.to_owned(),
     );
     let test_result = card.decrypt_and_verify_sync(
         &provider,
-        &[TestAddressKey(private_key)],
-        &verification_keys,
+        &provider.empty_private_keys(),
+        &provider.empty_public_keys(),
     );
 
     assert!(test_result.is_err());
