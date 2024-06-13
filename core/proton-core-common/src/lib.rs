@@ -2,7 +2,6 @@
 mod context;
 pub mod db;
 mod event_subscriber;
-mod json;
 pub mod os;
 mod session;
 mod user_context;

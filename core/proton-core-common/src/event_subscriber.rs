@@ -10,7 +10,8 @@ use proton_api_core::exports::tracing::{debug, error, Level};
 use proton_api_core::exports::{anyhow, tracing};
 use proton_event_loop::SubscriberError;
 use stash::orm::Model;
-use stash::stash::{Stash, StashError};
+use stash::params;
+use stash::stash::{Stash, StashError, Tether};
 
 pub trait CoreEvent: Event {
     fn get_core_event_user(&self) -> Option<&User>;
@@ -27,8 +28,10 @@ pub trait CoreEvent: Event {
     fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace>;
 
     fn get_core_event_contacts(&self) -> Option<&[ContactEvent]>;
+    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]>;
 
     fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]>;
+    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]>;
 }
 
 /// Since the core database can be embedded into another database, the integrator needs to provide
@@ -106,13 +109,13 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
                         })?;
                     }
                 }
-                if let Some(contacts) = event.get_core_event_contacts() {
+                if let Some(contacts) = event.get_core_event_contacts_mut() {
                     debug!("Handling contact events");
-                    handle_contact_event(tx, contacts)?;
+                    handle_contact_event(&tx, contacts).await?;
                 }
-                if let Some(contact_emails) = event.get_core_event_contact_emails() {
+                if let Some(contact_emails) = event.get_core_event_contact_emails_mut() {
                     debug!("Handling contact email events");
-                    handle_contact_email_event(tx, contact_emails)?;
+                    handle_contact_email_event(&tx, contact_emails).await?;
                 }
             }
             Ok(())
@@ -121,19 +124,19 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
     }
 }
 
-fn handle_contact_event(
-    tx: &mut CoreSqliteConnectionMut,
-    contact_events: &[ContactEvent],
-) -> DBResult<()> {
+async fn handle_contact_event(
+    tx: &Tether,
+    contact_events: &mut [ContactEvent],
+) -> Result<(), StashError> {
     for event in contact_events {
         match event.action {
-            Action::Delete => tx.delete_contact_with_id(&event.id).map_err(|e| {
+            Action::Delete => tx.execute("DELETE FROM contacts WHERE rid = ?", params![event.id.clone()]).await.map(|_| ()).map_err(|e| {
                 error!("Failed to delete contact: {e}");
                 e
             })?,
             Action::Create | Action::Update => {
-                if let Some(contact) = &event.contact {
-                    tx.create_or_update_contact(contact).map_err(|e| {
+                if let Some(ref mut contact) = event.contact {
+                    contact.save_using(tx).await.map_err(|e| {
                         error!("Failed to create or update contact: {e}");
                         e
                     })?;
@@ -145,19 +148,19 @@ fn handle_contact_event(
     Ok(())
 }
 
-fn handle_contact_email_event(
-    tx: &mut CoreSqliteConnectionMut,
-    contact_email_events: &[ContactEmailEvent],
-) -> DBResult<()> {
+async fn handle_contact_email_event(
+    tx: &Tether,
+    contact_email_events: &mut [ContactEmailEvent],
+) -> Result<(), StashError> {
     for event in contact_email_events {
         match event.action {
-            Action::Delete => tx.delete_contact_mail_with_id(&event.id).map_err(|e| {
+            Action::Delete => tx.execute("DELETE FROM contact_emails WHERE rid = ?", params![event.id.clone()]).await.map(|_| ()).map_err(|e| {
                 error!("Failed to delete contact mail: {e}");
                 e
             })?,
             Action::Create | Action::Update => {
-                if let Some(contact) = &event.contact_email {
-                    tx.create_or_update_contact_emails(std::iter::once(contact))
+                if let Some(ref mut contact_email) = event.contact_email {
+                    contact_email.save_using(tx).await
                         .map_err(|e| {
                             error!("Failed to create or update contact mail: {e}");
                             e

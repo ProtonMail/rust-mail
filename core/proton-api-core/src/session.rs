@@ -1,6 +1,6 @@
 use crate::auth::{ArcAuthStore, UserKeySecret};
 use crate::domain::{
-    Address, Contact, ContactEmail, ContactFilter, ContactId, ContactPartial, Event, EventId, User,
+    Address, Contact, ContactEmail, ContactFilter, ContactId, Event, EventId, User,
     UserSettings,
 };
 use crate::http::{self, APIEnvConfig};
@@ -165,7 +165,7 @@ impl Session {
     pub async fn contacts(
         &self,
         contact_filter: ContactFilter,
-    ) -> Result<Vec<ContactPartial>, http::RequestError> {
+    ) -> Result<Vec<Contact>, http::RequestError> {
         self.execute_request(GetAllContactsPartialRequest::new(contact_filter))
             .await
             .map(|v| v.contacts)

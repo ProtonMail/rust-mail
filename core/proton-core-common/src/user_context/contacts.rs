@@ -1,8 +1,7 @@
 use proton_api_core::domain::{ContactFilter, ContactId};
 use proton_api_core::exports::tracing::{self, debug, error, Level};
-use proton_event_loop::proton_async::futures::TryFutureExt;
-
-use crate::db::CoreSqliteConnection;
+use stash::orm::Model;
+use stash::stash::StashError;
 use crate::{CoreContextResult, UserContext};
 
 const SYNC_CONTACT_PAGE_SIZE: usize = 1000;
@@ -19,9 +18,16 @@ impl UserContext {
         // TODO: There should be one transaction for the whole sync.
         let mut page_index = 0;
         // Reset the database state by deleting all contacts.
-        self.new_db_connection_as::<CoreSqliteConnection>()?
-            .tx(|tx| tx.delete_all_contact_data())
-            .map_err(|err| {
+        async {
+            let tx = self.stash.transaction().await?;
+            tx.execute("DELETE FROM contacts", vec![]).await?;
+            tx.execute("DELETE FROM contact_emails", vec![]).await?;
+            tx.execute("DELETE FROM contact_cards", vec![]).await?;
+            tx.execute("DELETE FROM contact_email_labels", vec![]).await?;
+            tx.commit().await?;
+            Ok(())
+        }.await
+            .map_err(|err: StashError| {
                 error!("Failed to reset contact tables: {err}");
                 err
             })?;
@@ -30,14 +36,20 @@ impl UserContext {
         loop {
             let filter: ContactFilter =
                 ContactFilter::new_builder(page_index, SYNC_CONTACT_PAGE_SIZE).build();
-            let contacts = self.session.contacts(filter).await.map_err(|err| {
+            let mut contacts = self.session.contacts(filter).await.map_err(|err| {
                 error!("Failed to fetch contacts for page {page_index}: {err}");
                 err
             })?;
             if !contacts.is_empty() {
-                self.new_db_connection_as::<CoreSqliteConnection>()?
-                    .tx(|tx| tx.create_or_update_partial_contacts(contacts.iter()))
-                    .map_err(|err| {
+                async {
+                    let tx = self.stash.transaction().await?;
+                    for contact in &mut contacts {
+                        contact.save_using(&tx).await?;
+                    }
+                    tx.commit().await?;
+                    Ok(())
+                }.await
+                    .map_err(|err: StashError| {
                         error!("Failed to sync contacts for page {page_index} to db: {err}");
                         err
                     })?;
@@ -59,14 +71,20 @@ impl UserContext {
         loop {
             let filter: ContactFilter =
                 ContactFilter::new_builder(page_index, SYNC_CONTACT_PAGE_SIZE).build();
-            let contact_emails = self.session.contact_emails(filter).await.map_err(|err| {
+            let mut contact_emails = self.session.contact_emails(filter).await.map_err(|err| {
                 error!("Failed to sync contact emails for page {page_index}: {err}");
                 err
             })?;
             if !contact_emails.is_empty() {
-                self.new_db_connection_as::<CoreSqliteConnection>()?
-                    .tx(|tx| tx.create_or_update_contact_emails(contact_emails.iter()))
-                    .map_err(|err| {
+                async {
+                    let tx = self.stash.transaction().await?;
+                    for contact_email in &mut contact_emails {
+                        contact_email.save_using(&tx).await?;
+                    }
+                    tx.commit().await?;
+                    Ok(())
+                }.await
+                    .map_err(|err: StashError| {
                         error!("Failed to sync contact emails for page {page_index} to db: {err}");
                         err
                     })?;
@@ -91,17 +109,14 @@ impl UserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
     pub async fn sync_contact_with_card(&self, id: ContactId) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {id}");
-        let mut connection = self.new_db_connection_as::<CoreSqliteConnection>()?;
-        self.session
-            .contact_with_cards(id)
+        let mut contact_with_card = self.session
+            .contact_with_cards(id).await
             .map_err(|err| {
                 error!("Failed to fetch full contact with: {err}");
                 err
-            })
-            .map_ok(|contact_with_card| {
-                connection.tx(|tx| tx.create_or_update_contact(&contact_with_card))
-            })
-            .await?
+            })?;
+        contact_with_card.set_stash(&self.stash);
+        contact_with_card.save().await
             .map_err(|err| {
                 error!("Failed to sync full contact to db: {err}");
                 err

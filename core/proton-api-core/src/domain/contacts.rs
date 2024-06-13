@@ -1,5 +1,7 @@
 use serde;
 use serde::{Deserialize, Serialize};
+use stash::macros::Model;
+use stash::stash::Stash;
 
 use crate::utils::{bool_from_integer, bool_to_integer};
 use crate::MAX_PAGE_ELEMENT_COUNT;
@@ -25,29 +27,48 @@ new_integer_enum!(u8, CardType {
 });
 
 /// Models the contact email addresses for a contact returned by the API.
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[TableName("contact_emails")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ContactEmail {
+    #[IdField]
     #[serde(rename = "ID")]
     pub id: ContactEmailId,
+    #[DbField]
+    pub rid: String,
+    #[DbField]
     pub name: String,
+    #[DbField]
     pub email: String,
     #[serde(rename = "Type")]
     pub contact_type: Vec<ContactType>,
+    #[DbField]
     pub defaults: ContactSendingPreferences,
-    pub order: u32,
+    #[DbField]
+    pub display_order: u32,
+    #[DbField]
     #[serde(rename = "ContactID")]
+    #[DbField]
     pub contact_id: ContactId,
     #[serde(rename = "LabelIDs")]
     pub label_ids: Vec<ContactLabelId>,
+    #[DbField]
     pub canonical_email: String,
+    #[DbField]
     pub last_used_time: u64,
     #[serde(
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
+    #[DbField]
     pub is_proton: bool,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
 }
 
 /// Represents a contact card returned by the API.
@@ -63,73 +84,35 @@ pub struct ContactCard {
     pub signature: Option<CardSignature>,
 }
 
-/// Represents partial contact information returned by the API.
-///
-/// The partial contact information does not contain the
-/// contact emails and the v-cards.
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
-#[serde(crate = "self::serde", rename_all = "PascalCase")]
-pub struct ContactPartial {
-    #[serde(rename = "ID")]
-    pub id: ContactId,
-    pub name: String,
-    #[serde(rename = "UID")]
-    pub uid: ContactUid,
-    pub size: u64,
-    pub create_time: u64,
-    pub modify_time: u64,
-    #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<ContactLabelId>,
-}
-
 /// A complete contact returned by the API.
-///
-/// Compared to the [`ContactPartial`], it additionally includes
-/// all associated contact emails ([`ContactEmail`]) and cards ([`ContactCard`]).
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[TableName("contacts")]
 pub struct Contact {
+    #[IdField]
     #[serde(rename = "ID")]
     pub id: ContactId,
+    #[DbField]
     pub name: String,
+    #[DbField]
     #[serde(rename = "UID")]
     pub uid: ContactUid,
+    #[DbField]
     pub size: u64,
+    #[DbField]
     pub create_time: u64,
+    #[DbField]
     pub modify_time: u64,
     pub contact_emails: Vec<ContactEmail>,
     #[serde(rename = "LabelIDs")]
     pub label_ids: Vec<ContactLabelId>,
     pub cards: Vec<ContactCard>,
-}
-
-impl From<Contact> for ContactPartial {
-    fn from(value: Contact) -> Self {
-        Self {
-            id: value.id,
-            name: value.name,
-            uid: value.uid,
-            size: value.size,
-            create_time: value.create_time,
-            modify_time: value.modify_time,
-            label_ids: value.label_ids,
-        }
-    }
-}
-
-impl Contact {
-    #[must_use]
-    pub fn to_partial_contact(&self) -> ContactPartial {
-        ContactPartial {
-            id: self.id.clone(),
-            name: self.name.clone(),
-            uid: self.uid.clone(),
-            size: self.size,
-            create_time: self.create_time,
-            modify_time: self.modify_time,
-            label_ids: self.label_ids.clone(),
-        }
-    }
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
 }
 
 /// Parameters to filter/search contacts with a given criteria on API requests.

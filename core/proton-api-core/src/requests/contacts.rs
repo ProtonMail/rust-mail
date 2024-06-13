@@ -1,4 +1,4 @@
-use crate::domain::{Contact, ContactEmail, ContactFilter, ContactId, ContactPartial};
+use crate::domain::{Contact, ContactEmail, ContactFilter, ContactId};
 use crate::http::{JsonResponse, Method, RequestData, RequestDesc};
 use serde::Serialize;
 use serde::{self, Deserialize};
@@ -11,7 +11,7 @@ pub struct GetAllContactsPartialRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetAllContactsPartialResponse {
-    pub contacts: Vec<ContactPartial>,
+    pub contacts: Vec<Contact>,
     pub total: u64,
 }
 

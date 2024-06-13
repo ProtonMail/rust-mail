@@ -1,6 +1,8 @@
-use proton_sqlite3::SqliteTransaction;
+use futures::executor::block_on;
+use stash::stash::{StashError, Tether};
 
-pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
+pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
+    block_on(async {
     tx.execute(
         r"
             CREATE TABLE contacts (
@@ -13,13 +15,15 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                 modify_time INTEGER NOT NULL
             )
         ",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"CREATE UNIQUE INDEX index_contact_rid ON contacts (rid)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"
@@ -29,7 +33,7 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                 name TEXT NOT NULL,
                 email TEXT NOT NULL,
                 defaults INTEGER NOT NULL,
-                `order` INTEGER NOT NULL,
+                display_order INTEGER NOT NULL,
                 contact_id INTEGER NOT NULL,
                 remote_contact_id TEXT,
                 canonical_email TEXT NOT NULL,
@@ -42,18 +46,21 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                     ON DELETE CASCADE
             )
         ",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"CREATE INDEX index_contact_emails_email ON contact_emails (canonical_email)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"CREATE INDEX index_contact_emails_contact_id ON contact_emails (contact_id)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"
@@ -71,13 +78,15 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                    ON DELETE CASCADE
             )
         ",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"CREATE INDEX index_contact_cards_id ON contact_cards (contact_id)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"
@@ -93,13 +102,16 @@ pub fn create_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
                     ON DELETE CASCADE
             )
         ",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     tx.execute(
         r"CREATE INDEX index_contact_email_label_id ON contact_email_labels (contact_emails_id)",
-        (),
-    )?;
+        vec![],
+    )
+    .await?;
 
     Ok(())
+    })
 }
