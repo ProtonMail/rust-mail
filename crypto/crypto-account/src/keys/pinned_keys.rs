@@ -2,16 +2,16 @@ use std::str::FromStr;
 
 use proton_crypto::crypto::{PublicKey, UnixTimestamp};
 
+/// Error returned if parsing the [`PGPScheme`] from a string fails.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParsePGPSchemeError;
+
 /// PGP scheme options to encrypt and email.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum PGPScheme {
     PGPInline,
     PGPMime,
 }
-
-/// Error returned if parsing the [`PGPScheme`] from a string fails.
-#[derive(Debug, PartialEq, Eq)]
-pub struct ParsePGPSchemeError;
 
 impl PGPScheme {
     /// Returns the string representation of a PGP scheme.
@@ -40,6 +40,35 @@ impl FromStr for PGPScheme {
     }
 }
 
+/// Preferred mime type to receive an email with.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum EmailMimeType {
+    Html,
+    Text,
+}
+
+impl EmailMimeType {
+    /// Returns the string representation of the mime type.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Html => "text/html",
+            Self::Text => "text/plain",
+        }
+    }
+}
+
+impl FromStr for EmailMimeType {
+    type Err = ParsePGPSchemeError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input {
+            "text/html" => Ok(Self::Html),
+            "text/plain" => Ok(Self::Text),
+            _ => Err(ParsePGPSchemeError),
+        }
+    }
+}
+
 /// Pinned keys represent public address keys extracted from a contact's v-card.
 #[derive(Default, Debug, Clone)]
 pub struct PinnedPublicKeys<Pub: PublicKey> {
@@ -53,6 +82,8 @@ pub struct PinnedPublicKeys<Pub: PublicKey> {
     pub sign: Option<bool>,
     /// Extracted from `x-pm-scheme` on the v-card email property group.
     pub scheme: Option<PGPScheme>,
+    /// Extracted from `x-pm-mimetype` on the v-card email property group.
+    pub mime_type: Option<EmailMimeType>,
     /// Indicates if the pinned keys got extracted from a contact
     /// v-card with a verified signature.
     pub contact_signature_verified: bool,
@@ -69,6 +100,7 @@ impl<Pub: PublicKey> PinnedPublicKeys<Pub> {
             encrypt_to_untrusted: None,
             sign: None,
             scheme: None,
+            mime_type: None,
             contact_signature_verified: false,
             signature_timestamp: None,
         }
