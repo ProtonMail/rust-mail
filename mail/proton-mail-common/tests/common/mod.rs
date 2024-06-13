@@ -47,7 +47,10 @@ impl TestContext {
     }
 
     /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
-    pub async fn with_user_secret_and_user_id(user_key_secret: UserKeySecret, user_id: UserId) -> Self {
+    pub async fn with_user_secret_and_user_id(
+        user_key_secret: UserKeySecret,
+        user_id: UserId,
+    ) -> Self {
         Self::_new(Some(user_key_secret), Some(user_id)).await
     }
 

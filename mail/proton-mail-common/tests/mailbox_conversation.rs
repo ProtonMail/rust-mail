@@ -86,43 +86,39 @@ async fn test_new_mailbox_sync_conversations() {
         },
     ];
 
-        let conversations = params.conversations.clone();
-        ctx.setup_user(params.clone()).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1)
-            .await;
-        ctx.catch_all().await;
-        ctx.user_context()
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .expect("failed to initialize");
+    let conversations = params.conversations.clone();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1)
+        .await;
+    ctx.catch_all().await;
+    ctx.user_context()
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
 
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-        mailbox.sync(10).await.unwrap();
+    mailbox.sync(10).await.unwrap();
 
     // Get conversations for mailbox.
     let conversations = mailbox.conversations(1).unwrap();
 
     // Get the message for a conversation.
-    let (_, messages) =
-        mailbox
-            .conversation_messages(conversations[0].id)
-            .await
-            .unwrap()
-        ;
+    let (_, messages) = mailbox
+        .conversation_messages(conversations[0].id)
+        .await
+        .unwrap();
 
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0].rid, Some(message_id1));
     assert_eq!(messages[1].rid, Some(message_id2));
 
     // Get messages again, but should not fire request.
-    let _ =
-        mailbox
-            .conversation_messages(conversations[0].id)
-            .await
-            .unwrap()
-        ;
+    let _ = mailbox
+        .conversation_messages(conversations[0].id)
+        .await
+        .unwrap();
 }

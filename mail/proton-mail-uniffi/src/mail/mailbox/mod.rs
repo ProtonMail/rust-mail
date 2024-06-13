@@ -9,6 +9,7 @@ use proton_mail_common::db::proton_sqlite3::SharedLive;
 use proton_mail_common::db::{
     ConversationQuery, LocalAttachmentId, LocalConversationId, LocalLabelId, LocalMessageId,
 };
+use proton_mail_common::exports::anyhow::anyhow;
 use proton_mail_common::exports::proton_sqlite3::{
     InProcessTrackerService, LiveQueryUpdated, Observable, SharedLiveQueryBuilder,
 };
@@ -20,7 +21,6 @@ use proton_mail_common::proton_api_mail::domain::{
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
-use proton_mail_common::exports::anyhow::anyhow;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]

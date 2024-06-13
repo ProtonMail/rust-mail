@@ -14,24 +14,24 @@ async fn test_load_attachment_buffer() {
     let params = TestParams::default_basic();
 
     // Api mock.
-        let conversations = params.conversations.clone();
-        let test_attachment = params.attachments.first().unwrap();
-        ctx.setup_user(params.clone()).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        ctx.mock_get_attachment_metadata(test_attachment.clone())
-            .await;
-        ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
-            .await;
-        ctx.catch_all().await;
-        ctx.user_context()
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .expect("failed to initialize");
+    let conversations = params.conversations.clone();
+    let test_attachment = params.attachments.first().unwrap();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.mock_get_attachment_metadata(test_attachment.clone())
+        .await;
+    ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
+        .await;
+    ctx.catch_all().await;
+    ctx.user_context()
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
 
     // Sync mails.
-        mailbox.sync(1).await.expect("mailbox sync failed");
+    mailbox.sync(1).await.expect("mailbox sync failed");
 
     // Get default conversation with the default attachment.
     let local_conversation = mailbox.conversations(1).unwrap();
@@ -45,20 +45,20 @@ async fn test_load_attachment_buffer() {
         .unwrap()
         .id;
     // Load and decrypt attachment.
-        let decryption_result = mailbox
-            .load_attachment_to_buffer(attachment_id)
-            .await
-            .expect("decryption should not fail");
-        assert_eq!(
-            decryption_result.content,
-            testdata_expected_attachment_decrypted(),
-            "attachments should be equal"
-        );
-        assert!(
-            matches!(
-                decryption_result.verification_result,
-                Err(VerificationError::NotSigned(_))
-            ),
-            "There should be no signatures to verify"
-        );
+    let decryption_result = mailbox
+        .load_attachment_to_buffer(attachment_id)
+        .await
+        .expect("decryption should not fail");
+    assert_eq!(
+        decryption_result.content,
+        testdata_expected_attachment_decrypted(),
+        "attachments should be equal"
+    );
+    assert!(
+        matches!(
+            decryption_result.verification_result,
+            Err(VerificationError::NotSigned(_))
+        ),
+        "There should be no signatures to verify"
+    );
 }

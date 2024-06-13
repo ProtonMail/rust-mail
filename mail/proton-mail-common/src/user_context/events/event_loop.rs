@@ -3,7 +3,9 @@ use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
 use async_trait::async_trait;
 use proton_api_mail::proton_api_core;
-use proton_api_mail::proton_api_core::domain::{ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, User, UserSettings};
+use proton_api_mail::proton_api_core::domain::{
+    ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, User, UserSettings,
+};
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::serde::{self, Deserialize, Serialize};
@@ -48,7 +50,7 @@ impl proton_core_common::CoreEvent for MailEvent {
     fn get_core_event_addresses(&self) -> Option<&[proton_api_core::domain::Address]> {
         self.event.addresses.as_deref()
     }
-    
+
     fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
         unimplemented!()
     }
