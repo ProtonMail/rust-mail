@@ -154,7 +154,6 @@ impl Mailbox {
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
     ) -> Result<ConversationMessagesLiveQueryResult, MailboxError> {
         let mbox = self.mbox.clone();
-        self.uniffi_async(async move {
             let id = LocalConversationId::from(id);
             let builder = FFIObservableConversationMessagesQueryBuilder(cb);
             let query = mbox.new_conversation_message_query(builder, id).await?;
@@ -175,8 +174,6 @@ impl Mailbox {
                 message_id_to_open: id.value(),
                 query,
             })
-        })
-        .await
     }
 }
 

@@ -6,10 +6,10 @@ use proton_api_mail::domain::{Label, LabelId, LabelType};
 use proton_mail_common::settings::MailSettings;
 use proton_mail_common::Mailbox;
 
-#[test]
-fn test_get_sender_image() {
+#[tokio::test]
+async fn test_get_sender_image() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
     params
         .labels
@@ -28,7 +28,6 @@ fn test_get_sender_image() {
             expanded: false,
             order: 0,
         });
-    ctx.async_runtime().block_on(async {
         let conversations = params.conversations.clone();
         ctx.setup_user(params.clone()).await;
         ctx.mock_get_conversations(conversations, 1).await;
@@ -39,19 +38,15 @@ fn test_get_sender_image() {
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
             .expect("failed to initialize");
-    });
 
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
 
-    ctx.async_runtime().block_on(async {
         mailbox.sync(1).await.expect("mailbox sync failed");
-    });
     let local_conversation = mailbox.conversations(2).unwrap();
     let sender = &local_conversation.first().unwrap().senders.first().unwrap();
     let mail_settings = MailSettings::new(&ctx.user_context(), None);
 
-    ctx.async_runtime().block_on(async {
         let image = ctx
             .user_context()
             .image_for_sender(
@@ -70,5 +65,4 @@ fn test_get_sender_image() {
             image.to_vec(),
             vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
         )
-    });
 }

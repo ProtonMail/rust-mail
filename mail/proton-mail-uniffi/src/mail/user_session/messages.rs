@@ -15,9 +15,7 @@ impl MailUserSession {
         &self,
         filter: MessageMetadataFilter,
     ) -> Result<FilteredMessages, MailSessionError> {
-        let ctx = self.ctx.clone();
-        self.uniffi_async(async move { Ok(ctx.filter_messages(filter).await?) })
-            .await
+        Ok(self.ctx.filter_messages(filter).await?)
     }
 
     /// Retrieve the message metadata from id.

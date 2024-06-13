@@ -34,10 +34,8 @@ impl MailUserSession {
     ) -> MailSessionResult<Option<Vec<u8>>> {
         let mode = light_or_dark_mode_from_string(mode)?;
 
-        let ctx = self.ctx.clone();
-        self.uniffi_async(async move {
             //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
-            Ok(ctx
+            Ok(self.ctx
                 .image_for_sender(
                     mail_settings.settings(),
                     address,
@@ -49,8 +47,6 @@ impl MailUserSession {
                 )
                 .await
                 .map(|v| v.map(|v| v.to_vec()))?)
-        })
-        .await
     }
 }
 

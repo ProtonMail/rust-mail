@@ -18,18 +18,17 @@ use proton_crypto_inbox::proton_crypto_account::keys::KeyFlag;
 use proton_mail_common::Mailbox;
 use std::iter;
 
-#[test]
-fn mailbox_message_body_simple() {
+#[tokio::test]
+async fn mailbox_message_body_simple() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
-    );
+    ).await;
     let params = message_body_test_params();
 
     let message = message_body_test_message_simple();
 
-    ctx.async_runtime().block_on(async {
         ctx.setup_user(params.clone()).await;
         ctx.mock_get_message_metadata(vec![message.metadata.clone()], 1)
             .await;
@@ -40,13 +39,10 @@ fn mailbox_message_body_simple() {
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
             .expect("failed to initialize");
-    });
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
-    ctx.async_runtime().block_on(async {
         mailbox.sync(10).await.unwrap();
-    });
 
     // Resolve local id.
     let messages = mailbox.messages(1).unwrap();
@@ -54,9 +50,8 @@ fn mailbox_message_body_simple() {
     assert_eq!(messages[0].rid, Some(message.metadata.id));
 
     // Decrypt the message body.
-    let decrypted_body = ctx
-        .async_runtime()
-        .block_on(async { mailbox.message_body(messages[0].id).await.unwrap() });
+    let decrypted_body =
+        mailbox.message_body(messages[0].id).await.unwrap();
 
     let expected = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">This is a test body.</div>"#;
     assert_eq!(decrypted_body.body, expected);
