@@ -106,7 +106,9 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     record. Note that it is important to apply `#[serde(skip)]` to this
 ///     field to avoid it being included in the serialisation requirements.
 ///   - `#[IdField]`: The field that contains the primary key for the record.
-///     This is expected to be a `Uuid` field.
+///     This can be any type, as defined by the associated type [`Model::Id`],
+///     and needs to be wrapped in an [`Option`] in order to support automatic
+///     generation of primary keys by the database, i.e. `AUTOINCREMENT`.
 ///   - `#[DbField]`: Any other field that should be included in the database
 ///     record. These can be of any type supported for (de)serialisation from/to
 ///     `rusqlite`.
@@ -132,7 +134,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// #[TableName("foo_table")]
 /// struct Foo {
 ///     #[IdField]
-///     id: Uuid,
+///     id: Option<Uuid>,
 ///
 ///     #[DbField]
 ///     name: String,
@@ -194,7 +196,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         impl #impl_generics stash::orm::Model for #name #ty_generics #where_clause {
             type Id = #id_type;
 
-            fn id(&self) -> Self::Id {
+            fn id(&self) -> Option<Self::Id> {
                 self.#id_field.clone()
             }
 
@@ -208,6 +210,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             fn stash(&self) -> &stash::stash::Stash {
                 &self.#stash_field.as_ref().expect("Stash field is not set")
+            }
+
+            fn set_id(&mut self, id: Option<Self::Id>) {
+                self.#id_field = id;
             }
 
             fn set_row_id(&mut self, id: Option<u64>) {
@@ -344,12 +350,30 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type) {
                 .any(|attr| attr.path().is_ident("IdField"))
         })
         .expect("IdField attribute is missing");
+
+    let id_type = match &id_field.ty {
+        Type::Path(type_path) if type_path.path.segments.last().unwrap().ident == "Option" => {
+            if let syn::PathArguments::AngleBracketed(generic_args) =
+                &type_path.path.segments.last().unwrap().arguments
+            {
+                if let syn::GenericArgument::Type(inner_type) = generic_args.args.first().unwrap() {
+                    inner_type.clone()
+                } else {
+                    panic!("Invalid IdField type: expected Option<T>");
+                }
+            } else {
+                panic!("Invalid IdField type: expected Option<T>");
+            }
+        }
+        _ => panic!("IdField must be wrapped in an Option"),
+    };
+
     (
         id_field
             .ident
             .clone()
             .expect("IdField must have an identifier"),
-        id_field.ty.clone(),
+        id_type,
     )
 }
 
