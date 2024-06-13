@@ -57,6 +57,8 @@ use syn::{
 pub fn db_record_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Extract attributes
     let fields = extract_fields(&input, "DbRecord");
@@ -74,7 +76,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
         generate_fn_from_row_impl(&fields, &db_fields, None, &from_row_values_impl);
 
     (quote! {
-        impl stash::orm::DbRecord for #name {
+        impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
             #fn_fields_impl
             #fn_field_names_impl
             #fn_field_values_impl
@@ -155,6 +157,8 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Extract attributes
     let table_name = extract_table_name(&input);
@@ -180,14 +184,14 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     );
 
     (quote! {
-        impl stash::orm::DbRecord for #name {
+        impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
             #fn_fields_impl
             #fn_field_names_impl
             #fn_field_values_impl
             #fn_from_row_impl
         }
 
-        impl stash::orm::Model for #name {
+        impl #impl_generics stash::orm::Model for #name #ty_generics #where_clause {
             type Id = #id_type;
 
             fn id(&self) -> Self::Id {
