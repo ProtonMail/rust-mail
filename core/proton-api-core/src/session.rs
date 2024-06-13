@@ -1,7 +1,6 @@
 use crate::auth::{ArcAuthStore, UserKeySecret};
 use crate::domain::{
-    Address, Contact, ContactEmail, ContactFilter, ContactId, Event, EventId, User,
-    UserSettings,
+    Address, Contact, ContactEmail, ContactFilter, ContactId, Event, EventId, User, UserSettings,
 };
 use crate::http::{self, APIEnvConfig};
 use crate::http::{Client, FromResponse, OwnedRequest, RequestDesc, X_PM_UID_HEADER};

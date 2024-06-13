@@ -1,8 +1,8 @@
+use crate::{CoreContextResult, UserContext};
 use proton_api_core::domain::{ContactFilter, ContactId};
 use proton_api_core::exports::tracing::{self, debug, error, Level};
 use stash::orm::Model;
 use stash::stash::StashError;
-use crate::{CoreContextResult, UserContext};
 
 const SYNC_CONTACT_PAGE_SIZE: usize = 1000;
 
@@ -23,14 +23,16 @@ impl UserContext {
             tx.execute("DELETE FROM contacts", vec![]).await?;
             tx.execute("DELETE FROM contact_emails", vec![]).await?;
             tx.execute("DELETE FROM contact_cards", vec![]).await?;
-            tx.execute("DELETE FROM contact_email_labels", vec![]).await?;
+            tx.execute("DELETE FROM contact_email_labels", vec![])
+                .await?;
             tx.commit().await?;
             Ok(())
-        }.await
-            .map_err(|err: StashError| {
-                error!("Failed to reset contact tables: {err}");
-                err
-            })?;
+        }
+        .await
+        .map_err(|err: StashError| {
+            error!("Failed to reset contact tables: {err}");
+            err
+        })?;
         // First update the partial contacts since email contacts reference them.
         debug!("Syncing partial contacts");
         loop {
@@ -48,11 +50,12 @@ impl UserContext {
                     }
                     tx.commit().await?;
                     Ok(())
-                }.await
-                    .map_err(|err: StashError| {
-                        error!("Failed to sync contacts for page {page_index} to db: {err}");
-                        err
-                    })?;
+                }
+                .await
+                .map_err(|err: StashError| {
+                    error!("Failed to sync contacts for page {page_index} to db: {err}");
+                    err
+                })?;
             }
             debug!(
                 "Synced page {} of partial contacts, {} contacts fetched",
@@ -83,11 +86,12 @@ impl UserContext {
                     }
                     tx.commit().await?;
                     Ok(())
-                }.await
-                    .map_err(|err: StashError| {
-                        error!("Failed to sync contact emails for page {page_index} to db: {err}");
-                        err
-                    })?;
+                }
+                .await
+                .map_err(|err: StashError| {
+                    error!("Failed to sync contact emails for page {page_index} to db: {err}");
+                    err
+                })?;
             }
             debug!(
                 "Synced page {} of contact emails, {} contact emails fetched",
@@ -109,18 +113,15 @@ impl UserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
     pub async fn sync_contact_with_card(&self, id: ContactId) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {id}");
-        let mut contact_with_card = self.session
-            .contact_with_cards(id).await
-            .map_err(|err| {
-                error!("Failed to fetch full contact with: {err}");
-                err
-            })?;
+        let mut contact_with_card = self.session.contact_with_cards(id).await.map_err(|err| {
+            error!("Failed to fetch full contact with: {err}");
+            err
+        })?;
         contact_with_card.set_stash(&self.stash);
-        contact_with_card.save().await
-            .map_err(|err| {
-                error!("Failed to sync full contact to db: {err}");
-                err
-            })?;
+        contact_with_card.save().await.map_err(|err| {
+            error!("Failed to sync full contact to db: {err}");
+            err
+        })?;
         Ok(())
     }
 }

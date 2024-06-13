@@ -16,11 +16,11 @@ use proton_api_core::login::Flow;
 use proton_api_core::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
+use stash::params;
 use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use stash::params;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreContextError {
@@ -217,7 +217,7 @@ impl Context {
         })?;
 
         //TODO(ET-231): User cache paths.
-        
+
         self.inner
             .session_stash
             .execute(

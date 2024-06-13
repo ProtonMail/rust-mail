@@ -3,8 +3,8 @@ use stash::stash::{StashError, Tether};
 
 pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
     block_on(async {
-    tx.execute(
-        r"
+        tx.execute(
+            r"
             CREATE TABLE contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rid TEXT UNIQUE,
@@ -15,18 +15,18 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                 modify_time INTEGER NOT NULL
             )
         ",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"CREATE UNIQUE INDEX index_contact_rid ON contacts (rid)",
-        vec![],
-    )
-    .await?;
+        tx.execute(
+            r"CREATE UNIQUE INDEX index_contact_rid ON contacts (rid)",
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"
+        tx.execute(
+            r"
             CREATE TABLE contact_emails (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rid TEXT UNIQUE,
@@ -46,24 +46,24 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                     ON DELETE CASCADE
             )
         ",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"CREATE INDEX index_contact_emails_email ON contact_emails (canonical_email)",
-        vec![],
-    )
-    .await?;
+        tx.execute(
+            r"CREATE INDEX index_contact_emails_email ON contact_emails (canonical_email)",
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"CREATE INDEX index_contact_emails_contact_id ON contact_emails (contact_id)",
-        vec![],
-    )
-    .await?;
+        tx.execute(
+            r"CREATE INDEX index_contact_emails_contact_id ON contact_emails (contact_id)",
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"
+        tx.execute(
+            r"
             CREATE TABLE contact_cards (
                 contact_id INTEGER NOT NULL,
                 card_type INTEGER NOT NULL,
@@ -78,18 +78,18 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                    ON DELETE CASCADE
             )
         ",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"CREATE INDEX index_contact_cards_id ON contact_cards (contact_id)",
-        vec![],
-    )
-    .await?;
+        tx.execute(
+            r"CREATE INDEX index_contact_cards_id ON contact_cards (contact_id)",
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
-        r"
+        tx.execute(
+            r"
             CREATE TABLE contact_email_labels (
                 contact_emails_id INTEGER NOT NULL,
                 value TEXT NOT NULL,
@@ -102,16 +102,16 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                     ON DELETE CASCADE
             )
         ",
-        vec![],
-    )
-    .await?;
+            vec![],
+        )
+        .await?;
 
-    tx.execute(
+        tx.execute(
         r"CREATE INDEX index_contact_email_label_id ON contact_email_labels (contact_emails_id)",
         vec![],
     )
     .await?;
 
-    Ok(())
+        Ok(())
     })
 }
