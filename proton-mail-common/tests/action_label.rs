@@ -17,25 +17,25 @@ async fn test_label_custom_label() {
     let user_ctx = ctx.user_context();
 
     let (init_params, conv_id, label_id, _) = test_init_params_label();
-        let conversations = init_params.conversations.clone();
-        ctx.setup_user(init_params).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        ctx.mock_label_conversation(&label_id, std::iter::once(conv_id.clone()), None, [])
-            .await;
-        ctx.mock_unlabel_conversation(&label_id, std::iter::once(conv_id.clone()), [])
-            .await;
-        ctx.catch_all().await;
-        let cb = NullCallback {};
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &cb)
-            .await
-            .expect("failed to initialize");
+    let conversations = init_params.conversations.clone();
+    ctx.setup_user(init_params).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.mock_label_conversation(&label_id, std::iter::once(conv_id.clone()), None, [])
+        .await;
+    ctx.mock_unlabel_conversation(&label_id, std::iter::once(conv_id.clone()), [])
+        .await;
+    ctx.catch_all().await;
+    let cb = NullCallback {};
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &cb)
+        .await
+        .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
 
     // Sync the mailbox
-        mailbox_inbox.sync(10).await.unwrap();
+    mailbox_inbox.sync(10).await.unwrap();
 
     let mailbox_label =
         Mailbox::with_remote_id(user_ctx.clone(), &label_id).expect("failed to create mailbox");
@@ -70,30 +70,30 @@ async fn test_label_starred() {
     let user_ctx = ctx.user_context();
 
     let (init_params, conv_id, _, _) = test_init_params_label();
-        let conversations = init_params.conversations.clone();
-        ctx.setup_user(init_params).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        ctx.mock_label_conversation(
-            LabelId::starred(),
-            std::iter::once(conv_id.clone()),
-            None,
-            [],
-        )
+    let conversations = init_params.conversations.clone();
+    ctx.setup_user(init_params).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.mock_label_conversation(
+        LabelId::starred(),
+        std::iter::once(conv_id.clone()),
+        None,
+        [],
+    )
+    .await;
+    ctx.mock_unlabel_conversation(LabelId::starred(), std::iter::once(conv_id.clone()), [])
         .await;
-        ctx.mock_unlabel_conversation(LabelId::starred(), std::iter::once(conv_id.clone()), [])
-            .await;
-        ctx.catch_all().await;
-        let cb = NullCallback {};
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &cb)
-            .await
-            .expect("failed to initialize");
+    ctx.catch_all().await;
+    let cb = NullCallback {};
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &cb)
+        .await
+        .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
 
     // Sync the mailbox
-        mailbox_inbox.sync(10).await.unwrap();
+    mailbox_inbox.sync(10).await.unwrap();
 
     let mailbox_label = Mailbox::with_remote_id(user_ctx.clone(), LabelId::starred())
         .expect("failed to create mailbox");
@@ -128,21 +128,21 @@ async fn test_label_fails_when_labelling_folders() {
     let user_ctx = ctx.user_context();
 
     let (init_params, _, _, folder_id) = test_init_params_label();
-        let conversations = init_params.conversations.clone();
-        ctx.setup_user(init_params).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        ctx.catch_all().await;
-        let cb = NullCallback {};
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &cb)
-            .await
-            .expect("failed to initialize");
+    let conversations = init_params.conversations.clone();
+    ctx.setup_user(init_params).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.catch_all().await;
+    let cb = NullCallback {};
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &cb)
+        .await
+        .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
 
     // Sync the mailbox
-        mailbox_inbox.sync(10).await.unwrap();
+    mailbox_inbox.sync(10).await.unwrap();
 
     let mailbox_folder =
         Mailbox::with_remote_id(user_ctx.clone(), &folder_id).expect("failed to create mailbox");

@@ -154,26 +154,26 @@ impl Mailbox {
         cb: Box<dyn MailboxLiveQueryUpdatedCallback>,
     ) -> Result<ConversationMessagesLiveQueryResult, MailboxError> {
         let mbox = self.mbox.clone();
-            let id = LocalConversationId::from(id);
-            let builder = FFIObservableConversationMessagesQueryBuilder(cb);
-            let query = mbox.new_conversation_message_query(builder, id).await?;
+        let id = LocalConversationId::from(id);
+        let builder = FFIObservableConversationMessagesQueryBuilder(cb);
+        let query = mbox.new_conversation_message_query(builder, id).await?;
 
-            let id = match query.value().as_ref() {
-                Err(e) => {
-                    return Err(MailboxError::Other(anyhow!("Live query failed: {e}")));
-                }
-                // If no unread message is returned, use last message id.
-                Ok(v) => match mbox.first_unread_message_in_conversation(v.as_slice())? {
-                    Some(id) => Some(id),
-                    None => v.last().map(|v| v.id),
-                },
+        let id = match query.value().as_ref() {
+            Err(e) => {
+                return Err(MailboxError::Other(anyhow!("Live query failed: {e}")));
             }
-            .ok_or(MailboxError::ConversationHasNoMessages(id))?;
+            // If no unread message is returned, use last message id.
+            Ok(v) => match mbox.first_unread_message_in_conversation(v.as_slice())? {
+                Some(id) => Some(id),
+                None => v.last().map(|v| v.id),
+            },
+        }
+        .ok_or(MailboxError::ConversationHasNoMessages(id))?;
 
-            Ok(ConversationMessagesLiveQueryResult {
-                message_id_to_open: id.value(),
-                query,
-            })
+        Ok(ConversationMessagesLiveQueryResult {
+            message_id_to_open: id.value(),
+            query,
+        })
     }
 }
 

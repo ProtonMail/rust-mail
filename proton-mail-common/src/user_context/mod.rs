@@ -12,12 +12,12 @@ pub use conversations::FilteredConversations;
 pub use initialization::*;
 pub use messages::FilteredMessages;
 
+use futures::executor::block_on;
 use proton_action_queue::ActionQueue;
 use proton_api_mail::proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use std::sync::{Arc, Weak};
-use futures::executor::block_on;
 
 use crate::db::{MailSqliteConnection, MailSqliteConnectionMut, MailSqliteConnectionRef};
 use crate::user_context::action_queue::new_action_queue;

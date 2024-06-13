@@ -54,16 +54,16 @@ async fn test_new_mailbox_sync_conversations() {
     .unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-        mailbox1.sync(10).await.unwrap();
+    mailbox1.sync(10).await.unwrap();
 
     // Sync mailbox 2 - this should also fire a network request
-        mailbox2.sync(10).await.unwrap();
+    mailbox2.sync(10).await.unwrap();
 
     // Try syncing mailbox1 again - this should not fire any network requests
-        mailbox1.sync(10).await.unwrap();
+    mailbox1.sync(10).await.unwrap();
 
     // Try syncing mailbox2 again - this should not fire any network requests
-        mailbox2.sync(10).await.unwrap();
+    mailbox2.sync(10).await.unwrap();
 }
 #[tokio::test]
 async fn test_new_mailbox_sync_messages() {
@@ -117,13 +117,13 @@ async fn test_new_mailbox_sync_messages() {
             expanded: false,
             order: 0,
         });
-        ctx.setup_user(params.clone()).await;
-        ctx.mock_get_message_metadata(messages, 2).await;
-        ctx.catch_all().await;
-        ctx.user_context()
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .expect("failed to initialize");
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message_metadata(messages, 2).await;
+    ctx.catch_all().await;
+    ctx.user_context()
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
@@ -205,13 +205,13 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
             expanded: false,
             order: 0,
         });
-        ctx.setup_user(params.clone()).await;
-        ctx.mock_get_message_metadata(messages, 2).await;
-        ctx.catch_all().await;
-        ctx.user_context()
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .expect("failed to initialize");
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_message_metadata(messages, 2).await;
+    ctx.catch_all().await;
+    ctx.user_context()
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
 
     // Create a drafts mailbox
     let mailbox_drafts = Mailbox::with_remote_id(ctx.user_context(), LabelId::drafts()).unwrap();
@@ -220,7 +220,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     let mailbox_sent = Mailbox::with_remote_id(ctx.user_context(), LabelId::sent()).unwrap();
 
     // Check that mailboxes always sync messages.
-        mailbox_drafts.sync(10).await.unwrap();
+    mailbox_drafts.sync(10).await.unwrap();
 
-        mailbox_sent.sync(10).await.unwrap();
+    mailbox_sent.sync(10).await.unwrap();
 }

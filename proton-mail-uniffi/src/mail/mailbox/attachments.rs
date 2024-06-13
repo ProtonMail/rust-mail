@@ -47,9 +47,10 @@ impl Mailbox {
         &self,
         local_attachment_id: u64,
     ) -> Result<DecryptedAttachment, MailboxError> {
-            self.mbox.load_attachment_to_buffer(local_attachment_id.into())
-                .await
-                .map(Into::into)
-                .map_err(MailboxError::from)
+        self.mbox
+            .load_attachment_to_buffer(local_attachment_id.into())
+            .await
+            .map(Into::into)
+            .map_err(MailboxError::from)
     }
 }

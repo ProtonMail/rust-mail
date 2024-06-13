@@ -13,11 +13,11 @@ impl MailUserSession {
     ) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
         let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
-            let cb_ref = cb.as_ref();
-            if let Err((_, e)) = ctx.initialize_async(LabelId::inbox().clone(), cb_ref).await {
-                return Err(MailSessionError::from(e));
-            }
-            Ok(())
+        let cb_ref = cb.as_ref();
+        if let Err((_, e)) = ctx.initialize_async(LabelId::inbox().clone(), cb_ref).await {
+            return Err(MailSessionError::from(e));
+        }
+        Ok(())
     }
 }
 

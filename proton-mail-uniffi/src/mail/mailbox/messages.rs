@@ -33,9 +33,9 @@ impl Mailbox {
     /// Returns error if the network request, the database query, reading/writing
     /// the body to the cache or decrypting the body failed.
     pub async fn message_body(&self, id: u64) -> Result<DecryptedMessageBody, MailboxError> {
-            Ok(DecryptedMessageBody {
-                message: self.mbox.message_body(LocalMessageId::from(id)).await?,
-            })
+        Ok(DecryptedMessageBody {
+            message: self.mbox.message_body(LocalMessageId::from(id)).await?,
+        })
     }
 }
 

@@ -28,41 +28,41 @@ async fn test_get_sender_image() {
             expanded: false,
             order: 0,
         });
-        let conversations = params.conversations.clone();
-        ctx.setup_user(params.clone()).await;
-        ctx.mock_get_conversations(conversations, 1).await;
-        ctx.mock_get_image_for_conversation(vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
-            .await;
-        ctx.catch_all().await;
-        ctx.user_context()
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .expect("failed to initialize");
+    let conversations = params.conversations.clone();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.mock_get_image_for_conversation(vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07])
+        .await;
+    ctx.catch_all().await;
+    ctx.user_context()
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
 
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
 
-        mailbox.sync(1).await.expect("mailbox sync failed");
+    mailbox.sync(1).await.expect("mailbox sync failed");
     let local_conversation = mailbox.conversations(2).unwrap();
     let sender = &local_conversation.first().unwrap().senders.first().unwrap();
     let mail_settings = MailSettings::new(&ctx.user_context(), None);
 
-        let image = ctx
-            .user_context()
-            .image_for_sender(
-                &mail_settings,
-                sender.address.clone(),
-                sender.bimi_selector.clone(),
-                sender.display_sender_image,
-                None,
-                None,
-                None,
-            )
-            .await
-            .expect("failed to get image")
-            .expect("should have value");
-        assert_eq!(
-            image.to_vec(),
-            vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
+    let image = ctx
+        .user_context()
+        .image_for_sender(
+            &mail_settings,
+            sender.address.clone(),
+            sender.bimi_selector.clone(),
+            sender.display_sender_image,
+            None,
+            None,
+            None,
         )
+        .await
+        .expect("failed to get image")
+        .expect("should have value");
+    assert_eq!(
+        image.to_vec(),
+        vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
+    )
 }

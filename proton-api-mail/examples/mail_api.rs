@@ -78,17 +78,15 @@ async fn main() {
 
     let mail_session = MailSession::new(session.clone());
 
-    let messages =
-        mail_session
-            .message_metadata(MessageMetadataFilterBuilder::new(0, 10).build())
-            .await
-            .unwrap()
-            .messages
-    ;
+    let messages = mail_session
+        .message_metadata(MessageMetadataFilterBuilder::new(0, 10).build())
+        .await
+        .unwrap()
+        .messages;
 
     for m in messages {
-            let m = mail_session.message(&m.id).await.unwrap();
-            println!("{:?}", m.attachments);
+        let m = mail_session.message(&m.id).await.unwrap();
+        println!("{:?}", m.attachments);
     }
 
     session.logout().await.unwrap();

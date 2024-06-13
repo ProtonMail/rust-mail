@@ -39,8 +39,8 @@ impl MailUserSession {
 impl MailUserSession {
     /// Log out a session.
     pub async fn logout(&self) -> Result<(), MailSessionError> {
-		self.ctx().logout().await?;
-		Ok(())
+        self.ctx().logout().await?;
+        Ok(())
     }
 
     /// Fork the current session.
@@ -58,6 +58,10 @@ impl MailUserSession {
     /// there is a problem with the HTTP request.
     ///
     pub async fn fork(&self) -> Result<String, MailSessionError> {
-        self.ctx.session().fork().await.map_err(MailSessionError::from)
+        self.ctx
+            .session()
+            .fork()
+            .await
+            .map_err(MailSessionError::from)
     }
 }
