@@ -54,29 +54,21 @@ async fn test_new_mailbox_sync_conversations() {
     .unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-    ctx.async_runtime().block_on(async {
         mailbox1.sync(10).await.unwrap();
-    });
 
     // Sync mailbox 2 - this should also fire a network request
-    ctx.async_runtime().block_on(async {
         mailbox2.sync(10).await.unwrap();
-    });
 
     // Try syncing mailbox1 again - this should not fire any network requests
-    ctx.async_runtime().block_on(async {
         mailbox1.sync(10).await.unwrap();
-    });
 
     // Try syncing mailbox2 again - this should not fire any network requests
-    ctx.async_runtime().block_on(async {
         mailbox2.sync(10).await.unwrap();
-    });
 }
-#[test]
-fn test_new_mailbox_sync_messages() {
+#[tokio::test]
+async fn test_new_mailbox_sync_messages() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
     let mut mail_settings = MailSettings::default();
     mail_settings.view_mode = MailSettingsViewMode::Messages;
@@ -125,7 +117,6 @@ fn test_new_mailbox_sync_messages() {
             expanded: false,
             order: 0,
         });
-    ctx.async_runtime().block_on(async {
         ctx.setup_user(params.clone()).await;
         ctx.mock_get_message_metadata(messages, 2).await;
         ctx.catch_all().await;
@@ -133,7 +124,6 @@ fn test_new_mailbox_sync_messages() {
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
             .expect("failed to initialize");
-    });
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
@@ -162,10 +152,10 @@ fn test_new_mailbox_sync_messages() {
     mailbox2.sync(10).await.unwrap();
 }
 
-#[test]
-fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
+#[tokio::test]
+async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
     // For view mode to conversations.
     let mut mail_settings = MailSettings::default();
@@ -215,7 +205,6 @@ fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
             expanded: false,
             order: 0,
         });
-    ctx.async_runtime().block_on(async {
         ctx.setup_user(params.clone()).await;
         ctx.mock_get_message_metadata(messages, 2).await;
         ctx.catch_all().await;
@@ -223,7 +212,6 @@ fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
             .expect("failed to initialize");
-    });
 
     // Create a drafts mailbox
     let mailbox_drafts = Mailbox::with_remote_id(ctx.user_context(), LabelId::drafts()).unwrap();
@@ -232,11 +220,7 @@ fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     let mailbox_sent = Mailbox::with_remote_id(ctx.user_context(), LabelId::sent()).unwrap();
 
     // Check that mailboxes always sync messages.
-    ctx.async_runtime().block_on(async {
         mailbox_drafts.sync(10).await.unwrap();
-    });
 
-    ctx.async_runtime().block_on(async {
         mailbox_sent.sync(10).await.unwrap();
-    });
 }

@@ -19,8 +19,8 @@ use proton_mail_common::proton_api_mail::domain::{
 };
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use proton_mail_common::MailboxObservableQueryBuilder;
-use std::future::Future;
 use std::sync::Arc;
+use proton_mail_common::exports::anyhow::anyhow;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -105,7 +105,7 @@ impl Mailbox {
     #[uniffi::constructor]
     pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
         let mbox =
-            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), LocalLabelId::new(label_id));
+            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), LocalLabelId::new(label_id))?;
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }
@@ -148,34 +148,10 @@ impl Mailbox {
 
 impl Mailbox {
     async fn sync(mbox: proton_mail_common::Mailbox) -> MailboxResult<Self> {
-        let uniffi_mbox = Self { mbox: mbox.clone() };
-
-        uniffi_mbox
-            .uniffi_async(async move {
-                if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
-                    error!("Could not sync mailbox: {e}");
-                }
-                Ok(())
-            })
-            .await?;
-
-        Ok(uniffi_mbox)
-    }
-
-    /// Helper function to hide implementation details of how to run async code with
-    /// uniffi.
-    pub(crate) async fn uniffi_async<T, F>(&self, f: F) -> Result<T, MailboxError>
-    where
-        T: Send + 'static,
-        F: Future<Output = Result<T, MailboxError>> + Send + 'static,
-    {
-        self.mbox
-            .user_context()
-            .mail_context()
-            .async_runtime()
-            .spawn(f)
-            .await
-            .map_err(|err| MailboxError::Other(anyhow!("Failed to join task: {err}")))?
+        if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
+            error!("Could not sync mailbox: {e}");
+        }
+        Ok(Self { mbox })
     }
 }
 

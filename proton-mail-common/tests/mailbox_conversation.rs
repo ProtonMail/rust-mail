@@ -7,10 +7,10 @@ use proton_api_mail::domain::{
 };
 use proton_mail_common::Mailbox;
 
-#[test]
-fn test_new_mailbox_sync_conversations() {
+#[tokio::test]
+async fn test_new_mailbox_sync_conversations() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new();
+    let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
     params
         .labels
@@ -86,7 +86,6 @@ fn test_new_mailbox_sync_conversations() {
         },
     ];
 
-    ctx.async_runtime().block_on(async {
         let conversations = params.conversations.clone();
         ctx.setup_user(params.clone()).await;
         ctx.mock_get_conversations(conversations, 1).await;
@@ -97,36 +96,33 @@ fn test_new_mailbox_sync_conversations() {
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
             .expect("failed to initialize");
-    });
 
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
 
     // Sync mailbox 1 - this should fire a network request
-    ctx.async_runtime().block_on(async {
         mailbox.sync(10).await.unwrap();
-    });
 
     // Get conversations for mailbox.
     let conversations = mailbox.conversations(1).unwrap();
 
     // Get the message for a conversation.
-    let (_, messages) = ctx.async_runtime().block_on(async {
+    let (_, messages) =
         mailbox
             .conversation_messages(conversations[0].id)
             .await
             .unwrap()
-    });
+        ;
 
     assert_eq!(messages.len(), 2);
     assert_eq!(messages[0].rid, Some(message_id1));
     assert_eq!(messages[1].rid, Some(message_id2));
 
     // Get messages again, but should not fire request.
-    let _ = ctx.async_runtime().block_on(async {
+    let _ =
         mailbox
             .conversation_messages(conversations[0].id)
             .await
             .unwrap()
-    });
+        ;
 }

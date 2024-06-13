@@ -17,6 +17,7 @@ use proton_api_mail::proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use std::sync::{Arc, Weak};
+use futures::executor::block_on;
 
 use crate::db::{MailSqliteConnection, MailSqliteConnectionMut, MailSqliteConnectionRef};
 use crate::user_context::action_queue::new_action_queue;
@@ -243,8 +244,6 @@ impl LoadKeySecret for CloneSecretLoader {
 
 impl LoadKeySecret for MailUserContext {
     fn key_secret(&self) -> Option<UserKeySecret> {
-        self.mail_context()
-            .async_runtime()
-            .block_on(self.session().expose_key_secret())
+        block_on(self.session().expose_key_secret())
     }
 }

@@ -6,9 +6,8 @@ mod initialization;
 mod labels;
 mod messages;
 
-use crate::mail::{MailSessionError, MailSessionResult};
+use crate::mail::MailSessionError;
 use proton_mail_common as pmc;
-use std::future::Future;
 use std::sync::Arc;
 
 /// [`MailUserSession`] contains all the relevant information for an active user session, you
@@ -33,21 +32,6 @@ impl MailUserSession {
     }
     pub(crate) fn ctx(&self) -> &pmc::MailUserContext {
         &self.ctx
-    }
-
-    /// Helper function to hide implementation details of how to run async code with
-    /// uniffi.
-    pub(crate) async fn uniffi_async<T, F>(&self, f: F) -> Result<T, MailSessionError>
-    where
-        T: Send + 'static,
-        F: Future<Output = MailSessionResult<T>> + Send + 'static,
-    {
-        self.ctx
-            .mail_context()
-            .async_runtime()
-            .spawn(f)
-            .await
-            .map_err(map_task_join_error)?
     }
 }
 

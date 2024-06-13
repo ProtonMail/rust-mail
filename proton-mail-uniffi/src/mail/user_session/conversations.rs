@@ -15,9 +15,7 @@ impl MailUserSession {
         &self,
         filter: ConversationFilter,
     ) -> Result<FilteredConversations, MailSessionError> {
-        let ctx = self.ctx.clone();
-        self.uniffi_async(async move { Ok(ctx.filter_conversations(filter).await?) })
-            .await
+        Ok(self.ctx.filter_conversations(filter).await?)
     }
 
     /// Retrieve a conversation by remote `id` in the All Mail context.

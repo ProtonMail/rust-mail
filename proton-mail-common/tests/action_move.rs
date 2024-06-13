@@ -75,6 +75,7 @@ async fn test_move_between_folders() {
     // flush queue to execute on remote
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -94,6 +95,7 @@ async fn test_move_between_folders() {
     // flush queue to execute on remote
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -162,6 +164,7 @@ async fn test_move_from_label_does_not_unlabel() {
     // mock for label
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -254,6 +257,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
 
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     assert!(!has_conversation(&mailbox_inbox, local_conv_id));
@@ -273,6 +277,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     // flush queue to execute on remote
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Note, there is no way to validate action got successfully executed, have to check locally
@@ -361,6 +366,7 @@ async fn test_move_into_spam_remove_labels() {
 
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     assert!(!has_conversation(&mailbox_inbox, local_conv_id));
@@ -428,6 +434,7 @@ async fn move_out_of_trash_set_almost_all_mail() {
 
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     assert!(has_conversation(&mailbox_inbox, local_conv_id));
@@ -494,6 +501,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
 
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     assert!(has_conversation(&mailbox_inbox, local_conv_id));

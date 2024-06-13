@@ -8,13 +8,12 @@ use proton_mail_common::Mailbox;
 
 use crate::common::attachment::{testdata_attachment_data, testdata_expected_attachment_decrypted};
 
-#[test]
-fn test_load_attachment_buffer() {
-    let ctx = TestContext::new();
+#[tokio::test]
+async fn test_load_attachment_buffer() {
+    let ctx = TestContext::new().await;
     let params = TestParams::default_basic();
 
     // Api mock.
-    ctx.async_runtime().block_on(async {
         let conversations = params.conversations.clone();
         let test_attachment = params.attachments.first().unwrap();
         ctx.setup_user(params.clone()).await;
@@ -28,14 +27,11 @@ fn test_load_attachment_buffer() {
             .initialize_async(LabelId::inbox().clone(), &NullCallback {})
             .await
             .expect("failed to initialize");
-    });
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
 
     // Sync mails.
-    ctx.async_runtime().block_on(async {
         mailbox.sync(1).await.expect("mailbox sync failed");
-    });
 
     // Get default conversation with the default attachment.
     let local_conversation = mailbox.conversations(1).unwrap();
@@ -49,7 +45,6 @@ fn test_load_attachment_buffer() {
         .unwrap()
         .id;
     // Load and decrypt attachment.
-    ctx.async_runtime().block_on(async {
         let decryption_result = mailbox
             .load_attachment_to_buffer(attachment_id)
             .await
@@ -66,5 +61,4 @@ fn test_load_attachment_buffer() {
             ),
             "There should be no signatures to verify"
         );
-    });
 }

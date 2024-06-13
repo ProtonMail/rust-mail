@@ -11,13 +11,12 @@ use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus
 use proton_mail_common::Mailbox;
 use velcro::hash_map;
 
-#[test]
-fn test_label_custom_label() {
-    let ctx = TestContext::new();
+#[tokio::test]
+async fn test_label_custom_label() {
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context();
 
     let (init_params, conv_id, label_id, _) = test_init_params_label();
-    ctx.async_runtime().block_on(async {
         let conversations = init_params.conversations.clone();
         ctx.setup_user(init_params).await;
         ctx.mock_get_conversations(conversations, 1).await;
@@ -31,15 +30,12 @@ fn test_label_custom_label() {
             .initialize_async(LabelId::inbox().clone(), &cb)
             .await
             .expect("failed to initialize");
-    });
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
 
     // Sync the mailbox
-    ctx.async_runtime().block_on(async {
         mailbox_inbox.sync(10).await.unwrap();
-    });
 
     let mailbox_label =
         Mailbox::with_remote_id(user_ctx.clone(), &label_id).expect("failed to create mailbox");
@@ -54,6 +50,7 @@ fn test_label_custom_label() {
     // execute the action.
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Unlabel conversation.
@@ -63,16 +60,16 @@ fn test_label_custom_label() {
     // execute the action.
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 }
 
-#[test]
-fn test_label_starred() {
-    let ctx = TestContext::new();
+#[tokio::test]
+async fn test_label_starred() {
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context();
 
     let (init_params, conv_id, _, _) = test_init_params_label();
-    ctx.async_runtime().block_on(async {
         let conversations = init_params.conversations.clone();
         ctx.setup_user(init_params).await;
         ctx.mock_get_conversations(conversations, 1).await;
@@ -91,15 +88,12 @@ fn test_label_starred() {
             .initialize_async(LabelId::inbox().clone(), &cb)
             .await
             .expect("failed to initialize");
-    });
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
 
     // Sync the mailbox
-    ctx.async_runtime().block_on(async {
         mailbox_inbox.sync(10).await.unwrap();
-    });
 
     let mailbox_label = Mailbox::with_remote_id(user_ctx.clone(), LabelId::starred())
         .expect("failed to create mailbox");
@@ -114,6 +108,7 @@ fn test_label_starred() {
     // execute the action.
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 
     // Unlabel conversation.
@@ -123,16 +118,16 @@ fn test_label_starred() {
     // execute the action.
     user_ctx
         .execute_pending_actions()
+        .await
         .expect("failed to flush queue");
 }
 
-#[test]
-fn test_label_fails_when_labelling_folders() {
-    let ctx = TestContext::new();
+#[tokio::test]
+async fn test_label_fails_when_labelling_folders() {
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context();
 
     let (init_params, _, _, folder_id) = test_init_params_label();
-    ctx.async_runtime().block_on(async {
         let conversations = init_params.conversations.clone();
         ctx.setup_user(init_params).await;
         ctx.mock_get_conversations(conversations, 1).await;
@@ -142,15 +137,12 @@ fn test_label_fails_when_labelling_folders() {
             .initialize_async(LabelId::inbox().clone(), &cb)
             .await
             .expect("failed to initialize");
-    });
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .expect("failed to create mailbox");
 
     // Sync the mailbox
-    ctx.async_runtime().block_on(async {
         mailbox_inbox.sync(10).await.unwrap();
-    });
 
     let mailbox_folder =
         Mailbox::with_remote_id(user_ctx.clone(), &folder_id).expect("failed to create mailbox");
