@@ -8,10 +8,11 @@ use crate::db::{
     DBResult, LocalAttachmentMetadata, LocalConversationCount, LocalInlineLabelInfo, LocalLabelId,
     LocalMessageId, MailSqliteConnectionImpl,
 };
+use indoc::indoc;
 use proton_api_mail::domain::{
     Conversation, ConversationCount, ConversationId, LabelId, MessageAddress,
 };
-use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row};
+use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Statement};
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
@@ -966,6 +967,13 @@ WHERE label_message_count.label_id = msg_labels.label_id
         Ok(())
     }
 
+    /// Assign label `label_id` to conversation with `id`.
+    ///
+    /// All messages that belong to the conversation with `id` will be assigned
+    /// the label `label_id`.
+    ///
+    /// # Error
+    /// Returns error if query failed.
     pub fn label_conversation(
         &mut self,
         label_id: LocalLabelId,
@@ -974,6 +982,13 @@ WHERE label_message_count.label_id = msg_labels.label_id
         self.label_conversations(label_id, std::iter::once(id))
     }
 
+    /// Assign label `label_id` to the conversations with `ids`.
+    ///
+    /// All messages that belong to the conversation with `ids` will be assigned
+    /// the label `label_id`.
+    ///
+    /// # Error
+    /// Returns error if query failed.
     pub fn label_conversations(
         &mut self,
         label_id: LocalLabelId,
@@ -988,97 +1003,18 @@ INSERT OR IGNORE INTO message_labels (message_id, label_id) SELECT * FROM conv_m
 ",
         )?;
 
-        for id in ids {
-            // Check if conversation already has this label
-            let (has_label,is_unread) : (bool,bool) =self.0.query_row("SELECT IFNULL(conversation_id,0), IFNULL(ctx_num_unread,0)<>0 FROM conversation_labels WHERE label_id=? AND conversation_id=?", (label_id,id),|r|{Ok((r.get(0)?,r.get(1)?))}).optional()?.unwrap_or((false,false));
+        let mut update_statements = ConversationAddLabelStatements::new(self)?;
 
+        for id in ids {
             // label all conversation messages
             let msg_ids: Vec<LocalMessageId> =
                 mapped_rows_to_vec(label_msg_stmt.query_map((label_id, id), |r| r.get(0))?)?;
 
             if !msg_ids.is_empty() {
-                // collect info.
-                struct MessageInfo {
-                    size: u64,
-                    time: u64,
-                    expiration_time: u64,
-                    count: u64,
-                    unread: u64,
-                    num_attachments: u64,
-                    snooze_time: u64,
-                }
-
-                let info = self.0.query_row(
-                    &format!(
-                        r"
-SELECT
-    MAX(time) AS time,
-    MAX(expiration_time) AS expiration_time,
-    SUM(size) AS size,
-    COUNT(id) AS `count`,
-    SUM(unread) AS unread,
-    SUM(num_attachments) AS num_attachments,
-    MAX(snooze_time) as snooze_time
-FROM messages
-WHERE id IN ({}) GROUP BY conversation_id",
-                        gen_variable_in_argument_list(msg_ids.len())
-                    ),
-                    params_from_iter(msg_ids),
-                    |r| {
-                        Ok(MessageInfo {
-                            size: r.get(2)?,
-                            time: r.get(0)?,
-                            expiration_time: r.get(1)?,
-                            count: r.get(3)?,
-                            unread: r.get(4)?,
-                            num_attachments: r.get(5)?,
-                            snooze_time: r.get(6)?,
-                        })
-                    },
-                )?;
-
-                // create label if not exists
-                // must take into account labels that have already been applied
-                self.0.execute(
-                    r"
-INSERT INTO conversation_labels (
-    label_id,
-    conversation_id,
-    ctx_time,
-    ctx_size,
-    ctx_num_messages,
-    ctx_num_unread,
-    ctx_num_attachments,
-    ctx_expiration_time,
-    ctx_snooze_time
-) VALUES (?,?,?,?,?,?,?,?,?)
-ON CONFLICT(label_id, conversation_id) DO UPDATE SET
-    ctx_time=CASE WHEN excluded.ctx_time > ctx_time THEN excluded.ctx_time ELSE ctx_time END,
-    ctx_snooze_time=CASE WHEN excluded.ctx_snooze_time > ctx_snooze_time THEN excluded.ctx_snooze_time ELSE ctx_snooze_time END,
-    ctx_expiration_time=CASE WHEN excluded.ctx_expiration_time > ctx_expiration_time THEN excluded.ctx_expiration_time ELSE ctx_expiration_time END,
-    ctx_size=ctx_size+excluded.ctx_size,
-    ctx_num_messages=ctx_num_messages+excluded.ctx_num_messages,
-    ctx_num_unread=ctx_num_unread+excluded.ctx_num_unread,
-    ctx_num_attachments=ctx_num_attachments+excluded.ctx_num_attachments
-", (label_id, id, info.time, info.size, info.count, info.unread, info.num_attachments, info.expiration_time, info.snooze_time)
-                )?;
-                // update message counts
-                self.0.execute(
-                    r"
-INSERT INTO label_message_count (label_id, total, unread) VALUES (?,?,?)
-ON CONFLICT(label_id) DO UPDATE SET total=total+excluded.total, unread=unread+excluded.unread",
-                    (label_id, info.count, info.unread),
-                )?;
-                // only update conv label count if conv does not  have label or has not been marked unread yet
-                let should_inc = !has_label;
-                let should_inc_unread = !is_unread && info.unread != 0;
-                if should_inc_unread || should_inc {
-                    self.0.execute(
-                        r"UPDATE label_conversation_count SET unread=unread+?, total=total+? WHERE label_id=?",
-                        (should_inc_unread, should_inc, label_id),
-                    )?;
-                }
+                update_statements.update(self, label_id, id, &msg_ids)?;
             } else {
+                let (has_label, _) = update_statements.check_label(label_id, id)?;
+
                 // Fallback without message metadata. We should grab the highest time values from
                 // all the remaining labels assigned to this conversation. All conversations
                 // messages will at the minimum, always assigned the All Mail label.
@@ -1259,6 +1195,169 @@ ON CONFLICT(label_id) DO UPDATE SET total=total-excluded.total, unread=unread-ex
             )
             .optional()?;
         Ok(value.unwrap_or(false))
+    }
+}
+
+/// Contains all logic to apply changes to a conversation and associated data when
+/// a new label is assigned to a message. This code can be shared between conversation
+/// and message label operations.
+///
+/// For conversations this only makes sense if we have synchronized at least one message.
+pub(super) struct ConversationAddLabelStatements<'c> {
+    has_labels: Statement<'c>,
+    create_label: Statement<'c>,
+    update_message_counts: Statement<'c>,
+    update_conversation_counts: Statement<'c>,
+}
+impl<'c> ConversationAddLabelStatements<'c> {
+    pub fn new(conn: &mut MailSqliteConnectionImpl<'c>) -> DBResult<Self> {
+        Ok(Self{
+           has_labels: conn.0.prepare(indoc! {"
+                SELECT
+                    IFNULL(conversation_id,0),
+                    IFNULL(ctx_num_unread,0)<>0
+                FROM conversation_labels
+                WHERE label_id=? AND conversation_id=?"})?,
+            create_label: conn.0.prepare(indoc! {"
+                INSERT INTO conversation_labels (
+                    label_id,
+                    conversation_id,
+                    ctx_time,
+                    ctx_size,
+                    ctx_num_messages,
+                    ctx_num_unread,
+                    ctx_num_attachments,
+                    ctx_expiration_time,
+                    ctx_snooze_time
+                ) VALUES (?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(label_id, conversation_id) DO UPDATE SET
+                    ctx_time=CASE WHEN excluded.ctx_time > ctx_time THEN excluded.ctx_time ELSE ctx_time END,
+                    ctx_snooze_time=CASE WHEN excluded.ctx_snooze_time > ctx_snooze_time THEN excluded.ctx_snooze_time ELSE ctx_snooze_time END,
+                    ctx_expiration_time=CASE WHEN excluded.ctx_expiration_time > ctx_expiration_time THEN excluded.ctx_expiration_time ELSE ctx_expiration_time END,
+                    ctx_size=ctx_size+excluded.ctx_size,
+                    ctx_num_messages=ctx_num_messages+excluded.ctx_num_messages,
+                    ctx_num_unread=ctx_num_unread+excluded.ctx_num_unread,
+                    ctx_num_attachments=ctx_num_attachments+excluded.ctx_num_attachments
+               "})?,
+            update_message_counts: conn.0.prepare(indoc! {"
+                INSERT INTO label_message_count (
+                    label_id,
+                    total,
+                    unread
+                ) VALUES (?,?,?)
+                ON CONFLICT(label_id) DO UPDATE SET
+                    total=total+excluded.total,
+                    unread=unread+excluded.unread
+            "})?,
+            update_conversation_counts:  conn.0.prepare(indoc! {
+                "UPDATE label_conversation_count SET
+                    unread=unread+?,
+                    total=total+?
+                WHERE label_id=?",
+            })?
+            })
+    }
+
+    /// Check whether the conversation already has this label and whether it is unread.
+    ///
+    /// The first returned item indicates whether this label is already known and the second
+    /// whether the label is unread.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn check_label(
+        &mut self,
+        label_id: LocalLabelId,
+        conversation_id: LocalConversationId,
+    ) -> DBResult<(bool, bool)> {
+        Ok(self
+            .has_labels
+            .query_row((label_id, conversation_id), |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()?
+            .unwrap_or((false, false)))
+    }
+
+    /// Apply changes to `conversation_id` when `label_id` is assigned to the given `msg_ids`.
+    ///
+    /// # Errors
+    /// Returns error if the query failed.
+    pub fn update(
+        &mut self,
+        conn: &mut MailSqliteConnectionImpl<'c>,
+        label_id: LocalLabelId,
+        conversation_id: LocalConversationId,
+        msg_ids: &[LocalMessageId],
+    ) -> DBResult<()> {
+        assert!(!msg_ids.is_empty());
+
+        let (has_label, is_unread) = self.check_label(label_id, conversation_id)?;
+
+        // collect info.
+        struct MessageInfo {
+            size: u64,
+            time: u64,
+            expiration_time: u64,
+            count: u64,
+            unread: u64,
+            num_attachments: u64,
+            snooze_time: u64,
+        }
+
+        let info = conn.0.query_row(
+            &format!(
+                indoc! {"
+                    SELECT
+                        MAX(time) AS time,
+                        MAX(expiration_time) AS expiration_time,
+                        SUM(size) AS size,
+                        COUNT(id) AS `count`,
+                        SUM(unread) AS unread,
+                        SUM(num_attachments) AS num_attachments,
+                        MAX(snooze_time) as snooze_time
+                    FROM messages
+                    WHERE id IN ({}) GROUP BY conversation_id"
+                },
+                gen_variable_in_argument_list(msg_ids.len())
+            ),
+            params_from_iter(msg_ids),
+            |r| {
+                Ok(MessageInfo {
+                    size: r.get(2)?,
+                    time: r.get(0)?,
+                    expiration_time: r.get(1)?,
+                    count: r.get(3)?,
+                    unread: r.get(4)?,
+                    num_attachments: r.get(5)?,
+                    snooze_time: r.get(6)?,
+                })
+            },
+        )?;
+
+        // create label if not exists
+        // must take into account labels that have already been applied
+        self.create_label.execute((
+            label_id,
+            conversation_id,
+            info.time,
+            info.size,
+            info.count,
+            info.unread,
+            info.num_attachments,
+            info.expiration_time,
+            info.snooze_time,
+        ))?;
+        // update message counts
+        self.update_message_counts
+            .execute((label_id, info.count, info.unread))?;
+        // only update conv label count if conv does not  have label or has not been marked unread yet
+        let should_inc = !has_label;
+        let should_inc_unread = !is_unread && info.unread != 0;
+        if should_inc_unread || should_inc {
+            self.update_conversation_counts
+                .execute((should_inc_unread, should_inc, label_id))?;
+        }
+
+        Ok(())
     }
 }
 
