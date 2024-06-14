@@ -10,7 +10,6 @@ mod core;
 mod migrations;
 pub(crate) mod session;
 
-pub use contacts::*;
 pub use migrations::*;
 pub use session::*;
 

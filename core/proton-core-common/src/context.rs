@@ -160,12 +160,16 @@ impl Context {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
         };
 
-        debug!("Creating new context for user {}({})", user.email, user.id);
-        let stash = self.new_user_db_pool(&user.id).await?;
+        if let Some(ref id) = user.id {
+            debug!("Creating new context for user {}({})", user.email, id);
+            let stash = self.new_user_db_pool(id).await?;
 
-        let ctx = UserContext::new(login_flow.session().clone(), stash, user.id.clone());
-
-        Ok(ctx)
+            let ctx = UserContext::new(login_flow.session().clone(), stash, id.clone());
+            
+            Ok(ctx)
+        } else {
+            Err(CoreContextError::Other(anyhow!("Missing user id in login flow")))
+        }
     }
 
     /// Get a user context from an existing session.
@@ -175,13 +179,16 @@ impl Context {
         session: &EncryptedUserSession,
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> CoreContextResult<UserContext> {
-        let stash = self.new_user_db_pool(&session.user_id).await?;
+        let user_id = match &session.user_id {
+            Some(id) => id.clone(),
+            None => return Err(CoreContextError::Other(anyhow!("Missing user id in login flow"))),
+        };
+        let stash = self.new_user_db_pool(&user_id).await?;
         debug!("decrypting session tokens");
         let key = self.get_encryption_key()?;
         let decrypted_session = session
             .to_decrypted_session(&key)
             .map_err(|_| CoreContextError::Crypto)?;
-        let user_id = session.user_id.clone();
         let core_session = new_arc_auth_store(CoreSession::new(
             Some(decrypted_session),
             self.inner.session_stash.clone(),
@@ -209,7 +216,10 @@ impl Context {
     /// # Errors
     /// Returns error if data can not be removed or the db operation failed.
     pub async fn delete_session(&self, session: &EncryptedUserSession) -> CoreContextResult<()> {
-        let db_path = get_user_db_path(&self.inner.user_db_path, &session.user_id);
+        let Some(user_id) = &session.user_id else {
+            return Err(CoreContextError::Other(anyhow!("Missing user id in login flow")));
+        };
+        let db_path = get_user_db_path(&self.inner.user_db_path, user_id);
         std::fs::remove_file(db_path).map_err(|e| {
             let e = anyhow!("Failed to erase user database: {e}");
             error!("{e}");

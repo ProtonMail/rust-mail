@@ -39,7 +39,7 @@ impl ToSql for StoredActionId {
 #[TableName("action_queue")]
 pub struct StoredAction {
     #[IdField]
-    pub id: StoredActionId,
+    pub id: Option<StoredActionId>,
     #[DbField]
     pub action_id: ActionId,
     #[DbField]
@@ -308,7 +308,7 @@ mod tests {
                 .await
                 .expect("failed to get next action")
                 .expect("action must be present");
-            assert_eq!(stored_action.id, stored_ids[0]);
+            assert_eq!(stored_action.id.unwrap(), stored_ids[0]);
             assert_eq!(stored_action.action_id, *action1.action_id());
             assert_eq!(stored_action.version, action1.action_version());
             let deserialized = stored_action
@@ -327,7 +327,7 @@ mod tests {
                 .await
                 .expect("failed to get next action")
                 .expect("action must be present");
-            assert_eq!(stored_action.id, stored_ids[1]);
+            assert_eq!(stored_action.id.unwrap(), stored_ids[1]);
             assert_eq!(stored_action.action_id, *action2.action_id());
             assert_eq!(stored_action.version, action2.action_version());
             let deserialized = stored_action
@@ -381,7 +381,7 @@ mod tests {
                 .await
                 .expect("failed to get next action")
                 .expect("action must be present");
-            assert_eq!(stored_action.id, stored_ids[1]);
+            assert_eq!(stored_action.id.unwrap(), stored_ids[1]);
             store
                 .erase_actions(&[stored_ids[1]])
                 .await
@@ -394,7 +394,7 @@ mod tests {
                 .await
                 .expect("failed to get next action")
                 .expect("action must be present");
-            assert_eq!(stored_action.id, stored_ids[2]);
+            assert_eq!(stored_action.id.unwrap(), stored_ids[2]);
             store
                 .erase_actions(&[stored_ids[2]])
                 .await
@@ -407,7 +407,7 @@ mod tests {
                 .await
                 .expect("failed to get next action")
                 .expect("action must be present");
-            assert_eq!(stored_action.id, stored_ids[0]);
+            assert_eq!(stored_action.id.unwrap(), stored_ids[0]);
             store
                 .erase_actions(&[stored_ids[0]])
                 .await
@@ -419,7 +419,7 @@ mod tests {
                 .await
                 .expect("failed to get next action")
                 .expect("action must be present");
-            assert_eq!(stored_action.id, stored_ids[3]);
+            assert_eq!(stored_action.id.unwrap(), stored_ids[3]);
             store
                 .erase_actions(&[stored_ids[3]])
                 .await

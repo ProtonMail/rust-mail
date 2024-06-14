@@ -144,7 +144,7 @@ sql_using_serde!(Password);
 #[TableName("user_settings")]
 pub struct UserSettings {
     #[IdField]
-    pub id: UserId,
+    pub id: Option<UserId>,
     #[DbField]
     pub email: Email,
     #[DbField]

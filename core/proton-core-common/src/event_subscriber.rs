@@ -132,7 +132,7 @@ async fn handle_contact_event(
         match event.action {
             Action::Delete => tx
                 .execute(
-                    "DELETE FROM contacts WHERE rid = ?",
+                    "DELETE FROM contacts WHERE remote_id = ?",
                     params![event.id.clone()],
                 )
                 .await
@@ -163,7 +163,7 @@ async fn handle_contact_email_event(
         match event.action {
             Action::Delete => tx
                 .execute(
-                    "DELETE FROM contact_emails WHERE rid = ?",
+                    "DELETE FROM contact_emails WHERE remote_id = ?",
                     params![event.id.clone()],
                 )
                 .await

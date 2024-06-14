@@ -7,7 +7,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
             r"
             CREATE TABLE contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rid TEXT UNIQUE,
+                remote_id TEXT UNIQUE,
                 name TEXT NOT NULL,
                 uid TEXT NOT NULL,
                 size INTEGER NOT NULL,
@@ -20,7 +20,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         .await?;
 
         tx.execute(
-            r"CREATE UNIQUE INDEX index_contact_rid ON contacts (rid)",
+            r"CREATE UNIQUE INDEX index_contact_remote_id ON contacts (remote_id)",
             vec![],
         )
         .await?;
@@ -29,7 +29,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
             r"
             CREATE TABLE contact_emails (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rid TEXT UNIQUE,
+                remote_id TEXT UNIQUE,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL,
                 defaults INTEGER NOT NULL,

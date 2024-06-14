@@ -34,9 +34,9 @@ new_integer_enum!(u8, CardType {
 pub struct ContactEmail {
     #[IdField]
     #[serde(rename = "ID")]
-    pub id: ContactEmailId,
+    pub id: Option<u64>,
     #[DbField]
-    pub rid: String,
+    pub remote_id: ContactEmailId,
     #[DbField]
     pub name: String,
     #[DbField]
@@ -90,8 +90,11 @@ pub struct ContactCard {
 #[TableName("contacts")]
 pub struct Contact {
     #[IdField]
+    #[serde(skip)]
+    pub id: Option<u64>,
+    #[DbField]
     #[serde(rename = "ID")]
-    pub id: ContactId,
+    pub remote_id: ContactId,
     #[DbField]
     pub name: String,
     #[DbField]

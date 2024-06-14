@@ -153,7 +153,7 @@ async fn test_local_source() {
             .await
             .expect("failed to get message")
             .expect("message should be found");
-        assert_eq!(message.id, message_id1);
+        assert_eq!(message.id.unwrap(), message_id1);
         assert!(!message.read);
         assert!(message.folder.is_none());
     }
@@ -163,7 +163,7 @@ async fn test_local_source() {
             .await
             .expect("failed to get message")
             .expect("message should be found");
-        assert_eq!(message.id, message_id2);
+        assert_eq!(message.id.unwrap(), message_id2);
         assert!(!message.read);
         assert_eq!(message.folder, Some(folder_id1));
     }
@@ -173,9 +173,9 @@ async fn test_local_source() {
             .await
             .expect("failed to get messages");
         assert_eq!(messages.len(), 3);
-        assert_eq!(messages[0].id, message_id1);
-        assert_eq!(messages[1].id, message_id2);
-        assert_eq!(messages[2].id, message_id3);
+        assert_eq!(messages[0].id.unwrap(), message_id1);
+        assert_eq!(messages[1].id.unwrap(), message_id2);
+        assert_eq!(messages[2].id.unwrap(), message_id3);
     }
 
     {

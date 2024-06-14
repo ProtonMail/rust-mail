@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use futures::executor::block_on;
 
 use account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use proton_api_core::{
@@ -12,17 +13,18 @@ use proton_api_core::{
 };
 use proton_core_common::{
     db::{
-        CoreSqliteConnection, DBMigrationError, DecryptedUserSession, EncryptedUserSession,
-        SessionEncryptionKey, SessionSqliteConnection,
+        DecryptedUserSession, EncryptedUserSession,
+        SessionEncryptionKey,
     },
     os::{InMemoryKeyChain, KeyChain},
     Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
     UserDatabaseInitializer,
 };
-use proton_event_loop::proton_async::runtime::MultiThreaded;
-use proton_sqlite3::{SqliteConnection, SqliteConnectionPool, SqliteMode};
 use tempdir::TempDir;
 use wiremock::{matchers::any, Mock, MockServer, Request};
+use proton_sqlite3::MigratorError;
+use stash::orm::Model;
+use stash::stash::Stash;
 
 pub mod account;
 pub mod contacts;
@@ -30,7 +32,7 @@ pub mod contacts;
 struct TestCoreDatabaseInitializer {}
 
 impl UserDatabaseInitializer for TestCoreDatabaseInitializer {
-    fn initialize(&self, _conn: &mut SqliteConnection) -> Result<(), DBMigrationError> {
+    fn initialize(&self, _stash: &Stash) -> Result<(), MigratorError> {
         Ok(())
     }
 }
@@ -54,13 +56,10 @@ impl TestContext {
     }
 
     /// Create and initialize test context.
-    pub fn new() -> Self {
-        Self::_new(None, None)
-    }
-
-    fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<UserId>) -> Self {
-        let runtime = MultiThreaded::new(2).expect("failed to create runtime");
-        let mock_server = runtime.block_on(async { MockServer::start().await });
+    pub async fn new() -> Self {
+        let user_key_secret: Option<UserKeySecret> = None;
+        let user_id: Option<UserId> = None;
+        let mock_server = MockServer::start().await;
 
         // Create client with the mock server as the base URL
         let api_env_config = APIEnvConfig {
@@ -91,24 +90,21 @@ impl TestContext {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(TestCoreDatabaseInitializer {})];
         let core_context = Context::new(
-            runtime,
             tmp_dir.path(),
             tmp_dir.path(),
             keychain,
             initializers,
             client,
             None,
-        )
+        ).await
         .expect("failed to create context");
 
         // Generate a fake session and write it to the database
-        let pool =
-            SqliteConnectionPool::new(SqliteMode::File(tmp_dir.path().join("session.db")), false);
-        let mut conn =
-            SessionSqliteConnection::from(pool.acquire().expect("failed to acquire connection"));
+        let path = tmp_dir.path().join("session.db");
+        let stash = Stash::new(Some(&path)).expect("failed to create stash");
 
         // Create a fake session
-        let session = DecryptedUserSession {
+        let mut session = DecryptedUserSession {
             session_id: Self::test_uid(),
             user_id: user_id.unwrap_or(UserId::from(TEST_USER_ID)),
             name: None,
@@ -120,7 +116,8 @@ impl TestContext {
         }
         .to_encrypted_session(&encryption_key)
         .expect("failed to generate encrypted session");
-        conn.tx(|tx| tx.create_or_update_session(&session))
+        session.set_stash(&stash);
+        session.save().await
             .expect("failed to make changes to session db");
 
         Self {
@@ -175,32 +172,21 @@ impl TestContext {
     }
 
     /// Get the test user context.
-    pub fn user_context(&self) -> UserContext {
+    pub async fn user_context(&self) -> UserContext {
         self.context
-            .user_context_from_session(&self.encrypted_user_session, None)
+            .user_context_from_session(&self.encrypted_user_session, None).await
             .expect("failed to create user context")
-    }
-
-    /// Get the async runtime.
-    pub fn async_runtime(&self) -> &MultiThreaded {
-        self.context.async_runtime()
-    }
-}
-
-impl Default for TestContext {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
 impl CoreEventSubscriberConnectionProvider for &TestContext {
     fn get_user_id_and_db_connection(
         &self,
-    ) -> proton_api_core::exports::anyhow::Result<(UserId, CoreSqliteConnection)> {
-        let user_ctx = self.user_context();
+    ) -> proton_api_core::exports::anyhow::Result<(UserId, Stash)> {
+        let user_ctx = block_on(async { self.user_context().await });
         Ok((
             user_ctx.user_id().clone(),
-            user_ctx.new_db_connection_as::<CoreSqliteConnection>()?,
+            user_ctx.stash().clone(),
         ))
     }
 }
@@ -230,13 +216,22 @@ impl CoreEvent for TestCoreEvent {
     fn get_core_event_user(&self) -> Option<&User> {
         self.user.as_ref()
     }
+    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
+        self.user.as_mut()
+    }
 
     fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
         self.user_settings.as_ref()
     }
+    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
+        self.user_settings.as_mut()
+    }
 
     fn get_core_event_addresses(&self) -> Option<&[Address]> {
         self.address.as_deref()
+    }
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
+        self.address.as_mut().map(|vec| vec.as_mut_slice())
     }
 
     fn get_core_event_used_space(&self) -> Option<i64> {
@@ -250,9 +245,15 @@ impl CoreEvent for TestCoreEvent {
     fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
         self.contacts.as_deref()
     }
+    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
+        self.contacts.as_mut().map(|vec| vec.as_mut_slice())
+    }
 
     fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
         self.contact_emails.as_deref()
+    }
+    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
+        self.contact_emails.as_mut().map(|vec| vec.as_mut_slice())
     }
 }
 

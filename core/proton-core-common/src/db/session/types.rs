@@ -57,7 +57,7 @@ impl DecryptedUserSession {
 
         Ok(EncryptedUserSession {
             session_id: self.session_id.clone(),
-            user_id: self.user_id.clone(),
+            user_id: Some(self.user_id.clone()),
             name: self.name.clone(),
             email: self.email.clone(),
             refresh_token: encrypted_refresh_token,
@@ -77,7 +77,7 @@ pub struct EncryptedUserSession {
     #[DbField]
     pub session_id: Uid,
     #[IdField]
-    pub user_id: UserId,
+    pub user_id: Option<UserId>,
     #[DbField]
     pub name: Option<String>,
     #[DbField]
@@ -128,9 +128,15 @@ impl EncryptedUserSession {
             .map_err(|_| DecryptionError::Decryption)?
             .map(UserKeySecret::from);
 
+        let user_id = match &self.user_id {
+            Some(user_id) => user_id.clone(),
+            None => {
+                return Err(DecryptionError::Decryption);
+            }
+        };
         Ok(DecryptedUserSession {
             session_id: self.session_id.clone(),
-            user_id: self.user_id.clone(),
+            user_id,
             name: self.name.clone(),
             email: self.email.clone(),
             refresh_token: decrypted_refresh_token,

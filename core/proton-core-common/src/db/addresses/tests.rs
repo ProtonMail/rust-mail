@@ -17,7 +17,7 @@ async fn test_address_create() {
         .expect("Failed to start transaction");
     let mut address = create_test_address(&conn);
     address.save().await.expect("failed to create address");
-    let db_address = Address::load_using(address.id.clone(), &tx)
+    let db_address = Address::load_using(address.id.as_ref().unwrap().clone(), &tx)
         .await
         .expect("failed to get address")
         .expect("should exist");
@@ -37,7 +37,7 @@ async fn test_address_create_duplicate() {
     let mut address2 = create_test_address(&conn);
     address2.display_order = 10;
     assert!(address2.save().await.is_err());
-    let db_address = Address::load_using(address.id.clone(), &tx)
+    let db_address = Address::load_using(address.id.as_ref().unwrap().clone(), &tx)
         .await
         .expect("failed to get address")
         .expect("should exist");
@@ -56,7 +56,7 @@ async fn test_address_update() {
     address.save().await.expect("failed to create address");
     let mut address2 = create_test_address_updated(&conn);
     address2.save().await.expect("failed to create duplicate");
-    let db_address = Address::load_using(address.id.clone(), &tx)
+    let db_address = Address::load_using(address.id.as_ref().unwrap().clone(), &tx)
         .await
         .expect("failed to get address")
         .expect("should exist");
@@ -79,7 +79,7 @@ async fn test_address_delete() {
     )
     .await
     .expect("failed to delete address");
-    let db_address = Address::load_using(address.id.clone(), &tx)
+    let db_address = Address::load_using(address.id.as_ref().unwrap().clone(), &tx)
         .await
         .expect("failed to get address");
     assert_eq!(db_address, None);
@@ -88,7 +88,7 @@ async fn test_address_delete() {
 
 fn create_test_address(stash: &Stash) -> Address {
     Address {
-        id: AddressId::from("address_id"),
+        id: Some(AddressId::from("address_id")),
         email: "hello@mail.com".into(),
         send: true,
         receive: false,
@@ -175,7 +175,7 @@ fn create_test_address(stash: &Stash) -> Address {
 fn create_test_address_updated(stash: &Stash) -> Address {
     let old_address = create_test_address(stash);
     Address {
-        id: AddressId::from("address_id2"),
+        id: Some(AddressId::from("address_id2")),
         email: "hello_bar@mail.com".into(),
         send: false,
         receive: true,

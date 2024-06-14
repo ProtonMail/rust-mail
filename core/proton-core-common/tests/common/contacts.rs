@@ -1,5 +1,5 @@
 use proton_api_core::{
-    domain::{Contact, ContactEmail, ContactPartial},
+    domain::{Contact, ContactEmail},
     requests::{GetAllContactsPartialResponse, GetContactEmailsResponse, GetFullContactResponse},
 };
 use wiremock::{
@@ -16,7 +16,7 @@ impl TestContext {
     ///
     /// * `contacts` - The contacts that should be in the mocked return.
     ///
-    pub async fn mock_get_all_contacts_partial_request(&self, contacts: Vec<ContactPartial>) {
+    pub async fn mock_get_all_contacts_partial_request(&self, contacts: Vec<Contact>) {
         let num_contacts = contacts.len() as u64;
         let response = GetAllContactsPartialResponse {
             contacts,
@@ -58,7 +58,7 @@ impl TestContext {
     ///
     pub async fn mock_get_full_contact(&self, contact: Contact) {
         Mock::given(method("GET"))
-            .and(path(format!("/api/contacts/{}", &contact.id)))
+            .and(path(format!("/api/contacts/{}", &contact.id.as_ref().unwrap())))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetFullContactResponse { contact }),
             )
