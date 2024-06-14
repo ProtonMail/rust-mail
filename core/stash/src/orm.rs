@@ -289,6 +289,33 @@ where
     /// The ID type for the record.
     type Id: Clone + Debug + FromSql + PartialEq + ToSql;
 
+    /// Gets a list of fields with names and values, excluding the ID field.
+    ///
+    /// The field values are returned in a form that is compatible with
+    /// conversion to SQL type, but pre-conversion. The ID field is excluded
+    /// from the list.
+    ///
+    /// Note: Any fields using an intermediary type (i.e. specified with the
+    /// `via` attribute argument) will be converted to that type before being
+    /// returned.
+    ///
+    fn fields_without_id(&self) -> HashMap<&'static str, Box<dyn ToSql + Send>>;
+
+    /// Gets a list of field names for the record type, excluding the ID field.
+    fn field_names_without_id() -> Vec<&'static str>;
+
+    /// Gets a list of field values for the record, excluding the ID field.
+    ///
+    /// The field values are returned in a form that is compatible with
+    /// conversion to SQL type, but pre-conversion. The ID field is excluded
+    /// from the list.
+    ///
+    /// Note: Any fields using an intermediary type (i.e. specified with the
+    /// `via` attribute argument) will be converted to that type before being
+    /// returned.
+    ///
+    fn field_values_without_id(&self) -> Vec<Box<dyn ToSql + Send>>;
+
     /// Finds records in the database using specific query logic.
     ///
     /// This function bridges the gap between ORM-level handling of formalised

@@ -77,9 +77,18 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
-            #fn_fields_impl
-            #fn_field_names_impl
-            #fn_field_values_impl
+            fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
+                #fn_fields_impl
+            }
+
+            fn field_names() -> Vec<&'static str> {
+                #fn_field_names_impl
+            }
+
+            fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
+                #fn_field_values_impl
+            }
+
             #fn_from_row_impl
         }
     })
@@ -169,15 +178,25 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let row_id_field = extract_row_id_field(&fields);
     let stash_field = extract_stash_field(&fields);
     let db_fields = extract_db_fields(&fields, true);
+    let db_fields_without_id = extract_db_fields(&fields, false);
     let via_attrs = extract_via_attrs(&fields, true);
+    let via_attrs_without_id = extract_via_attrs(&fields, false);
 
     // Generate trait implementation
     let db_fields_impl = generate_db_field_values_impl(&db_fields, &via_attrs);
+    let db_fields_without_id_impl =
+        generate_db_field_values_impl(&db_fields_without_id, &via_attrs_without_id);
     let db_field_values_impl = db_fields_impl.clone();
+    let db_field_values_without_id_impl = db_fields_without_id_impl.clone();
     let from_row_values_impl = generate_from_row_values_impl(&fields, &via_attrs);
     let fn_fields_impl = generate_fn_fields_impl(&db_fields, &db_fields_impl);
     let fn_field_names_impl = generate_fn_field_names_impl(&db_fields);
     let fn_field_values_impl = generate_fn_field_values_impl(&db_field_values_impl);
+    let fn_fields_without_id_impl =
+        generate_fn_fields_impl(&db_fields_without_id, &db_fields_without_id_impl);
+    let fn_field_names_without_id_impl = generate_fn_field_names_impl(&db_fields_without_id);
+    let fn_field_values_without_id_impl =
+        generate_fn_field_values_impl(&db_field_values_without_id_impl);
     let fn_from_row_impl = generate_fn_from_row_impl(
         &fields,
         &db_fields,
@@ -187,14 +206,35 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
-            #fn_fields_impl
-            #fn_field_names_impl
-            #fn_field_values_impl
+            fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
+                #fn_fields_impl
+            }
+
+            fn field_names() -> Vec<&'static str> {
+                #fn_field_names_impl
+            }
+
+            fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
+                #fn_field_values_impl
+            }
+
             #fn_from_row_impl
         }
 
         impl #impl_generics stash::orm::Model for #name #ty_generics #where_clause {
             type Id = #id_type;
+
+            fn fields_without_id(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
+                #fn_fields_without_id_impl
+            }
+
+            fn field_names_without_id() -> Vec<&'static str> {
+                #fn_field_names_without_id_impl
+            }
+
+            fn field_values_without_id(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
+                #fn_field_values_without_id_impl
+            }
 
             fn id(&self) -> Option<Self::Id> {
                 self.#id_field.clone()
@@ -614,13 +654,11 @@ fn generate_fn_fields_impl(
     db_field_values_impl: &[TokenStream2],
 ) -> TokenStream2 {
     quote! {
-        fn fields(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
-            let mut map = std::collections::HashMap::new();
-            #(
-                map.insert(stringify!(#db_fields), #db_field_values_impl as Box<dyn stash::exports::ToSql + Send>);
-            )*
-            map
-        }
+        let mut map = std::collections::HashMap::new();
+        #(
+            map.insert(stringify!(#db_fields), #db_field_values_impl as Box<dyn stash::exports::ToSql + Send>);
+        )*
+        map
     }
 }
 
@@ -632,9 +670,7 @@ fn generate_fn_fields_impl(
 ///
 fn generate_fn_field_names_impl(db_fields: &[Ident]) -> TokenStream2 {
     quote! {
-        fn field_names() -> Vec<&'static str> {
-            vec![#(stringify!(#db_fields)),*]
-        }
+        vec![#(stringify!(#db_fields)),*]
     }
 }
 
@@ -647,11 +683,9 @@ fn generate_fn_field_names_impl(db_fields: &[Ident]) -> TokenStream2 {
 ///
 fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> TokenStream2 {
     quote! {
-        fn field_values(&self) -> Vec<Box<dyn stash::exports::ToSql + Send>> {
-            vec![
-                #(#db_field_values_impl as Box<dyn stash::exports::ToSql + Send>),*
-            ]
-        }
+        vec![
+            #(#db_field_values_impl as Box<dyn stash::exports::ToSql + Send>),*
+        ]
     }
 }
 
