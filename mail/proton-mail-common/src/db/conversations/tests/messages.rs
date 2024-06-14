@@ -3,7 +3,7 @@ use crate::db::conversations::tests::conversations::{
     MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
 use crate::db::conversations::tests::db_states::{
-    new_test_delete_db_state, new_test_unread_db_state,
+    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
 };
 use crate::db::conversations::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
@@ -911,6 +911,125 @@ fn messages_mark_unread() {
                 .unwrap()
                 .unwrap();
             assert_eq!(db_conv.num_unread, 3);
+        });
+    });
+}
+
+#[test]
+fn label_messages() {
+    // Label conversation with a label that was never assigned to the conversation.
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        let state = new_test_label_db_state();
+        with_tx_core(&mut core_conn, |core_tx| {
+            prepare_db_state_core(core_tx, &state.addresses)
+        });
+        with_tx(&mut conn, |tx| {
+            let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+
+            let local_conv_id = *state_map
+                .conversations
+                .get(&state.conversations[0].id)
+                .unwrap();
+            let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
+            let local_msg_id2 = *state_map.messages.get(&state.messages[1].id).unwrap();
+            let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
+            let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+            tx.label_message(local_label_id1, local_msg_id1)
+                .expect("failed to label");
+
+            let db_conversation = tx
+                .get_conversation_with_context(local_conv_id, local_label_id1)
+                .expect("failed to get conversation")
+                .unwrap();
+
+            // There should be 1 unread message.
+            assert_eq!(db_conversation.num_unread, 0);
+            assert_eq!(db_conversation.num_messages_ctx, 1);
+            assert_eq!(db_conversation.num_attachments, 1);
+            assert_eq!(db_conversation.size, state.messages[0].size,);
+            assert_eq!(db_conversation.time, state.messages[0].time,);
+            assert_eq!(
+                db_conversation.expiration_time,
+                state.messages[0].expiration_time,
+            );
+            assert_eq!(db_conversation.snooze_time, state.messages[0].snooze_time,);
+
+            // Check conversation counts have the new conversation.
+            {
+                let conv_counts = conv_counts_as_map(tx);
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 1);
+            }
+
+            // Check message counts.
+            {
+                let message_counts = msg_counts_as_map(tx);
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 1);
+            }
+
+            let check_full_conversations = |tx: &mut MailSqliteConnectionMut| {
+                // Check conversation after all messages have been labeled.
+                let db_conversation = tx
+                    .get_conversation_with_context(local_conv_id, local_label_id1)
+                    .expect("failed to get conversation")
+                    .unwrap();
+                assert_eq!(db_conversation.num_unread, 1);
+                assert_eq!(db_conversation.num_messages_ctx, 3);
+                assert_eq!(db_conversation.num_attachments, 1);
+                assert_eq!(
+                    db_conversation.size,
+                    state.messages.iter().fold(0, |x, m| x + m.size)
+                );
+                assert_eq!(
+                    db_conversation.time,
+                    state.messages.iter().fold(0, |x, m| x.max(m.time))
+                );
+                assert_eq!(
+                    db_conversation.expiration_time,
+                    state
+                        .messages
+                        .iter()
+                        .fold(0, |x, m| x.max(m.expiration_time))
+                );
+                assert_eq!(
+                    db_conversation.snooze_time,
+                    state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
+                );
+
+                // Check conversation counts.
+                {
+                    let conv_counts = conv_counts_as_map(tx);
+                    let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                    assert_eq!(label_counts.unread, 1);
+                    assert_eq!(label_counts.total, 1);
+                }
+
+                // Check message counts.
+                {
+                    let message_counts = msg_counts_as_map(tx);
+                    let label_counts = message_counts.get(&local_label_id1).unwrap();
+                    assert_eq!(label_counts.unread, 1);
+                    assert_eq!(label_counts.total, 3);
+                }
+            };
+
+            // Label remaining messages.
+            tx.label_messages(local_label_id1, [local_msg_id2, local_msg_id3])
+                .unwrap();
+
+            check_full_conversations(tx);
+
+            // Apply again, should be noop.
+            tx.label_messages(
+                local_label_id1,
+                [local_msg_id1, local_msg_id2, local_msg_id3],
+            )
+            .unwrap();
+
+            check_full_conversations(tx);
         });
     });
 }

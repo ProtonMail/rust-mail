@@ -1,4 +1,5 @@
 use crate::avatar::AvatarInformation;
+use crate::db::conversations::connection_conversations::ConversationAddLabelStatements;
 use crate::db::json::{
     deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer,
 };
@@ -13,7 +14,8 @@ use proton_sqlite3::rusqlite::{params_from_iter, OptionalExtension, Row, Stateme
 use proton_sqlite3::utils::{
     gen_variable_in_argument_list, mapped_rows_into_vec, mapped_rows_to_vec, StmtIndexAllocator,
 };
-use std::collections::BTreeSet;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 
 impl<'c> MailSqliteConnectionImpl<'c> {
     pub fn create_message_from_metadata(
@@ -937,6 +939,72 @@ WHERE lmc.label_id = dm.label_id
             stmt.execute([label_id])?;
         }
         drop(stmt);
+
+        Ok(())
+    }
+
+    /// Add the label with `label_id` to the message with `id`.
+    ///
+    /// This will also assign the `label_id` to the conversation this message belongs to.
+    ///
+    /// # Error
+    /// Returns error if the query failed.
+    pub fn label_message(&mut self, label_id: LocalLabelId, id: LocalMessageId) -> DBResult<()> {
+        self.label_messages(label_id, std::iter::once(id))
+    }
+
+    /// Add the label with `label_id` to the messages with `ids`.
+    ///
+    /// This will also assign the `label_id` to all the conversations the messages belong to.
+    ///
+    /// # Error
+    /// Returns error if the query failed.
+    pub fn label_messages(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalMessageId>,
+    ) -> DBResult<()> {
+        let ids = ids.into_iter();
+        let mut insert_labels_stmt = self
+            .0
+            .prepare("INSERT OR IGNORE INTO message_labels VALUES (?,?) RETURNING message_id")?;
+
+        let mut get_message_conversation_stmt = self
+            .0
+            .prepare("SELECT conversation_id FROM messages WHERE id=?")?;
+
+        let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
+
+        for id in ids {
+            // insert into message_labels or ignore
+            if insert_labels_stmt
+                .query_row((id, label_id), |r| r.get::<usize, LocalMessageId>(0))
+                .optional()?
+                .is_some()
+            {
+                // if it was inserted we need to retrieve the conversation to update everything.
+                let conv_id = get_message_conversation_stmt.query_row([id], |r| r.get(0))?;
+                match conversation_messages.entry(conv_id) {
+                    Entry::Vacant(v) => {
+                        v.insert(vec![id]);
+                    }
+                    Entry::Occupied(mut o) => {
+                        o.get_mut().push(id);
+                    }
+                }
+            }
+        }
+
+        if conversation_messages.is_empty() {
+            // Nothing to do.
+            return Ok(());
+        }
+
+        // Update the conversations data, which will also update counters.
+        let mut conv_statement = ConversationAddLabelStatements::new(self)?;
+        for (conv_id, messages) in conversation_messages {
+            conv_statement.update(self, label_id, conv_id, &messages)?;
+        }
 
         Ok(())
     }
