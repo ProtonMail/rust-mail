@@ -1,5 +1,7 @@
 use crate::avatar::AvatarInformation;
-use crate::db::conversations::connection_conversations::ConversationAddLabelStatements;
+use crate::db::conversations::connection_conversations::{
+    ConversationAddLabelStatements, ConversationMessageLabelStats,
+};
 use crate::db::json::{
     deserialize_json_from_row, deserialize_optional_json_from_row, JsonWriteBuffer,
 };
@@ -1005,6 +1007,153 @@ WHERE lmc.label_id = dm.label_id
         for (conv_id, messages) in conversation_messages {
             conv_statement.update(self, label_id, conv_id, &messages)?;
         }
+
+        Ok(())
+    }
+
+    /// Remove the label with `label_id` from the message with `id`.
+    ///
+    /// This will also remove the `label_id` to the conversation this message belongs to.
+    ///
+    /// # Error
+    /// Returns error if the query failed.
+    pub fn unlabel_message(&mut self, label_id: LocalLabelId, id: LocalMessageId) -> DBResult<()> {
+        self.unlabel_messages(label_id, std::iter::once(id))
+    }
+
+    /// Remove the label with `label_id` from the messages with `ids`.
+    ///
+    /// This will also remove the `label_id` from all the conversations the messages belong to.
+    ///
+    /// # Error
+    /// Returns error if the query failed.
+    pub fn unlabel_messages(
+        &mut self,
+        label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = LocalMessageId>,
+    ) -> DBResult<()> {
+        // Remove label from messages.
+        let ids = ids.into_iter();
+        let mut delete_label_stmt = self.0.prepare(
+            "DELETE FROM message_labels WHERE label_id=? AND message_id=? RETURNING message_id",
+        )?;
+
+        let mut get_message_conversation_stmt = self
+            .0
+            .prepare("SELECT conversation_id, unread FROM messages WHERE id=?")?;
+        let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
+
+        let mut unread_count = 0_usize;
+        let mut updated_count = 0_usize;
+        for id in ids {
+            // insert into message_labels or ignore
+            if delete_label_stmt
+                .query_row((label_id, id), |r| r.get::<usize, LocalMessageId>(0))
+                .optional()?
+                .is_some()
+            {
+                // if it was inserted we need to retrieve the conversation to update everything.
+                let (conv_id, unread): (LocalConversationId, bool) = get_message_conversation_stmt
+                    .query_row([id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                match conversation_messages.entry(conv_id) {
+                    Entry::Vacant(v) => {
+                        v.insert(vec![id]);
+                    }
+                    Entry::Occupied(mut o) => {
+                        o.get_mut().push(id);
+                    }
+                }
+
+                if unread {
+                    unread_count += 1;
+                }
+                updated_count += 1;
+            }
+        }
+
+        if conversation_messages.is_empty() {
+            // Nothing to do.
+            return Ok(());
+        }
+
+        let mut update_conversation_label_stmt = self.0.prepare(indoc! {"
+            UPDATE conversation_labels SET
+                ctx_time=?,
+                ctx_snooze_time=?,
+                ctx_expiration_time=?,
+                ctx_size=?,
+                ctx_num_messages=?,
+                ctx_num_unread=?,
+                ctx_num_attachments=?
+            WHERE label_id=? AND  conversation_id = ?
+            RETURNING ctx_num_unread, ctx_num_messages"
+        })?;
+
+        let mut update_conversation_counters_stmt = self.0.prepare(indoc! {"
+            UPDATE label_conversation_count SET
+                unread=unread-?,
+                total=total-?
+            WHERE label_id=?
+            "
+        })?;
+
+        let mut delete_conversation_label_stmt = self
+            .0
+            .prepare("DELETE FROM conversation_labels WHERE conversation_id=? AND label_id=?")?;
+
+        // Apply changes to conversations.
+        for (conv_id, msg_ids) in conversation_messages {
+            // update conversation labels
+            let (remaining_unread, remaining_messages): (u64, u64) = if let Some(info) =
+                ConversationMessageLabelStats::new_in_negated(self, conv_id, label_id, &msg_ids)?
+            {
+                update_conversation_label_stmt.query_row(
+                    (
+                        info.time,
+                        info.snooze_time,
+                        info.expiration_time,
+                        info.size,
+                        info.count,
+                        info.unread,
+                        info.num_attachments,
+                        label_id,
+                        conv_id,
+                    ),
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?
+            } else {
+                // If no information is returned it means there are no messages associated
+                // with this label.
+                delete_conversation_label_stmt.execute((conv_id, label_id))?;
+                (0, 0)
+            };
+
+            // update conversation counters
+            if remaining_unread == 0 || remaining_messages == 0 {
+                update_conversation_counters_stmt.execute((
+                    // Only update unread count if there were actually unread messages in the list.
+                    if remaining_unread == 0 && unread_count != 0 {
+                        1
+                    } else {
+                        0
+                    },
+                    if remaining_messages == 0 { 1 } else { 0 },
+                    label_id,
+                ))?;
+            }
+        }
+
+        // update message counters
+        self.0.execute(
+            indoc! {
+                "UPDATE label_message_count SET
+                        unread=unread-?,
+                        total=total-?
+                    WHERE label_id=?
+                "
+            },
+            (unread_count, updated_count, label_id),
+        )?;
 
         Ok(())
     }
