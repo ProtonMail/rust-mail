@@ -57,6 +57,8 @@ use syn::{
 pub fn db_record_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Extract attributes
     let fields = extract_fields(&input, "DbRecord");
@@ -70,10 +72,11 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
     let fn_fields_impl = generate_fn_fields_impl(&db_fields, &db_fields_impl);
     let fn_field_names_impl = generate_fn_field_names_impl(&db_fields);
     let fn_field_values_impl = generate_fn_field_values_impl(&db_field_values_impl);
-    let fn_from_row_impl = generate_fn_from_row_impl(&db_fields, &from_row_values_impl, None);
+    let fn_from_row_impl =
+        generate_fn_from_row_impl(&fields, &db_fields, None, &from_row_values_impl);
 
     (quote! {
-        impl stash::orm::DbRecord for #name {
+        impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
             #fn_fields_impl
             #fn_field_names_impl
             #fn_field_values_impl
@@ -103,7 +106,9 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     record. Note that it is important to apply `#[serde(skip)]` to this
 ///     field to avoid it being included in the serialisation requirements.
 ///   - `#[IdField]`: The field that contains the primary key for the record.
-///     This is expected to be a `Uuid` field.
+///     This can be any type, as defined by the associated type [`Model::Id`],
+///     and needs to be wrapped in an [`Option`] in order to support automatic
+///     generation of primary keys by the database, i.e. `AUTOINCREMENT`.
 ///   - `#[DbField]`: Any other field that should be included in the database
 ///     record. These can be of any type supported for (de)serialisation from/to
 ///     `rusqlite`.
@@ -129,7 +134,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// #[TableName("foo_table")]
 /// struct Foo {
 ///     #[IdField]
-///     id: Uuid,
+///     id: Option<Uuid>,
 ///
 ///     #[DbField]
 ///     name: String,
@@ -154,6 +159,8 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Extract attributes
     let table_name = extract_table_name(&input);
@@ -172,23 +179,24 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let fn_field_names_impl = generate_fn_field_names_impl(&db_fields);
     let fn_field_values_impl = generate_fn_field_values_impl(&db_field_values_impl);
     let fn_from_row_impl = generate_fn_from_row_impl(
+        &fields,
         &db_fields,
-        &from_row_values_impl,
         Some((&row_id_field, &stash_field)),
+        &from_row_values_impl,
     );
 
     (quote! {
-        impl stash::orm::DbRecord for #name {
+        impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
             #fn_fields_impl
             #fn_field_names_impl
             #fn_field_values_impl
             #fn_from_row_impl
         }
 
-        impl stash::orm::Model for #name {
+        impl #impl_generics stash::orm::Model for #name #ty_generics #where_clause {
             type Id = #id_type;
 
-            fn id(&self) -> Self::Id {
+            fn id(&self) -> Option<Self::Id> {
                 self.#id_field.clone()
             }
 
@@ -202,6 +210,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             fn stash(&self) -> &stash::stash::Stash {
                 &self.#stash_field.as_ref().expect("Stash field is not set")
+            }
+
+            fn set_id(&mut self, id: Option<Self::Id>) {
+                self.#id_field = id;
             }
 
             fn set_row_id(&mut self, id: Option<u64>) {
@@ -338,12 +350,30 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type) {
                 .any(|attr| attr.path().is_ident("IdField"))
         })
         .expect("IdField attribute is missing");
+
+    let id_type = match &id_field.ty {
+        Type::Path(type_path) if type_path.path.segments.last().unwrap().ident == "Option" => {
+            if let syn::PathArguments::AngleBracketed(generic_args) =
+                &type_path.path.segments.last().unwrap().arguments
+            {
+                if let syn::GenericArgument::Type(inner_type) = generic_args.args.first().unwrap() {
+                    inner_type.clone()
+                } else {
+                    panic!("Invalid IdField type: expected Option<T>");
+                }
+            } else {
+                panic!("Invalid IdField type: expected Option<T>");
+            }
+        }
+        _ => panic!("IdField must be wrapped in an Option"),
+    };
+
     (
         id_field
             .ident
             .clone()
             .expect("IdField must have an identifier"),
-        id_field.ty.clone(),
+        id_type,
     )
 }
 
@@ -524,6 +554,53 @@ fn generate_db_field_values_impl(
         .collect()
 }
 
+/// Generate code implementation for individual default field values.
+///
+/// This function generates the code implementation to return the default values
+/// of individual non-database fields. These do not have to be compatible with
+/// conversion to and from SQL, but need to implement [`Default`].
+///
+/// # Parameters
+///
+/// * `all_fields`      - The fields of the struct. Specifically, *all* the
+///                       fields that the struct has.
+/// * `db_fields`       - The list of database fields detected. These are not
+///                       the focus of this function — rather, those fields that
+///                       are *not* database fields (and also not internal
+///                       fields) will be used.
+/// * `internal_fields` - Internal-used fields for `Model`s: firstly the field
+///                       that contains the internal row ID, and then the field
+///                       that contains the associated `Stash`. If [`None`],
+///                       then these will be excluded from the generated code.
+///
+fn generate_default_fields_impl(
+    all_fields: &[&Field],
+    db_fields: &[Ident],
+    internal_fields: Option<(&Ident, &Ident)>,
+) -> TokenStream2 {
+    let default_fields: Vec<_> = all_fields
+        .iter()
+        .filter(|field| {
+            !db_fields.contains(field.ident.as_ref().unwrap())
+                && !matches!(
+                    internal_fields,
+                    Some((row_id_field, stash_field))
+                    if field.ident.as_ref() == Some(row_id_field) || field.ident.as_ref() == Some(stash_field)
+                )
+        })
+        .map(|field| {
+            let field_ident = field.ident.as_ref().unwrap();
+            quote! {
+                #field_ident: Default::default(),
+            }
+        })
+        .collect();
+
+    quote! {
+        #(#default_fields)*
+    }
+}
+
 /// Generate code implementation for the `fields()` method.
 ///
 /// # Parameters
@@ -582,20 +659,23 @@ fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> Token
 ///
 /// # Parameters
 ///
+/// * `all_fields`           - The fields of the struct. Specifically, *all* the
+///                            fields that the struct has.
 /// * `db_fields`            - The list of database fields.
-/// * `from_row_values_impl` - The code implementation to convert the values
-///                            from the database row to the appropriate struct
-///                            field types.
 /// * `internal_fields`      - Internal-used fields for `Model`s: firstly the
 ///                            field that contains the internal row ID, and then
 ///                            the field that contains the associated `Stash`.
 ///                            If [`None`], then these will be excluded from the
 ///                            generated code.
+/// * `from_row_values_impl` - The code implementation to convert the values
+///                            from the database row to the appropriate struct
+///                            field types.
 ///
 fn generate_fn_from_row_impl(
+    all_fields: &[&Field],
     db_fields: &[Ident],
-    from_row_values_impl: &[TokenStream2],
     internal_fields: Option<(&Ident, &Ident)>,
+    from_row_values_impl: &[TokenStream2],
 ) -> TokenStream2 {
     let internal_fields_impl = if let Some((row_id_field, stash_field)) = internal_fields {
         quote! {
@@ -608,6 +688,7 @@ fn generate_fn_from_row_impl(
     } else {
         quote! {}
     };
+    let default_fields_impl = generate_default_fields_impl(all_fields, db_fields, internal_fields);
 
     quote! {
         fn from_row(row: &stash::exports::Row, columns: &[String], stash: stash::stash::Stash) -> Result<Self, stash::orm::ConversionError> {
@@ -615,6 +696,7 @@ fn generate_fn_from_row_impl(
                 #(
                     #db_fields: #from_row_values_impl,
                 )*
+                #default_fields_impl
                 #internal_fields_impl
             })
         }

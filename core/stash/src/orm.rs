@@ -12,7 +12,7 @@
 //! with types that are saved to the database.
 //!
 
-use crate::datatypes::QueryResultU64;
+use crate::datatypes::QueryResultIdPair;
 use crate::stash::{Notification, Stash, StashError, Tether};
 use core::any::Any;
 use core::fmt::{Debug, Display};
@@ -287,7 +287,7 @@ where
     <Self as Model>::Id: Send + Sync + 'static,
 {
     /// The ID type for the record.
-    type Id: Clone + ToSql;
+    type Id: Clone + Debug + FromSql + PartialEq + ToSql;
 
     /// Finds records in the database using specific query logic.
     ///
@@ -420,10 +420,9 @@ where
             let mut ids: HashMap<u64, Self::Id> = records
                 .iter()
                 .map(|record: &Self| {
-                    record
-                        .row_id()
-                        .map(|row_id| (row_id, record.id()))
-                        .ok_or(StashError::MissingRowId)
+                    let row_id = record.row_id().ok_or(StashError::MissingRowId)?;
+                    let id = record.id().ok_or(StashError::IdNotSet)?;
+                    Ok((row_id, id))
                 })
                 .collect::<Result<HashMap<u64, Self::Id>, StashError>>()?;
             let receiver = stash.subscribe().await?;
@@ -568,7 +567,12 @@ where
                     {
                         Ok(records) => {
                             if let Some(record) = records.into_iter().next() {
-                                drop(ids.insert(notification.row, record.id()));
+                                if let Some(id) = record.id() {
+                                    drop(ids.insert(notification.row, id));
+                                } else {
+                                    // This could happen, in which case we log it and carry on
+                                    warn!("No ID set for the record said to have changed");
+                                }
                                 return Some(ResultsetChange::Inserted(record));
                             }
                             // This could happen, in which case we log it and carry on
@@ -613,12 +617,16 @@ where
     /// table. It may or may not be the same as the internal "row ID" used by
     /// SQLite.
     ///
+    /// Note that in order to support auto-incrementing primary keys, this
+    /// function returns an [`Option`]. If the ID is set manually then this will
+    /// simply always return a [`Some`] value.
+    ///
     /// # See also
     ///
     /// * [`Model::id_field_name()`]
     /// * [`Model::row_id()`]
     ///
-    fn id(&self) -> Self::Id;
+    fn id(&self) -> Option<Self::Id>;
 
     /// Gets the name of the ID field for the record type.
     ///
@@ -774,11 +782,19 @@ where
     /// Gets a reference to the database-handling [`Stash`] for the record.
     fn stash(&self) -> &Stash;
 
+    /// Sets the record's unique primary ID field value.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The row id to set for the record.
+    ///
+    fn set_id(&mut self, id: Option<Self::Id>);
+
     /// Sets the record's unique row ID.
     ///
     /// # Parameters
     ///
-    /// * `stash` - The row id to set for the record.
+    /// * `id` - The row id to set for the record.
     ///
     fn set_row_id(&mut self, id: Option<u64>);
 
@@ -979,10 +995,13 @@ where
 ///
 async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Result<(), StashError> {
     let fields = M::field_names();
-    #[allow(clippy::option_if_let_else)]
-    #[allow(clippy::single_match_else)]
-    match model.row_id() {
-        Some(_) => {
+    match (model.row_id(), model.id()) {
+        // The row ID is set, but the ID field is not - invalid state.
+        (Some(_), None) => {
+            return Err(StashError::InvalidIdState);
+        }
+        // The ID field is set (the row ID may or may not be set) - save normally.
+        (None | Some(_), Some(id)) => {
             let update_fields = fields
                 .iter()
                 .map(|field| format!("{field} = ?"))
@@ -1004,7 +1023,7 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
             #[allow(trivial_casts)]
             let field_values: Vec<Box<dyn ToSql + Send>> = M::field_values(model)
                 .into_iter()
-                .chain(once(Box::new(model.id()) as Box<dyn ToSql + Send>))
+                .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
                 .collect();
             #[allow(clippy::shadow_reuse)]
             let affected: usize = match tether {
@@ -1015,7 +1034,8 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
                 return Err(StashError::NoRowsUpdated);
             }
         }
-        None => {
+        (None, None) => {
+            // Neither the row ID nor the ID field are set - new record.
             let placeholders = repeat("?")
                 .take(fields.len())
                 .collect::<Vec<_>>()
@@ -1027,11 +1047,12 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
                 VALUES
                     ({})
                 RETURNING
-                    rowid AS value
+                    rowid AS rowid, {} AS id
             ",
                 M::table_name(),
                 fields.join(", "),
                 placeholders,
+                M::id_field_name(),
             );
             let field_values: Vec<Box<dyn ToSql + Send>> =
                 M::field_values(model).into_iter().collect();
@@ -1039,18 +1060,19 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
             let rows = match tether {
                 Some(tether) => {
                     tether
-                        .query::<_, QueryResultU64>(&query, field_values)
+                        .query::<_, QueryResultIdPair<M::Id>>(&query, field_values)
                         .await?
                 }
                 None => {
                     model
                         .stash()
-                        .query::<_, QueryResultU64>(&query, field_values)
+                        .query::<_, QueryResultIdPair<M::Id>>(&query, field_values)
                         .await?
                 }
             };
             if let Some(row) = rows.into_iter().next() {
-                model.set_row_id(Some(row.value));
+                model.set_id(Some(row.id));
+                model.set_row_id(Some(row.rowid));
             } else {
                 return Err(StashError::NoRowIdReturned);
             }

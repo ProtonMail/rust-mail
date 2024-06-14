@@ -529,6 +529,20 @@ pub enum StashError {
     #[error("Statement execution error: {0}")]
     ExecutionError(SqliteError),
 
+    /// The primary key ID was received as [`None`] in a location where it was
+    /// expected to be [`Some`]. This implies that either the records were not
+    /// previously saved, and were expected to be, or that there is some kind of
+    /// misconfiguration relating to primary keys, such as `AUTOINCREMENT` not
+    /// being set when it should be.
+    #[error("ID not set")]
+    IdNotSet,
+
+    /// There is a row ID, but no primary ID field value. This should never
+    /// happen in practice, and if it does, it means some manual process has
+    /// taken place that has resulted in an invalid state.
+    #[error("Row ID set without ID field being set")]
+    InvalidIdState,
+
     /// The row ID was missing from the query results. This should never happen
     /// in practice as the only places that rely on it are responsible for
     /// specifying it in the queries that get run. Manual queries may not
