@@ -674,6 +674,17 @@ fn extract_table_name(input: &DeriveInput) -> LitStr {
 fn extract_via_attrs(fields: &[&Field], include_id_field: bool) -> Vec<Option<ViaIntermediary>> {
     fields
         .iter()
+        .filter(|field| {
+            field
+                .attrs
+                .iter()
+                .any(|attr| attr.path().is_ident("DbField"))
+                || (include_id_field
+                    && field
+                        .attrs
+                        .iter()
+                        .any(|attr| attr.path().is_ident("IdField")))
+        })
         .map(|field| {
             if field
                 .attrs
