@@ -10,7 +10,7 @@ use quote::{quote, ToTokens};
 use syn::parse::{Parse, ParseStream};
 use syn::{
     parse_macro_input, Data, DeriveInput, Error as SynError, Field, Fields, Ident, LitStr, Path,
-    Type,
+    Token, Type,
 };
 
 /// Automatically derive the `DbRecord` trait for a struct.
@@ -115,22 +115,30 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     record. Note that it is important to apply `#[serde(skip)]` to this
 ///     field to avoid it being included in the serialisation requirements.
 ///   - `#[IdField]`: The field that contains the primary key for the record.
-///     This can be any type, as defined by the associated type [`Model::Id`],
-///     and needs to be wrapped in an [`Option`] in order to support automatic
-///     generation of primary keys by the database, i.e. `AUTOINCREMENT`.
+///     This can be any type, as defined by the associated type [`Model::Id`].
+///     If the field is `optional` or `autoincrement` then it will need to be
+///     wrapped in an [`Option`] (see below).
 ///   - `#[DbField]`: Any other field that should be included in the database
 ///     record. These can be of any type supported for (de)serialisation from/to
 ///     `rusqlite`.
 ///
+/// The `IdField` attribute has some configuration options available, namely
+/// `autoincrement` and `optional`. The first supports automatic generation of
+/// primary keys by the database, i.e. `AUTOINCREMENT`, and the second supports
+/// general optionality for the field. In either case, the field will need to be
+/// wrapped in an [`Option`].
+///
 /// The `DbField` attribute can also be used to specify a wrapper type for the
 /// field. This is useful when the field type does not directly implement the
 /// `ToSql` and `FromSql` traits. In this case, the attribute should be used as
-/// `#[DbField(WrapperType)]`, where `WrapperType` is the type that should be
-/// used to wrap the field for database operations. The wrapper type should
+/// `#[DbField(via WrapperType)]`, where `WrapperType` is the type that should
+/// be used to wrap the field for database operations. The wrapper type should
 /// implement the `From` trait for the field type, and the `ToSql` and `FromSql`
 /// traits for the database operations.
 ///
-/// # Example
+/// # Examples
+///
+/// ## Example 1
 ///
 /// ```rust
 /// use serde::{Serialize, Deserialize};
@@ -143,7 +151,75 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// #[TableName("foo_table")]
 /// struct Foo {
 ///     #[IdField]
+///     id: Uuid,
+///
+///     #[DbField]
+///     name: String,
+///
+///     #[DbField]
+///     value: i32,
+///
+///     #[DbField(via CsvArray<i32>)]
+///     values: Vec<i32>,
+///
+///     #[RowIdField]
+///     #[serde(skip)]
+///     row_id: Option<u64>,
+///
+///     #[StashField]
+///     #[serde(skip)]
+///     stash: Option<Stash>,
+/// }
+/// ```
+///
+/// ## Example 2
+///
+/// ```rust
+/// use serde::{Serialize, Deserialize};
+/// use stash::macros::Model;
+/// use stash::orm::{CsvArray, Model};
+/// use stash::stash::Stash;
+/// use uuid::Uuid;
+///
+/// #[derive(Clone, Debug, Model, Deserialize, PartialEq, Serialize)]
+/// #[TableName("foo_table")]
+/// struct Foo {
+///     #[IdField(optional)]
 ///     id: Option<Uuid>,
+///
+///     #[DbField]
+///     name: String,
+///
+///     #[DbField]
+///     value: i32,
+///
+///     #[DbField(via CsvArray<i32>)]
+///     values: Vec<i32>,
+///
+///     #[RowIdField]
+///     #[serde(skip)]
+///     row_id: Option<u64>,
+///
+///     #[StashField]
+///     #[serde(skip)]
+///     stash: Option<Stash>,
+/// }
+/// ```
+///
+/// ## Example 3
+///
+/// ```rust
+/// use serde::{Serialize, Deserialize};
+/// use stash::macros::Model;
+/// use stash::orm::{CsvArray, Model};
+/// use stash::stash::Stash;
+/// use uuid::Uuid;
+///
+/// #[derive(Clone, Debug, Model, Deserialize, PartialEq, Serialize)]
+/// #[TableName("foo_table")]
+/// struct Foo {
+///     #[IdField(autoincrement)]
+///     id: Option<u64>,
 ///
 ///     #[DbField]
 ///     name: String,
@@ -174,7 +250,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     // Extract attributes
     let table_name = extract_table_name(&input);
     let fields = extract_fields(&input, "Model");
-    let (id_field, id_type) = extract_id_field(&fields);
+    let (id_field, id_type, is_optional, is_autoincrement) = extract_id_field(&fields);
     let row_id_field = extract_row_id_field(&fields);
     let stash_field = extract_stash_field(&fields);
     let db_fields = extract_db_fields(&fields, true);
@@ -183,6 +259,11 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let via_attrs_without_id = extract_via_attrs(&fields, false);
 
     // Generate trait implementation
+    let id_field_type = if is_optional {
+        quote! { Option<#id_type> }
+    } else {
+        quote! { #id_type }
+    };
     let db_fields_impl = generate_db_field_values_impl(&db_fields, &via_attrs);
     let db_fields_without_id_impl =
         generate_db_field_values_impl(&db_fields_without_id, &via_attrs_without_id);
@@ -203,6 +284,8 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         Some((&row_id_field, &stash_field)),
         &from_row_values_impl,
     );
+    let fn_id_value_impl = generate_fn_id_value_impl(&id_field, is_optional);
+    let fn_set_id_value_impl = generate_fn_set_id_value_impl(&id_field, is_optional);
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
@@ -222,7 +305,8 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         }
 
         impl #impl_generics stash::orm::Model for #name #ty_generics #where_clause {
-            type Id = #id_type;
+            type Id = #id_field_type;
+            type IdType = #id_type;
 
             fn fields_without_id(&self) -> std::collections::HashMap<&'static str, Box<dyn stash::exports::ToSql + Send>> {
                 #fn_fields_without_id_impl
@@ -236,12 +320,24 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 #fn_field_values_without_id_impl
             }
 
-            fn id(&self) -> Option<Self::Id> {
+            fn id(&self) -> Self::Id {
                 self.#id_field.clone()
             }
 
             fn id_field_name() -> &'static str {
                 stringify!(#id_field)
+            }
+
+            fn id_is_autoincrementing() -> bool {
+                #is_autoincrement
+            }
+
+            fn id_is_optional() -> bool {
+                #is_optional
+            }
+
+            fn id_value(&self) -> Result<Self::IdType, stash::stash::StashError> {
+                #fn_id_value_impl
             }
 
             fn row_id(&self) -> Option<u64> {
@@ -252,8 +348,12 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 &self.#stash_field.as_ref().expect("Stash field is not set")
             }
 
-            fn set_id(&mut self, id: Option<Self::Id>) {
+            fn set_id(&mut self, id: Self::Id) {
                 self.#id_field = id;
+            }
+
+            fn set_id_value(&mut self, id: Self::IdType) {
+                #fn_set_id_value_impl
             }
 
             fn set_row_id(&mut self, id: Option<u64>) {
@@ -380,7 +480,7 @@ fn extract_fields<'a>(input: &'a DeriveInput, macro_name: &'a str) -> Vec<&'a Fi
 /// This function panics if the `IdField` attribute is missing, or does not have
 /// an identifier.
 ///
-fn extract_id_field(fields: &[&Field]) -> (Ident, Type) {
+fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
     let id_field = fields
         .iter()
         .find(|field| {
@@ -391,21 +491,55 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type) {
         })
         .expect("IdField attribute is missing");
 
-    let id_type = match &id_field.ty {
-        Type::Path(type_path) if type_path.path.segments.last().unwrap().ident == "Option" => {
-            if let syn::PathArguments::AngleBracketed(generic_args) =
-                &type_path.path.segments.last().unwrap().arguments
-            {
-                if let syn::GenericArgument::Type(inner_type) = generic_args.args.first().unwrap() {
-                    inner_type.clone()
+    let mut is_optional = false;
+    let mut is_autoincrement = false;
+
+    for attr in &id_field.attrs {
+        if attr.path().is_ident("IdField") {
+            if let Ok(meta) = attr.parse_args_with(|input: ParseStream| {
+                let mut args = Vec::new();
+                while !input.is_empty() {
+                    args.push(input.parse::<Ident>()?);
+                    if input.is_empty() {
+                        break;
+                    }
+                    input.parse::<Token![,]>()?;
+                }
+                Ok(args)
+            }) {
+                for arg in meta {
+                    if arg == "optional" {
+                        is_optional = true;
+                    } else if arg == "autoincrement" {
+                        is_optional = true;
+                        is_autoincrement = true;
+                    }
+                }
+            }
+        }
+    }
+
+    let id_type = if is_optional {
+        match &id_field.ty {
+            Type::Path(type_path) if type_path.path.segments.last().unwrap().ident == "Option" => {
+                if let syn::PathArguments::AngleBracketed(generic_args) =
+                    &type_path.path.segments.last().unwrap().arguments
+                {
+                    if let syn::GenericArgument::Type(inner_type) =
+                        generic_args.args.first().unwrap()
+                    {
+                        inner_type.clone()
+                    } else {
+                        panic!("Invalid IdField type: expected Option<T>");
+                    }
                 } else {
                     panic!("Invalid IdField type: expected Option<T>");
                 }
-            } else {
-                panic!("Invalid IdField type: expected Option<T>");
             }
+            _ => panic!("IdField with 'optional' or 'autoincrement' must be wrapped in an Option"),
         }
-        _ => panic!("IdField must be wrapped in an Option"),
+    } else {
+        id_field.ty.clone()
     };
 
     (
@@ -414,6 +548,8 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type) {
             .clone()
             .expect("IdField must have an identifier"),
         id_type,
+        is_optional,
+        is_autoincrement,
     )
 }
 
@@ -519,11 +655,17 @@ fn extract_table_name(input: &DeriveInput) -> LitStr {
 /// fields. It is expected that the optional `via` argument is used to specify a
 /// wrapper type for the field, for those that require it.
 ///
+/// Note that the `via` argument only applies to `DbField` attributes, and not
+/// to `IdField` attributes.
+///
 /// # Parameters
 ///
 /// * `fields`           - The fields of the struct. Specifically, *all* the
 ///                        fields that the struct has.
-/// * `include_id_field` - Allow an `IdField` in addition to `DbField`s.
+/// * `include_id_field` - Allow an `IdField` in addition to `DbField`s. Note
+///                        that if this is `true`, then the entry will be
+///                        present but always [`None`], as the `via` argument
+///                        does not apply to `IdField`s.
 ///
 /// # Panics
 ///
@@ -533,26 +675,31 @@ fn extract_via_attrs(fields: &[&Field], include_id_field: bool) -> Vec<Option<Vi
     fields
         .iter()
         .map(|field| {
-            field
+            if field
                 .attrs
                 .iter()
-                .find(|attr| {
-                    attr.path().is_ident("DbField")
-                        || (include_id_field && attr.path().is_ident("IdField"))
-                })
-                .and_then(|attr| match attr.parse_args::<ViaIntermediary>() {
-                    Ok(via) => Some(via),
-                    Err(err) => {
-                        if err
-                            .to_string()
-                            .contains("expected attribute arguments in parentheses")
-                        {
-                            None
-                        } else {
-                            panic!("Failed to parse attribute: {err}")
+                .any(|attr| attr.path().is_ident("IdField"))
+            {
+                None
+            } else {
+                field
+                    .attrs
+                    .iter()
+                    .find(|attr| attr.path().is_ident("DbField"))
+                    .and_then(|attr| match attr.parse_args::<ViaIntermediary>() {
+                        Ok(via) => Some(via),
+                        Err(err) => {
+                            if err
+                                .to_string()
+                                .contains("expected attribute arguments in parentheses")
+                            {
+                                None
+                            } else {
+                                panic!("Failed to parse attribute: {err}")
+                            }
                         }
-                    }
-                })
+                    })
+            }
         })
         .collect()
 }
@@ -733,6 +880,44 @@ fn generate_fn_from_row_impl(
                 #default_fields_impl
                 #internal_fields_impl
             })
+        }
+    }
+}
+
+/// Generate code implementation for the `id_value()` method.
+///
+/// # Parameters
+///
+/// * `id_field`    - The field that contains the primary key.
+/// * `is_optional` - Whether the primary key is optional.
+///
+fn generate_fn_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenStream2 {
+    if is_optional {
+        quote! {
+            self.#id_field.clone().ok_or(stash::stash::StashError::IdNotSet)
+        }
+    } else {
+        quote! {
+            Ok(self.#id_field.clone())
+        }
+    }
+}
+
+/// Generate code implementation for the `set_id_value()` method.
+///
+/// # Parameters
+///
+/// * `id_field`    - The field that contains the primary key.
+/// * `is_optional` - Whether the primary key is optional.
+///
+fn generate_fn_set_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenStream2 {
+    if is_optional {
+        quote! {
+            self.#id_field = Some(id);
+        }
+    } else {
+        quote! {
+            self.#id_field = id;
         }
     }
 }
