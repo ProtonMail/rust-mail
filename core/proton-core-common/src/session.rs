@@ -182,7 +182,7 @@ impl proton_api_core::auth::Store for CoreSession {
             let mut session = EncryptedUserSession::load(user_id.clone(), &self.stash)
                 .await?
                 .unwrap();
-            session.user_id = Some(user_id);
+            session.user_id = user_id;
             session.access_token = encrypted_access_token;
             session.refresh_token = encrypted_refresh_token;
             session.scopes = scope.clone();
@@ -271,7 +271,7 @@ fn auth_to_encrypted_session(
 ) -> EncryptedUserSession {
     EncryptedUserSession {
         session_id: auth.uid,
-        user_id: Some(auth.user_id),
+        user_id: auth.user_id,
         name: None,
         email: auth.email,
         refresh_token: encrypted_refresh_token,

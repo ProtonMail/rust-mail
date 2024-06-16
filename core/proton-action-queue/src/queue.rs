@@ -107,13 +107,9 @@ impl ActionQueue {
                 debug!("No actions to consume");
                 return Ok(false);
             };
-            let Some(action_id) = pending.id else {
-                warn!("Missing action id");
-                return Ok(false);
-            };
 
             let action_span =
-                tracing::span!(Level::DEBUG, "action", stored_id = action_id.to_string());
+                tracing::span!(Level::DEBUG, "action", stored_id = pending.id.to_string());
             action_span.in_scope(|| -> ActionQueueResult<()> {
                 let mut handler = self
                     .action_factory
@@ -142,7 +138,7 @@ impl ActionQueue {
                 Ok(())
             })?;
 
-            if let Err(e) = store.erase_actions(&[action_id]).await {
+            if let Err(e) = store.erase_actions(&[pending.id]).await {
                 error!("Failed to remove action: {e}");
                 return Err(e.into());
             }

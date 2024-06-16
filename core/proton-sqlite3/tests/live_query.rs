@@ -9,7 +9,7 @@ use tokio::spawn as spawn_async;
 #[TableName("foo")]
 pub struct Foo {
     #[IdField]
-    pub id: Option<u64>,
+    pub id: u64,
     #[DbField]
     pub bar: u64,
     #[RowIdField]

@@ -71,7 +71,7 @@ impl ToSql for LabelId {
 #[TableName("messages")]
 pub struct Message {
     #[IdField]
-    pub id: Option<MessageId>,
+    pub id: MessageId,
     #[DbField]
     pub folder: Option<FolderId>,
     #[DbField(via CsvArray<LabelId>)]

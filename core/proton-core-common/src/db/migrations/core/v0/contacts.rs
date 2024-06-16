@@ -6,13 +6,13 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         tx.execute(
             r"
             CREATE TABLE contacts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE,
                 name TEXT NOT NULL,
                 uid TEXT NOT NULL,
                 size INTEGER NOT NULL,
                 create_time INTEGER NOT NULL,
-                modify_time INTEGER NOT NULL
+                modify_time INTEGER NOT NULL,
+                label_ids TEXT NOT NULL
             )
         ",
             vec![],
@@ -28,21 +28,21 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         tx.execute(
             r"
             CREATE TABLE contact_emails (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE,
                 name TEXT NOT NULL,
                 email TEXT NOT NULL,
+                contact_type TEXT NOT NULL,
                 defaults INTEGER NOT NULL,
                 display_order INTEGER NOT NULL,
-                contact_id INTEGER NOT NULL,
-                remote_contact_id TEXT,
+                remote_contact_id TEXT NOT NULL,
+                label_ids TEXT NOT NULL,
                 canonical_email TEXT NOT NULL,
                 last_used_time INTEGER NOT NULL,
                 is_proton INTEGER NOT NULL,
 
                 CONSTRAINT constraint_contact_emails_cid
-                    FOREIGN KEY (contact_id)
-                    REFERENCES contacts (id)
+                    FOREIGN KEY (remote_contact_id)
+                    REFERENCES contacts (remote_id)
                     ON DELETE CASCADE
             )
         ",
@@ -57,7 +57,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         .await?;
 
         tx.execute(
-            r"CREATE INDEX index_contact_emails_contact_id ON contact_emails (contact_id)",
+            r"CREATE INDEX index_contact_emails_contact_id ON contact_emails (remote_contact_id)",
             vec![],
         )
         .await?;
@@ -65,16 +65,15 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         tx.execute(
             r"
             CREATE TABLE contact_cards (
-                contact_id INTEGER NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                remote_contact_id TEXT NOT NULL,
                 card_type INTEGER NOT NULL,
                 data TEXT NOT NULL,
                 signature TEXT,
 
-                PRIMARY KEY(contact_id, data),
-
                 CONSTRAINT constraint_contact_cards_cid
-                   FOREIGN KEY (contact_id)
-                   REFERENCES contacts (id)
+                   FOREIGN KEY (remote_contact_id)
+                   REFERENCES contacts (remote_id)
                    ON DELETE CASCADE
             )
         ",
@@ -83,7 +82,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         .await?;
 
         tx.execute(
-            r"CREATE INDEX index_contact_cards_id ON contact_cards (contact_id)",
+            r"CREATE INDEX index_contact_cards_id ON contact_cards (remote_contact_id)",
             vec![],
         )
         .await?;
@@ -98,7 +97,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
 
                 CONSTRAINT constraint_contact_label_cid
                     FOREIGN KEY (contact_emails_id)
-                    REFERENCES contact_emails (id)
+                    REFERENCES contact_emails (remote_id)
                     ON DELETE CASCADE
             )
         ",

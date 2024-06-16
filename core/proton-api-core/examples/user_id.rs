@@ -110,7 +110,7 @@ async fn main() {
     }
 
     let user = login_flow.reset_and_take_user().unwrap();
-    println!("User ID is {:?}", user.id);
+    println!("User ID is {}", user.id);
 
     let settings = session.get_user_settings().await.unwrap();
     println!("User settings is {:?}", settings);

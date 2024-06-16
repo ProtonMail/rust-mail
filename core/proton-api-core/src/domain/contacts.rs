@@ -1,7 +1,10 @@
 use serde;
 use serde::{Deserialize, Serialize};
+use tracing::error;
 use stash::macros::Model;
-use stash::stash::Stash;
+use stash::orm::Model;
+use stash::{params, sql_using_serde};
+use stash::stash::{Stash, StashError, Tether};
 
 use crate::utils::{bool_from_integer, bool_to_integer};
 use crate::MAX_PAGE_ELEMENT_COUNT;
@@ -26,33 +29,42 @@ new_integer_enum!(u8, CardType {
     EncryptedAndSigned = 3,
 });
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Labels(pub Vec<ContactLabelId>);
+
+sql_using_serde!(Labels);
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct ContactTypes(pub Vec<ContactType>);
+
+sql_using_serde!(ContactTypes);
+
 /// Models the contact email addresses for a contact returned by the API.
 #[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[TableName("contact_emails")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct ContactEmail {
-    #[IdField]
+    #[IdField(optional)]
     #[serde(rename = "ID")]
-    pub id: Option<u64>,
-    #[DbField]
-    pub remote_id: ContactEmailId,
+    pub remote_id: Option<ContactEmailId>,
     #[DbField]
     pub name: String,
     #[DbField]
     pub email: String,
+    #[DbField]
     #[serde(rename = "Type")]
-    pub contact_type: Vec<ContactType>,
+    pub contact_type: ContactTypes,
     #[DbField]
     pub defaults: ContactSendingPreferences,
     #[DbField]
     pub display_order: u32,
     #[DbField]
     #[serde(rename = "ContactID")]
+    pub remote_contact_id: Option<ContactId>,
     #[DbField]
-    pub contact_id: ContactId,
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<ContactLabelId>,
+    pub label_ids: Labels,
     #[DbField]
     pub canonical_email: String,
     #[DbField]
@@ -75,13 +87,29 @@ pub struct ContactEmail {
 ///
 /// Contact cards contain information encoded as a v-card.
 /// Cards can be encrypted or signed with the user keys.
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+#[derive(Clone, Debug, Deserialize, Eq, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[TableName("contact_cards")]
 pub struct ContactCard {
+    #[IdField(autoincrement)]
+    #[serde(skip)]
+    pub id: Option<u64>,
+    #[DbField]
+    #[serde(skip)]
+    pub remote_contact_id: Option<ContactId>,
+    #[DbField]
     #[serde(rename = "Type")]
     pub card_type: CardType,
+    #[DbField]
     pub data: CardData,
+    #[DbField]
     pub signature: Option<CardSignature>,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
 }
 
 /// A complete contact returned by the API.
@@ -89,12 +117,9 @@ pub struct ContactCard {
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[TableName("contacts")]
 pub struct Contact {
-    #[IdField]
-    #[serde(skip)]
-    pub id: Option<u64>,
-    #[DbField]
+    #[IdField(optional)]
     #[serde(rename = "ID")]
-    pub remote_id: ContactId,
+    pub remote_id: Option<ContactId>,
     #[DbField]
     pub name: String,
     #[DbField]
@@ -107,8 +132,9 @@ pub struct Contact {
     #[DbField]
     pub modify_time: u64,
     pub contact_emails: Vec<ContactEmail>,
+    #[DbField]
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<ContactLabelId>,
+    pub label_ids: Labels,
     pub cards: Vec<ContactCard>,
     #[RowIdField]
     #[serde(skip)]
@@ -116,6 +142,78 @@ pub struct Contact {
     #[StashField]
     #[serde(skip)]
     pub stash: Option<Stash>,
+}
+
+impl Contact {
+    /// Returns the associated cards for a contact.
+    /// 
+    /// This function retrieves the cards for a contact, stores them in the
+    /// contact struct, and then returns them.
+    /// 
+    /// # Errors
+    /// 
+    /// Returns a [`StashError`] if the cards cannot be retrieved.
+    /// 
+    pub async fn cards(&mut self) -> Result<&Vec<ContactCard>, StashError> {
+        self.cards = ContactCard::find("WHERE remote_contact_id = ?", params![self.remote_id.clone()], self.stash(), None).await?;
+        Ok(&self.cards)
+    }
+    
+    /// Returns the associated emails for a contact.
+    ///
+    /// This function retrieves the emails for a contact, stores them in the
+    /// contact struct, and then returns them.
+    ///
+    /// # Errors
+    /// 
+    /// Returns a [`StashError`] if the emails cannot be retrieved.
+    /// 
+    pub async fn emails(&mut self) -> Result<&Vec<ContactEmail>, StashError> {
+        self.contact_emails = ContactEmail::find("WHERE remote_contact_id = ?", params![self.remote_id.clone()], self.stash(), None).await?;
+        Ok(&self.contact_emails)
+    }
+    
+    /// Overrides [`Model::save()`] to set the contact id for children.
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        Model::save(self).await?;
+        for card in &mut self.cards {
+            card.remote_contact_id.clone_from(&self.remote_id);
+        }
+        for email in &mut self.contact_emails {
+            email.remote_contact_id.clone_from(&self.remote_id);
+        }
+        self.stash.as_ref().unwrap().execute("DELETE FROM contact_cards WHERE remote_contact_id = ?", params![self.remote_id.clone()]).await?;
+        for card in &mut self.cards {
+            card.id = None;
+            card.row_id = None;
+            card.save().await.map_err(|e| {
+                error!("Failed to update contact cards: {e}");
+                e
+            })?;
+        }
+        Ok(())
+    }
+    
+    /// Overrides [`Model::save_using()`] to set the contact id for children.
+    pub async fn save_using(&mut self, tether: &Tether) -> Result<(), StashError> {
+        Model::save_using(self, tether).await?;
+        for card in &mut self.cards {
+            card.remote_contact_id.clone_from(&self.remote_id);
+        }
+        for email in &mut self.contact_emails {
+            email.remote_contact_id.clone_from(&self.remote_id);
+        }
+        tether.execute("DELETE FROM contact_cards WHERE remote_contact_id = ?", params![self.remote_id.clone()]).await?;
+        for card in &mut self.cards {
+            card.id = None;
+            card.row_id = None;
+            card.save_using(&tether).await.map_err(|e| {
+                error!("Failed to update contact cards: {e}");
+                e
+            })?;
+        }
+        Ok(())
+    }
 }
 
 /// Parameters to filter/search contacts with a given criteria on API requests.

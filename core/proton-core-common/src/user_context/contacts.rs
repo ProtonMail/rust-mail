@@ -1,5 +1,5 @@
 use crate::{CoreContextResult, UserContext};
-use proton_api_core::domain::{ContactFilter, ContactId};
+use proton_api_core::domain::{Contact, ContactEmail, ContactFilter, ContactId};
 use proton_api_core::exports::tracing::{self, debug, error, Level};
 use stash::orm::Model;
 use stash::stash::StashError;
@@ -117,9 +117,41 @@ impl UserContext {
             error!("Failed to fetch full contact with: {err}");
             err
         })?;
+        if let Some(remote_id) = &contact_with_card.remote_id {
+            let existing = Contact::load(remote_id.clone(), &self.stash).await.map_err(|err| {
+                error!("Failed to load contact from db: {err}");
+                err
+            })?;
+            if let Some(existing) = existing {
+                contact_with_card.row_id = existing.row_id;
+            }
+        }
+        let tx = self.stash.transaction().await.map_err(|err| {
+            error!("Failed to start transaction: {err}");
+            err
+        })?;
         contact_with_card.set_stash(&self.stash);
-        contact_with_card.save().await.map_err(|err| {
+        contact_with_card.save_using(&tx).await.map_err(|err| {
             error!("Failed to sync full contact to db: {err}");
+            err
+        })?;
+        for email in &mut contact_with_card.contact_emails {
+            if let Some(remote_id) = &email.remote_id {
+                let existing = ContactEmail::load(remote_id.clone(), &self.stash).await.map_err(|err| {
+                    error!("Failed to load contact email from db: {err}");
+                    err
+                })?;
+                if let Some(existing) = existing {
+                    email.row_id = existing.row_id;
+                }
+            }
+            email.save_using(&tx).await.map_err(|e| {
+                error!("Failed to update contact emails: {e}");
+                e
+            })?;
+        }
+        tx.commit().await.map_err(|err| {
+            error!("Failed to commit transaction: {err}");
             err
         })?;
         Ok(())

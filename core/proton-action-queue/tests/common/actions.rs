@@ -95,14 +95,14 @@ impl RemoteActionHandler for TestRemoteActionHandler<MoveMessageAction> {
         for msg in &local_messages {
             // Check if message is still in the state we put it in.
             if msg.folder != Some(self.action.to) {
-                self.action.ids.retain(|id| *id != msg.id.unwrap());
+                self.action.ids.retain(|id| *id != msg.id);
             }
         }
 
         // check for deleted messages.
         self.action
             .ids
-            .retain(|id| local_messages.iter().find(|&m| m.id.unwrap() == *id).is_some());
+            .retain(|id| local_messages.iter().find(|&m| m.id == *id).is_some());
 
         if self.action.ids.is_empty() {
             return Ok(ActionLocalValidationResult::Invalid);
@@ -249,7 +249,7 @@ impl RemoteActionHandler for TestRemoteActionHandler<DeleteMessageAction> {
         })?;
         self.action
             .ids
-            .retain(|id| messages.iter().find(|m| m.id.unwrap() == *id).is_some());
+            .retain(|id| messages.iter().find(|m| m.id == *id).is_some());
 
         if self.action.ids.is_empty() {
             return Ok(ActionLocalValidationResult::Invalid);

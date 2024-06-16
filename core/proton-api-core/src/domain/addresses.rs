@@ -20,7 +20,7 @@ utils::string_id!(AddressId);
 pub struct Address {
     #[IdField]
     #[serde(rename = "ID")]
-    pub id: Option<AddressId>,
+    pub id: AddressId,
     #[DbField]
     pub email: String,
     #[DbField]

@@ -165,12 +165,12 @@ pub trait RemoteActionHandler {
 pub enum ActionFactoryError {
     #[error("Action has unknown type: {0}")]
     UnknownAction(ActionId),
-    #[error("Stored action {0:?} has unknown action type: {1}")]
-    UnknownStoredAction(Option<StoredActionId>, ActionId),
+    #[error("Stored action {0} has unknown action type: {1}")]
+    UnknownStoredAction(StoredActionId, ActionId),
     #[error("Failed to create local handler for action {0}: {1}")]
     LocalHandler(ActionId, ActionFactoryInstanceError),
-    #[error("Stored action {0:?} ({1}) failed to create remote handler: {2}")]
-    RemoteHandler(Option<StoredActionId>, ActionId, ActionFactoryInstanceError),
+    #[error("Stored action {0} ({1}) failed to create remote handler: {2}")]
+    RemoteHandler(StoredActionId, ActionId, ActionFactoryInstanceError),
     #[error("Unknown error:{0}")]
     Unknown(anyhow::Error),
 }

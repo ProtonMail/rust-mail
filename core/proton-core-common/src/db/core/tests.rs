@@ -17,7 +17,7 @@ async fn test_core_store_and_load_user() {
             .await
             .expect("failed to start transaction");
         user.save_using(&tx).await.expect("failed to store user");
-        let db_user = User::load_using(user.id.as_ref().unwrap().clone(), &tx)
+        let db_user = User::load_using(user.id.clone(), &tx)
             .await
             .expect("failed to load user")
             .expect("should have value");
@@ -55,7 +55,7 @@ async fn test_core_user_space_updates() {
             .await
             .expect("failed to update used space");
 
-        let db_user = User::load_using(user.id.as_ref().unwrap().clone(), &tx)
+        let db_user = User::load_using(user.id.clone(), &tx)
             .await
             .expect("failed to load user")
             .expect("should have value");
@@ -71,7 +71,7 @@ async fn test_core_store_and_load_user_settings() {
     let user_id = UserId::from("USER");
 
     let mut settings = UserSettings {
-        id: Some(user_id.clone()),
+        id: user_id.clone(),
         email: Email {
             value: "FooBar".to_string(),
             status: 1,
@@ -143,7 +143,7 @@ async fn test_core_store_and_load_user_settings() {
 
 fn new_test_user(stash: Stash) -> User {
     User {
-        id: Some(UserId::from("my_user_id")),
+        id: UserId::from("my_user_id"),
         name: Some("my_user_name".to_string()),
         display_name: Some("My User Name".to_string()),
         email: "my_name@user.me".to_string(),

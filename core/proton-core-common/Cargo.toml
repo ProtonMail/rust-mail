@@ -17,6 +17,8 @@ secrecy = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }
 tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 uniffi = { workspace = true, optional = true }
 zeroize = { workspace = true }
 

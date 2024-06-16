@@ -79,7 +79,7 @@ sql_using_serde!(Flags);
 pub struct User {
     #[IdField]
     #[serde(rename = "ID")]
-    pub id: Option<UserId>,
+    pub id: UserId,
     #[DbField]
     pub name: Option<String>,
     #[DbField]

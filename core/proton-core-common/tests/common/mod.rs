@@ -1,5 +1,12 @@
 use std::sync::Arc;
 use futures::executor::block_on;
+use std::io::stdout;
+use tracing::subscriber::set_global_default;
+use tracing::Level;
+use tracing_subscriber::fmt::layer;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{registry, EnvFilter};
 
 use account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use proton_api_core::{
@@ -57,6 +64,13 @@ impl TestContext {
 
     /// Create and initialize test context.
     pub async fn new() -> Self {
+        drop(set_global_default(
+            registry()
+                .with(EnvFilter::new(
+                    "debug,stash=debug",
+                ))
+                .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
+        ));
         let user_key_secret: Option<UserKeySecret> = None;
         let user_id: Option<UserId> = None;
         let mock_server = MockServer::start().await;

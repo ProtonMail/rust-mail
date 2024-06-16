@@ -3,9 +3,23 @@ use proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
+use std::io::stdout;
+use tracing::subscriber::set_global_default;
+use tracing::Level;
+use tracing_subscriber::fmt::layer;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{registry, EnvFilter};
 
 #[cfg(test)]
 async fn new_test_connection() -> Stash {
+    drop(set_global_default(
+        registry()
+            .with(EnvFilter::new(
+                "debug,stash=debug",
+            ))
+            .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
+    ));
     use crate::db::migrations::migrate_session_db;
     let stash = Stash::new(None).expect("Failed to create Stash");
     migrate_session_db(&stash).await.expect("failed to migrate");
