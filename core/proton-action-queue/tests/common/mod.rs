@@ -1,294 +1,122 @@
-mod actions;
-mod domain;
-mod sources;
-
-pub use actions::*;
-pub use domain::*;
-use proton_action_queue::{
-    ActionFactory, ActionQueue, ActionStore, SessionProvider, SessionProviderError,
-};
+#![allow(dead_code)]
+use proton_action_queue::action::{Action, Error, Factory};
+use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
+use proton_action_queue::queue::Queue;
+use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::Session;
-pub use sources::*;
-use stash::stash::Stash;
-use std::io::stdout;
-use std::sync::Arc;
-use tracing::subscriber::set_global_default;
-use tracing::Level;
-use tracing_subscriber::fmt::layer;
-use tracing_subscriber::fmt::writer::MakeWriterExt;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{registry, EnvFilter};
+use stash::macros::DbRecord;
+use stash::params;
+use stash::stash::{Stash, StashError, Tether};
 
-pub struct PanicSessionProvider {}
-
-impl SessionProvider for PanicSessionProvider {
-    fn retrieve_session(&self) -> Result<Session, SessionProviderError> {
-        panic!("should not be called");
-    }
+/// Create a new queue.
+pub async fn new_queue(factory: Factory) -> Queue {
+    Queue::with_factory(new_stash().await, factory)
+        .await
+        .unwrap()
 }
 
-pub struct TestCtx {
-    stash: Stash,
-    _file: tempfile::NamedTempFile,
+/// Create a new queue with a given db `pool`.
+pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
+    Queue::with_factory(stash, factory).await.unwrap()
 }
 
-impl TestCtx {
-    pub async fn new() -> TestCtx {
-        let tmp_file = tempfile::NamedTempFile::new().expect("failed to create tempfile");
-        drop(set_global_default(
-            registry()
-                .with(EnvFilter::new(
-                    "debug,proton_action_queue=trace,stash=debug",
-                ))
-                .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
-        ));
+pub async fn new_stash() -> Stash {
+    let stash = Stash::new(None).unwrap();
+    let tx = stash.transaction().await.unwrap();
+    tx.ext_create_table().await.unwrap();
+    tx.commit().await.unwrap();
+    stash
+}
 
-        tracing::info!("DB crated at {:?}", tmp_file.path());
+pub async fn new_queue_typed<T: Action>() -> Queue {
+    new_queue(new_factory::<T>()).await
+}
 
-        let stash = Stash::new(Some(tmp_file.path())).expect("failed to create stash");
+/// Create a new test session with bogus values.
+pub fn new_session() -> Session {
+    let config = proton_api_core::services::proton::Config {
+        app_version: "TEST".to_owned(),
+        base_url: "https://test.com".to_owned(),
+        user_agent: "TEST".to_owned(),
+        allow_http: true,
+        skip_srp_proof_validation: true,
+    };
+    Session::new(config)
+}
 
-        ActionStore::init_tables(&stash)
-            .await
-            .expect("failed to init store tables");
+/// Create a new factory with an action.
+pub fn new_factory<T: Action>() -> Factory {
+    let mut factory = Factory::new();
+    factory.register::<T>().unwrap();
+    factory
+}
 
-        let _ = TestLocalSource::new_with_init(stash.clone())
-            .await
-            .expect("failed to crease local source");
-        TestCtx {
-            stash,
-            _file: tmp_file,
-        }
-    }
+pub trait TestExtension {
+    async fn ext_create_table(&self) -> Result<(), StashError>;
 
-    pub fn stash(&self) -> Stash {
-        self.stash.clone()
-    }
+    async fn ext_insert_value(&self, key: &str, value: u32) -> Result<(), StashError>;
 
-    pub fn new_action_queue(&self, remote: Arc<dyn RemoteSource>) -> ActionQueue {
-        // If action queue fails to initialize, when remote source is mocked it will
-        // trigger the mock check before the failure is printed.
-        let _remote = remote.clone();
+    async fn ext_delete_value(&self, key: &str) -> Result<(), StashError>;
 
-        let factory = build_factory(remote);
-        ActionQueue::new(
-            self.stash.clone(),
-            Box::new(PanicSessionProvider {}),
-            factory,
+    async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError>;
+}
+
+impl TestExtension for Tether {
+    async fn ext_create_table(&self) -> Result<(), StashError> {
+        self.execute(
+            "CREATE TABLE ext (key TEXT PRIMARY KEY, value INTEGER NOT NULL)",
+            vec![],
         )
+        .await?;
+        Ok(())
+    }
+
+    async fn ext_insert_value(&self, key: &str, value: u32) -> Result<(), StashError> {
+        self.execute(
+            "INSERT OR REPLACE INTO ext VALUES (?,?)",
+            params![key.to_owned(), value],
+        )
+        .await?;
+        Ok(())
+    }
+
+    async fn ext_delete_value(&self, key: &str) -> Result<(), StashError> {
+        self.execute("DELETE FROM ext WHERE key=?", params![key.to_owned()])
+            .await?;
+        Ok(())
+    }
+
+    async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
+        #[derive(Debug, Copy, Clone, Eq, PartialEq, DbRecord)]
+        struct Record {
+            #[DbField]
+            value: u32,
+        }
+        let v = self
+            .query_row::<_, Record>("SELECT value FROM ext WHERE key=?", params![key.to_owned()])
+            .await
+            .optional()?;
+
+        Ok(v.map(|v| v.value))
     }
 }
 
-pub fn build_factory(remote: Arc<dyn RemoteSource>) -> ActionFactory {
-    let mut action_factory = ActionFactory::new();
-
-    action_factory
-        .register(Box::new(
-            TestActionFactoryInstance::<MoveMessageAction>::new(remote.clone()),
-        ))
-        .expect("failed to add factory");
-
-    action_factory
-        .register(Box::new(
-            TestActionFactoryInstance::<DeleteMessageAction>::new(remote.clone()),
-        ))
-        .expect("failed to add factory");
-
-    action_factory
+#[derive(Debug, thiserror::Error)]
+pub enum DefaultError {
+    #[error("{0}")]
+    Request(#[from] ApiServiceError),
+    #[error("{0}")]
+    Other(anyhow::Error),
+    #[error("{0}")]
+    DB(#[from] StashError),
 }
 
-pub fn new_mock_remote<F: FnOnce(&mut MockRemoteSource)>(f: F) -> Arc<dyn RemoteSource> {
-    let mut mock = MockRemoteSource::new();
-    (f)(&mut mock);
-    Arc::new(mock)
-}
+impl Error for DefaultError {
+    fn request_error(&self) -> Option<&ApiServiceError> {
+        let Self::Request(err) = self else {
+            return None;
+        };
 
-#[tokio::test]
-async fn test_local_source() {
-    // Sanity Check local source implementation to ensure tests will work reliably
-    let test_ctx = TestCtx::new().await;
-    let transaction = test_ctx
-        .stash()
-        .transaction()
-        .await
-        .expect("failed to start transaction");
-    let mut tx = TestLocalSourceTransaction::new(transaction.clone());
-    let folder_id1 = tx
-        .create_folder("foo")
-        .await
-        .expect("failed to create folder");
-    let folder_id2 = tx
-        .create_folder("bar")
-        .await
-        .expect("failed to create folder");
-    let folder_id3 = tx
-        .create_folder("xxx")
-        .await
-        .expect("failed to create folder");
-
-    let label_id1 = tx.create_label("l1").await.expect("failed to create label");
-    let label_id2 = tx.create_label("l2").await.expect("failed to create label");
-
-    let message_id1 = tx
-        .create_message(false)
-        .await
-        .expect("failed to create message");
-    let message_id2 = tx
-        .create_message(false)
-        .await
-        .expect("failed to create message");
-    let message_id3 = tx
-        .create_message(true)
-        .await
-        .expect("failed to create message");
-
-    tx.move_message_to_folder(&[message_id2], folder_id1)
-        .await
-        .expect("failed to move");
-    tx.move_message_to_folder(&[message_id3], folder_id2)
-        .await
-        .expect("failed to move");
-    {
-        let message = tx
-            .get_message(message_id1)
-            .await
-            .expect("failed to get message")
-            .expect("message should be found");
-        assert_eq!(message.id, message_id1);
-        assert!(!message.read);
-        assert!(message.folder.is_none());
+        Some(err)
     }
-    {
-        let message = tx
-            .get_message(message_id2)
-            .await
-            .expect("failed to get message")
-            .expect("message should be found");
-        assert_eq!(message.id, message_id2);
-        assert!(!message.read);
-        assert_eq!(message.folder, Some(folder_id1));
-    }
-    {
-        let messages = tx
-            .get_messages(&[message_id1, message_id2, message_id3])
-            .await
-            .expect("failed to get messages");
-        assert_eq!(messages.len(), 3);
-        assert_eq!(messages[0].id, message_id1);
-        assert_eq!(messages[1].id, message_id2);
-        assert_eq!(messages[2].id, message_id3);
-    }
-
-    {
-        assert!(tx
-            .get_message(MessageId(25))
-            .await
-            .expect("failed to get message")
-            .is_none());
-    }
-    {
-        let name = tx
-            .get_folder_name(folder_id1)
-            .await
-            .expect("failed to get folder")
-            .expect("folder should be found");
-        assert_eq!(name, "foo");
-    }
-    {
-        let name = tx
-            .get_folder_name(folder_id2)
-            .await
-            .expect("failed to get folder")
-            .expect("folder should be found");
-        assert_eq!(name, "bar");
-    }
-    {
-        let name = tx
-            .get_folder_name(folder_id3)
-            .await
-            .expect("failed to get folder")
-            .expect("folder should be found");
-        assert_eq!(name, "xxx");
-    }
-
-    {
-        tx.rename_folder(folder_id3, "renamed")
-            .await
-            .expect("failed to rename folder");
-        let name = tx
-            .get_folder_name(folder_id3)
-            .await
-            .expect("failed to get folder")
-            .expect("folder should be found");
-        assert_eq!(name, "renamed");
-    }
-
-    //delete folder
-    {
-        tx.delete_folder(folder_id3)
-            .await
-            .expect("failed to delete folder");
-        let message = tx
-            .get_message(message_id3)
-            .await
-            .expect("failed to get message")
-            .expect("message should be found");
-        assert_eq!(message.folder, Some(folder_id2));
-    }
-
-    // add labels
-    {
-        tx.add_message_to_label(&[message_id3], label_id1)
-            .await
-            .expect("failed to add to folder");
-        tx.add_message_to_label(&[message_id3], label_id2)
-            .await
-            .expect("failed to add to folder");
-        let message = tx
-            .get_message(message_id3)
-            .await
-            .expect("failed to get message")
-            .expect("message should be found");
-        assert_eq!(message.labels, [label_id1, label_id2]);
-    }
-
-    // remove folder
-    {
-        tx.remove_message_from_label(&[message_id2], label_id2)
-            .await
-            .expect("failed to remove from folder");
-        tx.remove_message_from_label(&[message_id2], label_id1)
-            .await
-            .expect("failed to remove from folder");
-        let message = tx
-            .get_message(message_id2)
-            .await
-            .expect("failed to get message")
-            .expect("message should be found");
-        assert!(message.labels.is_empty());
-    }
-
-    // Read unread
-    {
-        tx.mark_messages_read(true, &[message_id1])
-            .await
-            .expect("failed to mark messages as read");
-        let message = tx
-            .get_message(message_id1)
-            .await
-            .expect("failed to get message")
-            .expect("message should be found");
-        assert!(message.read);
-    }
-
-    // Delete messages
-    {
-        tx.delete_message(&[message_id1, message_id2])
-            .await
-            .expect("failed to delete messages");
-    }
-
-    transaction
-        .commit()
-        .await
-        .expect("Failed to execute transaction");
 }

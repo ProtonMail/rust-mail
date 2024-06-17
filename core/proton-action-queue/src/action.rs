@@ -1,280 +1,626 @@
-use crate::{SessionProvider, SessionProviderError, StoredAction, StoredActionId};
-use anyhow::Error as AnyhowError;
+use crate::db::StoredAction;
+use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
 use proton_api_core::service::ApiServiceError;
-use proton_sqlite3::rusqlite;
-use proton_sqlite3::rusqlite::types::{
-    FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef,
-};
-use proton_sqlite3::rusqlite::ToSql;
+use proton_api_core::session::Session;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef};
+use rusqlite::ToSql;
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use stash::stash::Tether;
-use std::any::{Any, TypeId};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
-use thiserror::Error;
-use uuid::Uuid;
+use std::marker::PhantomData;
 
-#[derive(Debug, Error)]
-pub enum ActionError {
-    #[error("Local Source: {0}")]
-    Local(#[source] AnyhowError),
-    #[error("Remote Source: {0}")]
-    Remote(#[from] ApiServiceError),
-    #[error("Serialization error: {0}")]
-    Serialization(#[source] rmp_serde::encode::Error),
-    #[error("Unknown Error: {0}")]
-    Unknown(#[source] AnyhowError),
-}
+/// Actions can return any error type, but we need to be able to inspect the http request error
+/// to detect network failure.
+pub trait Error: std::error::Error + Send + Sync {
+    /// If the error contains a request error, return a reference to this error for inspection.
+    fn request_error(&self) -> Option<&ApiServiceError>;
 
-/// ActionId is a unique identifier for each action type. This is required to construct an
-/// action after it has been serialized to the queue. [`std::any::TypeId`] is not guaranteed to remain
-/// the same between rust releases.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub struct ActionId(pub Uuid);
-
-impl ActionId {
-    pub const fn new(uuid: Uuid) -> Self {
-        Self(uuid)
+    /// Check if the error is the result of a network failure.
+    ///
+    /// An error is considered a network failure the server replies with 429/5xx HTTP status codes
+    /// or there was an issue with the underlying network transport layer.
+    #[must_use]
+    fn is_network_failure(&self) -> bool {
+        let Some(request_error) = self.request_error() else {
+            return false;
+        };
+        match request_error {
+            ApiServiceError::Redirect(_, _)
+            | ApiServiceError::Timeout(_)
+            | ApiServiceError::NetworkError(_)
+            | ApiServiceError::ConnectionError(_)
+            | ApiServiceError::InternalServerError(_, _) => true,
+            ApiServiceError::OtherHttpError(code, _, _) => {
+                let code = code.as_u16();
+                code == 429 || code >= 500
+            }
+            _ => false,
+        }
     }
 }
 
-impl Display for ActionId {
+/// Errors that may occur during action version conversion.
+#[derive(Debug, thiserror::Error)]
+pub enum VersionConverterError {
+    #[error("Deserialization error: {0}")]
+    Deserialization(#[source] rmp_serde::encode::Error),
+    /// Return this error
+    #[error("Action version {0} is invalid")]
+    InvalidVersion(u32),
+    #[error("Failed to migrate action: {0}")]
+    Failure(#[source] anyhow::Error),
+}
+
+/// Unique identifier for each type of action.
+///
+/// It is recommended this value be a human-readable string to aid in debugging.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct Type(pub &'static str);
+
+impl Type {
+    #[must_use]
+    pub const fn new(id: &'static str) -> Self {
+        Self(id)
+    }
+}
+
+impl AsRef<str> for Type {
+    fn as_ref(&self) -> &str {
+        self.0
+    }
+}
+
+impl Display for Type {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
 
-impl FromSql for ActionId {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        Uuid::column_result(value).map(ActionId)
+/// Identifier for an action that has been queued.
+///
+/// This can be used to interact with certain API's available on the [`crate::queue::Queue`].
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct Id(pub u64);
+
+impl Display for Id {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
     }
 }
 
-impl ToSql for ActionId {
+impl FromSql for Id {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        u64::column_result(value).map(Id)
+    }
+}
+
+impl ToSql for Id {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         self.0.to_sql()
     }
 }
 
-/// Generate a new ActionId from an UUID string literal.
-/// ```
-/// use proton_action_queue::{define_action_id};
-///
-/// define_action_id!(MY_PRIVATE_ACTION_ID, "831f9eb6-5238-4f0b-a0ff-68afce98e119");
-/// define_action_id!(pub MY_PUBLIC_ACTION_ID, "831f9eb6-5238-4f0b-a0ff-78afce98e119");
-/// ```
-#[macro_export]
-macro_rules! define_action_id {
-    ($name:ident, $uuid_str:literal) => {
-        const $name: $crate::ActionId = $crate::ActionId::new(uuid::uuid!($uuid_str));
-    };
-    ($viz:vis $name:ident, $uuid_str:literal) => {
-        $viz const $name: $crate::ActionId = $crate::ActionId::new(uuid::uuid!($uuid_str));
-    };
-}
-
 /// Defines the priority of a queued action.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(u8)]
-pub enum ActionPriority {
+pub enum Priority {
     Highest = 0,
     High = 1,
     Normal = 2,
     Low = 3,
 }
 
-impl ToSql for ActionPriority {
+impl ToSql for Priority {
     fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }
 
-impl FromSql for ActionPriority {
+impl FromSql for Priority {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match i64::column_result(value)? {
-            0 => Ok(ActionPriority::Highest),
-            1 => Ok(ActionPriority::High),
-            2 => Ok(ActionPriority::Normal),
-            3 => Ok(ActionPriority::Low),
-            _ => Err(FromSqlError::InvalidType),
+            0 => Ok(Priority::Highest),
+            1 => Ok(Priority::High),
+            2 => Ok(Priority::Normal),
+            3 => Ok(Priority::Low),
+            v => Err(FromSqlError::OutOfRange(v)),
         }
     }
 }
 
-/// Result of checking the local state before applying an action.
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum ActionLocalValidationResult {
-    /// The state is valid and the action can be applied.
-    Valid,
-    /// The state is no longer valid, action should not be applied.
-    Invalid,
+/// Version conversion for stored actions.
+///
+/// This will be called if we encounter a queued action which was created with an older
+/// version of the implementation.
+pub trait VersionConverter {
+    /// Output of the conversion.
+    type Output: Action;
+    /// Convert the serialized action from the `old_version` to the `new_version`.
+    ///
+    /// The `data` for this action was recorded when the action was at `old_version`.
+    ///
+    /// # Remarks
+    /// This function is also called if `old_version` and `new_version` have the samve value.
+    ///
+    /// # Errors
+    /// Return error if the version conversion failed.
+    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output>;
 }
 
-pub type ActionResult<T> = Result<T, ActionError>;
+/// Default version converter implementation.
+///
+/// If the versions don't match it will throw an error.
+pub struct DefaultVersionConverter<T>(PhantomData<T>);
 
-/// Defines an action in the queue. Action behavior is controlled with the [`LocalActionHandler`]
-/// and the [`RemoteActionHandler`] traits.
-pub trait Action: Any + Serialize + DeserializeOwned + Debug + Clone {
-    /// Return the ActionId, generate one with the
-    const ID: ActionId;
+impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
+    type Output = T;
+
+    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
+        if old_version == current_version {
+            Ok(T::deserialize_action(data)?)
+        } else {
+            Err(FactoryError::InvalidVersion(current_version))
+        }
+    }
+}
+
+/// Required metadata to define an action.
+///
+/// An Action is an operation in the system that is applied opportunistically to the local data set
+/// first and executed on the remote server as soon as possible.
+///
+/// Its is recommended to assign this trait to the part of the action which contains the
+/// data required for it to operate on. Execution of the action is defined by the [`Handler`] trait.
+///
+pub trait Action: Serialize + DeserializeOwned + 'static {
+    /// Unique type identifier.
+    const TYPE: Type;
+
+    /// Version of the current implementation.
     const VERSION: u32;
-    const PRIORITY: ActionPriority = ActionPriority::Normal;
-    fn action_version(&self) -> u32 {
+
+    /// Default priority for this action.
+    ///
+    /// Can be overridden with [`MetadataBuilder::with_priority_override`].
+    const PRIORITY: Priority = Priority::Normal;
+
+    /// Associated version converter.
+    ///
+    /// For more details see the [`VersionConverter`] trait.
+    type VersionConverter: VersionConverter<Output = Self>;
+
+    /// Execution handler for this action.
+    ///
+    /// For more details see the [`Handler`] trait.
+    type Handler: Handler<Action = Self>;
+
+    /// Output returned by executing this action.
+    ///
+    /// Note this is only available if the action was executed on the remote via
+    /// [`crate::queue::Queue::apply_action`].
+    type Output;
+
+    /// Error type returned if this action fails.
+    ///
+    /// To ensure we can correctly implement network error detection errors need
+    /// to implement the [`Error`] trait.
+    type Error: Error;
+
+    /// Action version.
+    fn version(&self) -> u32 {
         Self::VERSION
     }
 
-    fn action_id(&self) -> &'static ActionId {
-        &Self::ID
+    /// Action Type.
+    fn action_type(&self) -> Type {
+        Self::TYPE
     }
 
-    fn as_any(&self) -> &dyn Any {
+    /// Action priority.
+    fn priority(&self) -> Priority {
+        Self::PRIORITY
+    }
+
+    /// Serialize the action data into a binary format.
+    ///
+    /// # Errors
+    /// Returns error if the serialization failed.
+    fn serialize_action(&self) -> Result<Vec<u8>, rmp_serde::encode::Error> {
+        rmp_serde::to_vec(self)
+    }
+
+    /// Deserialize the action from a binary format.
+    ///
+    /// # Errors
+    /// Returns error if the deserialization failed.
+    fn deserialize_action(data: &[u8]) -> Result<Self, rmp_serde::decode::Error> {
+        rmp_serde::from_slice::<Self>(data)
+    }
+}
+
+/// Defines how an action behaves.
+///
+/// To define the data on which an action operates see the [`Action`] trait.
+#[allow(async_fn_in_trait)]
+pub trait Handler: Default + 'static {
+    /// Action on which this handler operates.
+    type Action: Action;
+
+    /// Apply the `action` to the local database using the given `tx` transaction.
+    ///
+    /// # Remarks
+    /// Changes made to the `action` data at this point will be persisted into the database once
+    /// executing has finished successfully.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
+    async fn apply_local(
+        &self,
+        action: &mut Self::Action,
+        tx: &Tether,
+    ) -> Result<(), <Self::Action as Action>::Error>;
+
+    /// Revert the `action` from the local database using the given `tx` transaction.
+    ///
+    /// This function is only called if:
+    /// * Remote operation failed to execute and the resulting errors is not a network error.
+    /// * The action is being cancelled.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
+    async fn revert_local(
+        &self,
+        action: &mut Self::Action,
+        tx: &Tether,
+    ) -> Result<(), <Self::Action as Action>::Error>;
+
+    /// Apply the `action` on the server with the given `session`.
+    ///
+    /// This function is always called after [`Handler::apply_local()`].
+    ///
+    /// # Remarks
+    /// Changes made to the `action` data at this point are accessible to [`Handler::apply_local_post_remote()`]
+    /// after this call. They are not serialized to the database.
+    ///
+    /// # Errors
+    /// Returns error if the network request failed.
+    async fn apply_remote(
+        &self,
+        action: &mut Self::Action,
+        session: &Session,
+    ) -> Result<(), <Self::Action as Action>::Error>;
+
+    /// Apply any remaining changes from `action` to the local database with the given `tx` transaction.
+    ///
+    /// This function is called if [`Handler::apply_remote`] completes successfully.
+    ///
+    /// # Errors
+    /// Returns error if the operation failed.
+    async fn apply_local_post_remote(
+        &self,
+        action: &mut Self::Action,
+        tx: &Tether,
+    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error>;
+}
+
+/// Metadata associated with an [`Action`].
+///
+/// By default, [`Action`]s do not have any associated metadata. If you queue an action
+/// it will be assigned a default contructed [`Metadata`].
+///
+/// You can construct a custom [`Metadata`] type to override certain behaviors and/or assign
+/// more details to this action.
+///
+/// All the associated metadata is returned on error as [`QueuedMetadata`].
+///
+/// See also the [`MetadataBuilder`] type.
+#[derive(Debug, Clone)]
+pub struct Metadata {
+    /// List of queued actions the action depends upon. The action will only execute if all
+    /// the dependencies have been executed.
+    pub(crate) dependencies: Vec<Id>,
+    /// Optional debug string which can be assigned to diagnose issues or provide more context.
+    pub(crate) debug_string: Option<String>,
+    /// A list of resources to associate with this action. Can be any of any type as long as it is
+    /// serializable.
+    pub(crate) resources: Vec<Vec<u8>>,
+    /// Time at which this action was created.
+    pub(crate) created: chrono::DateTime<chrono::Utc>,
+    /// If set, overrides the action's default priority.
+    pub(crate) priority_override: Option<Priority>,
+    /// If set, delays the execution of this action by the specified duration.
+    pub(crate) delay: Option<std::time::Duration>,
+}
+
+impl Default for Metadata {
+    fn default() -> Self {
+        Self {
+            dependencies: vec![],
+            debug_string: None,
+            resources: vec![],
+            created: chrono::Utc::now(),
+            priority_override: None,
+            delay: None,
+        }
+    }
+}
+
+impl Metadata {
+    /// Create a new builder for this type.
+    #[must_use]
+    pub fn builder() -> MetadataBuilder {
+        MetadataBuilder::new()
+    }
+}
+
+/// Builder for [`Metadata`].
+pub struct MetadataBuilder {
+    metadata: Metadata,
+}
+impl Default for MetadataBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MetadataBuilder {
+    /// Create new instance of the builder.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            metadata: Metadata::default(),
+        }
+    }
+
+    /// Assign a `debug_string` to an action.
+    #[must_use]
+    pub fn with_debug_string(mut self, debug_string: impl Into<String>) -> Self {
+        self.metadata.debug_string = Some(debug_string.into());
         self
     }
 
-    fn as_boxed_any(&self) -> Box<dyn Any> {
-        Box::new(self.clone())
+    /// Assign a `resource` to this action.
+    ///
+    /// The `resource` will be serialized into a byte array.
+    ///
+    /// # Errors
+    /// Returns error if the serialization failed.
+    pub fn with_resource(
+        mut self,
+        resource: &impl Serialize,
+    ) -> Result<Self, rmp_serde::encode::Error> {
+        self.metadata.resources.push(rmp_serde::to_vec(resource)?);
+        Ok(self)
     }
 
-    fn priority(&self) -> ActionPriority {
-        Self::PRIORITY
+    /// Assign `action_id` as a dependency of this action.
+    ///
+    /// The action to which this metadata will be assigned will not execute until
+    /// `action_id` has completed.
+    ///
+    /// This function is cumulative and  will not override previous values if called
+    /// multiple times.
+    #[must_use]
+    pub fn with_dependency(mut self, action_id: Id) -> Self {
+        self.metadata.dependencies.push(action_id);
+        self
+    }
+
+    /// Assign `action_ids` as a dependency of this action.
+    ///
+    /// The action to which this metadata will be assigned will not execute until
+    /// all the actions in `action_ids` have completed.
+    ///
+    /// This function is cumulative and  will not override previous values if called
+    /// multiple times.
+    #[must_use]
+    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = Id>) -> Self {
+        self.metadata.dependencies.extend(action_ids);
+        self
+    }
+
+    /// Override the creation time of an action.
+    ///
+    /// By default, the action will use the current time at the time of queueing.
+    #[must_use]
+    pub fn with_creation_time(mut self, date_time: chrono::DateTime<chrono::Utc>) -> Self {
+        self.metadata.created = date_time;
+        self
+    }
+
+    /// Override the priority of an action.
+    #[must_use]
+    pub fn with_priority_override(mut self, priority: Priority) -> Self {
+        self.metadata.priority_override = Some(priority);
+        self
+    }
+
+    /// Delay the execution of this action by `duration`.
+    ///
+    /// Delaying the action still causes [`Handler::apply_local`] to be called, but subsequent
+    /// calls are delayed until the action has spent at least a period of `duration` in
+    /// the queue.
+    ///
+    /// Note that this requires the action to be queued ([`crate::queue::Queue::queue_action()`])
+    /// rather than applied ([`crate::queue::Queue::queue_action()`]).
+    #[must_use]
+    pub fn with_delay(mut self, duration: std::time::Duration) -> Self {
+        self.metadata.delay = Some(duration);
+        self
+    }
+
+    /// Generate the [`Metadata`] type.
+    #[must_use]
+    pub fn build(self) -> Metadata {
+        self.metadata
     }
 }
 
-/// Define the behavior of a queued action for local changes. These will be instantiated by an [`ActionFactoryInstance`].
-pub trait LocalActionHandler {
-    /// Apply the action to the local state.
-    fn apply_local(&mut self) -> ActionResult<()>;
-}
-
-/// Define the behavior of a queued action for remote changes. These will be instantiated by an [`ActionFactoryInstance`].
-pub trait RemoteActionHandler {
-    /// Revert the action on the local state.
-    fn revert_local(&mut self) -> ActionResult<()>;
-
-    /// Check whether the local state still matches this action's expectations.
-    fn validate_local(&mut self) -> ActionResult<ActionLocalValidationResult>;
-
-    /// Apply the changes on the remote.
-    fn apply_remote(&mut self) -> ActionResult<()>;
-}
-
-/// Errors that can occur during action factory operations.
-#[derive(Debug, Error)]
-pub enum ActionFactoryError {
-    #[error("Action has unknown type: {0}")]
-    UnknownAction(ActionId),
+/// Errors that can occur during factory operations.
+#[derive(Debug, thiserror::Error)]
+pub enum FactoryError {
     #[error("Stored action {0} has unknown action type: {1}")]
-    UnknownStoredAction(StoredActionId, ActionId),
-    #[error("Failed to create local handler for action {0}: {1}")]
-    LocalHandler(ActionId, ActionFactoryInstanceError),
-    #[error("Stored action {0} ({1}) failed to create remote handler: {2}")]
-    RemoteHandler(StoredActionId, ActionId, ActionFactoryInstanceError),
-    #[error("Unknown error:{0}")]
-    Unknown(AnyhowError),
-}
-
-/// Errors that can occur during action factory instance operations.
-#[derive(Debug, Error)]
-pub enum ActionFactoryInstanceError {
+    UnknownType(Id, String),
     #[error("Action has invalid version {0}")]
     InvalidVersion(u32),
-    #[error("Action is not of expected type got '{0:?}', expected '{1:?}'")]
-    InvalidType(TypeId, TypeId),
     #[error("Failed to deserialize: {0}")]
     Deserialize(#[from] rmp_serde::decode::Error),
-    #[error("Failed to retrieve session: {0}")]
-    SessionProvider(#[from] SessionProviderError),
-    #[error("Unknown error: {0}")]
-    Unknown(AnyhowError),
+    #[error("Version Conversion: {0}")]
+    VersionConverter(#[from] VersionConverterError),
+    #[error("Action type {0} is already registered")]
+    AlreadyRegistered(Type),
+    #[error("Unknown error:{0}")]
+    Unknown(anyhow::Error),
 }
 
-/// A factory for the creation of [`LocationActionHandler`] and [`RemoteActionHandler`] for an action.
-/// It's recommended to store any mocking/interface/wrappers in the factory and then share them
-/// with each of the handlers in order to keep the actions themselves as simple as possible.
-pub trait ActionFactoryInstance: Debug + Send + Sync {
-    /// Action id for this handler.
-    fn action_id(&self) -> &'static ActionId;
+pub type FactoryResult<T> = Result<T, FactoryError>;
 
-    /// Construct a new [`LocalActionHandler`] for an action
-    fn local_handler(
-        &self,
-        action: Box<dyn Any>,
-        tx: Tether,
-    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError>;
-
-    /// Construct a new [`RemoteActionHandler`] for a stored action.
-    fn remote_handler(
+/// Internal trait to deserialize and an action from the db.
+trait FactoryInstance: Send + Sync {
+    fn decode(
         &self,
         action: StoredAction,
-        tx: Tether,
-        session_provider: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryInstanceError>;
+    ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)>;
 }
 
-/// Gateway to all [`ActionFactoryInstance`] types. Each action should register their handler
-/// with this type.
+/// Factory Instance implementation that works for any [`Action`] type.
+struct TypeErasedFactoryInstance<T: Action>(PhantomData<T>);
+
+impl<T: Action> FactoryInstance for TypeErasedFactoryInstance<T> {
+    fn decode(
+        &self,
+        stored_action: StoredAction,
+    ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
+        // Check version
+        let deserialized: T =
+            T::VersionConverter::convert(stored_action.version, T::VERSION, &stored_action.state)?;
+
+        let id = stored_action.id;
+        let queued_metadata = QueuedMetadata::from(stored_action);
+
+        // Return type.
+        Ok((
+            Box::new(TypeErasedAction::<T> {
+                action_id: id,
+                handler: T::Handler::default(),
+                action: deserialized,
+            }),
+            queued_metadata,
+        ))
+    }
+}
+
+/// # Safety
+/// This is safe to apply since we do not interact with the action itself, the type data
+/// is only stored in `PhantomData`.
+unsafe impl<T: Action> Send for TypeErasedFactoryInstance<T> {}
+
+/// # Safety
+/// This is safe to apply since we do not interact with the action itself, the type data
+/// is only stored in `PhantomData`.
+unsafe impl<T: Action> Sync for TypeErasedFactoryInstance<T> {}
+
+/// This type represents the [`Action`] factory which is used by [`crate::queue::Queue`] to
+/// reconstruct queued actions.
 #[derive(Default)]
-pub struct ActionFactory {
-    factories: HashMap<ActionId, Box<dyn ActionFactoryInstance>>,
+pub struct Factory {
+    factories: HashMap<String, Box<dyn FactoryInstance>>,
 }
 
-impl ActionFactory {
+impl Factory {
+    /// Create a new instance.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             factories: HashMap::new(),
         }
     }
 
-    /// Register an [`ActionFactoryInstance`] with this factory. If an instance already exists for
-    /// this type and error is returned with the supplied value.
-    pub fn register(
-        &mut self,
-        factory: Box<dyn ActionFactoryInstance>,
-    ) -> Result<(), Box<dyn ActionFactoryInstance>> {
-        match self.factories.entry(factory.action_id().clone()) {
-            Entry::Occupied(_) => Err(factory),
+    /// Register an [`Action`] with the factory.
+    ///
+    /// # Errors
+    /// Returns error if the action type was already registered before.
+    pub fn register<T: Action + 'static>(&mut self) -> FactoryResult<()> {
+        match self.factories.entry(T::TYPE.to_string()) {
+            Entry::Occupied(_) => Err(FactoryError::AlreadyRegistered(T::TYPE)),
             Entry::Vacant(v) => {
-                v.insert(factory);
+                v.insert(Box::new(TypeErasedFactoryInstance::<T>(PhantomData)));
                 Ok(())
             }
         }
     }
 
-    /// Get a local handler for a given action.
-    pub fn local_handler<T: Action>(
-        &self,
-        action: &T,
-        tx: Tether,
-    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryError> {
-        let Some(factory) = self.factories.get(action.action_id()) else {
-            return Err(ActionFactoryError::UnknownAction(
-                action.action_id().clone(),
-            ));
-        };
-
-        factory
-            .local_handler(action.as_boxed_any(), tx)
-            .map_err(|e| ActionFactoryError::LocalHandler(action.action_id().clone(), e))
-    }
-
-    /// Get a remote handler for a stored action.
-    pub fn remote_handler(
+    /// Decode the stored action.
+    ///
+    /// # Errors
+    /// Returns error if the decoding failed.
+    pub(crate) fn decode(
         &self,
         action: StoredAction,
-        tx: Tether,
-        session_provider: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryError> {
-        let Some(factory) = self.factories.get(&action.action_id) else {
-            return Err(ActionFactoryError::UnknownStoredAction(
+    ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
+        let Some(factory) = self.factories.get(&action.action_type) else {
+            return Err(FactoryError::UnknownType(
                 action.id,
-                action.action_id.clone(),
+                action.action_type.clone(),
             ));
         };
 
-        factory
-            .remote_handler(action.clone(), tx, session_provider)
-            .map_err(|e| ActionFactoryError::RemoteHandler(action.id, action.action_id.clone(), e))
+        factory.decode(action)
+    }
+}
+
+#[cfg(test)]
+pub(crate) struct NoopActionHandler<T: Action>(PhantomData<T>);
+
+#[cfg(test)]
+impl<T: Action> Default for NoopActionHandler<T> {
+    fn default() -> Self {
+        Self(PhantomData)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub struct NoopError {}
+
+impl Display for NoopError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Noop")
+    }
+}
+
+impl Error for NoopError {
+    fn request_error(&self) -> Option<&ApiServiceError> {
+        None
+    }
+}
+
+#[cfg(test)]
+impl<T: Action + 'static> Handler for NoopActionHandler<T>
+where
+    <T as Action>::Output: Default,
+{
+    type Action = T;
+
+    async fn apply_local(&self, _: &mut Self::Action, _: &Tether) -> Result<(), T::Error> {
+        Ok(())
+    }
+
+    async fn revert_local(&self, _: &mut Self::Action, _: &Tether) -> Result<(), T::Error> {
+        Ok(())
+    }
+
+    async fn apply_remote(&self, _: &mut Self::Action, _: &Session) -> Result<(), T::Error> {
+        Ok(())
+    }
+
+    async fn apply_local_post_remote(
+        &self,
+        _: &mut Self::Action,
+        _: &Tether,
+    ) -> Result<<Self::Action as Action>::Output, T::Error> {
+        Ok(T::Output::default())
     }
 }

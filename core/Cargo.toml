@@ -53,6 +53,7 @@ velcro = "0.5.4"
 wiremock = "0.6.0"
 zeroize = "1.7.0"
 
+
 [workspace.dependencies.reqwest]
 version = "0.11"
 default-features = false
