@@ -1,5 +1,4 @@
-use crate::domain::{MailEvent, MailSettings};
-use crate::requests::GetMailSettingsRequest;
+use crate::domain::MailEvent;
 use proton_api_core::domain::EventId;
 use proton_api_core::{http, Session};
 
@@ -28,13 +27,6 @@ impl MailSession {
 
     pub async fn event(&self, id: &EventId) -> Result<MailEvent, http::RequestError> {
         self.session.get_event::<MailEvent>(id).await
-    }
-
-    pub async fn mail_settings(&self) -> Result<MailSettings, http::RequestError> {
-        self.session
-            .execute_request(GetMailSettingsRequest {})
-            .await
-            .map(|r| r.mail_settings)
     }
 }
 

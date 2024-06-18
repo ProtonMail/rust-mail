@@ -3,6 +3,14 @@ use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
 use proton_api_core::utils::{bool_from_integer, bool_to_integer};
 use std::convert::Into;
+use stash::exports::{SqliteError, FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
+use stash::macros::Model;
+use stash::orm::Model;
+use stash::stash::Stash;
+use tracing::debug;
+use crate::domain::{ApiError, MailSettingsViewMode};
+use crate::MailSession;
+use crate::requests::GetLabelsRequest;
 
 proton_api_core::utils::string_id!(LabelId);
 
@@ -23,46 +31,122 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::System,
 ];
 
-#[derive(Debug, Deserialize, Serialize, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Deserialize, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+// TEMP
+//#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[allow(clippy::struct_excessive_bools)]
+#[TableName("labels")]
 pub struct Label {
+    #[IdField(autoincrement)]
+    #[serde(skip)]
+    pub local_id: Option<u64>,
+    #[DbField]
     #[serde(rename = "ID")]
-    pub id: LabelId,
+    pub remote_id: Option<LabelId>,
+    #[DbField]
     #[serde(rename = "ParentID")]
     pub parent_id: Option<LabelId>,
+    #[DbField]
     pub name: String,
+    #[DbField]
     pub path: Option<String>,
+    #[DbField]
     pub color: String,
+    #[DbField]
     #[serde(rename = "Type")]
     pub label_type: LabelType,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub notify: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub display: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub sticky: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub expanded: bool,
+    #[DbField]
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub initialized_conv: bool,
+    #[DbField]
+    #[serde(
+        default,
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub initialized_msg: bool,
+    #[DbField]
     #[serde(default = "default_label_order")]
     pub order: u32,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
+}
+
+impl Label {
+    /// Return the preferred view mode for this label.
+    ///
+    /// If this function returns [`None`] we should use the
+    /// [`MailSettingsViewMode`] defined in the user's [`MailSettings`],
+    /// otherwise the returned value should be used.
+    /// 
+    pub fn view_mode(&self) -> Option<MailSettingsViewMode> {
+        let remote_id = self.remote_id.as_ref()?;
+
+        if remote_id == LabelId::drafts()
+            || remote_id == LabelId::sent()
+            || remote_id == LabelId::all_drafts()
+            || remote_id == LabelId::all_sent()
+        {
+            return Some(MailSettingsViewMode::Messages);
+        }
+
+        None
+    }
+    
+    pub async fn sync_labels(stash: &Stash, mail_session: &MailSession) -> Result<(), ApiError> {
+        let mut all_labels = Vec::with_capacity(64);
+        for category in ALL_LABEL_TYPES {
+            debug!("Fetching labels ({:?})", category);
+            all_labels.extend(mail_session.session()
+                .execute_request(GetLabelsRequest::new(category))
+                .await?
+                .labels);
+        }
+        debug!("Storing labels into database");
+        let tx = stash.transaction().await?;
+        for label in all_labels.iter_mut() {
+            label.save_using(&tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
 }
 
 fn default_label_order() -> u32 {
@@ -196,27 +280,22 @@ impl std::fmt::Display for SysLabelId {
     }
 }
 
-#[cfg(feature = "sql")]
-use proton_api_core::exports::proton_sqlite3::rusqlite;
-
-#[cfg(feature = "sql")]
-impl rusqlite::types::FromSql for LabelType {
-    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+impl FromSql for LabelType {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match u8::column_result(value)? {
             1 => Ok(LabelType::Label),
             2 => Ok(LabelType::ContactGroup),
             3 => Ok(LabelType::Folder),
             4 => Ok(LabelType::System),
-            v => Err(rusqlite::types::FromSqlError::OutOfRange(i64::from(v))),
+            v => Err(FromSqlError::OutOfRange(i64::from(v))),
         }
     }
 }
 
-#[cfg(feature = "sql")]
-impl rusqlite::types::ToSql for LabelType {
-    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-        Ok(rusqlite::types::ToSqlOutput::Owned(
-            rusqlite::types::Value::Integer(*self as i64),
+impl ToSql for LabelType {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(
+            Value::Integer(*self as i64),
         ))
     }
 }

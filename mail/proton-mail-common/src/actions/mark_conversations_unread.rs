@@ -1,4 +1,3 @@
-use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -9,25 +8,25 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
+use stash::stash::Tether;
 
 define_action_id!(
     MARK_CONVERSATION_UNREAD_ACTION_ID,
     "a4a3e11b-3464-4781-844b-8e716bc72ffa"
 );
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde")]
 pub struct MarkConversationsUnreadAction {
-    active_label_id: LocalLabelId,
-    ids: Vec<LocalConversationId>,
+    active_label_id: u64,
+    ids: Vec<u64>,
 }
 
 impl MarkConversationsUnreadAction {
     pub fn new(
-        active_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalConversationId>,
+        active_label_id: u64,
+        ids: impl IntoIterator<Item = u64>,
     ) -> Self {
         Self {
             active_label_id,
@@ -41,12 +40,12 @@ impl Action for MarkConversationsUnreadAction {
     const VERSION: u32 = 1;
 }
 
-struct MarkConversationUnreadLocalHandler<'c, 't: 'c> {
-    action: &'c MarkConversationsUnreadAction,
-    tx: MailSqliteConnectionMut<'t>,
+struct MarkConversationUnreadLocalHandler {
+    action: MarkConversationsUnreadAction,
+    tx: Tether,
 }
 
-impl<'c, 't: 'c> LocalActionHandler for MarkConversationUnreadLocalHandler<'c, 't> {
+impl<'c, 't: 'c> LocalActionHandler for MarkConversationUnreadLocalHandler {
     fn apply_local(&mut self) -> ActionResult<()> {
         if self.action.ids.is_empty() {
             return Err(ActionError::Local(anyhow!(
@@ -61,13 +60,13 @@ impl<'c, 't: 'c> LocalActionHandler for MarkConversationUnreadLocalHandler<'c, '
     }
 }
 
-struct MarkConversationUnreadRemoteHandler<'t> {
+struct MarkConversationUnreadRemoteHandler {
     action: MarkConversationsUnreadAction,
     session: MailSession,
-    tx: MailSqliteConnectionMut<'t>,
+    tx: Tether,
 }
 
-impl<'t> RemoteActionHandler for MarkConversationUnreadRemoteHandler<'t> {
+impl RemoteActionHandler for MarkConversationUnreadRemoteHandler {
     fn revert_local(&mut self) -> ActionResult<()> {
         self.tx
             .mark_conversations_read(self.action.ids.iter().cloned())
@@ -137,30 +136,31 @@ impl ActionFactoryInstance for MarkConversationsUnreadActionFactory {
         &MARK_CONVERSATION_UNREAD_ACTION_ID
     }
 
-    fn local_handler<'r, 't: 'r>(
+    fn local_handler(
         &self,
-        action: &'r dyn Any,
-        tx: &'r mut SqliteTransaction<'t>,
-    ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
-        let Some(action) = action.downcast_ref::<MarkConversationsUnreadAction>() else {
+        action: Box<dyn Any>,
+        tx: Tether,
+    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
+        let type_id = action.type_id().clone();
+        let Ok(action) = action.downcast::<MarkConversationsUnreadAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
-                action.type_id(),
+                type_id,
                 std::any::TypeId::of::<MarkConversationsUnreadAction>(),
             ));
         };
 
         Ok(Box::new(MarkConversationUnreadLocalHandler {
-            action,
-            tx: MailSqliteConnectionMut::new(tx),
+            action: *action,
+            tx,
         }))
     }
 
-    fn remote_handler<'r, 't: 'r>(
-        &'r self,
-        action: &StoredAction,
-        tx: &'r mut SqliteTransaction<'t>,
+    fn remote_handler(
+        &self,
+        action: StoredAction,
+        tx: Tether,
         session_provider: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
+    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryInstanceError> {
         if action.version != MarkConversationsUnreadAction::VERSION {
             return Err(ActionFactoryInstanceError::InvalidVersion(action.version));
         }
@@ -170,7 +170,7 @@ impl ActionFactoryInstance for MarkConversationsUnreadActionFactory {
 
         Ok(Box::new(MarkConversationUnreadRemoteHandler {
             action,
-            tx: MailSqliteConnectionMut::new(tx),
+            tx,
             session: MailSession::from(session),
         }))
     }

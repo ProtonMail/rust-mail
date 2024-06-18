@@ -1,6 +1,6 @@
 use crate::db::{
-    with_file_sqlite_db, DBResult, LocalAttachment, LocalAttachmentId, LocalConversationId,
-    LocalMessageId, MailSqliteConnection,
+    with_file_sqlite_db, Attachment, u64, u64,
+    u64,
 };
 use crate::exports::crypto::keys::AddressKeys;
 use proton_api_mail::domain::{
@@ -8,10 +8,10 @@ use proton_api_mail::domain::{
     MessageAddress, MessageFlags, MessageId, MessageMetadata,
 };
 use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus, AddressType};
-use proton_core_common::db::CoreSqliteConnection;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
+use stash::stash::StashError;
 
 #[test]
 fn test_attachment_create_without_metadata() {
@@ -20,8 +20,7 @@ fn test_attachment_create_without_metadata() {
     with_file_sqlite_db(|mut core_conn, mut mail_conn, _| {
         let (_, conv_id, message_id) =
             create_attachment_dependencies(&mut core_conn, &mut mail_conn, None).unwrap();
-        mail_conn
-            .tx(|tx| -> DBResult<()> {
+        let tx = mail_conn.transaction().await.unwrap();
                 let attachment = test_attachment();
                 let local_id = tx.create_or_update_attachment(&attachment)?;
                 assert!(
@@ -30,7 +29,7 @@ fn test_attachment_create_without_metadata() {
                         .unwrap()
                         .0
                 );
-                let expected = LocalAttachment::from_attachment(
+                let expected = Attachment::from_attachment(
                     local_id,
                     conv_id,
                     Some(message_id),
@@ -41,11 +40,11 @@ fn test_attachment_create_without_metadata() {
                 Ok(())
             })
             .unwrap();
-    })
+    tx.commit().await.unwrap();
 }
 
-#[test]
-fn test_attachment_create_with_metadata() {
+#[tokio::test]
+async fn test_attachment_create_with_metadata() {
     // Simulates an attachment's full info being stored with an existing
     // message or conversation metadata.
     with_file_sqlite_db(|mut core_conn, mut mail_conn, _| {
@@ -59,10 +58,9 @@ fn test_attachment_create_with_metadata() {
         };
         let (_, conv_id, message_id) =
             create_attachment_dependencies(&mut core_conn, &mut mail_conn, Some(metadata)).unwrap();
-        mail_conn
-            .tx(|tx| -> DBResult<()> {
+        let tx = mail_conn.transaction().await.unwrap();
                 assert!(
-                    !tx.is_attachment_metadata_complete(LocalAttachmentId::new(1))
+                    !tx.is_attachment_metadata_complete(u64::new(1))
                         .unwrap()
                         .unwrap()
                         .0
@@ -74,7 +72,7 @@ fn test_attachment_create_with_metadata() {
                         .unwrap()
                         .0
                 );
-                let expected = LocalAttachment::from_attachment(
+                let expected = Attachment::from_attachment(
                     local_id,
                     conv_id,
                     Some(message_id),
@@ -85,7 +83,7 @@ fn test_attachment_create_with_metadata() {
                 Ok(())
             })
             .unwrap();
-    })
+    tx.commit().await.unwrap();
 }
 fn test_attachment() -> Attachment {
     Attachment {
@@ -126,7 +124,7 @@ fn create_attachment_dependencies(
     core_conn: &mut CoreSqliteConnection,
     conn: &mut MailSqliteConnection,
     metadata: Option<AttachmentMetadata>,
-) -> DBResult<(AddressId, LocalConversationId, LocalMessageId)> {
+) -> Result<(AddressId, u64, u64), StashError> {
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
     let addr_id = address_id();
     let conv_id = conversation_id();

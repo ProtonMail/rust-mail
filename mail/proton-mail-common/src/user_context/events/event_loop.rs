@@ -2,16 +2,17 @@ use crate::actions::EventLoopAction;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
 use async_trait::async_trait;
+use futures::executor::block_on;
 use proton_api_mail::proton_api_core;
-use proton_api_mail::proton_api_core::domain::{
-    ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, User, UserSettings,
-};
+use proton_api_mail::proton_api_core::domain::{Address, ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, User, UserSettings};
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::proton_api_core::exports::tracing::error;
 use proton_core_common::CoreEventSubscriber;
 use proton_event_loop::EventLoopError;
+use stash::datatypes::QueryResultString;
+use stash::params;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[serde(crate = "self::serde")]
@@ -34,9 +35,15 @@ impl proton_core_common::CoreEvent for MailEvent {
     fn get_core_event_user(&self) -> Option<&User> {
         self.event.user.as_ref()
     }
+    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
+        self.event.user.as_mut()
+    }
 
     fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
         self.event.user_settings.as_ref()
+    }
+    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
+        self.event.user_settings.as_mut()
     }
 
     fn get_core_event_used_space(&self) -> Option<i64> {
@@ -50,12 +57,21 @@ impl proton_core_common::CoreEvent for MailEvent {
     fn get_core_event_addresses(&self) -> Option<&[proton_api_core::domain::Address]> {
         self.event.addresses.as_deref()
     }
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
+        self.event.addresses.as_deref_mut()
+    }
 
     fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
         unimplemented!()
     }
+    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
+        unimplemented!()
+    }
 
     fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
+        unimplemented!()
+    }
+    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
         unimplemented!()
     }
 }
@@ -64,28 +80,25 @@ const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 
 impl proton_event_loop::Store for MailUserContext {
     fn load(&self) -> anyhow::Result<Option<EventId>> {
-        let conn = self.new_db_connection().map_err(|e| {
-            error!("Failed to acquire db connection: {e}");
-            anyhow!("Failed to acquire db connection")
-        })?;
-        conn.read(|conn| {
-            conn.get_last_event_id(MAIL_EVENT_TYPE_ID).map_err(|e| {
+        let conn = self.inner.user_context.stash();
+        Ok(block_on(async {
+            conn.query::<_, QueryResultString>("SELECT value FROM event_id_store WHERE id = ?1", params![MAIL_EVENT_TYPE_ID]).await
+        }).map_err(|e| {
                 error!("Failed to load event id from db:{e}");
                 anyhow!("Failed to load event id {e}")
-            })
-        })
+        })?
+        .into_iter().next().map(|result| EventId::from(result.value)))
     }
 
     fn store(&self, id: &EventId) -> anyhow::Result<()> {
-        let mut conn = self.new_db_connection().map_err(|e| {
-            error!("Failed to acquire db connection: {e}");
-            anyhow!("Failed to acquire db connection")
-        })?;
-        conn.tx(|tx| tx.set_last_event_id(MAIL_EVENT_TYPE_ID, id))
+        let conn = self.inner.user_context.stash();
+        block_on(async {
+            conn.execute("INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)", params![MAIL_EVENT_TYPE_ID, id.clone()]).await
             .map_err(|e| {
                 error!("Failed to store event id in db:{e}");
                 anyhow!("Failed to store event id {e}")
             })
+        }).map(|_| ())
     }
 }
 
@@ -103,8 +116,8 @@ impl proton_event_loop::Provider<MailEvent> for MailUserContext {
 }
 
 impl MailUserContext {
-    pub fn queue_event_loop_poll(&self) -> MailContextResult<()> {
-        self.queue_action(EventLoopAction {})
+    pub async fn queue_event_loop_poll(&self) -> MailContextResult<()> {
+        self.queue_action(EventLoopAction {}).await
     }
 
     pub async fn poll_event_loop(&self) -> Result<(), EventLoopError> {

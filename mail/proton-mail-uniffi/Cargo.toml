@@ -11,8 +11,10 @@ crate-type = ["staticlib", "cdylib"]
 [dependencies]
 bytes = { workspace = true}
 futures = { workspace = true }
+proton-api-mail = { workspace = true }
 proton-mail-common = { workspace = true }
 proton-mail-message-detector = { workspace = true }
+stash = { workspace = true }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 uniffi = { workspace = true }

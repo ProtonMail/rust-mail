@@ -1,36 +1,26 @@
 mod attachments;
-mod conversations;
-mod labels;
-mod messages;
 
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
-use proton_mail_common::db::proton_sqlite3::SharedLive;
-use proton_mail_common::db::{
-    ConversationQuery, LocalAttachmentId, LocalConversationId, LocalLabelId, LocalMessageId,
-};
 use proton_mail_common::exports::anyhow::anyhow;
-use proton_mail_common::exports::proton_sqlite3::{
-    InProcessTrackerService, LiveQueryUpdated, Observable, SharedLiveQueryBuilder,
-};
 use proton_mail_common::exports::tracing::error;
 use proton_mail_common::exports::{anyhow, thiserror};
 use proton_mail_common::proton_api_mail::domain::{
     AddressDomainLogoError, LabelId, MailSettingsViewMode,
 };
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
-use proton_mail_common::MailboxObservableQueryBuilder;
 use std::sync::Arc;
+use stash::stash::StashError;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum MailboxError {
     #[error("Could not find label with id '{0}'")]
-    LabelNotFound(LocalLabelId),
+    LabelNotFound(u64),
     #[error("Could not find label with remote id '{0}'")]
     RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
-    LabelDoesNotHaveRemoteId(LocalLabelId),
+    LabelDoesNotHaveRemoteId(u64),
     #[error("{0}")]
     Context(
         #[from]
@@ -42,15 +32,17 @@ pub enum MailboxError {
     #[error("Invalid Action: {0}")]
     InvalidAction(anyhow::Error),
     #[error("Conversation '{0}' not found")]
-    ConversationNotFound(LocalConversationId),
+    ConversationNotFound(u64),
     #[error("Conversation '{0}' does not have a remote id")]
-    ConversationDoesNotHaveRemoteId(LocalConversationId),
+    ConversationDoesNotHaveRemoteId(u64),
     #[error("Problem with conversation with local ID: '{0}'")]
-    ConversationError(LocalConversationId),
+    ConversationError(u64),
+    #[error("Could not find message with id '{0}'")]
+    MessageNotFound(u64),
     #[error("Message '{0}' does not have a remote id")]
-    MessageDoesNotHaveRemoteId(LocalMessageId),
+    MessageDoesNotHaveRemoteId(u64),
     #[error("Conversation '{0}' has no messages")]
-    ConversationHasNoMessages(LocalConversationId),
+    ConversationHasNoMessages(u64),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
     #[error("Mailbox is not in the right view mode for the current operation")]
@@ -58,13 +50,13 @@ pub enum MailboxError {
     #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
     AddressDomainLogoError(AddressDomainLogoError),
     #[error("Attachment '{0}' not found")]
-    AttachmentNotFound(LocalAttachmentId),
+    AttachmentNotFound(u64),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(String),
-    #[error("Database Error: {0}")]
-    DB(#[from] proton_mail_common::db::DBError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(anyhow::Error),
+    #[error("Stash Error: {0}")]
+    Stash(#[from] StashError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -83,20 +75,6 @@ pub trait MailboxBackgroundResult: Send + Sync {
     fn on_background_result(&self, error: Option<MailboxError>);
 }
 
-/// Callback for a labels view data change.
-#[uniffi::export(callback_interface)]
-pub trait MailboxLiveQueryUpdatedCallback: Send + Sync {
-    fn on_updated(&self);
-}
-
-impl LiveQueryUpdated for Box<dyn MailboxLiveQueryUpdatedCallback> {
-    fn on_live_query_updated(&self) {
-        self.on_updated();
-    }
-}
-
-new_live_query!(MailboxConversationLiveQuery, ConversationQuery);
-
 const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
 #[uniffi::export]
@@ -105,7 +83,7 @@ impl Mailbox {
     #[uniffi::constructor]
     pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
         let mbox =
-            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), LocalLabelId::new(label_id))?;
+            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), u64::new(label_id))?;
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }
@@ -195,40 +173,5 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
                 Self::ConversationHasNoMessages(e)
             }
         }
-    }
-}
-
-/*
-struct FFIMailboxBackgroundVoidResult(Box<dyn MailboxBackgroundResult>);
-
-impl FFIMailboxBackgroundVoidResult {
-    fn boxed(self) -> Box<dyn proton_mail_common::MailboxBackgroundResult<()>> {
-        Box::new(self)
-    }
-}
-
-impl From<Box<dyn MailboxBackgroundResult>> for FFIMailboxBackgroundVoidResult {
-    fn from(value: Box<dyn MailboxBackgroundResult>) -> Self {
-        Self(value)
-    }
-}
-
-impl proton_mail_common::MailboxBackgroundResult<()> for FFIMailboxBackgroundVoidResult {
-    fn on_background_result(&self, result: proton_mail_common::MailboxResult<()>) {
-        let result = if let Err(e) = result {
-            Some(e.into())
-        } else {
-            None
-        };
-        self.0.on_background_result(result);
-    }
-}*/
-
-struct FFIObservableConversationsQueryBuilder(Box<dyn MailboxLiveQueryUpdatedCallback>);
-impl MailboxObservableQueryBuilder<ConversationQuery> for FFIObservableConversationsQueryBuilder {
-    type Output = Arc<MailboxConversationLiveQuery>;
-
-    fn build(self, tracker: InProcessTrackerService, query: ConversationQuery) -> Self::Output {
-        MailboxConversationLiveQuery::new(tracker, query, self.0)
     }
 }

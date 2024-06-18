@@ -1,14 +1,14 @@
 use indoc::indoc;
-use proton_sqlite3::SqliteTransaction;
+use stash::stash::{StashError, Tether};
 
-pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
+pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
     // Attachments
     tx.execute(
         indoc! {"
             CREATE TABLE attachments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rid TEXT UNIQUE,
-                name TEXT NON NULL,
+                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                remote_id TEXT UNIQUE DEFAULT NULL,
+                name TEXT NOT NULL,
                 size INTEGER NOT NULL,
                 mime_type TEXT NOT NULL,
                 address_id TEXT DEFAULT NULL,
@@ -17,7 +17,7 @@ pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResu
                 enc_signature TEXT DEFAULT NULL,
                 disposition TEXT NOT NULL,
                 sender TEXT DEFAULT NULL,
-                conversation_id INTEGER DEFAULT NULL,
+                local_conversation_id INTEGER DEFAULT NULL,
                 message_id INTEGER DEFAULT NULL,
                 is_auto_forwardee INTEGER NOT NULL DEFAULT 0,
                 content_id TEXT DEFAULT NULL,
@@ -30,23 +30,22 @@ pub fn create_attachment_tables(tx: &mut SqliteTransaction) -> crate::db::DBResu
                     REFERENCES addresses (id),
 
                 CONSTRAINT attachments_conversation_id
-                    FOREIGN KEY (conversation_id)
-                    REFERENCES conversations (id)
+                    FOREIGN KEY (local_conversation_id)
+                    REFERENCES conversations (local_id)
                     ON DELETE CASCADE,
 
                 CONSTRAINT attachments_message_id
-                    FOREIGN KEY (message_id)
-                    REFERENCES messages (id)
+                    FOREIGN KEY (local_message_id)
+                    REFERENCES messages (local_id)
                     ON DELETE CASCADE
             )
         "},
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        "CREATE UNIQUE INDEX index_attachments_rid ON attachments (rid)",
-        (),
-    )?;
-
+        "CREATE UNIQUE INDEX index_attachments_rid ON attachments (remote_id)",
+        vec![],
+    ).await;
     Ok(())
 }

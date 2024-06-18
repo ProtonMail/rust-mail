@@ -1,19 +1,12 @@
 use super::MailSession;
-use crate::domain::{LabelId, Message, MessageCount, MessageId, MessageMetadataFilter};
+use crate::domain::{LabelId, MessageCount, MessageId, MessageMetadataFilter};
 use crate::requests::{
     DeleteMessagesRequest, DeleteMessagesResponseObject, GetMessageCountsRequest,
-    GetMessageMetadataRequest, GetMessageRequest, MessageMetadataResponse,
+    GetMessageMetadataRequest, MessageMetadataResponse,
 };
 use proton_api_core::http;
 
 impl MailSession {
-    pub async fn message(&self, id: &MessageId) -> Result<Message, http::RequestError> {
-        self.session
-            .execute_request(GetMessageRequest::new(id))
-            .await
-            .map(|v| v.message)
-    }
-
     pub async fn message_counts(&self) -> Result<Vec<MessageCount>, http::RequestError> {
         self.session
             .execute_request(GetMessageCountsRequest {})

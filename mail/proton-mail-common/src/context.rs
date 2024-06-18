@@ -1,6 +1,6 @@
 use crate::db::DBMigrationError;
 use crate::MailUserContext;
-use proton_api_mail::domain::AddressDomainLogoError;
+use proton_api_mail::domain::{AddressDomainLogoError, ApiError};
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
 use proton_api_mail::proton_api_core::http::{Client, RequestError};
 use proton_api_mail::proton_api_core::login::Flow;
@@ -11,12 +11,12 @@ use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabase
 use proton_event_loop::EventLoopError;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use futures::executor::block_on;
+use stash::stash::{Stash, StashError};
 
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
 pub enum MailContextError {
-    #[error("Database Error: {0}")]
-    DB(#[from] crate::db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
@@ -37,6 +37,10 @@ pub enum MailContextError {
     PGPKeyAccess(KeyHandlingError),
     #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
     AddressDomainLogoError(#[from] AddressDomainLogoError),
+    #[error("Stash Error: {0}")]
+    Stash(#[from] StashError),
+    #[error("API Error: {0}")]
+    Api(#[from] ApiError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -44,7 +48,6 @@ pub enum MailContextError {
 impl From<CoreContextError> for MailContextError {
     fn from(value: CoreContextError) -> Self {
         match value {
-            CoreContextError::DB(db) => MailContextError::DB(db),
             CoreContextError::Crypto => MailContextError::Crypto,
             CoreContextError::KeyChain(err) => MailContextError::KeyChain(err),
             CoreContextError::IO(err) => MailContextError::IO(err),
@@ -53,6 +56,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::Other(err) => MailContextError::Other(err),
             CoreContextError::Http(err) => MailContextError::Http(err),
             CoreContextError::PGPKeyAccess(err) => MailContextError::PGPKeyAccess(err),
+            CoreContextError::Stash(err) => MailContextError::Stash(err),
         }
     }
 }
@@ -67,7 +71,7 @@ pub struct MailContext {
 }
 
 impl MailContext {
-    pub fn new(
+    pub async fn new(
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
@@ -84,7 +88,7 @@ impl MailContext {
             initializers,
             client,
             network_callback,
-        )?;
+        ).await?;
 
         Ok(Self {
             core_context,
@@ -105,11 +109,11 @@ impl MailContext {
     /// # Errors
     /// Returns error if the flow is in an invalid state or there was an issue initializing
     /// the user database.
-    pub fn user_context_from_login_flow(
+    pub async fn user_context_from_login_flow(
         &self,
         login_flow: &Flow,
     ) -> MailContextResult<MailUserContext> {
-        let ctx = self.core_context.user_context_from_login_flow(login_flow)?;
+        let ctx = self.core_context.user_context_from_login_flow(login_flow).await?;
         Ok(MailUserContext::new(self.clone(), ctx))
     }
 
@@ -117,28 +121,28 @@ impl MailContext {
     ///
     /// # Errors
     /// Returns error if we failed to decrypt the user session or access the user database.
-    pub fn user_context_from_session(
+    pub async fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> MailContextResult<MailUserContext> {
-        let ctx = self.core_context.user_context_from_session(session, cb)?;
+        let ctx = self.core_context.user_context_from_session(session, cb).await?;
         Ok(MailUserContext::new(self.clone(), ctx))
     }
     /// Return the list of active session.
     ///
     /// # Errors
     /// Returns error if the db query failed.
-    pub fn sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
-        Ok(self.core_context.get_sessions()?)
+    pub async fn sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
+        Ok(self.core_context.get_sessions().await?)
     }
 
     /// Removes a user session and deletes all associated data.
     ///
     /// # Errors
     /// Returns error if data can not be removed or the db operation failed.
-    pub fn delete_session(&self, session: &EncryptedUserSession) -> MailContextResult<()> {
-        Ok(self.core_context.delete_session(session)?)
+    pub async fn delete_session(&self, session: &EncryptedUserSession) -> MailContextResult<()> {
+        Ok(self.core_context.delete_session(session).await?)
     }
     pub fn set_network_connected(&self, value: bool) {
         self.core_context.set_network_connected(value)
@@ -159,10 +163,12 @@ struct MailUserDatabaseInitializer {}
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
     fn initialize(
         &self,
-        conn: &mut crate::db::proton_sqlite3::SqliteConnection,
+        stash: &Stash,
     ) -> Result<(), DBMigrationError> {
-        crate::db::migrations::migrate_db(conn)?;
-        proton_action_queue::ActionStore::init_tables(conn)?;
+        block_on(async {
+        crate::db::migrations::migrate_db(stash).await?;
+        proton_action_queue::ActionStore::init_tables(stash).await?;
         Ok(())
+        })
     }
 }

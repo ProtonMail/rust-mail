@@ -1,18 +1,18 @@
 use std::io;
 
-use crate::db::{LocalAttachment, LocalAttachmentId, LocalAttachmentMetadata};
 use crate::{MailContextError, MailUserContext, Mailbox, MailboxError, MailboxResult};
-use proton_crypto_inbox::attachment::AttachmentDecryption;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
 };
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_api_mail::domain::{Attachment, AttachmentMetadata};
+use stash::orm::Model;
 
 /// A decrypted attachment returned by [`Mailbox::load_attachment_to_buffer`].
 #[derive(Debug)]
 pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
-    pub attachment_metadata: LocalAttachmentMetadata,
+    pub attachment_metadata: AttachmentMetadata,
     /// Content buffer of the attachment
     pub content: Vec<u8>,
     /// The result of the signature verification.
@@ -35,34 +35,24 @@ impl Mailbox {
     /// Signature verification failures are not returned as errors.
     pub async fn load_attachment_to_buffer(
         &self,
-        attachment_id: LocalAttachmentId,
+        attachment_id: u64,
     ) -> MailboxResult<DecryptedAttachment> {
         let user_context = self.user_context();
-        // First check if the metadata is complete for decryption.
-        let (metadata_complete, attachment_id_opt) = user_context
-            .db_read(|conn| conn.is_attachment_metadata_complete(attachment_id))
-            .map_err(MailContextError::from)?
+        let mut attachment = Attachment::load(attachment_id, user_context.stash())
+            .await?
             .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
-
-        if !metadata_complete {
-            let remote_attachment_id =
-                attachment_id_opt.ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
-            user_context
-                .sync_complete_attachment_metadata(remote_attachment_id)
+        let remote_attachment_id =
+            attachment.remote_id.clone().ok_or(MailboxError::AttachmentDoesNotHaveRemoteId(attachment_id))?;
+        // First check if the metadata is complete for decryption.
+        if !attachment.has_complete_metadata() {
+            attachment.sync_complete_metadata(&user_context.mail_session())
                 .await
                 .map_err(MailContextError::from)?;
+            // Load the complete attachment metadata.
+            attachment = Attachment::load(attachment_id, user_context.stash())
+                .await?
+                .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
         }
-
-        // Load the complete attachment metadata.
-        let attachment_metadata = user_context
-            .db_read(|conn| conn.attachment_with_id(attachment_id))
-            .map_err(MailContextError::from)?
-            .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
-
-        let remote_attachment_id = attachment_metadata
-            .rid
-            .as_ref()
-            .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
 
         // Load the attachment content.
         // TODO: Lets opt for a stream in the future
@@ -76,7 +66,7 @@ impl Mailbox {
         let pgp_provider = new_pgp_provider();
         decrypt_attachment_to_buffer(
             &pgp_provider,
-            attachment_metadata,
+            attachment,
             user_context,
             attachment_source_reader.as_ref(),
         )
@@ -87,7 +77,7 @@ impl Mailbox {
 /// Helper function to decrypt the attachment.
 async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
-    attachment_info: LocalAttachment,
+    attachment_info: Attachment,
     mail_user_ctx: &MailUserContext,
     data: impl io::Read,
 ) -> MailboxResult<DecryptedAttachment> {

@@ -1,5 +1,5 @@
 use crate::db::{
-    new_test_connection, with_tx, LabelColor, LocalLabel, LocalLabelId, MailSqliteConnectionImpl,
+    new_test_connection, with_tx, LabelColor, Label, u64, MailSqliteConnectionImpl,
 };
 use proton_api_mail::domain::{ConversationCount, Label, LabelId, LabelType, MessageCount};
 
@@ -35,7 +35,7 @@ fn test_remote_label_add_duplicate() {
         let new_local_id = tx.create_remote_label(&label).unwrap();
         assert_eq!(local_id, new_local_id);
         let db_label = tx.label_with_id(local_id).unwrap().unwrap();
-        assert_eq!(LocalLabel::from_label(local_id, None, label), db_label);
+        assert_eq!(Label::from_label(local_id, None, label), db_label);
     });
 }
 
@@ -243,8 +243,8 @@ fn update_local_label() {
 
         fn compare_db_label(
             conn_ref: &MailSqliteConnectionImpl,
-            id: LocalLabelId,
-            f: impl FnOnce(&LocalLabel),
+            id: u64,
+            f: impl FnOnce(&Label),
         ) {
             let db_label = conn_ref
                 .label_with_id(id)
@@ -288,20 +288,20 @@ fn test_mark_labels_as_initialized() {
             )
             .expect("failed to create label");
         assert!(!tx
-            .check_if_label_is_initialized_conversations(new_label.id)
+            .has_initialized_conversations(new_label.id)
             .unwrap());
         tx.mark_label_as_initialized_conversations(new_label.id)
             .expect("failed to mark label as initialized");
         assert!(tx
-            .check_if_label_is_initialized_conversations(new_label.id)
+            .has_initialized_conversations(new_label.id)
             .unwrap());
         assert!(!tx
-            .check_if_label_is_initialized_messages(new_label.id)
+            .has_initialized_messages(new_label.id)
             .unwrap());
         tx.mark_label_as_initialized_messages(new_label.id)
             .expect("failed to mark label as initialized");
         assert!(tx
-            .check_if_label_is_initialized_messages(new_label.id)
+            .has_initialized_messages(new_label.id)
             .unwrap());
     });
 }
@@ -312,7 +312,7 @@ fn compare_remote_labels_with_local<'i>(
 ) {
     let local_labels = conn_ref.labels().unwrap();
 
-    let find_label = |id: &LabelId| -> &LocalLabel {
+    let find_label = |id: &LabelId| -> &Label {
         local_labels
             .iter()
             .find(|l| l.rid.as_ref() == Some(id))
@@ -383,7 +383,7 @@ fn test_labels() -> Vec<Label> {
     ]
 }
 
-fn compare_local_to_remote(conn: &MailSqliteConnectionImpl, local: &LocalLabel, remote: &Label) {
+fn compare_local_to_remote(conn: &MailSqliteConnectionImpl, local: &Label, remote: &Label) {
     assert_eq!(
         local.rid.as_ref(),
         Some(&remote.id),

@@ -1,8 +1,6 @@
-use crate::exports::tracing::warn;
-use crate::settings::MailSettings;
 use crate::{MailContextResult, MailUserContext};
 use bytes::Bytes;
-use proton_api_mail::domain::{AddressDomainLogoDetailsBuilder, LightOrDarkMode};
+use proton_api_mail::domain::{AddressDomainLogoDetailsBuilder, LightOrDarkMode, MailSettings};
 
 impl MailUserContext {
     /// Get sender image for an address.
@@ -37,15 +35,7 @@ impl MailUserContext {
         mode: Option<LightOrDarkMode>,
         format: Option<String>,
     ) -> MailContextResult<Option<Bytes>> {
-        if mail_settings.with(|s| {
-            match s {
-                Ok(s) => s.hide_sender_images,
-                Err(e) => {
-                    warn!("mail settings not available, using default value for hide sender image. Err: {e}");
-                    true
-                },
-            }
-        }) {
+        if mail_settings.hide_sender_images {
             // sender images are to be hidden, return nothing
             return Ok(None);
         }

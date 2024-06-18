@@ -1,10 +1,5 @@
-mod connection;
 #[cfg(test)]
 mod tests;
-mod types;
-
-pub use connection::*;
-pub use types::*;
 
 // The attachment metadata can come from 3 different places.
 //

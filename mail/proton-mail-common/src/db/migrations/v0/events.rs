@@ -1,7 +1,6 @@
-use crate::db::DBResult;
-use proton_sqlite3::SqliteTransaction;
+use stash::stash::{StashError, Tether};
 
-pub fn create_event_tables(tx: &mut SqliteTransaction) -> DBResult<()> {
+pub async fn create_event_tables(tx: &Tether) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE event_id_store (
@@ -9,7 +8,7 @@ pub fn create_event_tables(tx: &mut SqliteTransaction) -> DBResult<()> {
                 value TEXT NOT NULL
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await;
     Ok(())
 }

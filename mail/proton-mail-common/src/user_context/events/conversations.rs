@@ -1,12 +1,12 @@
-use crate::db::{DBResult, MailSqliteConnectionMut};
+use stash::stash::{StashError, Tether};
 use proton_api_mail::domain::ConversationEvent;
 use proton_api_mail::proton_api_core::domain::Action;
 use proton_api_mail::proton_api_core::exports::tracing::warn;
 
 pub fn handle_conversation_events(
-    tx: &mut MailSqliteConnectionMut,
+    tx: &Tether,
     conversation_events: &[ConversationEvent],
-) -> DBResult<()> {
+) -> Result<(), StashError> {
     for conversation_event in conversation_events {
         match conversation_event.action {
             Action::Delete => {

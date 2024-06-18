@@ -8,7 +8,7 @@ use proton_api_mail::domain::{
 };
 use proton_api_mail::exports::crypto::keys::AddressKeys;
 use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus, AddressType};
-use proton_mail_common::db::LocalConversationId;
+use proton_mail_common::db::u64;
 use proton_mail_common::Mailbox;
 use std::collections::HashMap;
 use velcro::hash_map;
@@ -509,7 +509,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     assert!(has_conversation(&mailbox_almost_all_mail, local_conv_id));
 }
 
-fn has_conversation(mailbox: &Mailbox, local_conversation_id: LocalConversationId) -> bool {
+fn has_conversation(mailbox: &Mailbox, local_conversation_id: u64) -> bool {
     let conversations = mailbox.conversations(10).unwrap();
     conversations.iter().any(|c| c.id == local_conversation_id)
 }

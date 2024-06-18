@@ -3,7 +3,6 @@ mod common;
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::domain::{Label, LabelId, LabelType};
-use proton_mail_common::settings::MailSettings;
 use proton_mail_common::Mailbox;
 
 #[tokio::test]
@@ -45,7 +44,7 @@ async fn test_get_sender_image() {
     mailbox.sync(1).await.expect("mailbox sync failed");
     let local_conversation = mailbox.conversations(2).unwrap();
     let sender = &local_conversation.first().unwrap().senders.first().unwrap();
-    let mail_settings = MailSettings::new(&ctx.user_context(), None);
+    let mail_settings = MailSettings::load();
 
     let image = ctx
         .user_context()

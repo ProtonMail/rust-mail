@@ -26,7 +26,9 @@ proton-event-loop = { version = "=0.6.13", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common", features = ["uniffi"] }
 proton-mail-message-detector = { path = "proton-mail-message-detector" }
 proton-sqlite3 = { version = "=0.6.2", registry = "proton" }
+stash = { version = "0.1.0", registry = "proton" }  
 tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uniffi = { version = "0.27.1", features = ["tokio"] }
 url = "2.5.0"
@@ -38,6 +40,7 @@ wiremock = "0.6.0"
 #proton-core-common = { path = "../proton-api-core/proton-core-common" }
 #proton-event-loop = { path = "../proton-api-core/proton-event-loop" }
 #proton-sqlite3 = { path = "../proton-api-core/proton-sqlite3" }
+#stash = { path = "../proton-api-core/stash" }
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"

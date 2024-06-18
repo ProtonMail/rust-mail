@@ -1,15 +1,11 @@
-use crate::db::DBResult;
-use proton_api_mail::proton_api_core::exports::serde::de::DeserializeOwned;
 use proton_api_mail::proton_api_core::exports::serde::Serialize;
 use proton_api_mail::proton_api_core::exports::serde_json;
 use proton_sqlite3::rusqlite::types::ToSqlOutput;
-use proton_sqlite3::rusqlite::{Row, ToSql};
+use proton_sqlite3::rusqlite::ToSql;
 use std::ops::Deref;
 use std::str;
-
-pub fn serde_json_err_to_sql_err(v: serde_json::Error) -> proton_sqlite3::rusqlite::Error {
-    proton_sqlite3::rusqlite::Error::ToSqlConversionFailure(Box::new(v))
-}
+use stash::orm::ConversionError;
+use stash::stash::StashError;
 
 pub struct JsonWriteBuffer {
     b: Vec<u8>,
@@ -36,8 +32,10 @@ impl JsonWriteBuffer {
     pub fn serialize<T: Serialize + ?Sized>(
         &mut self,
         v: &T,
-    ) -> DBResult<JsonWriteBufferResult<'_>> {
-        serde_json::to_writer(&mut self.b, v).map_err(serde_json_err_to_sql_err)?;
+    ) -> Result<JsonWriteBufferResult<'_>, StashError> {
+        serde_json::to_writer(&mut self.b, v).map_err(
+            |err| StashError::DeserializationError(ConversionError::SerializationError(err.to_string()))
+        )?;
         Ok(JsonWriteBufferResult { buffer: self })
     }
 
@@ -75,28 +73,4 @@ impl<'w> ToSql for JsonWriteBufferResult<'w> {
     fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
         self.as_ref().to_sql()
     }
-}
-
-#[inline(always)]
-pub fn deserialize_json<T: DeserializeOwned>(value: &str) -> DBResult<T> {
-    serde_json::from_str(value).map_err(serde_json_err_to_sql_err)
-}
-
-#[inline(always)]
-pub fn deserialize_json_from_row<T: DeserializeOwned>(r: &Row, index: usize) -> DBResult<T> {
-    let value_ref = r.get_ref(index)?;
-    let str = value_ref.as_str()?;
-    deserialize_json(str)
-}
-
-#[inline(always)]
-pub fn deserialize_optional_json_from_row<T: DeserializeOwned>(
-    r: &Row,
-    index: usize,
-) -> DBResult<Option<T>> {
-    let value_ref = r.get_ref(index)?;
-    let Some(str) = value_ref.as_str_or_null()? else {
-        return Ok(None);
-    };
-    Ok(Some(deserialize_json(str)?))
 }

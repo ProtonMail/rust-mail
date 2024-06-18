@@ -7,19 +7,17 @@ use crate::db::conversations::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
 };
 use crate::db::{
-    with_file_sqlite_db, with_tx, with_tx_core, LocalAttachmentMetadata, LocalConversationId,
-    LocalInlineLabelInfo, LocalMessageBodyMetadata, LocalMessageCount, LocalMessageMetadata,
+    with_file_sqlite_db, with_tx, with_tx_core, AttachmentMetadata, u64,
+    LocalInlineLabelInfo, MessageBodyMetadata, MessageCount, MessageMetadata,
     MailSqliteConnectionMut,
 };
 use crate::exports::serde_json;
 use lazy_static::lazy_static;
-use proton_api_mail::domain::{
-    AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType, Message,
-    MessageAddress, MessageAttachment, MessageAttachmentHeaders, MessageCount, MessageFlags,
-    MessageId, MessageMetadata, MimeType,
-};
+use proton_api_mail::domain::{AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType, Message, MessageAddress, MessageAttachment, MessageAttachmentHeaders, MessageBodyMetadata, MessageCount, MessageFlags, MessageId, MessageMetadata, MimeType};
 use proton_core_common::db::CoreSqliteConnectionMut;
 use proton_crypto_inbox::attachment::KeyPackets;
+use stash::orm::Model;
+use crate::exports::tracing::error;
 
 use super::conversations::create_address;
 use super::utils::prepare_db_state_core;
@@ -38,7 +36,7 @@ fn test_create_message() {
                 .get_message_metadata(id)
                 .expect("failed to get message")
                 .expect("must have a value");
-            let expected = LocalMessageMetadata::from_message_metadata(
+            let expected = MessageMetadata::from_message_metadata(
                 id,
                 conv_id,
                 metadata,
@@ -89,7 +87,7 @@ fn test_create_message_with_attachments() {
                 .expect("failed to get attachments")
                 .expect("must have value");
             assert_eq!(attachments.len(), 1);
-            let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
+            let converted_attachment = AttachmentMetadata::from_attachment_metadata(
                 attachments[0].id,
                 attachment_metadata.clone(),
             );
@@ -129,7 +127,7 @@ fn test_update_message() {
                 .expect("failed to get message")
                 .expect("must have a value");
             let expected =
-                LocalMessageMetadata::from_message_metadata(id, conv_id, metadata_updated, None);
+                MessageMetadata::from_message_metadata(id, conv_id, metadata_updated, None);
             assert_eq!(db_metadata, expected);
             assert!(db_metadata.starred);
 
@@ -162,12 +160,12 @@ fn test_message_counts() {
             ];
 
             let expected_counts = [
-                LocalMessageCount {
+                MessageCount {
                     id: labels[0],
                     total: 20,
                     unread: 4,
                 },
-                LocalMessageCount {
+                MessageCount {
                     id: labels[1],
                     total: 400,
                     unread: 124,
@@ -498,7 +496,20 @@ fn test_create_message_and_body() {
             let id = tx
                 .create_message_from_metadata(&message.metadata)
                 .expect("failed to create message");
-            let db_body_after_insert = tx.create_or_update_message_body(&message).unwrap();
+            let mut metadata = MessageBodyMetadata {
+                local_message_id: message.local_id,
+                remote_id: message.remote_id.clone(),
+                header: message.header.clone(),
+                parsed_headers: message.parsed_headers.clone(),
+                mime_type: message.mime_type.clone(),
+                row_id: None,
+                stash: conn.clone(),
+            };
+            metadata.save().await.map_err(|e| {
+                error!("Failed to store message body metadata in db: {e}");
+                e
+            })?;
+            let db_body_after_insert = metadata;
 
             assert_eq!(id, db_body_after_insert.id);
 
@@ -509,7 +520,7 @@ fn test_create_message_and_body() {
 
             assert_eq!(db_body_after_insert, db_message_body);
 
-            let expected = LocalMessageBodyMetadata::from_message(id, &message);
+            let expected = MessageBodyMetadata::from_message(id, &message);
 
             assert_eq!(db_message_body, expected);
         });
@@ -536,8 +547,21 @@ fn test_update_message_and_body() {
             let id = tx
                 .create_message_from_metadata(&message.metadata)
                 .expect("failed to create message");
-            tx.create_or_update_message_body(&message).unwrap();
 
+            let mut metadata = MessageBodyMetadata {
+                local_message_id: message.local_id,
+                remote_id: message.remote_id.clone(),
+                header: message.header.clone(),
+                parsed_headers: message.parsed_headers.clone(),
+                mime_type: message.mime_type.clone(),
+                row_id: None,
+                stash: conn.clone(),
+            };
+            metadata.save().await.map_err(|e| {
+                error!("Failed to store message body metadata in db: {e}");
+                e
+            })?;
+            
             // Update the body
             message.parsed_headers.insert(
                 "marco".to_owned(),
@@ -547,14 +571,26 @@ fn test_update_message_and_body() {
             message.body = "new body type".to_owned();
             message.mime_type = MimeType::TextHTML;
 
-            tx.create_or_update_message_body(&message).unwrap();
+            let mut metadata = MessageBodyMetadata {
+                local_message_id: message.local_id,
+                remote_id: message.remote_id.clone(),
+                header: message.header.clone(),
+                parsed_headers: message.parsed_headers.clone(),
+                mime_type: message.mime_type.clone(),
+                row_id: None,
+                stash: conn.clone(),
+            };
+            metadata.save().await.map_err(|e| {
+                error!("Failed to store message body metadata in db: {e}");
+                e
+            })?;
 
             let db_message_body = tx
                 .message_body(id)
                 .expect("failed to get message")
                 .expect("must have a value");
 
-            let expected = LocalMessageBodyMetadata::from_message(id, &message);
+            let expected = MessageBodyMetadata::from_message(id, &message);
 
             assert_eq!(db_message_body, expected);
         });
@@ -607,7 +643,21 @@ fn test_create_message_and_body_with_attachments() {
             let id = tx
                 .create_message_from_metadata(&message.metadata)
                 .expect("failed to create message");
-            tx.create_or_update_message_body(&message).unwrap();
+            
+            let mut metadata = MessageBodyMetadata {
+                local_message_id: message.local_id,
+                remote_id: message.remote_id.clone(),
+                header: message.header.clone(),
+                parsed_headers: message.parsed_headers.clone(),
+                mime_type: message.mime_type.clone(),
+                row_id: None,
+                stash: conn.clone(),
+            };
+            metadata.save().await.map_err(|e| {
+                error!("Failed to store message body metadata in db: {e}");
+                e
+            })?;
+            
             let local_attachments = tx.attachments_for_message(id).expect("must have value");
             let local_attachment = local_attachments.first().unwrap();
 
@@ -639,7 +689,7 @@ fn test_create_message_dependencies_core(tx_core: &mut CoreSqliteConnectionMut) 
     create_address(tx_core);
 }
 
-fn test_create_message_dependencies(tx: &mut MailSqliteConnectionMut) -> LocalConversationId {
+fn test_create_message_dependencies(tx: &mut MailSqliteConnectionMut) -> u64 {
     create_labels(tx);
     let conversation = test_conversation(
         [ConversationLabels {

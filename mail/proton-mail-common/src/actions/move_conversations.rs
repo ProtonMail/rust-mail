@@ -1,4 +1,3 @@
-use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -10,27 +9,27 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
+use stash::stash::Tether;
 
 define_action_id!(
     MOVE_CONVERSATIONS_ACTION_ID,
     "e9ccc85a-23fe-40e5-9e53-106ab0c35fe9"
 );
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde")]
 pub struct MoveConversationsAction {
-    active_label_id: LocalLabelId,
-    destination_label_id: LocalLabelId,
-    ids: Vec<LocalConversationId>,
+    active_label_id: u64,
+    destination_label_id: u64,
+    ids: Vec<u64>,
 }
 
 impl MoveConversationsAction {
     pub fn new(
-        active_label_id: LocalLabelId,
-        destination_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = LocalConversationId>,
+        active_label_id: u64,
+        destination_label_id: u64,
+        ids: impl IntoIterator<Item = u64>,
     ) -> Self {
         Self {
             active_label_id,
@@ -45,12 +44,12 @@ impl Action for MoveConversationsAction {
     const VERSION: u32 = 1;
 }
 
-struct MoveConversationsLocalHandler<'c, 't: 'c> {
-    action: &'c MoveConversationsAction,
-    tx: MailSqliteConnectionMut<'t>,
+struct MoveConversationsLocalHandler {
+    action: MoveConversationsAction,
+    tx: Tether,
 }
 
-impl<'c, 't: 'c> LocalActionHandler for MoveConversationsLocalHandler<'c, 't> {
+impl LocalActionHandler for MoveConversationsLocalHandler {
     fn apply_local(&mut self) -> ActionResult<()> {
         if self.action.ids.is_empty() {
             return Err(ActionError::Local(anyhow!(
@@ -129,13 +128,13 @@ impl<'c, 't: 'c> LocalActionHandler for MoveConversationsLocalHandler<'c, 't> {
     }
 }
 
-struct MoveConversationsRemoteHandler<'t> {
+struct MoveConversationsRemoteHandler {
     action: MoveConversationsAction,
     session: MailSession,
-    tx: MailSqliteConnectionMut<'t>,
+    tx: Tether,
 }
 
-impl<'t> RemoteActionHandler for MoveConversationsRemoteHandler<'t> {
+impl RemoteActionHandler for MoveConversationsRemoteHandler {
     fn revert_local(&mut self) -> ActionResult<()> {
         let src_label = self
             .tx
@@ -247,30 +246,31 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
         &MOVE_CONVERSATIONS_ACTION_ID
     }
 
-    fn local_handler<'r, 't: 'r>(
+    fn local_handler(
         &self,
-        action: &'r dyn Any,
-        tx: &'r mut SqliteTransaction<'t>,
-    ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
-        let Some(action) = action.downcast_ref::<MoveConversationsAction>() else {
+        action: Box<dyn Any>,
+        tx: Tether,
+    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
+        let type_id = action.type_id().clone();
+        let Ok(action) = action.downcast::<MoveConversationsAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
-                action.type_id(),
+                type_id,
                 std::any::TypeId::of::<MoveConversationsAction>(),
             ));
         };
 
         Ok(Box::new(MoveConversationsLocalHandler {
-            action,
-            tx: MailSqliteConnectionMut::new(tx),
+            action: *action,
+            tx,
         }))
     }
 
-    fn remote_handler<'r, 't: 'r>(
-        &'r self,
-        action: &StoredAction,
-        tx: &'r mut SqliteTransaction<'t>,
+    fn remote_handler(
+        &self,
+        action: StoredAction,
+        tx: Tether,
         session_provider: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
+    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryInstanceError> {
         if action.version != MoveConversationsAction::VERSION {
             return Err(ActionFactoryInstanceError::InvalidVersion(action.version));
         }
@@ -280,7 +280,7 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
 
         Ok(Box::new(MoveConversationsRemoteHandler {
             action,
-            tx: MailSqliteConnectionMut::new(tx),
+            tx,
             session: MailSession::from(session),
         }))
     }

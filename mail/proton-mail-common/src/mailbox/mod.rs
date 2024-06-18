@@ -1,54 +1,50 @@
 mod attachments;
-mod conversation;
-mod messages;
 
 #[cfg(test)]
 mod tests;
 
 pub use attachments::DecryptedAttachment;
-pub use messages::{DecryptedMessageBody, ParsedHeaderValue};
-
-use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
-use crate::db::{
-    LabelCountsQuery, LocalAttachmentId, LocalConversationId, LocalLabel, LocalLabelId,
-    LocalMessageId,
-};
-use crate::exports::tracing;
 use crate::exports::tracing::debug;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
-use proton_api_mail::domain::{LabelId, MailSettingsViewMode};
+use proton_api_mail::domain::{MAIL_SETTINGS_ID, Label, LabelId, MailSettings, MailSettingsViewMode, Conversation, Message};
 use proton_api_mail::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
 use proton_api_mail::proton_api_core::http::RequestError;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
+use stash::stash::StashError;
+use stash::orm::Model;
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MailboxError {
-    #[error("Could not find label with id '{0}'")]
-    LabelNotFound(LocalLabelId),
+    #[error("Could not find label with local id '{0}'")]
+    LabelNotFound(u64),
     #[error("Could not find label with remote id '{0}'")]
     RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
-    LabelDoesNotHaveRemoteId(LocalLabelId),
+    LabelDoesNotHaveRemoteId(u64),
     #[error("Attachment '{0}' not found")]
-    AttachmentNotFound(LocalAttachmentId),
+    AttachmentNotFound(u64),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(#[from] AttachmentDecryptionError),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryptionIO(String),
+    #[error("Attachment '{0}' does not have a remote id")]
+    AttachmentDoesNotHaveRemoteId(u64),
     #[error("Conversation '{0}' not found")]
-    ConversationNotFound(LocalConversationId),
+    ConversationNotFound(u64),
     #[error("Conversation '{0}' does not have a remote id")]
-    ConversationDoesNotHaveRemoteId(LocalConversationId),
+    ConversationDoesNotHaveRemoteId(u64),
     #[error("Message '{0}' does not have a remote id")]
-    MessageDoesNotHaveRemoteId(LocalMessageId),
+    MessageDoesNotHaveRemoteId(u64),
+    #[error("Could not find message with local id '{0}'")]
+    MessageNotFound(u64),
     #[error("Problem with conversation with local ID: '{0}'")]
-    ConversationError(LocalConversationId),
+    ConversationError(u64),
     #[error("Conversation '{0}' has no messages")]
-    ConversationHasNoMessages(LocalConversationId),
+    ConversationHasNoMessages(u64),
     #[error("API request failed with error: '{0}'")]
     APIError(RequestError),
     #[error("{0}")]
@@ -63,29 +59,10 @@ pub enum MailboxError {
     InvalidViewMode,
     #[error("Action is not valid: {0}")]
     InvalidAction(anyhow::Error),
-    #[error("Database Error: {0}")]
-    DB(#[from] crate::db::DBError),
+    #[error("Stash Error: {0}")]
+    Stash(#[from] StashError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
-}
-
-/// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:
-/// Some platforms are able to use the [`crate::db::proton_sqlite3::LiveQuery`] type and other
-/// platform may benefit from a different solution.
-pub trait MailboxObservableQueryBuilder<Q: Observable> {
-    type Output;
-
-    fn build(self, tracker: InProcessTrackerService, query: Q) -> Self::Output;
-}
-
-impl<Q: Observable, R, F: FnOnce(InProcessTrackerService, Q) -> R> MailboxObservableQueryBuilder<Q>
-    for F
-{
-    type Output = R;
-
-    fn build(self, tracker: InProcessTrackerService, query: Q) -> Self::Output {
-        (self)(tracker, query)
-    }
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
@@ -101,7 +78,7 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 #[derive(Clone)]
 pub struct Mailbox {
     user_ctx: MailUserContext,
-    label_id: LocalLabelId,
+    label_id: u64,
     view_mode: MailSettingsViewMode,
 }
 
@@ -116,106 +93,52 @@ impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> 
 }
 
 enum LabelIdMode<'a> {
-    Local(LocalLabelId),
+    Local(u64),
     Remote(&'a LabelId),
 }
 
 impl Mailbox {
-    pub fn with_remote_id(user_ctx: MailUserContext, label_id: &LabelId) -> MailboxResult<Self> {
-        let (label, view_mode) =
-            Self::retrieve_label_and_view_mode(&user_ctx, LabelIdMode::Remote(label_id))?;
-        Ok(Self::from_label_and_view_mode(user_ctx, label, view_mode))
-    }
-
-    pub fn with_id(user_ctx: MailUserContext, label_id: LocalLabelId) -> MailboxResult<Self> {
-        let (label, view_mode) =
-            Self::retrieve_label_and_view_mode(&user_ctx, LabelIdMode::Local(label_id))?;
-        Ok(Self::from_label_and_view_mode(user_ctx, label, view_mode))
-    }
-
-    fn from_label_and_view_mode(
+    async fn new(
         user_ctx: MailUserContext,
-        label: LocalLabel,
-        view_mode: MailSettingsViewMode,
-    ) -> Self {
-        let view_mode = label.mail_settings_view_mode().unwrap_or(view_mode);
-        debug!("Creating Mailbox ({}, view_mode={:?})", label.id, view_mode);
-        Self {
-            label_id: label.id,
+        label_id: u64,
+    ) -> MailboxResult<Self> {
+        let Some(label) = Label::load(label_id, &user_ctx.stash()).await? else {
+            return Err(MailboxError::LabelNotFound(label_id));
+        };
+        let view_mode = if let Some(view_mode) = label.view_mode() {
+            view_mode
+        } else {
+            MailSettings::load(MAIL_SETTINGS_ID, &user_ctx.stash())
+                .await
+                .map_err(|e| {
+                    error!("Failed to load mail settings: {e}");
+                    e
+                })
+                .ok()
+                .and_then(|settings| settings)
+                .map(|settings| settings.view_mode)
+                .unwrap_or(MailSettingsViewMode::Conversations)
+        };
+        debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
+        Ok(Self {
+            label_id,
             view_mode,
             user_ctx,
-        }
-    }
-
-    fn retrieve_label_and_view_mode(
-        user_context: &MailUserContext,
-        label_id: LabelIdMode,
-    ) -> MailboxResult<(LocalLabel, MailSettingsViewMode)> {
-        user_context.db_read(|conn| {
-            let label = match label_id {
-                LabelIdMode::Local(id) => {
-                    let Some(label) = conn.label_with_id(id)? else {
-                        return Err(MailboxError::LabelNotFound(id));
-                    };
-                    label
-                }
-                LabelIdMode::Remote(id) => {
-                    let Some(label) = conn.label_with_remote_id(id)? else {
-                        return Err(MailboxError::RemoteLabelNotFound(id.clone()));
-                    };
-                    label
-                }
-            };
-            let view_mode = conn.mail_settings_view_mode()?;
-            Ok((label, view_mode))
         })
     }
 
     pub fn user_context(&self) -> &MailUserContext {
         &self.user_ctx
     }
-    pub fn label_id(&self) -> LocalLabelId {
+    pub fn label_id(&self) -> u64 {
         self.label_id
     }
 
-    /// Create a new live query which track the total number and unread number of items present
-    /// in the current mailbox.
-    ///
-    /// The returned values will track either messages or conversations depending on the
-    /// current mailbox's view mode.
-    ///
-    /// # Errors
-    /// Return error if the database operation failed.
-    pub fn new_label_item_count_query<Builder: MailboxObservableQueryBuilder<LabelCountsQuery>>(
-        &self,
-        builder: Builder,
-    ) -> Result<Builder::Output, MailboxError> {
-        Ok(builder.build(
-            self.user_ctx.tracker_service().clone(),
-            LabelCountsQuery::new(self.label_id, self.view_mode),
-        ))
-    }
-
-    /// Get the label details associated with this mailbox.
-    ///
-    /// # Errors
-    /// Returns error if db query failed.
-    pub fn label(&self) -> MailboxResult<Option<LocalLabel>> {
-        Ok(self
-            .user_context()
-            .db_read(|c| c.label_with_id(self.label_id))?)
-    }
-
-    /// The mailbox's current view mode.
-    pub fn view_mode(&self) -> MailSettingsViewMode {
-        self.view_mode
-    }
-
-    pub fn refresh(&self, cb: Box<dyn MailUserContextInitializationCallback>) -> MailboxResult<()> {
-        let Some(label) = self.user_ctx.get_label(self.label_id)? else {
+    pub async fn refresh(&self, cb: Box<dyn MailUserContextInitializationCallback>) -> MailboxResult<()> {
+        let Some(label) = Label::load(self.label_id, &self.user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
-        let Some(rid) = label.rid else {
+        let Some(rid) = label.remote_id else {
             return Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id));
         };
 
@@ -231,71 +154,61 @@ impl Mailbox {
     /// # Errors
     /// Returns error if API request or database changes failed.
     pub async fn sync(&self, count: usize) -> MailboxResult<()> {
-        let rid = self
-            .user_ctx
-            .db_read(|conn| conn.remote_label_id_from_local_id(self.label_id))
-            .map_err(MailContextError::DB)?;
-        if let Some(Some(remote_id)) = rid {
-            tracing::debug!("Syncing {}({})", self.label_id, remote_id);
-            let ctx = self.user_ctx.clone();
-
-            let initialized = ctx
-                .db_read(|conn| match self.view_mode {
-                    MailSettingsViewMode::Conversations => {
-                        conn.check_if_label_is_initialized_conversations(self.label_id)
-                    }
-                    MailSettingsViewMode::Messages => {
-                        conn.check_if_label_is_initialized_messages(self.label_id)
-                    }
-                })
-                .map_err(|e| {
-                    error!("Failed to check if label is initialized: {e}");
-                    MailContextError::DB(e)
-                })?;
+        let ctx = self.user_ctx.clone();
+        let Some(mut label) = Label::load(self.label_id, &ctx.stash()).await? else {
+            return Err(MailboxError::LabelNotFound(self.label_id));
+        };
+        
+        if let Some(remote_id) = label.remote_id.clone() {
+            debug!("Syncing {}({})", self.label_id, &remote_id);
+            
+            let initialized =
+                match self.view_mode {
+                    MailSettingsViewMode::Conversations => label.initialized_conv,
+                    MailSettingsViewMode::Messages => label.initialized_msg,
+                };
             if initialized {
-                tracing::debug!("Label {} already initialized, skipping", self.label_id);
+                debug!("Label {} already initialized, skipping", self.label_id);
                 return Ok(());
             }
-            tracing::debug!(
+            debug!(
                 "Label {} not initialized, fetching (mode={:?})",
                 self.label_id,
                 self.view_mode
             );
 
             match self.view_mode {
-                MailSettingsViewMode::Conversations => ctx
-                    .sync_first_conversation_page(remote_id, count)
+                MailSettingsViewMode::Conversations => Conversation
+                    ::sync_first_conversation_page(remote_id, count, ctx.stash(), &ctx.mail_session())
                     .await
                     .map_err(|e| {
                         error!("Failed to sync conversations for label: {e}");
                         e
                     }),
-                MailSettingsViewMode::Messages => ctx
-                    .sync_first_message_page(remote_id, count)
+                MailSettingsViewMode::Messages => Message
+                    ::sync_first_message_page(remote_id, count, ctx.stash(), &ctx.mail_session())
                     .await
                     .map_err(|e| {
                         error!("Failed to sync messages for label: {e}");
                         e
                     }),
             }?;
-
-            ctx.db_write(|tx| {
+            
                 match self.view_mode {
                     MailSettingsViewMode::Conversations => {
-                        tx.mark_label_as_initialized_conversations(self.label_id)?;
+                        label.initialized_conv = true;
                     }
                     MailSettingsViewMode::Messages => {
-                        tx.mark_label_as_initialized_messages(self.label_id)?;
+                        label.initialized_msg = true;
                     }
                 }
-                Ok(())
-            })
+            label.save().await
             .map_err(|e| {
                 error!("Failed to mark label as initialized: {e}");
-                MailContextError::DB(e)
+                MailContextError::Stash(e)
             })?;
 
-            tracing::debug!("Syncing finished");
+            debug!("Syncing finished");
             Ok(())
         } else {
             Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id))

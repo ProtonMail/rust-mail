@@ -1,15 +1,14 @@
+use stash::params;
+use stash::stash::{StashError, Tether};
 use proton_api_mail::domain::LabelId;
-use proton_sqlite3::SqliteTransaction;
 
-type RResult<T> = proton_sqlite3::rusqlite::Result<T>;
-
-pub fn create_labels_tables(tx: &mut SqliteTransaction) -> RResult<()> {
+pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
     // Local version for manipulation.
     tx.execute(
         r#"
             CREATE TABLE labels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rid TEXT UNIQUE,
+                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                remote_id TEXT UNIQUE DEFAULT NULL,
                 type INTEGER NOT NULL,
                 `order` INTEGER NOT NULL,
                 name TEXT NOT NULL,
@@ -25,57 +24,57 @@ pub fn create_labels_tables(tx: &mut SqliteTransaction) -> RResult<()> {
 
                 CONSTRAINT constraint_labels_parent_id
                     FOREIGN KEY (parent_id)
-                    REFERENCES labels (id)
+                    REFERENCES labels (local_id)
                     ON DELETE SET NULL
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        r#"CREATE UNIQUE INDEX index_labels_rid ON labels (`rid`)"#,
-        (),
-    )?;
-    tx.execute(r#"CREATE INDEX index_labels_order ON labels (`order`)"#, ())?;
+        r#"CREATE UNIQUE INDEX index_labels_rid ON labels (`remote_id`)"#,
+        vec![],
+    ).await?;
+    tx.execute(r#"CREATE INDEX index_labels_order ON labels (`order`)"#, vec![]).await?;
 
     // Label Conversation Count
     tx.execute(
         r#"
             CREATE TABLE label_conversation_count (
-                label_id INTEGER NOT NULL PRIMARY KEY,
+                local_label_id TEXT NOT NULL PRIMARY KEY,
                 total INTEGER NOT NULL,
                 unread INTEGER NOT NULL,
                 
                 CONSTRAINT constraint_label_conversation_count_label_id
-                    FOREIGN KEY (label_id)
-                    REFERENCES labels (id)
+                    FOREIGN KEY (local_label_id)
+                    REFERENCES labels (local_id)
                     ON DELETE CASCADE
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     // Label Message Count
     tx.execute(
         r#"
             CREATE TABLE label_message_count (
-                label_id INTEGER NOT NULL PRIMARY KEY,
+                local_label_id INTEGER NOT NULL PRIMARY KEY,
                 total INTEGER NOT NULL,
                 unread INTEGER NOT NULL,
                 
                 CONSTRAINT constraint_label_conversation_count_label_id
-                    FOREIGN KEY (label_id)
-                    REFERENCES labels (id)
+                    FOREIGN KEY (local_label_id)
+                    REFERENCES labels (local_id)
                     ON DELETE CASCADE
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     // Insert default known system
-    let mut stmt = tx.prepare(
-        r#"INSERT INTO labels (rid, type, name, color, `order`) VALUES (?,4,?,'#000000',?)"#,
-    )?;
+    let sql =
+        r#"INSERT INTO labels (remote_id, type, name, color, `order`) VALUES (?,4,?,'#000000',?)"#
+    ;
     let labels = [
         (LabelId::inbox(), "Inbox"),
         (LabelId::starred(), "Starred"),
@@ -87,8 +86,8 @@ pub fn create_labels_tables(tx: &mut SqliteTransaction) -> RResult<()> {
         (LabelId::all_mail(), "All Mail"),
         (LabelId::almost_all_mail(), "Almost All Mail"),
     ];
-    for (index, (id, name)) in labels.iter().enumerate() {
-        stmt.execute((id, name, index))?;
+    for (index, (id, name)) in labels.into_iter().enumerate() {
+        tx.execute(sql, params![id, name, index]).await?;
     }
     Ok(())
 }

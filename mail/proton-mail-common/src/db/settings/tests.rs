@@ -1,11 +1,11 @@
-use crate::db::{new_test_connection, with_tx};
-use proton_api_mail::domain::MailSettings;
+use crate::db::new_test_connection;
+use proton_api_mail::domain::{MAIL_SETTINGS_ID, MailSettings};
 
 #[test]
 fn test_mail_settings_store_read() {
     let (_, mut conn, _) = new_test_connection();
-    with_tx(&mut conn, |tx| {
         let settings = MailSettings {
+            local_id: MAIL_SETTINGS_ID,
             display_name: "foo".to_string(),
             signature: "bar".to_string(),
             theme: "goose".to_string(),
@@ -46,9 +46,10 @@ fn test_mail_settings_store_read() {
             mobile_settings: None,
             hide_remote_images: Default::default(),
             hide_sender_images: Default::default(),
+            row_id: None,
+            stash: None,
         };
-        tx.create_or_update_mail_settings(&settings).unwrap();
-        let db_settings = tx.mail_settings().unwrap();
+        settings.save().await.unwrap();
+        let db_settings = MailSettings.load(MAIL_SETTINGS_ID, &conn).unwrap().unwrap();
         assert_eq!(db_settings, settings);
-    })
 }

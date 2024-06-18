@@ -1,23 +1,14 @@
 use super::MailSession;
-use crate::domain::{ConversationCount, ConversationFilter, ConversationId, LabelId};
+use crate::domain::{ConversationCount, ConversationId, LabelId};
 use crate::requests::{
     ConversationsResponseObject, DeleteConversationsRequest, GetConversationCountsRequest,
-    GetConversationRequest, GetConversationResponse, GetConversationsRequest,
-    GetConversationsResponse, LabelConversationRequest, MarkConversationsReadRequest,
+    GetConversationRequest, GetConversationResponse,
+    LabelConversationRequest, MarkConversationsReadRequest,
     MarkConversationsUnreadRequest, UnlabelConversationRequest,
 };
 use proton_api_core::http;
 
 impl MailSession {
-    pub async fn conversations(
-        &self,
-        filter: ConversationFilter,
-    ) -> Result<GetConversationsResponse, http::RequestError> {
-        self.session
-            .execute_request(GetConversationsRequest::new(filter))
-            .await
-    }
-
     pub async fn conversation(
         &self,
         id: &ConversationId,
