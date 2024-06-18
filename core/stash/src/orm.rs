@@ -286,8 +286,41 @@ where
     Self: 'static,
     <Self as Model>::Id: Send + Sync + 'static,
 {
-    /// The ID type for the record.
+    /// The ID type for the record. This is the type as stored in the struct,
+    /// i.e. the field type. For an optional ID, this includes the [`Option`].
     type Id: Clone + Debug + FromSql + PartialEq + ToSql;
+
+    /// The actual ID type for the record. This is the type as stored in the
+    /// database. For an optional ID, this does *not* include the [`Option`] —
+    /// for non-optional IDs, it is the same as [`Self::Id`].
+    type IdType: Clone + Debug + FromSql + PartialEq + ToSql + Send + Sync;
+
+    /// Gets a list of fields with names and values, excluding the ID field.
+    ///
+    /// The field values are returned in a form that is compatible with
+    /// conversion to SQL type, but pre-conversion. The ID field is excluded
+    /// from the list.
+    ///
+    /// Note: Any fields using an intermediary type (i.e. specified with the
+    /// `via` attribute argument) will be converted to that type before being
+    /// returned.
+    ///
+    fn fields_without_id(&self) -> HashMap<&'static str, Box<dyn ToSql + Send>>;
+
+    /// Gets a list of field names for the record type, excluding the ID field.
+    fn field_names_without_id() -> Vec<&'static str>;
+
+    /// Gets a list of field values for the record, excluding the ID field.
+    ///
+    /// The field values are returned in a form that is compatible with
+    /// conversion to SQL type, but pre-conversion. The ID field is excluded
+    /// from the list.
+    ///
+    /// Note: Any fields using an intermediary type (i.e. specified with the
+    /// `via` attribute argument) will be converted to that type before being
+    /// returned.
+    ///
+    fn field_values_without_id(&self) -> Vec<Box<dyn ToSql + Send>>;
 
     /// Finds records in the database using specific query logic.
     ///
@@ -399,7 +432,7 @@ where
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         stash: &Stash,
-        queue: Option<QueueSender<ResultsetChange<Self, Self::Id>>>,
+        queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
     ) -> Result<Vec<Self>, StashError> {
         let query = formatdoc!(
             "
@@ -417,14 +450,14 @@ where
         // Set up listener for changes to the result set, if requested.
         #[allow(clippy::shadow_reuse)]
         if let Some(queue) = queue {
-            let mut ids: HashMap<u64, Self::Id> = records
+            let mut ids: HashMap<u64, Self::IdType> = records
                 .iter()
                 .map(|record: &Self| {
                     let row_id = record.row_id().ok_or(StashError::MissingRowId)?;
-                    let id = record.id().ok_or(StashError::IdNotSet)?;
+                    let id = record.id_value()?;
                     Ok((row_id, id))
                 })
-                .collect::<Result<HashMap<u64, Self::Id>, StashError>>()?;
+                .collect::<Result<HashMap<u64, Self::IdType>, StashError>>()?;
             let receiver = stash.subscribe().await?;
             let stash_clone = stash.clone();
 
@@ -548,10 +581,10 @@ where
     ///
     fn handle_notification<Q: AsRef<str> + Send + Sync>(
         notification: Notification,
-        ids: &mut HashMap<u64, Self::Id>,
+        ids: &mut HashMap<u64, Self::IdType>,
         stash: &Stash,
         query: &Q,
-    ) -> impl Future<Output = Option<ResultsetChange<Self, Self::Id>>> + Send {
+    ) -> impl Future<Output = Option<ResultsetChange<Self, Self::IdType>>> + Send {
         async move {
             #[allow(clippy::wildcard_enum_match_arm)]
             match notification.action {
@@ -567,7 +600,7 @@ where
                     {
                         Ok(records) => {
                             if let Some(record) = records.into_iter().next() {
-                                if let Some(id) = record.id() {
+                                if let Ok(id) = record.id_value() {
                                     drop(ids.insert(notification.row, id));
                                 } else {
                                     // This could happen, in which case we log it and carry on
@@ -618,15 +651,17 @@ where
     /// SQLite.
     ///
     /// Note that in order to support auto-incrementing primary keys, this
-    /// function returns an [`Option`]. If the ID is set manually then this will
-    /// simply always return a [`Some`] value.
+    /// function will return an [`Option`] if the `IdField` attribute has been
+    /// configured with either the `autoincrement` or `optional` parameters. If
+    /// the ID is set manually then this will simply return the defined type.
     ///
     /// # See also
     ///
     /// * [`Model::id_field_name()`]
+    /// * [`Model::id_value()`]
     /// * [`Model::row_id()`]
     ///
-    fn id(&self) -> Option<Self::Id>;
+    fn id(&self) -> Self::Id;
 
     /// Gets the name of the ID field for the record type.
     ///
@@ -639,6 +674,47 @@ where
     /// * [`Model::row_id()`]
     ///
     fn id_field_name() -> &'static str;
+
+    /// Whether the record's ID field is auto-incrementing.
+    ///
+    /// If the record's ID field is auto-incrementing, then it will be set by
+    /// the database. In this situation the ID field will not be included in
+    /// `INSERT` or `UPDATE` queries, and the defined ID field type will need to
+    /// be wrapped in an [`Option`].
+    ///
+    fn id_is_autoincrementing() -> bool;
+
+    /// Whether the record's ID field is optional.
+    ///
+    /// If the record's ID field is optional, then the defined ID field type
+    /// will need to be wrapped in an [`Option`]. Whether the ID field is
+    /// included in `INSERT` or `UPDATE` queries will depend on whether it is
+    /// set as auto-incrementing — auto-incrementing means that it is optional,
+    /// but being optional does not necessarily mean auto-incrementing.
+    ///
+    fn id_is_optional() -> bool;
+
+    /// Gets the record's unique ID value.
+    ///
+    /// This is the primary key value for the record as defined when creating
+    /// the table. It may or may not be the same as the internal "row ID" used
+    /// by SQLite.
+    ///
+    /// Note that this function will always return the actual ID value, even if
+    /// defined as an [`Option`]. If the ID is not set, i.e. is [`None`], then
+    /// this will generate an error.
+    ///
+    /// # Errors
+    ///
+    /// * [`StashError::IdNotSet`]
+    ///
+    /// # See also
+    ///
+    /// * [`Model::id()`]
+    /// * [`Model::id_field_name()`]
+    /// * [`Model::row_id()`]
+    ///
+    fn id_value(&self) -> Result<Self::IdType, StashError>;
 
     /// Loads a record from the database by ID.
     ///
@@ -671,7 +747,7 @@ where
     /// * [`Tether::load()`]
     ///
     #[must_use]
-    async fn load(id: Self::Id, stash: &Stash) -> Result<Option<Self>, StashError> {
+    async fn load(id: Self::IdType, stash: &Stash) -> Result<Option<Self>, StashError> {
         perform_load(id, stash, None).await
     }
 
@@ -704,7 +780,7 @@ where
     /// * [`Tether::load()`]
     ///
     #[must_use]
-    async fn load_using(id: Self::Id, tether: &Tether) -> Result<Option<Self>, StashError> {
+    async fn load_using(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
         perform_load(id, tether.stash(), Some(tether)).await
     }
 
@@ -737,10 +813,50 @@ where
     ///   2. The [`Stash`] must be set on the record instance. This is necessary
     ///      to know where to save the record to.
     ///
+    /// # Logic
+    ///
+    /// There are a number of factors that determine the approach taken to
+    /// saving a record. The decisions to make are firstly whether to perform an
+    /// `INSERT` or an `UPDATE`, and secondly whether to include the ID field in
+    /// the query.
+    ///
+    /// The factors influencing the decision are: whether the row ID is set,
+    /// whether the ID field is set, and whether the ID field has been
+    /// configured as optional or auto-incrementing.
+    ///
+    /// If the ID field is auto-incrementing (optional and database-managed):
+    ///
+    ///   - Row ID set, ID field set: `UPDATE`
+    ///   - Row ID set, ID field not set: [`StashError::InvalidIdState`]
+    ///   - Row ID not set, ID field set: [`StashError::InvalidIdState`]
+    ///   - Row ID not set, ID field not set: `INSERT`
+    ///
+    /// If the ID field is optional (but not auto-incrementing, i.e. manual):
+    ///
+    ///   - Row ID set, ID field set: `UPDATE`
+    ///   - Row ID set, ID field not set: [`StashError::InvalidIdState`]
+    ///   - Row ID not set, ID field set: `INSERT`
+    ///   - Row ID not set, ID field not set: [`StashError::IdNotSet`]
+    ///
+    /// If the ID field is fully manual:
+    ///
+    ///   - Row ID set: `UPDATE`
+    ///   - Row ID not set: `INSERT`
+    ///
+    /// Note: If the ID field is set to optional or auto-incrementing, then the
+    /// [`id_value()`](Model::id_value()) function will return an error if it is
+    /// not set, which is how we can determine this.
+    ///
     /// # Errors
     ///
-    /// See [`Stash::query()`] for a list of possible errors that can occur when
-    /// using this function.
+    /// See [`Stash::query()`] for a list of possible general query-related
+    /// errors that can occur when using this function. In addition, the
+    /// following may occur:
+    ///
+    /// * [`StashError::IdNotSet`]
+    /// * [`StashError::InvalidIdState`]
+    /// * [`StashError::NoRowIdReturned`]
+    /// * [`StashError::NoRowsUpdated`]
     ///
     /// # See also
     ///
@@ -786,9 +902,27 @@ where
     ///
     /// # Parameters
     ///
-    /// * `id` - The row id to set for the record.
+    /// * `id` - The row id to set for the record. If the ID is wrapped in an
+    ///          [`Option`], the [`Option`] should be included.
     ///
-    fn set_id(&mut self, id: Option<Self::Id>);
+    /// # See also
+    ///
+    /// * [`Model::set_id_value()`]
+    ///
+    fn set_id(&mut self, id: Self::Id);
+
+    /// Sets the record's unique primary ID field's true value.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The row id to set for the record, as a bare type without being
+    ///          wrapped in an [`Option`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::set_id()`]
+    ///
+    fn set_id_value(&mut self, id: Self::IdType);
 
     /// Sets the record's unique row ID.
     ///
@@ -994,14 +1128,24 @@ where
 /// * [`Model::save_using()`]
 ///
 async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Result<(), StashError> {
-    let fields = M::field_names();
-    match (model.row_id(), model.id()) {
-        // The row ID is set, but the ID field is not - invalid state.
-        (Some(_), None) => {
+    // If the ID field is auto-incrementing then it is fully managed by the
+    // database, and we exclude it from the list here.
+    let (fields, values) = if M::id_is_autoincrementing() {
+        (
+            M::field_names_without_id(),
+            M::field_values_without_id(model),
+        )
+    } else {
+        (M::field_names(), M::field_values(model))
+    };
+
+    match (model.row_id(), model.id_value()) {
+        // The row ID is set, but the optional ID field is not - invalid state.
+        (Some(_), Err(_)) => {
             return Err(StashError::InvalidIdState);
         }
-        // The ID field is set (the row ID may or may not be set) - save normally.
-        (None | Some(_), Some(id)) => {
+        // The row ID and the ID field are both set - perform an update.
+        (Some(_), Ok(id)) => {
             let update_fields = fields
                 .iter()
                 .map(|field| format!("{field} = ?"))
@@ -1021,7 +1165,7 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
                 M::id_field_name(),
             );
             #[allow(trivial_casts)]
-            let field_values: Vec<Box<dyn ToSql + Send>> = M::field_values(model)
+            let field_values: Vec<Box<dyn ToSql + Send>> = values
                 .into_iter()
                 .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
                 .collect();
@@ -1034,8 +1178,20 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
                 return Err(StashError::NoRowsUpdated);
             }
         }
-        (None, None) => {
-            // Neither the row ID nor the ID field are set - new record.
+        // The row ID is not set (the ID field may or may not be set) - new record.
+        (None, _) => {
+            if M::id_is_autoincrementing() && model.id_value().is_ok() {
+                // If the ID field is configured as auto-incrementing and is set, but the
+                // row ID is not set, then the state is invalid, because it should have been
+                // loaded from the database.
+                return Err(StashError::InvalidIdState);
+            }
+            if M::id_is_optional() && !M::id_is_autoincrementing() && model.id_value().is_err() {
+                // If the ID field is configured as optional but NOT auto-incrementing, and
+                // is not set, then the state is invalid, because it is under manual control
+                // and needs to be set before saving.
+                return Err(StashError::IdNotSet);
+            }
             let placeholders = repeat("?")
                 .take(fields.len())
                 .collect::<Vec<_>>()
@@ -1054,24 +1210,23 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
                 placeholders,
                 M::id_field_name(),
             );
-            let field_values: Vec<Box<dyn ToSql + Send>> =
-                M::field_values(model).into_iter().collect();
+            let field_values: Vec<Box<dyn ToSql + Send>> = values.into_iter().collect();
             #[allow(clippy::shadow_reuse)]
             let rows = match tether {
                 Some(tether) => {
                     tether
-                        .query::<_, QueryResultIdPair<M::Id>>(&query, field_values)
+                        .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
                         .await?
                 }
                 None => {
                     model
                         .stash()
-                        .query::<_, QueryResultIdPair<M::Id>>(&query, field_values)
+                        .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
                         .await?
                 }
             };
             if let Some(row) = rows.into_iter().next() {
-                model.set_id(Some(row.id));
+                model.set_id_value(row.id);
                 model.set_row_id(Some(row.rowid));
             } else {
                 return Err(StashError::NoRowIdReturned);

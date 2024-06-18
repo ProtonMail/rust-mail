@@ -537,10 +537,12 @@ pub enum StashError {
     #[error("ID not set")]
     IdNotSet,
 
-    /// There is a row ID, but no primary ID field value. This should never
-    /// happen in practice, and if it does, it means some manual process has
-    /// taken place that has resulted in an invalid state.
-    #[error("Row ID set without ID field being set")]
+    /// There is a row ID, but no primary ID field value — or, no row ID, but
+    /// the primary ID field is set when configured as auto-incrementing.
+    /// Neither of these situations should ever happen in normal practice, and
+    /// if they do, it means some manual process has taken place that has
+    /// resulted in an invalid state.
+    #[error("Row ID and ID field are in an invalid state")]
     InvalidIdState,
 
     /// The row ID was missing from the query results. This should never happen
