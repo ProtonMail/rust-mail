@@ -74,7 +74,7 @@ impl MailUserContext {
     pub fn session(&self) -> &Session {
         self.inner.user_context.session()
     }
-    
+
     /// Get the database connection.
     #[must_use]
     pub fn stash(&self) -> &Stash {
@@ -108,7 +108,8 @@ impl MailUserContext {
         let keys = self
             .inner
             .user_context
-            .user_keys_unlocked(pgp_provider, self).await?;
+            .user_keys_unlocked(pgp_provider, self)
+            .await?;
         Ok(keys)
     }
 
@@ -124,7 +125,8 @@ impl MailUserContext {
         let keys = self
             .inner
             .user_context
-            .user_keys_unlocked(pgp_provider, &secret_loader).await?;
+            .user_keys_unlocked(pgp_provider, &secret_loader)
+            .await?;
         Ok(keys)
     }
 
@@ -144,7 +146,8 @@ impl MailUserContext {
         let keys = self
             .inner
             .user_context
-            .address_keys_unlocked(pgp_provider, self, address_id).await?;
+            .address_keys_unlocked(pgp_provider, self, address_id)
+            .await?;
         Ok(keys)
     }
 
@@ -159,10 +162,11 @@ impl MailUserContext {
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         // TODO: This should not be necessary and handled by the UserContext
         let secret = CloneSecretLoader(self.session().expose_key_secret().await);
-        let keys =
-            self.inner
-                .user_context
-                .address_keys_unlocked(pgp_provider, &secret, address_id).await?;
+        let keys = self
+            .inner
+            .user_context
+            .address_keys_unlocked(pgp_provider, &secret, address_id)
+            .await?;
         Ok(keys)
     }
 

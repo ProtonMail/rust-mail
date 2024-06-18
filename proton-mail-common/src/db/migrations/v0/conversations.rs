@@ -20,12 +20,14 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         "CREATE UNIQUE INDEX index_conversations_rid ON conversations (remote_id)",
         vec![],
-    ).await?;
+    )
+    .await?;
 
     // Conversation -> Labels
     tx.execute(
@@ -56,7 +58,8 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         r#"CREATE INDEX index_conversations_labels_cid ON conversation_labels (local_conversation_id)"#,
@@ -66,7 +69,8 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
     tx.execute(
         r#"CREATE INDEX index_conversations_labels_lid ON conversation_labels (local_label_id)"#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     //Conversation -> attachment
     tx.execute(
@@ -89,7 +93,8 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         r#"CREATE INDEX index_conversations_attachments_cid ON conversation_attachments (local_conversation_id)"#,

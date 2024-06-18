@@ -1,6 +1,6 @@
+use proton_api_mail::domain::LabelId;
 use stash::params;
 use stash::stash::{StashError, Tether};
-use proton_api_mail::domain::LabelId;
 
 pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
     // Local version for manipulation.
@@ -29,13 +29,19 @@ pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         r#"CREATE UNIQUE INDEX index_labels_rid ON labels (`remote_id`)"#,
         vec![],
-    ).await?;
-    tx.execute(r#"CREATE INDEX index_labels_order ON labels (`order`)"#, vec![]).await?;
+    )
+    .await?;
+    tx.execute(
+        r#"CREATE INDEX index_labels_order ON labels (`order`)"#,
+        vec![],
+    )
+    .await?;
 
     // Label Conversation Count
     tx.execute(
@@ -52,7 +58,8 @@ pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     // Label Message Count
     tx.execute(
@@ -69,12 +76,12 @@ pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     // Insert default known system
     let sql =
-        r#"INSERT INTO labels (remote_id, type, name, color, `order`) VALUES (?,4,?,'#000000',?)"#
-    ;
+        r#"INSERT INTO labels (remote_id, type, name, color, `order`) VALUES (?,4,?,'#000000',?)"#;
     let labels = [
         (LabelId::inbox(), "Inbox"),
         (LabelId::starred(), "Starred"),

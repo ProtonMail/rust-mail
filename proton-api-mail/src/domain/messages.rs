@@ -1,27 +1,31 @@
-use crate::domain::{ApiError, AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId};
+use crate::domain::{
+    ApiError, AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId,
+};
 use crate::exports::serde_json;
+use crate::requests::{GetMessageMetadataRequest, GetMessageRequest};
 use crate::{MailSession, MAX_PAGE_ELEMENT_COUNT};
+use indoc::formatdoc;
 use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
 use proton_api_core::utils::{bool_from_integer, bool_to_integer, opt_bool_to_integer};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
-use stash::exports::{FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
-use stash::macros::Model;
-use stash::orm::Model;
-use stash::{params, sql_using_serde};
-use stash::stash::{Stash, StashError};
-use tracing::{debug, error};
-use crate::requests::{GetMessageMetadataRequest, GetMessageRequest};
-use serde_json::Value as JsonValue;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
+use serde_json::Value as JsonValue;
+use stash::exports::{
+    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef,
+};
+use stash::macros::Model;
+use stash::orm::Model;
+use stash::stash::{Stash, StashError};
+use stash::{params, sql_using_serde};
+use std::collections::HashMap;
 use std::convert::AsRef;
-use indoc::formatdoc;
+use std::path::{Path, PathBuf};
+use tracing::{debug, error};
 
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
@@ -160,23 +164,16 @@ impl MessageFlags {
 
 #[cfg(feature = "sql")]
 impl ToSql for MessageFlags {
-    fn to_sql(
-        &self,
-    ) -> Result<
-        ToSqlOutput<'_>, SqliteError,
-    > {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.0.to_sql()
     }
 }
 
 #[cfg(feature = "sql")]
 impl FromSql for MessageFlags {
-    fn column_result(
-        value: ValueRef<'_>,
-    ) -> FromSqlResult<Self> {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let value = u64::column_result(value)?;
-        MessageFlags::from_bits(value)
-            .ok_or(FromSqlError::InvalidType)
+        MessageFlags::from_bits(value).ok_or(FromSqlError::InvalidType)
     }
 }
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -260,9 +257,9 @@ pub enum MimeType {
 #[allow(clippy::struct_excessive_bools)]
 #[TableName("messages")]
 pub struct Message {
-	#[IdField(autoincrement)]
-	#[serde(skip)]
-	pub local_id: Option<u64>,
+    #[IdField(autoincrement)]
+    #[serde(skip)]
+    pub local_id: Option<u64>,
     #[DbField]
     #[serde(rename = "ID")]
     pub remote_id: Option<MessageId>,
@@ -405,15 +402,26 @@ impl Message {
                 row_id: None,
                 stash: Some(stash.clone()),
             };
-            if let Some(existing) = Self::find("WHERE remote_id = ?", params![message.remote_id.clone()], stash, None).await?.into_iter().next() {
+            if let Some(existing) = Self::find(
+                "WHERE remote_id = ?",
+                params![message.remote_id.clone()],
+                stash,
+                None,
+            )
+            .await?
+            .into_iter()
+            .next()
+            {
                 message.local_id = existing.local_id;
                 message.row_id = existing.row_id;
                 message.stash = existing.stash;
-                
+
                 // Remove any labels that are no longer associated with this conversation.
                 if !message.label_ids.0.is_empty() {
                     #[allow(trivial_casts)]
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             message_labels
                         WHERE
@@ -422,42 +430,74 @@ impl Message {
                                 SELECT local_id FROM labels WHERE remote_id IN ({})
                             )
                         ",
-                        vec!["?"; message.label_ids.0.len()].join(",")
-                    ), vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>].into_iter().chain(message.label_ids.0.iter().map(|label| Box::new(label.clone()) as Box<dyn ToSql + Send>)).collect()).await?;
+                            vec!["?"; message.label_ids.0.len()].join(",")
+                        ),
+                        vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
+                            .into_iter()
+                            .chain(
+                                message
+                                    .label_ids
+                                    .0
+                                    .iter()
+                                    .map(|label| Box::new(label.clone()) as Box<dyn ToSql + Send>),
+                            )
+                            .collect(),
+                    )
+                    .await?;
                 } else {
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             message_labels
                         WHERE
                             local_message_id = ?
                         ",
-                    ), params![message.local_id]).await?;
+                        ),
+                        params![message.local_id],
+                    )
+                    .await?;
                 }
 
                 // Remove any attachments that are no longer associated with this conversation.
                 if !message.attachments_metadata.0.is_empty() {
                     #[allow(trivial_casts)]
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             message_attachments
                         WHERE
                             local_message_id = ?
                             AND local_attachment_id NOT IN ({})
                         ",
-                        vec!["?"; message.attachments_metadata.0.len()].join(",")
-                    ), vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>].into_iter().chain(message.attachments_metadata.0.iter().map(|attachment| Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>)).collect()).await?;
+                            vec!["?"; message.attachments_metadata.0.len()].join(",")
+                        ),
+                        vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
+                            .into_iter()
+                            .chain(message.attachments_metadata.0.iter().map(|attachment| {
+                                Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
+                            }))
+                            .collect(),
+                    )
+                    .await?;
                 } else {
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             message_attachments
                         WHERE
                             local_message_id = ?
                         ",
-                    ), params![message.local_id]).await?;
+                        ),
+                        params![message.local_id],
+                    )
+                    .await?;
                 }
             }
             message.save_using(&tx).await?;
-            
+
             for mut _label in message.label_ids.0 {
                 // TODO
                 // label.save_using(&tx).await?;
@@ -474,22 +514,25 @@ impl Message {
         tx.commit().await?;
         Ok(ids)
     }
-    
+
     /// Get the cache path for a message body with `id`.
     pub fn message_cache_path(&self, cache_path: &Path) -> PathBuf {
-        cache_path.join(format!("message_body_{}", self.local_id.expect("Message does not have a local id")))
+        cache_path.join(format!(
+            "message_body_{}",
+            self.local_id.expect("Message does not have a local id")
+        ))
     }
-    
+
     /// Get the message's body.
     ///
     /// This will attempt to fetch the message data from the servers if it has
     /// not yet been downloaded before.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
-    /// 
+    ///
     pub async fn message_body<P: PGPProviderSync>(
         &self,
         cache_path: &Path,
@@ -498,16 +541,19 @@ impl Message {
         address_keys: UnlockedAddressKeys<P>,
     ) -> Result<DecryptedMessageBody, ApiError>
     where
-        UnlockedAddressKeys<P>: AsRef<P::PrivateKey>
+        UnlockedAddressKeys<P>: AsRef<P::PrivateKey>,
     {
         // Fetch metadata first to sync contents and cache.
         let metadata = self.sync_message_body(cache_path, mail_session).await?;
 
         // TODO(ET-231): Read body from cache.
-        let encrypted_body = std::fs::read_to_string(self.message_cache_path(cache_path)).map_err(|e| {
-            error!("Failed to read encrypted message body from cache: {e}");
-            ApiError::Other(r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned())
-        })?;
+        let encrypted_body =
+            std::fs::read_to_string(self.message_cache_path(cache_path)).map_err(|e| {
+                error!("Failed to read encrypted message body from cache: {e}");
+                ApiError::Other(
+                    r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned(),
+                )
+            })?;
 
         // Decrypt message.
 
@@ -542,10 +588,10 @@ impl Message {
     /// Synchronize the message body.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns error if the API request failed or the data could not be written
     /// to the database.
-    /// 
+    ///
     pub async fn sync_message_body(
         &self,
         cache_path: &Path,
@@ -555,19 +601,25 @@ impl Message {
             return Err(ApiError::Stash(StashError::NoStashAvailable));
         };
         // TODO(ET-231): Use caching solution.
-        let metadata = if let Some(metadata) = MessageBodyMetadata::find("WHERE id = ?", params![self.local_id], &conn, None)
-            .await
-            .map_err(|e| {
-                error!("Failed to retrieve message body metadata from db: {e}");
-                e
-            })?.into_iter().next() {
+        let metadata = if let Some(metadata) =
+            MessageBodyMetadata::find("WHERE id = ?", params![self.local_id], &conn, None)
+                .await
+                .map_err(|e| {
+                    error!("Failed to retrieve message body metadata from db: {e}");
+                    e
+                })?
+                .into_iter()
+                .next()
+        {
             metadata
         } else {
             // metadata is not there it is either missing or the message does not exist.
-            let remote_id =
-                self.remote_id.clone().ok_or(ApiError::Other("MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned()))?;
+            let remote_id = self.remote_id.clone().ok_or(ApiError::Other(
+                "MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned(),
+            ))?;
             // sync the message body
-            let message = mail_session.session()
+            let message = mail_session
+                .session()
                 .execute_request(GetMessageRequest::new(&remote_id))
                 .await
                 .map(|v| v.message)
@@ -577,32 +629,34 @@ impl Message {
                 })?;
 
             // create message in the database and store body in the cache.
-                let mut metadata = MessageBodyMetadata {
-                    local_message_id: message.local_id,
-                    remote_id: message.remote_id.clone(),
-                    header: message.header.clone(),
-                    parsed_headers: message.parsed_headers.clone(),
-                    mime_type: message.mime_type.clone(),
-                    row_id: None,
-                    stash: Some(conn.clone()),
-                };
-                metadata.save().await.map_err(|e| {
-                    error!("Failed to store message body metadata in db: {e}");
-                    e
-                })?;
+            let mut metadata = MessageBodyMetadata {
+                local_message_id: message.local_id,
+                remote_id: message.remote_id.clone(),
+                header: message.header.clone(),
+                parsed_headers: message.parsed_headers.clone(),
+                mime_type: message.mime_type.clone(),
+                row_id: None,
+                stash: Some(conn.clone()),
+            };
+            metadata.save().await.map_err(|e| {
+                error!("Failed to store message body metadata in db: {e}");
+                e
+            })?;
 
-                // TODO(ET-231): Write to cache.
-                std::fs::write(self.message_cache_path(cache_path), &message.body).map_err(|e| {
-                    error!("Failed to write message body: {e}");
-                    ApiError::Other(r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned())
-                })?;
+            // TODO(ET-231): Write to cache.
+            std::fs::write(self.message_cache_path(cache_path), &message.body).map_err(|e| {
+                error!("Failed to write message body: {e}");
+                ApiError::Other(
+                    r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned(),
+                )
+            })?;
 
-                metadata
+            metadata
         };
 
         Ok(metadata)
     }
-    
+
     /// Synchronize the first `count` messages of the label with `label_id`.
     ///
     /// # Errors
@@ -616,14 +670,15 @@ impl Message {
         stash: &Stash,
         session: &MailSession,
     ) -> Result<(), ApiError> {
-        let response = session.session()
+        let response = session
+            .session()
             .execute_request(GetMessageMetadataRequest::new(MessageMetadataFilter {
                 page: 0,
                 page_size: count.max(MAX_PAGE_ELEMENT_COUNT) as u64,
                 label_id: Some(vec![label_id]),
                 desc: Some(true),
                 ..Default::default()
-			}))
+            }))
             .await?;
 
         debug!(
@@ -743,7 +798,7 @@ impl Serialize for MessageMetadataSortMode {
 /// Message bodies are not stored in the database.
 ///
 /// For metadata associated with a message see [`MessageMetadata`].
-/// 
+///
 #[derive(Clone, Debug, Eq, Deserialize, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[TableName("message_bodies")]
@@ -864,11 +919,7 @@ pub struct MessageCount {
 
 #[cfg(feature = "sql")]
 impl ToSql for MimeType {
-    fn to_sql(
-        &self,
-    ) -> Result<
-        ToSqlOutput<'_>, SqliteError,
-    > {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         match self {
             MimeType::TextPlain => "text/plain",
             MimeType::TextHTML => "text/html",
@@ -882,9 +933,7 @@ impl ToSql for MimeType {
 
 #[cfg(feature = "sql")]
 impl FromSql for MimeType {
-    fn column_result(
-        value: ValueRef<'_>,
-    ) -> FromSqlResult<Self> {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let value = value.as_str()?;
         Ok(match value {
             "text/plain" => MimeType::TextPlain,
@@ -893,11 +942,9 @@ impl FromSql for MimeType {
             "multipart/related" => MimeType::MultipartRelated,
             "message/rfc822" => MimeType::MessageRFC822,
             _ => {
-                return Err(
-                    FromSqlError::Other(
-                        format!("invalid mime type value:{value}").into(),
-                    ),
-                )
+                return Err(FromSqlError::Other(
+                    format!("invalid mime type value:{value}").into(),
+                ))
             }
         })
     }

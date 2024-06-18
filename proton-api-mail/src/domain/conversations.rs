@@ -1,17 +1,20 @@
-use crate::domain::{ApiError, AttachmentMetadata, ExternalId, Label, LabelId, LabelType, MessageAddress, MessageAttachmentInfo, MessageId, MessageMetadata, MessageMetadataSortMode};
+use crate::domain::{
+    ApiError, AttachmentMetadata, ExternalId, Label, LabelId, LabelType, MessageAddress,
+    MessageAttachmentInfo, MessageId, MessageMetadata, MessageMetadataSortMode,
+};
+use crate::requests::GetConversationsRequest;
+use crate::{MailSession, MAX_PAGE_ELEMENT_COUNT};
+use indoc::formatdoc;
 use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde;
 use proton_api_core::exports::serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
-use indoc::formatdoc;
-use stash::exports::ToSql;
+use std::collections::HashMap;
 use tracing::debug;
-use crate::{MailSession, MAX_PAGE_ELEMENT_COUNT};
-use crate::requests::GetConversationsRequest;
 
 proton_api_core::utils::string_id!(ConversationId);
 
@@ -73,11 +76,11 @@ pub struct ConversationLabels {
     pub context_num_messages: u64,
     #[DbField]
     pub context_time: u64,
-	#[DbField]
+    #[DbField]
     pub context_size: u64,
-	#[DbField]
+    #[DbField]
     pub context_num_attachments: u64,
-	#[DbField]
+    #[DbField]
     pub context_expiration_time: u64,
     #[DbField]
     pub context_snooze_time: u64,
@@ -143,15 +146,26 @@ impl Conversation {
         let mut ids = Vec::with_capacity(conversations.len());
 
         for mut conv in conversations {
-            if let Some(existing) = Self::find("WHERE remote_id = ?", params![conv.remote_id.clone()], stash, None).await?.into_iter().next() {
+            if let Some(existing) = Self::find(
+                "WHERE remote_id = ?",
+                params![conv.remote_id.clone()],
+                stash,
+                None,
+            )
+            .await?
+            .into_iter()
+            .next()
+            {
                 conv.local_id = existing.local_id;
                 conv.row_id = existing.row_id;
                 conv.stash = existing.stash;
-                
+
                 // Remove any labels that are no longer associated with this conversation.
                 if !conv.labels.is_empty() {
                     #[allow(trivial_casts)]
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             conversation_labels
                         WHERE
@@ -160,42 +174,70 @@ impl Conversation {
                                 SELECT local_id FROM labels WHERE remote_id IN ({})
                             )
                         ",
-                        vec!["?"; conv.labels.len()].join(",")
-                    ), vec![Box::new(conv.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>].into_iter().chain(conv.labels.iter().map(|label| Box::new(label.remote_id.clone()) as Box<dyn ToSql + Send>)).collect()).await?;
+                            vec!["?"; conv.labels.len()].join(",")
+                        ),
+                        vec![Box::new(conv.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
+                            .into_iter()
+                            .chain(conv.labels.iter().map(|label| {
+                                Box::new(label.remote_id.clone()) as Box<dyn ToSql + Send>
+                            }))
+                            .collect(),
+                    )
+                    .await?;
                 } else {
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             conversation_labels
                         WHERE
                             local_conversation_id = ?
                         ",
-                    ), params![conv.local_id]).await?;
+                        ),
+                        params![conv.local_id],
+                    )
+                    .await?;
                 }
 
                 // Remove any attachments that are no longer associated with this conversation.
                 if !conv.attachments_metadata.is_empty() {
                     #[allow(trivial_casts)]
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             conversation_attachments
                         WHERE
                             local_conversation_id = ?
                             AND local_attachment_id NOT IN ({})
                         ",
-                        vec!["?"; conv.attachments_metadata.len()].join(",")
-                    ), vec![Box::new(conv.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>].into_iter().chain(conv.attachments_metadata.iter().map(|attachment| Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>)).collect()).await?;
+                            vec!["?"; conv.attachments_metadata.len()].join(",")
+                        ),
+                        vec![Box::new(conv.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
+                            .into_iter()
+                            .chain(conv.attachments_metadata.iter().map(|attachment| {
+                                Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
+                            }))
+                            .collect(),
+                    )
+                    .await?;
                 } else {
-                    tx.execute(formatdoc!("
+                    tx.execute(
+                        formatdoc!(
+                            "
                         DELETE FROM
                             conversation_attachments
                         WHERE
                             local_conversation_id = ?
                         ",
-                    ), params![conv.local_id]).await?;
+                        ),
+                        params![conv.local_id],
+                    )
+                    .await?;
                 }
             }
             conv.save_using(&tx).await?;
-            
+
             for mut label in conv.labels {
                 label.save_using(&tx).await?;
             }
@@ -210,35 +252,34 @@ impl Conversation {
         tx.commit().await?;
         Ok(ids)
     }
-    
+
     #[inline]
     #[must_use]
     pub fn is_starred(&self) -> bool {
-        self.labels.iter().any(|l| l.remote_id == *LabelId::starred())
+        self.labels
+            .iter()
+            .any(|l| l.remote_id == *LabelId::starred())
     }
-    
+
     /// Retrieve the first unread message that should be displayed to the user
     /// from the conversation's `messages`.
     ///
     /// The returned message will depend on the `label` where the conversation
     /// is returned.
-    /// 
+    ///
     // TODO: This should become an instance method later once all is stable.
-    pub fn first_unread_message(
-        label: &Label,
-        messages: &[MessageMetadata],
-    ) -> Option<MessageId> {
+    pub fn first_unread_message(label: &Label, messages: &[MessageMetadata]) -> Option<MessageId> {
         if messages.is_empty() {
             return None;
         }
-    
+
         if label.label_type == LabelType::Label
             || label.label_type == LabelType::Folder
             || label.remote_id.as_ref() == Some(LabelId::starred())
         {
             // last consecutive that is not a draft
             let mut last_unread = None;
-    
+
             for msg in messages.iter().rev() {
                 if msg.unread && !msg.flags.is_draft() {
                     last_unread = Some(msg.remote_id.clone());
@@ -246,19 +287,19 @@ impl Conversation {
                     break;
                 }
             }
-    
+
             return last_unread;
         };
-    
+
         // In any other location check if the last message is unread.
         let mut iter = messages.iter().rev();
         let msg = iter.next()?;
         if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
             return Some(msg.remote_id.clone());
         }
-    
+
         let mut last_unread = None;
-    
+
         // last consecutive message that is not a draft or sent auto-reply
         for msg in iter {
             if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
@@ -267,7 +308,7 @@ impl Conversation {
                 break;
             }
         }
-    
+
         last_unread
     }
 
@@ -278,7 +319,10 @@ impl Conversation {
     /// Returns an error if the API request failed or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_conversation_and_message_counts(_stash: &Stash, _session: &MailSession) -> Result<(), ApiError> {
+    pub async fn sync_conversation_and_message_counts(
+        _stash: &Stash,
+        _session: &MailSession,
+    ) -> Result<(), ApiError> {
         // TODO
         // let conversation_counts = session.conversation_counts().await?;
         // let message_counts = session.message_counts().await?;
@@ -300,7 +344,8 @@ impl Conversation {
         stash: &Stash,
         session: &MailSession,
     ) -> Result<(), ApiError> {
-        let response = session.session()
+        let response = session
+            .session()
             .execute_request(GetConversationsRequest::new(ConversationFilter {
                 page: 0,
                 page_size: count.max(MAX_PAGE_ELEMENT_COUNT) as u64,

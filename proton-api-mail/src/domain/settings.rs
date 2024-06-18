@@ -4,6 +4,9 @@ use proton_api_core::utils::{
     bool_from_integer, bool_to_integer, opt_bool_from_integer, opt_bool_to_integer,
 };
 
+use crate::domain::ApiError;
+use crate::requests::GetMailSettingsRequest;
+use crate::MailSession;
 #[cfg(feature = "sql")]
 use proton_api_core::exports::proton_sqlite3;
 use stash::macros::Model;
@@ -11,9 +14,6 @@ use stash::orm::Model;
 use stash::sql_using_serde;
 use stash::stash::Stash;
 use tracing::debug;
-use crate::domain::ApiError;
-use crate::MailSession;
-use crate::requests::GetMailSettingsRequest;
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
 
@@ -205,7 +205,8 @@ pub struct MailSettings {
 
 impl MailSettings {
     pub async fn sync_mail_settings(mail_session: MailSession) -> Result<(), ApiError> {
-        let mut settings = mail_session.session()
+        let mut settings = mail_session
+            .session()
             .execute_request(GetMailSettingsRequest {})
             .await
             .map(|r| r.mail_settings)?;

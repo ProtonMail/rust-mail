@@ -1,16 +1,18 @@
+use crate::domain::{ApiError, MailSettingsViewMode};
+use crate::requests::GetLabelsRequest;
+use crate::MailSession;
 use lazy_static::lazy_static;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize};
 use proton_api_core::exports::serde_repr::{Deserialize_repr, Serialize_repr};
 use proton_api_core::utils::{bool_from_integer, bool_to_integer};
-use std::convert::Into;
-use stash::exports::{SqliteError, FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
+use stash::exports::{
+    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
+};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::Stash;
+use std::convert::Into;
 use tracing::debug;
-use crate::domain::{ApiError, MailSettingsViewMode};
-use crate::MailSession;
-use crate::requests::GetLabelsRequest;
 
 proton_api_core::utils::string_id!(LabelId);
 
@@ -115,7 +117,7 @@ impl Label {
     /// If this function returns [`None`] we should use the
     /// [`MailSettingsViewMode`] defined in the user's [`MailSettings`],
     /// otherwise the returned value should be used.
-    /// 
+    ///
     pub fn view_mode(&self) -> Option<MailSettingsViewMode> {
         let remote_id = self.remote_id.as_ref()?;
 
@@ -129,15 +131,18 @@ impl Label {
 
         None
     }
-    
+
     pub async fn sync_labels(stash: &Stash, mail_session: &MailSession) -> Result<(), ApiError> {
         let mut all_labels = Vec::with_capacity(64);
         for category in ALL_LABEL_TYPES {
             debug!("Fetching labels ({:?})", category);
-            all_labels.extend(mail_session.session()
-                .execute_request(GetLabelsRequest::new(category))
-                .await?
-                .labels);
+            all_labels.extend(
+                mail_session
+                    .session()
+                    .execute_request(GetLabelsRequest::new(category))
+                    .await?
+                    .labels,
+            );
         }
         debug!("Storing labels into database");
         let tx = stash.transaction().await?;
@@ -294,8 +299,6 @@ impl FromSql for LabelType {
 
 impl ToSql for LabelType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(ToSqlOutput::Owned(
-            Value::Integer(*self as i64),
-        ))
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }

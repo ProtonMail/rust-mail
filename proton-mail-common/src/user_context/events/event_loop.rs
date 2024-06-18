@@ -4,7 +4,9 @@ use crate::{MailContextResult, MailUserContext, WeakMailUserContext};
 use async_trait::async_trait;
 use futures::executor::block_on;
 use proton_api_mail::proton_api_core;
-use proton_api_mail::proton_api_core::domain::{Address, ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, User, UserSettings};
+use proton_api_mail::proton_api_core::domain::{
+    Address, ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, User, UserSettings,
+};
 use proton_api_mail::proton_api_core::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
 use proton_api_mail::proton_api_core::exports::serde::{self, Deserialize, Serialize};
@@ -82,23 +84,35 @@ impl proton_event_loop::Store for MailUserContext {
     fn load(&self) -> anyhow::Result<Option<EventId>> {
         let conn = self.inner.user_context.stash();
         Ok(block_on(async {
-            conn.query::<_, QueryResultString>("SELECT value FROM event_id_store WHERE id = ?1", params![MAIL_EVENT_TYPE_ID]).await
-        }).map_err(|e| {
-                error!("Failed to load event id from db:{e}");
-                anyhow!("Failed to load event id {e}")
+            conn.query::<_, QueryResultString>(
+                "SELECT value FROM event_id_store WHERE id = ?1",
+                params![MAIL_EVENT_TYPE_ID],
+            )
+            .await
+        })
+        .map_err(|e| {
+            error!("Failed to load event id from db:{e}");
+            anyhow!("Failed to load event id {e}")
         })?
-        .into_iter().next().map(|result| EventId::from(result.value)))
+        .into_iter()
+        .next()
+        .map(|result| EventId::from(result.value)))
     }
 
     fn store(&self, id: &EventId) -> anyhow::Result<()> {
         let conn = self.inner.user_context.stash();
         block_on(async {
-            conn.execute("INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)", params![MAIL_EVENT_TYPE_ID, id.clone()]).await
+            conn.execute(
+                "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
+                params![MAIL_EVENT_TYPE_ID, id.clone()],
+            )
+            .await
             .map_err(|e| {
                 error!("Failed to store event id in db:{e}");
                 anyhow!("Failed to store event id {e}")
             })
-        }).map(|_| ())
+        })
+        .map(|_| ())
     }
 }
 

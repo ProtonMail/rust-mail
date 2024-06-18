@@ -1,7 +1,4 @@
-use crate::db::{
-    with_file_sqlite_db, Attachment, u64, u64,
-    u64,
-};
+use crate::db::{u64, u64, u64, with_file_sqlite_db, Attachment};
 use crate::exports::crypto::keys::AddressKeys;
 use proton_api_mail::domain::{
     Attachment, AttachmentId, AttachmentMetadata, Conversation, ConversationId, Disposition,
@@ -21,25 +18,21 @@ fn test_attachment_create_without_metadata() {
         let (_, conv_id, message_id) =
             create_attachment_dependencies(&mut core_conn, &mut mail_conn, None).unwrap();
         let tx = mail_conn.transaction().await.unwrap();
-                let attachment = test_attachment();
-                let local_id = tx.create_or_update_attachment(&attachment)?;
-                assert!(
-                    tx.is_attachment_metadata_complete(local_id)
-                        .unwrap()
-                        .unwrap()
-                        .0
-                );
-                let expected = Attachment::from_attachment(
-                    local_id,
-                    conv_id,
-                    Some(message_id),
-                    &attachment,
-                );
-                let db_attachment = tx.attachment_with_id(local_id).unwrap().unwrap();
-                assert_eq!(expected, db_attachment);
-                Ok(())
-            })
-            .unwrap();
+        let attachment = test_attachment();
+        let local_id = tx.create_or_update_attachment(&attachment)?;
+        assert!(
+            tx.is_attachment_metadata_complete(local_id)
+                .unwrap()
+                .unwrap()
+                .0
+        );
+        let expected =
+            Attachment::from_attachment(local_id, conv_id, Some(message_id), &attachment);
+        let db_attachment = tx.attachment_with_id(local_id).unwrap().unwrap();
+        assert_eq!(expected, db_attachment);
+        Ok(())
+    })
+    .unwrap();
     tx.commit().await.unwrap();
 }
 
@@ -59,30 +52,26 @@ async fn test_attachment_create_with_metadata() {
         let (_, conv_id, message_id) =
             create_attachment_dependencies(&mut core_conn, &mut mail_conn, Some(metadata)).unwrap();
         let tx = mail_conn.transaction().await.unwrap();
-                assert!(
-                    !tx.is_attachment_metadata_complete(u64::new(1))
-                        .unwrap()
-                        .unwrap()
-                        .0
-                );
-                let local_id = tx.create_or_update_attachment(&attachment)?;
-                assert!(
-                    tx.is_attachment_metadata_complete(local_id)
-                        .unwrap()
-                        .unwrap()
-                        .0
-                );
-                let expected = Attachment::from_attachment(
-                    local_id,
-                    conv_id,
-                    Some(message_id),
-                    &attachment,
-                );
-                let db_attachment = tx.attachment_with_id(local_id).unwrap().unwrap();
-                assert_eq!(expected, db_attachment);
-                Ok(())
-            })
-            .unwrap();
+        assert!(
+            !tx.is_attachment_metadata_complete(u64::new(1))
+                .unwrap()
+                .unwrap()
+                .0
+        );
+        let local_id = tx.create_or_update_attachment(&attachment)?;
+        assert!(
+            tx.is_attachment_metadata_complete(local_id)
+                .unwrap()
+                .unwrap()
+                .0
+        );
+        let expected =
+            Attachment::from_attachment(local_id, conv_id, Some(message_id), &attachment);
+        let db_attachment = tx.attachment_with_id(local_id).unwrap().unwrap();
+        assert_eq!(expected, db_attachment);
+        Ok(())
+    })
+    .unwrap();
     tx.commit().await.unwrap();
 }
 fn test_attachment() -> Attachment {

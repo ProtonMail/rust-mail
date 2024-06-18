@@ -9,6 +9,7 @@ pub async fn create_settings_table(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await;
+    )
+    .await;
     Ok(())
 }

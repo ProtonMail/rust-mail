@@ -14,6 +14,9 @@ impl CoreEventSubscriberConnectionProvider for WeakMailUserContext {
             e
         })?;
 
-        Ok((ctx.user_id().clone(), ctx.inner.user_context.stash().clone()))
+        Ok((
+            ctx.user_id().clone(),
+            ctx.inner.user_context.stash().clone(),
+        ))
     }
 }

@@ -1,11 +1,11 @@
 use std::io;
 
 use crate::{MailContextError, MailUserContext, Mailbox, MailboxError, MailboxResult};
+use proton_api_mail::domain::{Attachment, AttachmentMetadata};
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
 };
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
-use proton_api_mail::domain::{Attachment, AttachmentMetadata};
 use stash::orm::Model;
 
 /// A decrypted attachment returned by [`Mailbox::load_attachment_to_buffer`].
@@ -41,11 +41,14 @@ impl Mailbox {
         let mut attachment = Attachment::load(attachment_id, user_context.stash())
             .await?
             .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
-        let remote_attachment_id =
-            attachment.remote_id.clone().ok_or(MailboxError::AttachmentDoesNotHaveRemoteId(attachment_id))?;
+        let remote_attachment_id = attachment
+            .remote_id
+            .clone()
+            .ok_or(MailboxError::AttachmentDoesNotHaveRemoteId(attachment_id))?;
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
-            attachment.sync_complete_metadata(&user_context.mail_session())
+            attachment
+                .sync_complete_metadata(&user_context.mail_session())
                 .await
                 .map_err(MailContextError::from)?;
             // Load the complete attachment metadata.

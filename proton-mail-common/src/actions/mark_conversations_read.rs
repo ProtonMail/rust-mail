@@ -8,8 +8,8 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use std::any::Any;
 use stash::stash::Tether;
+use std::any::Any;
 
 define_action_id!(
     MARK_CONVERSATION_READ_ACTION_ID,
@@ -24,10 +24,7 @@ pub struct MarkConversationsReadAction {
 }
 
 impl MarkConversationsReadAction {
-    pub fn new(
-        active_label_id: u64,
-        ids: impl IntoIterator<Item = u64>,
-    ) -> Self {
+    pub fn new(active_label_id: u64, ids: impl IntoIterator<Item = u64>) -> Self {
         Self {
             active_label_id,
             ids: Vec::from_iter(ids),

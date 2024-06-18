@@ -8,8 +8,8 @@ use proton_action_queue::{
     SessionProvider, StoredAction,
 };
 use proton_event_loop::EventLoopError;
-use std::any::Any;
 use stash::stash::Tether;
+use std::any::Any;
 
 define_action_id!(EVENT_LOOP_ACTION_ID, "cccb153b-4cee-4634-90ae-6d7424e5f4d1");
 #[derive(Clone, Debug, Deserialize, Serialize)]

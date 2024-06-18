@@ -1,8 +1,6 @@
 use super::MailSession;
 use crate::domain::{Label, LabelId, LabelType};
-use crate::requests::{
-    CreateLabelRequest, DeleteLabelRequest, UpdateLabelRequest,
-};
+use crate::requests::{CreateLabelRequest, DeleteLabelRequest, UpdateLabelRequest};
 use proton_api_core::http;
 
 impl MailSession {

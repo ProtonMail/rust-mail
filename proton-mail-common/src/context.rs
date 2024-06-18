@@ -1,5 +1,6 @@
 use crate::db::DBMigrationError;
 use crate::MailUserContext;
+use futures::executor::block_on;
 use proton_api_mail::domain::{AddressDomainLogoError, ApiError};
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
 use proton_api_mail::proton_api_core::http::{Client, RequestError};
@@ -9,10 +10,9 @@ use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
+use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use futures::executor::block_on;
-use stash::stash::{Stash, StashError};
 
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
@@ -88,7 +88,8 @@ impl MailContext {
             initializers,
             client,
             network_callback,
-        ).await?;
+        )
+        .await?;
 
         Ok(Self {
             core_context,
@@ -113,7 +114,10 @@ impl MailContext {
         &self,
         login_flow: &Flow,
     ) -> MailContextResult<MailUserContext> {
-        let ctx = self.core_context.user_context_from_login_flow(login_flow).await?;
+        let ctx = self
+            .core_context
+            .user_context_from_login_flow(login_flow)
+            .await?;
         Ok(MailUserContext::new(self.clone(), ctx))
     }
 
@@ -126,7 +130,10 @@ impl MailContext {
         session: &EncryptedUserSession,
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> MailContextResult<MailUserContext> {
-        let ctx = self.core_context.user_context_from_session(session, cb).await?;
+        let ctx = self
+            .core_context
+            .user_context_from_session(session, cb)
+            .await?;
         Ok(MailUserContext::new(self.clone(), ctx))
     }
     /// Return the list of active session.
@@ -161,14 +168,11 @@ impl MailContext {
 struct MailUserDatabaseInitializer {}
 
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
-    fn initialize(
-        &self,
-        stash: &Stash,
-    ) -> Result<(), DBMigrationError> {
+    fn initialize(&self, stash: &Stash) -> Result<(), DBMigrationError> {
         block_on(async {
-        crate::db::migrations::migrate_db(stash).await?;
-        proton_action_queue::ActionStore::init_tables(stash).await?;
-        Ok(())
+            crate::db::migrations::migrate_db(stash).await?;
+            proton_action_queue::ActionStore::init_tables(stash).await?;
+            Ok(())
         })
     }
 }

@@ -1,8 +1,6 @@
-
 /// Access the user's mail settings
 #[derive(uniffi::Object)]
-pub struct MailUserSettings {
-}
+pub struct MailUserSettings {}
 
 /// Callback interface to signal the mail settings have been updated.
 #[uniffi::export(callback_interface)]

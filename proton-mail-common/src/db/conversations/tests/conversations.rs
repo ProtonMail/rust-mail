@@ -8,9 +8,8 @@ use crate::db::conversations::tests::utils::{
 };
 use crate::db::conversations::types::Conversation;
 use crate::db::{
-    with_file_sqlite_db, with_tx, with_tx_core, LabelColor, AttachmentMetadata,
-    ConversationCount, u64, LocalInlineLabelInfo, u64,
-    MailSqliteConnectionMut,
+    u64, u64, with_file_sqlite_db, with_tx, with_tx_core, AttachmentMetadata, ConversationCount,
+    LabelColor, LocalInlineLabelInfo, MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
 use proton_api_mail::domain::{
@@ -106,8 +105,7 @@ fn test_conversation_create_starred() {
                 .expect("failed to create conversation");
 
             {
-                let local_conversation =
-                    Conversation::from_conversation(id, conv.clone(), None);
+                let local_conversation = Conversation::from_conversation(id, conv.clone(), None);
                 let db_conversation = tx
                     .get_conversation(id)
                     .expect("failed to get conversation")
@@ -143,8 +141,7 @@ fn test_conversation_create_starred() {
                 .create_conversation(&conv)
                 .expect("failed to create conversation");
             {
-                let local_conversation =
-                    Conversation::from_conversation(id, conv.clone(), None);
+                let local_conversation = Conversation::from_conversation(id, conv.clone(), None);
                 let db_conversation = tx
                     .get_conversation(id)
                     .expect("failed to get conversation")
@@ -1632,9 +1629,7 @@ lazy_static! {
     pub(super) static ref MY_CONVERSATION_ID: ConversationId =
         ConversationId::from("MyConversationID");
 }
-pub(in crate::db::conversations) fn create_labels(
-    tx: &mut MailSqliteConnectionMut,
-) -> Vec<u64> {
+pub(in crate::db::conversations) fn create_labels(tx: &mut MailSqliteConnectionMut) -> Vec<u64> {
     let labels = [test_label1(), test_label2()];
     tx.create_remote_labels(labels.iter())
         .expect("failed to create labels");
