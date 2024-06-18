@@ -159,6 +159,81 @@ fn test_create_message_with_attachments() {
         });
     });
 }
+#[test]
+fn attachment_properly_initialized_after_conversation_load_chain() {
+    // * Create conversation with attachment
+    // * Create message with attachment
+    // * Create message body with attachment
+    // * Observe attachment is loaded correctly
+    with_file_sqlite_db(|mut core_conn, mut conn, _| {
+        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+        with_tx(&mut conn, |tx| {
+            let attachment_metadata = AttachmentMetadata {
+                id: AttachmentId::from("myattachment"),
+                size: 80,
+                name: "foo.pdf".to_string(),
+                mime_type: "application/pdf".to_string(),
+                disposition: Disposition::Inline,
+            };
+            create_labels(tx);
+
+            let conversation = test_conversation(
+                [ConversationLabels {
+                    id: MY_LABEL_ID1.clone(),
+                    context_num_unread: 0,
+                    context_num_messages: 0,
+                    context_time: 0,
+                    context_size: 0,
+                    context_num_attachments: 0,
+                    context_expiration_time: 0,
+                    context_snooze_time: 0,
+                }],
+                [attachment_metadata.clone()],
+            );
+
+            tx.create_conversation(&conversation).unwrap();
+
+            let metadata =
+                test_message_metadata([MY_LABEL_ID1.clone()], [attachment_metadata.clone()]);
+            let id = tx
+                .create_message_from_metadata(&metadata)
+                .expect("failed to create message");
+
+            let message = Message {
+                metadata,
+                header: "".to_string(),
+                parsed_headers: Default::default(),
+                body: "".to_string(),
+                mime_type: MimeType::TextPlain,
+                attachments: vec![MessageAttachment {
+                    id: attachment_metadata.id.clone(),
+                    name: attachment_metadata.name.clone(),
+                    size: attachment_metadata.size,
+                    mime_type: attachment_metadata.mime_type,
+                    disposition: attachment_metadata.disposition,
+                    key_packets: KeyPackets::from(""),
+                    signature: None,
+                    enc_signature: None,
+                    headers: MessageAttachmentHeaders {
+                        content_disposition: "inline".to_owned(),
+                        content_id: None,
+                        content_transfer_encoding: None,
+                        image_width: None,
+                        image_height: None,
+                    },
+                }],
+            };
+
+            tx.create_or_update_message_body(&message).unwrap();
+
+            let attachments = tx.attachments_for_message(id).unwrap();
+            assert_eq!(attachments.len(), 1);
+            let attachment = &attachments[0];
+            assert_eq!(attachment.address_id, message.metadata.address_id);
+            assert_eq!(attachment.message_id, Some(id));
+        });
+    });
+}
 
 #[test]
 fn test_update_message() {

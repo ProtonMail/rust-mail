@@ -167,6 +167,7 @@ RETURNING id",
     pub fn create_or_update_attachments_from_message<'i>(
         &mut self,
         message_id: LocalMessageId,
+        address_id: &AddressId,
         conversation_id: Option<LocalConversationId>,
         attachments: impl IntoIterator<Item = &'i MessageAttachment>,
     ) -> DBResult<Vec<LocalAttachmentId>> {
@@ -188,10 +189,11 @@ RETURNING id",
                 content_id,
                 transfer_encoding,
                 image_width,
-                image_height
+                image_height,
+                address_id
             ) VALUES (
                 ?,?,?,?,?,?,?,?,?,
-                ?,?,?,?,?
+                ?,?,?,?,?,?
             )
             ON CONFLICT (rid) DO UPDATE SET
                 key_packets=excluded.key_packets,
@@ -202,7 +204,8 @@ RETURNING id",
                 content_id=excluded.content_id,
                 transfer_encoding=excluded.transfer_encoding,
                 image_width=excluded.image_width,
-                image_height=excluded.image_height
+                image_height=excluded.image_height,
+                address_id=excluded.address_id
             RETURNING id
         "})?;
 
@@ -223,6 +226,7 @@ RETURNING id",
                 &attachment.headers.content_transfer_encoding,
                 &attachment.headers.image_width,
                 &attachment.headers.image_height,
+                address_id,
             );
             let local_id: LocalAttachmentId = stmt
                 .raw_query()

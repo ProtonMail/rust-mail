@@ -720,6 +720,7 @@ WHERE lmc.label_id = dm.label_id
             let conversation_id = self.message_conversation_id(local_id)?;
             self.create_or_update_attachments_from_message(
                 local_id,
+                &message.metadata.address_id,
                 conversation_id,
                 &message.attachments,
             )?;
