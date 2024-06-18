@@ -1,6 +1,6 @@
-use proton_sqlite3::SqliteTransaction;
+use stash::stash::{StashError, Tether};
 
-pub fn create_settings_table(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
+pub async fn create_settings_table(tx: &Tether) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE mail_settings (
@@ -8,7 +8,7 @@ pub fn create_settings_table(tx: &mut SqliteTransaction) -> crate::db::DBResult<
                 value TEXT NOT NULL
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await;
     Ok(())
 }

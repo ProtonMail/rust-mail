@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use proton_mail_common::db::LocalAttachmentMetadata;
+use proton_mail_common::db::AttachmentMetadata;
 
 use crate::{
     core::SignatureVerificationResult,
@@ -11,7 +11,7 @@ use crate::{
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
-    pub attachment_metadata: LocalAttachmentMetadata,
+    pub attachment_metadata: AttachmentMetadata,
     /// The attachment content.
     pub content: Vec<u8>,
     /// The result of the signature verification.

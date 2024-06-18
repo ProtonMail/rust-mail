@@ -1,11 +1,11 @@
-use proton_sqlite3::SqliteTransaction;
+use stash::stash::{StashError, Tether};
 
-pub fn create_conversation_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
+pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE conversations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rid TEXT UNIQUE,
+                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                remote_id TEXT UNIQUE DEFAULT NULL,
                 `order` INTEGER NOT NULL,
                 subject TEXT NOT NULL,
                 senders TEXT NOT NULL,
@@ -19,85 +19,85 @@ pub fn create_conversation_tables(tx: &mut SqliteTransaction) -> crate::db::DBRe
                 has_messages INTEGER NOT NULL DEFAULT 0
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        "CREATE UNIQUE INDEX index_conversations_rid ON conversations (rid)",
-        (),
-    )?;
+        "CREATE UNIQUE INDEX index_conversations_rid ON conversations (remote_id)",
+        vec![],
+    ).await?;
 
     // Conversation -> Labels
     tx.execute(
         r#"
             CREATE TABLE conversation_labels (
-               conversation_id INTEGER NOT NULL,
-               label_id INTEGER NOT NULL,
-               ctx_time INTEGER NOT NULL,
-               ctx_size INTEGER NOT NULL,
-               ctx_num_messages INTEGER NOT NULL,
-               ctx_num_unread INTEGER NOT NULL,
-               ctx_num_attachments INTEGER NOT NULL,
-               ctx_expiration_time INTEGER NOT NULL,
-               ctx_snooze_time INTEGER NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                local_conversation_id INTEGER NOT NULL,
+                local_label_id INTEGER NOT NULL,
+                ctx_time INTEGER NOT NULL,
+                ctx_size INTEGER NOT NULL,
+                ctx_num_messages INTEGER NOT NULL,
+                ctx_num_unread INTEGER NOT NULL,
+                ctx_num_attachments INTEGER NOT NULL,
+                ctx_expiration_time INTEGER NOT NULL,
+                ctx_snooze_time INTEGER NOT NULL,
 
-               PRIMARY KEY(conversation_id, label_id),
+                UNIQUE(local_conversation_id, local_label_id),
 
-               CONSTRAINT constraint_conversation_labels_cid
-                   FOREIGN KEY (conversation_id)
-                   REFERENCES conversations (id)
-                   ON DELETE CASCADE ON UPDATE CASCADE,
+                CONSTRAINT constraint_conversation_labels_cid
+                    FOREIGN KEY (local_conversation_id)
+                    REFERENCES conversations (local_id)
+                    ON DELETE CASCADE ON UPDATE CASCADE,
 
-               CONSTRAINT constraint_conversation_labels_lid
-                   FOREIGN KEY (label_id)
-                   REFERENCES labels (id)
-                   ON DELETE CASCADE
+                CONSTRAINT constraint_conversation_labels_lid
+                    FOREIGN KEY (local_label_id)
+                    REFERENCES labels (local_id)
+                    ON DELETE CASCADE
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        r#"CREATE INDEX index_conversations_labes_cid ON conversation_labels (conversation_id)"#,
-        (),
-    )?;
+        r#"CREATE INDEX index_conversations_labels_cid ON conversation_labels (local_conversation_id)"#,
+        vec![],
+    ).await?;
 
     tx.execute(
-        r#"CREATE INDEX index_conversations_labes_lid ON conversation_labels (label_id)"#,
-        (),
-    )?;
+        r#"CREATE INDEX index_conversations_labels_lid ON conversation_labels (local_label_id)"#,
+        vec![],
+    ).await?;
 
     //Conversation -> attachment
     tx.execute(
         r#"
             CREATE TABLE conversation_attachments(
-                conversation_id INTEGER NOT NULL,
-                attachment_id INTEGER NOT NULL,
+                local_conversation_id INTEGER NOT NULL,
+                local_attachment_id INTEGER NOT NULL,
 
-                PRIMARY KEY(conversation_id, attachment_id),
+                PRIMARY KEY(local_conversation_id, local_attachment_id),
 
                 CONSTRAINT conversation_attachments_cid
-                    FOREIGN KEY (conversation_id)
-                    REFERENCES conversations (id)
+                    FOREIGN KEY (local_conversation_id)
+                    REFERENCES conversations (local_id)
                     ON DELETE CASCADE ON UPDATE CASCADE,
 
                 CONSTRAINT conversation_attachments_aid
-                    FOREIGN KEY (attachment_id)
-                    REFERENCES attachments (id)
+                    FOREIGN KEY (local_attachment_id)
+                    REFERENCES attachments (local_id)
                     ON DELETE CASCADE ON UPDATE CASCADE
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        r#"CREATE INDEX index_conversations_attachments_cid ON conversation_attachments (conversation_id)"#,
-        (),
-    )?;
+        r#"CREATE INDEX index_conversations_attachments_cid ON conversation_attachments (local_conversation_id)"#,
+        vec![],
+    ).await?;
     tx.execute(
-        r#"CREATE INDEX index_conversations_attachments_aid ON conversation_attachments (attachment_id)"#,
-        (),
-    )?;
-
+        r#"CREATE INDEX index_conversations_attachments_aid ON conversation_attachments (local_attachment_id)"#,
+        vec![],
+    ).await?;
     Ok(())
 }

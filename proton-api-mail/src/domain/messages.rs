@@ -1,6 +1,6 @@
-use crate::domain::{AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId};
+use crate::domain::{ApiError, AttachmentId, AttachmentMetadata, ConversationId, Disposition, LabelId};
 use crate::exports::serde_json;
-use crate::MAX_PAGE_ELEMENT_COUNT;
+use crate::{MailSession, MAX_PAGE_ELEMENT_COUNT};
 use proton_api_core::domain::AddressId;
 use proton_api_core::exports::serde::{self, Deserialize, Serialize, Serializer};
 use proton_api_core::utils::{bool_from_integer, bool_to_integer, opt_bool_to_integer};
@@ -8,6 +8,20 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
+use stash::exports::{FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
+use stash::macros::Model;
+use stash::orm::Model;
+use stash::{params, sql_using_serde};
+use stash::stash::{Stash, StashError};
+use tracing::{debug, error};
+use crate::requests::{GetMessageMetadataRequest, GetMessageRequest};
+use serde_json::Value as JsonValue;
+use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
+use std::convert::AsRef;
+use indoc::formatdoc;
 
 proton_api_core::utils::string_id!(MessageId);
 proton_api_core::utils::string_id!(ExternalId);
@@ -145,24 +159,24 @@ impl MessageFlags {
 }
 
 #[cfg(feature = "sql")]
-impl crate::exports::proton_sqlite3::rusqlite::types::ToSql for MessageFlags {
+impl ToSql for MessageFlags {
     fn to_sql(
         &self,
-    ) -> crate::exports::proton_sqlite3::rusqlite::Result<
-        crate::exports::proton_sqlite3::rusqlite::types::ToSqlOutput<'_>,
+    ) -> Result<
+        ToSqlOutput<'_>, SqliteError,
     > {
         self.0.to_sql()
     }
 }
 
 #[cfg(feature = "sql")]
-impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MessageFlags {
+impl FromSql for MessageFlags {
     fn column_result(
-        value: crate::exports::proton_sqlite3::rusqlite::types::ValueRef<'_>,
-    ) -> crate::exports::proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        value: ValueRef<'_>,
+    ) -> FromSqlResult<Self> {
         let value = u64::column_result(value)?;
         MessageFlags::from_bits(value)
-            .ok_or(crate::exports::proton_sqlite3::rusqlite::types::FromSqlError::InvalidType)
+            .ok_or(FromSqlError::InvalidType)
     }
 }
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -170,14 +184,14 @@ impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MessageFlags {
 #[allow(clippy::struct_excessive_bools)]
 pub struct MessageMetadata {
     #[serde(rename = "ID")]
-    pub id: MessageId,
+    pub remote_id: MessageId,
     #[serde(rename = "ConversationID")]
     pub conversation_id: ConversationId,
     pub order: u64,
     #[serde(rename = "AddressID")]
     pub address_id: AddressId,
     #[serde(rename = "LabelIDs")]
-    pub label_ids: Vec<LabelId>,
+    pub label_ids: LabelIds,
     #[serde(rename = "ExternalID")]
     pub external_id: Option<ExternalId>,
 
@@ -186,13 +200,13 @@ pub struct MessageMetadata {
     #[serde(default)]
     pub sender: MessageAddress,
     #[serde(default)]
-    pub to_list: Vec<MessageAddress>,
+    pub to_list: MessageAddresses,
     #[serde(rename = "CCList", default)]
-    pub cc_list: Vec<MessageAddress>,
+    pub cc_list: MessageAddresses,
     #[serde(rename = "BCCList", default)]
-    pub bcc_list: Vec<MessageAddress>,
+    pub bcc_list: MessageAddresses,
     #[serde(default)]
-    pub reply_tos: Vec<MessageAddress>,
+    pub reply_tos: MessageAddresses,
     pub flags: MessageFlags,
     pub time: u64,
     pub size: u64,
@@ -220,8 +234,10 @@ pub struct MessageMetadata {
     pub snooze_time: u64,
     pub num_attachments: u32,
     #[serde(default)]
-    pub attachments_metadata: Vec<AttachmentMetadata>,
+    pub attachments_metadata: AttachmentMetadatas,
 }
+
+sql_using_serde!(MessageMetadata);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
@@ -239,22 +255,411 @@ pub enum MimeType {
     MessageRFC822,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Deserialize, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
+#[TableName("messages")]
 pub struct Message {
-    #[serde(flatten)]
-    pub metadata: MessageMetadata,
+	#[IdField(autoincrement)]
+	#[serde(skip)]
+	pub local_id: Option<u64>,
+    #[DbField]
+    #[serde(rename = "ID")]
+    pub remote_id: Option<MessageId>,
+    #[DbField]
+    pub local_conversation_id: Option<u64>,
+    #[DbField]
+    #[serde(rename = "ConversationID")]
+    pub remote_conversation_id: ConversationId,
+    #[DbField]
+    pub order: u64,
+    #[DbField]
+    #[serde(rename = "AddressID")]
+    pub address_id: AddressId,
+    #[DbField]
+    #[serde(rename = "LabelIDs")]
+    pub label_ids: LabelIds,
+    #[DbField]
+    #[serde(rename = "ExternalID")]
+    pub external_id: Option<ExternalId>,
+    #[DbField]
+    #[serde(default)]
+    pub subject: String,
+    #[DbField]
+    #[serde(default)]
+    pub sender: MessageAddress,
+    #[DbField]
+    #[serde(default)]
+    pub to_list: MessageAddresses,
+    #[DbField]
+    #[serde(rename = "CCList", default)]
+    pub cc_list: MessageAddresses,
+    #[DbField]
+    #[serde(rename = "BCCList", default)]
+    pub bcc_list: MessageAddresses,
+    #[DbField]
+    #[serde(default)]
+    pub reply_tos: MessageAddresses,
+    #[DbField]
+    pub flags: MessageFlags,
+    #[DbField]
+    pub time: u64,
+    #[DbField]
+    pub size: u64,
+    #[DbField]
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub unread: bool,
+    #[DbField]
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_replied: bool,
+    #[DbField]
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_replied_all: bool,
+    #[DbField]
+    #[serde(
+        deserialize_with = "bool_from_integer",
+        serialize_with = "bool_to_integer"
+    )]
+    pub is_forwarded: bool,
+    #[DbField]
+    pub expiration_time: u64,
+    #[DbField]
+    pub snooze_time: u64,
+    #[DbField]
+    pub num_attachments: u32,
+    #[DbField]
+    #[serde(default)]
+    pub attachments_metadata: AttachmentMetadatas,
+    #[DbField]
     pub header: String,
     // Unfortunately, some values returned in this struct are either
     // arrays or strings.
-    pub parsed_headers: HashMap<String, serde_json::Value>,
+    #[DbField]
+    pub parsed_headers: ParsedHeaders,
     pub body: String,
+    #[DbField]
     #[serde(rename = "MIMEType")]
     pub mime_type: MimeType,
+    #[DbField]
     #[serde(default)]
-    pub attachments: Vec<MessageAttachment>,
+    pub attachments: MessageAttachments,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
 }
+
+impl Message {
+    async fn create_or_update_messages_from_metadata(
+        metadata: Vec<MessageMetadata>,
+        stash: &Stash,
+    ) -> Result<Vec<u64>, ApiError> {
+        let tx = stash.transaction().await?;
+        let mut ids = Vec::with_capacity(metadata.len());
+
+        for metadata in metadata {
+            let mut message = Self {
+                local_id: None,
+                remote_id: Some(metadata.remote_id),
+                local_conversation_id: None,
+                remote_conversation_id: metadata.conversation_id,
+                order: metadata.order,
+                address_id: metadata.address_id,
+                label_ids: metadata.label_ids,
+                external_id: metadata.external_id,
+                subject: metadata.subject,
+                sender: metadata.sender,
+                to_list: metadata.to_list,
+                cc_list: metadata.cc_list,
+                bcc_list: metadata.bcc_list,
+                reply_tos: metadata.reply_tos,
+                flags: metadata.flags,
+                time: metadata.time,
+                size: metadata.size,
+                unread: metadata.unread,
+                is_replied: metadata.is_replied,
+                is_replied_all: metadata.is_replied_all,
+                is_forwarded: metadata.is_forwarded,
+                expiration_time: metadata.expiration_time,
+                snooze_time: metadata.snooze_time,
+                num_attachments: metadata.num_attachments,
+                attachments_metadata: metadata.attachments_metadata,
+                header: "".to_owned(),
+                parsed_headers: ParsedHeaders {
+                    headers: HashMap::new(),
+                },
+                body: "".to_owned(),
+                mime_type: MimeType::TextPlain,
+                attachments: MessageAttachments(Vec::new()),
+                row_id: None,
+                stash: Some(stash.clone()),
+            };
+            if let Some(existing) = Self::find("WHERE remote_id = ?", params![message.remote_id.clone()], stash, None).await?.into_iter().next() {
+                message.local_id = existing.local_id;
+                message.row_id = existing.row_id;
+                message.stash = existing.stash;
+                
+                // Remove any labels that are no longer associated with this conversation.
+                if !message.label_ids.0.is_empty() {
+                    #[allow(trivial_casts)]
+                    tx.execute(formatdoc!("
+                        DELETE FROM
+                            message_labels
+                        WHERE
+                            local_message_id = ?
+                            AND local_label_id NOT IN (
+                                SELECT local_id FROM labels WHERE remote_id IN ({})
+                            )
+                        ",
+                        vec!["?"; message.label_ids.0.len()].join(",")
+                    ), vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>].into_iter().chain(message.label_ids.0.iter().map(|label| Box::new(label.clone()) as Box<dyn ToSql + Send>)).collect()).await?;
+                } else {
+                    tx.execute(formatdoc!("
+                        DELETE FROM
+                            message_labels
+                        WHERE
+                            local_message_id = ?
+                        ",
+                    ), params![message.local_id]).await?;
+                }
+
+                // Remove any attachments that are no longer associated with this conversation.
+                if !message.attachments_metadata.0.is_empty() {
+                    #[allow(trivial_casts)]
+                    tx.execute(formatdoc!("
+                        DELETE FROM
+                            message_attachments
+                        WHERE
+                            local_message_id = ?
+                            AND local_attachment_id NOT IN ({})
+                        ",
+                        vec!["?"; message.attachments_metadata.0.len()].join(",")
+                    ), vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>].into_iter().chain(message.attachments_metadata.0.iter().map(|attachment| Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>)).collect()).await?;
+                } else {
+                    tx.execute(formatdoc!("
+                        DELETE FROM
+                            message_attachments
+                        WHERE
+                            local_message_id = ?
+                        ",
+                    ), params![message.local_id]).await?;
+                }
+            }
+            message.save_using(&tx).await?;
+            
+            for mut _label in message.label_ids.0 {
+                // TODO
+                // label.save_using(&tx).await?;
+                continue;
+            }
+            for mut _attachment in message.attachments_metadata.0 {
+                // TODO
+                // attachment.save_using(&tx).await?;
+                continue;
+            }
+
+            ids.push(message.local_id.unwrap());
+        }
+        tx.commit().await?;
+        Ok(ids)
+    }
+    
+    /// Get the cache path for a message body with `id`.
+    pub fn message_cache_path(&self, cache_path: &Path) -> PathBuf {
+        cache_path.join(format!("message_body_{}", self.local_id.expect("Message does not have a local id")))
+    }
+    
+    /// Get the message's body.
+    ///
+    /// This will attempt to fetch the message data from the servers if it has
+    /// not yet been downloaded before.
+    ///
+    /// # Errors
+    /// 
+    /// Returns error if the message failed to download, the db query failed or
+    /// the message body could not be written to the cache.
+    /// 
+    pub async fn message_body<P: PGPProviderSync>(
+        &self,
+        cache_path: &Path,
+        mail_session: &MailSession,
+        pgp_provider: P,
+        address_keys: UnlockedAddressKeys<P>,
+    ) -> Result<DecryptedMessageBody, ApiError>
+    where
+        UnlockedAddressKeys<P>: AsRef<P::PrivateKey>
+    {
+        // Fetch metadata first to sync contents and cache.
+        let metadata = self.sync_message_body(cache_path, mail_session).await?;
+
+        // TODO(ET-231): Read body from cache.
+        let encrypted_body = std::fs::read_to_string(self.message_cache_path(cache_path)).map_err(|e| {
+            error!("Failed to read encrypted message body from cache: {e}");
+            ApiError::Other(r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned())
+        })?;
+
+        // Decrypt message.
+
+        let encrypted_msg = EncryptedMessageBody {
+            metadata,
+            encrypted_body,
+        };
+
+        //TODO: Verify signature.
+        let (decrypted_body, _) = encrypted_msg
+            .decrypt(&pgp_provider, &address_keys)
+            .map_err(|e| {
+                error!("Failed to decrypt message ({:?}): {e}", self.local_id);
+                ApiError::Other("e".to_owned())
+            })?;
+
+        match decrypted_body {
+            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody {
+                metadata: encrypted_msg.metadata,
+                body,
+            }),
+            DecryptedBody::Mime(multipart) => {
+                //TODO(ET-263): Handle multipart messages.
+                Ok(DecryptedMessageBody {
+                    metadata: encrypted_msg.metadata,
+                    body: multipart.body,
+                })
+            }
+        }
+    }
+
+    /// Synchronize the message body.
+    ///
+    /// # Errors
+    /// 
+    /// Returns error if the API request failed or the data could not be written
+    /// to the database.
+    /// 
+    pub async fn sync_message_body(
+        &self,
+        cache_path: &Path,
+        mail_session: &MailSession,
+    ) -> Result<MessageBodyMetadata, ApiError> {
+        let Some(conn) = self.stash() else {
+            return Err(ApiError::Stash(StashError::NoStashAvailable));
+        };
+        // TODO(ET-231): Use caching solution.
+        let metadata = if let Some(metadata) = MessageBodyMetadata::find("WHERE id = ?", params![self.local_id], &conn, None)
+            .await
+            .map_err(|e| {
+                error!("Failed to retrieve message body metadata from db: {e}");
+                e
+            })?.into_iter().next() {
+            metadata
+        } else {
+            // metadata is not there it is either missing or the message does not exist.
+            let remote_id =
+                self.remote_id.clone().ok_or(ApiError::Other("MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned()))?;
+            // sync the message body
+            let message = mail_session.session()
+                .execute_request(GetMessageRequest::new(&remote_id))
+                .await
+                .map(|v| v.message)
+                .map_err(|e| {
+                    error!("Failed to retrieve message: {e}");
+                    ApiError::Other("MailContextError::from(e)".to_owned())
+                })?;
+
+            // create message in the database and store body in the cache.
+                let mut metadata = MessageBodyMetadata {
+                    local_message_id: message.local_id,
+                    remote_id: message.remote_id.clone(),
+                    header: message.header.clone(),
+                    parsed_headers: message.parsed_headers.clone(),
+                    mime_type: message.mime_type.clone(),
+                    row_id: None,
+                    stash: Some(conn.clone()),
+                };
+                metadata.save().await.map_err(|e| {
+                    error!("Failed to store message body metadata in db: {e}");
+                    e
+                })?;
+
+                // TODO(ET-231): Write to cache.
+                std::fs::write(self.message_cache_path(cache_path), &message.body).map_err(|e| {
+                    error!("Failed to write message body: {e}");
+                    ApiError::Other(r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned())
+                })?;
+
+                metadata
+        };
+
+        Ok(metadata)
+    }
+    
+    /// Synchronize the first `count` messages of the label with `label_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database.
+    ///
+    pub async fn sync_first_message_page(
+        label_id: LabelId,
+        count: usize,
+        stash: &Stash,
+        session: &MailSession,
+    ) -> Result<(), ApiError> {
+        let response = session.session()
+            .execute_request(GetMessageMetadataRequest::new(MessageMetadataFilter {
+                page: 0,
+                page_size: count.max(MAX_PAGE_ELEMENT_COUNT) as u64,
+                label_id: Some(vec![label_id]),
+                desc: Some(true),
+                ..Default::default()
+			}))
+            .await?;
+
+        debug!(
+            "Fetched {} messages TOTAL={}",
+            response.messages.len(),
+            response.total
+        );
+
+        Self::create_or_update_messages_from_metadata(response.messages, stash).await?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct MessageAttachments(pub Vec<MessageAttachment>);
+
+sql_using_serde!(MessageAttachments);
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct MessageAddresses(pub Vec<MessageAddress>);
+
+sql_using_serde!(MessageAddresses);
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct AttachmentMetadatas(pub Vec<AttachmentMetadata>);
+
+sql_using_serde!(AttachmentMetadatas);
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct LabelIds(pub Vec<LabelId>);
+
+sql_using_serde!(LabelIds);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
@@ -333,8 +738,46 @@ impl Serialize for MessageMetadataSortMode {
     }
 }
 
+/// Metadata associated with the Body of a message.
+///
+/// Message bodies are not stored in the database.
+///
+/// For metadata associated with a message see [`MessageMetadata`].
+/// 
+#[derive(Clone, Debug, Eq, Deserialize, Model, PartialEq, Serialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+#[TableName("message_bodies")]
+pub struct MessageBodyMetadata {
+    #[IdField(optional)]
+    #[serde(skip)]
+    pub local_message_id: Option<u64>,
+    #[DbField]
+    #[serde(rename = "ID")]
+    pub remote_id: Option<MessageId>,
+    #[DbField]
+    pub header: String,
+    #[DbField]
+    pub parsed_headers: ParsedHeaders,
+    #[DbField]
+    pub mime_type: MimeType,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
+}
+
+#[derive(Clone, Debug, Eq, Deserialize, PartialEq, Serialize)]
+#[serde(crate = "self::serde", rename_all = "PascalCase")]
+pub struct ParsedHeaders {
+    pub headers: HashMap<String, serde_json::Value>,
+}
+
+sql_using_serde!(ParsedHeaders);
+
 /// Parameters to filter/search messages with a given criteria.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Default, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct MessageMetadataFilter {
@@ -405,242 +848,9 @@ pub struct MessageMetadataFilter {
     pub external_id: Option<ExternalId>,
     #[serde(rename = "ID")]
     /// Filter on the given message ids.
-    ids: Option<Vec<MessageId>>,
+    pub ids: Option<Vec<MessageId>>,
     /// If true automatically convert simple queries to wildcarded versions, such as `test` to `*test*`.
     pub auto_wildcard: Option<bool>,
-}
-
-impl MessageMetadataFilter {
-    fn new(page_number: usize, page_size: usize) -> Self {
-        Self {
-            ids: None,
-            subject: None,
-            attachments: None,
-            address_id: None,
-            external_id: None,
-            end_id: None,
-            keyword: None,
-            recipients: None,
-            to: None,
-            cc: None,
-            bcc: None,
-            label_id: None,
-            sort: None,
-            desc: None,
-            begin: None,
-            end: None,
-            conversation_id: None,
-            page_size: page_size.max(MAX_PAGE_ELEMENT_COUNT) as u64,
-            page: page_number as u64,
-            limit: None,
-            begin_id: None,
-            from: None,
-            unread: None,
-            auto_wildcard: None,
-        }
-    }
-}
-
-/// Builder for [`MessageMetadataFilter`].
-#[derive(Debug)]
-pub struct MessageMetadataFilterBuilder(MessageMetadataFilter);
-
-impl MessageMetadataFilterBuilder {
-    /// Create a new builder for `page_index` and with a `page_size` number of elements.
-    #[must_use]
-    pub fn new(page_index: usize, page_size: usize) -> Self {
-        Self(MessageMetadataFilter::new(page_index, page_size))
-    }
-
-    /// The number of messages to return.
-    #[must_use]
-    pub fn with_limit(mut self, limit: usize) -> Self {
-        self.0.limit = Some(limit as u64);
-        self
-    }
-
-    /// The `label_ids` to filter on.
-    ///
-    /// This function is cumulative and does not reset previous values.
-    #[must_use]
-    pub fn with_label_id(mut self, label_ids: impl Into<LabelId>) -> Self {
-        match &mut self.0.label_id {
-            None => {
-                self.0.label_id = Some(vec![label_ids.into()]);
-            }
-            Some(v) => {
-                v.push(label_ids.into());
-            }
-        };
-        self
-    }
-
-    /// Result sort `mode`.
-    #[must_use]
-    pub fn with_sort_mode(mut self, mode: MessageMetadataSortMode) -> Self {
-        self.0.sort = Some(mode);
-        self
-    }
-
-    /// Sort the results descending.
-    #[must_use]
-    pub fn descending(mut self) -> Self {
-        self.0.desc = Some(true);
-        self
-    }
-
-    /// Sort the results ascending.
-    #[must_use]
-    pub fn ascending(mut self) -> Self {
-        self.0.desc = Some(false);
-        self
-    }
-
-    /// UNIX timestamp to filter messages at or later than `timestamp`.
-    #[must_use]
-    pub fn with_begin(mut self, timestamp: u64) -> Self {
-        self.0.begin = Some(timestamp);
-        self
-    }
-
-    /// UNIX timestamp to filter messages at or earlier than `timestamp`.
-    #[must_use]
-    pub fn with_end(mut self, timestamp: u64) -> Self {
-        self.0.end = Some(timestamp);
-        self
-    }
-
-    /// Return only messages newer, in creation time (NOT timestamp), than `begin_id`.
-    #[must_use]
-    pub fn with_begin_id(mut self, begin_id: impl Into<MessageId>) -> Self {
-        self.0.begin_id = Some(begin_id.into());
-        self
-    }
-
-    /// Return only messages older, in creation time (NOT timestamp), than `end_id`.
-    #[must_use]
-    pub fn with_end_id(mut self, end_id: impl Into<MessageId>) -> Self {
-        self.0.end_id = Some(end_id.into());
-        self
-    }
-
-    /// Keyword search of To, CC, BCC, From and Subject fields.
-    #[must_use]
-    pub fn with_keyword(mut self, keyword: impl Into<String>) -> Self {
-        self.0.keyword = Some(keyword.into());
-        self
-    }
-
-    /// Keyword search of To, CC and BCC fields.
-    #[must_use]
-    pub fn with_recipients(mut self, recipients: impl IntoIterator<Item = String>) -> Self {
-        self.0.recipients = Some(recipients.into_iter().collect());
-        self
-    }
-
-    /// Keyword search of To field.
-    #[must_use]
-    pub fn with_to(mut self, keyword: impl Into<String>) -> Self {
-        self.0.to = Some(keyword.into());
-        self
-    }
-
-    /// Keyword search of CC field.
-    #[must_use]
-    pub fn with_cc(mut self, keyword: impl Into<String>) -> Self {
-        self.0.cc = Some(keyword.into());
-        self
-    }
-
-    /// Keyword search of CC field.
-    #[must_use]
-    pub fn with_bcc(mut self, keyword: impl Into<String>) -> Self {
-        self.0.bcc = Some(keyword.into());
-        self
-    }
-
-    /// Keyword search of From field.
-    #[must_use]
-    pub fn with_from(mut self, keyword: impl Into<String>) -> Self {
-        self.0.from = Some(keyword.into());
-        self
-    }
-
-    /// Keyword search of Subject field.
-    #[must_use]
-    pub fn with_subject(mut self, keyword: impl Into<String>) -> Self {
-        self.0.subject = Some(keyword.into());
-        self
-    }
-
-    /// Return only message which have attachments.
-    #[must_use]
-    pub fn with_attachments(mut self) -> Self {
-        self.0.attachments = Some(true);
-        self
-    }
-
-    /// Return only message which have no attachments.
-    #[must_use]
-    pub fn without_attachments(mut self) -> Self {
-        self.0.attachments = Some(false);
-        self
-    }
-
-    /// Return only messages that are unread.
-    #[must_use]
-    pub fn with_unread(mut self) -> Self {
-        self.0.unread = Some(true);
-        self
-    }
-
-    /// Return only messages that are read.
-    #[must_use]
-    pub fn with_read(mut self) -> Self {
-        self.0.unread = Some(false);
-        self
-    }
-
-    /// Filter message by `conversation_id`.
-    #[must_use]
-    pub fn with_conversation_id(mut self, conversation_id: impl Into<ConversationId>) -> Self {
-        self.0.conversation_id = Some(conversation_id.into());
-        self
-    }
-
-    /// Filter on `address_id`.
-    #[must_use]
-    pub fn with_address_id(mut self, address_id: impl Into<AddressId>) -> Self {
-        self.0.address_id = Some(address_id.into());
-        self
-    }
-
-    /// Filter on `external_id`.
-    #[must_use]
-    pub fn with_external_id(mut self, external_id: impl Into<ExternalId>) -> Self {
-        self.0.external_id = Some(external_id.into());
-        self
-    }
-
-    /// Filter on `message_ids`.
-    #[must_use]
-    pub fn with_message_ids(mut self, message_ids: impl IntoIterator<Item = MessageId>) -> Self {
-        self.0.ids = Some(message_ids.into_iter().collect());
-        self
-    }
-
-    /// If true automatically convert simple queries to wildcarded versions, such as `test` to `*test*`.
-    #[must_use]
-    pub fn with_auto_wildcard(mut self, enabled: bool) -> Self {
-        self.0.auto_wildcard = Some(enabled);
-        self
-    }
-
-    /// Create the filter.
-    #[must_use]
-    pub fn build(self) -> MessageMetadataFilter {
-        self.0
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
@@ -653,11 +863,11 @@ pub struct MessageCount {
 }
 
 #[cfg(feature = "sql")]
-impl crate::exports::proton_sqlite3::rusqlite::types::ToSql for MimeType {
+impl ToSql for MimeType {
     fn to_sql(
         &self,
-    ) -> crate::exports::proton_sqlite3::rusqlite::Result<
-        crate::exports::proton_sqlite3::rusqlite::types::ToSqlOutput<'_>,
+    ) -> Result<
+        ToSqlOutput<'_>, SqliteError,
     > {
         match self {
             MimeType::TextPlain => "text/plain",
@@ -671,10 +881,10 @@ impl crate::exports::proton_sqlite3::rusqlite::types::ToSql for MimeType {
 }
 
 #[cfg(feature = "sql")]
-impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MimeType {
+impl FromSql for MimeType {
     fn column_result(
-        value: crate::exports::proton_sqlite3::rusqlite::types::ValueRef<'_>,
-    ) -> crate::exports::proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        value: ValueRef<'_>,
+    ) -> FromSqlResult<Self> {
         let value = value.as_str()?;
         Ok(match value {
             "text/plain" => MimeType::TextPlain,
@@ -684,11 +894,76 @@ impl crate::exports::proton_sqlite3::rusqlite::types::FromSql for MimeType {
             "message/rfc822" => MimeType::MessageRFC822,
             _ => {
                 return Err(
-                    crate::exports::proton_sqlite3::rusqlite::types::FromSqlError::Other(
+                    FromSqlError::Other(
                         format!("invalid mime type value:{value}").into(),
                     ),
                 )
             }
         })
+    }
+}
+
+/// Consists of the message's body metadata and decrypted content.
+pub struct DecryptedMessageBody {
+    /// Metadata associated with the message body
+    pub metadata: MessageBodyMetadata,
+    /// The decrypted message contents.
+    pub body: String,
+}
+
+/// A message parsed header value can either be a string or an array of strings.
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
+pub enum ParsedHeaderValue {
+    String(String),
+    Array(Vec<String>),
+}
+
+impl DecryptedMessageBody {
+    /// Retrieve a parsed header value for a given `key`.
+    pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
+        let value = self.metadata.parsed_headers.headers.get(key)?;
+        match value {
+            JsonValue::String(s) => Some(ParsedHeaderValue::String(s.clone())),
+            JsonValue::Array(array) => {
+                let mut result = Vec::with_capacity(array.len());
+                for (idx, item) in array.iter().enumerate() {
+                    if let JsonValue::String(str) = item {
+                        result.push(str.clone());
+                    } else {
+                        tracing::warn!(
+                            "Header array value {key}[{idx}] of message {:?} has invalid value type",
+                            self.metadata.local_message_id
+                        );
+                    }
+                }
+                Some(ParsedHeaderValue::Array(result))
+            }
+            _ => {
+                tracing::warn!(
+                    "Header value {key} of message {:?} has invalid value type",
+                    self.metadata.local_message_id
+                );
+                None
+            }
+        }
+    }
+}
+
+struct EncryptedMessageBody {
+    pub metadata: MessageBodyMetadata,
+    pub encrypted_body: String,
+}
+
+impl DecryptableMessage for EncryptedMessageBody {
+    fn message_id(&self) -> Option<&str> {
+        self.metadata.remote_id.as_ref().map(|v| v.as_ref())
+    }
+
+    fn message_is_mime(&self) -> bool {
+        self.metadata.mime_type == MimeType::MultipartMixed
+    }
+
+    fn message_encrypted_body(&self) -> &[u8] {
+        self.encrypted_body.as_bytes()
     }
 }

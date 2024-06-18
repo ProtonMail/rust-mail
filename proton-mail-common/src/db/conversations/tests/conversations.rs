@@ -6,10 +6,10 @@ use crate::db::conversations::tests::utils::{
     conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
     prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip,
 };
-use crate::db::conversations::types::LocalConversation;
+use crate::db::conversations::types::Conversation;
 use crate::db::{
-    with_file_sqlite_db, with_tx, with_tx_core, LabelColor, LocalAttachmentMetadata,
-    LocalConversationCount, LocalConversationId, LocalInlineLabelInfo, LocalLabelId,
+    with_file_sqlite_db, with_tx, with_tx_core, LabelColor, AttachmentMetadata,
+    ConversationCount, u64, LocalInlineLabelInfo, u64,
     MailSqliteConnectionMut,
 };
 use lazy_static::lazy_static;
@@ -38,7 +38,7 @@ fn test_conversation_create_no_labels() {
                 .create_conversation(&conv)
                 .expect("failed to create conversation");
 
-            let local_conversation = LocalConversation::from_conversation(id, conv.clone(), None);
+            let local_conversation = Conversation::from_conversation(id, conv.clone(), None);
             let db_conversation = tx
                 .get_conversation(id)
                 .expect("failed to get conversation")
@@ -74,7 +74,7 @@ fn test_unknown_conversation_messages_returns_error() {
     with_file_sqlite_db(|mut core_conn, mut conn, _| {
         with_tx_core(&mut core_conn, create_address);
         with_tx(&mut conn, |tx| {
-            let id = LocalConversationId::new(1024);
+            let id = u64::new(1024);
             tx.messages_metadata_for_conversation(id)
                 .expect_err("should fail");
         });
@@ -107,7 +107,7 @@ fn test_conversation_create_starred() {
 
             {
                 let local_conversation =
-                    LocalConversation::from_conversation(id, conv.clone(), None);
+                    Conversation::from_conversation(id, conv.clone(), None);
                 let db_conversation = tx
                     .get_conversation(id)
                     .expect("failed to get conversation")
@@ -117,7 +117,7 @@ fn test_conversation_create_starred() {
                 assert!(db_conversation.starred);
             }
             {
-                let local_conversation = LocalConversation::from_conversation_and_label(
+                let local_conversation = Conversation::from_conversation_and_label(
                     id,
                     LabelId::starred(),
                     conv.clone(),
@@ -144,7 +144,7 @@ fn test_conversation_create_starred() {
                 .expect("failed to create conversation");
             {
                 let local_conversation =
-                    LocalConversation::from_conversation(id, conv.clone(), None);
+                    Conversation::from_conversation(id, conv.clone(), None);
                 let db_conversation = tx
                     .get_conversation(id)
                     .expect("failed to get conversation")
@@ -196,7 +196,7 @@ fn test_conversation_create_with_labels() {
                 .iter()
                 .enumerate()
             {
-                let local_conversation = LocalConversation::from_conversation_and_label(
+                let local_conversation = Conversation::from_conversation_and_label(
                     id,
                     label,
                     conv.clone(),
@@ -244,7 +244,7 @@ fn test_conversation_create_with_attachment() {
                 .expect("failed to get attachments")
                 .expect("must have value");
             assert_eq!(attachments.len(), 1);
-            let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
+            let converted_attachment = AttachmentMetadata::from_attachment_metadata(
                 attachments[0].id,
                 conv.attachments_metadata[0].clone(),
             );
@@ -293,7 +293,7 @@ fn test_conversation_create_with_attachment_and_label() {
                 .expect("failed to get attachments")
                 .expect("must have value");
             assert_eq!(attachments.len(), 1);
-            let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
+            let converted_attachment = AttachmentMetadata::from_attachment_metadata(
                 attachments[0].id,
                 conv.attachments_metadata[0].clone(),
             );
@@ -363,7 +363,7 @@ fn test_conversation_update() {
             tx.update_conversation(&conv_update)
                 .expect("failed to update conversation");
 
-            let mut local_conversation = LocalConversation::from_conversation_and_label(
+            let mut local_conversation = Conversation::from_conversation_and_label(
                 id,
                 &MY_LABEL_ID1,
                 conv_update.clone(),
@@ -379,7 +379,7 @@ fn test_conversation_update() {
                 .expect("failed to get attachments")
                 .expect("must have value");
             assert_eq!(attachments.len(), 1);
-            let converted_attachment = LocalAttachmentMetadata::from_attachment_metadata(
+            let converted_attachment = AttachmentMetadata::from_attachment_metadata(
                 attachments[0].id,
                 conv_update.attachments_metadata[0].clone(),
             );
@@ -868,12 +868,12 @@ fn test_conversation_counts() {
             ];
 
             let expected_counts = [
-                LocalConversationCount {
+                ConversationCount {
                     id: labels[0],
                     total: 20,
                     unread: 4,
                 },
-                LocalConversationCount {
+                ConversationCount {
                     id: labels[1],
                     total: 400,
                     unread: 124,
@@ -1634,7 +1634,7 @@ lazy_static! {
 }
 pub(in crate::db::conversations) fn create_labels(
     tx: &mut MailSqliteConnectionMut,
-) -> Vec<LocalLabelId> {
+) -> Vec<u64> {
     let labels = [test_label1(), test_label2()];
     tx.create_remote_labels(labels.iter())
         .expect("failed to create labels");

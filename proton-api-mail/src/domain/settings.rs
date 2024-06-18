@@ -6,49 +6,82 @@ use proton_api_core::utils::{
 
 #[cfg(feature = "sql")]
 use proton_api_core::exports::proton_sqlite3;
+use stash::macros::Model;
+use stash::orm::Model;
+use stash::sql_using_serde;
+use stash::stash::Stash;
+use tracing::debug;
+use crate::domain::ApiError;
+use crate::MailSession;
+use crate::requests::GetMailSettingsRequest;
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
+pub const MAIL_SETTINGS_ID: u64 = 1;
+
+#[derive(Clone, Debug, Eq, Deserialize, Model, PartialEq, Serialize)]
 #[serde(crate = "self::serde", rename_all = "PascalCase")]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+// TEMP
+//#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[allow(clippy::struct_excessive_bools)]
+#[TableName("settings")]
 pub struct MailSettings {
+    #[IdField]
+    #[serde(skip)]
+    pub local_id: u64,
+    #[DbField]
     pub display_name: String,
+    #[DbField]
     pub signature: String,
+    #[DbField]
     pub theme: String,
+    #[DbField]
     #[serde(
         default = "default_proto_bool_true",
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub auto_save_contacts: bool,
+    #[DbField]
     #[serde(default)]
     pub composer_mode: MailSettingsComposerMode,
+    #[DbField]
     #[serde(default)]
     pub message_buttons: MailSettingsMessageButtons,
+    #[DbField]
     #[serde(default)]
     pub show_images: MailSettingsShowImages,
+    #[DbField]
     #[serde(default)]
     pub show_moved: MailSettingsShowMoved,
+    #[DbField]
     pub auto_delete_spam_and_trash_days: Option<u32>,
+    #[DbField]
     #[serde(default)]
     pub almost_all_mail: MailSettingsAlmostAllMail,
+    #[DbField]
     pub next_message_on_move: Option<MailSettingsNextMessageOnMove>,
+    #[DbField]
     #[serde(default)]
     pub view_mode: MailSettingsViewMode,
+    #[DbField]
     #[serde(default)]
     pub view_layout: MailSettingsViewLayout,
+    #[DbField]
     #[serde(default)]
     pub swipe_left: MailSettingsSwipeAction,
+    #[DbField]
     #[serde(default)]
     pub swipe_right: MailSettingsSwipeAction,
+    #[DbField]
     #[serde(
         default = "default_proto_bool_true",
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub shortcuts: bool,
+    #[DbField]
     #[serde(rename = "PMSignature", default)]
     pub pm_signature: MailSettingsPMSignature,
+    #[DbField]
     #[serde(
         rename = "PMSignatureReferralLink",
         default,
@@ -56,95 +89,136 @@ pub struct MailSettings {
         serialize_with = "bool_to_integer"
     )]
     pub pm_signature_referral_link: bool,
+    #[DbField]
     #[serde(default)]
     pub image_proxy: u32,
+    #[DbField]
     pub num_message_per_page: u32,
+    #[DbField]
     #[serde(rename = "DraftMIMEType")]
     pub draft_mime_type: String,
+    #[DbField]
     #[serde(rename = "ReceiveMIMEType")]
     pub receive_mime_type: String,
+    #[DbField]
     #[serde(rename = "ShowMIMEType")]
     pub show_mime_type: String,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub enable_folder_color: bool,
+    #[DbField]
     #[serde(
         default = "default_proto_bool_true",
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub inherit_parent_folder_color: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub submission_access: bool,
+    #[DbField]
     #[serde(default)]
     pub right_to_left: MailSettingsComposerDirection,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub attach_public_key: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub sign: bool,
+    #[DbField]
     #[serde(default, rename = "PGPScheme")]
     pub pgp_scheme: MailSettingsPGPScheme,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub prompt_pin: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub sticky_labels: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub confirm_link: bool,
+    #[DbField]
     #[serde(default = "default_delay_seconds")]
     pub delay_send_seconds: u32,
+    #[DbField]
     pub font_face: Option<String>,
+    #[DbField]
     pub spam_action: Option<MailSettingsSpamAction>,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "opt_bool_from_integer",
         serialize_with = "opt_bool_to_integer"
     )]
     pub block_sender_confirmation: Option<bool>,
+    #[DbField]
     pub mobile_settings: Option<MailSettingsMobileSettings>,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub hide_remote_images: bool,
+    #[DbField]
     #[serde(
         default,
         deserialize_with = "bool_from_integer",
         serialize_with = "bool_to_integer"
     )]
     pub hide_sender_images: bool,
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
+}
+
+impl MailSettings {
+    pub async fn sync_mail_settings(mail_session: MailSession) -> Result<(), ApiError> {
+        let mut settings = mail_session.session()
+            .execute_request(GetMailSettingsRequest {})
+            .await
+            .map(|r| r.mail_settings)?;
+        debug!("Storing labels into database");
+        settings.save().await?;
+        Ok(())
+    }
 }
 
 impl Default for MailSettings {
     fn default() -> Self {
         Self {
+            local_id: MAIL_SETTINGS_ID,
             display_name: String::new(),
             signature: String::new(),
             theme: String::new(),
@@ -185,6 +259,8 @@ impl Default for MailSettings {
             mobile_settings: None,
             hide_remote_images: false,
             hide_sender_images: false,
+            row_id: None,
+            stash: None,
         }
     }
 }
@@ -366,6 +442,8 @@ pub struct MailSettingsMobileSettings {
     pub conversation_toolbar: MailSettingsMobileSetting,
     pub list_toolbar: MailSettingsMobileSetting,
 }
+
+sql_using_serde!(MailSettingsMobileSettings);
 
 #[inline]
 fn default_proto_bool_true() -> bool {

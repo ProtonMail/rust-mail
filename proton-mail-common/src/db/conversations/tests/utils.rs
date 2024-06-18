@@ -1,5 +1,5 @@
 use crate::db::{
-    LocalConversationCount, LocalConversationId, LocalLabelId, LocalMessageCount, LocalMessageId,
+    ConversationCount, u64, u64, MessageCount, u64,
     MailSqliteConnectionMut,
 };
 use proton_api_mail::{
@@ -22,9 +22,9 @@ pub(in crate::db::conversations) struct TestDBState {
 
 #[derive(Default)]
 pub(in crate::db::conversations) struct TestDBStateMap {
-    pub labels: HashMap<LabelId, LocalLabelId>,
-    pub conversations: HashMap<ConversationId, LocalConversationId>,
-    pub messages: HashMap<MessageId, LocalMessageId>,
+    pub labels: HashMap<LabelId, u64>,
+    pub conversations: HashMap<ConversationId, u64>,
+    pub messages: HashMap<MessageId, u64>,
     pub conversation_counts: HashMap<LabelId, ConversationCount>,
     pub message_counts: HashMap<LabelId, MessageCount>,
 }
@@ -244,7 +244,7 @@ pub(in crate::db::conversations) fn message_counts_for_conversation(
 
 pub(in crate::db::conversations) fn conv_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
-) -> BTreeMap<LocalLabelId, LocalConversationCount> {
+) -> BTreeMap<u64, ConversationCount> {
     BTreeMap::from_iter(
         tx.conversation_counts()
             .unwrap()
@@ -255,7 +255,7 @@ pub(in crate::db::conversations) fn conv_counts_as_map(
 
 pub(in crate::db::conversations) fn msg_counts_as_map(
     tx: &mut MailSqliteConnectionMut,
-) -> BTreeMap<LocalLabelId, LocalMessageCount> {
+) -> BTreeMap<u64, MessageCount> {
     BTreeMap::from_iter(
         tx.message_counts()
             .unwrap()

@@ -1,4 +1,3 @@
-use crate::db::{LocalConversationId, LocalLabelId, MailSqliteConnectionMut};
 use async_trait::async_trait;
 use futures::executor::block_on;
 use proton_action_queue::{
@@ -10,23 +9,23 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
+use stash::stash::Tether;
 
 define_action_id!(
     DELETE_CONVERSATION_ACTION_ID,
     "5cb14a1d-2b1f-48b3-8ea3-c8cc880cf8bd"
 );
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde")]
 pub struct DeleteConversationsAction {
-    label_id: LocalLabelId,
-    ids: Vec<LocalConversationId>,
+    label_id: u64,
+    ids: Vec<u64>,
 }
 
 impl DeleteConversationsAction {
-    pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
+    pub fn new(label_id: u64, ids: impl IntoIterator<Item = u64>) -> Self {
         Self {
             label_id,
             ids: Vec::from_iter(ids),
@@ -39,12 +38,12 @@ impl Action for DeleteConversationsAction {
     const VERSION: u32 = 1;
 }
 
-struct DeleteConversationLocalHandler<'c, 't: 'c> {
-    action: &'c DeleteConversationsAction,
-    tx: MailSqliteConnectionMut<'t>,
+struct DeleteConversationLocalHandler {
+    action: DeleteConversationsAction,
+    tx: Tether,
 }
 
-impl<'c, 't: 'c> LocalActionHandler for DeleteConversationLocalHandler<'c, 't> {
+impl LocalActionHandler for DeleteConversationLocalHandler {
     fn apply_local(&mut self) -> ActionResult<()> {
         if self.action.ids.is_empty() {
             return Err(ActionError::Local(anyhow!(
@@ -58,14 +57,14 @@ impl<'c, 't: 'c> LocalActionHandler for DeleteConversationLocalHandler<'c, 't> {
     }
 }
 
-struct DeleteConversationRemoteHandler<'t> {
+struct DeleteConversationRemoteHandler {
     action: DeleteConversationsAction,
     session: MailSession,
-    tx: MailSqliteConnectionMut<'t>,
+    tx: Tether,
 }
 
 #[async_trait]
-impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler<'t> {
+impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler {
     fn revert_local(&mut self) -> ActionResult<()> {
         self.tx
             .unmark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
@@ -150,30 +149,31 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
         &DELETE_CONVERSATION_ACTION_ID
     }
 
-    fn local_handler<'r, 't: 'r>(
+    fn local_handler(
         &self,
-        action: &'r dyn Any,
-        tx: &'r mut SqliteTransaction<'t>,
-    ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
-        let Some(action) = action.downcast_ref::<DeleteConversationsAction>() else {
+        action: Box<dyn Any>,
+        tx: Tether,
+    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
+        let type_id = action.type_id().clone();
+        let Ok(action) = action.downcast::<DeleteConversationsAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
-                action.type_id(),
+                type_id,
                 std::any::TypeId::of::<DeleteConversationsAction>(),
             ));
         };
 
         Ok(Box::new(DeleteConversationLocalHandler {
-            action,
-            tx: MailSqliteConnectionMut::new(tx),
+            action: *action,
+            tx,
         }))
     }
 
-    fn remote_handler<'r, 't: 'r>(
-        &'r self,
-        action: &StoredAction,
-        tx: &'r mut SqliteTransaction<'t>,
+    fn remote_handler(
+        &self,
+        action: StoredAction,
+        tx: Tether,
         session_provider: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
+    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryInstanceError> {
         if action.version != DeleteConversationsAction::VERSION {
             return Err(ActionFactoryInstanceError::InvalidVersion(action.version));
         }
@@ -183,7 +183,7 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
 
         Ok(Box::new(DeleteConversationRemoteHandler {
             action,
-            tx: MailSqliteConnectionMut::new(tx),
+            tx,
             session: MailSession::from(session),
         }))
     }

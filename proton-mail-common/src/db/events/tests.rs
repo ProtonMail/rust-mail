@@ -1,10 +1,10 @@
-use crate::db::{new_test_connection, DBResult};
+use crate::db::new_test_connection;
 use proton_api_mail::proton_api_core::domain::EventId;
 
-#[test]
-fn test_event_id_store_get_set() {
+#[tokio::test]
+async fn test_event_id_store_get_set() {
     let (_, mut conn, _) = new_test_connection();
-    conn.tx(|tx| -> DBResult<()> {
+    let tx = conn.transaction().await.expect("Failed to start transaction");
         let event_id1 = EventId::from("EVENT1");
         let event_id2 = EventId::from("EVENT2");
         let event_id3 = EventId::from("EVENT3");
@@ -42,7 +42,5 @@ fn test_event_id_store_get_set() {
             .get_last_event_id(EVENT_TYPE_ID_1)
             .expect("failed to get event id")
             .is_none());
-        Ok(())
-    })
-    .unwrap();
+        tx.commit().await.expect("Failed to commit transaction");
 }

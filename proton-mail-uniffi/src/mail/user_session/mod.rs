@@ -1,10 +1,8 @@
 mod actions;
-mod conversations;
 mod events;
 mod images;
 mod initialization;
 mod labels;
-mod messages;
 
 use crate::mail::MailSessionError;
 use proton_mail_common as pmc;

@@ -8,11 +8,11 @@ use proton_action_queue::{
     SessionProvider, StoredAction,
 };
 use proton_event_loop::EventLoopError;
-use proton_sqlite3::SqliteTransaction;
 use std::any::Any;
+use stash::stash::Tether;
 
 define_action_id!(EVENT_LOOP_ACTION_ID, "cccb153b-4cee-4634-90ae-6d7424e5f4d1");
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(crate = "self::serde")]
 pub struct EventLoopAction {}
 
@@ -74,11 +74,11 @@ impl ActionFactoryInstance for EventLoopActionFactory {
         &EVENT_LOOP_ACTION_ID
     }
 
-    fn local_handler<'r, 't: 'r>(
+    fn local_handler(
         &self,
-        action: &'r dyn Any,
-        _: &'r mut SqliteTransaction<'t>,
-    ) -> Result<Box<dyn LocalActionHandler + 'r>, ActionFactoryInstanceError> {
+        action: Box<dyn Any>,
+        _: Tether,
+    ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
         let Some(_) = action.downcast_ref::<EventLoopAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
                 action.type_id(),
@@ -88,12 +88,12 @@ impl ActionFactoryInstance for EventLoopActionFactory {
         Ok(Box::new(EventLoopLocalActionHandler {}))
     }
 
-    fn remote_handler<'r, 't: 'r>(
-        &'r self,
-        action: &StoredAction,
-        _: &'r mut SqliteTransaction<'t>,
+    fn remote_handler(
+        &self,
+        action: StoredAction,
+        _: Tether,
         _: &dyn SessionProvider,
-    ) -> Result<Box<dyn RemoteActionHandler + 'r>, ActionFactoryInstanceError> {
+    ) -> Result<Box<dyn RemoteActionHandler>, ActionFactoryInstanceError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ActionFactoryInstanceError::Unknown(anyhow!(
                 "Could not upgrade context"

@@ -30,8 +30,6 @@ pub struct MailSession {
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum MailSessionError {
-    #[error("Database Error: {0}")]
-    DB(#[from] db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
@@ -54,6 +52,8 @@ pub enum MailSessionError {
     InvalidImageMode(String),
     #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
     AddressDomainLogoError(#[from] AddressDomainLogoError),
+    #[error("Stash Error: {0}")]
+    Stash(#[from] StashError),
     #[error("{0}")]
     Other(anyhow::Error),
 }

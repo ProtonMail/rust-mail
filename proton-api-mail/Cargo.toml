@@ -8,10 +8,14 @@ categories = ["api-bindings"]
 [dependencies]
 bitflags = {workspace = true }
 bytes = { workspace = true }
+indoc = { workspace = true }
 lazy_static = { workspace = true }
 proton-api-core = { workspace = true }
 proton-crypto-inbox = { workspace = true }
+stash = { workspace = true }
+thiserror = "1"
 tokio = { workspace = true }
+tracing = { workspace = true }
 uniffi = { workspace = true, optional = true }
 
 [dev-dependencies]

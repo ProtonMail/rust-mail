@@ -1,15 +1,15 @@
 use indoc::indoc;
-use proton_sqlite3::SqliteTransaction;
+use stash::stash::{StashError, Tether};
 
-pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<()> {
+pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE messages(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                rid TEXT UNIQUE,
+                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                remote_id TEXT UNIQUE DEFAULT NULL,
                 address_id TEXT NOT NULL,
-                conversation_id INTEGER DEFAULT NULL,
-                conversation_rid TEXT DEFAULT NULL,
+                local_conversation_id INTEGER DEFAULT NULL,
+                remote_conversation_id TEXT DEFAULT NULL,
                 `order` INTEGER NOT NULL,
                 subject TEXT NOT NULL,
                 unread INTEGER NOT NULL,
@@ -39,108 +39,108 @@ pub fn create_message_tables(tx: &mut SqliteTransaction) -> crate::db::DBResult<
                     REFERENCES addresses (id),
 
                 CONSTRAINT messages_conversation_id
-                    FOREIGN KEY (conversation_id)
-                    REFERENCES conversations (id)
+                    FOREIGN KEY (local_conversation_id)
+                    REFERENCES conversations (local_id)
                     ON DELETE CASCADE
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        "CREATE UNIQUE INDEX index_messages_rid ON messages (rid)",
-        (),
-    )?;
+        "CREATE UNIQUE INDEX index_messages_rid ON messages (remote_id)",
+        vec![],
+    ).await?;
     tx.execute(
-        "CREATE INDEX index_messages_cid ON messages (conversation_id)",
-        (),
-    )?;
+        "CREATE INDEX index_messages_cid ON messages (local_conversation_id)",
+        vec![],
+    ).await?;
 
     tx.execute(
-        "CREATE INDEX index_messages_conv_rid ON messages (conversation_rid)",
-        (),
-    )?;
+        "CREATE INDEX index_messages_conv_rid ON messages (remote_conversation_id)",
+        vec![],
+    ).await?;
 
     //message -> labels
     tx.execute(
         r#"
             CREATE TABLE message_labels(
-                message_id INTEGER NOT NULL,
-                label_id INTEGER NOT NULL,
+                local_message_id INTEGER NOT NULL,
+                local_label_id INTEGER NOT NULL,
 
-                PRIMARY KEY(message_id, label_id),
+                PRIMARY KEY(local_message_id, local_label_id),
 
                 CONSTRAINT message_labels_mid
-                    FOREIGN KEY (message_id)
-                    REFERENCES messages (id)
+                    FOREIGN KEY (local_message_id)
+                    REFERENCES messages (local_id)
                     ON DELETE CASCADE ON UPDATE CASCADE,
 
                 CONSTRAINT message_labels_lid
-                    FOREIGN KEY (label_id)
-                    REFERENCES labels (id)
+                    FOREIGN KEY (local_label_id)
+                    REFERENCES labels (local_id)
                     ON DELETE CASCADE ON UPDATE CASCADE
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        r#"CREATE INDEX index_messages_labels_mid ON message_labels (message_id)"#,
-        (),
-    )?;
+        r#"CREATE INDEX index_messages_labels_mid ON message_labels (local_message_id)"#,
+        vec![],
+    ).await?;
     tx.execute(
-        r#"CREATE INDEX index_messages_labels_lid ON message_labels(label_id)"#,
-        (),
-    )?;
+        r#"CREATE INDEX index_messages_labels_lid ON message_labels(local_label_id)"#,
+        vec![],
+    ).await?;
 
     //messages -> attachment
     tx.execute(
         r#"
             CREATE TABLE message_attachments(
-                message_id INTEGER NOT NULL,
-                attachment_id INTEGER NOT NULL,
+                local_message_id INTEGER NOT NULL,
+                local_attachment_id INTEGER NOT NULL,
 
-                PRIMARY KEY(message_id, attachment_id),
+                PRIMARY KEY(local_message_id, local_attachment_id),
 
                 CONSTRAINT message_attachments_cid
-                    FOREIGN KEY (message_id)
-                    REFERENCES messages (id)
+                    FOREIGN KEY (local_message_id)
+                    REFERENCES messages (local_id)
                     ON DELETE CASCADE ON UPDATE CASCADE,
 
                 CONSTRAINT message_attachments_aid
-                    FOREIGN KEY (attachment_id)
-                    REFERENCES attachments (id)
+                    FOREIGN KEY (local_attachment_id)
+                    REFERENCES attachments (local_id)
                     ON DELETE CASCADE ON UPDATE CASCADE
             )
         "#,
-        (),
-    )?;
+        vec![],
+    ).await?;
 
     tx.execute(
-        r#"CREATE INDEX index_messages_attachments_cid ON message_attachments (message_id)"#,
-        (),
-    )?;
+        r#"CREATE INDEX index_messages_attachments_cid ON message_attachments (local_message_id)"#,
+        vec![],
+    ).await?;
     tx.execute(
-        r#"CREATE INDEX index_messages_attachments_aid ON message_attachments (attachment_id)"#,
-        (),
-    )?;
+        r#"CREATE INDEX index_messages_attachments_aid ON message_attachments (local_attachment_id)"#,
+        vec![],
+    ).await?;
 
     // Message bodies table
     tx.execute(
         indoc! {"
         CREATE TABLE message_bodies (
-            id INTEGER PRIMARY KEY NOT NULL,
+            local_message_id INTEGER PRIMARY KEY NOT NULL,
             header TEXT NOT NULL,
             parsed_headers TEXT NOT NULL,
             mime_type TEXT NOT NULL,
 
             CONSTRAINT message_bodies_id
-                FOREIGN KEY (id)
-                REFERENCES messages (id)
+                FOREIGN KEY (local_message_id)
+                REFERENCES messages (local_id)
                 ON DELETE CASCADE
         )"
         },
-        (),
-    )?;
+        vec![],
+    ).await;
     Ok(())
 }

@@ -1,5 +1,5 @@
 use crate::{MailContextError, MailUserContext};
-use proton_api_mail::domain::LabelId;
+use proton_api_mail::domain::{Conversation, LabelId, MailSettings};
 use proton_api_mail::proton_api_core::exports::tracing::{self, error, trace, Level};
 use tokio::spawn;
 
@@ -57,7 +57,7 @@ impl MailUserContext {
 
         trace!("Syncing Mail settings");
         cb.on_stage(MailUserContextLoadingStage::MailSettings);
-        if let Err(e) = ctx.sync_mail_settings().await {
+        if let Err(e) = MailSettings::sync_mail_settings().await {
             error!("Failed to sync user settings: {e}");
             return Err((MailUserContextLoadingStage::MailSettings, e));
         }
@@ -80,7 +80,7 @@ impl MailUserContext {
         // load conversation counters
         trace!("Syncing conversation and message counts");
         cb.on_stage(MailUserContextLoadingStage::Counters);
-        if let Err(e) = ctx.sync_conversation_and_message_counts().await {
+        if let Err(e) = Conversation::sync_conversation_and_message_counts().await {
             error!("Failed to sync conversation and messages counter: {e}");
             return Err((MailUserContextLoadingStage::Counters, e));
         }

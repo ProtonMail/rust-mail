@@ -6,8 +6,9 @@ mod labels;
 mod messages;
 mod settings;
 
-use proton_api_mail::proton_api_core::exports::tracing;
-use proton_sqlite3::SqliteTransaction;
+use futures::executor::block_on;
+use stash::stash::{StashError, Tether};
+use proton_api_mail::exports::tracing::debug_span;
 
 pub struct MigrationV0 {}
 
@@ -16,15 +17,33 @@ impl proton_sqlite3::Migration for MigrationV0 {
         "proton_mail_db_v0"
     }
 
-    fn migrate(&self, tx: &mut SqliteTransaction) -> proton_sqlite3::rusqlite::Result<()> {
-        tracing::debug_span!("labels").in_scope(|| labels::create_labels_tables(tx))?;
-        tracing::debug_span!("attachments")
-            .in_scope(|| attachments::create_attachment_tables(tx))?;
-        tracing::debug_span!("conversations")
-            .in_scope(|| conversations::create_conversation_tables(tx))?;
-        tracing::debug_span!("messages").in_scope(|| messages::create_message_tables(tx))?;
-        tracing::debug_span!("events").in_scope(|| events::create_event_tables(tx))?;
-        tracing::debug_span!("settings").in_scope(|| settings::create_settings_table(tx))?;
+    fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+        block_on(async {
+        let span = debug_span!("labels");
+        let entered = span.enter();
+        labels::create_labels_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("attachments");
+        let entered = span.enter();
+        attachments::create_attachment_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("conversations");
+        let entered = span.enter();
+        conversations::create_conversation_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("messages");
+        let entered = span.enter();
+        messages::create_message_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("events");
+        let entered = span.enter();
+        events::create_event_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("settings");
+        let entered = span.enter();
+        settings::create_settings_table(tx).await?;
+        drop(entered);
         Ok(())
+        })
     }
 }

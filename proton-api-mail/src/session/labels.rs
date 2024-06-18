@@ -1,18 +1,11 @@
 use super::MailSession;
 use crate::domain::{Label, LabelId, LabelType};
 use crate::requests::{
-    CreateLabelRequest, DeleteLabelRequest, GetLabelsRequest, UpdateLabelRequest,
+    CreateLabelRequest, DeleteLabelRequest, UpdateLabelRequest,
 };
 use proton_api_core::http;
 
 impl MailSession {
-    pub async fn labels(&self, label_type: LabelType) -> Result<Vec<Label>, http::RequestError> {
-        self.session
-            .execute_request(GetLabelsRequest::new(label_type))
-            .await
-            .map(|r| r.labels)
-    }
-
     pub async fn create_label(
         &self,
         name: &str,
