@@ -9,8 +9,8 @@ use proton_api_mail::exports::anyhow::anyhow;
 use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
 use proton_api_mail::exports::tracing::error;
 use proton_api_mail::MailSession;
-use std::any::Any;
 use stash::stash::Tether;
+use std::any::Any;
 
 define_action_id!(
     DELETE_CONVERSATION_ACTION_ID,

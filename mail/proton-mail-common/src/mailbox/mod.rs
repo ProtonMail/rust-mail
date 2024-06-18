@@ -3,17 +3,19 @@ mod attachments;
 #[cfg(test)]
 mod tests;
 
-pub use attachments::DecryptedAttachment;
 use crate::exports::tracing::debug;
 use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
-use proton_api_mail::domain::{MAIL_SETTINGS_ID, Label, LabelId, MailSettings, MailSettingsViewMode, Conversation, Message};
+pub use attachments::DecryptedAttachment;
+use proton_api_mail::domain::{
+    Conversation, Label, LabelId, MailSettings, MailSettingsViewMode, Message, MAIL_SETTINGS_ID,
+};
 use proton_api_mail::exports::anyhow;
 use proton_api_mail::proton_api_core::exports::thiserror;
 use proton_api_mail::proton_api_core::exports::tracing::error;
 use proton_api_mail::proton_api_core::http::RequestError;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
-use stash::stash::StashError;
 use stash::orm::Model;
+use stash::stash::StashError;
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
@@ -98,10 +100,7 @@ enum LabelIdMode<'a> {
 }
 
 impl Mailbox {
-    async fn new(
-        user_ctx: MailUserContext,
-        label_id: u64,
-    ) -> MailboxResult<Self> {
+    async fn new(user_ctx: MailUserContext, label_id: u64) -> MailboxResult<Self> {
         let Some(label) = Label::load(label_id, &user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
@@ -134,7 +133,10 @@ impl Mailbox {
         self.label_id
     }
 
-    pub async fn refresh(&self, cb: Box<dyn MailUserContextInitializationCallback>) -> MailboxResult<()> {
+    pub async fn refresh(
+        &self,
+        cb: Box<dyn MailUserContextInitializationCallback>,
+    ) -> MailboxResult<()> {
         let Some(label) = Label::load(self.label_id, &self.user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
@@ -158,52 +160,57 @@ impl Mailbox {
         let Some(mut label) = Label::load(self.label_id, &ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
-        
+
         if let Some(remote_id) = label.remote_id.clone() {
             debug!("Syncing {}({})", self.label_id, &remote_id);
-            
-            let initialized =
-                match self.view_mode {
-                    MailSettingsViewMode::Conversations => label.initialized_conv,
-                    MailSettingsViewMode::Messages => label.initialized_msg,
-                };
+
+            let initialized = match self.view_mode {
+                MailSettingsViewMode::Conversations => label.initialized_conv,
+                MailSettingsViewMode::Messages => label.initialized_msg,
+            };
             if initialized {
                 debug!("Label {} already initialized, skipping", self.label_id);
                 return Ok(());
             }
             debug!(
                 "Label {} not initialized, fetching (mode={:?})",
-                self.label_id,
-                self.view_mode
+                self.label_id, self.view_mode
             );
 
             match self.view_mode {
-                MailSettingsViewMode::Conversations => Conversation
-                    ::sync_first_conversation_page(remote_id, count, ctx.stash(), &ctx.mail_session())
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to sync conversations for label: {e}");
-                        e
-                    }),
-                MailSettingsViewMode::Messages => Message
-                    ::sync_first_message_page(remote_id, count, ctx.stash(), &ctx.mail_session())
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to sync messages for label: {e}");
-                        e
-                    }),
+                MailSettingsViewMode::Conversations => Conversation::sync_first_conversation_page(
+                    remote_id,
+                    count,
+                    ctx.stash(),
+                    &ctx.mail_session(),
+                )
+                .await
+                .map_err(|e| {
+                    error!("Failed to sync conversations for label: {e}");
+                    e
+                }),
+                MailSettingsViewMode::Messages => Message::sync_first_message_page(
+                    remote_id,
+                    count,
+                    ctx.stash(),
+                    &ctx.mail_session(),
+                )
+                .await
+                .map_err(|e| {
+                    error!("Failed to sync messages for label: {e}");
+                    e
+                }),
             }?;
-            
-                match self.view_mode {
-                    MailSettingsViewMode::Conversations => {
-                        label.initialized_conv = true;
-                    }
-                    MailSettingsViewMode::Messages => {
-                        label.initialized_msg = true;
-                    }
+
+            match self.view_mode {
+                MailSettingsViewMode::Conversations => {
+                    label.initialized_conv = true;
                 }
-            label.save().await
-            .map_err(|e| {
+                MailSettingsViewMode::Messages => {
+                    label.initialized_msg = true;
+                }
+            }
+            label.save().await.map_err(|e| {
                 error!("Failed to mark label as initialized: {e}");
                 MailContextError::Stash(e)
             })?;

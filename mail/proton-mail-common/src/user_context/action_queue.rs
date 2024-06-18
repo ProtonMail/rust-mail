@@ -14,7 +14,10 @@ impl MailUserContext {
 
     /// Execute exactly one pending action in the queue.
     pub async fn execute_pending_action(&self) -> MailContextResult<()> {
-        self.inner.action_queue.consume_pending_with_limit(1).await?;
+        self.inner
+            .action_queue
+            .consume_pending_with_limit(1)
+            .await?;
         Ok(())
     }
 
@@ -42,7 +45,13 @@ impl proton_action_queue::SessionProvider for SessionProvider {
 
 pub(super) fn new_action_queue(mail_user_context: WeakMailUserContext) -> ActionQueue {
     ActionQueue::new(
-        mail_user_context.inner.upgrade().unwrap().user_context.stash().clone(),
+        mail_user_context
+            .inner
+            .upgrade()
+            .unwrap()
+            .user_context
+            .stash()
+            .clone(),
         Box::new(SessionProvider(mail_user_context.clone())),
         new_action_factory(mail_user_context),
     )

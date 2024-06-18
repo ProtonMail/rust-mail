@@ -1,7 +1,4 @@
-use crate::db::{
-    ConversationCount, u64, u64, MessageCount, u64,
-    MailSqliteConnectionMut,
-};
+use crate::db::{u64, u64, u64, ConversationCount, MailSqliteConnectionMut, MessageCount};
 use proton_api_mail::{
     domain::{
         Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId,

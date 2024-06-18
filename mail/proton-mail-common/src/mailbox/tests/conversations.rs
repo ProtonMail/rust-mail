@@ -1,5 +1,5 @@
 use crate::avatar::AvatarInformation;
-use crate::db::{LabelColor, Label, u64, u64, MessageMetadata};
+use crate::db::{u64, u64, Label, LabelColor, MessageMetadata};
 use proton_api_mail::domain::{Conversation, LabelId, LabelType, MessageFlags};
 use proton_api_mail::proton_api_core::domain::AddressId;
 
@@ -130,11 +130,7 @@ fn first_unread_conversation_message_default_last_consecutive_unread_if_last_is_
         message_metadata_with_flags(u64::new(1), MessageFlags::RECEIVED, false),
         message_metadata_with_flags(u64::new(2), MessageFlags::RECEIVED, true),
         message_metadata_with_flags(u64::new(3), MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(
-            u64::new(4),
-            MessageFlags::SENT | MessageFlags::AUTO,
-            true,
-        ),
+        message_metadata_with_flags(u64::new(4), MessageFlags::SENT | MessageFlags::AUTO, true),
     ];
 
     let unread_id = Conversation::first_unread_message(&label, &messages);
@@ -152,11 +148,7 @@ fn first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_au
     let messages = [
         message_metadata_with_flags(u64::new(0), MessageFlags::RECEIVED, true),
         message_metadata_with_flags(u64::new(1), MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(
-            u64::new(2),
-            MessageFlags::SENT | MessageFlags::AUTO,
-            true,
-        ),
+        message_metadata_with_flags(u64::new(2), MessageFlags::SENT | MessageFlags::AUTO, true),
         message_metadata_with_flags(u64::new(3), MessageFlags::empty(), true),
         message_metadata_with_flags(u64::new(4), MessageFlags::RECEIVED, false),
     ];
@@ -166,11 +158,7 @@ fn first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_au
     assert_eq!(unread_id, Some(u64::new(0)));
 }
 
-fn message_metadata_with_flags(
-    id: u64,
-    flags: MessageFlags,
-    unread: bool,
-) -> MessageMetadata {
+fn message_metadata_with_flags(id: u64, flags: MessageFlags, unread: bool) -> MessageMetadata {
     MessageMetadata {
         id,
         rid: None,

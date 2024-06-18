@@ -2,9 +2,8 @@ use super::MailSession;
 use crate::domain::{ConversationCount, ConversationId, LabelId};
 use crate::requests::{
     ConversationsResponseObject, DeleteConversationsRequest, GetConversationCountsRequest,
-    GetConversationRequest, GetConversationResponse,
-    LabelConversationRequest, MarkConversationsReadRequest,
-    MarkConversationsUnreadRequest, UnlabelConversationRequest,
+    GetConversationRequest, GetConversationResponse, LabelConversationRequest,
+    MarkConversationsReadRequest, MarkConversationsUnreadRequest, UnlabelConversationRequest,
 };
 use proton_api_core::http;
 

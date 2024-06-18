@@ -8,15 +8,15 @@ mod labels;
 mod messages;
 mod settings;
 
-use proton_api_core::http::RequestError;
-use stash::stash::StashError;
 pub use attachments::*;
 pub use conversations::*;
 pub use event::*;
 pub use image_proxy::*;
 pub use labels::*;
 pub use messages::*;
+use proton_api_core::http::RequestError;
 pub use settings::*;
+use stash::stash::StashError;
 
 /// Errors that may occur while interacting with the API. This is temporary.
 #[derive(Debug, thiserror::Error)]

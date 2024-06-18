@@ -9,8 +9,8 @@ use proton_mail_common::proton_api_mail::domain::{
     AddressDomainLogoError, LabelId, MailSettingsViewMode,
 };
 use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
-use std::sync::Arc;
 use stash::stash::StashError;
+use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -82,8 +82,7 @@ impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
     pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
-        let mbox =
-            proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), u64::new(label_id))?;
+        let mbox = proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), u64::new(label_id))?;
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }

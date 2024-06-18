@@ -1,7 +1,7 @@
-use stash::stash::{StashError, Tether};
 use proton_api_mail::domain::MessageEvent;
 use proton_api_mail::proton_api_core::domain::Action;
 use proton_api_mail::proton_api_core::exports::tracing::warn;
+use stash::stash::{StashError, Tether};
 
 pub fn handle_message_events(
     tx: &Tether,

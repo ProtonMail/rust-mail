@@ -1,5 +1,6 @@
-use std::ops::Deref;
 use crate::domain::{ApiError, ConversationId, MessageAddress, MessageId};
+use crate::exports::serde::{Deserializer, Serializer};
+use crate::MailSession;
 use proton_api_core::{
     domain::AddressId,
     exports::serde::{self, Deserialize, Serialize},
@@ -8,13 +9,14 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
-use stash::exports::{FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
+use stash::exports::{
+    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef,
+};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::sql_using_serde;
 use stash::stash::Stash;
-use crate::MailSession;
-use crate::exports::serde::{Deserializer, Serializer};
+use std::ops::Deref;
 
 proton_api_core::utils::string_id!(AttachmentId);
 
@@ -32,9 +34,7 @@ impl FromSql for Disposition {
         match value.as_str()? {
             "inline" => Ok(Disposition::Inline),
             "attachment" => Ok(Disposition::Attachment),
-            _ => Err(FromSqlError::Other(
-                "Invalid enum value".into(),
-            )),
+            _ => Err(FromSqlError::Other("Invalid enum value".into())),
         }
     }
 }
@@ -42,12 +42,10 @@ impl FromSql for Disposition {
 #[cfg(feature = "sql")]
 impl ToSql for Disposition {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(ToSqlOutput::Borrowed(
-            ValueRef::Text(match self {
-                Disposition::Inline => "inline".as_bytes(),
-                Disposition::Attachment => "attachment".as_bytes(),
-            }),
-        ))
+        Ok(ToSqlOutput::Borrowed(ValueRef::Text(match self {
+            Disposition::Inline => "inline".as_bytes(),
+            Disposition::Attachment => "attachment".as_bytes(),
+        })))
     }
 }
 
@@ -212,7 +210,7 @@ impl Attachment {
     pub fn has_complete_metadata(&self) -> bool {
         self.key_packets.to_string().len() > 0
     }
-    
+
     /// Synchronize the full attachment metadata for the attachment.
     ///
     /// The database might contain partial attachment metadata missing the
@@ -220,17 +218,23 @@ impl Attachment {
     /// metadata this method must be called.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
-    /// 
-    pub async fn sync_complete_metadata(&self, session: &MailSession) -> Result<Option<()>, ApiError> {
+    ///
+    pub async fn sync_complete_metadata(
+        &self,
+        session: &MailSession,
+    ) -> Result<Option<()>, ApiError> {
         let remote_attachment_id = if let Some(remote_id) = self.remote_id.clone() {
             remote_id
         } else {
             return Ok(None);
         };
-        let mut attachment = session.attachment_metadata_complete(remote_attachment_id).await?.attachment;
+        let mut attachment = session
+            .attachment_metadata_complete(remote_attachment_id)
+            .await?
+            .attachment;
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
         attachment.stash = self.stash.clone();

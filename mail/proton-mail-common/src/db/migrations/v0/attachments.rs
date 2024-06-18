@@ -41,11 +41,13 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "},
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         "CREATE UNIQUE INDEX index_attachments_rid ON attachments (remote_id)",
         vec![],
-    ).await;
+    )
+    .await;
     Ok(())
 }

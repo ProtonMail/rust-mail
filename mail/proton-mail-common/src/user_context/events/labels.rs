@@ -1,12 +1,9 @@
-use stash::stash::{StashError, Tether};
 use proton_api_mail::domain::LabelEvent;
 use proton_api_mail::proton_api_core::domain::Action;
 use proton_api_mail::proton_api_core::exports::tracing::warn;
+use stash::stash::{StashError, Tether};
 
-pub fn handle_label_events(
-    tx: &Tether,
-    label_events: &[LabelEvent],
-) -> Result<(), StashError> {
+pub fn handle_label_events(tx: &Tether, label_events: &[LabelEvent]) -> Result<(), StashError> {
     for label_event in label_events {
         match label_event.action {
             Action::Delete => {

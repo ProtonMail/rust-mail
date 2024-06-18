@@ -1,6 +1,4 @@
-use crate::db::{
-    new_test_connection, with_tx, LabelColor, Label, u64, MailSqliteConnectionImpl,
-};
+use crate::db::{new_test_connection, u64, with_tx, Label, LabelColor, MailSqliteConnectionImpl};
 use proton_api_mail::domain::{ConversationCount, Label, LabelId, LabelType, MessageCount};
 
 #[test]
@@ -241,11 +239,7 @@ fn update_local_label() {
             )
             .expect("failed to create label");
 
-        fn compare_db_label(
-            conn_ref: &MailSqliteConnectionImpl,
-            id: u64,
-            f: impl FnOnce(&Label),
-        ) {
+        fn compare_db_label(conn_ref: &MailSqliteConnectionImpl, id: u64, f: impl FnOnce(&Label)) {
             let db_label = conn_ref
                 .label_with_id(id)
                 .expect("failed to get label")
@@ -287,22 +281,14 @@ fn test_mark_labels_as_initialized() {
                 LabelColor::purple(),
             )
             .expect("failed to create label");
-        assert!(!tx
-            .has_initialized_conversations(new_label.id)
-            .unwrap());
+        assert!(!tx.has_initialized_conversations(new_label.id).unwrap());
         tx.mark_label_as_initialized_conversations(new_label.id)
             .expect("failed to mark label as initialized");
-        assert!(tx
-            .has_initialized_conversations(new_label.id)
-            .unwrap());
-        assert!(!tx
-            .has_initialized_messages(new_label.id)
-            .unwrap());
+        assert!(tx.has_initialized_conversations(new_label.id).unwrap());
+        assert!(!tx.has_initialized_messages(new_label.id).unwrap());
         tx.mark_label_as_initialized_messages(new_label.id)
             .expect("failed to mark label as initialized");
-        assert!(tx
-            .has_initialized_messages(new_label.id)
-            .unwrap());
+        assert!(tx.has_initialized_messages(new_label.id).unwrap());
     });
 }
 

@@ -45,21 +45,25 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         "CREATE UNIQUE INDEX index_messages_rid ON messages (remote_id)",
         vec![],
-    ).await?;
+    )
+    .await?;
     tx.execute(
         "CREATE INDEX index_messages_cid ON messages (local_conversation_id)",
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         "CREATE INDEX index_messages_conv_rid ON messages (remote_conversation_id)",
         vec![],
-    ).await?;
+    )
+    .await?;
 
     //message -> labels
     tx.execute(
@@ -82,16 +86,19 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         r#"CREATE INDEX index_messages_labels_mid ON message_labels (local_message_id)"#,
         vec![],
-    ).await?;
+    )
+    .await?;
     tx.execute(
         r#"CREATE INDEX index_messages_labels_lid ON message_labels(local_label_id)"#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     //messages -> attachment
     tx.execute(
@@ -114,12 +121,14 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
             )
         "#,
         vec![],
-    ).await?;
+    )
+    .await?;
 
     tx.execute(
         r#"CREATE INDEX index_messages_attachments_cid ON message_attachments (local_message_id)"#,
         vec![],
-    ).await?;
+    )
+    .await?;
     tx.execute(
         r#"CREATE INDEX index_messages_attachments_aid ON message_attachments (local_attachment_id)"#,
         vec![],
@@ -141,6 +150,7 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
         )"
         },
         vec![],
-    ).await;
+    )
+    .await;
     Ok(())
 }

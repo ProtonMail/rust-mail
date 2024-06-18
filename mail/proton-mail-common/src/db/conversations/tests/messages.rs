@@ -7,17 +7,20 @@ use crate::db::conversations::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
 };
 use crate::db::{
-    with_file_sqlite_db, with_tx, with_tx_core, AttachmentMetadata, u64,
-    LocalInlineLabelInfo, MessageBodyMetadata, MessageCount, MessageMetadata,
-    MailSqliteConnectionMut,
+    u64, with_file_sqlite_db, with_tx, with_tx_core, AttachmentMetadata, LocalInlineLabelInfo,
+    MailSqliteConnectionMut, MessageBodyMetadata, MessageCount, MessageMetadata,
 };
 use crate::exports::serde_json;
+use crate::exports::tracing::error;
 use lazy_static::lazy_static;
-use proton_api_mail::domain::{AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType, Message, MessageAddress, MessageAttachment, MessageAttachmentHeaders, MessageBodyMetadata, MessageCount, MessageFlags, MessageId, MessageMetadata, MimeType};
+use proton_api_mail::domain::{
+    AttachmentId, AttachmentMetadata, ConversationLabels, Disposition, LabelId, LabelType, Message,
+    MessageAddress, MessageAttachment, MessageAttachmentHeaders, MessageBodyMetadata, MessageCount,
+    MessageFlags, MessageId, MessageMetadata, MimeType,
+};
 use proton_core_common::db::CoreSqliteConnectionMut;
 use proton_crypto_inbox::attachment::KeyPackets;
 use stash::orm::Model;
-use crate::exports::tracing::error;
 
 use super::conversations::create_address;
 use super::utils::prepare_db_state_core;
@@ -561,7 +564,7 @@ fn test_update_message_and_body() {
                 error!("Failed to store message body metadata in db: {e}");
                 e
             })?;
-            
+
             // Update the body
             message.parsed_headers.insert(
                 "marco".to_owned(),
@@ -643,7 +646,7 @@ fn test_create_message_and_body_with_attachments() {
             let id = tx
                 .create_message_from_metadata(&message.metadata)
                 .expect("failed to create message");
-            
+
             let mut metadata = MessageBodyMetadata {
                 local_message_id: message.local_id,
                 remote_id: message.remote_id.clone(),
@@ -657,7 +660,7 @@ fn test_create_message_and_body_with_attachments() {
                 error!("Failed to store message body metadata in db: {e}");
                 e
             })?;
-            
+
             let local_attachments = tx.attachments_for_message(id).expect("must have value");
             let local_attachment = local_attachments.first().unwrap();
 

@@ -2,10 +2,10 @@ use proton_api_mail::proton_api_core::exports::serde::Serialize;
 use proton_api_mail::proton_api_core::exports::serde_json;
 use proton_sqlite3::rusqlite::types::ToSqlOutput;
 use proton_sqlite3::rusqlite::ToSql;
-use std::ops::Deref;
-use std::str;
 use stash::orm::ConversionError;
 use stash::stash::StashError;
+use std::ops::Deref;
+use std::str;
 
 pub struct JsonWriteBuffer {
     b: Vec<u8>,
@@ -33,9 +33,9 @@ impl JsonWriteBuffer {
         &mut self,
         v: &T,
     ) -> Result<JsonWriteBufferResult<'_>, StashError> {
-        serde_json::to_writer(&mut self.b, v).map_err(
-            |err| StashError::DeserializationError(ConversionError::SerializationError(err.to_string()))
-        )?;
+        serde_json::to_writer(&mut self.b, v).map_err(|err| {
+            StashError::DeserializationError(ConversionError::SerializationError(err.to_string()))
+        })?;
         Ok(JsonWriteBufferResult { buffer: self })
     }
 

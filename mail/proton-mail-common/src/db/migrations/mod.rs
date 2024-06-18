@@ -10,7 +10,9 @@ pub async fn migrate_db(conn: &Stash) -> Result<usize, MigratorError> {
     let migrations: Vec<Box<dyn Migration>> = vec![Box::new(v0::MigrationV0 {})];
 
     let migrator = Migrator::new();
-    migrator.migrate(conn, VERSION_TABLE_NAME, &migrations).await
+    migrator
+        .migrate(conn, VERSION_TABLE_NAME, &migrations)
+        .await
 }
 
 #[tokio::test]
