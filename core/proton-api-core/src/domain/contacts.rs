@@ -155,10 +155,13 @@ impl Contact {
     /// Returns a [`StashError`] if the cards cannot be retrieved.
     ///
     pub async fn cards(&mut self) -> Result<&Vec<ContactCard>, StashError> {
+        let Some(stash) = self.stash() else {
+            return Err(StashError::NoStashAvailable);
+        };
         self.cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
-            self.stash(),
+            stash,
             None,
         )
         .await?;
@@ -175,10 +178,13 @@ impl Contact {
     /// Returns a [`StashError`] if the emails cannot be retrieved.
     ///
     pub async fn emails(&mut self) -> Result<&Vec<ContactEmail>, StashError> {
+        let Some(stash) = self.stash() else {
+            return Err(StashError::NoStashAvailable);
+        };
         self.contact_emails = ContactEmail::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
-            self.stash(),
+            stash,
             None,
         )
         .await?;
@@ -194,9 +200,10 @@ impl Contact {
         for email in &mut self.contact_emails {
             email.remote_contact_id.clone_from(&self.remote_id);
         }
-        self.stash
-            .as_ref()
-            .unwrap()
+        let Some(stash) = self.stash() else {
+            return Err(StashError::NoStashAvailable);
+        };
+        stash
             .execute(
                 "DELETE FROM contact_cards WHERE remote_contact_id = ?",
                 params![self.remote_id.clone()],

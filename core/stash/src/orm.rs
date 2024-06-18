@@ -896,7 +896,7 @@ where
     }
 
     /// Gets a reference to the database-handling [`Stash`] for the record.
-    fn stash(&self) -> &Stash;
+    fn stash(&self) -> Option<&Stash>;
 
     /// Sets the record's unique primary ID field value.
     ///
@@ -1172,7 +1172,13 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
             #[allow(clippy::shadow_reuse)]
             let affected: usize = match tether {
                 Some(tether) => tether.execute(&query, field_values).await?,
-                None => model.stash().execute(&query, field_values).await?,
+                None => {
+                    model
+                        .stash()
+                        .ok_or(StashError::NoStashAvailable)?
+                        .execute(&query, field_values)
+                        .await?
+                }
             };
             if affected == 0 {
                 return Err(StashError::NoRowsUpdated);
@@ -1221,6 +1227,7 @@ async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Resul
                 None => {
                     model
                         .stash()
+                        .ok_or(StashError::NoStashAvailable)?
                         .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
                         .await?
                 }

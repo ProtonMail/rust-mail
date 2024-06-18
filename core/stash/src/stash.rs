@@ -566,6 +566,12 @@ pub enum StashError {
     #[error("No row ID returned after saving record")]
     NoRowIdReturned,
 
+    /// No [`Stash`] is available to use. This usually implies that functions
+    /// are being called against a [`Model`] instance without setting the
+    /// `stash` property first.
+    #[error("No Stash available to use")]
+    NoStashAvailable,
+
     /// No rows were updated upon saving a record. This can happen if the record  
     /// data hasn't changed, in which case it's not an error — but in other  
     /// situations, it would signify a problem.  
