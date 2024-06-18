@@ -1,30 +1,30 @@
 [package]
 name = "proton-mail-common"
-version = "0.5.24"
+version = "0.5.25"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proton-core-common = {workspace=true}
-proton-async= {workspace=true}
-proton-api-mail = {version = "=0.3.12",path ="../proton-api-mail", features = ["sql"], registry = "proton"}
-proton-event-loop = {workspace=true}
-proton-action-queue = {workspace=true}
-uniffi = {optional = true, workspace=true}
-proton-sqlite3 = {workspace=true}
-uuid = {version = "1.7", features = ["v4"]}
-proton-crypto-inbox = {workspace= true}
-bytes = {workspace= true}
-indoc = {workspace= true}
+proton-core-common = { workspace = true }
+proton-async = { workspace = true }
+proton-api-mail = { version = "=0.3.12", path = "../proton-api-mail", features = ["sql"], registry = "proton" }
+proton-event-loop = { workspace = true }
+proton-action-queue = { workspace = true }
+uniffi = { optional = true, workspace = true }
+proton-sqlite3 = { workspace = true }
+uuid = { version = "1.7", features = ["v4"] }
+proton-crypto-inbox = { workspace = true }
+bytes = { workspace = true }
+indoc = { workspace = true }
 
 [dev-dependencies]
-lazy_static = {workspace=true}
+lazy_static = { workspace = true }
 tempdir = "0.3.1"
 # anotate your tests with traced_test attribute to see log outputs.
-tracing-test = {version = "0.2.4" , features = ["no-env-filter"]}
+tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 velcro = "0.5.4"
-wiremock = {workspace=true}
+wiremock = { workspace = true }
 tempfile = "3.10.1"
 
 # not compatible with global clippy configuration yet
@@ -32,7 +32,7 @@ tempfile = "3.10.1"
 # workspace = true
 
 [features]
-uniffi=["dep:uniffi", "proton-api-mail/uniffi", "proton-event-loop/uniffi", "proton-core-common/uniffi"]
+uniffi = ["dep:uniffi", "proton-api-mail/uniffi", "proton-event-loop/uniffi", "proton-core-common/uniffi"]
 
 # todo: remove when pedantic-ified and uncommend the [lints] section
 [lints.clippy]
