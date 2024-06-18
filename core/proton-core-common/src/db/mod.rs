@@ -31,9 +31,7 @@ async fn new_core_test_connection() -> Stash {
     use tracing_subscriber::{registry, EnvFilter};
     drop(set_global_default(
         registry()
-            .with(EnvFilter::new(
-                "debug,stash=debug",
-            ))
+            .with(EnvFilter::new("debug,stash=debug"))
             .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
     ));
     use crate::db::migrations::migrate_core_db;

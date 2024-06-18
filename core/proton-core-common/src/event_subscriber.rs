@@ -121,7 +121,9 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::
             Ok(())
         }
         .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))?;
-        tx.commit().await.map_err(|e| SubscriberError::Other(anyhow!("Failed to commit transaction: {e}")))
+        tx.commit()
+            .await
+            .map_err(|e| SubscriberError::Other(anyhow!("Failed to commit transaction: {e}")))
     }
 }
 

@@ -56,13 +56,13 @@ impl UserContext {
     pub fn session_as<T: From<Session>>(&self) -> T {
         T::from(self.session.clone())
     }
-    
+
     /// Get the database connection.
     #[must_use]
     pub fn stash(&self) -> &Stash {
         &self.stash
     }
-    
+
     /// Get the tracker service for database operations.
     #[must_use]
     pub fn tracker_service(&self) -> &Stash {

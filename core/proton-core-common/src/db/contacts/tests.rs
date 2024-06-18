@@ -1,5 +1,9 @@
 use crate::db::new_core_test_connection;
-use proton_api_core::domain::{CardData, CardSignature, CardType, Contact, ContactCard, ContactEmail, ContactEmailId, ContactId, ContactLabelId, ContactSendingPreferences, ContactType, ContactTypes, ContactUid, Labels};
+use proton_api_core::domain::{
+    CardData, CardSignature, CardType, Contact, ContactCard, ContactEmail, ContactEmailId,
+    ContactId, ContactLabelId, ContactSendingPreferences, ContactType, ContactTypes, ContactUid,
+    Labels,
+};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
@@ -7,88 +11,117 @@ use stash::stash::Stash;
 #[tokio::test]
 async fn test_full_contact() {
     let conn = new_core_test_connection().await;
-    let tx = conn.transaction().await.expect("Failed to start transaction");
-        let mut full_contact = create_test_full_contact(&conn);
-        full_contact.row_id = None;
-        full_contact.save_using(&tx).await
-            .expect("failed to create contact");
-        let id = full_contact.row_id.clone()
-            .expect("failed to get contact id");
-        let remote_id = full_contact.remote_id.clone()
-            .expect("failed to get contact id");
-        full_contact.save_using(&tx).await
-            .expect("failed to overwrite contact");
+    let tx = conn
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
+    let mut full_contact = create_test_full_contact(&conn);
+    full_contact.row_id = None;
+    full_contact
+        .save_using(&tx)
+        .await
+        .expect("failed to create contact");
+    let id = full_contact
+        .row_id
+        .clone()
+        .expect("failed to get contact id");
+    let remote_id = full_contact
+        .remote_id
+        .clone()
+        .expect("failed to get contact id");
+    full_contact
+        .save_using(&tx)
+        .await
+        .expect("failed to overwrite contact");
     tx.commit().await.expect("Failed to commit transaction");
-        let id_second = full_contact.row_id.clone()
-            .expect("failed to get contact id");
-        assert_eq!(id, 1);
-        assert_eq!(id, id_second);
-        // Query the full contact with cards
-        let mut contact_with_cards = Contact::load_using(remote_id, &tx).await
-            .expect("query contact with cards failed")
-            .expect("expected to find contact");
-        let cards = contact_with_cards.cards().await
-            .expect("Failed to query cards");
-        assert_eq!(cards.len(), full_contact.cards.len());
+    let id_second = full_contact
+        .row_id
+        .clone()
+        .expect("failed to get contact id");
+    assert_eq!(id, 1);
+    assert_eq!(id, id_second);
+    // Query the full contact with cards
+    let mut contact_with_cards = Contact::load_using(remote_id, &tx)
+        .await
+        .expect("query contact with cards failed")
+        .expect("expected to find contact");
+    let cards = contact_with_cards
+        .cards()
+        .await
+        .expect("Failed to query cards");
+    assert_eq!(cards.len(), full_contact.cards.len());
 }
 
 #[tokio::test]
 async fn test_partial_contact() {
     let conn = new_core_test_connection().await;
-    let tx = conn.transaction().await.expect("Failed to start transaction");
-        let mut partial_contacts = create_test_partial_contacts();
-        let mut contact_emails = create_test_contact_emails(&conn);
-        // Insert all partial contacts
-        for contact in &mut partial_contacts {
-            contact.row_id = None;
-            contact.save_using(&tx).await
-                .expect("failed to create contact");
-        }
-        // Insert all contact mails
-        for contact_email in &mut contact_emails {
-            contact_email.row_id = None;
-            contact_email.remote_contact_id = partial_contacts.first().unwrap().remote_id.clone();
-            contact_email.save_using(&tx).await
-                .expect("failed to create contact email");
-        }
+    let tx = conn
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
+    let mut partial_contacts = create_test_partial_contacts();
+    let mut contact_emails = create_test_contact_emails(&conn);
+    // Insert all partial contacts
+    for contact in &mut partial_contacts {
+        contact.row_id = None;
+        contact
+            .save_using(&tx)
+            .await
+            .expect("failed to create contact");
+    }
+    // Insert all contact mails
+    for contact_email in &mut contact_emails {
+        contact_email.row_id = None;
+        contact_email.remote_contact_id = partial_contacts.first().unwrap().remote_id.clone();
+        contact_email
+            .save_using(&tx)
+            .await
+            .expect("failed to create contact email");
+    }
     tx.commit().await.expect("Failed to commit transaction");
-    
-        assert_eq!(partial_contacts.first().unwrap().row_id.unwrap(), 1);
-        assert_eq!(contact_emails.first().unwrap().row_id.unwrap(), 1);
 
-        // Query specific contact mail.
-        let mail = ContactEmail::find_first("WHERE canonical_email = ?", params!["contact_email_1@contact.test"], &conn).await
-            .expect("failed to query email")
-            .expect("expected to find contact email");
-        assert_eq!(
-            mail.canonical_email,
-            "contact_email_1@contact.test"
-        );
+    assert_eq!(partial_contacts.first().unwrap().row_id.unwrap(), 1);
+    assert_eq!(contact_emails.first().unwrap().row_id.unwrap(), 1);
 
-        // Query all test contact mails.
-        let mails = ContactEmail::find("LIMIT 100", vec![], &conn, None).await
-            .expect("failed to query email");
-        assert_eq!(mails.len(), contact_emails.len());
+    // Query specific contact mail.
+    let mail = ContactEmail::find_first(
+        "WHERE canonical_email = ?",
+        params!["contact_email_1@contact.test"],
+        &conn,
+    )
+    .await
+    .expect("failed to query email")
+    .expect("expected to find contact email");
+    assert_eq!(mail.canonical_email, "contact_email_1@contact.test");
 
-        // Query all contacts.
-        let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None).await
-            .expect("failed to query contacts");
-        let contact = contacts.first_mut().unwrap();
-        assert_eq!(
-            contact.remote_id,
-            Some(ContactId::from("a29olIjFv0rnXxBhSMw=="))
-        );
-        assert_eq!(contact.emails().await.unwrap().len(), contact_emails.len());
+    // Query all test contact mails.
+    let mails = ContactEmail::find("LIMIT 100", vec![], &conn, None)
+        .await
+        .expect("failed to query email");
+    assert_eq!(mails.len(), contact_emails.len());
 
-        // Query specific contact.
-        let mut contact_single = Contact::load(contact.remote_id.clone().unwrap(), &conn).await
-            .expect("failed to query contacts")
-            .expect("expected to find contact");
-        contact_single.cards().await
-            .expect("failed to query cards");
-        contact_single.emails().await
-            .expect("failed to query emails");
-        assert_eq!(&contact_single, contact);
+    // Query all contacts.
+    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+        .await
+        .expect("failed to query contacts");
+    let contact = contacts.first_mut().unwrap();
+    assert_eq!(
+        contact.remote_id,
+        Some(ContactId::from("a29olIjFv0rnXxBhSMw=="))
+    );
+    assert_eq!(contact.emails().await.unwrap().len(), contact_emails.len());
+
+    // Query specific contact.
+    let mut contact_single = Contact::load(contact.remote_id.clone().unwrap(), &conn)
+        .await
+        .expect("failed to query contacts")
+        .expect("expected to find contact");
+    contact_single.cards().await.expect("failed to query cards");
+    contact_single
+        .emails()
+        .await
+        .expect("failed to query emails");
+    assert_eq!(&contact_single, contact);
 }
 
 fn create_test_full_contact(stash: &Stash) -> Contact {
@@ -136,7 +169,9 @@ fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
             remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
-            label_ids: Labels(vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+            label_ids: Labels(vec![ContactLabelId::from(
+                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+            )]),
             canonical_email: "contact_email_1@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,
@@ -151,7 +186,9 @@ fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
             remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
-            label_ids: Labels(vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+            label_ids: Labels(vec![ContactLabelId::from(
+                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+            )]),
             canonical_email: "contact_email_2@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,
@@ -170,7 +207,9 @@ fn create_test_partial_contacts() -> Vec<Contact> {
         create_time: 1_503_815_366,
         modify_time: 1_503_815_366,
         contact_emails: vec![],
-        label_ids: Labels(vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+        label_ids: Labels(vec![ContactLabelId::from(
+            "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+        )]),
         cards: vec![],
         row_id: Some(1),
         stash: None,

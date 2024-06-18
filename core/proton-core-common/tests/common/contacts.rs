@@ -58,7 +58,10 @@ impl TestContext {
     ///
     pub async fn mock_get_full_contact(&self, contact: Contact) {
         Mock::given(method("GET"))
-            .and(path(format!("/api/contacts/{}", &contact.remote_id.as_ref().unwrap())))
+            .and(path(format!(
+                "/api/contacts/{}",
+                &contact.remote_id.as_ref().unwrap()
+            )))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetFullContactResponse { contact }),
             )

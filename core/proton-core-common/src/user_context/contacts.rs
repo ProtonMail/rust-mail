@@ -118,10 +118,12 @@ impl UserContext {
             err
         })?;
         if let Some(remote_id) = &contact_with_card.remote_id {
-            let existing = Contact::load(remote_id.clone(), &self.stash).await.map_err(|err| {
-                error!("Failed to load contact from db: {err}");
-                err
-            })?;
+            let existing = Contact::load(remote_id.clone(), &self.stash)
+                .await
+                .map_err(|err| {
+                    error!("Failed to load contact from db: {err}");
+                    err
+                })?;
             if let Some(existing) = existing {
                 contact_with_card.row_id = existing.row_id;
             }
@@ -137,10 +139,12 @@ impl UserContext {
         })?;
         for email in &mut contact_with_card.contact_emails {
             if let Some(remote_id) = &email.remote_id {
-                let existing = ContactEmail::load(remote_id.clone(), &self.stash).await.map_err(|err| {
-                    error!("Failed to load contact email from db: {err}");
-                    err
-                })?;
+                let existing = ContactEmail::load(remote_id.clone(), &self.stash)
+                    .await
+                    .map_err(|err| {
+                        error!("Failed to load contact email from db: {err}");
+                        err
+                    })?;
                 if let Some(existing) = existing {
                     email.row_id = existing.row_id;
                 }

@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use futures::executor::block_on;
 use std::io::stdout;
+use std::sync::Arc;
 use tracing::subscriber::set_global_default;
 use tracing::Level;
 use tracing_subscriber::fmt::layer;
@@ -19,19 +19,16 @@ use proton_api_core::{
     http::{APIEnvConfig, Builder},
 };
 use proton_core_common::{
-    db::{
-        DecryptedUserSession, EncryptedUserSession,
-        SessionEncryptionKey,
-    },
+    db::{DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey},
     os::{InMemoryKeyChain, KeyChain},
     Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
     UserDatabaseInitializer,
 };
-use tempdir::TempDir;
-use wiremock::{matchers::any, Mock, MockServer, Request};
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::Stash;
+use tempdir::TempDir;
+use wiremock::{matchers::any, Mock, MockServer, Request};
 
 pub mod account;
 pub mod contacts;
@@ -66,9 +63,7 @@ impl TestContext {
     pub async fn new() -> Self {
         drop(set_global_default(
             registry()
-                .with(EnvFilter::new(
-                    "debug,stash=debug",
-                ))
+                .with(EnvFilter::new("debug,stash=debug"))
                 .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
         ));
         let user_key_secret: Option<UserKeySecret> = None;
@@ -110,7 +105,8 @@ impl TestContext {
             initializers,
             client,
             None,
-        ).await
+        )
+        .await
         .expect("failed to create context");
 
         // Generate a fake session and write it to the database
@@ -131,7 +127,9 @@ impl TestContext {
         .to_encrypted_session(&encryption_key)
         .expect("failed to generate encrypted session");
         session.set_stash(&stash);
-        session.save().await
+        session
+            .save()
+            .await
             .expect("failed to make changes to session db");
 
         Self {
@@ -188,7 +186,8 @@ impl TestContext {
     /// Get the test user context.
     pub async fn user_context(&self) -> UserContext {
         self.context
-            .user_context_from_session(&self.encrypted_user_session, None).await
+            .user_context_from_session(&self.encrypted_user_session, None)
+            .await
             .expect("failed to create user context")
     }
 }
@@ -198,10 +197,7 @@ impl CoreEventSubscriberConnectionProvider for &TestContext {
         &self,
     ) -> proton_api_core::exports::anyhow::Result<(UserId, Stash)> {
         let user_ctx = block_on(async { self.user_context().await });
-        Ok((
-            user_ctx.user_id().clone(),
-            user_ctx.stash().clone(),
-        ))
+        Ok((user_ctx.user_id().clone(), user_ctx.stash().clone()))
     }
 }
 

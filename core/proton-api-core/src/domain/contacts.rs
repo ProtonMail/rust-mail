@@ -1,10 +1,10 @@
 use serde;
 use serde::{Deserialize, Serialize};
-use tracing::error;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::{params, sql_using_serde};
 use stash::stash::{Stash, StashError, Tether};
+use stash::{params, sql_using_serde};
+use tracing::error;
 
 use crate::utils::{bool_from_integer, bool_to_integer};
 use crate::MAX_PAGE_ELEMENT_COUNT;
@@ -146,33 +146,45 @@ pub struct Contact {
 
 impl Contact {
     /// Returns the associated cards for a contact.
-    /// 
+    ///
     /// This function retrieves the cards for a contact, stores them in the
     /// contact struct, and then returns them.
-    /// 
+    ///
     /// # Errors
-    /// 
+    ///
     /// Returns a [`StashError`] if the cards cannot be retrieved.
-    /// 
+    ///
     pub async fn cards(&mut self) -> Result<&Vec<ContactCard>, StashError> {
-        self.cards = ContactCard::find("WHERE remote_contact_id = ?", params![self.remote_id.clone()], self.stash(), None).await?;
+        self.cards = ContactCard::find(
+            "WHERE remote_contact_id = ?",
+            params![self.remote_id.clone()],
+            self.stash(),
+            None,
+        )
+        .await?;
         Ok(&self.cards)
     }
-    
+
     /// Returns the associated emails for a contact.
     ///
     /// This function retrieves the emails for a contact, stores them in the
     /// contact struct, and then returns them.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns a [`StashError`] if the emails cannot be retrieved.
-    /// 
+    ///
     pub async fn emails(&mut self) -> Result<&Vec<ContactEmail>, StashError> {
-        self.contact_emails = ContactEmail::find("WHERE remote_contact_id = ?", params![self.remote_id.clone()], self.stash(), None).await?;
+        self.contact_emails = ContactEmail::find(
+            "WHERE remote_contact_id = ?",
+            params![self.remote_id.clone()],
+            self.stash(),
+            None,
+        )
+        .await?;
         Ok(&self.contact_emails)
     }
-    
+
     /// Overrides [`Model::save()`] to set the contact id for children.
     pub async fn save(&mut self) -> Result<(), StashError> {
         Model::save(self).await?;
@@ -182,7 +194,14 @@ impl Contact {
         for email in &mut self.contact_emails {
             email.remote_contact_id.clone_from(&self.remote_id);
         }
-        self.stash.as_ref().unwrap().execute("DELETE FROM contact_cards WHERE remote_contact_id = ?", params![self.remote_id.clone()]).await?;
+        self.stash
+            .as_ref()
+            .unwrap()
+            .execute(
+                "DELETE FROM contact_cards WHERE remote_contact_id = ?",
+                params![self.remote_id.clone()],
+            )
+            .await?;
         for card in &mut self.cards {
             card.id = None;
             card.row_id = None;
@@ -193,7 +212,7 @@ impl Contact {
         }
         Ok(())
     }
-    
+
     /// Overrides [`Model::save_using()`] to set the contact id for children.
     pub async fn save_using(&mut self, tether: &Tether) -> Result<(), StashError> {
         Model::save_using(self, tether).await?;
@@ -203,7 +222,12 @@ impl Contact {
         for email in &mut self.contact_emails {
             email.remote_contact_id.clone_from(&self.remote_id);
         }
-        tether.execute("DELETE FROM contact_cards WHERE remote_contact_id = ?", params![self.remote_id.clone()]).await?;
+        tether
+            .execute(
+                "DELETE FROM contact_cards WHERE remote_contact_id = ?",
+                params![self.remote_id.clone()],
+            )
+            .await?;
         for card in &mut self.cards {
             card.id = None;
             card.row_id = None;

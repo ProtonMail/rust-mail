@@ -1,8 +1,10 @@
 use common::{TestContext, TestCoreEvent};
-use proton_api_core::domain::{Action, CardData, CardSignature, CardType, Contact, ContactCard, ContactEmail, ContactEmailEvent, ContactEmailId, ContactEvent, ContactId, ContactLabelId, ContactSendingPreferences, ContactType, ContactTypes, ContactUid, Labels};
-use proton_core_common::{
-    CoreEventSubscriber, UserContext,
+use proton_api_core::domain::{
+    Action, CardData, CardSignature, CardType, Contact, ContactCard, ContactEmail,
+    ContactEmailEvent, ContactEmailId, ContactEvent, ContactId, ContactLabelId,
+    ContactSendingPreferences, ContactType, ContactTypes, ContactUid, Labels,
 };
+use proton_core_common::{CoreEventSubscriber, UserContext};
 use proton_event_loop::Subscriber;
 use stash::orm::Model;
 use stash::params;
@@ -19,25 +21,26 @@ async fn test_sync_and_load_contacts() {
     let test_contacts_email = create_test_contact_emails(Some(user_ctx.stash().clone()));
 
     // Api mock.
-        ctx.mock_get_all_contacts_partial_request(test_contacts.clone())
-            .await;
-        ctx.mock_get_all_contact_emails_request(test_contacts_email.clone())
-            .await;
-        ctx.catch_all().await;
+    ctx.mock_get_all_contacts_partial_request(test_contacts.clone())
+        .await;
+    ctx.mock_get_all_contact_emails_request(test_contacts_email.clone())
+        .await;
+    ctx.catch_all().await;
 
     // Sync contacts
-    user_ctx.sync_contacts().await
+    user_ctx
+        .sync_contacts()
+        .await
         .expect("failed to sync contacts");
 
     // Check database
     let conn = user_ctx.stash();
-    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None).await
+    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+        .await
         .expect("Failed to get contacts");
     for contact in &mut contacts {
-        contact.cards().await
-            .expect("Failed to query cards");
-        contact.emails().await
-            .expect("Failed to query emails");
+        contact.cards().await.expect("Failed to query cards");
+        contact.emails().await.expect("Failed to query emails");
     }
     let expected_contacts = expected_local_contacts(Some(user_ctx.stash().clone()));
     assert_eq!(contacts, expected_contacts);
@@ -47,27 +50,28 @@ async fn test_sync_and_load_contacts() {
 async fn test_sync_and_load_full_contact() {
     let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
-    
+
     let test_full_contact = create_test_full_contact(Some(user_ctx.stash().clone()));
     let remote_id = test_full_contact.remote_id.clone().unwrap();
 
     // Api mock.
-        ctx.mock_get_full_contact(test_full_contact.clone()).await;
-        ctx.catch_all().await;
+    ctx.mock_get_full_contact(test_full_contact.clone()).await;
+    ctx.catch_all().await;
 
     // Sync contacts
-    user_ctx.sync_contact_with_card(remote_id.clone()).await
+    user_ctx
+        .sync_contact_with_card(remote_id.clone())
+        .await
         .expect("failed to sync contacts");
 
     // Check database
     let conn = user_ctx.stash();
-    let mut contact = Contact::load(remote_id, &conn).await
+    let mut contact = Contact::load(remote_id, &conn)
+        .await
         .expect("Failed to load contact")
         .expect("contact should be found");
-    contact.cards().await
-        .expect("Failed to query cards");
-    contact.emails().await
-        .expect("Failed to query emails");
+    contact.cards().await.expect("Failed to query cards");
+    contact.emails().await.expect("Failed to query emails");
     let expected_contact = create_test_full_contact(Some(user_ctx.stash().clone()));
     assert_eq!(contact, expected_contact);
 }
@@ -86,34 +90,40 @@ async fn test_sync_and_load_contacts_mixed() {
         test_contacts.clone(),
         test_contacts_email.clone(),
         test_full_contact.clone(),
-    ).await;
+    )
+    .await;
 
     // Check database
     let conn = user_ctx.stash();
-    
+
     let remote_id = test_contacts.first().unwrap().remote_id.clone().unwrap();
-    let mut contact = Contact::load(remote_id, &conn).await
+    let mut contact = Contact::load(remote_id, &conn)
+        .await
         .expect("Failed to load contact")
         .expect("contact should be found");
-    contact.cards().await
-        .expect("Failed to query cards");
-    contact.emails().await
-        .expect("Failed to query emails");
+    contact.cards().await.expect("Failed to query cards");
+    contact.emails().await.expect("Failed to query emails");
     let expected_contact = create_test_full_contact(Some(user_ctx.stash().clone()));
     assert_eq!(contact, expected_contact);
 
-    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None).await
+    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+        .await
         .expect("Failed to load contacts");
     for contact in &mut contacts {
-        contact.emails().await
-            .expect("Failed to query emails");
+        contact.emails().await.expect("Failed to query emails");
     }
     let expected_contacts = expected_local_contacts(Some(user_ctx.stash().clone()));
     assert_eq!(contacts, expected_contacts);
 
     let email_to_query = "contact_email_1@contact.test";
-    let queried_contact_emails = ContactEmail::find("WHERE canonical_email = ?", params![email_to_query], &conn, None).await
-        .expect("Failed to get contact emails");
+    let queried_contact_emails = ContactEmail::find(
+        "WHERE canonical_email = ?",
+        params![email_to_query],
+        &conn,
+        None,
+    )
+    .await
+    .expect("Failed to get contact emails");
     let expected_mail = contact
         .contact_emails
         .iter()
@@ -137,7 +147,8 @@ async fn test_sync_and_delete_event_contact() {
         test_contacts.clone(),
         test_contacts_email.clone(),
         test_full_contact.clone(),
-    ).await;
+    )
+    .await;
 
     let email_to_remove = test_contacts_email.first().unwrap().clone();
     let contact_to_remove = test_contacts.last().unwrap();
@@ -158,16 +169,25 @@ async fn test_sync_and_delete_event_contact() {
         ..Default::default()
     };
     // Fire event:
-    test_event_subscriber.on_events(&mut [events]).await
+    test_event_subscriber
+        .on_events(&mut [events])
+        .await
         .expect("failed to execute event");
 
     // Were the  deletions successful?
     let conn = user_ctx.stash();
-    let queried_contact_emails = ContactEmail::find("WHERE canonical_email = ?", params![email_to_remove.canonical_email], &conn, None).await
-        .expect("Failed to get contact emails");
+    let queried_contact_emails = ContactEmail::find(
+        "WHERE canonical_email = ?",
+        params![email_to_remove.canonical_email],
+        &conn,
+        None,
+    )
+    .await
+    .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let contacts = Contact::find("LIMIT 100", vec![], &conn, None).await
+    let contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+        .await
         .expect("Failed to get contacts");
     assert_eq!(contacts.len(), test_contacts.len() - 1);
 }
@@ -187,9 +207,11 @@ async fn test_sync_and_modify_event_contact() {
         test_contacts.clone(),
         test_contacts_email.clone(),
         test_full_contact.clone(),
-    ).await;
+    )
+    .await;
 
-    let (modified_contact, removed_email, added_email) = create_test_full_modified_contact(Some(user_ctx.stash().clone()));
+    let (modified_contact, removed_email, added_email) =
+        create_test_full_modified_contact(Some(user_ctx.stash().clone()));
 
     let remote_id = modified_contact.remote_id.clone().unwrap();
     let modify_contact_event = ContactEvent {
@@ -213,24 +235,32 @@ async fn test_sync_and_modify_event_contact() {
         ..Default::default()
     };
     // Fire event:
-    test_event_subscriber.on_events(&mut [event]).await
+    test_event_subscriber
+        .on_events(&mut [event])
+        .await
         .expect("failed to execute event");
 
     let conn = user_ctx.stash();
-    let queried_contact_emails = ContactEmail::find("WHERE canonical_email = ?", params![removed_email.canonical_email], &conn, None).await
-        .expect("Failed to get contact emails");
+    let queried_contact_emails = ContactEmail::find(
+        "WHERE canonical_email = ?",
+        params![removed_email.canonical_email],
+        &conn,
+        None,
+    )
+    .await
+    .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let mut contact = Contact::load(remote_id, &conn).await
+    let mut contact = Contact::load(remote_id, &conn)
+        .await
         .expect("Failed to load contact")
         .expect("contact should be found");
-    contact.emails().await
+    contact
+        .emails()
+        .await
         .expect("Failed to query contact emails");
 
-    assert_eq!(
-        contact.modify_time,
-        modified_contact.modify_time
-    );
+    assert_eq!(contact.modify_time, modified_contact.modify_time);
     assert_eq!(contact.size, modified_contact.size);
     assert_eq!(
         contact.contact_emails.len(),
@@ -260,17 +290,21 @@ async fn prepare_sync_test_data_contacts(
     }
     let remote_contact_id = test_full_contact.remote_id.clone();
     // Api mock.
-        ctx.mock_get_all_contacts_partial_request(test_contacts)
-            .await;
-        ctx.mock_get_all_contact_emails_request(test_contacts_email)
-            .await;
-        ctx.mock_get_full_contact(test_full_contact).await;
-        ctx.catch_all().await;
-    
+    ctx.mock_get_all_contacts_partial_request(test_contacts)
+        .await;
+    ctx.mock_get_all_contact_emails_request(test_contacts_email)
+        .await;
+    ctx.mock_get_full_contact(test_full_contact).await;
+    ctx.catch_all().await;
+
     // Sync contacts
-    user_ctx.sync_contacts().await
+    user_ctx
+        .sync_contacts()
+        .await
         .expect("failed to sync contacts");
-    user_ctx.sync_contact_with_card(remote_contact_id.unwrap()).await
+    user_ctx
+        .sync_contact_with_card(remote_contact_id.unwrap())
+        .await
         .expect("failed to sync contacts");
 }
 
@@ -284,7 +318,9 @@ fn create_test_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
             create_time: 1_503_815_366,
             modify_time: 1_503_815_366,
             contact_emails: vec![],
-            label_ids: Labels(vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+            label_ids: Labels(vec![ContactLabelId::from(
+                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+            )]),
             cards: vec![],
             row_id: Some(1),
             stash: stash.clone(),
@@ -334,7 +370,9 @@ fn create_test_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
             remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
-            label_ids: Labels(vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+            label_ids: Labels(vec![ContactLabelId::from(
+                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+            )]),
             canonical_email: "contact_email_2@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,
@@ -349,7 +387,9 @@ fn create_test_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             defaults: ContactSendingPreferences::Custom,
             display_order: 1,
             remote_contact_id: Some(ContactId::from("z29olIjFv0rnXxBhSMz==")),
-            label_ids: Labels(vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+            label_ids: Labels(vec![ContactLabelId::from(
+                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
+            )]),
             canonical_email: "contact_email_3@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,
@@ -393,7 +433,10 @@ fn expected_local_contacts(stash: Option<Stash>) -> Vec<Contact> {
 }
 
 fn create_test_full_contact(stash: Option<Stash>) -> Contact {
-    let mut contact = create_test_partial_contacts(stash.clone()).into_iter().next().unwrap();
+    let mut contact = create_test_partial_contacts(stash.clone())
+        .into_iter()
+        .next()
+        .unwrap();
     let emails = create_test_contact_emails(stash.clone())
         .into_iter()
         .filter(|mail| mail.remote_contact_id == contact.remote_id)
@@ -422,7 +465,9 @@ fn create_test_full_contact(stash: Option<Stash>) -> Contact {
     contact
 }
 
-fn create_test_full_modified_contact(stash: Option<Stash>) -> (Contact, ContactEmail, ContactEmail) {
+fn create_test_full_modified_contact(
+    stash: Option<Stash>,
+) -> (Contact, ContactEmail, ContactEmail) {
     let mut contact = create_test_full_contact(stash.clone());
     let removed_mail = contact.contact_emails.pop().unwrap();
     contact.modify_time += 1;
