@@ -5,8 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-
 ## [Unreleased] - 2024-00-00
+
+## [0.10.28] - 2024-06-18
+
+### Fixed
+
+- Correctly initialize address id in attachments when created from message data.
 
 ## [0.10.27] - 2024-06-12
 
