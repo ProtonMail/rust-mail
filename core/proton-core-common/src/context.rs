@@ -24,8 +24,6 @@ use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreContextError {
-    #[error("Database Error: {0}")]
-    DB(#[from] crate::db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]

@@ -17,9 +17,6 @@ pub use proton_sqlite3;
 #[cfg(test)]
 use stash::stash::Stash;
 
-pub type DBResult<T> = proton_sqlite3::rusqlite::Result<T>;
-pub type DBError = proton_sqlite3::rusqlite::Error;
-
 #[cfg(test)]
 async fn new_core_test_connection() -> Stash {
     use std::io::stdout;

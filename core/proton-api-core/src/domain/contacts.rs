@@ -238,7 +238,7 @@ impl Contact {
         for card in &mut self.cards {
             card.id = None;
             card.row_id = None;
-            card.save_using(&tether).await.map_err(|e| {
+            card.save_using(tether).await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e
             })?;

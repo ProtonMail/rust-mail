@@ -30,8 +30,6 @@ pub trait CoreSessionCallback: Send + Sync {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CoreSessionError {
-    #[error("Database Error: {0}")]
-    DB(#[from] crate::db::DBError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]

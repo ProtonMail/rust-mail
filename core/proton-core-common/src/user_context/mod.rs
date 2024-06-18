@@ -63,12 +63,6 @@ impl UserContext {
         &self.stash
     }
 
-    /// Get the tracker service for database operations.
-    #[must_use]
-    pub fn tracker_service(&self) -> &Stash {
-        &self.stash
-    }
-
     /// Get the user id of this context.
     #[must_use]
     pub fn user_id(&self) -> &UserId {
