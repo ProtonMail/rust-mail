@@ -343,3 +343,55 @@ pub struct PutMessagesDeleteRequest {
     #[serde(rename = "CurrentLabelID")]
     pub label_id: Option<RemoteId>,
 }
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct PutMessagesLabelRequest {
+    /// TODO: Document this field.
+    pub action: u32,
+
+    /// TODO: Document this field.
+    #[serde(rename = "IDs")]
+    pub ids: Vec<RemoteId>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "LabelID")]
+    pub label_id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "Option<BoolFromInt>")]
+    pub spam_action: Option<bool>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessagesReadRequest {
+    /// TODO: Document this field.
+    #[serde(rename = "IDs")]
+    pub ids: Vec<RemoteId>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessagesUnlabelRequest {
+    /// TODO: Document this field.
+    #[serde(rename = "IDs")]
+    pub ids: Vec<RemoteId>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "LabelID")]
+    pub label_id: RemoteId,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessagesUnreadRequest {
+    /// TODO: Document this field.
+    #[serde(rename = "IDs")]
+    pub ids: Vec<RemoteId>,
+}

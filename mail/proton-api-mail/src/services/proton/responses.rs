@@ -218,3 +218,49 @@ pub struct PutMessagesDeleteResponse {
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult>,
 }
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessagesLabelResponse {
+    /// TODO: Document this field.
+    #[serde(rename = "Responses")]
+    pub responses: Vec<OperationResult>,
+
+    /// TODO: Document this field.
+    pub undo_token: Option<UndoToken>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessagesReadResponse {
+    /// TODO: Document this field.
+    #[serde(rename = "Responses")]
+    pub responses: Vec<OperationResult>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessagesUnlabelResponse {
+    /// TODO: Document this field.
+    #[serde(rename = "Responses")]
+    pub responses: Vec<OperationResult>,
+
+    /// TODO: Document this field.
+    pub undo_token: Option<UndoToken>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutMessagesUnreadResponse {
+    /// TODO: Document this field.
+    #[serde(rename = "Responses")]
+    pub responses: Vec<OperationResult>,
+}
