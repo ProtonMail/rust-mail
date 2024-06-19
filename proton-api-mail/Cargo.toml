@@ -17,6 +17,12 @@ thiserror = "1"
 tokio = { workspace = true }
 tracing = { workspace = true }
 uniffi = { workspace = true, optional = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_repr = { workspace = true }
+serde_with = "3.8.1"
+smart-default = "0.7.1"
+velcro = { workspace = true }
 
 [dev-dependencies]
 bytes = "1.6.0"

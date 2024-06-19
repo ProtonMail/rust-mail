@@ -26,12 +26,17 @@ proton-event-loop = { version = "=0.6.13", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common", features = ["uniffi"] }
 proton-mail-message-detector = { path = "proton-mail-message-detector" }
 proton-sqlite3 = { version = "=0.6.2", registry = "proton" }
-stash = { version = "0.1.0", registry = "proton" }  
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.117"
+serde_repr = "0.1"
+stash = { version = "0.1.0", registry = "proton"  }
+thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uniffi = { version = "0.27.1", features = ["tokio"] }
 url = "2.5.0"
+velcro = "0.5.4"
 wiremock = "0.6.0"
 
 #[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
