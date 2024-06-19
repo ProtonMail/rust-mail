@@ -22,6 +22,8 @@ serde-aux = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_urlencoded = "0.7.1"
+serde_with = "3.8.1"
+smart-default = "0.7.1"
 stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
