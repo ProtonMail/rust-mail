@@ -24,7 +24,8 @@ use crate::services::proton::requests::{
     GetConversationsOptions, GetImagesLogoOptions, GetLabelsOptions, GetMessagesOptions,
     PostLabelsRequest, PutConversationsDeleteRequest, PutConversationsLabelRequest,
     PutConversationsReadRequest, PutConversationsUnlabelRequest, PutConversationsUnreadRequest,
-    PutLabelRequest, PutMessagesDeleteRequest,
+    PutLabelRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
+    PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
 };
 use crate::services::proton::responses::{
     GetAttachmentMetadataResponse, GetConversationResponse, GetConversationsCountResponse,
@@ -32,6 +33,8 @@ use crate::services::proton::responses::{
     GetMessagesResponse, GetSettingsResponse, PostLabelsResponse, PutConversationsDeleteResponse,
     PutConversationsLabelResponse, PutConversationsReadResponse, PutConversationsUnlabelResponse,
     PutConversationsUnreadResponse, PutLabelResponse, PutMessagesDeleteResponse,
+    PutMessagesLabelResponse, PutMessagesReadResponse, PutMessagesUnlabelResponse,
+    PutMessagesUnreadResponse,
 };
 use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 use bytes::Bytes;
@@ -502,6 +505,108 @@ pub trait ProtonMail: ApiService {
                 ids: message_ids,
                 label_id,
             },
+            None,
+        )
+        .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - TODO: Document this parameter.
+    /// * `label_id`    - TODO: Document this parameter.
+    /// * `spam_action` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_messages_label(
+        &self,
+        message_ids: Vec<RemoteId>,
+        label_id: RemoteId,
+        spam_action: Option<bool>,
+    ) -> Result<PutMessagesLabelResponse, ApiServiceError> {
+        self.put::<_, Json<_>>(
+            &format!("{}/messages/label", Self::BASE_PATH_MAIL),
+            PutMessagesLabelRequest {
+                action: 1,
+                ids: message_ids,
+                label_id,
+                spam_action,
+            },
+            None,
+        )
+        .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_messages_read(
+        &self,
+        message_ids: Vec<RemoteId>,
+    ) -> Result<PutMessagesReadResponse, ApiServiceError> {
+        self.put::<_, Json<_>>(
+            &format!("{}/messages/read", Self::BASE_PATH_MAIL),
+            PutMessagesReadRequest { ids: message_ids },
+            None,
+        )
+        .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - TODO: Document this parameter.
+    /// * `label_id`    - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_messages_unlabel(
+        &self,
+        message_ids: Vec<RemoteId>,
+        label_id: RemoteId,
+    ) -> Result<PutMessagesUnlabelResponse, ApiServiceError> {
+        self.put::<_, Json<_>>(
+            &format!("{}/messages/unlabel", Self::BASE_PATH_MAIL),
+            PutMessagesUnlabelRequest {
+                ids: message_ids,
+                label_id,
+            },
+            None,
+        )
+        .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_messages_unread(
+        &self,
+        message_ids: Vec<RemoteId>,
+    ) -> Result<PutMessagesUnreadResponse, ApiServiceError> {
+        self.put::<_, Json<_>>(
+            &format!("{}/messages/unread", Self::BASE_PATH_MAIL),
+            PutMessagesUnreadRequest { ids: message_ids },
             None,
         )
         .await
