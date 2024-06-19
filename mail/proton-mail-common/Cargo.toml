@@ -16,7 +16,7 @@ proton-core-common = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
-serde_json = "1.0.117"
+serde_json = { workspace = true }
 stash = { workspace = true }
 tokio = { workspace = true }
 uniffi = { workspace = true, optional = true }

@@ -2,6 +2,7 @@
 
 pub mod domain;
 pub mod requests;
+pub mod services;
 mod session;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
