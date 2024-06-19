@@ -1,3 +1,6 @@
+mod encrypt;
+pub use encrypt::*;
+
 mod errors;
 pub use errors::*;
 
