@@ -67,6 +67,22 @@ impl KeyFlag {
     pub fn supports_mail(&self) -> bool {
         !self.is_email_no_encryption()
     }
+    /// Sets the key flag to be compromised.
+    pub fn set_compromised(&mut self) {
+        self.0 &= !FLAG_NOT_COMPROMISED;
+    }
+    /// Sets the key flag to not be compromised.
+    pub fn set_not_compromised(&mut self) {
+        self.0 |= FLAG_NOT_COMPROMISED;
+    }
+    /// Sets the key flag to be obsolete.
+    pub fn set_obsolete(&mut self) {
+        self.0 &= !FLAG_NOT_OBSOLETE;
+    }
+    /// Sets the key flag to not be obsolete.
+    pub fn set_not_obsolete(&mut self) {
+        self.0 |= FLAG_NOT_OBSOLETE;
+    }
 }
 
 crate::string_id! {

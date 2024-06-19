@@ -1,0 +1,174 @@
+use proton_crypto_account::keys::{
+    APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKey, APIPublicKeySource,
+    DecryptedAddressKey, KeyFlag, KeyId, PinnedPublicKeys, PublicAddressKeys, SKLSignature,
+    SignedKeyList,
+};
+use proton_crypto_inbox::{
+    keys::InboxVerificationPreferences,
+    proton_crypto::{
+        crypto::{DataEncoding, PGPProviderSync},
+        new_pgp_provider,
+    },
+};
+
+const TEST_KEY: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: ProtonMail
+
+xjMEZW86jxYJKwYBBAHaRw8BAQdAQOc3jVxw1ISyaSKde3UJ7ZH5foMrjeCV
+NWNm8uHmqOnNKWx1YnV4MkBwcm90b24uYmxhY2sgPGx1YnV4MkBwcm90b24u
+YmxhY2s+wowEEBYKAD4FgmVvOo8ECwkHCAmQGQDOlJmIZYgDFQgKBBYAAgEC
+GQECmwMCHgEWIQTSZZlb0pFeKO6tpwcZAM6UmYhliAAADqcBAMBEiBTMSpoW
+0RiXd8wOVl37EyGd39rx0IlGsjsI77AQAP9VsjMZLAD6HU2SYwiL5EF2wHpP
+OUcDZqVMpnL9aaJeBsKoBBAWCABaBQJlbzrpCRDU0hoFUaey7BYhBDYVQ78N
+pW2mDLPalNTSGgVRp7LsLBxUZXN0IE9wZW5QR1AgQ0EgPHRlc3Qtb3BlbnBn
+cC1jYUBwcm90b24ubWU+BYMA7U4AAABVpgEApRWyrfiiJKsSl+Y/kWApsHgN
+AgSLLTsXXFxjpUg88ggA/iAIkVfZBOvLlDMdcuGPXliZythV5A292gekdlH+
+0SoIzjgEZW86jxIKKwYBBAGXVQEFAQEHQLVv/2vApjXs2rWnbzfkqDWiBA5X
+j46YndFrAia0Fa10AwEIB8J4BBgWCgAqBYJlbzqPCZAZAM6UmYhliAKbDBYh
+BNJlmVvSkV4o7q2nBxkAzpSZiGWIAAAFkgEApdB1yTmSFV+QcrgsGSZ7veyF
+TupI/rjj+Y8rceHcBkcBALaLyrpX7cUeY0yX2MZhPmpiJeE4+4Rot8PIGkVa
+X08A
+=fBDT
+-----END PGP PUBLIC KEY BLOCK-----
+";
+
+const PRIVATE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xX0GY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laP+HQcL
+Awgr/Ssmlogji+ACZVkAJhSw8ixv8qOdigzBa/6C38y9kNF+6z8p0p7QogkBoptJ
+eKSRqtw0fpcZZwpOEsKMV8PvmPFD0U8VMG9kvGMU7cKxBh8bCgAAAEIFgmOHf+MD
+CwkHBRUKDggMAhYAApsDAh4JIiEGyxhsTwYJppfk1S36bHIrDB8eJ8GKVnCPZSXs
+J7rZrMkFJwkCBwIAAAAArSggED4tfSJ+wObXzkRx2za/yXCDJTaQJxSYp+8FdsB/
+quFFhbO5A7ASfsT9ovAjBFoux2vLT5VxqWUeFK7hE3odZoRCyI+VHjPE/9M/uaF9
+UR7tdY/G2cxQy1/Xk7IDnVgEx30GY4d/4xkAAAAghpMkg2f55QFduSL49ICV3aeE
+mH8tWYWxL7rRbK9eRDX+HQcLAwgr/Ssmlogji+ByP40pWjHluaiB3cUHpIU3h69K
+TXWNUyIsltFCLkpnGCJk3tj8D267qpVCcJS5Q8s0dd5tyyENmsfpodQTyMzGKM2U
+N8KbBhgbCgAAACwFgmOHf+MCmwwiIQbLGGxPBgmml+TVLfpscisMHx4nwYpWcI9l
+JewnutmsyQAAAAAEASCm6RhtnVk1/I/lYxTNtSdIalpRIPm3YqI1pynwOQEKVlFr
+ZzcAxDNINdr2MaFjPGPNVvmxwcPNOSPJFlZF1OrxTovh1r7/4q2u6HybtejZ6FJI
+XJZFK5NJl7m2b8peBgY=
+-----END PGP PRIVATE KEY BLOCK-----";
+
+const PRIVATE_KEY_PASSWORD: &str = "password";
+
+#[test]
+fn test_verification_preferences() {
+    let pgp_provider = new_pgp_provider();
+    let pinned_keys = create_test_pinned_key(&pgp_provider);
+    let api_keys = create_test_public_key(&pgp_provider);
+    let verification_preferences =
+        InboxVerificationPreferences::from_public_address_keys(api_keys, Some(pinned_keys));
+    assert!(verification_preferences.compromised_fingerprints.is_empty());
+    assert!(verification_preferences.uses_pinned_keys());
+    assert_eq!(verification_preferences.pinned_keys.len(), 1);
+    assert_eq!(verification_preferences.api_keys.len(), 1);
+}
+
+#[test]
+fn test_verification_preferences_compromised() {
+    let pgp_provider = new_pgp_provider();
+    let mut api_keys = create_test_public_key(&pgp_provider);
+    let pinned_keys = create_test_pinned_key(&pgp_provider);
+    api_keys
+        .address
+        .keys
+        .first_mut()
+        .unwrap()
+        .flags
+        .set_compromised();
+    let verification_preferences =
+        InboxVerificationPreferences::from_public_address_keys(api_keys, Some(pinned_keys));
+    assert!(verification_preferences.pinned_keys.is_empty());
+    assert!(verification_preferences.api_keys.is_empty());
+    assert_eq!(verification_preferences.compromised_fingerprints.len(), 1);
+}
+
+#[test]
+fn test_verification_preferences_own() {
+    let pgp_provider = new_pgp_provider();
+    let address_keys = create_test_decrypted_address_key(&pgp_provider);
+    let verification_preferences =
+        InboxVerificationPreferences::from_unlocked_address_keys(&address_keys);
+    assert!(verification_preferences.pinned_keys.is_empty());
+    assert!(verification_preferences.compromised_fingerprints.is_empty());
+    assert_eq!(verification_preferences.api_keys.len(), 1);
+    assert!(!verification_preferences.uses_pinned_keys());
+}
+
+#[test]
+fn test_verification_preferences_own_compromised() {
+    let pgp_provider = new_pgp_provider();
+    let mut address_keys = create_test_decrypted_address_key(&pgp_provider);
+    address_keys.first_mut().unwrap().flags.set_compromised();
+    let verification_preferences =
+        InboxVerificationPreferences::from_unlocked_address_keys(&address_keys);
+    assert!(verification_preferences.pinned_keys.is_empty());
+    assert!(verification_preferences.api_keys.is_empty());
+    assert_eq!(verification_preferences.compromised_fingerprints.len(), 1);
+}
+
+fn create_test_pinned_key<T: PGPProviderSync>(provider: &T) -> PinnedPublicKeys<T::PublicKey> {
+    let key = provider
+        .public_key_import(TEST_KEY, DataEncoding::Armor)
+        .unwrap();
+    PinnedPublicKeys {
+        pinned_keys: vec![key],
+        encrypt_to_pinned: Some(true),
+        encrypt_to_untrusted: Some(true),
+        sign: Some(true),
+        scheme: None,
+        mime_type: None,
+        contact_signature_verified: true,
+        signature_timestamp: None,
+    }
+}
+
+fn create_test_public_key<T: PGPProviderSync>(provider: &T) -> PublicAddressKeys<T::PublicKey> {
+    let address_keys = vec![APIPublicKey {
+        source: APIPublicKeySource::Proton,
+        flags: KeyFlag::from(3_u32),
+        public_key: TEST_KEY.into(),
+    }];
+    let skl = SignedKeyList {
+        min_epoch_id: Some(837),
+        max_epoch_id: Some(1407),
+        expected_min_epoch_id: None,
+        data: Some("Data".into()),
+        obsolescence_token: None,
+        signature: Some(SKLSignature::from("signature")),
+        revision: 31,
+    };
+    let address_key_keygroup = APIPublicAddressKeyGroup {
+        keys: address_keys,
+        signed_key_list: Some(skl),
+    };
+    let api_keys = APIPublicAddressKeys {
+        address_keys: address_key_keygroup,
+        catch_all_keys: None,
+        unverified_keys: None,
+        warnings: vec![String::from("this is a warning")],
+        proton_mx: true,
+        is_proton: false,
+    };
+    api_keys.import(provider).unwrap()
+}
+
+fn create_test_decrypted_address_key<T: PGPProviderSync>(
+    provider: &T,
+) -> Vec<DecryptedAddressKey<T::PrivateKey, T::PublicKey>> {
+    let private_key = provider
+        .private_key_import(
+            PRIVATE_KEY,
+            PRIVATE_KEY_PASSWORD.as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let public_key = provider.private_key_to_public_key(&private_key).unwrap();
+    vec![DecryptedAddressKey {
+        id: KeyId::from("G8URRzoYaBW6mSPQjbbo2yYgwI828DVcEs8dDRKxByd1A_qSRYF49TOtw_m4wvDGb76M-r3AVdXuDzSHObR5hQ=="),
+        private_key,
+        public_key,
+        flags: KeyFlag::from(3_u32),
+        primary: true
+    }]
+}
