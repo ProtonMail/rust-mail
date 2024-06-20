@@ -85,7 +85,8 @@ pub trait DecryptableMessage {
             .new_decryptor()
             .with_passphrase(passphrase.as_ref())
             .with_ut8_sanitization()
-            .decrypt(self.message_encrypted_body(), DataEncoding::Armor)?;
+            .decrypt(self.message_encrypted_body(), DataEncoding::Armor)
+            .map_err(MessageError::Decryption)?;
         let decoded_message = std::str::from_utf8(decrypted_message.as_bytes())?;
         Ok(DecryptedBody::Plain(decoded_message.to_owned()))
     }
@@ -100,7 +101,8 @@ fn decrypt_mime<T: PGPProviderSync>(
     let decrypted_body = pgp_provider
         .new_decryptor()
         .with_decryption_key_refs(decryption_keys)
-        .decrypt(data, DataEncoding::Armor)?;
+        .decrypt(data, DataEncoding::Armor)
+        .map_err(MessageError::Decryption)?;
     let signatures = decrypted_body.signatures().unwrap_or_default();
     let raw_mime_data = decrypted_body.into_vec();
     let (mime_body_data, mime_signatures) =

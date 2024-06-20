@@ -12,13 +12,16 @@ pub trait DraftEncryption {
         provider: &T,
         address_key: impl AsRef<T::PrivateKey>,
     ) -> Result<Vec<u8>, MessageError> {
-        let address_public_key = provider.private_key_to_public_key(address_key.as_ref())?;
+        let address_public_key = provider
+            .private_key_to_public_key(address_key.as_ref())
+            .map_err(MessageError::KeyProblem)?;
         let encryptor = provider.new_encryptor();
         let binding = [address_key];
 
-        Ok(encryptor
+        encryptor
             .with_encryption_key(address_public_key.as_public_key())
             .with_signing_key_refs(&binding)
-            .encrypt_raw(self.message_body(), DataEncoding::Armor)?)
+            .encrypt_raw(self.message_body(), DataEncoding::Armor)
+            .map_err(MessageError::Encryption)
     }
 }

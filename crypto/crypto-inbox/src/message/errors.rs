@@ -6,8 +6,12 @@ use proton_crypto_inbox_mime::ProcessMimeError;
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::module_name_repetitions)]
 pub enum MessageError {
+    #[error("Failed to encrypt the message body: {0}")]
+    Encryption(CryptoError),
     #[error("Failed to decrypt the message body: {0}")]
-    Decryption(#[from] CryptoError),
+    Decryption(CryptoError),
+    #[error("Problem with provided key: {0}")]
+    KeyProblem(CryptoError),
     #[error("Failed to decode message body to utf-8 string: {0}")]
     BodyDecode(#[from] Utf8Error),
     #[error("Failed to decode mime message body: {0}")]
