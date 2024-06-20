@@ -1,0 +1,36 @@
+use velcro::hash_set;
+
+use crate::properties::email::{validate_email, Email};
+use crate::test::{make_property, property_reject_parameters};
+use crate::values::text::Text;
+use crate::ParameterType;
+
+#[test]
+fn email_strut() {
+    let email = Email::new_validated("text").unwrap();
+    assert_eq!(email.value, Text::new_unchecked("text"));
+}
+
+#[test]
+fn email_property() {
+    validate_email(&make_property("EMAIL", Some("text"), None)).unwrap();
+    validate_email(&make_property(
+        "EMAIL",
+        Some("text"),
+        Some(vec![
+            ("VALUE", vec!["text"]),
+            ("PID", vec!["1.2", "2.3"]),
+            ("PREF", vec!["1"]),
+            ("TYPE", vec!["work", "home"]),
+            ("ALTID", vec!["param-value"]),
+            ("any", vec!["foo", "bar"]),
+        ]),
+    ))
+    .unwrap();
+    property_reject_parameters(
+        validate_email,
+        "EMAIL",
+        "text",
+        hash_set! {ParameterType::CalScale, ParameterType::Geo, ParameterType::Label, ParameterType::Language, ParameterType::MediaType, ParameterType::SortAs, ParameterType::TZ},
+    );
+}

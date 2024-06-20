@@ -1,0 +1,18 @@
+[package]
+name = "proton-vcard"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono.workspace = true       # Date and DateTime validation
+ical.workspace = true         # vCard Parser/Writer
+oxilangtag.workspace = true   # Language tag validation [RFC 5646](https://tools.ietf.org/html/rfc5646)
+paste.workspace = true        # Macro to create indentifiers
+regex_static.workspace = true # Static regular expressions
+thiserror.workspace = true    # Error Handling
+tracing.workspace = true      # Logging
+url.workspace = true          # URI validation [RFC3986]
+velcro.workspace = true       # hashset/hashmap macro
+
+[lints]
+workspace = true

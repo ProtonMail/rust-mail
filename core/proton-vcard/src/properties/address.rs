@@ -1,0 +1,297 @@
+use std::collections::HashSet;
+use std::fmt::{Debug, Formatter};
+
+use ical::generator::Property as IcalProperty;
+use velcro::hash_set;
+
+use crate::errors::{VcardValidationError, VcardValidationResult};
+use crate::parameters::alternative_id::AlternativeId;
+use crate::parameters::any::Any;
+use crate::parameters::geo_localisation::GeoLocalisation;
+use crate::parameters::label::Label;
+use crate::parameters::language::Language;
+use crate::parameters::pid::Pid;
+use crate::parameters::preference::Preference;
+use crate::parameters::time_zone::TimeZone;
+use crate::parameters::type_generic::GenericType;
+use crate::parameters::value::ValueType;
+use crate::properties::{
+    any_debug, list_debug, loop_debug, optional_debug, validate_parameters, VcardProperty,
+};
+use crate::validation::get_property_kind;
+use crate::values::check_list;
+use crate::values::list_component::{is_list_component_value, ListComponent};
+use crate::vcard::{group_from_name, split_list};
+use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
+
+/// To specify the components of the delivery address for the vCard object.
+#[derive(Clone)]
+pub struct Address {
+    pub post_office_box: ListComponent,
+    pub extension: ListComponent,
+    pub street: ListComponent,
+    pub locality: ListComponent,
+    pub region: ListComponent,
+    pub code: ListComponent,
+    pub country: ListComponent,
+    pub value_type: Option<ValueType>,
+    pub label: Option<Label>,
+    pub language: Option<Language>,
+    pub geo_localisation: Option<GeoLocalisation>,
+    pub time_zone: Option<TimeZone>,
+    pub alternative_id: Option<AlternativeId>,
+    pub pid: Option<Pid>,
+    pub preference: Option<Preference>,
+    pub r#type: HashSet<GenericType>,
+    pub any: HashSet<Any>,
+    pub group: Option<String>,
+}
+
+impl Address {
+    /// Create a new ADR property without any parameter or group
+    #[must_use]
+    pub fn new(
+        post_office_box: ListComponent,
+        extension: ListComponent,
+        street: ListComponent,
+        locality: ListComponent,
+        region: ListComponent,
+        code: ListComponent,
+        country: ListComponent,
+    ) -> Self {
+        Self {
+            post_office_box,
+            extension,
+            street,
+            locality,
+            region,
+            code,
+            country,
+            value_type: None,
+            label: None,
+            language: None,
+            geo_localisation: None,
+            time_zone: None,
+            alternative_id: None,
+            pid: None,
+            preference: None,
+            r#type: HashSet::new(),
+            any: HashSet::new(),
+            group: None,
+        }
+    }
+
+    /// Try to create a new ADR property from strs without any parameters or group
+    ///
+    /// # Errors
+    ///   * if any of the arguments is not a valid list-component value
+    pub fn new_validated(
+        post_office_box: &str,
+        extension: &str,
+        street: &str,
+        locality: &str,
+        region: &str,
+        code: &str,
+        country: &str,
+    ) -> VCardResult<Self> {
+        Ok(Self::new(
+            ListComponent::try_from(post_office_box)
+                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
+            ListComponent::try_from(extension)
+                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
+            ListComponent::try_from(street)
+                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
+            ListComponent::try_from(locality)
+                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
+            ListComponent::try_from(region)
+                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
+            ListComponent::try_from(code)
+                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
+            ListComponent::try_from(country)
+                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
+        ))
+    }
+}
+
+impl Debug for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut comma = false;
+        write!(f, "Address {{")?;
+        list_debug!(self, f, pobox, post_office_box, comma);
+        list_debug!(self, f, ext, extension, comma);
+        list_debug!(self, f, street, street, comma);
+        list_debug!(self, f, locality, locality, comma);
+        list_debug!(self, f, region, region, comma);
+        list_debug!(self, f, code, code, comma);
+        list_debug!(self, f, country, country, comma);
+        optional_debug!(self, f, VALUE, value_type, comma);
+        optional_debug!(self, f, LABEL, label, comma);
+        optional_debug!(self, f, LANG, language, comma);
+        optional_debug!(self, f, GEO, geo_localisation, comma);
+        optional_debug!(self, f, TZ, time_zone, comma);
+        optional_debug!(self, f, ALTID, alternative_id, comma);
+        optional_debug!(self, f, PID, pid, comma);
+        optional_debug!(self, f, PREF, preference, comma);
+        loop_debug!(self, f, TYPE, r#type, comma);
+        any_debug!(self, f, any, comma);
+        optional_debug!(self, f, group, group, comma);
+        write!(f, "}}")
+    }
+}
+
+impl TryFrom<&IcalProperty> for Address {
+    type Error = VCardError;
+
+    #[allow(clippy::too_many_lines)]
+    fn try_from(property: &IcalProperty) -> VCardResult<Self> {
+        let Some(value) = &property.value else {
+            return Err(VCardError::MissingValue(PropertyKind::Adr));
+        };
+
+        // ADR-value = ADR-component-pobox ";" ADR-component-ext ";" ADR-component-street ";" ADR-component-locality ";" ADR-component-region ";" ADR-component-code ";" ADR-component-country
+        // ADR-component-pobox    = list-component
+        // ADR-component-ext      = list-component
+        // ADR-component-street   = list-component
+        // ADR-component-locality = list-component
+        // ADR-component-region   = list-component
+        // ADR-component-code     = list-component
+        // ADR-component-country  = list-component
+        // So a valid ADR value can be ';;;;;;' => 7 empty list-component
+        let values: [String; 7] = split_list(value, ';')
+            .try_into()
+            .map_err(|_| VCardError::InvalidValue(PropertyKind::Adr, value.clone()))?;
+        let mut result = Self::new_validated(
+            values[0].as_str(),
+            values[1].as_str(),
+            values[2].as_str(),
+            values[3].as_str(),
+            values[4].as_str(),
+            values[5].as_str(),
+            values[6].as_str(),
+        )?;
+        result.group = group_from_name(property.name.as_str());
+        if let Some(parameters) = &property.params {
+            for (name, values) in parameters {
+                match ParameterType::from(name.as_str()) {
+                    ParameterType::Value => {
+                        result.value_type = Some(
+                            ValueType::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::Label => {
+                        result.label = Some(
+                            Label::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::Language => {
+                        result.language = Some(
+                            Language::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::Geo => {
+                        result.geo_localisation = Some(
+                            GeoLocalisation::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::TZ => {
+                        result.time_zone = Some(
+                            TimeZone::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::AltId => {
+                        result.alternative_id = Some(
+                            AlternativeId::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::Pid => {
+                        result.pid = Some(
+                            Pid::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::Pref => {
+                        result.preference = Some(
+                            Preference::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    ParameterType::Type => {
+                        result.r#type = GenericType::set_from_values(values.as_slice())
+                            .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?;
+                    }
+                    ParameterType::Any => {
+                        result.any.insert(
+                            Any::new_validated(name.as_str(), values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
+                        );
+                    }
+                    parameter_type => {
+                        return Err(VCardError::UnexpectedParameter(
+                            PropertyKind::Adr,
+                            parameter_type,
+                        ))
+                    }
+                }
+            }
+        };
+        Ok(result)
+    }
+}
+
+impl VcardProperty for Address {
+    fn get_preference(&self) -> Option<Preference> {
+        self.preference
+    }
+}
+
+/// Validate that the given `property` respect the format for a `ADR` property
+///
+/// # Errors
+///   * if property value is not a list of 7 `list_component` separated by semicolon
+///   * if anu parameter is invalid
+pub fn validate_adr(property: &IcalProperty) -> VcardValidationResult<()> {
+    // ADR-param = "VALUE=text" / label-param / language-param / geo-parameter / tz-parameter / altid-param / pid-param / pref-param / type-param / any-param
+    // ADR-value = ADR-component-pobox ";" ADR-component-ext ";" ADR-component-street ";" ADR-component-locality ";" ADR-component-region ";" ADR-component-code ";" ADR-component-country
+    // ADR-component-pobox    = list-component
+    // ADR-component-ext      = list-component
+    // ADR-component-street   = list-component
+    // ADR-component-locality = list-component
+    // ADR-component-region   = list-component
+    // ADR-component-code     = list-component
+    // ADR-component-country  = list-component
+    if let Some(value) = &property.value {
+        if check_list(value, is_list_component_value, ';').is_some_and(|c| c == 7) {
+            validate_parameters(
+                property,
+                ValueType::Text,
+                &hash_set!(
+                    ParameterType::Value,
+                    ParameterType::Label,
+                    ParameterType::Language,
+                    ParameterType::Geo,
+                    ParameterType::TZ,
+                    ParameterType::AltId,
+                    ParameterType::Pid,
+                    ParameterType::Pref,
+                    ParameterType::Type,
+                    ParameterType::Any
+                ),
+            )?;
+        } else {
+            return Err(VcardValidationError::InvalidPropertyValue(
+                get_property_kind(&property.name)?,
+            ));
+        }
+    } else {
+        return Err(VcardValidationError::InvalidPropertyValue(
+            get_property_kind(&property.name)?,
+        ));
+    }
+    Ok(())
+}
