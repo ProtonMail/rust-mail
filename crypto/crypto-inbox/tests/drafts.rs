@@ -22,6 +22,24 @@ qnK1SNfocPNfh//OecgiqA4=
 -----END PGP PRIVATE KEY BLOCK-----
 ";
 
+pub const DIFFERENT_PRIVATE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xYYEZSfovhYJKwYBBAHaRw8BAQdA6gS5mfVImh6ONhKgZGSVrLH4cdZaS9IW
+6FhqYGWe2wr+CQMI7cZcc+SQB+tgAAAAAAAAAAAAAAAAAAAAAKEiVaK2iq+g
+Y3+lmnRmmRZ4/HeC9UOoRmmFxHiHqFflv+bfqRD3hL2/+ayIG4MpahvRrnd0
+ss0nbHVidXhAcHJvdG9uLmJsYWNrIDxsdWJ1eEBwcm90b24uYmxhY2s+wowE
+EBYKAD4FgmUn6L4ECwkHCAmQVfYMqF9LlQEDFQgKBBYAAgECGQECmwMCHgEW
+IQRJQPffztT8sMiZ4Y1V9gyoX0uVAQAAIOMA+wUpEGAm8SsDMt/tuaTSYrV/
+DBsUzTYtFbzoBkT+dOLRAQDvZ4Z/YUn7mX71v0qXVTfGY5oLnY88Wuo9dySU
+ns8kB8eLBGUn6L4SCisGAQQBl1UBBQEBB0DzvEDbVNT8WhIxijPVGHKGQ1Y3
+s9Zw1i63nkkSnpLzNwMBCAf+CQMICODa4UCuLdlgAAAAAAAAAAAAAAAAAAAA
+ABF+V4UBANv2UoEWSWPt2lltQkXnsXZ9rB5NkywVQwqc5vW/h3yx5vjZEY10
+4jA3eSBo2bIaocJ4BBgWCAAqBYJlJ+i+CZBV9gyoX0uVAQKbDBYhBElA99/O
+1PywyJnhjVX2DKhfS5UBAAASqQEA4qisiR8EHC6S7/EsUhS2uuin1tY0KQ0j
+1jmrk+HHQugA/in2lPCiO/6RdSLXnbXnGj+7lP65+qrMXHb+mqBRdWsA
+-----END PGP PRIVATE KEY BLOCK-----
+";
+
 struct TestDraft(Vec<u8>);
 
 impl DraftEncryption for TestDraft {
@@ -69,4 +87,35 @@ fn test_encrypt_and_decrypt_draft() {
         .unwrap();
 
     assert_eq!(plain_text.0.body(), message);
+}
+
+#[test]
+fn test_draft_decryption_fails_if_wrong_key_used() {
+    let pgp_provider = new_pgp_provider();
+    let private_key = pgp_provider
+        .private_key_import(
+            PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let message = "hello_world";
+    let draft = TestDraft(message.as_bytes().to_owned());
+
+    let encrypted_draft =
+        String::from_utf8(draft.encrypt_draft(&pgp_provider, &private_key).unwrap()).unwrap();
+
+    let decryptable_message = TestMessage(false, encrypted_draft);
+
+    let private_key = pgp_provider
+        .private_key_import(
+            DIFFERENT_PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+
+    let decryption_result = decryptable_message.decrypt(&pgp_provider, &[private_key]);
+
+    assert!(decryption_result.is_err());
 }
