@@ -208,6 +208,8 @@ impl MailUserContext {
 
     /// Filter or Search conversations which match the given `filter`.
     ///
+    /// To correctly render the returned list a `label_id` needs to provided for context.
+    ///
     /// Note that search results are inserted into the database.
     ///
     /// # Errors
@@ -215,13 +217,14 @@ impl MailUserContext {
     pub async fn filter_conversations(
         &self,
         filter: ConversationFilter,
+        label_id: LocalLabelId,
     ) -> MailContextResult<FilteredConversations> {
         let response = self.mail_session().conversations(filter).await?;
 
         let conversations = if !response.conversations.is_empty() {
             self.db_write(|tx| {
                 let ids = tx.create_conversations(response.conversations.iter())?;
-                tx.get_conversations(ids.into_iter())
+                tx.get_conversations_with_ids_and_context(label_id, ids.into_iter())
             })?
         } else {
             Vec::new()

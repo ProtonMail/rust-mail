@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## Changed
+
+- Update `MailUserSession::filter_converstions` to require a label id for context.
+
 ## [0.10.28] - 2024-06-21
 
 ### Changed
