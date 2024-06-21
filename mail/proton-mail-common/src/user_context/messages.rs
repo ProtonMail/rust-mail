@@ -25,8 +25,10 @@ impl MailUserContext {
                 error!("Failed to retrieve message body metadata from db: {e}");
                 e
             })? {
+            debug!("Message body metadata already synced.");
             metadata
         } else {
+            debug!("Syncing metadata and body");
             // metadata is not there it is either missing or the message does not exist.
             let Some(Some(remote_id)) = self.db_read(|conn| conn.message_remote_id(message_id))?
             else {
@@ -63,10 +65,12 @@ impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
     pub async fn sync_message_with_remote_id(&self, id: &MessageId) -> MailboxResult<()> {
         if let Some(local_id) = self.db_read(|conn| conn.message_id_from_remote_id(id))? {
-            debug!("Message with id {id} already synced");
+            debug!("Message already synced");
             self.sync_message_body(local_id).await?;
             return Ok(());
         };
+
+        debug!("Syncing message");
 
         // sync the message body
         let message = self.mail_session().message(id).await.map_err(|e| {
