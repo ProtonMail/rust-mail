@@ -116,6 +116,8 @@ impl MailUserContext {
                 error!("Failed to write message metadata: {e}");
                 MailContextError::DB(e)
             })?;
+        } else {
+            debug!("Conversation messages already synced")
         }
 
         Ok(())
