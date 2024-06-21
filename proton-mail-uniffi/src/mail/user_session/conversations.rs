@@ -7,6 +7,8 @@ use proton_mail_common::FilteredConversations;
 impl MailUserSession {
     /// Filter or Search conversations which match the given `filter`.
     ///
+    /// To correctly render the returned list a `label_id` needs to provided for context.
+    ///
     /// Note that search results are inserted into the database.
     ///
     /// # Errors
@@ -14,10 +16,15 @@ impl MailUserSession {
     pub async fn filter_conversations(
         &self,
         filter: ConversationFilter,
+        label_id: u64,
     ) -> Result<FilteredConversations, MailSessionError> {
         let ctx = self.ctx.clone();
-        self.uniffi_async(async move { Ok(ctx.filter_conversations(filter).await?) })
-            .await
+        self.uniffi_async(async move {
+            Ok(ctx
+                .filter_conversations(filter, LocalLabelId::from(label_id))
+                .await?)
+        })
+        .await
     }
 
     /// Retrieve a conversation by remote `id` in the All Mail context.
