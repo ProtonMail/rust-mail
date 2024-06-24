@@ -21,6 +21,7 @@ pub trait EncryptableDraft {
         encryptor
             .with_encryption_key(address_public_key.as_public_key())
             .with_signing_key_refs(&binding)
+            .with_utf8()
             .encrypt_raw(self.plain_text_message_body(), DataEncoding::Armor)
             .map_err(MessageError::Encryption)
     }
