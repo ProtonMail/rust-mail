@@ -1,4 +1,4 @@
-use proton_crypto_inbox::message::DecryptableMessage;
+use proton_crypto_inbox::message::{DecryptableMessage, EncryptableDraft};
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
 use proton_crypto_inbox::{message::DraftEncryption, proton_crypto::new_pgp_provider};
 
@@ -42,8 +42,8 @@ ABF+V4UBANv2UoEWSWPt2lltQkXnsXZ9rB5NkywVQwqc5vW/h3yx5vjZEY10
 
 struct TestDraft(Vec<u8>);
 
-impl DraftEncryption for TestDraft {
-    fn message_body(&self) -> &[u8] {
+impl EncryptableDraft for TestDraft {
+    fn plain_text_message_body(&self) -> &[u8] {
         &self.0
     }
 }
@@ -77,8 +77,12 @@ fn test_encrypt_and_decrypt_draft() {
     let message = "hello_world";
     let draft = TestDraft(message.as_bytes().to_owned());
 
-    let encrypted_draft =
-        String::from_utf8(draft.encrypt_draft(&pgp_provider, &private_key).unwrap()).unwrap();
+    let encrypted_draft = String::from_utf8(
+        draft
+            .encrypt_draft_body(&pgp_provider, &private_key)
+            .unwrap(),
+    )
+    .unwrap();
 
     let decryptable_message = TestMessage(false, encrypted_draft);
 
@@ -102,8 +106,12 @@ fn test_draft_decryption_fails_if_wrong_key_used() {
     let message = "hello_world";
     let draft = TestDraft(message.as_bytes().to_owned());
 
-    let encrypted_draft =
-        String::from_utf8(draft.encrypt_draft(&pgp_provider, &private_key).unwrap()).unwrap();
+    let encrypted_draft = String::from_utf8(
+        draft
+            .encrypt_draft_body(&pgp_provider, &private_key)
+            .unwrap(),
+    )
+    .unwrap();
 
     let decryptable_message = TestMessage(false, encrypted_draft);
 

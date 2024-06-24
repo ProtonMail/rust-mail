@@ -4,10 +4,10 @@ use proton_crypto_account::proton_crypto::crypto::{
 
 use crate::message::errors::MessageError;
 
-pub trait DraftEncryption {
-    fn message_body(&self) -> &[u8];
+pub trait EncryptableDraft {
+    fn plain_text_message_body(&self) -> &[u8];
 
-    fn encrypt_draft<T: PGPProviderSync>(
+    fn encrypt_draft_body<T: PGPProviderSync>(
         &self,
         provider: &T,
         address_key: impl AsRef<T::PrivateKey>,
@@ -21,7 +21,7 @@ pub trait DraftEncryption {
         encryptor
             .with_encryption_key(address_public_key.as_public_key())
             .with_signing_key_refs(&binding)
-            .encrypt_raw(self.message_body(), DataEncoding::Armor)
+            .encrypt_raw(self.plain_text_message_body(), DataEncoding::Armor)
             .map_err(MessageError::Encryption)
     }
 }
