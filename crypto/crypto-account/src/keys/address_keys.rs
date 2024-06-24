@@ -1,7 +1,14 @@
 use futures::future::join_all;
 
-use super::{DecryptedUserKey, KeyError, KeyFlag, KeyId, LockedKey, UnlockResult};
-use proton_crypto::crypto::{AsPublicKeyRef, PGPProviderSync, PrivateKey, PublicKey};
+use crate::{crypto::generate_locked_pgp_key_with_token, errors::AccountCryptoError};
+
+use super::{
+    ArmoredPrivateKey, DecryptedUserKey, EncryptedKeyToken, KeyError, KeyFlag, KeyId,
+    KeyTokenSignature, LockedKey, UnlockResult, UnlockedUserKey,
+};
+use proton_crypto::crypto::{
+    AsPublicKeyRef, KeyGeneratorAlgorithm, PGPProviderSync, PrivateKey, PublicKey,
+};
 use serde::{Deserialize, Serialize};
 
 #[allow(type_alias_bounds)]
@@ -152,5 +159,69 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedAddressKey<Priv,
 impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedAddressKey<Priv, Pub> {
     fn as_public_key(&self) -> &Pub {
         &self.public_key
+    }
+}
+
+/// Represents a locked address key locally generated but not yet synced with the backend.
+pub struct LocalAddressKey {
+    /// The locked armored private key.
+    pub private_key: ArmoredPrivateKey,
+    /// Token to decrypt a key via another key (e.g., user key).
+    pub token: EncryptedKeyToken,
+    /// `OpenPGP` Signature to verify the token.
+    pub signature: KeyTokenSignature,
+    /// Key flags
+    pub flags: KeyFlag,
+    /// Key flags
+    pub primary: bool,
+}
+
+impl LocalAddressKey {
+    /// Generates a fresh user key and locks it with the provided user key.
+    ///
+    /// To use the default key algorithm for the generated key, call with [`KeyGeneratorAlgorithm::default()`].
+    pub fn generate<Provider: PGPProviderSync>(
+        pgp_provider: &Provider,
+        email: &str,
+        algorithm: KeyGeneratorAlgorithm,
+        flags: KeyFlag,
+        primary: bool,
+        user_key: &UnlockedUserKey<Provider>,
+    ) -> Result<Self, AccountCryptoError> {
+        generate_locked_pgp_key_with_token(pgp_provider, email, email, algorithm, user_key, None)
+            .map(|(private_key, token, signature)| LocalAddressKey {
+                private_key,
+                token,
+                signature,
+                flags,
+                primary,
+            })
+    }
+
+    /// Unlocks the locally generated address key with the provided user key.
+    ///
+    /// The key id is retrieved from the API upon registering the key.
+    pub fn unlock<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        key_id: KeyId,
+        user_key: &UnlockedUserKey<Provider>,
+    ) -> Result<UnlockedAddressKey<Provider>, AccountCryptoError> {
+        let (private_key, public_key) = crate::crypto::import_key_with_token(
+            pgp_provider,
+            &self.private_key,
+            &self.token,
+            &self.signature,
+            &[user_key],
+            &[user_key],
+            &None,
+        )?;
+        Ok(DecryptedAddressKey {
+            id: key_id,
+            flags: self.flags,
+            primary: self.primary,
+            private_key,
+            public_key,
+        })
     }
 }

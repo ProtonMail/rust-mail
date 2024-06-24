@@ -1,3 +1,5 @@
+use std::string::FromUtf8Error;
+
 use proton_crypto::{crypto::VerificationError, CryptoError};
 
 use crate::keys::KeyId;
@@ -22,6 +24,14 @@ pub enum AccountCryptoError {
     KeyImport(CryptoError),
     #[error("Failed to export public key from private key {0}")]
     TransformPublic(CryptoError),
+    #[error("Failed to generate a fresh key {0}")]
+    GenerateKey(CryptoError),
+    #[error("Failed to armor key")]
+    GenerateKeyArmor,
+    #[error("Failed to encrypt token {0}")]
+    TokenEncryption(CryptoError),
+    #[error("Failed to encode token {0}")]
+    TokenEncoding(#[from] FromUtf8Error),
 }
 
 #[derive(Debug, thiserror::Error)]

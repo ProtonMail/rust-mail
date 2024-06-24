@@ -2,8 +2,12 @@ use proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorAsync, DecryptorSync,
     DetachedSignatureVariant, PGPProviderAsync, PGPProviderSync, VerifiedData,
 };
+use zeroize::Zeroizing;
 
-use crate::errors::AccountCryptoError;
+use crate::{
+    errors::AccountCryptoError,
+    keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature},
+};
 
 /// Decrypts a token associated with key to unlock it.
 ///
@@ -11,18 +15,18 @@ use crate::errors::AccountCryptoError;
 /// If signature verification fails, it returns an error.
 pub fn decrypt_key_token<Prov: PGPProviderSync>(
     provider: &Prov,
-    token: &str,
-    signature: &str,
+    token: &EncryptedKeyToken,
+    signature: &KeyTokenSignature,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
     verification_context: &Option<Prov::VerificationContext>,
-) -> Result<Vec<u8>, AccountCryptoError> {
+) -> Result<Zeroizing<Vec<u8>>, AccountCryptoError> {
     let mut decryptor = provider
         .new_decryptor()
         .with_decryption_key_refs(decryption_keys)
         .with_verification_key_refs(verification_keys)
         .with_detached_signature_ref(
-            signature.as_bytes(),
+            signature.0.as_bytes(),
             DetachedSignatureVariant::Plaintext,
             true,
         );
@@ -30,10 +34,10 @@ pub fn decrypt_key_token<Prov: PGPProviderSync>(
         decryptor = decryptor.with_verification_context(context);
     }
     let verified_data = decryptor
-        .decrypt(token.as_bytes(), DataEncoding::Armor)
+        .decrypt(token.0.as_bytes(), DataEncoding::Armor)
         .map_err(AccountCryptoError::TokenDecryption)?;
     verified_data.verification_result()?;
-    Ok(verified_data.into_vec())
+    Ok(Zeroizing::new(verified_data.into_vec()))
 }
 
 /// Import a PGP private key that unlocks with an encrypted token from other keys.
@@ -42,9 +46,9 @@ pub fn decrypt_key_token<Prov: PGPProviderSync>(
 /// unlocks the imported key with the decrypted token, and verifies that signature over the token is valid.
 pub fn import_key_with_token<Prov: PGPProviderSync>(
     provider: &Prov,
-    private_key: &str,
-    token: &str,
-    signature: &str,
+    private_key: &ArmoredPrivateKey,
+    token: &EncryptedKeyToken,
+    signature: &KeyTokenSignature,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
     verification_context: &Option<Prov::VerificationContext>,
@@ -58,7 +62,11 @@ pub fn import_key_with_token<Prov: PGPProviderSync>(
         verification_context,
     )?;
     let private_key = provider
-        .private_key_import(private_key.as_bytes(), decrypted_token, DataEncoding::Armor)
+        .private_key_import(
+            private_key.0.as_bytes(),
+            decrypted_token,
+            DataEncoding::Armor,
+        )
         .map_err(AccountCryptoError::KeyImport)?;
     let public_key = provider
         .private_key_to_public_key(&private_key)
@@ -69,8 +77,8 @@ pub fn import_key_with_token<Prov: PGPProviderSync>(
 /// Decrypts an encrypted token.
 pub async fn decrypt_key_token_async<Prov: PGPProviderAsync>(
     provider: &Prov,
-    token: &str,
-    signature: &str,
+    token: &EncryptedKeyToken,
+    signature: &KeyTokenSignature,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
     verification_context: Option<Prov::VerificationContext>,
@@ -80,7 +88,7 @@ pub async fn decrypt_key_token_async<Prov: PGPProviderAsync>(
         .with_decryption_key_refs(decryption_keys)
         .with_verification_key_refs(verification_keys)
         .with_detached_signature_ref(
-            signature.as_bytes(),
+            signature.0.as_bytes(),
             DetachedSignatureVariant::Plaintext,
             true,
         );
@@ -88,7 +96,7 @@ pub async fn decrypt_key_token_async<Prov: PGPProviderAsync>(
         decryptor = decryptor.with_verification_context(context);
     }
     let verified_data = decryptor
-        .decrypt_async(token.as_bytes(), DataEncoding::Armor)
+        .decrypt_async(token.0.as_bytes(), DataEncoding::Armor)
         .await
         .map_err(AccountCryptoError::TokenDecryption)?;
     verified_data.verification_result()?;
@@ -101,9 +109,9 @@ pub async fn decrypt_key_token_async<Prov: PGPProviderAsync>(
 /// unlocks the imported key with the decrypted token, and verifies that signature over the token is valid.
 pub async fn import_key_with_token_async<Prov: PGPProviderAsync>(
     provider: &Prov,
-    private_key: &str,
-    token: &str,
-    signature: &str,
+    private_key: &ArmoredPrivateKey,
+    token: &EncryptedKeyToken,
+    signature: &KeyTokenSignature,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
     verification_context: Option<Prov::VerificationContext>,
@@ -118,7 +126,11 @@ pub async fn import_key_with_token_async<Prov: PGPProviderAsync>(
     )
     .await?;
     let private_key = provider
-        .private_key_import_async(private_key.as_bytes(), decrypted_token, DataEncoding::Armor)
+        .private_key_import_async(
+            private_key.0.as_bytes(),
+            decrypted_token,
+            DataEncoding::Armor,
+        )
         .await
         .map_err(AccountCryptoError::KeyImport)?;
     let public_key = provider

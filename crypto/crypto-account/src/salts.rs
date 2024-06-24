@@ -1,13 +1,18 @@
 use std::fmt::Debug;
 
 use crate::keys::KeyId;
-use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
-use proton_crypto::{srp::SRPProvider, CryptoError};
+use base64::{prelude::BASE64_STANDARD as BASE_64, DecodeSliceError, Engine as _};
+use proton_crypto::{secure_random_bytes, srp::SRPProvider, CryptoError};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // bcrypt prefix and salt (first 29 bytes)
 const PREFIX_LEN: usize = 29;
+
+crate::string_id! {
+    // A base64 encoded key salt.
+    KeySalt
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum SaltError {
@@ -16,7 +21,7 @@ pub enum SaltError {
     #[error("Key with id {0} has no salt value")]
     KeyHasNoSalt(KeyId),
     #[error("Could not decode key salt: {0}")]
-    Base64Decode(#[from] base64::DecodeError),
+    Base64Decode(#[from] DecodeSliceError),
     #[error("Failed to hash: {0}")]
     Hash(#[from] CryptoError),
     #[error("Failed to decoded hash")]
@@ -28,7 +33,7 @@ pub struct Salt {
     #[serde(rename = "ID")]
     pub id: KeyId,
     #[serde(rename = "KeySalt")]
-    pub key_salt: Option<String>,
+    pub key_salt: Option<KeySalt>,
 }
 
 /// A hashed secret to decrypt a user key.
@@ -59,13 +64,66 @@ impl Debug for KeySecret {
     }
 }
 
+impl KeySalt {
+    const SALT_LEN: usize = 16;
+    /// Encode raw salt bytes as [`KeySalt`].
+    pub fn from_bytes(salt_bytes: &[u8; Self::SALT_LEN]) -> Self {
+        Self(BASE_64.encode(salt_bytes))
+    }
+
+    /// Generates a fresh random [`KeySalt`] using client randomness.
+    pub fn generate() -> Self {
+        let salt_bytes: [u8; Self::SALT_LEN] = secure_random_bytes();
+        Self::from_bytes(&salt_bytes)
+    }
+
+    /// Encode raw salt bytes as [`KeySalt`].
+    pub fn encode(salt_bytes: &[u8]) -> Self {
+        Self(BASE_64.encode(salt_bytes))
+    }
+
+    /// Decodes the base64 key salt to its raw binary form.
+    pub fn decode(&self) -> Result<[u8; Self::SALT_LEN], SaltError> {
+        let mut salt_bytes: [u8; Self::SALT_LEN] = [0; Self::SALT_LEN];
+        BASE_64.decode_slice(&self.0, &mut salt_bytes)?;
+        Ok(salt_bytes)
+    }
+
+    /// Derives the salted key passphrase to unlock a key from a password.
+    ///
+    /// # Errors
+    /// - Password derivation fails [`SaltError::Hash`].
+    /// - Decoding fails [`SaltError::HashDecode`].
+    pub fn salted_key_passphrase<Provider: SRPProvider>(
+        &self,
+        srp_provider: &Provider,
+        key_pass: &[u8],
+    ) -> Result<KeySecret, SaltError> {
+        let result = srp_provider.mailbox_password(key_pass, self.decode()?)?;
+        if result.as_ref().len() < PREFIX_LEN {
+            return Err(SaltError::HashDecode);
+        }
+        // Remove bcrypt prefix and salt (first 29 characters)
+        Ok(KeySecret(result.as_ref()[PREFIX_LEN..].as_ref().to_vec()))
+    }
+}
+
+/// A list of salts retrieved from the API.
 #[derive(Deserialize, Debug)]
 pub struct Salts(Vec<Salt>);
+
 impl Salts {
     pub fn new(salts: impl IntoIterator<Item = Salt>) -> Self {
         Self(salts.into_iter().collect::<Vec<_>>())
     }
 
+    /// Derives the key secret to unlock the key with the given key id.
+    ///
+    /// Tries to find the matching salt, and derives the password.
+    ///
+    /// # Errors
+    /// - Matching key salt not found [`SaltError::KeyNotFound`] or [`SaltError::KeyHasNoSalt`].
+    /// - Password derivation fails
     pub fn salt_for_key<T: SRPProvider>(
         &self,
         srp_provider: &T,
@@ -75,20 +133,9 @@ impl Salts {
         let Some(salt) = self.0.iter().find(|&v| v.id == *key) else {
             return Err(SaltError::KeyNotFound(key.clone()));
         };
-
         let Some(key_salt) = &salt.key_salt else {
             return Err(SaltError::KeyHasNoSalt(key.clone()));
         };
-
-        let key_salt_decoded = BASE_64.decode(key_salt)?;
-
-        let result = srp_provider.mailbox_password(key_pass, key_salt_decoded)?;
-
-        if result.as_ref().len() < PREFIX_LEN {
-            return Err(SaltError::HashDecode);
-        }
-
-        // Remove bcrypt prefix and salt (first 29 characters)
-        Ok(KeySecret(result.as_ref()[PREFIX_LEN..].as_ref().to_vec()))
+        key_salt.salted_key_passphrase(srp_provider, key_pass)
     }
 }

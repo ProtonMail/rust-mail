@@ -22,9 +22,10 @@ macro_rules! string_id {
         $(#[$meta])*
         pub struct $name(pub String);
 
-        impl Display for $name {
-            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-                self.0.fmt(f)
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                std::fmt::Display::fmt(&self.0, f)
+
             }
         }
 

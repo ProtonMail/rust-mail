@@ -1,7 +1,6 @@
 //! Proton key domain types.
-mod api_public_keys;
-
-pub use api_public_keys::*;
+mod api_keys;
+pub use api_keys::*;
 mod address_keys;
 pub use address_keys::*;
 mod public_address_keys;

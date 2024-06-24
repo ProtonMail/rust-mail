@@ -1,14 +1,18 @@
 use futures::future::join_all;
 
-use super::{KeyId, LockedKey, UnlockResult};
+use super::{ArmoredPrivateKey, KeyId, LockedKey, UnlockResult};
 use crate::{
+    crypto::generate_locked_pgp_key,
     errors::{AccountCryptoError, KeyError},
     salts::KeySecret,
 };
 use proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, PGPProviderAsync, PGPProviderSync, PrivateKey, PublicKey,
+    AsPublicKeyRef, DataEncoding, KeyGeneratorAlgorithm, PGPProviderAsync, PGPProviderSync,
+    PrivateKey, PublicKey,
 };
 use serde::{Deserialize, Serialize};
+
+pub const USER_KEY_USER_ID_EMAIL: &str = "not_for_email_use@domain.tld";
 
 #[allow(type_alias_bounds)]
 pub type UnlockedUserKey<Provider: PGPProviderSync> =
@@ -45,7 +49,7 @@ impl UserKeys {
         let mut decrypted_address_keys: Vec<UnlockedUserKey<T>> = Vec::with_capacity(self.0.len());
         decrypted_address_keys.extend(self.0.iter().filter_map(|locked_key| {
             let decryption_result = provider.private_key_import(
-                &locked_key.private_key,
+                &locked_key.private_key.0,
                 salted_password,
                 DataEncoding::Armor,
             );
@@ -98,7 +102,7 @@ impl UserKeys {
             decrypted_user_key_futures.push(async {
                 let decryption_result = provider
                     .private_key_import_async(
-                        &locked_key.private_key,
+                        &locked_key.private_key.0,
                         salted_password,
                         DataEncoding::Armor,
                     )
@@ -161,5 +165,87 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedUserKey<Priv, Pu
 impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedUserKey<Priv, Pub> {
     fn as_public_key(&self) -> &Pub {
         &self.public_key
+    }
+}
+
+impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for &DecryptedUserKey<Priv, Pub> {
+    fn as_public_key(&self) -> &Pub {
+        &self.public_key
+    }
+}
+
+/// Represents a locked user key locally generated but not yet synced with the backend.
+pub struct LocalUserKey {
+    /// The locked armored private key.
+    pub private_key: ArmoredPrivateKey,
+}
+
+impl LocalUserKey {
+    /// Generates a fresh user key and locks it with the provided salted password.
+    ///
+    /// To use the default key algorithm for the generated key, call with [`KeyGeneratorAlgorithm::default()`].
+    ///
+    /// # Errors
+    /// - Key generation fails
+    /// - Key locking fails
+    ///
+    /// # Example
+    /// ```
+    /// use proton_crypto::crypto::{KeyGeneratorAlgorithm, PGPProviderSync};
+    /// use proton_crypto::{new_pgp_provider, new_srp_provider};
+    /// use proton_crypto_account::salts::KeySalt;
+    /// use proton_crypto_account::keys::LocalUserKey;
+    ///
+    /// let srp_provider = new_srp_provider();
+    /// let pgp_provider = new_pgp_provider();
+    /// let salt = KeySalt::generate();
+    /// let key_secret = salt
+    ///     .salted_key_passphrase(&srp_provider, "password".as_bytes())
+    ///     .unwrap();
+    /// let key = LocalUserKey::generate(&pgp_provider, KeyGeneratorAlgorithm::default(), &key_secret)
+    ///     .expect("key generation failed");
+    /// ```
+    pub fn generate<Provider: PGPProviderSync>(
+        pgp_provider: &Provider,
+        algorithm: KeyGeneratorAlgorithm,
+        salted_password: &KeySecret,
+    ) -> Result<Self, AccountCryptoError> {
+        generate_locked_pgp_key(
+            pgp_provider,
+            USER_KEY_USER_ID_EMAIL,
+            USER_KEY_USER_ID_EMAIL,
+            algorithm,
+            salted_password,
+        )
+        .map(|private_key| LocalUserKey { private_key })
+    }
+
+    /// Unlocks the locally generated user key with the provided salted password.
+    ///
+    /// The key id is retrieved from the API upon registering the key.
+    ///
+    /// # Errors
+    /// - If key unlock fails returns a [`AccountCryptoError::KeyImport`].
+    pub fn unlock<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        key_id: KeyId,
+        salted_password: &KeySecret,
+    ) -> Result<UnlockedUserKey<Provider>, AccountCryptoError> {
+        let private_key = pgp_provider
+            .private_key_import(
+                self.private_key.0.as_bytes(),
+                salted_password,
+                DataEncoding::Armor,
+            )
+            .map_err(AccountCryptoError::KeyImport)?;
+        let public_key = pgp_provider
+            .private_key_to_public_key(&private_key)
+            .map_err(AccountCryptoError::KeyImport)?;
+        Ok(DecryptedUserKey {
+            id: key_id,
+            private_key,
+            public_key,
+        })
     }
 }

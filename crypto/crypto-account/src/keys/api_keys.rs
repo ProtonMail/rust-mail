@@ -21,7 +21,7 @@ crate::string_id! {
 }
 
 /// Represent a flag of a key containing a bit map.
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Copy, Default)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Copy)]
 pub struct KeyFlag(u32);
 
 impl Display for KeyFlag {
@@ -33,6 +33,15 @@ impl Display for KeyFlag {
 impl<T: Into<u32>> From<T> for KeyFlag {
     fn from(value: T) -> Self {
         Self(value.into())
+    }
+}
+
+impl Default for KeyFlag {
+    fn default() -> Self {
+        let mut flag = KeyFlag(0);
+        flag.set_not_compromised();
+        flag.set_not_obsolete();
+        flag
     }
 }
 
@@ -86,7 +95,17 @@ impl KeyFlag {
 }
 
 crate::string_id! {
-    /// Signature of a key token.
+    /// An armored `OpenPGP` private key.
+    ArmoredPrivateKey
+}
+
+crate::string_id! {
+    /// A key token that contains a locked key secret.
+    EncryptedKeyToken
+}
+
+crate::string_id! {
+    /// A signature over the key token.
     KeyTokenSignature
 }
 
@@ -100,11 +119,11 @@ pub struct LockedKey {
     /// Proton version of the key.
     pub version: u32,
     /// `OpenPGP` private key armored.
-    pub private_key: String,
+    pub private_key: ArmoredPrivateKey,
     /// Token to decrypt a key via another key (e.g., user key).
-    pub token: Option<String>,
+    pub token: Option<EncryptedKeyToken>,
     /// `OpenPGP` Signature to verify the token.
-    pub signature: Option<String>, // Only available for address keys
+    pub signature: Option<KeyTokenSignature>, // Only available for address keys
     /// (Deprecated) Migrated accounts do not have the activation field set.
     pub activation: Option<String>,
     /// Is the key the primary key to use.

@@ -1,5 +1,3 @@
-use std::fmt::{Display, Formatter};
-
 use crate::errors::SKLError;
 
 use proton_crypto::crypto::{
