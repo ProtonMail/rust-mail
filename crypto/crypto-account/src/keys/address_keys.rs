@@ -1,13 +1,15 @@
 use futures::future::join_all;
 
-use crate::{crypto::generate_locked_pgp_key_with_token, errors::AccountCryptoError};
+use crate::{
+    crypto::generate_locked_pgp_key_with_token, errors::AccountCryptoError, salts::KeySecret,
+};
 
 use super::{
     ArmoredPrivateKey, DecryptedUserKey, EncryptedKeyToken, KeyError, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey, UnlockResult, UnlockedUserKey,
 };
 use proton_crypto::crypto::{
-    AsPublicKeyRef, KeyGeneratorAlgorithm, PGPProviderSync, PrivateKey, PublicKey,
+    AsPublicKeyRef, KeyGeneratorAlgorithm, PGPProviderAsync, PGPProviderSync, PrivateKey, PublicKey,
 };
 use serde::{Deserialize, Serialize};
 
@@ -36,20 +38,30 @@ impl AddressKeys {
     ///
     /// Returns the address keys that were successfully decrypted and verified using the provided user keys.
     /// If decryption or verification fails for a key, the key is not included in the returned vector.
+    /// To be able to unlock legacy address keys a `passphrase` has to provided additionally.
     pub fn unlock<T: PGPProviderSync>(
         &self,
         provider: &T,
         user_keys: impl AsRef<[DecryptedUserKey<T::PrivateKey, T::PublicKey>]>,
+        passphrase: Option<&KeySecret>,
     ) -> UnlockResult<UnlockedAddressKey<T>> {
         let mut failed_keys = Vec::new();
         let mut decrypted_address_keys: Vec<UnlockedAddressKey<T>> =
             Vec::with_capacity(self.0.len());
         decrypted_address_keys.extend(self.0.iter().filter_map(|locked_key| {
-            let (Some(token), Some(signature), Some(flags)) =
-                (&locked_key.token, &locked_key.signature, &locked_key.flags)
-            else {
+            let Some(flags) = &locked_key.flags else {
                 failed_keys.push(KeyError::MissingValue(locked_key.id.clone()));
                 return None;
+            };
+            let (Some(token), Some(signature)) = (&locked_key.token, &locked_key.signature) else {
+                // Try legacy decryption
+                return match unlock_legacy_key(provider, locked_key, passphrase) {
+                    Ok(unlocked_key) => Some(unlocked_key),
+                    Err(err) => {
+                        failed_keys.push(err);
+                        return None;
+                    }
+                };
             };
             let decryption_result = crate::crypto::import_key_with_token(
                 provider,
@@ -80,14 +92,16 @@ impl AddressKeys {
             failed: failed_keys,
         }
     }
+
     /// Decrypts the address keys with the provided user keys asynchronously.
     ///
     /// Returns the address keys that were successfully decrypted and verified using the provided user keys.
     /// If decryption or verification fails for a key, the key is not included in the returned vector.
-    pub async fn unlock_async<T: proton_crypto::crypto::PGPProviderAsync>(
+    pub async fn unlock_async<T: PGPProviderAsync>(
         &self,
         provider: &T,
         user_keys: impl AsRef<[UnlockedAddressKey<T>]>,
+        passphrase: Option<&KeySecret>,
     ) -> UnlockResult<UnlockedAddressKey<T>> {
         let mut failed_keys = Vec::new();
         let mut decrypted_address_keys: Vec<UnlockedAddressKey<T>> =
@@ -95,10 +109,13 @@ impl AddressKeys {
         let mut decrypted_address_key_futures: Vec<_> = Vec::with_capacity(self.0.len());
         for locked_key in &self.0 {
             decrypted_address_key_futures.push(async {
-                let (Some(token), Some(signature), Some(flags)) =
-                    (&locked_key.token, &locked_key.signature, &locked_key.flags)
-                else {
+                let Some(flags) = &locked_key.flags else {
                     return Err(KeyError::MissingValue(locked_key.id.clone()));
+                };
+                let (Some(token), Some(signature)) = (&locked_key.token, &locked_key.signature)
+                else {
+                    // Try legacy decryption
+                    return unlock_legacy_key_async(provider, locked_key, passphrase).await;
                 };
                 let decryption_result = crate::crypto::import_key_with_token_async(
                     provider,
@@ -157,6 +174,12 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsRef<Priv> for DecryptedAddressKey<Priv,
 }
 
 impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedAddressKey<Priv, Pub> {
+    fn as_public_key(&self) -> &Pub {
+        &self.public_key
+    }
+}
+
+impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for &DecryptedAddressKey<Priv, Pub> {
     fn as_public_key(&self) -> &Pub {
         &self.public_key
     }
@@ -224,4 +247,53 @@ impl LocalAddressKey {
             public_key,
         })
     }
+}
+
+/// Helper function to unlock a legacy key.
+fn unlock_legacy_key<Provider: PGPProviderSync>(
+    pgp_provider: &Provider,
+    locked_key: &LockedKey,
+    passphrase: Option<&KeySecret>,
+) -> Result<UnlockedAddressKey<Provider>, KeyError> {
+    let (Some(flags), Some(key_secret)) = (&locked_key.flags, passphrase) else {
+        return Err(KeyError::MissingValue(locked_key.id.clone()));
+    };
+    let (private_key, public_key) = crate::crypto::import_key_with_passphrase(
+        pgp_provider,
+        &locked_key.private_key,
+        key_secret,
+    )
+    .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+    Ok(DecryptedAddressKey {
+        private_key,
+        public_key,
+        id: locked_key.id.clone(),
+        flags: *flags,
+        primary: locked_key.primary,
+    })
+}
+
+/// Helper function to unlock a legacy key.
+async fn unlock_legacy_key_async<Provider: PGPProviderAsync>(
+    pgp_provider: &Provider,
+    locked_key: &LockedKey,
+    passphrase: Option<&KeySecret>,
+) -> Result<UnlockedAddressKey<Provider>, KeyError> {
+    let (Some(flags), Some(key_secret)) = (&locked_key.flags, passphrase) else {
+        return Err(KeyError::MissingValue(locked_key.id.clone()));
+    };
+    let (private_key, public_key) = crate::crypto::import_key_with_passphrase_async(
+        pgp_provider,
+        &locked_key.private_key,
+        key_secret,
+    )
+    .await
+    .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+    Ok(DecryptedAddressKey {
+        private_key,
+        public_key,
+        id: locked_key.id.clone(),
+        flags: *flags,
+        primary: locked_key.primary,
+    })
 }

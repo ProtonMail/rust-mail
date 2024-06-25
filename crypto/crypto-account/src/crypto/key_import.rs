@@ -61,12 +61,17 @@ pub fn import_key_with_token<Prov: PGPProviderSync>(
         verification_keys,
         verification_context,
     )?;
+    import_key_with_passphrase(provider, private_key, decrypted_token)
+}
+
+/// Helper function to import an `OpenPGP` private key with a passphrase.
+pub fn import_key_with_passphrase<Prov: PGPProviderSync>(
+    provider: &Prov,
+    private_key: &ArmoredPrivateKey,
+    passphrase: impl AsRef<[u8]>,
+) -> Result<(Prov::PrivateKey, Prov::PublicKey), AccountCryptoError> {
     let private_key = provider
-        .private_key_import(
-            private_key.0.as_bytes(),
-            decrypted_token,
-            DataEncoding::Armor,
-        )
+        .private_key_import(private_key.0.as_bytes(), passphrase, DataEncoding::Armor)
         .map_err(AccountCryptoError::KeyImport)?;
     let public_key = provider
         .private_key_to_public_key(&private_key)
@@ -125,12 +130,17 @@ pub async fn import_key_with_token_async<Prov: PGPProviderAsync>(
         verification_context,
     )
     .await?;
+    import_key_with_passphrase_async(provider, private_key, decrypted_token).await
+}
+
+/// Helper function to import an `OpenPGP` private key with a passphrase.
+pub async fn import_key_with_passphrase_async<Prov: PGPProviderAsync>(
+    provider: &Prov,
+    private_key: &ArmoredPrivateKey,
+    passphrase: impl AsRef<[u8]>,
+) -> Result<(Prov::PrivateKey, Prov::PublicKey), AccountCryptoError> {
     let private_key = provider
-        .private_key_import_async(
-            private_key.0.as_bytes(),
-            decrypted_token,
-            DataEncoding::Armor,
-        )
+        .private_key_import_async(private_key.0.as_bytes(), passphrase, DataEncoding::Armor)
         .await
         .map_err(AccountCryptoError::KeyImport)?;
     let public_key = provider

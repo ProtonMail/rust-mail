@@ -64,6 +64,25 @@ pub fn get_test_locked_address_key() -> AddressKeys {
     )
 }
 
+pub fn get_test_locked_legacy_address_key() -> AddressKeys {
+    AddressKeys::new(
+        vec![LockedKey {
+            id:KeyId::from("ssbW3i5egXM4F-2uqNc2qACsxtKnuYaWMYJsso5IKTLQXLwEDFc_Hib0QaK6QODlGryyLhBH679-UkMkRBSz9w=="),
+            version:3,
+            private_key: ArmoredPrivateKey::from(TEST_USER_KEY),
+            token: None,
+            signature: None,
+            primary: true,
+            active: true,
+            flags:Some(KeyFlag::from(3_u32)),
+            activation: None,
+            recovery_secret: None,
+            recovery_secret_signature: None,
+            address_forwarding_id: None,
+        }]
+    )
+}
+
 fn get_test_locked_user_keys() -> UserKeys {
     let key = LockedKey {
         id: KeyId::from("aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ=="),
@@ -101,7 +120,25 @@ fn test_address_keys_decrypt() {
     let provider = new_pgp_provider();
     let user_keys = get_test_decrypted_user_key(&provider);
     let address_keys = get_test_locked_address_key();
-    let unlocked_keys = address_keys.unlock(&provider, user_keys.as_slice());
+    let unlocked_keys = address_keys.unlock(&provider, user_keys.as_slice(), None);
+    assert!(unlocked_keys.failed.is_empty());
+    assert!(!unlocked_keys.unlocked_keys.is_empty());
+}
+
+#[test]
+fn test_address_keys_legacy_decrypt() {
+    let provider = new_pgp_provider();
+    let srp_provider = new_srp_provider();
+    let key_id = get_test_key_id();
+    let salts = get_test_salts();
+    let user_keys = get_test_decrypted_user_key(&provider);
+    let address_keys = get_test_locked_address_key();
+
+    let key_secret = salts
+        .salt_for_key(&srp_provider, &key_id, "password".as_bytes())
+        .unwrap();
+    // Legacy keys are just encrypted with the key secret.
+    let unlocked_keys = address_keys.unlock(&provider, user_keys.as_slice(), Some(&key_secret));
     assert!(unlocked_keys.failed.is_empty());
     assert!(!unlocked_keys.unlocked_keys.is_empty());
 }
