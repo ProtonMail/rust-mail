@@ -61,7 +61,7 @@ fn generate_token_values<Provider: PGPProviderSync>(
 ) -> Result<(Zeroizing<String>, EncryptedKeyToken, KeyTokenSignature), AccountCryptoError> {
     // Generate a fresh random token.
     let token = generate_random_token();
-    // Encrypt/sing it with the parent user key.
+    // Encrypt/sign it with the parent user key.
     let mut encrypted_token: Vec<u8> = Vec::with_capacity(token.len() * 2);
     let mut encryptor = pgp_provider
         .new_encryptor()

@@ -38,7 +38,7 @@ impl AddressKeys {
     ///
     /// Returns the address keys that were successfully decrypted and verified using the provided user keys.
     /// If decryption or verification fails for a key, the key is not included in the returned vector.
-    /// To be able to unlock legacy address keys a `passphrase` has to provided additionally.
+    /// To be able to unlock legacy address keys a `passphrase` must also be provided.
     pub fn unlock<T: PGPProviderSync>(
         &self,
         provider: &T,

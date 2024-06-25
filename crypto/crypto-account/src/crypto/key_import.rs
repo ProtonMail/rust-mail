@@ -64,7 +64,7 @@ pub fn import_key_with_token<Prov: PGPProviderSync>(
     import_key_with_passphrase(provider, private_key, decrypted_token)
 }
 
-/// Helper function to import an `OpenPGP` private key with a passphrase.
+/// Helper function to import an `OpenPGP` private key secured with a passphrase.
 pub fn import_key_with_passphrase<Prov: PGPProviderSync>(
     provider: &Prov,
     private_key: &ArmoredPrivateKey,
