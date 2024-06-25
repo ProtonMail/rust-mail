@@ -44,7 +44,7 @@ ABF+V4UBANv2UoEWSWPt2lltQkXnsXZ9rB5NkywVQwqc5vW/h3yx5vjZEY10
 struct TestDraft(Vec<u8>);
 
 impl EncryptableDraft for TestDraft {
-    fn plain_text_message_body(&self) -> &[u8] {
+    fn plaintext_message_body(&self) -> &[u8] {
         &self.0
     }
 }
