@@ -6,7 +6,7 @@ use proton_crypto::{
         EncryptorDetachedSignatureWriter, EncryptorSync, KeyGenerator, KeyGeneratorAlgorithm,
         KeyGeneratorSync, PGPProviderSync,
     },
-    secure_random_bytes,
+    generate_secure_random_bytes,
 };
 use zeroize::Zeroizing;
 
@@ -14,6 +14,8 @@ use crate::{
     errors::AccountCryptoError,
     keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature, UnlockedUserKey},
 };
+
+use super::TOKEN_SIZE;
 
 /// Helper function to generate a fresh `OpenPGP` key and lock it.
 pub fn generate_locked_pgp_key<Provider: PGPProviderSync>(
@@ -32,8 +34,8 @@ pub fn generate_locked_pgp_key<Provider: PGPProviderSync>(
     pgp_provider
         .private_key_export(&private_key, passphrase, DataEncoding::Armor)
         .map(|key_bytes| String::from_utf8(key_bytes.as_ref().to_vec()))
-        .map_err(|_err| AccountCryptoError::GenerateKeyArmor)?
-        .map_err(|_err| AccountCryptoError::GenerateKeyArmor)
+        .map_err(|_err| AccountCryptoError::GenerateKeyArmor)? // For the CryptoError error
+        .map_err(|_err| AccountCryptoError::GenerateKeyArmor) // For the FromUtf8 error
         .map(ArmoredPrivateKey)
 }
 
@@ -59,7 +61,6 @@ fn generate_token_values<Provider: PGPProviderSync>(
     parent_key: &UnlockedUserKey<Provider>,
     context: Option<&Provider::SigningContext>,
 ) -> Result<(Zeroizing<String>, EncryptedKeyToken, KeyTokenSignature), AccountCryptoError> {
-    // Generate a fresh random token.
     let token = generate_random_token();
     // Encrypt/sign it with the parent user key.
     let mut encrypted_token: Vec<u8> = Vec::with_capacity(token.len() * 2);
@@ -83,14 +84,13 @@ fn generate_token_values<Provider: PGPProviderSync>(
     let detached_signature = encryptor_writer
         .finalize_with_detached_signature()
         .map_err(AccountCryptoError::TokenEncryption)?;
-    // Transform outputs to UTF-8.
+    // Interpret the outputs as UTF-8 encoded.
     let encrypted_token_type = EncryptedKeyToken(String::from_utf8(encrypted_token)?);
     let token_signature_type = KeyTokenSignature(String::from_utf8(detached_signature)?);
     Ok((token, encrypted_token_type, token_signature_type))
 }
 
 fn generate_random_token() -> Zeroizing<String> {
-    const TOKEN_SIZE: usize = 32;
-    let token: Zeroizing<[u8; TOKEN_SIZE]> = Zeroizing::new(secure_random_bytes());
+    let token: Zeroizing<[u8; TOKEN_SIZE]> = Zeroizing::new(generate_secure_random_bytes());
     Zeroizing::new(hex::encode(token))
 }

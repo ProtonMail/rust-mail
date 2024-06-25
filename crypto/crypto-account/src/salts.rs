@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use crate::keys::KeyId;
 use base64::{prelude::BASE64_STANDARD as BASE_64, DecodeSliceError, Engine as _};
-use proton_crypto::{secure_random_bytes, srp::SRPProvider, CryptoError};
+use proton_crypto::{generate_secure_random_bytes, srp::SRPProvider, CryptoError};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -73,7 +73,7 @@ impl KeySalt {
 
     /// Generates a fresh random [`KeySalt`] using client randomness.
     pub fn generate() -> Self {
-        let salt_bytes: [u8; Self::SALT_LEN] = secure_random_bytes();
+        let salt_bytes: [u8; Self::SALT_LEN] = generate_secure_random_bytes();
         Self::from_bytes(&salt_bytes)
     }
 

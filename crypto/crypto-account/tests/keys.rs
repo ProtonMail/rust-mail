@@ -4,7 +4,7 @@ use proton_crypto_account::keys::{
     AddressKeys, ArmoredPrivateKey, DecryptedUserKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LocalAddressKey, LocalUserKey, LockedKey, UserKeys,
 };
-use proton_crypto_account::salts::{KeySalt, Salt, Salts};
+use proton_crypto_account::salts::{KeySalt, KeySecret, Salt, Salts};
 
 const TEST_USER_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -175,8 +175,16 @@ fn test_user_key_generate() {
         .unwrap();
     let key = LocalUserKey::generate(&provider, KeyGeneratorAlgorithm::default(), &key_secret)
         .expect("key generation failed");
-    key.unlock(&provider, KeyId(String::default()), &key_secret)
+    // Unlock ok
+    key.unlock_and_assign_key_id(&provider, KeyId(String::default()), &key_secret)
         .expect("unlock should succeed");
+    // Unlock fail
+    let unlock_result = key.unlock_and_assign_key_id(
+        &provider,
+        KeyId(String::default()),
+        &KeySecret::new("hello".into()),
+    );
+    assert!(unlock_result.is_err());
 }
 
 #[test]
@@ -190,7 +198,7 @@ fn test_address_key_generate() {
     let key = LocalUserKey::generate(&provider, KeyGeneratorAlgorithm::default(), &key_secret)
         .expect("key generation failed");
     let unlocked_user_key = key
-        .unlock(&provider, KeyId(String::default()), &key_secret)
+        .unlock_and_assign_key_id(&provider, KeyId(String::default()), &key_secret)
         .expect("unlock should succeed");
 
     let fresh_address_key = LocalAddressKey::generate(
@@ -203,7 +211,17 @@ fn test_address_key_generate() {
     )
     .expect("ok");
 
+    // Unlock ok
     fresh_address_key
-        .unlock(&provider, KeyId(String::new()), &unlocked_user_key)
+        .unlock_and_assign_key_id(&provider, KeyId(String::new()), &unlocked_user_key)
         .expect("unlock should not fail");
+
+    // Unlock fail
+    let wrong_key = get_test_decrypted_user_key(&provider)
+        .into_iter()
+        .next()
+        .unwrap();
+    let unlock_result =
+        fresh_address_key.unlock_and_assign_key_id(&provider, KeyId(String::new()), &wrong_key);
+    assert!(unlock_result.is_err());
 }

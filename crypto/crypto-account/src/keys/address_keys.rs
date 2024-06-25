@@ -1,7 +1,9 @@
 use futures::future::join_all;
 
 use crate::{
-    crypto::generate_locked_pgp_key_with_token, errors::AccountCryptoError, salts::KeySecret,
+    crypto::{generate_locked_pgp_key_with_token, unlock_legacy_key, unlock_legacy_key_async},
+    errors::AccountCryptoError,
+    salts::KeySecret,
 };
 
 use super::{
@@ -224,7 +226,7 @@ impl LocalAddressKey {
     /// Unlocks the locally generated address key with the provided user key.
     ///
     /// The key id is retrieved from the API upon registering the key.
-    pub fn unlock<Provider: PGPProviderSync>(
+    pub fn unlock_and_assign_key_id<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         key_id: KeyId,
@@ -247,53 +249,4 @@ impl LocalAddressKey {
             public_key,
         })
     }
-}
-
-/// Helper function to unlock a legacy key.
-fn unlock_legacy_key<Provider: PGPProviderSync>(
-    pgp_provider: &Provider,
-    locked_key: &LockedKey,
-    passphrase: Option<&KeySecret>,
-) -> Result<UnlockedAddressKey<Provider>, KeyError> {
-    let (Some(flags), Some(key_secret)) = (&locked_key.flags, passphrase) else {
-        return Err(KeyError::MissingValue(locked_key.id.clone()));
-    };
-    let (private_key, public_key) = crate::crypto::import_key_with_passphrase(
-        pgp_provider,
-        &locked_key.private_key,
-        key_secret,
-    )
-    .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
-    Ok(DecryptedAddressKey {
-        private_key,
-        public_key,
-        id: locked_key.id.clone(),
-        flags: *flags,
-        primary: locked_key.primary,
-    })
-}
-
-/// Helper function to unlock a legacy key.
-async fn unlock_legacy_key_async<Provider: PGPProviderAsync>(
-    pgp_provider: &Provider,
-    locked_key: &LockedKey,
-    passphrase: Option<&KeySecret>,
-) -> Result<UnlockedAddressKey<Provider>, KeyError> {
-    let (Some(flags), Some(key_secret)) = (&locked_key.flags, passphrase) else {
-        return Err(KeyError::MissingValue(locked_key.id.clone()));
-    };
-    let (private_key, public_key) = crate::crypto::import_key_with_passphrase_async(
-        pgp_provider,
-        &locked_key.private_key,
-        key_secret,
-    )
-    .await
-    .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
-    Ok(DecryptedAddressKey {
-        private_key,
-        public_key,
-        id: locked_key.id.clone(),
-        flags: *flags,
-        primary: locked_key.primary,
-    })
 }

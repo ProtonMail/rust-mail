@@ -226,7 +226,7 @@ impl LocalUserKey {
     ///
     /// # Errors
     /// - If key unlock fails returns a [`AccountCryptoError::KeyImport`].
-    pub fn unlock<Provider: PGPProviderSync>(
+    pub fn unlock_and_assign_key_id<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
         key_id: KeyId,

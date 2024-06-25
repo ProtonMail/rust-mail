@@ -5,8 +5,12 @@ use proton_crypto::crypto::{
 use zeroize::Zeroizing;
 
 use crate::{
-    errors::AccountCryptoError,
-    keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature},
+    errors::{AccountCryptoError, KeyError},
+    keys::{
+        ArmoredPrivateKey, DecryptedAddressKey, EncryptedKeyToken, KeyTokenSignature, LockedKey,
+        UnlockedAddressKey,
+    },
+    salts::KeySecret,
 };
 
 /// Decrypts a token associated with key to unlock it.
@@ -148,4 +152,47 @@ pub async fn import_key_with_passphrase_async<Prov: PGPProviderAsync>(
         .await
         .map_err(AccountCryptoError::TransformPublic)?;
     Ok((private_key, public_key))
+}
+
+/// Helper function to unlock a legacy key.
+pub fn unlock_legacy_key<Provider: PGPProviderSync>(
+    pgp_provider: &Provider,
+    locked_key: &LockedKey,
+    passphrase: Option<&KeySecret>,
+) -> Result<UnlockedAddressKey<Provider>, KeyError> {
+    let (Some(flags), Some(key_secret)) = (&locked_key.flags, passphrase) else {
+        return Err(KeyError::MissingValue(locked_key.id.clone()));
+    };
+    let (private_key, public_key) =
+        import_key_with_passphrase(pgp_provider, &locked_key.private_key, key_secret)
+            .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+    Ok(DecryptedAddressKey {
+        private_key,
+        public_key,
+        id: locked_key.id.clone(),
+        flags: *flags,
+        primary: locked_key.primary,
+    })
+}
+
+/// Helper function to unlock a legacy key.
+pub async fn unlock_legacy_key_async<Provider: PGPProviderAsync>(
+    pgp_provider: &Provider,
+    locked_key: &LockedKey,
+    passphrase: Option<&KeySecret>,
+) -> Result<UnlockedAddressKey<Provider>, KeyError> {
+    let (Some(flags), Some(key_secret)) = (&locked_key.flags, passphrase) else {
+        return Err(KeyError::MissingValue(locked_key.id.clone()));
+    };
+    let (private_key, public_key) =
+        import_key_with_passphrase_async(pgp_provider, &locked_key.private_key, key_secret)
+            .await
+            .map_err(|err| KeyError::Unlock(locked_key.id.clone(), err))?;
+    Ok(DecryptedAddressKey {
+        private_key,
+        public_key,
+        id: locked_key.id.clone(),
+        flags: *flags,
+        primary: locked_key.primary,
+    })
 }
