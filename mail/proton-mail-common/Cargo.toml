@@ -16,8 +16,10 @@ proton-core-common = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 stash = { workspace = true }
+tracing = { workspace = true }
 tokio = { workspace = true }
 uniffi = { workspace = true, optional = true }
 uuid = { version = "1.7", features = ["v4"] }

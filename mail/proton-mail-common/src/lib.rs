@@ -6,6 +6,8 @@ mod mailbox;
 
 pub mod avatar;
 
+mod datatypes;
+mod models;
 mod proton_color;
 mod user_context;
 
@@ -27,3 +29,10 @@ pub mod exports {
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
+
+pub const ALL_LABEL_TYPES: [LabelType; 4] = [
+    LabelType::Label,
+    LabelType::ContactGroup,
+    LabelType::Folder,
+    LabelType::System,
+];

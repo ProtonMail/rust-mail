@@ -30,10 +30,10 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
 use serde::Deserialize;
-#[cfg(any(test, feature = "integration_tests"))]
+#[cfg(test)]
 use serde::Serialize;
 use serde_repr::Deserialize_repr;
-#[cfg(any(test, feature = "integration_tests"))]
+#[cfg(test)]
 use serde_repr::Serialize_repr;
 use serde_with::serde_as;
 use smart_default::SmartDefault;
@@ -44,7 +44,7 @@ use std::collections::HashMap;
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum AlmostAllMail {
     /// TODO: Document this variant.
@@ -57,7 +57,7 @@ pub enum AlmostAllMail {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ComposerDirection {
     /// TODO: Document this variant.
@@ -70,7 +70,7 @@ pub enum ComposerDirection {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ComposerMode {
     /// TODO: Document this variant.
@@ -83,7 +83,7 @@ pub enum ComposerMode {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "lowercase")]
 pub enum Disposition {
     /// TODO: Document this variant.
@@ -95,7 +95,7 @@ pub enum Disposition {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum MessageButtons {
     /// TODO: Document this variant.
@@ -108,7 +108,7 @@ pub enum MessageButtons {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 pub enum MimeType {
     /// TODO: Document this variant.
     #[serde(rename = "message/rfc822")]
@@ -134,7 +134,7 @@ pub enum MimeType {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum NextMessageOnMove {
     /// TODO: Document this variant.
@@ -150,7 +150,7 @@ pub enum NextMessageOnMove {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum PgpScheme {
     /// TODO: Document this variant.
@@ -163,7 +163,7 @@ pub enum PgpScheme {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum PmSignature {
     /// TODO: Document this variant.
@@ -179,7 +179,7 @@ pub enum PmSignature {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ShowImages {
     /// TODO: Document this variant.
@@ -198,7 +198,7 @@ pub enum ShowImages {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ShowMoved {
     /// TODO: Document this variant.
@@ -217,7 +217,7 @@ pub enum ShowMoved {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum SpamAction {
     /// TODO: Document this variant.
@@ -229,7 +229,7 @@ pub enum SpamAction {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum SwipeAction {
     /// TODO: Document this variant.
@@ -251,7 +251,7 @@ pub enum SwipeAction {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ViewLayout {
     /// TODO: Document this variant.
@@ -264,7 +264,7 @@ pub enum ViewLayout {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize_repr))]
+#[cfg_attr(test, derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ViewMode {
     /// TODO: Document this variant.
@@ -280,7 +280,7 @@ pub enum ViewMode {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Attachment {
     /// TODO: Document this field.
@@ -330,7 +330,7 @@ pub struct Attachment {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct AttachmentMetadata {
     /// TODO: Document this field.
@@ -354,7 +354,7 @@ pub struct AttachmentMetadata {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct AutoResponder {
     /// TODO: Document this field.
@@ -385,7 +385,7 @@ pub struct AutoResponder {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Conversation {
     /// TODO: Document this field.
@@ -440,7 +440,7 @@ pub struct Conversation {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct ConversationCount {
     /// TODO: Document this field.
@@ -456,7 +456,7 @@ pub struct ConversationCount {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct ConversationLabels {
     /// TODO: Document this field.
@@ -487,7 +487,7 @@ pub struct ConversationLabels {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 #[allow(clippy::struct_excessive_bools)]
@@ -536,7 +536,7 @@ pub struct Label {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, SmartDefault)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 #[allow(clippy::struct_excessive_bools)]
@@ -701,7 +701,7 @@ pub struct MailSettings {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 pub struct Message {
@@ -731,7 +731,7 @@ pub struct Message {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageAttachment {
     /// TODO: Document this field.
@@ -766,7 +766,7 @@ pub struct MessageAttachment {
 
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageAttachmentInfo {
     /// TODO: Document this field.
@@ -779,7 +779,7 @@ pub struct MessageAttachmentInfo {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageAttachmentHeaders {
     /// TODO: Document this field.
@@ -801,7 +801,7 @@ pub struct MessageAttachmentHeaders {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageCount {
     /// TODO: Document this field.
@@ -817,7 +817,7 @@ pub struct MessageCount {
 
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(transparent)]
 #[repr(transparent)]
 pub struct MessageFlags(u64);
@@ -937,7 +937,7 @@ bitflags::bitflags! {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 #[allow(clippy::struct_excessive_bools)]
@@ -1030,7 +1030,7 @@ pub struct MessageMetadata {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 pub struct MessageAddress {
@@ -1059,7 +1059,7 @@ pub struct MessageAddress {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSetting {
     /// TODO: Document this field.
@@ -1072,7 +1072,7 @@ pub struct MobileSetting {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSettings {
     /// TODO: Document this field.
@@ -1087,7 +1087,7 @@ pub struct MobileSettings {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct OperationResult {
     /// TODO: Document this field.
@@ -1101,7 +1101,7 @@ pub struct OperationResult {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct UndoToken {
     /// TODO: Document this field.
