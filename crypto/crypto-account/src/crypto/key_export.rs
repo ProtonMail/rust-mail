@@ -15,7 +15,7 @@ use crate::{
     keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature, UnlockedUserKey},
 };
 
-use super::TOKEN_SIZE;
+use super::{EXPECTED_ENCRYPTED_TOKEN_SIZE, TOKEN_SIZE};
 
 /// Helper function to generate a fresh `OpenPGP` key and lock it.
 pub fn generate_locked_pgp_key<Provider: PGPProviderSync>(
@@ -63,7 +63,7 @@ fn generate_token_values<Provider: PGPProviderSync>(
 ) -> Result<(Zeroizing<String>, EncryptedKeyToken, KeyTokenSignature), AccountCryptoError> {
     let token = generate_random_token();
     // Encrypt/sign it with the parent user key.
-    let mut encrypted_token: Vec<u8> = Vec::with_capacity(token.len() * 2);
+    let mut encrypted_token: Vec<u8> = Vec::with_capacity(EXPECTED_ENCRYPTED_TOKEN_SIZE);
     let mut encryptor = pgp_provider
         .new_encryptor()
         .with_encryption_key(parent_key.as_public_key())
