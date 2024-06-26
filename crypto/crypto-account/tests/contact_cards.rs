@@ -1,6 +1,6 @@
 use proton_crypto::crypto::{DataEncoding, PGPProvider, PGPProviderSync};
 use proton_crypto::new_pgp_provider;
-use proton_crypto_account::contacts::{CardCryptography, ContactCardType};
+use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard};
 
 const PRIVATE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -37,7 +37,7 @@ const SIGNED_SIGNATURE_INVALID: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: 
 
 struct TestCard(pub ContactCardType, pub String, pub String);
 
-impl CardCryptography for TestCard {
+impl DecryptableVerifiableCard for TestCard {
     fn card_type(&self) -> ContactCardType {
         self.0
     }

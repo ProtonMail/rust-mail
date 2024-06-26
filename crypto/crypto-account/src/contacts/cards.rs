@@ -13,7 +13,7 @@ pub enum ContactCardType {
     EncryptedAndSigned = 3,
 }
 
-pub trait CardCryptography {
+pub trait DecryptableVerifiableCard {
     /// Returns the card's crypto type.
     fn card_type(&self) -> ContactCardType;
 
