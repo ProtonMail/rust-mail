@@ -1,37 +1,67 @@
-use crate::auth::{Auth, UserKeySecret};
-use crate::domain::{HumanVerification, LoginData, SaltError, TFAStatus, TwoFactorAuth, User};
-use crate::requests::{AuthInfo, PasswordMode, TOTPRequest};
-use crate::{http, Session};
-use anyhow::anyhow;
-use proton_crypto_account::proton_crypto::srp::SRPProvider;
-use secrecy::{ExposeSecret, SecretVec};
-use std::fmt::Formatter;
+#![allow(clippy::module_name_repetitions)]
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("{0}")]
-    Request(#[source] http::RequestError),
-    #[error("Server SRP proof verification failed: {0}")]
-    ServerProof(String),
-    #[error("Account 2FA method ({0})is not supported")]
-    Unsupported2FA(TwoFactorAuth),
+use crate::auth::{Auth, UserKeySecret};
+use crate::service::{ApiServiceError, ServiceError};
+use crate::services::proton::request_data::HumanVerificationData;
+use crate::services::proton::requests::PostAuthRequest;
+use crate::services::proton::response_data::{
+    HumanVerificationChallenge, PasswordMode, TfaStatus, User,
+};
+use crate::session::{CoreSession, Session};
+use core::fmt;
+use proton_crypto_account::keys::{DecryptedUserKey, KeyId, LockedKey, UnlockResult};
+use proton_crypto_account::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
+use proton_crypto_account::proton_crypto::srp::SRPProvider as SrpProvider;
+use proton_crypto_account::salts::{KeySecret, Salt, Salts};
+use secrecy::{ExposeSecret, SecretVec};
+use std::fmt::{Debug, Formatter};
+use thiserror::Error;
+
+/// TODO: Document this enum.
+#[derive(Debug, Error)]
+pub enum LoginError {
+    /// TODO: Document this variant.
     #[error("Human Verification Required'")]
-    HumanVerificationRequired(HumanVerification),
-    #[error("Failed to calculate SRP Proof: {0}")]
-    SRPProof(String),
-    #[error("Operation is nto valid in the current state")]
+    HumanVerificationRequired(HumanVerificationChallenge),
+
+    /// TODO: Document this variant.
+    #[error("Operation is not valid in the current state")]
     InvalidState,
-    #[error("Failed to derive the key secret from the password: {0}")]
-    KeySecretDerivation(#[from] SaltError),
-    #[error("Failed to fetch salt to derive the key secret: {0}")]
-    KeySecretSaltFetch(#[from] http::RequestError),
+
+    /// TODO: Document this variant.
     #[error("Failed to store the key secret in the authentication state: {0}")]
     KeySecretAuthUpdate(String),
+
+    /// TODO: Document this variant.
     #[error("Failed to decrypt a user key with the derived client secret")]
     KeySecretDecryption,
+
+    /// TODO: Document this variant.
+    #[error("Failed to derive the key secret from the password: {0}")]
+    KeySecretDerivation(#[from] SaltError),
+
+    /// TODO: Document this variant.
+    #[error("Failed to fetch salt to derive the key secret: {0}")]
+    KeySecretSaltFetch(#[from] ApiServiceError),
+
+    /// TODO: Document this variant.
+    #[error("Server SRP proof verification failed: {0}")]
+    ServerProof(String),
+
+    /// TODO: Document this variant.
+    #[error("Failed to calculate SRP Proof: {0}")]
+    SrpProof(String),
+
+    /// TODO: Document this variant.
+    #[error("Account 2FA method is not supported")]
+    UnsupportedTfa,
+
+    /// TODO: Document this variant.
     #[error("Wrong mailbox password provided")]
     WrongMailboxPassword,
 }
+
+impl ServiceError for LoginError {}
 
 /// Handle all the possible states that are required to transition through in order to become
 /// authenticated.
@@ -42,7 +72,7 @@ pub struct Flow {
     user: Option<User>,
     mailbox_password: Option<SecretVec<u8>>,
     password_mode: Option<PasswordMode>,
-    tfa_status: Option<TFAStatus>,
+    tfa_status: Option<TfaStatus>,
 }
 
 impl Flow {
@@ -59,63 +89,62 @@ impl Flow {
     }
 
     /// Start login with credentials. The `human_verification` parameter only needs to be submitted
-    /// if during the login flow you catch a [`Error::HumanVerificationRequired`] error.
+    /// if during the login flow you catch a [`LoginError::HumanVerificationRequired`] error.
     ///
     /// # Errors
     /// Returns error if the login request or SRP proof calculations failed.
-    pub async fn login<'a>(
+    pub async fn login(
         &mut self,
-        username: &'a str,
-        password: &'a str,
-        human_verification: Option<LoginData>,
-    ) -> Result<(), Error> {
+        username: String,
+        password: String,
+        human_verification: Option<HumanVerificationData>,
+    ) -> Result<(), LoginError> {
         if !(self.is_logged_out() || human_verification.is_some()) {
-            return Err(Error::InvalidState);
+            return Err(LoginError::InvalidState);
         }
 
         // We persist the password for the duration of the the login flow.
         self.mailbox_password = Some(SecretVec::new(password.as_bytes().to_vec()));
 
-        let auth_resp = {
-            self.session
-                .execute_request(AuthInfo { username })
-                .await
-                .map_err(map_human_verification_err)
-        }?;
+        let auth_resp = { self.session.api().post_auth_info(username.clone()).await }?;
 
         let srp_provider = proton_crypto_account::proton_crypto::new_srp_provider();
         let proof = srp_provider
             .generate_client_proof(
-                username,
-                password,
+                &username,
+                &password,
                 auth_resp.version,
                 &auth_resp.salt,
                 &auth_resp.modulus,
                 &auth_resp.server_ephemeral,
             )
-            .map_err(|e| Error::SRPProof(e.to_string()))?;
+            .map_err(|e| LoginError::SrpProof(e.to_string()))?;
 
         let auth_response = self
             .session
-            .execute_request(crate::requests::Auth {
-                username,
-                client_ephemeral: &proof.ephemeral,
-                client_proof: &proof.proof,
-                srp_session: &auth_resp.srp_session,
-                human_verification: &human_verification,
-            })
-            .await
-            .map_err(map_human_verification_err)?;
+            .api()
+            .post_auth(
+                PostAuthRequest {
+                    client_ephemeral: proof.ephemeral.clone(),
+                    client_proof: proof.proof.clone(),
+                    srp_session: auth_resp.srp_session,
+                    username: username.clone(),
+                },
+                human_verification,
+            )
+            .await?;
 
-        let skip_srp_proof_validation = self.session.api_env_config().skip_srp_proof_validation;
+        let skip_srp_proof_validation = self.session.api().config().skip_srp_proof_validation;
 
         if !skip_srp_proof_validation && !proof.compare_server_proof(&auth_response.server_proof) {
-            return Err(Error::ServerProof("Server Proof does not match".to_owned()));
+            return Err(LoginError::ServerProof(
+                "Server Proof does not match".to_owned(),
+            ));
         }
 
         {
             let auth = Auth {
-                email: username.to_owned(),
+                email: username,
                 user_id: auth_response.user_id,
                 uid: auth_response.uid,
                 refresh_token: auth_response.refresh_token,
@@ -124,16 +153,7 @@ impl Flow {
                 key_secret: None,
             };
 
-            self.session
-                .auth_store()
-                .write()
-                .await
-                .set_auth(auth)
-                .map_err(|e| {
-                    Error::Request(http::RequestError::Other(anyhow!(
-                        "Failed to to store auth: {e}"
-                    )))
-                })?;
+            *self.session.auth.write().await = Some(auth);
         }
         self.tfa_status = Some(auth_response.tfa.enabled);
         self.password_mode = Some(auth_response.password_mode);
@@ -144,19 +164,16 @@ impl Flow {
     ///
     /// # Errors
     /// Returns error if the request failed.
-    pub async fn submit_totp(&mut self, code: &str) -> Result<(), Error> {
-        let LoginState::Awaiting2FA(status) = self.state else {
-            return Err(Error::InvalidState);
+    pub async fn submit_totp(&mut self, code: String) -> Result<(), LoginError> {
+        let LoginState::AwaitingTfa(status) = self.state else {
+            return Err(LoginError::InvalidState);
         };
 
-        if !matches!(status, TFAStatus::Totp | TFAStatus::TotpOrFIDO2) {
-            return Err(Error::Unsupported2FA(TwoFactorAuth::TOTP));
+        if !matches!(status, TfaStatus::Totp | TfaStatus::TotpOrFido2) {
+            return Err(LoginError::UnsupportedTfa);
         }
 
-        self.session
-            .execute_request(TOTPRequest::new(code))
-            .await
-            .map_err(map_human_verification_err)?;
+        self.session.api().post_auth_tfa(code).await?;
 
         self.next().await
     }
@@ -165,16 +182,19 @@ impl Flow {
     ///
     /// # Errors
     /// Returns error if the request failed.
-    /// If the password fails to decrypt the user key it returns a [`Error::WrongMailboxPassword`].
-    pub async fn submit_mailbox_password(&mut self, mailbox_password: &str) -> Result<(), Error> {
+    /// If the password fails to decrypt the user key it returns a [`LoginError::WrongMailboxPassword`].
+    pub async fn submit_mailbox_password(
+        &mut self,
+        mailbox_password: &str,
+    ) -> Result<(), LoginError> {
         let LoginState::AwaitingMailboxPassword = self.state else {
-            return Err(Error::InvalidState);
+            return Err(LoginError::InvalidState);
         };
 
         self.mailbox_password = Some(SecretVec::new(mailbox_password.as_bytes().to_vec()));
         let result = self.finalize_login().await;
-        if matches!(result, Err(Error::KeySecretDecryption)) {
-            return Err(Error::WrongMailboxPassword);
+        if matches!(result, Err(LoginError::KeySecretDecryption)) {
+            return Err(LoginError::WrongMailboxPassword);
         }
         result?;
 
@@ -196,7 +216,7 @@ impl Flow {
     /// Check whether the session is awaiting totp.
     #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
-        matches!(self.state, LoginState::Awaiting2FA(_))
+        matches!(self.state, LoginState::AwaitingTfa(_))
     }
 
     /// Check whether the session is awaiting a mailbox password.
@@ -227,23 +247,23 @@ impl Flow {
     }
 
     /// Advances the internal state machine.
-    async fn next(&mut self) -> Result<(), Error> {
+    async fn next(&mut self) -> Result<(), LoginError> {
         loop {
             match self.state {
                 LoginState::LoggedOut => {
                     let Some(tfa_enabled) = self.tfa_status.take() else {
-                        return Err(Error::InvalidState);
+                        return Err(LoginError::InvalidState);
                     };
-                    if tfa_enabled == TFAStatus::None {
+                    if tfa_enabled == TfaStatus::None {
                         self.state = LoginState::DeriveKeySecret;
                     } else {
-                        self.state = LoginState::Awaiting2FA(tfa_enabled);
+                        self.state = LoginState::AwaitingTfa(tfa_enabled);
                         break;
                     }
                 }
                 LoginState::DeriveKeySecret => {
                     let Some(mode) = &self.password_mode else {
-                        return Err(Error::InvalidState);
+                        return Err(LoginError::InvalidState);
                     };
                     match mode {
                         PasswordMode::One => {
@@ -257,7 +277,7 @@ impl Flow {
                         }
                     }
                 }
-                LoginState::Awaiting2FA(_) => {
+                LoginState::AwaitingTfa(_) => {
                     self.state = LoginState::DeriveKeySecret;
                 }
                 LoginState::AwaitingMailboxPassword => {
@@ -270,85 +290,148 @@ impl Flow {
     }
 
     /// Finalize the login by fetching the user and deriving the key secret.
-    async fn finalize_login(&mut self) -> Result<(), Error> {
+    async fn finalize_login(&mut self) -> Result<(), LoginError> {
         // Fetch user info at least once, some accounts trigger HV after login with first
         // API call.
-        let user = self
-            .session
-            .get_user()
-            .await
-            .map_err(map_human_verification_err)?;
+        let user = self.session.api().get_users().await?.user;
         self.derive_key_secret(&user).await?;
         self.user = Some(user);
         Ok(())
     }
 
     /// Derive the key secret to unlock user keys.
-    async fn derive_key_secret(&mut self, user: &User) -> Result<(), Error> {
+    async fn derive_key_secret(&mut self, user: &User) -> Result<(), LoginError> {
         let srp_provider = proton_crypto_account::proton_crypto::new_srp_provider();
         let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
         let Some(password) = self.mailbox_password.as_mut() else {
-            return Err(Error::InvalidState);
+            return Err(LoginError::InvalidState);
         };
 
         // Fetch the salts to derive the key password.
-        let salts = self
-            .session
-            .get_user_salts()
-            .await
-            .map_err(Error::KeySecretSaltFetch)?;
+        let salts = Salts::new(
+            self.session
+                .api()
+                .get_keys_salts()
+                .await
+                .map_err(LoginError::KeySecretSaltFetch)?
+                .key_salts
+                .into_iter()
+                .map(|salt| Salt {
+                    id: KeyId(salt.id.to_string()),
+                    key_salt: salt.key_salt,
+                }),
+        );
 
         // Derive the key secret to unlock the user keys.
-        let key_secret = user
-            .salt_password(&srp_provider, &salts, password.expose_secret())
+        let key_secret = Self::salt_password(user, &srp_provider, &salts, password.expose_secret())
             .map(UserKeySecret)
-            .map_err(Error::KeySecretDerivation)?;
+            .map_err(LoginError::KeySecretDerivation)?;
 
         // Check that the key works
-        let unlock_result = user.unlock_keys(&pgp_provider, key_secret.expose_secret());
+        let unlock_result =
+            Self::unlock_encryption_keys(user, &pgp_provider, key_secret.expose_secret());
         if unlock_result.unlocked_keys.is_empty() {
-            return Err(Error::KeySecretDecryption);
+            return Err(LoginError::KeySecretDecryption);
         }
 
         // Update the auth state with the derived user secret.
-        self.session
-            .auth_store()
-            .write()
-            .await
-            .refresh_user_key_secret(key_secret)
-            .map_err(|e| {
-                Error::Request(http::RequestError::Other(anyhow!(
-                    "Failed to store auth with user secret: {e}"
-                )))
-            })?;
+        if let Some(ref mut auth) = *self.session.auth.write().await {
+            auth.key_secret = Some(key_secret);
+        }
 
         // The password is no longer needed, erase it.
         self.mailbox_password = None;
         Ok(())
+    }
+
+    /// Get the user's primary encryption key.
+    ///
+    /// # Parameters
+    ///
+    /// * `user` - The user to get the primary encryption key for.
+    ///
+    #[must_use]
+    pub fn primary_encryption_key(user: &User) -> Option<&LockedKey> {
+        user.keys.0.iter().find(|&key| key.primary)
+    }
+
+    /// Salt a user password.
+    ///
+    /// # Parameters
+    ///
+    /// * `user`             - The user to get the primary encryption key for.
+    /// * `provider`         - TODO: Document this parameter.
+    /// * `salts`            - TODO: Document this parameter.
+    /// * `mailbox_password` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// If the primary encryption key is not found, a
+    /// [`SaltError::PrimaryKeyNotFound`] is returned. Otherwise, any errors
+    /// from [`Salts::salt_for_key()`] are propagated.
+    ///
+    pub fn salt_password<P: SrpProvider>(
+        user: &User,
+        provider: &P,
+        salts: &Salts,
+        mailbox_password: impl AsRef<[u8]>,
+    ) -> Result<KeySecret, SaltError> {
+        let Some(primary_key) = Self::primary_encryption_key(user) else {
+            return Err(SaltError::PrimaryKeyNotFound);
+        };
+        salts
+            .salt_for_key(provider, &primary_key.id, mailbox_password.as_ref())
+            .map_err(|err| SaltError::Salt(err.to_string()))
+    }
+
+    /// Unlock the user's encryption keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `user`            - The user to get the primary encryption key for.
+    /// * `provider`        - TODO: Document this parameter.
+    /// * `salted_password` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// See [`UserKeys::unlock()`](proton_crypto_account::keys::UserKeys::unlock()).
+    ///
+    pub fn unlock_encryption_keys<P: PgpProviderSync>(
+        user: &User,
+        provider: &P,
+        salted_password: &KeySecret,
+    ) -> UnlockResult<DecryptedUserKey<<P>::PrivateKey, <P>::PublicKey>> {
+        user.keys.unlock(provider, salted_password)
     }
 }
 
 #[derive(Debug)]
 enum LoginState {
     LoggedOut,
-    Awaiting2FA(TFAStatus),
+    AwaitingTfa(TfaStatus),
     DeriveKeySecret,
     AwaitingMailboxPassword,
     LoggedIn,
 }
 
-fn map_human_verification_err(e: http::RequestError) -> Error {
-    if let http::RequestError::API(e) = &e {
-        if let Ok(hv) = e.try_get_human_verification_details() {
-            return Error::HumanVerificationRequired(hv);
-        }
-    }
-
-    Error::Request(e)
-}
-
-impl std::fmt::Debug for Flow {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl Debug for Flow {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "LoginFlow(state:{:?})", self.state)
     }
+}
+
+/// TODO: Document this enum.
+#[derive(Debug, Error)]
+pub enum SaltError {
+    /// TODO: Document this variant.
+    #[error("{0}")]
+    Key(String),
+
+    /// TODO: Document this variant.
+    #[error("Could not find primary key")]
+    PrimaryKeyNotFound,
+
+    /// TODO: Document this variant.
+    #[error("{0}")]
+    Salt(String),
 }

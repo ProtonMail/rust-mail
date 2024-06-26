@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::time::SystemTime;
 
 use parking_lot::{Once, RwLock};

@@ -11,6 +11,7 @@ base64 = { workspace = true }
 bytes = { workspace = true }
 colored = { workspace = true }
 chrono = { workspace = true }
+futures = { workspace = true }
 parking_lot = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-sqlite3 = { workspace = true, optional = true }
@@ -33,10 +34,12 @@ velcro = { workspace = true }
 
 [features]
 default = []
+integration_tests = []
 uniffi = ["dep:uniffi"]
 sql = ["dep:proton-sqlite3"]
 
 [dev-dependencies]
+proton-api-core = { workspace = true, features = ["integration_tests"] }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 

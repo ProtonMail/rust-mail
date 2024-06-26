@@ -1,13 +1,8 @@
-use proton_api_core::{
-    auth::UserKeySecret,
-    exports::crypto::{
-        keys::{KeyId, LockedKey},
-        proton_crypto::new_srp_provider,
-        salts::{Salt, Salts},
-    },
-};
+use proton_api_core::auth::UserKeySecret;
+use proton_crypto_account::keys::{KeyId, LockedKey};
+use proton_crypto_account::proton_crypto::new_srp_provider;
+use proton_crypto_account::salts::{Salt, Salts};
 use std::iter;
-
 // Test data from Proton black user: rust_test@proton.black, pw: TEST_USER_PASSWORD
 
 pub const TEST_USER_MAIL: &str = "rust_test@proton.black";

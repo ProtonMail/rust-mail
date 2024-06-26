@@ -33,16 +33,20 @@ use crate::datatypes::{
     LabelId, Labels, LogAuth, Password, Phone, ProductUsedSpace, Referral, RemoteId, SettingsFlags,
     TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
 };
+use crate::CoreContextResult;
+use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
     ContactEmail as ApiContactEmail, ContactFull as ApiContactFull, User as ApiUser,
     UserSettings as ApiUserSettings,
 };
+use proton_api_core::services::proton::Proton;
+use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
-use tracing::error;
+use tracing::{debug, error};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -118,6 +122,34 @@ pub struct Address {
     /// present for convenience.
     #[StashField]
     pub stash: Option<Stash>,
+}
+
+impl Address {
+    /// Download and store user addresses into the database
+    ///
+    /// # Parameters
+    ///
+    /// * `api`   - The API instance to use to download the addresses.
+    /// * `stash` - The database instance to store the addresses.
+    ///
+    /// # Errors
+    ///
+    /// TODO: Document the errors.
+    ///
+    pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
+        let tx = stash.transaction().await?;
+        for mut address in api
+            .get_addresses()
+            .await?
+            .addresses
+            .into_iter()
+            .map(Address::from)
+        {
+            address.save_using(&tx).await?;
+        }
+
+        Ok(())
+    }
 }
 
 impl From<ApiAddress> for Address {
@@ -308,6 +340,205 @@ impl Contact {
                 e
             })?;
         }
+        Ok(())
+    }
+
+    /// Updates all user contacts including their emails without their cards.
+    ///
+    /// The update includes a reset of the database.
+    ///
+    /// # Parameters
+    ///
+    /// * `api`   - The API instance to use to download the addresses.
+    /// * `stash` - The database instance to store the addresses.
+    ///
+    /// # Errors
+    ///
+    /// TODO: Document the errors.
+    ///
+    #[allow(clippy::too_many_lines)]
+    pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
+        // TODO: There should be one transaction for the whole sync.
+        let mut page_index = 0;
+        // Reset the database state by deleting all contacts.
+        async {
+            let tx = stash.transaction().await?;
+            tx.execute("DELETE FROM contacts", vec![]).await?;
+            tx.execute("DELETE FROM contact_emails", vec![]).await?;
+            tx.execute("DELETE FROM contact_cards", vec![]).await?;
+            tx.execute("DELETE FROM contact_email_labels", vec![])
+                .await?;
+            tx.commit().await?;
+            Ok(())
+        }
+        .await
+        .map_err(|err: StashError| {
+            error!("Failed to reset contact tables: {err}");
+            err
+        })?;
+        // First update the partial contacts since email contacts reference them.
+        debug!("Syncing partial contacts");
+        loop {
+            let mut contacts: Vec<Contact> = api
+                .get_contacts(GetContactsOptions {
+                    label_id: None,
+                    page: page_index,
+                    page_size: SYNC_CONTACT_PAGE_SIZE,
+                })
+                .await
+                .map_err(|err| {
+                    error!("Failed to fetch contacts for page {page_index}: {err}");
+                    err
+                })?
+                .contacts
+                .into_iter()
+                .map(Contact::from)
+                .collect();
+            if !contacts.is_empty() {
+                async {
+                    let tx = stash.transaction().await?;
+                    for contact in &mut contacts {
+                        contact.save_using(&tx).await?;
+                    }
+                    tx.commit().await?;
+                    Ok(())
+                }
+                .await
+                .map_err(|err: StashError| {
+                    error!("Failed to sync contacts for page {page_index} to db: {err}");
+                    err
+                })?;
+            }
+            debug!(
+                "Synced page {} of partial contacts, {} contacts fetched",
+                page_index,
+                contacts.len()
+            );
+            if contacts.len() < SYNC_CONTACT_PAGE_SIZE {
+                break;
+            }
+            page_index += 1;
+        }
+
+        // Then, update the email contacts.
+        page_index = 0;
+        debug!("Syncing contact emails");
+        loop {
+            let mut contact_emails: Vec<ContactEmail> = api
+                .get_contacts_emails(GetContactsEmailsOptions {
+                    email: None, // TODO: This is the existing behaviour, but seems wrong...
+                    label_id: None,
+                    page: page_index,
+                    page_size: SYNC_CONTACT_PAGE_SIZE,
+                })
+                .await
+                .map_err(|err| {
+                    error!("Failed to sync contact emails for page {page_index}: {err}");
+                    err
+                })?
+                .contact_emails
+                .into_iter()
+                .map(ContactEmail::from)
+                .collect();
+            if !contact_emails.is_empty() {
+                async {
+                    let tx = stash.transaction().await?;
+                    for contact_email in &mut contact_emails {
+                        contact_email.save_using(&tx).await?;
+                    }
+                    tx.commit().await?;
+                    Ok(())
+                }
+                .await
+                .map_err(|err: StashError| {
+                    error!("Failed to sync contact emails for page {page_index} to db: {err}");
+                    err
+                })?;
+            }
+            debug!(
+                "Synced page {} of contact emails, {} contact emails fetched",
+                page_index,
+                contact_emails.len()
+            );
+            if contact_emails.len() < SYNC_CONTACT_PAGE_SIZE {
+                break;
+            }
+            page_index += 1;
+        }
+        Ok(())
+    }
+
+    /// Updates the full contact with the given ID including its emails and
+    /// cards.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`    - The ID of the [`Contact`] to sync.
+    /// * `api`   - The API instance to use to download the addresses.
+    /// * `stash` - The database instance to store the addresses.
+    ///
+    /// # Errors
+    ///
+    /// TODO: Document the errors.
+    ///
+    pub async fn sync_with_card(
+        id: RemoteId,
+        api: &Proton,
+        stash: &Stash,
+    ) -> CoreContextResult<()> {
+        debug!("Syncing full contact for contact id {id}");
+        let mut contact_with_card = Contact::from(
+            api.get_contact(id.clone().into())
+                .await
+                .map_err(|err| {
+                    error!("Failed to fetch full contact with id {id}: {err}");
+                    err
+                })?
+                .contact,
+        );
+
+        if let Some(remote_id) = &contact_with_card.remote_id {
+            let existing = Contact::load(remote_id.clone(), stash)
+                .await
+                .map_err(|err| {
+                    error!("Failed to load contact from db: {err}");
+                    err
+                })?;
+            if let Some(existing) = existing {
+                contact_with_card.row_id = existing.row_id;
+            }
+        }
+        let tx = stash.transaction().await.map_err(|err| {
+            error!("Failed to start transaction: {err}");
+            err
+        })?;
+        contact_with_card.set_stash(stash);
+        contact_with_card.save_using(&tx).await.map_err(|err| {
+            error!("Failed to sync full contact to db: {err}");
+            err
+        })?;
+        for email in &mut contact_with_card.contact_emails {
+            if let Some(remote_id) = &email.remote_id {
+                let existing =
+                    ContactEmail::load(remote_id.clone(), stash)
+                        .await
+                        .map_err(|err| {
+                            error!("Failed to load contact email from db: {err}");
+                            err
+                        })?;
+                if let Some(existing) = existing {
+                    email.row_id = existing.row_id;
+                }
+            }
+            email.save_using(&tx).await.map_err(|e| {
+                error!("Failed to update contact emails: {e}");
+                e
+            })?;
+        }
+        tx.commit().await.map_err(|err| {
+            error!("Failed to commit transaction: {err}");
+            err
+        })?;
         Ok(())
     }
 }
@@ -624,6 +855,42 @@ impl From<ApiUser> for User {
             row_id: None,
             stash: None,
         }
+    }
+}
+
+impl User {
+    // /// Get the user's display name.
+    // #[must_use]
+    // pub fn user_name(&self) -> &str {
+    //     if let Some(display_name) = self.display_name.as_deref() {
+    //         display_name
+    //     } else if let Some(name) = self.name.as_deref() {
+    //         name
+    //     } else {
+    //         &self.email
+    //     }
+    // }
+
+    /// Download and store user info and settings into the database
+    ///
+    /// # Parameters
+    ///
+    /// * `stash` - The database instance to store the addresses.
+    /// * `api`   - The API instance to use to download the addresses.
+    ///
+    /// # Errors
+    ///
+    /// TODO: Document the errors.
+    ///
+    pub async fn sync_user_and_settings(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
+        let mut user = User::from(api.get_users().await?.user);
+        let mut settings = UserSettings::from(api.get_settings().await?.user_settings);
+        settings.remote_id.clone_from(&user.remote_id);
+        user.set_stash(stash);
+        settings.set_stash(stash);
+        user.save().await?;
+        settings.save().await?;
+        Ok(())
     }
 }
 

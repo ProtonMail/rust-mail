@@ -4,7 +4,7 @@
 //!
 //! # Foreground Example
 //! This version of the loop requires the user to poll the loop manually so that it can progress.
-//! ```
+//! ```ignore
 //! use proton_api_core::domain::Event;
 //! use proton_event_loop::{EventLoop, Provider, Store};
 //!
@@ -23,7 +23,7 @@
 //! # Background Example
 //! This version of the loop runs automatically in a background task with a user defined interval.
 //! Additionally, this version also has modifiers to pause and resume the loop.
-//! ```
+//! ```ignore
 //! use std::time::Duration;
 //! use proton_api_core::domain::Event;
 //! use proton_event_loop::{BackgroundEventLoop, EventLoop, EventLoopErrorHandler, Provider, Store};
@@ -40,38 +40,33 @@
 //!
 //! ```
 //!
-mod background_loop;
+pub mod background_loop;
 #[cfg(test)]
-mod loop_tests;
-mod provider;
-mod store;
-mod subscriber;
+pub mod loop_tests;
+pub mod provider;
+pub mod store;
+pub mod subscriber;
 
-mod foreground_loop;
+pub mod foreground_loop;
 
-pub use background_loop::*;
-pub use foreground_loop::*;
-pub use paste;
-pub use provider::*;
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-pub use store::*;
-pub use subscriber::*;
-
-use proton_api_core::exports::serde::Deserialize;
-use proton_api_core::exports::{anyhow, thiserror};
-use proton_api_core::http::RequestError;
+use crate::subscriber::SubscriberError;
+use anyhow::Error as AnyhowError;
+use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::responses::GetEventResponse;
+use serde::Deserialize;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
+use thiserror::Error;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum EventLoopError {
     #[error("Failed to read from store: {0}")]
-    StoreRead(anyhow::Error),
+    StoreRead(AnyhowError),
     #[error("Failed to write store: {0}")]
-    StoreWrite(anyhow::Error),
+    StoreWrite(AnyhowError),
     #[error("Failed to retrieve event: {0}")]
-    Provider(#[from] RequestError),
+    Provider(#[from] ApiServiceError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
     #[error("Other: {0}")]

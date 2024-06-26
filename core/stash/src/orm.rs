@@ -1127,6 +1127,7 @@ where
 /// * [`Model::save()`]
 /// * [`Model::save_using()`]
 ///
+#[allow(clippy::too_many_lines)]
 async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Result<(), StashError> {
     // If the ID field is auto-incrementing then it is fully managed by the
     // database, and we exclude it from the list here.

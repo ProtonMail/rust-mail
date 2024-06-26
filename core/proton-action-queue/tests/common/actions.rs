@@ -5,8 +5,7 @@ use proton_action_queue::{
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
     SessionProvider, StoredAction,
 };
-use proton_api_core::exports::serde::Serialize;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
 use std::any::Any;
 use std::fmt::{Debug, Formatter};

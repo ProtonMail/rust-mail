@@ -1,9 +1,11 @@
-use crate::db::new_core_test_connection;
-use proton_api_core::domain::{
+use crate::datatypes::{
     DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
-    SettingsFlags, TFAStatus, TimeFormat, TwoFA, User, UserId, UserKeys, UserSettings, WeekStart,
+    RemoteId, SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
+    WeekStart,
 };
-use proton_api_core::exports::crypto::keys::{KeyId, LockedKey, UserKeys as RealUserKeys};
+use crate::db::new_core_test_connection;
+use crate::models::{User, UserSettings};
+use proton_crypto_account::keys::{KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
 use stash::stash::Stash;
 
@@ -17,7 +19,7 @@ async fn test_core_store_and_load_user() {
             .await
             .expect("failed to start transaction");
         user.save_using(&tx).await.expect("failed to store user");
-        let db_user = User::load_using(user.id.clone(), &tx)
+        let db_user = User::load_using(user.remote_id.clone().unwrap(), &tx)
             .await
             .expect("failed to load user")
             .expect("should have value");
@@ -55,7 +57,7 @@ async fn test_core_user_space_updates() {
             .await
             .expect("failed to update used space");
 
-        let db_user = User::load_using(user.id.clone(), &tx)
+        let db_user = User::load_using(user.remote_id.clone().unwrap(), &tx)
             .await
             .expect("failed to load user")
             .expect("should have value");
@@ -68,12 +70,12 @@ async fn test_core_user_space_updates() {
 async fn test_core_store_and_load_user_settings() {
     let stash = new_core_test_connection().await;
 
-    let user_id = UserId::from("USER");
+    let user_id = RemoteId::from("USER");
 
     let mut settings = UserSettings {
-        id: user_id.clone(),
+        remote_id: Some(user_id.clone()),
         email: Email {
-            value: "FooBar".to_string(),
+            value: "FooBar".to_owned(),
             status: 1,
             notify: 2,
             reset: 4,
@@ -83,24 +85,24 @@ async fn test_core_store_and_load_user_settings() {
             expiration_time: Some(1034),
         },
         phone: Phone {
-            value: "1234556".to_string(),
+            value: "1234556".to_owned(),
             status: 9,
             notify: 5,
             reset: 7,
         },
-        two_factor_auth: TwoFA {
-            enabled: TFAStatus::FIDO2,
-            allowed: TFAStatus::TotpOrFIDO2,
+        two_factor_auth: TwoFa {
+            enabled: TfaStatus::Fido2,
+            allowed: TfaStatus::TotpOrFido2,
             expiration_time: Some(9999),
             registered_keys: vec![],
         },
         news: 111,
-        locale: "LOCALE".to_string(),
+        locale: "LOCALE".to_owned(),
         log_auth: LogAuth::Advanced,
-        invoice_text: "my_invoice".to_string(),
+        invoice_text: "my_invoice".to_owned(),
         density: Density::Compact,
         week_start: WeekStart::Sunday,
-        date_format: DateFormat::YYYYMMDD,
+        date_format: DateFormat::YyyyMmDd,
         time_format: TimeFormat::H12,
         welcome: Default::default(),
         early_access: Default::default(),
@@ -143,44 +145,44 @@ async fn test_core_store_and_load_user_settings() {
 
 fn new_test_user(stash: Stash) -> User {
     User {
-        id: UserId::from("my_user_id"),
-        name: Some("my_user_name".to_string()),
-        display_name: Some("My User Name".to_string()),
-        email: "my_name@user.me".to_string(),
+        remote_id: Some(RemoteId::from("my_user_id")),
+        name: Some("my_user_name".to_owned()),
+        display_name: Some("My User Name".to_owned()),
+        email: "my_name@user.me".to_owned(),
         used_space: 1024,
         max_space: 4096,
         max_upload: 512,
-        user_type: proton_api_core::domain::UserType::Proton,
+        user_type: UserType::Proton,
         create_time: 111_111,
         credit: 222_222,
-        currency: "euro".to_string(),
+        currency: "euro".to_owned(),
         keys: UserKeys(RealUserKeys(vec![
             LockedKey {
                 id: KeyId::from("My_key_id"),
                 version: 3,
-                private_key: "my_private_key".to_string(),
+                private_key: "my_private_key".to_owned(),
                 token: None,
                 signature: None,
                 activation: None,
                 primary: true,
                 active: false,
                 flags: None,
-                recovery_secret: Some("recovery_secret".to_string()),
-                recovery_secret_signature: Some("recovery_signature".to_string()),
+                recovery_secret: Some("recovery_secret".to_owned()),
+                recovery_secret_signature: Some("recovery_signature".to_owned()),
                 address_forwarding_id: None,
             },
             LockedKey {
                 id: KeyId::from("My_key_id2"),
                 version: 3,
-                private_key: "my_private_key2".to_string(),
+                private_key: "my_private_key2".to_owned(),
                 token: None,
                 signature: None,
                 activation: None,
                 primary: true,
                 active: false,
                 flags: None,
-                recovery_secret: Some("recovery_secret2".to_string()),
-                recovery_secret_signature: Some("recovery_signature2".to_string()),
+                recovery_secret: Some("recovery_secret2".to_owned()),
+                recovery_secret_signature: Some("recovery_signature2".to_owned()),
                 address_forwarding_id: None,
             },
         ])),
@@ -192,7 +194,7 @@ fn new_test_user(stash: Stash) -> User {
             pass: 33,
         },
         to_migrate: Default::default(),
-        mnemonic_status: proton_api_core::domain::UserMnemonicStatus::Disabled,
+        mnemonic_status: UserMnemonicStatus::Disabled,
         role: 12345,
         private: 442_424,
         subscribed: 3_234_234,

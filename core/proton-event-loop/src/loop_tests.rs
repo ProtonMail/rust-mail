@@ -1,34 +1,57 @@
-use crate::background_loop::MockEventLoopErrorHandler;
-use crate::{
-    BackgroundEventLoop, EventLoopError, EventLoopErrorHandlerReply, MockProvider, MockStore,
-    MockSubscriber, Subscriber, SubscriberError,
+use crate::background_loop::{
+    BackgroundEventLoop, EventLoopErrorHandlerReply, MockEventLoopErrorHandler,
 };
+use crate::provider::MockProvider;
+use crate::store::MockStore;
+use crate::subscriber::{MockSubscriber, Subscriber};
+use crate::{Event, EventLoopError, SubscriberError};
+use anyhow::anyhow;
 use mockall::Sequence;
-use proton_api_core::domain::{EventId, More};
-use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::exports::serde;
-use proton_api_core::exports::serde::{Deserialize, Serialize};
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::responses::GetEventResponse;
+use serde::Deserialize;
 use std::time::Duration;
 use tokio::spawn;
 
-proton_api_core::declare_event!(LoopEvent,{f:bool});
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct LoopEvent {
+    pub event_id: RemoteId,
+    pub f: bool,
+    pub has_more: bool,
+}
+
+impl Event for LoopEvent {
+    type Id = RemoteId;
+    type Response = LoopEvent;
+
+    fn event_id(&self) -> &RemoteId {
+        &self.event_id
+    }
+
+    fn has_more(&self) -> bool {
+        self.has_more
+    }
+}
+
+impl GetEventResponse for LoopEvent {}
 
 #[tokio::test]
 async fn test_loop_event_collection() {
-    let first_event_id = EventId("0".into());
-    let second_event_id = EventId("1".into());
-    let third_event_id = EventId("2".into());
+    let first_event_id = RemoteId::from("0");
+    let second_event_id = RemoteId::from("1");
+    let third_event_id = RemoteId::from("2");
 
     let expected_events = [
         LoopEvent {
             event_id: second_event_id.clone(),
-            more: More::Yes,
             f: false,
+            has_more: true,
         },
         LoopEvent {
             event_id: third_event_id.clone(),
-            more: More::No,
             f: false,
+            has_more: false,
         },
     ];
 
@@ -140,12 +163,12 @@ async fn test_loop_event_collection() {
 
 #[tokio::test]
 async fn test_error_handler_retry_retries_loop() {
-    let first_event_id = EventId("0".into());
-    let second_event_id = EventId("1".into());
+    let first_event_id = RemoteId::from("0");
+    let second_event_id = RemoteId::from("1");
 
     let expected_events = [LoopEvent {
         event_id: second_event_id.clone(),
-        more: More::No,
+        has_more: false,
         f: false,
     }];
 
@@ -262,7 +285,7 @@ async fn test_error_handler_retry_retries_loop() {
 
 #[tokio::test]
 async fn test_error_handler_pause_pauses_loop() {
-    let first_event_id = EventId("0".into());
+    let first_event_id = RemoteId::from("0");
 
     let mut sequence = Sequence::new();
     let mut store = MockStore::new();
@@ -287,11 +310,7 @@ async fn test_error_handler_pause_pauses_loop() {
             .times(1)
             .in_sequence(&mut sequence)
             .withf(move |id| *id == first_event_id)
-            .return_once(move |_| {
-                Err(proton_api_core::http::RequestError::Other(anyhow!(
-                    "Failure"
-                )))
-            });
+            .return_once(move |_| Err(ApiServiceError::UnknownError("Failure".to_owned())));
     }
 
     subscriber.expect_name().return_const("foo".into());
@@ -330,7 +349,7 @@ async fn test_error_handler_pause_pauses_loop() {
 
 #[tokio::test]
 async fn test_error_handler_abort_causes_loop_exit() {
-    let first_event_id = EventId("0".into());
+    let first_event_id = RemoteId::from("0");
 
     let mut sequence = Sequence::new();
     let mut store = MockStore::new();
@@ -355,11 +374,7 @@ async fn test_error_handler_abort_causes_loop_exit() {
             .times(1)
             .in_sequence(&mut sequence)
             .withf(move |id| *id == first_event_id)
-            .return_once(move |_| {
-                Err(proton_api_core::http::RequestError::Other(anyhow!(
-                    "Failure"
-                )))
-            });
+            .return_once(move |_| Err(ApiServiceError::UnknownError("Failure".to_owned())));
     }
 
     subscriber.expect_name().return_const("foo".into());

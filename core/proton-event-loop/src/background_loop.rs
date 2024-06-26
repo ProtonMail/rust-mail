@@ -1,10 +1,10 @@
+use crate::foreground_loop::EventLoop;
 use crate::provider::Provider;
 use crate::store::Store;
-use crate::{EventLoop, EventLoopError, Subscriber};
+use crate::subscriber::Subscriber;
+use crate::{Event, EventLoopError};
 use futures::FutureExt;
 use parking_lot::Mutex;
-use proton_api_core::domain::Event;
-use proton_api_core::exports::tracing::debug;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,6 +12,7 @@ use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tokio::{select, spawn};
 use tokio_util::sync::CancellationToken;
+use tracing::debug;
 
 /// Response returned by the `LoopErrorHandler` to control the behavior of the event loop after an error occurs.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -33,16 +34,16 @@ pub trait EventLoopErrorHandler: Send + Sync {
 
 /// This type polls the proton events at a given interval and distributes incoming events among its subscribers.
 #[derive(Clone)]
-pub struct BackgroundEventLoop<T: Event + 'static> {
+pub struct BackgroundEventLoop<T: Event + From<<T as Event>::Response> + 'static> {
     inner: Arc<SharedBackgroundEventLoopState<T>>,
 }
-impl<T: Event + 'static> Default for BackgroundEventLoop<T> {
+impl<T: Event + From<<T as Event>::Response> + 'static> Default for BackgroundEventLoop<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Event + 'static> BackgroundEventLoop<T> {
+impl<T: Event + From<<T as Event>::Response> + 'static> BackgroundEventLoop<T> {
     #[must_use]
     pub fn new() -> Self {
         let shared = Arc::new(SharedBackgroundEventLoopState {
@@ -126,7 +127,7 @@ impl<T: Event + 'static> BackgroundEventLoop<T> {
     }
 }
 
-impl<T: Event> Drop for BackgroundEventLoop<T> {
+impl<T: Event + From<<T as Event>::Response>> Drop for BackgroundEventLoop<T> {
     fn drop(&mut self) {
         self.cancel();
     }
@@ -156,7 +157,7 @@ struct BackgroundLoopState<T: Event> {
 }
 
 #[doc(hidden)]
-impl<T: Event> BackgroundLoopState<T> {
+impl<T: Event + From<<T as Event>::Response>> BackgroundLoopState<T> {
     #[allow(clippy::ignored_unit_patterns)] // we can not control this macro impl
     async fn run(&mut self, poll_interval: Duration) {
         debug!("Starting loop");

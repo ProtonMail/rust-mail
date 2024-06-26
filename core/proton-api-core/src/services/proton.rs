@@ -55,10 +55,6 @@ pub mod response_data;
 pub mod responses;
 
 use crate::auth::Auth;
-use crate::http::{
-    DEFAULT_APP_VERSION, DEFAULT_HOST_URL, X_PM_HUMAN_VERIFICATION_TOKEN,
-    X_PM_HUMAN_VERIFICATION_TOKEN_TYPE,
-};
 use crate::service::{
     ApiResponse, ApiService, ApiServiceError, Body, Json, Request, ServiceError, NO_PARAMS,
 };
@@ -69,18 +65,21 @@ use crate::services::proton::requests::{
     GetKeysAllOptions, PostAuthInfoRequest, PostAuthRefreshRequest, PostAuthRequest,
     PostAuthSessionsForksRequest, PostAuthTfaRequest,
 };
-use crate::services::proton::response_data::HumanVerificationChallenge;
+use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChallenge};
 use crate::services::proton::responses::{
     GetAddressesResponse, GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
     GetEventResponse, GetEventsLatestResponse, GetKeysAllResponse, GetKeysSaltsResponse,
     GetSettingsResponse, GetUsersResponse, PostAuthInfoResponse, PostAuthRefreshResponse,
     PostAuthResponse, PostAuthSessionsForksResponse,
 };
-use crate::DEFAULT_REDIRECT_URL;
+use crate::{
+    DEFAULT_APP_VERSION, DEFAULT_HOST_URL, DEFAULT_REDIRECT_URL, X_PM_HUMAN_VERIFICATION_TOKEN,
+    X_PM_HUMAN_VERIFICATION_TOKEN_TYPE, X_PM_UID_HEADER,
+};
 use parking_lot::RwLock;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
-use reqwest::{Client, Url};
-use serde::de::DeserializeOwned;
+use reqwest::{Client, Method, Url};
+use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::{Error as JsonError, Value as JsonValue};
 use smart_default::SmartDefault;
@@ -181,13 +180,153 @@ impl ApiService for Proton {
     async fn on_error<J, T>(
         &self,
         error: ApiServiceError,
-        _request: Request<J>,
+        request: Request<J>,
     ) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
         T: ApiResponse,
     {
-        Err(error)
+        // At present, the only extended error details that we are interested in
+        // are those for Unauthorized statuses, because if we have an active,
+        // authenticated session, it means it has expired, and we need to
+        // refresh the token.
+        match &error {
+            ApiServiceError::Unauthorized(_, _) => {
+                // In a situation where we receive a 401 Unauthorized, we need to check if
+                // the session has expired. If it has, we need to refresh the token and
+                // retry the request. Otherwise, it means we are not authenticated, and we
+                // need to log in, so we return the error as is.
+                //
+                // For reference, the API documentation for this endpoint is here:
+                // https://confluence.protontech.ch/display/API/Authentication%2C+sessions%2C+and+tokens
+                //
+                // First we obtain a write lock to ensure no other threads are able to try
+                // to refresh the token at the same time. Meanwhile, during the period from
+                // the first failure (when the token expired) to the time when the token is
+                // refreshed, all requests will fail with the same error. This means that
+                // other threads will get to this piece of code and will also try to refresh
+                // the token. This can lead to a situation where the token is refreshed
+                // multiple times.
+                //
+                // To avoid this being a problem, we check the status of the lock. The only
+                // situation in which the lock is busy is when the token is being refreshed.
+                // This means that another thread is already refreshing the token, and we
+                // don't need to do anything. In this case, we just wait for the lock to be
+                // released, and then we can retry the request.
+                let mut refresh_already_in_progress = false;
+                #[allow(clippy::single_match_else)]
+                let mut auth_lock = match self.auth.try_write() {
+                    Ok(lock) => lock,
+                    Err(_) => {
+                        refresh_already_in_progress = true;
+                        // Wait for the lock to be released
+                        self.auth.write().await
+                    }
+                };
+                // We take the auth details, and put them back later. Meanwhile, if the
+                // refresh attempt fails, we're not logged in anyway, and so clearing the
+                // auth value at this stage is the right thing to do.
+                let Some(mut auth) = auth_lock.take() else {
+                    error!("Token refresh was requested, but there is no auth token");
+                    // Return the original error, i.e. a 401 Unauthorized, if there is no token.
+                    return Err(error);
+                };
+                // We only carry out the refresh if it is not already in progress elsewhere.
+                if refresh_already_in_progress {
+                    tracing::debug!("Account session expired, refresh is already in progress");
+                } else {
+                    tracing::debug!("Account session expired, attempting refresh");
+                    // Refresh the token. In order to avoid a nested calling situation, we do
+                    // this manually, and not by calling post_auth_refresh(). This is not ideal,
+                    // as it creates a slight duplication of logic, but is acceptable for now in
+                    // order to avoid recursion.
+                    let request = Request {
+                        body: Body::Json(PostAuthRefreshRequest {
+                            uid: auth.uid.clone(),
+                            refresh_token: auth.refresh_token.expose_secret().to_owned(),
+                            grant_type: "refresh_token".to_owned(),
+                            response_type: "token".to_owned(),
+                            redirect_uri: DEFAULT_REDIRECT_URL.to_owned(),
+                        }),
+                        method: Method::POST,
+                        url: self.get_url("auth/v4/refresh", None),
+                        ..Default::default()
+                    };
+                    let response = Self::handle_response::<Json<PostAuthRefreshResponse>>(
+                        Self::send_request(self.prepare_request(&request)?)
+                            .await
+                            .map_err(|err| {
+                                error!("Failed to refresh token: {err}");
+                                // Return the original error, i.e. a 401 Unauthorized, if the token refresh
+                                // failed.
+                                error
+                            })?,
+                    )
+                    .await?;
+                    // Store the new token.
+                    auth.uid = response.uid;
+                    auth.access_token = response.access_token;
+                    auth.refresh_token = response.refresh_token;
+                    auth.scope = response.scope;
+                    tracing::debug!("Session has been refreshed");
+                    // Update the persistent headers with the new token. When the request gets
+                    // retried, it will pick up the updated persistent headers.
+                    self.set_header(X_PM_UID_HEADER, auth.uid.as_ref());
+                    self.set_header(
+                        "Authorization",
+                        &format!("Bearer {}", auth.access_token.expose_secret()),
+                    );
+                }
+                *auth_lock = Some(auth);
+                drop(auth_lock);
+                // Retry the request. Note that there is a potential for an infinite loop
+                // here if the token refresh fails, and although there should not be a
+                // situation where the refresh succeeds and then the retry gets another 401
+                // Unauthorized, we track the number of retries in order to prevent this.
+                self.retry_request::<J, T>(request).await
+            }
+            // At present, the only extended error details that we are interested in
+            // are those for UnprocessableEntity statuses, as these can contain details
+            // for human verification, which we then need to carry out. This response
+            // can happen at any time.
+            ApiServiceError::UnprocessableEntity(_, body) => {
+                match serde_json::from_str::<ApiErrorInfo>(body) {
+                    Ok(info) => {
+                        // When we encounter a human verification challenge, we need to perform the
+                        // relevant actions for the specified type of human verification.
+                        if info.code == HUMAN_VERIFICATION_REQUESTED {
+                            let Some(details) = info.details else {
+                                return Err(ApiServiceError::ServiceError(Box::new(
+                                    ProtonApiServiceError::MissingHumanVerificationData,
+                                )));
+                            };
+                            Err(ApiServiceError::ServiceError(Box::new(
+                                ProtonApiServiceError::HumanVerificationRequested(
+                                    match serde_json::from_value::<HumanVerificationChallenge>(
+                                        details.clone(),
+                                    ) {
+                                        Ok(data) => data,
+                                        Err(err) => return Err(ApiServiceError::ServiceError(Box::new(
+                                            ProtonApiServiceError::FailedToDeserializeHumanVerificationData(err),
+                                        )))
+                                    }
+                                ),
+                            )))
+                        } else {
+                            Err(error)
+                        }
+                    }
+                    Err(err) => {
+                        // If we couldn't parse the response, we return it unaltered, as we don't
+                        // know if it contains a human verification challenge unless we can
+                        // deserialise it.
+                        error!("Failed to parse error response: {err}");
+                        Err(error)
+                    }
+                }
+            }
+            _ => Err(error),
+        }
     }
 
     fn set_header(&self, name: &str, value: &str) {
@@ -199,7 +338,7 @@ impl ApiService for Proton {
 }
 
 impl Proton {
-    const BASE_PATH: &'static str = "/core/v4";
+    const BASE_PATH: &'static str = "core/v4";
 
     /// Generates a new external API service handler.
     ///
@@ -295,7 +434,7 @@ impl Proton {
         &self,
         contact_id: RemoteId,
     ) -> Result<GetContactResponse, ApiServiceError> {
-        self.get::<_, Json<_>>(&format!("api/contacts/{contact_id}"), NO_PARAMS, None)
+        self.get::<_, Json<_>>(&format!("contacts/{contact_id}"), NO_PARAMS, None)
             .await
     }
 
@@ -315,7 +454,7 @@ impl Proton {
         &self,
         options: GetContactsOptions,
     ) -> Result<GetContactsResponse, ApiServiceError> {
-        self.get::<_, Json<_>>("api/contacts", Some(options), None)
+        self.get::<_, Json<_>>("contacts", Some(options), None)
             .await
     }
 
@@ -335,7 +474,7 @@ impl Proton {
         &self,
         options: GetContactsEmailsOptions,
     ) -> Result<GetContactsEmailsResponse, ApiServiceError> {
-        self.get::<_, Json<_>>("api/contacts/emails", Some(options), None)
+        self.get::<_, Json<_>>("contacts/emails", Some(options), None)
             .await
     }
 

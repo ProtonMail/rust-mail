@@ -1,9 +1,10 @@
-use crate::db::new_core_test_connection;
-use proton_api_core::domain::{
-    CardData, CardSignature, CardType, Contact, ContactCard, ContactEmail, ContactEmailId,
-    ContactId, ContactLabelId, ContactSendingPreferences, ContactType, ContactTypes, ContactUid,
-    Labels,
+#![allow(non_snake_case)]
+
+use crate::datatypes::{
+    CardType, ContactSendingPreferences, ContactTypes, LabelId, Labels, RemoteId,
 };
+use crate::db::new_core_test_connection;
+use crate::models::{Contact, ContactCard, ContactEmail};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
@@ -107,7 +108,7 @@ async fn test_partial_contact() {
     let contact = contacts.first_mut().unwrap();
     assert_eq!(
         contact.remote_id,
-        Some(ContactId::from("a29olIjFv0rnXxBhSMw=="))
+        Some(RemoteId::from("a29olIjFv0rnXxBhSMw=="))
     );
     assert_eq!(contact.emails().await.unwrap().len(), contact_emails.len());
 
@@ -126,30 +127,30 @@ async fn test_partial_contact() {
 
 fn create_test_full_contact(stash: &Stash) -> Contact {
     Contact {
-        remote_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
+        remote_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
         name: "contact_name".to_owned(),
-        uid: ContactUid::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
+        uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
         size: 1443,
         create_time: 1_503_815_366,
         modify_time: 1_503_815_366,
         contact_emails: create_test_contact_emails(stash),
-        label_ids: Labels(vec![ContactLabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
+        label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
         cards: vec![
             ContactCard {
-                id: Some(1),
-                remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
+                local_id: Some(1),
+                remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
                 card_type: CardType::Signed,
-                data: CardData::from(r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned()),
-                signature: Some(CardSignature::from("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----")),
+                data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
+                signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
                 row_id: Some(1),
                 stash: Some(stash.clone()),
             },
             ContactCard {
-                id: Some(2),
-                remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
+                local_id: Some(2),
+                remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
                 card_type: CardType::EncryptedAndSigned,
-                data: CardData::from("-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----"),
-                signature: Some(CardSignature::from("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----")),
+                data: "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_owned(),
+                signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
                 row_id: Some(2),
                 stash: Some(stash.clone()),
             }
@@ -162,16 +163,14 @@ fn create_test_full_contact(stash: &Stash) -> Contact {
 fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
     vec![
         ContactEmail {
-            remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMw==")),
+            remote_id: Some(RemoteId::from("aefew4323jFv0BhSMw==")),
             name: "contact_email_name_1".to_owned(),
             email: "contact_email_1@contact.test".to_owned(),
-            contact_type: ContactTypes(vec![ContactType::from("work")]),
+            contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
-            remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
-            label_ids: Labels(vec![ContactLabelId::from(
-                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
-            )]),
+            remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+            label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             canonical_email: "contact_email_1@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,
@@ -179,16 +178,14 @@ fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
             stash: Some(stash.clone()),
         },
         ContactEmail {
-            remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMz==")),
+            remote_id: Some(RemoteId::from("aefew4323jFv0BhSMz==")),
             name: "contact_email_name_2".to_owned(),
             email: "contact_email_2@contact.test".to_owned(),
-            contact_type: ContactTypes(vec![ContactType::from("work")]),
+            contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
-            remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
-            label_ids: Labels(vec![ContactLabelId::from(
-                "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
-            )]),
+            remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
+            label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             canonical_email: "contact_email_2@contact.test".to_owned(),
             last_used_time: 0,
             is_proton: true,
@@ -200,16 +197,14 @@ fn create_test_contact_emails(stash: &Stash) -> Vec<ContactEmail> {
 
 fn create_test_partial_contacts() -> Vec<Contact> {
     vec![Contact {
-        remote_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
+        remote_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
         name: "contact_name".to_owned(),
-        uid: ContactUid::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04".to_owned()),
+        uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04".to_owned()),
         size: 1443,
         create_time: 1_503_815_366,
         modify_time: 1_503_815_366,
         contact_emails: vec![],
-        label_ids: Labels(vec![ContactLabelId::from(
-            "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
-        )]),
+        label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
         cards: vec![],
         row_id: Some(1),
         stash: None,

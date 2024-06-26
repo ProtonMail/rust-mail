@@ -1,7 +1,6 @@
 use crate::{SessionProvider, SessionProviderError, StoredAction, StoredActionId};
-use proton_api_core::exports::anyhow;
-use proton_api_core::exports::serde;
-use proton_api_core::exports::thiserror;
+use anyhow::Error as AnyhowError;
+use proton_api_core::service::ApiServiceError;
 use proton_sqlite3::rusqlite;
 use proton_sqlite3::rusqlite::types::{
     FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef,
@@ -14,18 +13,19 @@ use std::any::{Any, TypeId};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
+use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ActionError {
     #[error("Local Source: {0}")]
-    Local(#[source] anyhow::Error),
-    #[error("Local Source: {0}")]
-    Remote(#[from] proton_api_core::http::RequestError),
+    Local(#[source] AnyhowError),
+    #[error("Remote Source: {0}")]
+    Remote(#[from] ApiServiceError),
     #[error("Serialization error: {0}")]
     Serialization(#[source] rmp_serde::encode::Error),
     #[error("Unknown Error: {0}")]
-    Unknown(#[source] anyhow::Error),
+    Unknown(#[source] AnyhowError),
 }
 
 /// ActionId is a unique identifier for each action type. This is required to construct an
@@ -161,7 +161,7 @@ pub trait RemoteActionHandler {
 }
 
 /// Errors that can occur during action factory operations.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ActionFactoryError {
     #[error("Action has unknown type: {0}")]
     UnknownAction(ActionId),
@@ -172,11 +172,11 @@ pub enum ActionFactoryError {
     #[error("Stored action {0} ({1}) failed to create remote handler: {2}")]
     RemoteHandler(StoredActionId, ActionId, ActionFactoryInstanceError),
     #[error("Unknown error:{0}")]
-    Unknown(anyhow::Error),
+    Unknown(AnyhowError),
 }
 
 /// Errors that can occur during action factory instance operations.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ActionFactoryInstanceError {
     #[error("Action has invalid version {0}")]
     InvalidVersion(u32),
@@ -187,7 +187,7 @@ pub enum ActionFactoryInstanceError {
     #[error("Failed to retrieve session: {0}")]
     SessionProvider(#[from] SessionProviderError),
     #[error("Unknown error: {0}")]
-    Unknown(anyhow::Error),
+    Unknown(AnyhowError),
 }
 
 /// A factory for the creation of [`LocationActionHandler`] and [`RemoteActionHandler`] for an action.

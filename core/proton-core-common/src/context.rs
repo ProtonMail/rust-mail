@@ -1,29 +1,33 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
+use crate::datatypes::RemoteId;
 use crate::db::{migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey};
 use crate::os::{KeyChain, KeyChainError};
-use crate::session::CoreSession;
+use crate::session::Session;
 use crate::user_context::{UserContext, UserDatabaseInitializer};
-use crate::CoreSessionCallback;
 use crate::KeyHandlingError;
-use proton_api_core::auth::new_arc_auth_store;
-use proton_api_core::domain::{ExposeSecret, SecretString, UserId};
-use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::exports::tracing::Level;
-use proton_api_core::exports::tracing::{debug, error};
-use proton_api_core::exports::{anyhow, thiserror, tracing};
-use proton_api_core::http::{Client, RequestError};
+use anyhow::{anyhow, Error as AnyhowError};
 use proton_api_core::login::Flow;
-use proton_api_core::Session;
+use proton_api_core::service::{ApiService, ApiServiceError};
+use proton_api_core::services::proton::Config as ApiConfig;
+use proton_api_core::services::proton::Proton;
+use proton_api_core::session::Session as ApiCoreSession;
 use proton_sqlite3::MigratorError;
+use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use thiserror::Error;
+use tokio::sync::RwLock as AsyncRwLock;
+use tracing::{debug, error, Level};
+use url::Url;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum CoreContextError {
+    #[error("API error: {0}")]
+    Api(#[from] ApiServiceError),
     #[error("A Cryptography error occurred")]
     Crypto,
     #[error("Keychain Error: {0}")]
@@ -34,14 +38,12 @@ pub enum CoreContextError {
     DBMigration(#[from] MigratorError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
-    #[error("HTTP Error: {0}")]
-    Http(#[from] RequestError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(#[from] KeyHandlingError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
     #[error("{0}")]
-    Other(anyhow::Error),
+    Other(AnyhowError),
 }
 
 /// Callback when the status of the network changes.
@@ -64,7 +66,7 @@ struct ContextInner {
     session_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
-    client: Client,
+    api: Proton,
     network_callback: Option<Box<dyn NetworkStatusChanged>>,
 }
 
@@ -90,7 +92,7 @@ impl Context {
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
-        client: Client,
+        api_url: Url,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Self> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
@@ -109,7 +111,14 @@ impl Context {
                 key_chain,
                 session_stash: stash,
                 user_db_initializers: initializers,
-                client,
+                api: Proton::new(
+                    ApiConfig {
+                        base_url: api_url.to_string(),
+                        ..Default::default()
+                    },
+                    None,
+                    Arc::new(AsyncRwLock::new(None)),
+                ),
                 network_callback,
             }),
         })
@@ -126,20 +135,19 @@ impl Context {
     /// Create a new login flow for a new user.
     /// # Errors
     /// Returns error if there is no encryption key in the keychain.
-    pub fn new_login_flow(
-        &self,
-        cb: Option<Box<dyn CoreSessionCallback>>,
-    ) -> CoreContextResult<Flow> {
+    pub fn new_login_flow(&self) -> CoreContextResult<Flow> {
         // Check if we have an encryption key
         let _ = self.get_encryption_key()?;
-        let core_session = new_arc_auth_store(CoreSession::new(
+        let _core_session = Session::new(
             None,
             self.inner.session_stash.clone(),
             self.inner.key_chain.clone(),
-            cb,
-        ));
+        );
 
-        let session = Session::new(self.inner.client.clone(), core_session);
+        let session = ApiCoreSession::new(ApiConfig {
+            base_url: self.inner.api.base_url().to_string(),
+            ..Default::default()
+        });
         Ok(Flow::new(session))
     }
 
@@ -159,19 +167,22 @@ impl Context {
         };
 
         debug!("Creating new context for user {}({})", user.email, user.id);
-        let stash = self.new_user_db_pool(&user.id).await?;
+        let stash = self.new_user_db_pool(&user.id.clone().into()).await?;
 
-        let ctx = UserContext::new(login_flow.session().clone(), stash, user.id.clone());
+        let ctx = UserContext::new(login_flow.session().clone(), stash, user.id.clone().into());
 
         Ok(ctx)
     }
 
     /// Get a user context from an existing session.
-    #[tracing::instrument(level=Level::DEBUG, skip(self,session, cb), fields(user_id=?session.user_id))]
+    ///
+    /// # Errors
+    ///
+    /// TODO: Document errors
+    ///
     pub async fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
-        cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> CoreContextResult<UserContext> {
         let stash = self.new_user_db_pool(&session.user_id).await?;
         debug!("decrypting session tokens");
@@ -180,14 +191,16 @@ impl Context {
             .to_decrypted_session(&key)
             .map_err(|_| CoreContextError::Crypto)?;
         let user_id = session.user_id.clone();
-        let core_session = new_arc_auth_store(CoreSession::new(
+        let _core_session = Session::new(
             Some(decrypted_session),
             self.inner.session_stash.clone(),
             self.inner.key_chain.clone(),
-            cb,
-        ));
+        );
         debug!("Creating session");
-        let session = Session::new(self.inner.client.clone(), core_session);
+        let session = ApiCoreSession::new(ApiConfig {
+            base_url: self.inner.api.base_url().to_string(),
+            ..Default::default()
+        });
         let ctx = UserContext::new(session, stash, user_id);
         Ok(ctx)
     }
@@ -250,7 +263,7 @@ impl Context {
         SessionEncryptionKey::from_base64(key.expose_secret()).ok_or(CoreContextError::Crypto)
     }
 
-    async fn new_user_db_pool(&self, user_id: &UserId) -> Result<Stash, MigratorError> {
+    async fn new_user_db_pool(&self, user_id: &RemoteId) -> Result<Stash, MigratorError> {
         let user_db_path = get_user_db_path(&self.inner.user_db_path, user_id);
         let stash = Stash::new(Some(&user_db_path))?;
         debug!("initializing core database");
@@ -270,6 +283,6 @@ fn get_session_db_path(path: impl AsRef<Path>) -> PathBuf {
     path.as_ref().join("session.db")
 }
 
-fn get_user_db_path(path: impl AsRef<Path>, user_id: &UserId) -> PathBuf {
+fn get_user_db_path(path: impl AsRef<Path>, user_id: &RemoteId) -> PathBuf {
     path.as_ref().join(user_id.to_string()).with_extension("db")
 }

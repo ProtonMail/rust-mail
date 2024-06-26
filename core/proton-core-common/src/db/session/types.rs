@@ -1,3 +1,4 @@
+use crate::datatypes::RemoteId;
 use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::Nonce;
 use aes_gcm::aes::Aes256;
@@ -5,31 +6,32 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, AesGcm, Key, KeySizeUser,
 };
-use proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
-use proton_api_core::domain::{Uid, UserId};
-use proton_api_core::exports::base64::prelude::BASE64_STANDARD;
-use proton_api_core::exports::base64::Engine;
-use proton_api_core::exports::thiserror;
+use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
+use proton_api_core::auth::UserKeySecret;
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+use secrecy::ExposeSecret;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::sql_using_serde;
 use stash::stash::Stash;
 use std::string::FromUtf8Error;
+use thiserror::Error;
 use zeroize::Zeroize;
 
 /// Contains the session authentication in a decrypted state, ready to be used by the
 /// http client.
 pub struct DecryptedUserSession {
-    pub session_id: Uid,
-    pub user_id: UserId,
+    pub session_id: RemoteId,
+    pub user_id: RemoteId,
     pub name: Option<String>,
     pub email: String,
-    pub refresh_token: RefreshToken,
-    pub access_token: AccessToken,
+    pub refresh_token: SecretString,
+    pub access_token: SecretString,
     pub key_secret: Option<UserKeySecret>,
-    pub scopes: Scope,
+    pub scopes: String,
 }
 
 impl DecryptedUserSession {
@@ -75,9 +77,9 @@ impl DecryptedUserSession {
 #[TableName("core_sessions")]
 pub struct EncryptedUserSession {
     #[DbField]
-    pub session_id: Uid,
+    pub session_id: RemoteId,
     #[IdField]
-    pub user_id: UserId,
+    pub user_id: RemoteId,
     #[DbField]
     pub name: Option<String>,
     #[DbField]
@@ -89,7 +91,7 @@ pub struct EncryptedUserSession {
     #[DbField]
     pub key_secret: Option<EncryptedKeySecret>,
     #[DbField]
-    pub scopes: Scope,
+    pub scopes: String,
     #[RowIdField]
     #[serde(skip)]
     pub row_id: Option<u64>,
@@ -112,13 +114,13 @@ impl EncryptedUserSession {
         let decrypted_access_token = key
             .decrypt(&self.access_token.0)
             .map_err(|_| DecryptionError::Decryption)?;
-        let decrypted_access_token = AccessToken::from(String::from_utf8(decrypted_access_token)?);
+        let decrypted_access_token = SecretString::from(String::from_utf8(decrypted_access_token)?);
 
         let decrypted_refresh_token = key
             .decrypt(&self.refresh_token.0)
             .map_err(|_| DecryptionError::Decryption)?;
         let decrypted_refresh_token =
-            RefreshToken::from(String::from_utf8(decrypted_refresh_token)?);
+            SecretString::from(String::from_utf8(decrypted_refresh_token)?);
 
         let decrypted_key_secret = self
             .key_secret
@@ -141,7 +143,7 @@ impl EncryptedUserSession {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum DecryptionError {
     #[error("Decryption failed")]
     Decryption,
@@ -163,7 +165,7 @@ impl EncryptedAccessToken {
     ///
     /// # Errors
     /// Returns error if the encryption failed.
-    pub fn new(token: &AccessToken, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+    pub fn new(token: &SecretString, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(token.expose_secret().as_bytes()).map(Self)
     }
 }
@@ -194,7 +196,7 @@ impl EncryptedRefreshToken {
     ///
     /// # Errors
     /// Returns error if the encryption failed.
-    pub fn new(token: &RefreshToken, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+    pub fn new(token: &SecretString, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(token.expose_secret().as_bytes()).map(Self)
     }
 }

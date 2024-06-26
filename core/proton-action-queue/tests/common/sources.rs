@@ -1,6 +1,7 @@
 #![allow(unused)]
 use crate::common::{FolderId, LabelId, Message, MessageId};
-use proton_api_core::exports::anyhow;
+use anyhow::Error as AnyhowError;
+use proton_api_core::service::ApiServiceError;
 use serde::{Deserialize, Serialize};
 use stash::datatypes::{QueryResultString, QueryResultU64};
 use stash::exports::ToSql;
@@ -40,23 +41,23 @@ impl TestLocalSource {
 
 #[mockall::automock]
 pub trait RemoteSource: Send + Sync {
-    fn get_messages(&self) -> Result<Vec<Message>, proton_api_core::http::RequestError>;
+    fn get_messages(&self) -> Result<Vec<Message>, ApiServiceError>;
 
-    fn get_message(&self, id: MessageId) -> Result<Message, proton_api_core::http::RequestError>;
+    fn get_message(&self, id: MessageId) -> Result<Message, ApiServiceError>;
 
     fn move_messages(
         &self,
         folder_id: FolderId,
         message_ids: &[MessageId],
-    ) -> Result<(), proton_api_core::http::RequestError>;
+    ) -> Result<(), ApiServiceError>;
 
     fn mark_messages_read(
         &self,
         value: bool,
         message_ids: &[MessageId],
-    ) -> Result<(), proton_api_core::http::RequestError>;
+    ) -> Result<(), ApiServiceError>;
 
-    fn delete_messages(&self, id: &[MessageId]) -> Result<(), proton_api_core::http::RequestError>;
+    fn delete_messages(&self, id: &[MessageId]) -> Result<(), ApiServiceError>;
 }
 
 pub struct TestLocalSourceTransaction {
@@ -98,7 +99,7 @@ impl TestLocalSourceTransaction {
 
         Ok(())
     }
-    pub async fn create_message(&mut self, read: bool) -> Result<MessageId, anyhow::Error> {
+    pub async fn create_message(&mut self, read: bool) -> Result<MessageId, AnyhowError> {
         Ok(MessageId(
             self.tx
                 .query::<_, QueryResultU64>(
@@ -112,7 +113,7 @@ impl TestLocalSourceTransaction {
         ))
     }
 
-    pub async fn get_message(&self, id: MessageId) -> Result<Option<Message>, anyhow::Error> {
+    pub async fn get_message(&self, id: MessageId) -> Result<Option<Message>, AnyhowError> {
         Ok(self.tx.query::<_, Message>("SELECT messages.rowid AS rowid, messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
 LEFT JOIN message_folders ON messages.id=message_folders.message
 LEFT JOIN message_labels ON messages.id=message_labels.message
@@ -120,7 +121,7 @@ WHERE messages.id = ? GROUP BY messages.id LIMIT 1
 ", params![id]).await?.into_iter().next())
     }
 
-    pub async fn get_messages(&self, ids: &[MessageId]) -> Result<Vec<Message>, anyhow::Error> {
+    pub async fn get_messages(&self, ids: &[MessageId]) -> Result<Vec<Message>, AnyhowError> {
         #[allow(trivial_casts)]
         Ok(self.tx.query::<_, Message>(&format!(
             "SELECT messages.rowid AS rowid, messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
@@ -132,7 +133,7 @@ WHERE messages.id IN ({}) AND messages.deleted=FALSE GROUP BY messages.id ", gen
     pub async fn get_messages_with_deleted(
         &self,
         ids: &[MessageId],
-    ) -> Result<Vec<Message>, anyhow::Error> {
+    ) -> Result<Vec<Message>, AnyhowError> {
         #[allow(trivial_casts)]
         Ok(self.tx.query::<_, Message>(&format!(
             "SELECT messages.rowid AS rowid, messages.id, messages.read, message_folders.folder, GROUP_CONCAT(message_labels.label) as labels FROM messages
@@ -145,7 +146,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         &mut self,
         message_ids: &[MessageId],
         label_id: LabelId,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), AnyhowError> {
         for id in message_ids {
             self.tx
                 .execute(
@@ -161,7 +162,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         &mut self,
         message_ids: &[MessageId],
         label_id: LabelId,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), AnyhowError> {
         for id in message_ids {
             self.tx
                 .execute(
@@ -177,7 +178,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         &mut self,
         message_ids: &[MessageId],
         to_folder_id: FolderId,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), AnyhowError> {
         for id in message_ids {
             self.tx.execute("INSERT INTO message_folders(message,folder, remote) VALUES (?,?,?) ON CONFLICT (message) DO UPDATE SET folder=excluded.folder", params![*id, to_folder_id, to_folder_id]).await?;
         }
@@ -188,7 +189,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         &mut self,
         value: bool,
         ids: &[MessageId],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), AnyhowError> {
         for id in ids {
             self.tx
                 .execute("UPDATE messages SET read=? WHERE id=?", params![value, *id])
@@ -201,7 +202,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         &mut self,
         value: bool,
         ids: &[MessageId],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), AnyhowError> {
         for id in ids {
             self.tx
                 .execute(
@@ -213,7 +214,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         Ok(())
     }
 
-    pub async fn delete_message(&mut self, message_ids: &[MessageId]) -> Result<(), anyhow::Error> {
+    pub async fn delete_message(&mut self, message_ids: &[MessageId]) -> Result<(), AnyhowError> {
         for id in message_ids {
             self.tx
                 .execute("DELETE FROM messages WHERE id=?", params![*id])
@@ -221,7 +222,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         }
         Ok(())
     }
-    pub async fn create_folder(&mut self, name: &str) -> Result<FolderId, anyhow::Error> {
+    pub async fn create_folder(&mut self, name: &str) -> Result<FolderId, AnyhowError> {
         Ok(FolderId(
             self.tx
                 .query::<_, QueryResultU64>(
@@ -235,7 +236,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         ))
     }
 
-    pub async fn rename_folder(&mut self, id: FolderId, name: &str) -> Result<(), anyhow::Error> {
+    pub async fn rename_folder(&mut self, id: FolderId, name: &str) -> Result<(), AnyhowError> {
         self.tx
             .execute(
                 "UPDATE folders SET name=? WHERE id=?",
@@ -245,14 +246,14 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         Ok(())
     }
 
-    pub async fn delete_folder(&mut self, id: FolderId) -> Result<(), anyhow::Error> {
+    pub async fn delete_folder(&mut self, id: FolderId) -> Result<(), AnyhowError> {
         self.tx
             .execute("DELETE FROM folders WHERE id=?", params![id])
             .await?;
         Ok(())
     }
 
-    pub async fn create_label(&mut self, name: &str) -> Result<LabelId, anyhow::Error> {
+    pub async fn create_label(&mut self, name: &str) -> Result<LabelId, AnyhowError> {
         Ok(LabelId(
             self.tx
                 .query::<_, QueryResultU64>(
@@ -266,7 +267,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         ))
     }
 
-    pub async fn rename_label(&mut self, id: LabelId, name: &str) -> Result<(), anyhow::Error> {
+    pub async fn rename_label(&mut self, id: LabelId, name: &str) -> Result<(), AnyhowError> {
         self.tx
             .execute(
                 "UPDATE label SET name=? WHERE id=?",
@@ -276,14 +277,14 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         Ok(())
     }
 
-    pub async fn delete_label(&mut self, id: LabelId) -> Result<(), anyhow::Error> {
+    pub async fn delete_label(&mut self, id: LabelId) -> Result<(), AnyhowError> {
         self.tx
             .execute("DELETE FROM labels WHERE id=?", params![id])
             .await?;
         Ok(())
     }
 
-    pub async fn get_folder_name(&self, id: FolderId) -> Result<Option<String>, anyhow::Error> {
+    pub async fn get_folder_name(&self, id: FolderId) -> Result<Option<String>, AnyhowError> {
         Ok(self
             .tx
             .query::<_, QueryResultString>(
@@ -302,7 +303,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
         &mut self,
         to: FolderId,
         ids: &[MessageId],
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<(), AnyhowError> {
         for id in ids {
             self.tx
                 .execute(
@@ -317,7 +318,7 @@ WHERE messages.id IN ({})  GROUP BY messages.id ", gen_variable_args("?", ids.le
     pub async fn get_move_message_state(
         &self,
         ids: &[MessageId],
-    ) -> Result<Vec<(MessageId, FolderId)>, anyhow::Error> {
+    ) -> Result<Vec<(MessageId, FolderId)>, AnyhowError> {
         #[allow(trivial_casts)]
         let iter = self
             .tx

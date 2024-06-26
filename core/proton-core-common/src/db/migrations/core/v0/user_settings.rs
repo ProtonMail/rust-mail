@@ -6,7 +6,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         tx.execute(
             r"
         CREATE TABLE user_settings (
-            id TEXT PRIMARY KEY,
+            remote_id TEXT PRIMARY KEY,
             email TEXT NOT NULL,
             password TEXT NOT NULL,
             phone TEXT NOT NULL,

@@ -1,5 +1,8 @@
-use crate::db::{EncryptedUserSession, SessionEncryptionKey};
-use proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
+use crate::datatypes::RemoteId;
+use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
+use crate::db::EncryptedUserSession;
+use proton_api_core::auth::UserKeySecret;
+use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
@@ -34,17 +37,15 @@ fn test_encryption() {
 
 #[tokio::test]
 async fn test_session_store_load() {
-    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
-        session_id: Uid::from("session_id"),
-        user_id: UserId::from("user_id"),
-        name: Some("foobar".to_string()),
-        email: "foo@bar.com".to_string(),
-        refresh_token: RefreshToken::from("token".to_string()),
-        access_token: AccessToken::from("access".to_string()),
+        session_id: RemoteId::from("session_id"),
+        user_id: RemoteId::from("user_id"),
+        name: Some("foobar".to_owned()),
+        email: "foo@bar.com".to_owned(),
+        refresh_token: SecretString::from("token".to_owned()),
+        access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: Scope::from("Scope"),
+        scopes: "Scope".to_owned(),
     };
 
     let key = SessionEncryptionKey::random();
@@ -107,28 +108,26 @@ async fn test_session_store_load() {
 
 #[tokio::test]
 async fn test_session_update() {
-    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
-        session_id: Uid::from("session_id"),
-        user_id: UserId::from("user_id"),
-        name: Some("foobar".to_string()),
-        email: "foo@bar.com".to_string(),
-        refresh_token: RefreshToken::from("token".to_string()),
-        access_token: AccessToken::from("access".to_string()),
+        session_id: RemoteId::from("session_id"),
+        user_id: RemoteId::from("user_id"),
+        name: Some("foobar".to_owned()),
+        email: "foo@bar.com".to_owned(),
+        refresh_token: SecretString::from("token".to_owned()),
+        access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: Scope::from("Scope"),
+        scopes: "Scope".to_owned(),
     };
 
     let updated_session = DecryptedUserSession {
-        session_id: Uid::from("session_id_2"),
-        user_id: UserId::from("user_id"),
-        name: Some("foobar".to_string()),
-        email: "foo@bar.com".to_string(),
-        refresh_token: RefreshToken::from("token".to_string()),
-        access_token: AccessToken::from("access".to_string()),
+        session_id: RemoteId::from("session_id_2"),
+        user_id: RemoteId::from("user_id"),
+        name: Some("foobar".to_owned()),
+        email: "foo@bar.com".to_owned(),
+        refresh_token: SecretString::from("token".to_owned()),
+        access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: Scope::from("Scope Scope2"),
+        scopes: "Scope Scope2".to_owned(),
     };
 
     let key = SessionEncryptionKey::random();
@@ -185,17 +184,15 @@ async fn test_session_update() {
 
 #[tokio::test]
 async fn test_session_delete_user_id() {
-    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
-        session_id: Uid::from("session_id"),
-        user_id: UserId::from("user_id"),
-        name: Some("foobar".to_string()),
-        email: "foo@bar.com".to_string(),
-        refresh_token: RefreshToken::from("token".to_string()),
-        access_token: AccessToken::from("access".to_string()),
+        session_id: RemoteId::from("session_id"),
+        user_id: RemoteId::from("user_id"),
+        name: Some("foobar".to_owned()),
+        email: "foo@bar.com".to_owned(),
+        refresh_token: SecretString::from("token".to_owned()),
+        access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: Scope::from("Scope"),
+        scopes: "Scope".to_owned(),
     };
     let key = SessionEncryptionKey::random();
     let mut encrypted_session = session
@@ -235,17 +232,15 @@ async fn test_session_delete_user_id() {
 
 #[tokio::test]
 async fn test_session_delete_session_id() {
-    use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
-    use proton_api_core::domain::{Uid, UserId};
     let session = DecryptedUserSession {
-        session_id: Uid::from("session_id"),
-        user_id: UserId::from("user_id"),
-        name: Some("foobar".to_string()),
-        email: "foo@bar.com".to_string(),
-        refresh_token: RefreshToken::from("token".to_string()),
-        access_token: AccessToken::from("access".to_string()),
+        session_id: RemoteId::from("session_id"),
+        user_id: RemoteId::from("user_id"),
+        name: Some("foobar".to_owned()),
+        email: "foo@bar.com".to_owned(),
+        refresh_token: SecretString::from("token".to_owned()),
+        access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: Scope::from("Scope"),
+        scopes: "Scope".to_owned(),
     };
     let key = SessionEncryptionKey::random();
     let mut encrypted_session = session

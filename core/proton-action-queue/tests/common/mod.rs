@@ -7,7 +7,7 @@ pub use domain::*;
 use proton_action_queue::{
     ActionFactory, ActionQueue, ActionStore, SessionProvider, SessionProviderError,
 };
-use proton_api_core::Session;
+use proton_api_core::session::Session;
 pub use sources::*;
 use stash::stash::Stash;
 use std::io::stdout;

@@ -355,8 +355,7 @@ pub trait ApiService {
     /// * `query`    - The URL query string.
     ///
     fn get_url(&self, endpoint: &str, query: Option<&str>) -> String {
-        let mut url = self.base_url().clone();
-        url.set_path(endpoint);
+        let mut url = self.base_url().clone().join(endpoint).unwrap();
         if let Some(q) = query {
             url.set_query(Some(q));
         }

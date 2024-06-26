@@ -1,8 +1,11 @@
-use crate::{EventLoopError, Provider, Store, Subscriber};
-use proton_api_core::domain::{Event, EventId};
-use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::exports::tracing::{self, debug, error, Level};
-use proton_api_core::http;
+use crate::provider::Provider;
+use crate::store::Store;
+use crate::subscriber::Subscriber;
+use crate::{Event, EventLoopError};
+use anyhow::anyhow;
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::RemoteId;
+use tracing::{self, debug, error, Level};
 
 /// Collect events from the Proton Servers in a loop and publish the events to the subscribers.
 /// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
@@ -26,7 +29,7 @@ impl EventLoop {
     }
 
     #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
-    pub async fn initialize<T: Event>(
+    pub async fn initialize<T: Event + From<<T as Event>::Response>>(
         &self,
         store: &dyn Store,
         provider: &dyn Provider<T>,
@@ -36,8 +39,8 @@ impl EventLoop {
         } else {
             debug!("No event id in event store, retrieving latest");
             let event_id = provider.get_latest_event_id().await?;
-            store.store(&event_id).map_err(EventLoopError::StoreWrite)?;
             debug!("Last event id = {event_id}");
+            store.store(event_id).map_err(EventLoopError::StoreWrite)?;
         }
         Ok(())
     }
@@ -47,7 +50,7 @@ impl EventLoop {
     /// iteration.
     /// The execution of the loop is aborted on the first error.
     #[tracing::instrument(name="event_poll",level=Level::DEBUG, skip(self, store, provider, subscribers))]
-    pub async fn poll<T: Event>(
+    pub async fn poll<T: Event + From<<T as Event>::Response>>(
         &self,
         store: &dyn Store,
         provider: &dyn Provider<T>,
@@ -74,7 +77,7 @@ impl EventLoop {
                 return Err(EventLoopError::Other("Collected no events".into()));
             };
 
-            if *last_event.event_id() == last_event_id {
+            if *last_event.event_id() == last_event_id.into() {
                 debug!("No new events");
                 //no new api events
                 return Ok(());
@@ -98,7 +101,7 @@ impl EventLoop {
             .event_id()
             .clone();
 
-        if let Err(e) = store.store(&new_event_id) {
+        if let Err(e) = store.store(new_event_id.clone().into()) {
             error!("Failed to store new event id: {e}");
             return Err(EventLoopError::StoreWrite(e));
         }
@@ -108,11 +111,11 @@ impl EventLoop {
         Ok(())
     }
 
-    async fn collect_events<T: Event>(
+    async fn collect_events<T: Event + From<<T as Event>::Response>>(
         &self,
         provider: &dyn Provider<T>,
-        last_event_id: &EventId,
-    ) -> http::Result<Vec<T>> {
+        last_event_id: &RemoteId,
+    ) -> Result<Vec<T>, ApiServiceError> {
         let mut events = Vec::with_capacity(4);
 
         let event = provider.get_event(last_event_id).await?;
@@ -129,7 +132,7 @@ impl EventLoop {
                 return Ok(events);
             }
 
-            let event = provider.get_event(&next_event_id).await?;
+            let event = provider.get_event(&next_event_id.into()).await?;
             has_more = event.has_more();
             next_event_id = event.event_id().clone();
             events.push(event);

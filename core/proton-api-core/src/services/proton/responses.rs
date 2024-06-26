@@ -37,13 +37,13 @@ use proton_crypto_account::keys::{
     APIUnverifiedPublicAddressKeyGroup as UnverifiedPublicAddressKeyGroup,
 };
 use serde::Deserialize;
-#[cfg(test)]
+#[cfg(any(test, feature = "integration_tests"))]
 use serde::Serialize;
 use serde_with::serde_as;
 
 /// The response containing addresses.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetAddressesResponse {
     /// The list of addresses.
@@ -52,7 +52,7 @@ pub struct GetAddressesResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetContactResponse {
     /// TODO: Document this field.
@@ -61,7 +61,7 @@ pub struct GetContactResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetContactsEmailsResponse {
     /// TODO: Document this field.
@@ -73,7 +73,7 @@ pub struct GetContactsEmailsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetContactsResponse {
     /// TODO: Document this field.
@@ -85,7 +85,7 @@ pub struct GetContactsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetEventsLatestResponse {
     /// TODO: Document this field.
@@ -95,7 +95,7 @@ pub struct GetEventsLatestResponse {
 
 /// Available public keys.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 pub struct GetKeysAllResponse {
@@ -129,6 +129,7 @@ pub struct GetKeysAllResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetKeysSaltsResponse {
     /// TODO: Document this field.
@@ -137,7 +138,7 @@ pub struct GetKeysSaltsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetSettingsResponse {
     /// TODO: Document this field.
@@ -147,7 +148,7 @@ pub struct GetSettingsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetUsersResponse {
     /// TODO: Document this field.
@@ -156,7 +157,7 @@ pub struct GetUsersResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostAuthResponse {
     /// TODO: Document this field.
@@ -192,7 +193,7 @@ pub struct PostAuthResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostAuthRefreshResponse {
     /// TODO: Document this field.
@@ -214,7 +215,7 @@ pub struct PostAuthRefreshResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostAuthInfoResponse {
     /// TODO: Document this field.
@@ -245,7 +246,7 @@ pub struct PostAuthInfoResponse {
 /// The fields in the JSON response are not currently documented.
 ///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(test, derive(Serialize))]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostAuthSessionsForksResponse {
     /// The selector that is returned when a session is forked. It's not clear

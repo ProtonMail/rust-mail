@@ -3,8 +3,7 @@ use crate::common::{
     TestLocalSourceTransaction,
 };
 use mockall::*;
-use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::http::RequestError;
+use proton_api_core::service::ApiServiceError;
 use std::sync::Arc;
 
 mod common;
@@ -52,7 +51,7 @@ async fn successive_message_move_but_fails_on_first_remote_action() {
     remote
         .expect_move_messages()
         .with(predicate::eq(folder3_id), predicate::always())
-        .returning(|_, _| Err(RequestError::Other(anyhow!("failed to move"))))
+        .returning(|_, _| Err(ApiServiceError::UnknownError("failed to move".to_owned())))
         .times(1);
 
     let queue = ctx.new_action_queue(Arc::new(remote));
@@ -126,7 +125,7 @@ async fn move_message_to_folder_remote_exec_fails() {
     let remote = new_mock_remote(|m| {
         m.expect_move_messages()
             .with(predicate::eq(folder1_id), predicate::always())
-            .returning(|_, _| Err(RequestError::Other(anyhow!("failed to move"))))
+            .returning(|_, _| Err(ApiServiceError::UnknownError("failed to move".to_owned())))
             .times(1);
     });
 
@@ -413,7 +412,7 @@ async fn delete_message_queued_action_executed_after_local_change() {
         m.expect_delete_messages()
             .times(1)
             .with(predicate::eq([message_id]))
-            .returning(|_| Err(RequestError::Other(anyhow!("failed to delete"))));
+            .returning(|_| Err(ApiServiceError::UnknownError("failed to delete".to_owned())));
     });
 
     let queue = ctx.new_action_queue(remote);

@@ -1,15 +1,11 @@
-use proton_api_core::domain::UserId;
-use proton_api_core::Session;
+pub use self::keys::*;
+use crate::datatypes::RemoteId;
+use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::stash::Stash;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
-
-pub use self::keys::*;
-mod addresses;
-mod contacts;
 mod keys;
-mod user;
 
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
@@ -25,7 +21,7 @@ pub trait UserDatabaseInitializer: Send + Sync {
 pub struct UserContext {
     session: Session,
     stash: Stash,
-    user_id: UserId,
+    user_id: RemoteId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
 }
 
@@ -36,7 +32,7 @@ impl Debug for UserContext {
 }
 
 impl UserContext {
-    pub(crate) fn new(session: Session, stash: Stash, id: UserId) -> Self {
+    pub(crate) fn new(session: Session, stash: Stash, id: RemoteId) -> Self {
         Self {
             session,
             stash,
@@ -65,7 +61,7 @@ impl UserContext {
 
     /// Get the user id of this context.
     #[must_use]
-    pub fn user_id(&self) -> &UserId {
+    pub fn user_id(&self) -> &RemoteId {
         &self.user_id
     }
 }

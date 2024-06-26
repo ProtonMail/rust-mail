@@ -1,17 +1,16 @@
 #![allow(clippy::module_name_repetitions)]
 
+use crate::datatypes::{ProductUsedSpace, RemoteId};
+use crate::events::{Action, ContactEmailEvent, ContactEvent};
+use crate::models::{Address, User, UserSettings};
+use anyhow::anyhow;
 use async_trait::async_trait;
-use proton_api_core::domain::{
-    Action, Address, ContactEmailEvent, ContactEvent, Event, ProductUsedSpace, User, UserId,
-    UserSettings,
-};
-use proton_api_core::exports::anyhow::anyhow;
-use proton_api_core::exports::tracing::{debug, error, Level};
-use proton_api_core::exports::{anyhow, tracing};
-use proton_event_loop::SubscriberError;
+use proton_event_loop::subscriber::{Subscriber, SubscriberError};
+use proton_event_loop::Event;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
+use tracing::{debug, error, Level};
 
 pub trait CoreEvent: Event {
     fn get_core_event_user(&self) -> Option<&User>;
@@ -41,7 +40,7 @@ pub trait CoreEventSubscriberConnectionProvider: Send + Sync {
     ///
     /// # Errors
     /// Return error if the connection or the user id can not be obtained.
-    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(UserId, Stash)>;
+    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)>;
 }
 pub struct CoreEventSubscriber<T: CoreEventSubscriberConnectionProvider>(T);
 
@@ -52,7 +51,7 @@ impl<T: CoreEventSubscriberConnectionProvider> CoreEventSubscriber<T> {
 }
 
 #[async_trait]
-impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> proton_event_loop::Subscriber<E>
+impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
     for CoreEventSubscriber<T>
 {
     fn name(&self) -> &str {
@@ -136,7 +135,7 @@ async fn handle_contact_event(
             Action::Delete => tx
                 .execute(
                     "DELETE FROM contacts WHERE remote_id = ?",
-                    params![event.id.clone()],
+                    params![event.remote_id.clone()],
                 )
                 .await
                 .map(|_| ())
@@ -167,7 +166,7 @@ async fn handle_contact_email_event(
             Action::Delete => tx
                 .execute(
                     "DELETE FROM contact_emails WHERE remote_id = ?",
-                    params![event.id.clone()],
+                    params![event.remote_id.clone()],
                 )
                 .await
                 .map(|_| ())
