@@ -210,7 +210,6 @@ fn test_address_key_generate() {
         &unlocked_user_key,
     )
     .expect("ok");
-
     // Unlock ok
     fresh_address_key
         .unlock_and_assign_key_id(&provider, KeyId(String::new()), &unlocked_user_key)
