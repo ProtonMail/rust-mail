@@ -92,6 +92,22 @@ impl KeyFlag {
     pub fn set_not_obsolete(&mut self) {
         self.0 |= FLAG_NOT_OBSOLETE;
     }
+    /// Sets the key flag to no email encryption.
+    pub fn set_email_no_encryption(&mut self) {
+        self.0 |= FLAG_EMAIL_NO_ENCRYPT;
+    }
+    /// Sets the key flag to email encryption.
+    pub fn set_email_encryption(&mut self) {
+        self.0 &= !FLAG_EMAIL_NO_ENCRYPT;
+    }
+    /// Sets the key flag to no email encryption.
+    pub fn set_email_no_sign(&mut self) {
+        self.0 |= FLAG_EMAIL_NO_SIGN;
+    }
+    /// Sets the key flag to email sign.
+    pub fn set_email_sign(&mut self) {
+        self.0 &= !FLAG_EMAIL_NO_SIGN;
+    }
 }
 
 crate::string_id! {

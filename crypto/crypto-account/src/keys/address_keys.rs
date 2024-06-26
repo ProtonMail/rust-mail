@@ -195,9 +195,9 @@ pub struct LocalAddressKey {
     pub token: EncryptedKeyToken,
     /// `OpenPGP` Signature to verify the token.
     pub signature: KeyTokenSignature,
-    /// Key flags
+    /// Address key flags
     pub flags: KeyFlag,
-    /// Key flags
+    /// Flag to indicate if this address key is the primary address key.
     pub primary: bool,
 }
 
