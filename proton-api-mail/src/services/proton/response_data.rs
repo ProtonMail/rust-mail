@@ -25,7 +25,10 @@
 
 use crate::services::proton::common::LabelType;
 use proton_api_core::services::proton::common::RemoteId;
-use proton_api_core::services::proton::response_data::ApiErrorInfo;
+use proton_api_core::services::proton::response_data::{
+    Action, Address, ApiErrorInfo, ProductUsedSpace, User, UserSettings,
+};
+use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
@@ -38,7 +41,6 @@ use serde_repr::Serialize_repr;
 use serde_with::serde_as;
 use smart_default::SmartDefault;
 use std::collections::HashMap;
-
 //  ENUMS
 //==============================================================================
 
@@ -454,6 +456,34 @@ pub struct ConversationCount {
     pub unread: u64,
 }
 
+/// Data for an event related to a [`ConversationEvent`] record.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct ConversationEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "EventID")]
+    pub event_id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub conversation: Option<Conversation>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
+}
+
+impl GetEventResponse for ConversationEvent {}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
@@ -533,6 +563,92 @@ pub struct Label {
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub sticky: bool,
 }
+
+/// Data for an event related to a [`LabelEvent`] record.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct LabelEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "EventID")]
+    pub event_id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
+
+    /// TODO: Document this field.
+    pub label: Option<Label>,
+}
+
+impl GetEventResponse for LabelEvent {}
+
+/// Data for an event related to a [`MailEvent`] record.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct MailEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "EventID")]
+    pub event_id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub addresses: Option<Vec<Address>>,
+
+    /// TODO: Document this field.
+    pub conversation_counts: Option<Vec<ConversationCount>>,
+
+    /// TODO: Document this field.
+    pub conversations: Option<Vec<ConversationEvent>>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
+
+    /// TODO: Document this field.
+    pub labels: Option<Vec<LabelEvent>>,
+
+    /// TODO: Document this field.
+    pub mail_settings: Option<MailSettings>,
+
+    /// TODO: Document this field.
+    pub message_counts: Option<Vec<MessageCount>>,
+
+    /// TODO: Document this field.
+    pub messages: Option<Vec<MessageEvent>>,
+
+    /// TODO: Document this field.
+    pub product_used_space: Option<ProductUsedSpace>,
+
+    /// TODO: Document this field.
+    pub used_space: Option<i64>,
+
+    /// TODO: Document this field.
+    pub user: Option<User>,
+
+    /// TODO: Document this field.
+    pub user_settings: Option<UserSettings>,
+}
+
+impl GetEventResponse for MailEvent {}
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, SmartDefault)]
@@ -814,6 +930,34 @@ pub struct MessageCount {
     /// TODO: Document this field.
     pub unread: u64,
 }
+
+/// Data for an event related to a [`MessageEvent`] record.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct MessageEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "EventID")]
+    pub event_id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub message: Option<MessageMetadata>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
+}
+
+impl GetEventResponse for MessageEvent {}
 
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]

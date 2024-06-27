@@ -7,6 +7,7 @@ mod mailbox;
 pub mod avatar;
 
 mod datatypes;
+mod events;
 mod models;
 mod proton_color;
 mod user_context;
