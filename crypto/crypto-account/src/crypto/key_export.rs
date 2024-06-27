@@ -56,7 +56,7 @@ pub fn generate_locked_pgp_key_with_token<Provider: PGPProviderSync>(
 }
 
 // Helper function to generate a fresh token and encrypt/sign it.
-fn generate_token_values<Provider: PGPProviderSync>(
+pub fn generate_token_values<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     parent_key: &UnlockedUserKey<Provider>,
     context: Option<&Provider::SigningContext>,

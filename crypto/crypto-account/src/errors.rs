@@ -33,6 +33,8 @@ pub enum AccountCryptoError {
     TokenEncryption(CryptoError),
     #[error("Failed to encode token {0}")]
     TokenEncoding(#[from] FromUtf8Error),
+    #[error("Found a legacy key when expecting no legacy key")]
+    UnexpectedLegacy,
 }
 
 #[derive(Debug, thiserror::Error)]

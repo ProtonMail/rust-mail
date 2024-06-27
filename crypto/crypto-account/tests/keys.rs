@@ -25,17 +25,34 @@ YJWp7nLYBj9YSh4+qOa/5QM=
 -----END PGP PRIVATE KEY BLOCK-----
 ";
 
+const TEST_USER_KEY_CHANGED: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xYYEZkI9XRYJKwYBBAHaRw8BAQdAqWn9T/nEzBz31DqsXAUdtIGUnrIHNrfD
+ZOuvtEIf8G/+CQMI8okkwdBKjuxgKBsLTTZH6cHgAlro1OnVNykZFiG6qASZ
+Omwsl9FjZdozMlq/4AyPwDG2tkwzyEHKzn+4/Daw+FBs9ve/2Z2kOq9aEn6I
+nc07bm90X2Zvcl9lbWFpbF91c2VAZG9tYWluLnRsZCA8bm90X2Zvcl9lbWFp
+bF91c2VAZG9tYWluLnRsZD7CjAQQFgoAPgWCZkI9XQQLCQcICZBICuUpsYEG
+ZQMVCAoEFgACAQIZAQKbAwIeARYhBCF533Bw13ukWKtNIUgK5SmxgQZlAADY
+pAD+NXPfGC0v116+xHi9HIcdDUXrQpd8pRbKRcHHKZ94DF0BAOYorJa1OHzk
+wzjxWQEz5Y82SLRYLNmlIVF+hHXlLtYAx4sEZkI9XRIKKwYBBAGXVQEFAQEH
+QKm+vMMpfMo45etkNw3LR+jFgMrbe4hZ9zPVZCxJUZtRAwEIB/4JAwg+PXvg
+gHJFA2ApL3+4HL9kuK3+HzOdTrWAGQ2dET1V4aV84gxW25FBTZbb+QqLhIym
++sYefVPntt6M/VNupYyXRs27abjPqm2YtH+rLnhwwngEGBYKACoFgmZCPV0J
+kEgK5SmxgQZlApsMFiEEIXnfcHDXe6RYq00hSArlKbGBBmUAANN3AP9s1V6S
+Lg9ogdrlmtTwuZhRXHQzUqC2AoLCv/lW0hz0ZQD+LBAeT7ymSyrwRtIvUh0b
+qnK1SNfocPNfh//OecgiqA4=
+=LMjL
+-----END PGP PRIVATE KEY BLOCK-----
+";
+
 const TEST_KEY_PASSWORD: &str = "password";
 
 fn get_test_decrypted_user_key<T: PGPProviderSync>(
     provider: &T,
+    test_key: &str,
 ) -> Vec<DecryptedUserKey<T::PrivateKey, T::PublicKey>> {
     let private_key = provider
-        .private_key_import(
-            TEST_USER_KEY,
-            TEST_KEY_PASSWORD.as_bytes(),
-            DataEncoding::Armor,
-        )
+        .private_key_import(test_key, TEST_KEY_PASSWORD.as_bytes(), DataEncoding::Armor)
         .unwrap();
     let public_key = provider.private_key_to_public_key(&private_key).unwrap();
     vec![DecryptedUserKey {
@@ -118,7 +135,7 @@ fn get_test_key_id() -> KeyId {
 #[test]
 fn test_address_keys_decrypt() {
     let provider = new_pgp_provider();
-    let user_keys = get_test_decrypted_user_key(&provider);
+    let user_keys = get_test_decrypted_user_key(&provider, TEST_USER_KEY);
     let address_keys = get_test_locked_address_key();
     let unlocked_keys = address_keys.unlock(&provider, user_keys.as_slice(), None);
     assert!(unlocked_keys.failed.is_empty());
@@ -131,7 +148,7 @@ fn test_address_keys_legacy_decrypt() {
     let srp_provider = new_srp_provider();
     let key_id = get_test_key_id();
     let salts = get_test_salts();
-    let user_keys = get_test_decrypted_user_key(&provider);
+    let user_keys = get_test_decrypted_user_key(&provider, TEST_USER_KEY);
     let address_keys = get_test_locked_address_key();
 
     let key_secret = salts
@@ -188,6 +205,30 @@ fn test_user_key_generate() {
 }
 
 #[test]
+fn test_user_key_change_secret() {
+    let provider = new_pgp_provider();
+    let test_user_key = get_test_decrypted_user_key(&provider, TEST_USER_KEY)
+        .into_iter()
+        .next()
+        .unwrap();
+    let test_secret = KeySecret::new("test_secret".into());
+    let locked_key = LocalUserKey::from_unlocked(&provider, &test_user_key, &test_secret)
+        .expect("lock should succeed");
+    // Unlock ok
+    locked_key
+        .unlock_and_assign_key_id(&provider, KeyId(String::default()), &test_secret)
+        .expect("unlock should succeed");
+
+    // Unlock fail
+    let unlock_result = locked_key.unlock_and_assign_key_id(
+        &provider,
+        KeyId(String::new()),
+        &KeySecret::new("test_secret_wrong".into()),
+    );
+    assert!(unlock_result.is_err());
+}
+
+#[test]
 fn test_address_key_generate() {
     let provider = new_pgp_provider();
     let srp_provider = new_srp_provider();
@@ -216,11 +257,64 @@ fn test_address_key_generate() {
         .expect("unlock should not fail");
 
     // Unlock fail
-    let wrong_key = get_test_decrypted_user_key(&provider)
+    let wrong_key = get_test_decrypted_user_key(&provider, TEST_USER_KEY)
         .into_iter()
         .next()
         .unwrap();
     let unlock_result =
         fresh_address_key.unlock_and_assign_key_id(&provider, KeyId(String::new()), &wrong_key);
+    assert!(unlock_result.is_err());
+}
+
+#[test]
+fn test_address_key_change_parent_key() {
+    // Init test data
+    let provider = new_pgp_provider();
+    let user_keys = get_test_decrypted_user_key(&provider, TEST_USER_KEY);
+    let address_keys = get_test_locked_address_key();
+    let unlocked_keys = address_keys.unlock(&provider, user_keys.as_slice(), None);
+    assert!(unlocked_keys.failed.is_empty());
+    assert!(!unlocked_keys.unlocked_keys.is_empty());
+
+    let other_user_key = get_test_decrypted_user_key(&provider, TEST_USER_KEY_CHANGED)
+        .into_iter()
+        .next()
+        .unwrap();
+    // Non-Legacy
+    let test_address_key = unlocked_keys.unlocked_keys.into_iter().next().unwrap();
+    let locked_address_key =
+        LocalAddressKey::from_unlocked(&provider, &test_address_key, &other_user_key)
+            .expect("lock should work");
+
+    // Unlock ok
+    locked_address_key
+        .unlock_and_assign_key_id(&provider, KeyId(String::new()), &other_user_key)
+        .expect("unlock should not fail");
+
+    // Unlock fail
+    let unlock_result = locked_address_key.unlock_and_assign_key_id(
+        &provider,
+        KeyId(String::new()),
+        user_keys.first().unwrap(),
+    );
+    assert!(unlock_result.is_err());
+
+    // Legacy
+    let test_secret = KeySecret::new("test_secret".into());
+    let locked_address_key =
+        LocalAddressKey::from_unlocked_legacy(&provider, &test_address_key, &test_secret)
+            .expect("lock should work");
+
+    // Unlock ok
+    locked_address_key
+        .unlock_legacy_and_assign_key_id(&provider, KeyId(String::new()), &test_secret)
+        .expect("unlock should not fail");
+
+    // Unlock fail
+    let unlock_result = locked_address_key.unlock_legacy_and_assign_key_id(
+        &provider,
+        KeyId(String::new()),
+        &KeySecret::new("test_secret_wrong".into()),
+    );
     assert!(unlock_result.is_err());
 }

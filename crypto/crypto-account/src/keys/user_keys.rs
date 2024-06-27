@@ -220,6 +220,29 @@ impl LocalUserKey {
         .map(|private_key| LocalUserKey { private_key })
     }
 
+    /// Lock an unlocked user key with a fresh secret.
+    ///
+    /// This needs to happen for example if the user changes its password.
+    /// Since the key is locked with a new secret, it must be synced with the backend,
+    /// and must be considered as local only.
+    pub fn from_unlocked<Provider: PGPProviderSync>(
+        pgp_provider: &Provider,
+        unlocked_user_key: &DecryptedUserKey<<Provider>::PrivateKey, <Provider>::PublicKey>,
+        salted_password: &KeySecret,
+    ) -> Result<Self, AccountCryptoError> {
+        let private_key = pgp_provider
+            .private_key_export(
+                &unlocked_user_key.private_key,
+                salted_password,
+                DataEncoding::Armor,
+            )
+            .map(|key_bytes| String::from_utf8(key_bytes.as_ref().to_vec()))
+            .map_err(|_err| AccountCryptoError::GenerateKeyArmor)? // For the CryptoError error
+            .map_err(|_err| AccountCryptoError::GenerateKeyArmor) // For the FromUtf8 error
+            .map(ArmoredPrivateKey)?;
+        Ok(Self { private_key })
+    }
+
     /// Unlocks the locally generated user key with the provided salted password.
     ///
     /// The key id is retrieved from the API upon registering the key.
