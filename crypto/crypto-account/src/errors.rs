@@ -42,9 +42,15 @@ pub enum SKLError {
     #[error("Failed to parse the SKL data: {0}")]
     ParseError(Box<dyn std::error::Error>),
     #[error("Failed to verify SKL signature: {0}")]
-    SignatureVerificationError(#[from] VerificationError),
+    SignatureVerification(#[from] VerificationError),
     #[error("No SKL data present")]
     NoSKLData,
+    #[error("Failed to encode SKL data to json: {0}")]
+    JsonEncode(#[from] serde_json::Error),
+    #[error("Failed to create signature: {0}")]
+    SignatureCreation(CryptoError),
+    #[error("Failed to convert binary data to UTF-8 string: {0}")]
+    StringConversion(#[from] FromUtf8Error),
 }
 
 #[derive(Debug, thiserror::Error)]
