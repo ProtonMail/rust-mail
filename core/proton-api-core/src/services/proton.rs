@@ -54,16 +54,19 @@ pub mod responses;
 
 use crate::service::{ApiService, ApiServiceError, NO_PARAMS};
 use crate::services::proton::common::RemoteId;
-use crate::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
+use crate::services::proton::requests::{
+    GetContactsEmailsOptions, GetContactsOptions, GetEventOptions,
+};
 use crate::services::proton::responses::{
     GetAddressesResponse, GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
-    GetSettingsResponse, GetUsersResponse,
+    GetEventResponse, GetEventsLatestResponse, GetSettingsResponse, GetUsersResponse,
 };
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Client, RequestBuilder, Url,
 };
 use serde::de::DeserializeOwned;
+use serde::Deserialize;
 
 /// A service for communicating with the Proton API.
 #[derive(Clone, Debug)]
@@ -187,6 +190,53 @@ impl Proton {
         options: GetContactsEmailsOptions,
     ) -> Result<GetContactsEmailsResponse, ApiServiceError> {
         self.get("api/contacts/emails", Some(options), None).await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `event_id`            - The ID of the event to get.
+    /// * `conversation_counts` - TODO: Document this parameter.
+    /// * `message_counts`      - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn get_event<T>(
+        &self,
+        event_id: RemoteId,
+        conversation_counts: bool,
+        message_counts: bool,
+    ) -> Result<T, ApiServiceError>
+    where
+        T: GetEventResponse + for<'de> Deserialize<'de>,
+    {
+        self.get(
+            &format!("core/v5/events/{event_id}"),
+            Some(GetEventOptions {
+                conversation_counts,
+                message_counts,
+            }),
+            None,
+        )
+        .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn get_events_latest(&self) -> Result<GetEventsLatestResponse, ApiServiceError> {
+        self.get(
+            &format!("{}/events/latest", Self::BASE_PATH),
+            NO_PARAMS,
+            None,
+        )
+        .await
     }
 
     /// TODO: Document this method.

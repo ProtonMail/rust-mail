@@ -24,6 +24,7 @@
 //!
 
 use crate::services::proton::common::RemoteId;
+use crate::services::proton::responses::GetEventResponse;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
 use serde::Deserialize;
 #[cfg(test)]
@@ -36,6 +37,24 @@ use serde_with::serde_as;
 
 //  ENUMS
 //==============================================================================
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(test, derive(Serialize_repr))]
+#[repr(u8)]
+pub enum Action {
+    /// TODO: Document this field.
+    Delete = 0,
+
+    /// TODO: Document this field.
+    Create = 1,
+
+    /// TODO: Document this field.
+    Update = 2,
+
+    /// TODO: Document this field.
+    UpdateFlags = 3,
+}
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
@@ -434,6 +453,62 @@ pub struct ContactEmail {
     /// TODO: Document this field.
     pub order: u32,
 }
+
+/// Data for an event related to a [`ContactEmail`] record.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct ContactEmailEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "EventID")]
+    pub event_id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub contact_email: Option<ContactEmail>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
+}
+
+impl GetEventResponse for ContactEmailEvent {}
+
+/// Data for an event related to a [`ContactBasic`] record.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct ContactEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "EventID")]
+    pub event_id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub contact: Option<ContactBasic>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
+}
+
+impl GetEventResponse for ContactEvent {}
 
 /// A complete contact returned by the API.
 ///

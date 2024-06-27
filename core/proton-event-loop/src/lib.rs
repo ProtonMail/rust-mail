@@ -53,11 +53,16 @@ pub use background_loop::*;
 pub use foreground_loop::*;
 pub use paste;
 pub use provider::*;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
 pub use store::*;
 pub use subscriber::*;
 
+use proton_api_core::exports::serde::Deserialize;
 use proton_api_core::exports::{anyhow, thiserror};
 use proton_api_core::http::RequestError;
+use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::responses::GetEventResponse;
 
 #[derive(Debug, thiserror::Error)]
 pub enum EventLoopError {
@@ -71,4 +76,32 @@ pub enum EventLoopError {
     Subscriber(String, SubscriberError),
     #[error("Other: {0}")]
     Other(String),
+}
+
+/// TODO: Document this trait.
+pub trait Event:
+    Clone
+    + Debug
+    // + for<'de> Deserialize<'de>
+    + Eq
+    + PartialEq
+    // + Serialize
+    + Send
+    + Sync
+    + 'static
+{
+    /// The type of remote ID used by the code that creates and handles the
+    /// events. Note that this will most likely be the `RemoteId` type of the
+    /// crate in question, which cannot be specified in this crate, hence is
+    /// left to be defined.
+    type Id: Clone + Debug + Display + Eq + From<RemoteId> + Hash + Into<RemoteId> + PartialEq + Send + Sync;
+
+    /// The API response type of the event.
+    type Response: GetEventResponse + Clone + Debug + for<'de> Deserialize<'de> + Eq + PartialEq + Send + Sync;
+
+    /// Get the event id of the event.
+    fn event_id(&self) -> &Self::Id;
+
+    /// Check if the event has more data.
+    fn has_more(&self) -> bool;
 }

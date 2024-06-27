@@ -30,6 +30,12 @@
 //! application that depends upon the API types can interpret and managed them
 //! in its own way.
 //!
+//! Note: The current exception to this organisation rule is that of the data
+//! types used for events. These are not saved in the database, and so do not
+//! have a related model, and their data types are not placed into this module
+//! as they are not related to modelling of persistent data against storage.
+//! Hence event data types are placed into the [`events`](crate::events) module.
+//!
 
 use core::fmt;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;

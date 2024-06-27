@@ -23,6 +23,7 @@
 use crate::services::proton::common::RemoteId;
 use crate::MAX_PAGE_ELEMENT_COUNT;
 use serde::Serialize;
+use serde_with::serde_as;
 use smart_default::SmartDefault;
 
 /// Parameters for getting emails for contacts.
@@ -61,4 +62,18 @@ pub struct GetContactsOptions {
     /// Number of records per page.
     #[default(MAX_PAGE_ELEMENT_COUNT)]
     pub page_size: usize,
+}
+
+/// Parameters for getting an event.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct GetEventOptions {
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub conversation_counts: bool,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub message_counts: bool,
 }

@@ -26,6 +26,7 @@
 //! are used by both requests and responses.
 //!
 
+use crate::services::proton::common::RemoteId;
 use crate::services::proton::response_data::{
     Address, ContactBasic, ContactEmail, ContactFull, User, UserSettings,
 };
@@ -79,6 +80,16 @@ pub struct GetContactsResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
+pub struct GetEventsLatestResponse {
+    /// TODO: Document this field.
+    #[serde(rename = "EventID")]
+    pub event_id: RemoteId,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
 pub struct GetSettingsResponse {
     /// TODO: Document this field.
     #[serde(rename = "UserSettings")]
@@ -93,3 +104,9 @@ pub struct GetUsersResponse {
     /// TODO: Document this field.
     pub user: User,
 }
+
+//  TRAITS
+//==============================================================================
+
+/// Marker trait for individual event responses.
+pub trait GetEventResponse: Send + Sync {}

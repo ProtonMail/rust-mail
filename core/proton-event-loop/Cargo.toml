@@ -11,6 +11,7 @@ futures = { workspace = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
 proton-api-core = { workspace = true }
+serde = { workspace = true }
 stash = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }

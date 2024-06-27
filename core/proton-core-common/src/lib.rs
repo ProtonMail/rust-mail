@@ -3,6 +3,7 @@ mod context;
 pub mod datatypes;
 pub mod db;
 mod event_subscriber;
+pub mod events;
 pub mod models;
 pub mod os;
 mod session;
