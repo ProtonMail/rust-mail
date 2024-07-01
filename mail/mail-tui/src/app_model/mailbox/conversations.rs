@@ -2,16 +2,15 @@
 
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{new_live_query, ConversationMessage, Item, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{ConversationMessage, Item, LiveQueryBuilder, Message, ITEM_LIMIT};
 use crate::app_model::BackgroundSender;
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
-use proton_mail_common::db::{
-    ConversationMessagesQuery, ConversationQuery, LocalConversationId, LocalLabelId,
-};
-use proton_mail_common::exports::proton_sqlite3::Live;
+use proton_core_common::db::proton_sqlite3::Observed;
+use proton_core_common::db::DBResult;
+use proton_mail_common::db::{LocalConversation, LocalConversationId, LocalLabelId};
 use proton_mail_common::exports::tracing;
 use proton_mail_common::{MailContext, Mailbox, MailboxResult};
 use ratatui::layout::Rect;
@@ -19,22 +18,26 @@ use ratatui::prelude::*;
 use ratatui::Frame;
 use throbber_widgets_tui::ThrobberState;
 
-pub type ConversationMessagesState = MessagesState<ConversationMessagesQuery>;
-
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
-    query: Live<ConversationQuery>,
+    _query: Observed,
+    conversations: Vec<LocalConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
 }
 
 impl ConversationsState {
-    pub fn new(mbox: &Mailbox) -> MailboxResult<Self> {
+    pub fn new(mbox: &Mailbox, background_sender: BackgroundSender) -> MailboxResult<Self> {
+        let conversations = mbox.conversations(ITEM_LIMIT)?;
         Ok(Self {
-            query: mbox.new_conversation_query(new_live_query, ITEM_LIMIT)?,
+            _query: mbox.new_conversation_query(
+                LiveQueryBuilder::new(conversations_refreshed_converter, background_sender),
+                ITEM_LIMIT,
+            )?,
             table_state: ScrollableTableState::new(Some(0)),
             messages: MessagesStatus::None,
+            conversations,
         })
     }
 
@@ -48,24 +51,15 @@ impl ConversationsState {
         let mbox = mbox.clone();
         let sender = sender.clone();
         ctx.async_runtime().spawn(async move {
-            let query = match mbox
-                .new_conversation_message_query(new_live_query, id)
+            let result = MessagesState::from_conversation(&mbox, id, sender.clone())
                 .await
-            {
-                Ok(q) => q,
-                Err(e) => {
+                .map_err(|e| {
                     let e = anyhow!("Failed to open conversation {id}: {e}");
                     tracing::error!("{e}");
-                    sender.send(e.into());
-                    return;
-                }
-            };
-            sender.send(
-                ConversationMessage::OpenConversationResult(Ok(Box::new(MessagesState::new(
-                    query,
-                ))))
-                .into(),
-            );
+                    e
+                })
+                .map(Box::new);
+            sender.send(ConversationMessage::OpenConversationResult(result).into());
         });
 
         self.messages = MessagesStatus::Loading(ThrobberState::default());
@@ -73,7 +67,7 @@ impl ConversationsState {
 
     fn open_conversation_result(
         &mut self,
-        result: anyhow::Result<Box<ConversationMessagesState>>,
+        result: anyhow::Result<Box<MessagesState>>,
     ) -> Option<Messages> {
         match result {
             Ok(state) => {
@@ -91,6 +85,10 @@ impl ConversationsState {
         self.messages = MessagesStatus::None;
     }
 
+    fn conversations_refreshed(&mut self, conversations: Vec<LocalConversation>) {
+        self.conversations = conversations;
+    }
+
     pub fn draw_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         if let MessagesStatus::Ready(_) = &self.messages {
             frame.render_widget(Text::from(" > Conversation Messages"), area);
@@ -99,14 +97,7 @@ impl ConversationsState {
 
     fn selected_conversation(&self) -> Option<LocalConversationId> {
         let index = self.table_state.selected()?;
-
-        match &*self.query.value() {
-            Ok(list) => list.get(index).map(|c| c.id),
-            Err(e) => {
-                tracing::error!("Can not select conversation, query failed: {e}");
-                None
-            }
-        }
+        self.conversations.get(index).map(|c| c.id)
     }
 }
 
@@ -198,6 +189,10 @@ impl StateHandler for ConversationsState {
                         self.open_conversation(ctx, mbox, sender, id);
                         None
                     }
+                    ConversationMessage::Refreshed(conversations) => {
+                        self.conversations_refreshed(conversations);
+                        None
+                    }
                     _ => None,
                 }
             }
@@ -225,13 +220,8 @@ impl StateHandler for ConversationsState {
     fn view(&mut self, frame: &mut Frame, area: Rect) {
         match &mut self.messages {
             MessagesStatus::None => {
-                let values = self.query.value();
-                let Ok(values) = &*values else {
-                    return;
-                };
-
-                let table = values.as_table();
-                let scrollable_table = ScrollableTable::new(table, values.len());
+                let table = self.conversations.as_table();
+                let scrollable_table = ScrollableTable::new(table, self.conversations.len());
 
                 frame.render_stateful_widget(scrollable_table, area, &mut self.table_state);
             }
@@ -252,7 +242,7 @@ impl StateHandler for ConversationsState {
 enum MessagesStatus {
     None,
     Loading(ThrobberState),
-    Ready(Box<ConversationMessagesState>),
+    Ready(Box<MessagesState>),
 }
 
 fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Option<Messages> {
@@ -327,6 +317,17 @@ fn unlabel_conversation(
         Ok(()) => Messages::DismissPopup,
         Err(e) => {
             let e = anyhow!("Failed to unlabel conversation: {e}");
+            tracing::error!("{e}");
+            e.into()
+        }
+    }
+}
+
+fn conversations_refreshed_converter(conversations: DBResult<Vec<LocalConversation>>) -> Messages {
+    match conversations {
+        Ok(c) => ConversationMessage::Refreshed(c).into(),
+        Err(e) => {
+            let e = anyhow!("Conversation list Query error: {e}");
             tracing::error!("{e}");
             e.into()
         }

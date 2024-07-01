@@ -4,15 +4,18 @@ mod model;
 mod popups;
 
 pub use model::Model;
+use proton_core_common::db::DBResult;
+use std::marker::PhantomData;
 
-use crate::app_model::mailbox::conversations::ConversationMessagesState;
-use crate::app_model::mailbox::messages::DecryptedMessage;
+use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
+use crate::app_model::BackgroundSender;
 use crate::messages::Messages;
-use proton_core_common::db::proton_sqlite3::{
-    InProcessTrackerService, Live, LiveQueryBuilder, Observable,
+use proton_core_common::db::proton_sqlite3::{InProcessTrackerService, Observable, Observed};
+use proton_mail_common::db::{
+    LabelItemCount, LocalConversation, LocalConversationId, LocalLabel, LocalLabelId,
+    LocalMessageId, LocalMessageMetadata,
 };
-use proton_mail_common::db::{LocalConversationId, LocalLabel, LocalLabelId, LocalMessageId};
-use proton_mail_common::Mailbox;
+use proton_mail_common::{Mailbox, MailboxObservableQueryBuilder};
 
 const ITEM_LIMIT: usize = 50;
 
@@ -26,6 +29,7 @@ pub enum Message {
     OpenUnlabelItemPopup(Item),
     SelectLabel(LocalLabelId),
     ConversationState(ConversationMessage),
+    ItemCountRefreshed(LabelItemCount),
     #[allow(clippy::enum_variant_names)]
     MessageState(MessageMessage),
 }
@@ -38,7 +42,8 @@ pub enum ConversationMessage {
     LabelConversation(LocalConversationId, LocalLabelId),
     UnlabelConversation(LocalConversationId, LocalLabelId),
     OpenConversation(LocalConversationId),
-    OpenConversationResult(anyhow::Result<Box<ConversationMessagesState>>),
+    OpenConversationResult(anyhow::Result<Box<MessagesState>>),
+    Refreshed(Vec<LocalConversation>),
     CloseConversation,
 }
 
@@ -53,6 +58,7 @@ pub enum MessageMessage {
     OpenMessageBody,
     OpenMessageBodyResult(anyhow::Result<Box<DecryptedMessage>>),
     CloseMessageBody,
+    Refreshed(Vec<LocalMessageMetadata>),
 }
 
 impl From<MessageMessage> for Messages {
@@ -68,11 +74,50 @@ pub enum Item {
     Message(LocalMessageId),
 }
 
-fn new_live_query<Q: Observable>(tracker: InProcessTrackerService, query: Q) -> Live<Q> {
-    LiveQueryBuilder::new(tracker)
-        .with_foreground_initializer()
-        .build(query)
+pub trait ToObservableMessage<T>: Send + Sync + 'static {
+    fn to_message(&self, value: DBResult<T>) -> Messages;
 }
+
+impl<T, F> ToObservableMessage<T> for F
+where
+    T: 'static,
+    F: Fn(DBResult<T>) -> Messages + Send + Sync + 'static,
+{
+    fn to_message(&self, value: DBResult<T>) -> Messages {
+        self(value)
+    }
+}
+
+pub struct LiveQueryBuilder<Q: Observable, T: ToObservableMessage<Q::Output>> {
+    _p: PhantomData<Q>,
+    converter: T,
+    background_sender: BackgroundSender,
+}
+
+impl<Q: Observable, T: ToObservableMessage<Q::Output>> LiveQueryBuilder<Q, T> {
+    pub fn new(converter: T, background_sender: BackgroundSender) -> Self {
+        Self {
+            _p: PhantomData,
+            converter,
+            background_sender,
+        }
+    }
+}
+
+impl<Q: Observable, T: ToObservableMessage<Q::Output>> MailboxObservableQueryBuilder<Q>
+    for LiveQueryBuilder<Q, T>
+{
+    type Output = Observed;
+
+    fn build(self, tracker: InProcessTrackerService, query: Q) -> Self::Output {
+        let converter = self.converter;
+        let sender = self.background_sender;
+        Observed::new(tracker, query, move |result: DBResult<Q::Output>| {
+            sender.send(converter.to_message(result));
+        })
+    }
+}
+
 /*
 #[derive(Clone)]
 struct LabelQuery {

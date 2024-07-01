@@ -1,14 +1,15 @@
 use crate::app_model::mailbox::conversations::ConversationsState;
-use crate::app_model::mailbox::messages::{MessagesState, MessagesViewState};
+use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{new_live_query, Item, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{Item, LiveQueryBuilder, Message, ITEM_LIMIT};
 use crate::app_model::{AppState, AppStateHandler, BackgroundSender};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
 use crossterm::event::Event;
-use proton_mail_common::db::proton_sqlite3::Live;
-use proton_mail_common::db::{LabelCountsQuery, LabelItemCount, LocalLabel, LocalLabelId};
+use proton_core_common::db::proton_sqlite3::Observed;
+use proton_core_common::db::DBResult;
+use proton_mail_common::db::{LabelItemCount, LocalLabel, LocalLabelId};
 use proton_mail_common::exports::tracing;
 use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult};
@@ -21,7 +22,7 @@ use throbber_widgets_tui::ThrobberState;
 enum State {
     Syncing(ThrobberState),
     Conversations(ConversationsState),
-    Messages(MessagesViewState),
+    Messages(MessagesState),
 }
 
 impl State {
@@ -46,7 +47,8 @@ pub struct Model {
     ctx: MailUserContext,
     mailbox: Mailbox,
     label: LocalLabel,
-    item_count_query: Option<Live<LabelCountsQuery>>,
+    item_count_query: Option<Observed>,
+    item_count: Option<LabelItemCount>,
     state: State,
     cancel_token: Option<Sender<()>>,
 }
@@ -63,6 +65,7 @@ impl Model {
             state: State::new_syncing(),
             label,
             item_count_query: None,
+            item_count: None,
             cancel_token: None,
         })
     }
@@ -124,8 +127,27 @@ impl Model {
         });
     }
 
-    fn build_item_count_query(&mut self) -> Option<Messages> {
-        match self.mailbox.new_label_item_count_query(new_live_query) {
+    fn build_item_count_query(&mut self, background_sender: BackgroundSender) -> Option<Messages> {
+        self.item_count_query = None;
+        self.item_count = None;
+        let local_label = match self
+            .mailbox
+            .user_context()
+            .db_read(|conn| conn.label_with_id_and_conversation_count(self.mailbox.label_id()))
+        {
+            Ok(label) => label,
+            Err(e) => return Some(MailboxError::from(e).into()),
+        };
+        self.item_count = local_label.map(|l| LabelItemCount {
+            unread: l.unread_count,
+            total: l.total_count,
+        });
+        match self
+            .mailbox
+            .new_label_item_count_query(LiveQueryBuilder::new(
+                label_item_count_converter,
+                background_sender,
+            )) {
             Ok(q) => {
                 self.item_count_query = Some(q);
                 None
@@ -134,29 +156,43 @@ impl Model {
         }
     }
 
-    fn open_conversation_view(&mut self, mbox: Mailbox, label: LocalLabel) -> Option<Messages> {
+    fn open_conversation_view(
+        &mut self,
+        mbox: Mailbox,
+        label: LocalLabel,
+        background_sender: BackgroundSender,
+    ) -> Option<Messages> {
         self.mailbox = mbox;
-        match ConversationsState::new(&self.mailbox) {
+        match ConversationsState::new(&self.mailbox, background_sender.clone()) {
             Ok(state) => {
                 self.state = State::Conversations(state);
                 self.label = label;
-                self.build_item_count_query()
+                self.build_item_count_query(background_sender)
             }
             Err(e) => Some(Messages::from(e)),
         }
     }
 
-    fn open_message_view(&mut self, mbox: Mailbox, label: LocalLabel) -> Option<Messages> {
+    fn open_message_view(
+        &mut self,
+        mbox: Mailbox,
+        label: LocalLabel,
+        background_sender: BackgroundSender,
+    ) -> Option<Messages> {
         self.mailbox = mbox;
-        let query = match self.mailbox.new_messages_query(new_live_query, ITEM_LIMIT) {
-            Ok(query) => query,
+        let state = match MessagesState::new(&self.mailbox, background_sender.clone()) {
+            Ok(state) => state,
             Err(e) => {
                 return Some(e.into());
             }
         };
         self.label = label;
-        self.state = State::Messages(MessagesState::new(query));
-        self.build_item_count_query()
+        self.state = State::Messages(state);
+        self.build_item_count_query(background_sender)
+    }
+
+    fn item_count_refreshed(&mut self, item_count: LabelItemCount) {
+        self.item_count = Some(item_count);
     }
 
     fn open_label_select_popup(&mut self) -> Messages {
@@ -257,8 +293,12 @@ impl AppStateHandler for Model {
                 self.sync_mailbox(mbox, sender.clone());
                 None
             }
-            Message::OpenConversationView(mbox, label) => self.open_conversation_view(mbox, label),
-            Message::OpenMessageView(mbox, label) => self.open_message_view(mbox, label),
+            Message::OpenConversationView(mbox, label) => {
+                self.open_conversation_view(mbox, label, sender.clone())
+            }
+            Message::OpenMessageView(mbox, label) => {
+                self.open_message_view(mbox, label, sender.clone())
+            }
             Message::OpenLabelSelectPopup => Some(self.open_label_select_popup()),
             Message::SelectLabel(label_id) => Some(self.select_label(label_id)),
             Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
@@ -266,6 +306,10 @@ impl AppStateHandler for Model {
             Message::OpenUnlabelItemPopup(item) => self.open_unlabel_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state.update(ctx, message, &self.mailbox, sender)
+            }
+            Message::ItemCountRefreshed(count) => {
+                self.item_count_refreshed(count);
+                None
             }
         }
     }
@@ -315,13 +359,10 @@ impl AppStateHandler for Model {
             .as_deref()
             .unwrap_or(self.label.name.as_str());
 
-        let counters = self.item_count_query.as_ref().map(|v| {
-            let counts = match &*v.value() {
-                Ok(v) => *v,
-                Err(_) => LabelItemCount::default(),
-            };
-            format!("T:{:4} U:{:4}", counts.total, counts.unread)
-        });
+        let counters = self
+            .item_count
+            .as_ref()
+            .map(|counts| format!("T:{:4} U:{:4}", counts.total, counts.unread));
         let [label_area, _, count_area, other_area] = Layout::horizontal([
             Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
             Constraint::Length(1),
@@ -419,6 +460,17 @@ fn background_worker(
             let e = anyhow!("Failed to poll events: {e}");
             tracing::error!("{e}");
             background_sender.send(Messages::DisplayError(Some("Event Loop".to_owned()), e));
+        }
+    }
+}
+
+fn label_item_count_converter(value: DBResult<LabelItemCount>) -> Messages {
+    match value {
+        Ok(value) => Message::ItemCountRefreshed(value).into(),
+        Err(e) => {
+            let e = anyhow!("Label Item Count Query error: {e}");
+            tracing::error!("{e}");
+            e.into()
         }
     }
 }

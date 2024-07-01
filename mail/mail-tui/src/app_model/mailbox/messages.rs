@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{Message, MessageMessage};
+use crate::app_model::mailbox::{LiveQueryBuilder, Message, MessageMessage, ITEM_LIMIT};
 use crate::app_model::BackgroundSender;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
@@ -11,12 +11,12 @@ use crate::widgets::{
 };
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use proton_mail_common::db::proton_sqlite3::Observable;
-use proton_mail_common::db::{LocalMessageId, LocalMessageMetadata, MessageQuery};
-use proton_mail_common::exports::proton_sqlite3::Live;
+use proton_core_common::db::proton_sqlite3::Observed;
+use proton_core_common::db::DBResult;
+use proton_mail_common::db::{LocalConversationId, LocalMessageId, LocalMessageMetadata};
 use proton_mail_common::exports::tracing;
 use proton_mail_common::proton_api_mail::domain::MimeType;
-use proton_mail_common::{DecryptedMessageBody, MailContext, Mailbox};
+use proton_mail_common::{DecryptedMessageBody, MailContext, Mailbox, MailboxResult};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
@@ -25,23 +25,54 @@ use throbber_widgets_tui::ThrobberState;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
-pub struct MessagesState<Q: Observable<Output = Vec<LocalMessageMetadata>>> {
-    query: Live<Q>,
+pub struct MessagesState {
+    _query: Observed,
+    messages: Vec<LocalMessageMetadata>,
     table_state: ScrollableTableState,
     open_message: DecryptedMessageStatus,
 }
 
-pub type MessagesViewState = MessagesState<MessageQuery>;
-
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
-impl<Q: Observable<Output = Vec<LocalMessageMetadata>>> MessagesState<Q> {
-    pub fn new(query: Live<Q>) -> Self {
-        Self {
-            query,
+impl MessagesState {
+    pub fn new(mbox: &Mailbox, background_sender: BackgroundSender) -> MailboxResult<Self> {
+        let messages = mbox.messages(ITEM_LIMIT)?;
+        let query = mbox.new_messages_query(
+            LiveQueryBuilder::new(messages_refreshed_converter, background_sender),
+            ITEM_LIMIT,
+        )?;
+
+        Ok(Self {
+            _query: query,
+            messages,
             table_state: ScrollableTableState::new(Some(0)),
             open_message: DecryptedMessageStatus::None,
-        }
+        })
+    }
+
+    pub async fn from_conversation(
+        mbox: &Mailbox,
+        conversation_id: LocalConversationId,
+        background_sender: BackgroundSender,
+    ) -> MailboxResult<Self> {
+        let (to_select, messages) = mbox.conversation_messages(conversation_id).await?;
+        let query = mbox
+            .new_conversation_message_query(
+                LiveQueryBuilder::new(messages_refreshed_converter, background_sender.clone()),
+                conversation_id,
+            )
+            .await?;
+
+        let index = to_select.map_or(0, |id| {
+            messages.iter().position(|m| m.id == id).unwrap_or(0)
+        });
+
+        Ok(Self {
+            _query: query,
+            messages,
+            table_state: ScrollableTableState::new(Some(index)),
+            open_message: DecryptedMessageStatus::None,
+        })
     }
 
     pub fn open_message_body(
@@ -89,32 +120,22 @@ impl<Q: Observable<Output = Vec<LocalMessageMetadata>>> MessagesState<Q> {
         self.open_message = DecryptedMessageStatus::None;
     }
 
+    fn messages_refreshed(&mut self, messages: Vec<LocalMessageMetadata>) {
+        self.messages = messages;
+    }
+
     fn selected_message(&self) -> Option<LocalMessageMetadata> {
         let index = self.table_state.selected()?;
-
-        match &*self.query.value() {
-            Ok(list) => list.get(index).cloned(),
-            Err(e) => {
-                tracing::error!("Can not select message, query failed: {e}");
-                None
-            }
-        }
+        self.messages.get(index).cloned()
     }
 
     fn selected_message_id(&self) -> Option<LocalMessageId> {
         let index = self.table_state.selected()?;
-
-        match &*self.query.value() {
-            Ok(list) => list.get(index).map(|c| c.id),
-            Err(e) => {
-                tracing::error!("Can not select message, query failed: {e}");
-                None
-            }
-        }
+        self.messages.get(index).map(|c| c.id)
     }
 }
 
-impl<Q: Observable<Output = Vec<LocalMessageMetadata>>> StateHandler for MessagesState<Q> {
+impl StateHandler for MessagesState {
     fn handle_event(&mut self, event: Event) -> Option<Messages> {
         let Event::Key(key) = event else {
             return None;
@@ -184,6 +205,7 @@ impl<Q: Observable<Output = Vec<LocalMessageMetadata>>> StateHandler for Message
             MessageMessage::CloseMessageBody => {
                 self.close_message();
             }
+            MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
         }
         None
     }
@@ -192,13 +214,8 @@ impl<Q: Observable<Output = Vec<LocalMessageMetadata>>> StateHandler for Message
         let table_area = self.open_message.draw(frame, area);
 
         if let Some(table_area) = table_area {
-            let values = self.query.value();
-            let Ok(values) = &*values else {
-                return;
-            };
-
-            let table = values.as_table();
-            let scrollable_table = ScrollableTable::new(table, values.len());
+            let table = self.messages.as_table();
+            let scrollable_table = ScrollableTable::new(table, self.messages.len());
 
             frame.render_stateful_widget(scrollable_table, table_area, &mut self.table_state);
         }
@@ -358,4 +375,15 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
     config
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
+}
+
+fn messages_refreshed_converter(messages: DBResult<Vec<LocalMessageMetadata>>) -> Messages {
+    match messages {
+        Ok(m) => MessageMessage::Refreshed(m).into(),
+        Err(e) => {
+            let e = anyhow!("Message list Query error: {e}");
+            tracing::error!("{e}");
+            e.into()
+        }
+    }
 }
