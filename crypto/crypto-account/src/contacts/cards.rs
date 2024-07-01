@@ -1,9 +1,12 @@
+use std::io::Write;
+
 use proton_crypto::crypto::{
-    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
-    PGPProviderSync, VerifiedData, Verifier, VerifierSync,
+    AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant, Encryptor,
+    EncryptorDetachedSignatureWriter, EncryptorSync, PGPProviderSync, Signer, SignerSync,
+    VerifiedData, Verifier, VerifierSync,
 };
 
-use crate::errors::CardCryptoError;
+use crate::{errors::CardCryptoError, keys::UnlockedAddressKey};
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ContactCardType {
@@ -71,5 +74,51 @@ pub trait DecryptableVerifiableCard {
                 Ok(decrypted_card_result.into_vec())
             }
         }
+    }
+}
+
+pub trait EncryptableAndSignableCard {
+    // Returns the plaintext, unencrypted, data comprising the contact
+    fn plaintext_card_data(&self) -> &[u8];
+
+    fn encrypt_and_sign_sync<T: PGPProviderSync>(
+        &self,
+        provider: &T,
+        address_key: &UnlockedAddressKey<T>,
+    ) -> Result<(Vec<u8>, Vec<u8>), CardCryptoError> {
+        let mut result_data: Vec<u8> = Vec::new();
+        let mut encryptor_writer = provider
+            .new_encryptor()
+            .with_encryption_key(address_key.as_public_key())
+            .with_signing_key(address_key.as_ref())
+            .with_utf8()
+            .encrypt_stream_with_detached_signature(
+                &mut result_data,
+                DetachedSignatureVariant::Plaintext,
+                DataEncoding::Armor,
+            )
+            .map_err(CardCryptoError::EncryptionError)?;
+
+        encryptor_writer
+            .write_all(self.plaintext_card_data())
+            .map_err(CardCryptoError::WriteError)?;
+
+        let detached_signature = encryptor_writer
+            .finalize_with_detached_signature()
+            .map_err(CardCryptoError::EncryptionError)?;
+
+        Ok((result_data, detached_signature))
+    }
+
+    fn sign_only<T: PGPProviderSync>(
+        &self,
+        provider: T,
+        address_key: &UnlockedAddressKey<T>,
+    ) -> Result<Vec<u8>, CardCryptoError> {
+        provider
+            .new_signer()
+            .with_signing_key(address_key.as_ref())
+            .sign_detached(self.plaintext_card_data(), DataEncoding::Armor)
+            .map_err(CardCryptoError::SigningError)
     }
 }

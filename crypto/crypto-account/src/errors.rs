@@ -1,3 +1,4 @@
+use std::io::Error;
 use std::string::FromUtf8Error;
 
 use proton_crypto::{crypto::VerificationError, CryptoError};
@@ -48,6 +49,12 @@ pub enum SKLError {
 pub enum CardCryptoError {
     #[error("Error decrypting card: {0}")]
     DecryptionError(CryptoError),
+    #[error("Error encrypting card: {0}")]
+    EncryptionError(CryptoError),
+    #[error("Error signing card: {0}")]
+    SigningError(CryptoError),
+    #[error("Error writing card data to stream: {0}")]
+    WriteError(Error),
     #[error("Error verifying card signature: {0}")]
     SignatureVerificationError(#[from] VerificationError),
     #[error("No signature found for a signed card")]
