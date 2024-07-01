@@ -55,7 +55,7 @@ impl MessagesState {
         conversation_id: LocalConversationId,
         background_sender: BackgroundSender,
     ) -> MailboxResult<Self> {
-        let (to_select, messages) = mbox.conversation_messages(conversation_id).await?;
+        let (to_select_id, messages) = mbox.conversation_messages(conversation_id).await?;
         let query = mbox
             .new_conversation_message_query(
                 LiveQueryBuilder::new(messages_refreshed_converter, background_sender.clone()),
@@ -63,9 +63,10 @@ impl MessagesState {
             )
             .await?;
 
-        let index = to_select.map_or(0, |id| {
-            messages.iter().position(|m| m.id == id).unwrap_or(0)
-        });
+        let index = messages
+            .iter()
+            .position(|m| m.id == to_select_id)
+            .unwrap_or(0);
 
         Ok(Self {
             _query: query,

@@ -37,7 +37,7 @@ registry = "proton"
 
 [dependencies.proton-mail-common]
 #path = "../mail/proton-mail-common"
-version = "=0.5.22"
+version = "=0.5.27"
 registry = "proton"
 
 [lints.rust]
