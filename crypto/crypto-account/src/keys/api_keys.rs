@@ -166,7 +166,7 @@ pub struct LockedKey {
 }
 
 impl LockedKey {
-    /// Indicates whether this is a legacy address key .
+    /// Indicates whether this is a legacy address key.
     ///
     /// Legacy means that the address key is encrypted with the same key secret
     /// as the user key. Thus, it does not contain an encrypted token and a token signature.

@@ -185,12 +185,6 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedAddressK
     }
 }
 
-impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for &DecryptedAddressKey<Priv, Pub> {
-    fn as_public_key(&self) -> &Pub {
-        &self.public_key
-    }
-}
-
 /// Represents a locked address key locally generated but not yet synced with the backend.
 pub struct LocalAddressKey {
     /// The locked armored private key.
@@ -279,8 +273,8 @@ impl LocalAddressKey {
 
     /// Locks an existing unlocked address key with a new key secret in legacy mode.
     ///
-    /// Only use this method if a legacy key should be produce.
-    /// In most scenarios this is not the case!/
+    /// Only use this method if a legacy key should be produced.
+    /// In most scenarios this is not the case!
     pub fn from_unlocked_legacy<Provider: PGPProviderSync>(
         pgp_provider: &Provider,
         unlocked_address_key: &DecryptedAddressKey<<Provider>::PrivateKey, <Provider>::PublicKey>,

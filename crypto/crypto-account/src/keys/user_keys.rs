@@ -168,12 +168,6 @@ impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for DecryptedUserKey<
     }
 }
 
-impl<Priv: PrivateKey, Pub: PublicKey> AsPublicKeyRef<Pub> for &DecryptedUserKey<Priv, Pub> {
-    fn as_public_key(&self) -> &Pub {
-        &self.public_key
-    }
-}
-
 /// Represents a locked user key locally generated but not yet synced with the backend.
 pub struct LocalUserKey {
     /// The locked armored private key.
