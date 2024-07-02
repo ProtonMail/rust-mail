@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Ensure mail cache path is unique per user.
 - Fix conversation message selection.
+- Use Get with query parameters for message metadata.
 
 ## [0.10.30] - 2024-06-21
 

@@ -3,7 +3,7 @@ use proton_api_core::exports::tracing::level_filters::LevelFilter;
 use proton_api_core::http::APIEnvConfig;
 use proton_api_core::login::Flow;
 use proton_api_core::{http, Session};
-use proton_api_mail::domain::MessageMetadataFilterBuilder;
+use proton_api_mail::domain::{LabelId, MessageMetadataFilterBuilder};
 use proton_api_mail::MailSession;
 use std::io::{stdin, stdout, BufRead, Write};
 use tracing_subscriber::layer::SubscriberExt;
@@ -82,7 +82,11 @@ fn main() {
 
     let messages = runtime.block_on(async {
         mail_session
-            .message_metadata(MessageMetadataFilterBuilder::new(0, 10).build())
+            .message_metadata(
+                MessageMetadataFilterBuilder::new(0, 10)
+                    .with_label_id(LabelId::all_mail().clone())
+                    .build(),
+            )
             .await
             .unwrap()
             .messages

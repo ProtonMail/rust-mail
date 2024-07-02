@@ -14,8 +14,8 @@ pub struct GetConversationsRequest {
 impl GetConversationsRequest {
     #[must_use]
     pub fn new(mut filter: ConversationFilter) -> Self {
-        filter.page_size = filter.page_size.max(MAX_PAGE_ELEMENT_COUNT_U64);
-        filter.limit = filter.limit.map(|v| v.max(MAX_LIMIT_VALUE_U64));
+        filter.page_size = filter.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
+        filter.limit = filter.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
         Self { filter }
     }
 }
