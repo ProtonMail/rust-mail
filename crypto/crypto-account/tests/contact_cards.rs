@@ -244,7 +244,7 @@ fn test_sign_plaintext_card() {
 
     let card = TestEncryptableCard(SIGNED_DATA.to_owned());
     let signature = card
-        .sign_only(&provider, &unlocked_address_key)
+        .sign_only_sync(&provider, &unlocked_address_key)
         .expect("signing should not fail");
 
     TestDecryptableCard(

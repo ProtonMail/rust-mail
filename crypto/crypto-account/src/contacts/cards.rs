@@ -110,7 +110,7 @@ pub trait EncryptableAndSignableCard {
         Ok((result_data, detached_signature))
     }
 
-    fn sign_only<T: PGPProviderSync>(
+    fn sign_only_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
         address_key: &UnlockedAddressKey<T>,
