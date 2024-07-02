@@ -52,7 +52,7 @@ pub mod requests;
 pub mod response_data;
 pub mod responses;
 
-use crate::service::{ApiService, ApiServiceError, NO_PARAMS};
+use crate::service::{ApiService, ApiServiceError, Request, NO_PARAMS};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::requests::{
     GetContactsEmailsOptions, GetContactsOptions, GetEventOptions,
@@ -63,10 +63,10 @@ use crate::services::proton::responses::{
 };
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
-    Client, RequestBuilder, Url,
+    Client, Url,
 };
 use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// A service for communicating with the Proton API.
 #[derive(Clone, Debug)]
@@ -82,14 +82,6 @@ pub struct Proton {
 }
 
 impl ApiService for Proton {
-    fn new(base_url: Url, headers: Option<HeaderMap>) -> Self {
-        Self {
-            client: Client::new(),
-            base_url,
-            headers: headers.unwrap_or_default(),
-        }
-    }
-
     fn base_url(&self) -> &Url {
         &self.base_url
     }
@@ -98,15 +90,18 @@ impl ApiService for Proton {
         &self.client
     }
 
-    fn headers(&self) -> &HeaderMap {
-        &self.headers
+    fn headers(&self) -> HeaderMap {
+        self.headers.clone()
     }
 
-    async fn on_error<T>(
+    async fn on_error<J, T>(
+        &self,
         error: ApiServiceError,
-        _request: impl Fn() -> RequestBuilder + Send,
+        _request: Request<J>,
+        _retries: u8,
     ) -> Result<T, ApiServiceError>
     where
+        J: Clone + Serialize + Send + Sync,
         T: DeserializeOwned,
     {
         Err(error)
@@ -122,6 +117,21 @@ impl ApiService for Proton {
 
 impl Proton {
     const BASE_PATH: &'static str = "/core/v4";
+
+    /// Generates a new external API service handler.
+    ///
+    /// # Parameters
+    ///
+    /// * `base_url` - The API base URL.
+    /// * `headers`  - The headers to send with every request.
+    ///
+    pub fn new(base_url: Url, headers: Option<HeaderMap>) -> Self {
+        Self {
+            client: Client::new(),
+            base_url,
+            headers: headers.unwrap_or_default(),
+        }
+    }
 
     /// GETs a list of addresses.
     ///
