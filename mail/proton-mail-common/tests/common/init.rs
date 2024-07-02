@@ -435,7 +435,7 @@ impl TestContext {
     /// * `expect`   - How many times the endpoint should be called.
     ///
     pub async fn mock_get_message_metadata(&self, metadata: Vec<MessageMetadata>, expect: u64) {
-        Mock::given(method("POST"))
+        Mock::given(method("GET"))
             .and(path("/api/mail/v4/messages"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(MessageMetadataResponse {

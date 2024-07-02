@@ -165,7 +165,7 @@ impl ConversationFilter {
             attachments: None,
             label_id: None,
             sort: None,
-            page_size: page_size.max(MAX_PAGE_ELEMENT_COUNT) as u64,
+            page_size: page_size.min(MAX_PAGE_ELEMENT_COUNT) as u64,
             page: page_index as u64,
             unread: None,
             limit: None,

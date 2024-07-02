@@ -27,8 +27,8 @@ pub struct MessageMetadataResponse {
 impl GetMessageMetadataRequest {
     #[must_use]
     pub fn new(mut filter: MessageMetadataFilter) -> Self {
-        filter.page_size = filter.page_size.max(MAX_PAGE_ELEMENT_COUNT_U64);
-        filter.limit = filter.limit.map(|v| v.max(MAX_LIMIT_VALUE_U64));
+        filter.page_size = filter.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
+        filter.limit = filter.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
         Self { filter }
     }
 }
@@ -37,9 +37,99 @@ impl http::RequestDesc for GetMessageMetadataRequest {
     type Response = JsonResponse<MessageMetadataResponse>;
 
     fn build(&self) -> RequestData {
-        RequestData::new(Method::Post, "mail/v4/messages")
-            .header("X-HTTP-Method-Override", "GET")
-            .json(&self.filter)
+        let mut data = RequestData::new(Method::Get, "mail/v4/messages")
+            .query("Page", &self.filter.page)
+            .query("PageSize", &self.filter.page_size);
+
+        if let Some(limit) = &self.filter.limit {
+            data = data.query("Limit", limit);
+        }
+
+        if let Some(label_id) = &self.filter.label_id {
+            data = data.query_array("LabelID", label_id);
+        }
+
+        if let Some(sort) = &self.filter.sort {
+            data = data.query("Sort", sort);
+        }
+
+        if let Some(desc) = self.filter.desc {
+            data = data.query("Desc", if desc { &1 } else { &0 });
+        }
+
+        if let Some(begin) = &self.filter.begin {
+            data = data.query("Begin", begin);
+        }
+
+        if let Some(end) = &self.filter.end {
+            data = data.query("End", end);
+        }
+
+        if let Some(begin_id) = &self.filter.begin_id {
+            data = data.query("BeginID", begin_id);
+        }
+
+        if let Some(end_id) = &self.filter.end_id {
+            data = data.query("EndID", end_id);
+        }
+
+        if let Some(keyword) = &self.filter.keyword {
+            data = data.query("Keyword", keyword);
+        }
+
+        if let Some(recipients) = &self.filter.recipients {
+            data = data.query_array("Recipients", recipients);
+        }
+
+        if let Some(to) = &self.filter.to {
+            data = data.query_array("To", to);
+        }
+
+        if let Some(cc) = &self.filter.cc {
+            data = data.query_array("CC", cc);
+        }
+
+        if let Some(bcc) = &self.filter.bcc {
+            data = data.query_array("BCC", bcc);
+        }
+
+        if let Some(from) = &self.filter.from {
+            data = data.query("From", from);
+        }
+
+        if let Some(subject) = &self.filter.subject {
+            data = data.query("Subject", subject);
+        }
+
+        if let Some(attachments) = self.filter.attachments {
+            data = data.query("Attachments", if attachments { &1 } else { &0 });
+        }
+
+        if let Some(unread) = self.filter.unread {
+            data = data.query("Unread", if unread { &1 } else { &0 });
+        }
+
+        if let Some(id) = &self.filter.conversation_id {
+            data = data.query("ConversationID", id);
+        }
+
+        if let Some(addr_id) = &self.filter.address_id {
+            data = data.query("AddressID", addr_id);
+        }
+
+        if let Some(ids) = &self.filter.ids {
+            data = data.query_array("ID", ids);
+        }
+
+        if let Some(external_id) = &self.filter.external_id {
+            data = data.query("ExternalID", external_id);
+        }
+
+        if let Some(wildcard) = self.filter.auto_wildcard {
+            data = data.query("AutoWildcard", if wildcard { &1 } else { &0 });
+        }
+
+        data
     }
 }
 

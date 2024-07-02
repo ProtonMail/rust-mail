@@ -370,13 +370,13 @@ pub struct MessageMetadataFilter {
     /// Keyword search of To, CC and BCC fields.
     pub recipients: Option<Vec<String>>,
     /// Keyword search of To field.
-    pub to: Option<String>,
+    pub to: Option<Vec<String>>,
     /// Keyword search of CC field.
     #[serde(rename = "CC")]
-    pub cc: Option<String>,
+    pub cc: Option<Vec<String>>,
     /// Keyword search of BCC field.
     #[serde(rename = "BCC")]
-    pub bcc: Option<String>,
+    pub bcc: Option<Vec<String>>,
     /// Keyword search From field.
     pub from: Option<String>,
     /// Keyword search Subject field.
@@ -405,7 +405,7 @@ pub struct MessageMetadataFilter {
     pub external_id: Option<ExternalId>,
     #[serde(rename = "ID")]
     /// Filter on the given message ids.
-    ids: Option<Vec<MessageId>>,
+    pub ids: Option<Vec<MessageId>>,
     /// If true automatically convert simple queries to wildcarded versions, such as `test` to `*test*`.
     pub auto_wildcard: Option<bool>,
 }
@@ -430,7 +430,7 @@ impl MessageMetadataFilter {
             begin: None,
             end: None,
             conversation_id: None,
-            page_size: page_size.max(MAX_PAGE_ELEMENT_COUNT) as u64,
+            page_size: page_size.min(MAX_PAGE_ELEMENT_COUNT) as u64,
             page: page_number as u64,
             limit: None,
             begin_id: None,
@@ -540,22 +540,22 @@ impl MessageMetadataFilterBuilder {
 
     /// Keyword search of To field.
     #[must_use]
-    pub fn with_to(mut self, keyword: impl Into<String>) -> Self {
-        self.0.to = Some(keyword.into());
+    pub fn with_to(mut self, keyword: impl IntoIterator<Item = String>) -> Self {
+        self.0.to = Some(keyword.into_iter().collect());
         self
     }
 
     /// Keyword search of CC field.
     #[must_use]
-    pub fn with_cc(mut self, keyword: impl Into<String>) -> Self {
-        self.0.cc = Some(keyword.into());
+    pub fn with_cc(mut self, keyword: impl IntoIterator<Item = String>) -> Self {
+        self.0.cc = Some(keyword.into_iter().collect());
         self
     }
 
     /// Keyword search of CC field.
     #[must_use]
-    pub fn with_bcc(mut self, keyword: impl Into<String>) -> Self {
-        self.0.bcc = Some(keyword.into());
+    pub fn with_bcc(mut self, keyword: impl IntoIterator<Item = String>) -> Self {
+        self.0.bcc = Some(keyword.into_iter().collect());
         self
     }
 
