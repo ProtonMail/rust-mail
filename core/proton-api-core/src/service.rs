@@ -6,7 +6,8 @@ use colored::Colorize;
 use regex::Regex;
 use reqwest::header::{HeaderName, HeaderValue};
 use reqwest::{
-    header::HeaderMap, Client, Error as ReqwestError, Method, Response, StatusCode, Url,
+    header::HeaderMap, Client, Error as ReqwestError, Method, RequestBuilder, Response, StatusCode,
+    Url,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Error as JsonError;
@@ -263,99 +264,13 @@ pub trait ApiService {
         T: DeserializeOwned,
     {
         let query = params.and_then(|p| to_query_string(p).ok());
-        self.execute_request(
-            Request::<()> {
-                headers,
-                method: Method::DELETE,
-                url: self.get_url(endpoint, query.as_deref()),
-                ..Default::default()
-            },
-            0,
-        )
+        self.perform_request(Request::<()> {
+            headers,
+            method: Method::DELETE,
+            url: self.get_url(endpoint, query.as_deref()),
+            ..Default::default()
+        })
         .await
-    }
-
-    /// Executes a request and handles the response.
-    ///
-    /// This function is the core of the API service, and is responsible for
-    /// sending the request, handling any errors that occur, and processing the
-    /// response.
-    ///
-    /// It accepts a [`Request`] instance that contained the information needed
-    /// to create and send the actual request. This allows for the request to be
-    /// retried in the event of a failure.
-    ///
-    /// # Parameters
-    ///
-    /// * `request` - The details of the request to send. This is data that can
-    ///               be used multiple times, to allow for situations such as
-    ///               retries.
-    /// * `retries` - The number of times this request has been retried. This is
-    ///               present so that it can be used to determine if the request
-    ///               should be retried again. Note that, at present, any retry
-    ///               logic is left to the downstream [`on_error()`](ApiService::on_error())
-    ///               implementation, to which this value is passed.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the request fails, or if the response indicates
-    /// failure.
-    ///
-    async fn execute_request<J, T>(
-        &self,
-        request: Request<J>,
-        retries: u8,
-    ) -> Result<T, ApiServiceError>
-    where
-        J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned,
-    {
-        let future = async {
-            let url = request.url.as_str();
-            let mut builder = match request.method {
-                Method::DELETE => self.client().delete(url),
-                Method::GET => self.client().get(url),
-                Method::PATCH => self.client().patch(url),
-                Method::POST => self.client().post(url),
-                Method::PUT => self.client().put(url),
-                _ => {
-                    return Err(ApiServiceError::UnsupportedHttpMethod(
-                        request.method.clone(),
-                    ))
-                }
-            }
-            .headers(self.combine_headers(request.headers.as_ref()));
-            // At present we clone the body for the Bytes and String types, which is not
-            // efficient, but is needed for retry handling. This could potentially be
-            // improved — the body() function does consume, but there may be ways around
-            // it. For now it's not a great concern.
-            // TODO: Improve handling of Bytes and String body types to not clone.
-            builder = match &request.body {
-                Body::Bytes(data) => builder.body(data.clone()),
-                Body::Form(data) => builder.form(data),
-                Body::Json(data) => builder.json(data),
-                Body::None => builder,
-                Body::String(data) => builder.body(data.clone().to_string()),
-            };
-            let result = match builder.send().await {
-                Ok(response) => {
-                    if let Err(err) = response.error_for_status_ref() {
-                        Err(Self::handle_http_error(err, response).await)
-                    } else {
-                        Ok(response)
-                    }
-                }
-                Err(err) => Err(Self::handle_error(err)),
-            };
-            match result {
-                Ok(response) => self.handle_response::<T>(response).await,
-                Err(err) => self.on_error(err, request, retries).await,
-            }
-        };
-        // We pin the future here to get around the compiler complaining about
-        // infinite recursion. In reality, we limit the recursion with the retries
-        // parameter, but we can't guarantee that to the compiler.
-        Box::pin(future).await
     }
 
     /// Sends a `GET` request to the specified URL.
@@ -386,14 +301,11 @@ pub trait ApiService {
         T: DeserializeOwned,
     {
         let query = params.and_then(|p| to_query_string(p).ok());
-        self.execute_request(
-            Request::<()> {
-                headers,
-                url: self.get_url(endpoint, query.as_deref()),
-                ..Default::default()
-            },
-            0,
-        )
+        self.perform_request(Request::<()> {
+            headers,
+            url: self.get_url(endpoint, query.as_deref()),
+            ..Default::default()
+        })
         .await
     }
 
@@ -502,7 +414,7 @@ pub trait ApiService {
     ///
     /// Returns an error if deserialisation of the response data fails.
     ///
-    async fn handle_response<T>(&self, response: Response) -> Result<T, ApiServiceError>
+    async fn handle_response<T>(response: Response) -> Result<T, ApiServiceError>
     where
         T: DeserializeOwned,
     {
@@ -548,11 +460,6 @@ pub trait ApiService {
     ///               Reqwest request builder. This is a function that can be
     ///               called multiple times, to allow for situations such as
     ///               retries.
-    /// * `retries` - The number of times this request has been retried. This is
-    ///               present so that it can be used to determine if the request
-    ///               should be retried again. Note that, at present, any retry
-    ///               logic is left to the downstream implementation of this
-    ///               method.
     ///
     /// # Errors
     ///
@@ -565,7 +472,6 @@ pub trait ApiService {
         &self,
         error: ApiServiceError,
         request: Request<J>,
-        retries: u8,
     ) -> Result<T, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
@@ -598,17 +504,49 @@ pub trait ApiService {
         J: Clone + Serialize + Send + Sync,
         T: DeserializeOwned,
     {
-        self.execute_request(
-            Request::<J> {
-                body: Body::Json(body),
-                headers,
-                method: Method::PATCH,
-                url: self.get_url(endpoint, None),
-                ..Default::default()
-            },
-            0,
-        )
+        self.perform_request(Request::<J> {
+            body: Body::Json(body),
+            headers,
+            method: Method::PATCH,
+            url: self.get_url(endpoint, None),
+            ..Default::default()
+        })
         .await
+    }
+
+    /// Performs a request and handles the response.
+    ///
+    /// This function is the core of the API service, and is responsible for
+    /// sending the request, handling any errors that occur, and processing the
+    /// response.
+    ///
+    /// It accepts a [`Request`] instance that contains the information needed
+    /// to create and send the actual request. This allows for the request to be
+    /// retried in the event of a failure.
+    ///
+    /// The process is split into multiple stages, all of which can be run
+    /// individually if needed, and this method combines them all together.
+    ///
+    /// # Parameters
+    ///
+    /// * `request` - The details of the request to send. This is data that can
+    ///               be used multiple times, to allow for situations such as
+    ///               retries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails, or if the response indicates
+    /// failure.
+    ///
+    async fn perform_request<J, T>(&self, request: Request<J>) -> Result<T, ApiServiceError>
+    where
+        J: Clone + Serialize + Send + Sync,
+        T: DeserializeOwned,
+    {
+        match Self::send_request(self.prepare_request(&request)?).await {
+            Ok(response) => Self::handle_response::<T>(response).await,
+            Err(err) => self.on_error(err, request).await,
+        }
     }
 
     /// Sends a `POST` request to the specified URL.
@@ -638,16 +576,13 @@ pub trait ApiService {
         J: Clone + Serialize + Send + Sync,
         T: DeserializeOwned,
     {
-        self.execute_request(
-            Request::<J> {
-                body: Body::Json(body),
-                headers,
-                method: Method::POST,
-                url: self.get_url(endpoint, None),
-                ..Default::default()
-            },
-            0,
-        )
+        self.perform_request(Request::<J> {
+            body: Body::Json(body),
+            headers,
+            method: Method::POST,
+            url: self.get_url(endpoint, None),
+            ..Default::default()
+        })
         .await
     }
 
@@ -680,17 +615,63 @@ pub trait ApiService {
         T: DeserializeOwned,
     {
         // .form(&body)
-        self.execute_request(
-            Request::<()> {
-                body: Body::Form(body),
-                headers,
-                method: Method::POST,
-                url: self.get_url(endpoint, None),
-                ..Default::default()
-            },
-            0,
-        )
+        self.perform_request(Request::<()> {
+            body: Body::Form(body),
+            headers,
+            method: Method::POST,
+            url: self.get_url(endpoint, None),
+            ..Default::default()
+        })
         .await
+    }
+
+    /// Prepares a request.
+    ///
+    /// This function is responsible for preparing a request, ready to send.
+    ///
+    /// It accepts a [`Request`] instance that contains the information needed
+    /// to create and send the actual request.
+    ///
+    /// # Parameters
+    ///
+    /// * `request` - The details of the request to send. This is data that can
+    ///               be used multiple times, to allow for situations such as
+    ///               retries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the specified HTTP method is not supported.
+    ///
+    fn prepare_request<J>(&self, request: &Request<J>) -> Result<RequestBuilder, ApiServiceError>
+    where
+        J: Clone + Serialize + Send + Sync,
+    {
+        let url = request.url.as_str();
+        let builder = match request.method {
+            Method::DELETE => self.client().delete(url),
+            Method::GET => self.client().get(url),
+            Method::PATCH => self.client().patch(url),
+            Method::POST => self.client().post(url),
+            Method::PUT => self.client().put(url),
+            _ => {
+                return Err(ApiServiceError::UnsupportedHttpMethod(
+                    request.method.clone(),
+                ))
+            }
+        }
+        .headers(self.combine_headers(request.headers.as_ref()));
+        // At present we clone the body for the Bytes and String types, which is not
+        // efficient, but is needed for retry handling. This could potentially be
+        // improved — the body() function does consume, but there may be ways around
+        // it. For now it's not a great concern.
+        // TODO: Improve handling of Bytes and String body types to not clone.
+        Ok(match &request.body {
+            Body::Bytes(data) => builder.body(data.clone()),
+            Body::Form(data) => builder.form(data),
+            Body::Json(data) => builder.json(data),
+            Body::None => builder,
+            Body::String(data) => builder.body(data.clone().to_string()),
+        })
     }
 
     /// Sends a `PUT` request to the specified URL.
@@ -720,17 +701,72 @@ pub trait ApiService {
         J: Clone + Serialize + Send + Sync,
         T: DeserializeOwned,
     {
-        self.execute_request(
-            Request::<J> {
-                body: Body::Json(body),
-                headers,
-                method: Method::PUT,
-                url: self.get_url(endpoint, None),
-                ..Default::default()
-            },
-            0,
-        )
+        self.perform_request(Request::<J> {
+            body: Body::Json(body),
+            headers,
+            method: Method::PUT,
+            url: self.get_url(endpoint, None),
+            ..Default::default()
+        })
         .await
+    }
+
+    /// Retries a request and handles the response.
+    ///
+    /// This function is responsible for sending the request, handling any
+    /// errors that occur, and processing the response.
+    ///
+    /// It accepts a [`Request`] instance that contains the information needed
+    /// to create and send the actual request.
+    ///
+    /// It is identical to [`perform_request()`](ApiService::perform_request()),
+    /// except it does not call [`on_error()`](ApiService::on_error()) if an error
+    /// occurs, thereby avoiding any further retries.
+    ///
+    /// # Parameters
+    ///
+    /// * `request` - The details of the request to send. This is data that can
+    ///               be used multiple times, to allow for situations such as
+    ///               retries.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails, or if the response indicates
+    /// failure.
+    ///
+    async fn retry_request<J, T>(&self, request: Request<J>) -> Result<T, ApiServiceError>
+    where
+        J: Clone + Serialize + Send + Sync,
+        T: DeserializeOwned,
+    {
+        Self::handle_response::<T>(Self::send_request(self.prepare_request(&request)?).await?).await
+    }
+
+    /// Sends a request and handles any resulting errors.
+    ///
+    /// This function is responsible for sending the request and handling any
+    /// errors that occur.
+    ///
+    /// # Parameters
+    ///
+    /// * `request` - The Reqwest request builder, prepared and ready to send.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails, or if the response indicates
+    /// failure.
+    ///
+    async fn send_request(request: RequestBuilder) -> Result<Response, ApiServiceError> {
+        match request.send().await {
+            Ok(response) => {
+                if let Err(err) = response.error_for_status_ref() {
+                    Err(Self::handle_http_error(err, response).await)
+                } else {
+                    Ok(response)
+                }
+            }
+            Err(err) => Err(Self::handle_error(err)),
+        }
     }
 
     /// Allows for the setting of any persistent client headers.

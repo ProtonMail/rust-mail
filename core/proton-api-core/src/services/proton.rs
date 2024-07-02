@@ -98,7 +98,6 @@ impl ApiService for Proton {
         &self,
         error: ApiServiceError,
         _request: Request<J>,
-        _retries: u8,
     ) -> Result<T, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
