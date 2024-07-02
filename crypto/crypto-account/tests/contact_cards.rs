@@ -231,6 +231,7 @@ fn test_sign_plaintext_card() {
         )
         .unwrap();
     let public_key = provider.private_key_to_public_key(&private_key).unwrap();
+    let verification_public_key = provider.private_key_to_public_key(&private_key).unwrap();
     let fourty_two: u32 = 42;
 
     let unlocked_address_key = DecryptedAddressKey {
@@ -242,8 +243,21 @@ fn test_sign_plaintext_card() {
     };
 
     let card = TestEncryptableCard(SIGNED_DATA.to_owned());
-    card.sign_only(provider, &unlocked_address_key)
+    let signature = card
+        .sign_only(&provider, &unlocked_address_key)
         .expect("signing should not fail");
+
+    TestDecryptableCard(
+        ContactCardType::Signed,
+        SIGNED_DATA.to_owned(),
+        String::from_utf8(signature).expect("encoding computed signature should not fail"),
+    )
+    .decrypt_and_verify_sync(
+        &provider,
+        &provider.empty_private_keys(),
+        &[verification_public_key],
+    )
+    .expect("signature verification should not fail");
 }
 
 #[test]

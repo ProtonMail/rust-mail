@@ -1,4 +1,4 @@
-use proton_crypto_account::keys::{DecryptedAddressKey, KeyFlag, KeyId, UnlockedAddressKey};
+use proton_crypto_account::keys::{DecryptedAddressKey, KeyFlag, KeyId};
 use proton_crypto_inbox::message::{DecryptableMessage, EncryptableDraft};
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;

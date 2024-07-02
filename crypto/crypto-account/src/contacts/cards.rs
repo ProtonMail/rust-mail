@@ -112,7 +112,7 @@ pub trait EncryptableAndSignableCard {
 
     fn sign_only<T: PGPProviderSync>(
         &self,
-        provider: T,
+        provider: &T,
         address_key: &UnlockedAddressKey<T>,
     ) -> Result<Vec<u8>, CardCryptoError> {
         provider
