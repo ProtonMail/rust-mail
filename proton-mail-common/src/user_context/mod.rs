@@ -11,6 +11,7 @@ mod settings;
 pub use conversations::FilteredConversations;
 pub use initialization::*;
 pub use messages::FilteredMessages;
+use std::path::PathBuf;
 
 use proton_action_queue::ActionQueue;
 use proton_api_mail::proton_api_core::auth::UserKeySecret;
@@ -19,6 +20,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, Unlo
 use std::sync::{Arc, Weak};
 
 use crate::db::{MailSqliteConnection, MailSqliteConnectionMut, MailSqliteConnectionRef};
+use crate::exports::tracing;
 use crate::user_context::action_queue::new_action_queue;
 use crate::{MailContext, MailContextResult};
 use proton_api_mail::proton_api_core::domain::{AddressId, UserId};
@@ -66,8 +68,16 @@ impl From<MailUserContext> for WeakMailUserContext {
 }
 
 impl MailUserContext {
-    pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Self {
-        Self {
+    pub(crate) fn new(
+        mail_context: MailContext,
+        user_context: UserContext,
+    ) -> MailContextResult<Self> {
+        let cache_path = mail_context.mail_cache_path(user_context.user_id());
+        std::fs::create_dir_all(cache_path).map_err(|e| {
+            tracing::error!("Failed to create mail cache path: {e}");
+            e
+        })?;
+        Ok(Self {
             inner: Arc::new_cyclic(|weak| MailUserContextInner {
                 user_context,
                 mail_context,
@@ -76,7 +86,7 @@ impl MailUserContext {
                     inner: weak.clone(),
                 }),
             }),
-        }
+        })
     }
 
     pub fn session(&self) -> &Session {
@@ -219,6 +229,11 @@ impl MailUserContext {
                 .user_context
                 .address_keys_unlocked(pgp_provider, &secret, address_id)?;
         Ok(keys)
+    }
+
+    /// Returns the cache path for mail related resource.
+    pub fn mail_cache_path(&self) -> PathBuf {
+        self.inner.mail_context.mail_cache_path(self.user_id())
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {
