@@ -1,29 +1,29 @@
 [package]
 name = "proton-api-mail"
-version = "0.3.12"
+version = "0.3.13"
 edition = "2021"
 keywords = ["proton", "rest", "api"]
 categories = ["api-bindings"]
 
 [dependencies]
-proton-api-core = {workspace=true}
-uniffi = {workspace=true, optional = true, features = ["tokio"]}
+proton-api-core = { workspace = true }
+uniffi = { workspace = true, optional = true, features = ["tokio"] }
 lazy_static = "1"
-proton-crypto-inbox = {workspace= true}
-bytes = {workspace= true}
-bitflags = {workspace = true}
+proton-crypto-inbox = { workspace = true }
+bytes = { workspace = true }
+bitflags = { workspace = true }
 
 [dev-dependencies]
 bytes = "1.6.0"
-proton-async = {workspace=true}
+proton-async = { workspace = true }
 reqwest = { version = "0.12.2", features = ["stream"] }
-tracing-subscriber = {workspace=true, features = ["env-filter"]}
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
 wiremock = "0.6.0"
 
 [features]
 default = []
 uniffi = ["dep:uniffi", "proton-api-core/uniffi"]
-sql =["proton-api-core/sql"]
+sql = ["proton-api-core/sql"]
 
 [lints]
 workspace = true
