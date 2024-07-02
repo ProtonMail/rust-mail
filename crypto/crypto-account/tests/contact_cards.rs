@@ -1,6 +1,9 @@
 use proton_crypto::crypto::{DataEncoding, PGPProvider, PGPProviderSync};
 use proton_crypto::new_pgp_provider;
-use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard};
+use proton_crypto_account::contacts::{
+    ContactCardType, DecryptableVerifiableCard, EncryptableAndSignableCard,
+};
+use proton_crypto_account::keys::{DecryptedAddressKey, KeyFlag, KeyId};
 
 const PRIVATE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -35,9 +38,9 @@ const SIGNED_SIGNATURE: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMa
 
 const SIGNED_SIGNATURE_INVALID: &str = "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwnUEARYKACcFgmZPSJAJkEgK5SmxgQZlFiEEIXnfcHDXe6RYq00hWONTPASS\nBmUAAN4YAQDw6/SL9HvDQ1xAbDqiIWFMLlIeu3xrqdjKr0Lr2J7ZXgEA4Bi+\nPVzWDK4s9zMO5FUjt5iWpAMm9Xsu5N0aHahWDQc=\n=NSAd\n-----END PGP SIGNATURE-----\n";
 
-struct TestCard(pub ContactCardType, pub String, pub String);
+struct TestDecryptableCard(pub ContactCardType, pub String, pub String);
 
-impl DecryptableVerifiableCard for TestCard {
+impl DecryptableVerifiableCard for TestDecryptableCard {
     fn card_type(&self) -> ContactCardType {
         self.0
     }
@@ -48,6 +51,14 @@ impl DecryptableVerifiableCard for TestCard {
 
     fn card_signature(&self) -> Option<&[u8]> {
         Some(self.2.as_bytes())
+    }
+}
+
+struct TestEncryptableCard(pub String);
+
+impl EncryptableAndSignableCard for TestEncryptableCard {
+    fn plaintext_card_data(&self) -> &[u8] {
+        self.0.as_bytes()
     }
 }
 
@@ -63,7 +74,7 @@ fn test_encrypted_card() {
         .unwrap();
     let verification_key = provider.private_key_to_public_key(&private_key).unwrap();
 
-    let card = TestCard(
+    let card = TestDecryptableCard(
         ContactCardType::Encrypted,
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
         String::default(),
@@ -89,7 +100,7 @@ fn test_signed_card() {
         .unwrap();
     let verification_key = provider.private_key_to_public_key(&private_key).unwrap();
 
-    let card = TestCard(
+    let card = TestDecryptableCard(
         ContactCardType::Signed,
         SIGNED_DATA.to_owned(),
         SIGNED_SIGNATURE.to_owned(),
@@ -111,7 +122,7 @@ fn test_signed_card_invalid_signature() {
         .unwrap();
     let verification_key = provider.private_key_to_public_key(&private_key).unwrap();
 
-    let card = TestCard(
+    let card = TestDecryptableCard(
         ContactCardType::Signed,
         SIGNED_DATA.to_owned(),
         SIGNED_SIGNATURE_INVALID.to_owned(),
@@ -133,7 +144,7 @@ fn test_signed_and_encrypted_card() {
         .unwrap();
     let verification_key = provider.private_key_to_public_key(&private_key).unwrap();
 
-    let card = TestCard(
+    let card = TestDecryptableCard(
         ContactCardType::EncryptedAndSigned,
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
         ENCRYPTED_AND_SIGNED_SIGNATURE.to_owned(),
@@ -159,7 +170,7 @@ fn test_signed_and_encrypted_card_invalid_signature() {
         .unwrap();
     let verification_key = provider.private_key_to_public_key(&private_key).unwrap();
 
-    let card = TestCard(
+    let card = TestDecryptableCard(
         ContactCardType::EncryptedAndSigned,
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
         ENCRYPTED_AND_SIGNED_SIGNATURE_INVALID.to_owned(),
@@ -172,7 +183,7 @@ fn test_signed_and_encrypted_card_invalid_signature() {
 #[test]
 fn test_signed_card_no_verification_keys() {
     let provider = new_pgp_provider();
-    let card = TestCard(
+    let card = TestDecryptableCard(
         ContactCardType::Signed,
         SIGNED_DATA.to_owned(),
         SIGNED_SIGNATURE.to_owned(),
@@ -199,7 +210,7 @@ fn test_signed_and_encrypted_card_no_decryption_keys() {
     let verification_keys = vec![provider.private_key_to_public_key(&private_key).unwrap()];
     let decryption_keys = provider.empty_private_keys();
 
-    let card = TestCard(
+    let card = TestDecryptableCard(
         ContactCardType::EncryptedAndSigned,
         ENCRYPTED_AND_SIGNED_DATA.to_owned(),
         ENCRYPTED_AND_SIGNED_SIGNATURE.to_owned(),
@@ -207,4 +218,76 @@ fn test_signed_and_encrypted_card_no_decryption_keys() {
     let test_result = card.decrypt_and_verify_sync(&provider, &decryption_keys, &verification_keys);
 
     assert!(test_result.is_err());
+}
+
+#[test]
+fn test_sign_plaintext_card() {
+    let provider = new_pgp_provider();
+    let private_key = provider
+        .private_key_import(
+            PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let public_key = provider.private_key_to_public_key(&private_key).unwrap();
+    let fourty_two: u32 = 42;
+
+    let unlocked_address_key = DecryptedAddressKey {
+        id: KeyId("hello".to_owned()),
+        flags: KeyFlag::from(fourty_two),
+        primary: true,
+        private_key,
+        public_key,
+    };
+
+    let card = TestEncryptableCard(SIGNED_DATA.to_owned());
+    card.sign_only(provider, &unlocked_address_key)
+        .expect("signing should not fail");
+}
+
+#[test]
+fn test_encrypt_and_sign_card() {
+    let provider = new_pgp_provider();
+    let private_key = provider
+        .private_key_import(
+            PRIVATE_KEY.as_bytes(),
+            "password".as_bytes(),
+            DataEncoding::Armor,
+        )
+        .unwrap();
+    let public_key = provider.private_key_to_public_key(&private_key).unwrap();
+    let verification_public_key = provider.private_key_to_public_key(&private_key).unwrap();
+    let fourty_two: u32 = 42;
+
+    let unlocked_address_key = DecryptedAddressKey {
+        id: KeyId("hello".to_owned()),
+        flags: KeyFlag::from(fourty_two),
+        primary: true,
+        private_key,
+        public_key,
+    };
+
+    let card = TestEncryptableCard(SIGNED_DATA.to_owned());
+    let (signed_data, detached_signature) = card
+        .encrypt_and_sign_sync(&provider, &unlocked_address_key)
+        .expect("encrypt and sign should not fail");
+
+    let decrypted_plaintext = TestDecryptableCard(
+        ContactCardType::EncryptedAndSigned,
+        String::from_utf8(signed_data).expect("string parsing of data from vector shouldn't fail"),
+        String::from_utf8(detached_signature)
+            .expect("string parsing of signature from vector shouldn't fail"),
+    )
+    .decrypt_and_verify_sync(
+        &provider,
+        &[unlocked_address_key.as_ref()],
+        &[verification_public_key],
+    )
+    .expect("decrypting and verifying signed and encrypted card should not fail");
+
+    assert_eq!(
+        SIGNED_DATA,
+        String::from_utf8(decrypted_plaintext).expect("encoding decrypted card should not fail")
+    );
 }
