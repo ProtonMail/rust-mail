@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Ensure mail cache path is unique per user.
+- Fix conversation message selection.
 
 ## [0.5.27] - 2024-06-21
 

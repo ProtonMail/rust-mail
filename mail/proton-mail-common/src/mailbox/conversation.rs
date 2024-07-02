@@ -265,17 +265,10 @@ pub fn first_unread_message_in_conversation(
         return last_unread;
     };
 
-    // In any other location check if the last message is unread.
-    let mut iter = messages.iter().rev();
-    let msg = iter.next()?;
-    if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
-        return Some(msg.id);
-    }
-
     let mut last_unread = None;
 
     // last consecutive message that is not a draft or sent auto-reply
-    for msg in iter {
+    for msg in messages.iter().rev() {
         if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
             last_unread = Some(msg.id);
         } else if last_unread.is_some() {
