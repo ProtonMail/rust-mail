@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Fixed
+
+- Ensure mail cache path is unique per user.
+
 ## [0.10.30] - 2024-06-21
 
 ## Changed

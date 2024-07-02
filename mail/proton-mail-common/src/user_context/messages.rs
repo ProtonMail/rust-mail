@@ -99,9 +99,9 @@ impl MailUserContext {
 
     /// Get the cache path for a message body with `id`.
     pub fn message_cache_path(&self, id: LocalMessageId) -> PathBuf {
-        self.mail_context()
-            .mail_cache_path()
-            .join(format!("message_body_{id}"))
+        let mut path = self.mail_cache_path();
+        path.push(format!("message_body_{id}"));
+        path
     }
 
     /// Filter or Search messages which match the given `filter`.

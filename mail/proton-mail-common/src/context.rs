@@ -1,6 +1,7 @@
 use crate::db::DBMigrationError;
 use crate::MailUserContext;
 use proton_api_mail::domain::AddressDomainLogoError;
+use proton_api_mail::proton_api_core::domain::UserId;
 use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
 use proton_api_mail::proton_api_core::http::{Client, RequestError};
 use proton_api_mail::proton_api_core::login::Flow;
@@ -10,7 +11,7 @@ use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 /// Errors that may occur while interacting with a MailContext.
@@ -113,7 +114,7 @@ impl MailContext {
         login_flow: &Flow,
     ) -> MailContextResult<MailUserContext> {
         let ctx = self.core_context.user_context_from_login_flow(login_flow)?;
-        Ok(MailUserContext::new(self.clone(), ctx))
+        MailUserContext::new(self.clone(), ctx)
     }
 
     /// Create a new context from an existing session.
@@ -126,7 +127,7 @@ impl MailContext {
         cb: Option<Box<dyn CoreSessionCallback>>,
     ) -> MailContextResult<MailUserContext> {
         let ctx = self.core_context.user_context_from_session(session, cb)?;
-        Ok(MailUserContext::new(self.clone(), ctx))
+        MailUserContext::new(self.clone(), ctx)
     }
     /// Return the list of active session.
     ///
@@ -155,9 +156,9 @@ impl MailContext {
         self.core_context.async_runtime()
     }
 
-    /// Path where mail content should be cached.
-    pub fn mail_cache_path(&self) -> &Path {
-        &self.mail_cache_path
+    /// Path where mail content should be cached for user with `user_id`.
+    pub fn mail_cache_path(&self, user_id: &UserId) -> PathBuf {
+        self.mail_cache_path.join(user_id.as_ref())
     }
 }
 
