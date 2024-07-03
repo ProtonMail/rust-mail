@@ -778,7 +778,7 @@ pub trait ApiService {
     /// * `name`  - The header name.
     /// * `value` - The header value.
     ///
-    fn set_header(&mut self, name: &str, value: &str);
+    fn set_header(&self, name: &str, value: &str);
 }
 
 /// Marker trait for service errors.

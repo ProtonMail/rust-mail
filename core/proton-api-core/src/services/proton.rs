@@ -54,7 +54,11 @@ pub mod requests;
 pub mod response_data;
 pub mod responses;
 
-use crate::http::{X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE};
+use crate::auth::Auth;
+use crate::http::{
+    DEFAULT_APP_VERSION, DEFAULT_HOST_URL, X_PM_HUMAN_VERIFICATION_TOKEN,
+    X_PM_HUMAN_VERIFICATION_TOKEN_TYPE,
+};
 use crate::service::{ApiService, ApiServiceError, Request, ServiceError, NO_PARAMS};
 use crate::services::proton::common::{Fido2Auth, RemoteId};
 use crate::services::proton::request_data::HumanVerificationData;
@@ -71,14 +75,17 @@ use crate::services::proton::responses::{
     PostAuthResponse, PostAuthSessionsForksResponse,
 };
 use crate::DEFAULT_REDIRECT_URL;
-use reqwest::{
-    header::{HeaderMap, HeaderName, HeaderValue},
-    Client, Url,
-};
+use parking_lot::RwLock;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::{Client, Url};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{Error as JsonError, Value as JsonValue};
+use smart_default::SmartDefault;
+use std::sync::Arc;
 use thiserror::Error;
+use tokio::sync::RwLock as AsyncRwLock;
+use tracing::error;
 use velcro::hash_map;
 
 const HUMAN_VERIFICATION_REQUESTED: u32 = 9001;
@@ -107,17 +114,53 @@ pub enum ProtonApiServiceError {
 
 impl ServiceError for ProtonApiServiceError {}
 
+/// The configuration for the Proton API service.
+#[derive(Clone, Debug, Eq, PartialEq, SmartDefault)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct Config {
+    /// TODO: Document this field.
+    pub allow_http: bool,
+
+    /// TODO: Document this field.
+    #[default(DEFAULT_APP_VERSION.to_owned())]
+    pub app_version: String,
+
+    /// The base URL for the external service.
+    #[default(DEFAULT_HOST_URL.to_owned())]
+    pub base_url: String,
+
+    /// TODO: Document this field.
+    pub skip_srp_proof_validation: bool,
+
+    /// TODO: Document this field.
+    #[default("NoClient/0.1.0".to_owned())]
+    pub user_agent: String,
+}
+
 /// A service for communicating with the Proton API.
-#[derive(Clone, Debug)]
+///
+/// This struct is thread-safe, and can be cloned without issue. Cloning will
+/// create a new Reqwest [`Client`] instance from the pool. It will also provide
+/// a new shared reference to the persistent headers, which are shared between
+/// threads, but the base URL is not expected to change after instantiation and
+/// is not shared.
+///
+#[derive(Clone)]
 pub struct Proton {
-    /// The Reqwest HTTP client which is used internally.
-    client: Client,
+    /// The current authentication context.
+    auth: Arc<AsyncRwLock<Option<Auth>>>,
 
     /// The base URL for the external service.
     base_url: Url,
 
+    /// The Reqwest HTTP client which is used internally.
+    client: Client,
+
+    /// The configuration for the service.
+    config: Config,
+
     /// A collection of headers to send with every request.
-    headers: HeaderMap,
+    headers: Arc<RwLock<HeaderMap>>,
 }
 
 impl ApiService for Proton {
@@ -130,7 +173,7 @@ impl ApiService for Proton {
     }
 
     fn headers(&self) -> HeaderMap {
-        self.headers.clone()
+        self.headers.read().clone()
     }
 
     async fn on_error<J, T>(
@@ -145,8 +188,8 @@ impl ApiService for Proton {
         Err(error)
     }
 
-    fn set_header(&mut self, name: &str, value: &str) {
-        self.headers.insert(
+    fn set_header(&self, name: &str, value: &str) {
+        self.headers.write().insert(
             HeaderName::from_bytes(name.as_bytes()).unwrap(),
             HeaderValue::from_bytes(value.as_bytes()).unwrap(),
         );
@@ -160,15 +203,30 @@ impl Proton {
     ///
     /// # Parameters
     ///
-    /// * `base_url` - The API base URL.
-    /// * `headers`  - The headers to send with every request.
+    /// * `config`  - The API configuration options.
+    /// * `headers` - The headers to send with every request.
+    /// * `auth`    - The current authentication context.
     ///
-    pub fn new(base_url: Url, headers: Option<HeaderMap>) -> Self {
+    #[allow(clippy::missing_panics_doc)]
+    pub fn new(
+        config: Config,
+        headers: Option<HeaderMap>,
+        auth: Arc<AsyncRwLock<Option<Auth>>>,
+    ) -> Self {
+        let base_url = Url::parse(&config.base_url).unwrap();
         Self {
-            client: Client::new(),
+            auth,
             base_url,
-            headers: headers.unwrap_or_default(),
+            client: Client::new(),
+            config,
+            headers: Arc::new(RwLock::new(headers.unwrap_or_default())),
         }
+    }
+
+    /// Gets the API configuration options.
+    #[must_use]
+    pub fn config(&self) -> &Config {
+        &self.config
     }
 
     /// DELETEs the current authentication session.
