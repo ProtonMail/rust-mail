@@ -98,13 +98,13 @@ pub trait EncryptableAndSignableCard {
     fn encrypt_and_sign_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
-        address_key: &UnlockedUserKey<T>,
+        user_key: &UnlockedUserKey<T>,
     ) -> Result<(EncryptedCard, CardSignature), CardCryptoError> {
         let mut result_data: Vec<u8> = Vec::new();
         let mut encryptor_writer = provider
             .new_encryptor()
-            .with_encryption_key(address_key.as_public_key())
-            .with_signing_key(address_key.as_ref())
+            .with_encryption_key(user_key.as_public_key())
+            .with_signing_key(user_key.as_ref())
             .with_utf8()
             .encrypt_stream_with_detached_signature(
                 &mut result_data,
@@ -133,11 +133,11 @@ pub trait EncryptableAndSignableCard {
     fn sign_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
-        address_key: &UnlockedUserKey<T>,
+        user_key: &UnlockedUserKey<T>,
     ) -> Result<CardSignature, CardCryptoError> {
         let signature = provider
             .new_signer()
-            .with_signing_key(address_key.as_ref())
+            .with_signing_key(user_key.as_ref())
             .sign_detached(self.plaintext_card_data(), DataEncoding::Armor)
             .map_err(CardCryptoError::SigningError)?;
 
