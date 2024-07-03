@@ -55,6 +55,8 @@ pub enum CardCryptoError {
     SigningError(CryptoError),
     #[error("Error writing card data to stream: {0}")]
     WriteError(Error),
+    #[error("Error encoding data to string: {0}")]
+    EncodingError(FromUtf8Error),
     #[error("Error verifying card signature: {0}")]
     SignatureVerificationError(#[from] VerificationError),
     #[error("No signature found for a signed card")]

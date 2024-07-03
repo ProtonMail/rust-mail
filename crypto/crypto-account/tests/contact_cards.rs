@@ -3,7 +3,7 @@ use proton_crypto::new_pgp_provider;
 use proton_crypto_account::contacts::{
     ContactCardType, DecryptableVerifiableCard, EncryptableAndSignableCard,
 };
-use proton_crypto_account::keys::{DecryptedAddressKey, KeyFlag, KeyId};
+use proton_crypto_account::keys::{DecryptedUserKey, KeyId};
 
 const PRIVATE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
@@ -232,32 +232,25 @@ fn test_sign_plaintext_card() {
         .unwrap();
     let public_key = provider.private_key_to_public_key(&private_key).unwrap();
     let verification_public_key = provider.private_key_to_public_key(&private_key).unwrap();
-    let fourty_two: u32 = 42;
 
-    let unlocked_address_key = DecryptedAddressKey {
+    let unlocked_address_key = DecryptedUserKey {
         id: KeyId("hello".to_owned()),
-        flags: KeyFlag::from(fourty_two),
-        primary: true,
         private_key,
         public_key,
     };
 
     let card = TestEncryptableCard(SIGNED_DATA.to_owned());
     let signature = card
-        .sign_only_sync(&provider, &unlocked_address_key)
+        .sign_sync(&provider, &unlocked_address_key)
         .expect("signing should not fail");
 
-    TestDecryptableCard(
-        ContactCardType::Signed,
-        SIGNED_DATA.to_owned(),
-        String::from_utf8(signature).expect("encoding computed signature should not fail"),
-    )
-    .decrypt_and_verify_sync(
-        &provider,
-        &provider.empty_private_keys(),
-        &[verification_public_key],
-    )
-    .expect("signature verification should not fail");
+    TestDecryptableCard(ContactCardType::Signed, SIGNED_DATA.to_owned(), signature.0)
+        .decrypt_and_verify_sync(
+            &provider,
+            &provider.empty_private_keys(),
+            &[verification_public_key],
+        )
+        .expect("signature verification should not fail");
 }
 
 #[test]
@@ -272,12 +265,9 @@ fn test_encrypt_and_sign_card() {
         .unwrap();
     let public_key = provider.private_key_to_public_key(&private_key).unwrap();
     let verification_public_key = provider.private_key_to_public_key(&private_key).unwrap();
-    let fourty_two: u32 = 42;
 
-    let unlocked_address_key = DecryptedAddressKey {
+    let unlocked_address_key = DecryptedUserKey {
         id: KeyId("hello".to_owned()),
-        flags: KeyFlag::from(fourty_two),
-        primary: true,
         private_key,
         public_key,
     };
@@ -289,9 +279,8 @@ fn test_encrypt_and_sign_card() {
 
     let decrypted_plaintext = TestDecryptableCard(
         ContactCardType::EncryptedAndSigned,
-        String::from_utf8(signed_data).expect("string parsing of data from vector shouldn't fail"),
-        String::from_utf8(detached_signature)
-            .expect("string parsing of signature from vector shouldn't fail"),
+        signed_data.0,
+        detached_signature.0,
     )
     .decrypt_and_verify_sync(
         &provider,

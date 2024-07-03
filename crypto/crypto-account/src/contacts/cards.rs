@@ -6,7 +6,19 @@ use proton_crypto::crypto::{
     VerifiedData, Verifier, VerifierSync,
 };
 
-use crate::{errors::CardCryptoError, keys::UnlockedAddressKey};
+use serde::{Deserialize, Serialize};
+
+use crate::{errors::CardCryptoError, keys::UnlockedUserKey};
+
+crate::string_id! {
+    /// An armored signature calculated on a plaintext vcard of a contact
+    CardSignature
+}
+
+crate::string_id! {
+    /// An armored ciphertext calculated on a plaintext vcard of a contact
+    EncryptedCard
+}
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ContactCardType {
@@ -78,14 +90,16 @@ pub trait DecryptableVerifiableCard {
 }
 
 pub trait EncryptableAndSignableCard {
-    // Returns the plaintext, unencrypted, data comprising the contact
+    /// Returns a slice of the plaintext card data comprising a contact v-card.
     fn plaintext_card_data(&self) -> &[u8];
 
+    /// Encrypt and and sign the plaintext card data.  This will produce two output values: the encrypted card
+    /// and the detached signature calculated over the plaintext card data.
     fn encrypt_and_sign_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
-        address_key: &UnlockedAddressKey<T>,
-    ) -> Result<(Vec<u8>, Vec<u8>), CardCryptoError> {
+        address_key: &UnlockedUserKey<T>,
+    ) -> Result<(EncryptedCard, CardSignature), CardCryptoError> {
         let mut result_data: Vec<u8> = Vec::new();
         let mut encryptor_writer = provider
             .new_encryptor()
@@ -107,18 +121,28 @@ pub trait EncryptableAndSignableCard {
             .finalize_with_detached_signature()
             .map_err(CardCryptoError::EncryptionError)?;
 
-        Ok((result_data, detached_signature))
+        Ok((
+            EncryptedCard(String::from_utf8(result_data).map_err(CardCryptoError::EncodingError)?),
+            CardSignature(
+                String::from_utf8(detached_signature).map_err(CardCryptoError::EncodingError)?,
+            ),
+        ))
     }
 
-    fn sign_only_sync<T: PGPProviderSync>(
+    /// Sign the plaintext card data.
+    fn sign_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
-        address_key: &UnlockedAddressKey<T>,
-    ) -> Result<Vec<u8>, CardCryptoError> {
-        provider
+        address_key: &UnlockedUserKey<T>,
+    ) -> Result<CardSignature, CardCryptoError> {
+        let signature = provider
             .new_signer()
             .with_signing_key(address_key.as_ref())
             .sign_detached(self.plaintext_card_data(), DataEncoding::Armor)
-            .map_err(CardCryptoError::SigningError)
+            .map_err(CardCryptoError::SigningError)?;
+
+        Ok(CardSignature(
+            String::from_utf8(signature).map_err(CardCryptoError::EncodingError)?,
+        ))
     }
 }
