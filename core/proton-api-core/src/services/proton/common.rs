@@ -10,8 +10,65 @@
 use core::fmt;
 use secrecy::{CloneableSecret, DebugSecret, Zeroize};
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
+
+//  ENUMS
+//==============================================================================
+
+/// Human verification type returned by the API.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[repr(u8)]
+#[serde(rename_all = "lowercase")]
+pub enum HumanVerificationType {
+    /// User needs to solve a Captcha, use [`crate::captcha_get`] to retrieve the token, solve in a web
+    /// browser/view and retrieve the token posted via an `HVCaptchaMessage`.
+    Captcha,
+
+    /// User needs to verify via a token send via an email. Note: Request for this
+    /// verification is not yet implemented.
+    Email,
+
+    /// User needs to verify via a token send via sms. Note: Request for this verification is not
+    /// yet inmplemented.
+    Sms,
+}
+
+impl HumanVerificationType {
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Captcha => "captcha",
+            Self::Email => "email",
+            Self::Sms => "sms",
+        }
+    }
+}
+
+//  STRUCTS
+//==============================================================================
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Fido2Auth {
+    /// TODO: Document this field.
+    pub authentication_data: String,
+
+    /// TODO: Document this field.
+    pub authentication_options: JsonValue,
+
+    /// TODO: Document this field.
+    pub client_data: String,
+
+    /// TODO: Document this field.
+    #[serde(rename = "CredentialID")]
+    pub credential_id: Vec<i32>,
+
+    /// TODO: Document this field.
+    pub signature: String,
+}
 
 /// Remote ID.
 ///

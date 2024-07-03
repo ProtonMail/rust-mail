@@ -1,3 +1,5 @@
+#![allow(clippy::module_name_repetitions)]
+
 //! The Proton API service.
 //!
 //! This module provides a service that can be used to make requests to the
@@ -52,21 +54,58 @@ pub mod requests;
 pub mod response_data;
 pub mod responses;
 
-use crate::service::{ApiService, ApiServiceError, Request, NO_PARAMS};
-use crate::services::proton::common::RemoteId;
+use crate::http::{X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE};
+use crate::service::{ApiService, ApiServiceError, Request, ServiceError, NO_PARAMS};
+use crate::services::proton::common::{Fido2Auth, RemoteId};
+use crate::services::proton::request_data::HumanVerificationData;
 use crate::services::proton::requests::{
-    GetContactsEmailsOptions, GetContactsOptions, GetEventOptions,
+    GetCaptchaOptions, GetContactsEmailsOptions, GetContactsOptions, GetEventOptions,
+    GetKeysAllOptions, PostAuthInfoRequest, PostAuthRefreshRequest, PostAuthRequest,
+    PostAuthSessionsForksRequest, PostAuthTfaRequest,
 };
+use crate::services::proton::response_data::HumanVerificationChallenge;
 use crate::services::proton::responses::{
     GetAddressesResponse, GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
-    GetEventResponse, GetEventsLatestResponse, GetSettingsResponse, GetUsersResponse,
+    GetEventResponse, GetEventsLatestResponse, GetKeysAllResponse, GetKeysSaltsResponse,
+    GetSettingsResponse, GetUsersResponse, PostAuthInfoResponse, PostAuthRefreshResponse,
+    PostAuthResponse, PostAuthSessionsForksResponse,
 };
+use crate::DEFAULT_REDIRECT_URL;
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue},
     Client, Url,
 };
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::{Error as JsonError, Value as JsonValue};
+use thiserror::Error;
+use velcro::hash_map;
+
+const HUMAN_VERIFICATION_REQUESTED: u32 = 9001;
+
+#[derive(Debug, Error)]
+pub enum ProtonApiServiceError {
+    //  HUMAN VERIFICATION DATA ERRORS
+    //==========================================================================
+    /// Human verification data was returned, but could not be deserialised.
+    #[error("Failed to deserialize human verification data: {0}")]
+    FailedToDeserializeHumanVerificationData(JsonError),
+
+    /// Human verification has been requested — this should lead to this
+    /// particular error being detected and handled.
+    #[error("Human verification requested")]
+    HumanVerificationRequested(HumanVerificationChallenge),
+
+    /// Human verification was indicated, but the data is missing.
+    #[error("Missing human verification data")]
+    MissingHumanVerificationData,
+
+    /// Human verification was indicated, but the specified type is unknown.
+    #[error(r#"Unknown human verification type "{0}""#)]
+    UnknownHumanVerificationType(String),
+}
+
+impl ServiceError for ProtonApiServiceError {}
 
 /// A service for communicating with the Proton API.
 #[derive(Clone, Debug)]
@@ -132,6 +171,16 @@ impl Proton {
         }
     }
 
+    /// DELETEs the current authentication session.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn delete_auth(&self) -> Result<(), ApiServiceError> {
+        self.delete("auth/v4", NO_PARAMS, None).await
+    }
+
     /// GETs a list of addresses.
     ///
     /// # Errors
@@ -141,6 +190,33 @@ impl Proton {
     pub async fn get_addresses(&self) -> Result<GetAddressesResponse, ApiServiceError> {
         self.get(&format!("{}/addresses", Self::BASE_PATH), NO_PARAMS, None)
             .await
+    }
+
+    /// GETs Captcha details.
+    ///
+    /// # Parameters
+    ///
+    /// * `token`     - The Captcha token to use.
+    /// * `force_web` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn get_captcha(
+        &self,
+        token: String,
+        force_web: bool,
+    ) -> Result<GetContactResponse, ApiServiceError> {
+        self.get(
+            &format!("{}/captcha", Self::BASE_PATH),
+            Some(GetCaptchaOptions {
+                force_web_messaging: force_web,
+                token,
+            }),
+            None,
+        )
+        .await
     }
 
     /// GETs a single contact.
@@ -250,6 +326,44 @@ impl Proton {
 
     /// TODO: Document this method.
     ///
+    /// # Parameters
+    ///
+    /// * `email`         - The email address to get keys for.
+    /// * `internal_only` - Whether to only get internal keys.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn get_keys_all(
+        &self,
+        email: String,
+        internal_only: Option<bool>,
+    ) -> Result<GetKeysAllResponse, ApiServiceError> {
+        self.get(
+            &format!("{}/keys/all", Self::BASE_PATH),
+            Some(GetKeysAllOptions {
+                email,
+                internal_only,
+            }),
+            None,
+        )
+        .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn get_keys_salts(&self) -> Result<GetKeysSaltsResponse, ApiServiceError> {
+        self.get(&format!("{}/keys/salts", Self::BASE_PATH), NO_PARAMS, None)
+            .await
+    }
+
+    /// TODO: Document this method.
+    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -278,5 +392,158 @@ impl Proton {
     pub async fn get_users(&self) -> Result<GetUsersResponse, ApiServiceError> {
         self.get(&format!("{}/users", Self::BASE_PATH), NO_PARAMS, None)
             .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `body`               - The body to use for the request.
+    /// * `human_verification` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn post_auth(
+        &self,
+        body: PostAuthRequest,
+        human_verification: Option<HumanVerificationData>,
+    ) -> Result<PostAuthResponse, ApiServiceError> {
+        // Repeat submission with x-pm-human-verification-token and
+        // x-pm-human-verification-token-type
+        let headers = human_verification.as_ref().map(|hv| {
+            hash_map! {
+                X_PM_HUMAN_VERIFICATION_TOKEN.to_owned(): hv.token.clone(),
+                X_PM_HUMAN_VERIFICATION_TOKEN_TYPE.to_owned(): hv.hv_type.as_str().to_owned(),
+            }
+        });
+        self.post("auth/v4", body, headers).await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `username` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn post_auth_info(
+        &self,
+        username: String,
+    ) -> Result<PostAuthInfoResponse, ApiServiceError> {
+        self.post("auth/v4/info", PostAuthInfoRequest { username }, None)
+            .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `uid`           - TODO: Document this parameter.
+    /// * `refresh_token` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn post_auth_refresh(
+        &self,
+        uid: RemoteId,
+        refresh_token: String,
+    ) -> Result<PostAuthRefreshResponse, ApiServiceError> {
+        self.post(
+            "auth/v4/refresh",
+            PostAuthRefreshRequest {
+                uid,
+                refresh_token,
+                grant_type: "refresh_token".to_owned(),
+                response_type: "token".to_owned(),
+                redirect_uri: DEFAULT_REDIRECT_URL.to_owned(),
+            },
+            None,
+        )
+        .await
+    }
+
+    /// Fork session request.
+    ///
+    /// This request is used to fork a user's session, providing a new session
+    /// for the same user.
+    ///
+    /// The general documentation for this can currently be found here:
+    ///
+    ///   - [Feature documentation](https://confluence.protontech.ch/display/CP/How+to+generate+a+session+fork+selector+for+testing+the+lite+account+application)
+    ///
+    /// The required POST request is described as being:
+    ///
+    ///   - `POST /api/auth/sessions/forks`
+    ///   - `{ ChildClientID: "web-account-lite", Independent: 0 }`
+    ///
+    /// The headers should be taken care of by the general request-response
+    /// process. Therefore all this action needs to do is call the endpoint with
+    /// the required JSON body.
+    ///
+    /// The relevant API documentation is here:
+    ///
+    ///   - [API docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/auth/#tag/Authentication-Sessions/operation/post_auth-%7B_version%7D-sessions-forks)
+    ///
+    /// The fields in the JSON body are not currently documented.
+    ///
+    /// # Parameters
+    ///
+    /// * `child_client_id` - The child client ID to use for the request, which
+    ///                       is always `"web-account-lite"` at present. It
+    ///                       seems like this is an identifier for the caller,
+    ///                       but this is not clear.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn post_auth_sessions_forks(
+        &self,
+        child_client_id: Option<String>,
+    ) -> Result<PostAuthSessionsForksResponse, ApiServiceError> {
+        self.post(
+            "auth/sessions/forks",
+            PostAuthSessionsForksRequest {
+                child_client_id: child_client_id.unwrap_or("web-account-lite".to_owned()),
+                independent: 0,
+            },
+            None,
+        )
+        .await
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `tfa_code` - TODO: Document this parameter.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn post_auth_tfa(&self, tfa_code: String) -> Result<(), ApiServiceError> {
+        self.post(
+            "auth/v4/2fa",
+            PostAuthTfaRequest {
+                two_factor_code: tfa_code,
+                fido2: Fido2Auth {
+                    authentication_data: String::new(),
+                    authentication_options: JsonValue::Null,
+                    client_data: String::new(),
+                    credential_id: vec![],
+                    signature: String::new(),
+                },
+            },
+            None,
+        )
+        .await
     }
 }

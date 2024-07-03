@@ -29,6 +29,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 uniffi = { workspace = true, optional = true }
+velcro = { workspace = true }
 
 [features]
 default = []

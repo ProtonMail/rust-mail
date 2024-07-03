@@ -23,13 +23,14 @@
 //! [`common`](crate::services::proton::common) module.
 //!
 
-use crate::services::proton::common::RemoteId;
+use crate::services::proton::common::{Fido2Auth, HumanVerificationType, RemoteId};
 use crate::services::proton::responses::GetEventResponse;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
 use serde::Deserialize;
 #[cfg(test)]
 use serde::Serialize;
 use serde_aux::field_attributes::deserialize_default_from_null;
+use serde_json::Value as JsonValue;
 use serde_repr::Deserialize_repr;
 #[cfg(test)]
 use serde_repr::Serialize_repr;
@@ -177,6 +178,18 @@ pub enum LogAuth {
 
     /// TODO: Document this variant.
     Advanced = 2,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(test, derive(Serialize_repr))]
+#[repr(u8)]
+pub enum PasswordMode {
+    /// TODO: Document this variant.
+    One = 1,
+
+    /// TODO: Document this variant.
+    Two = 2,
 }
 
 /// TODO: Document this enum.
@@ -354,6 +367,26 @@ pub struct AddressSignedKeyList {
 
     /// TODO: Document this field.
     pub signature: Option<String>,
+}
+
+/// Additional information about an API service error.
+///
+/// If a response is received with an HTTP status code that indicates a protocol
+/// error, then it may be accompanied by additional information about the error.
+/// This struct provides a way to access that information.
+///
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ApiErrorInfo {
+    /// Internal API code.
+    pub code: u32,
+
+    /// Optional error message that may be present.
+    pub error: Option<String>,
+
+    /// Optional JSON type with error details.
+    pub details: Option<JsonValue>,
 }
 
 /// Represents partial contact information returned by the API.
@@ -573,6 +606,18 @@ pub struct Email {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(test, derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
+pub struct Fido2Info {
+    /// TODO: Document this field.
+    pub authentication_options: JsonValue,
+
+    /// TODO: Document this field.
+    pub registered_keys: Option<JsonValue>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
 pub struct FidoKey {
     /// TODO: Document this field.
     pub attestation_format: String,
@@ -635,6 +680,18 @@ pub struct HighSecurity {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
     pub value: bool,
+}
+
+/// Information for the human verification challenge.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct HumanVerificationChallenge {
+    /// Types of supported verification.
+    pub methods: Vec<HumanVerificationType>,
+
+    /// Token for the verification request.
+    pub token: String,
 }
 
 /// TODO: Document this struct.
@@ -727,6 +784,32 @@ pub struct SettingsFlags {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
     pub welcomed: bool,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct TfaAuth {
+    /// TODO: Document this field.
+    #[serde(rename = "FIDO2")]
+    pub fido2: Fido2Auth,
+
+    /// TODO: Document this field.
+    pub two_factor_code: String,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(test, derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct TfaInfo {
+    /// TODO: Document this field.
+    pub enabled: TfaStatus,
+
+    /// TODO: Document this field.
+    #[serde(rename = "FIDO2")]
+    pub fido2_info: Fido2Info,
 }
 
 /// TODO: Document this struct.

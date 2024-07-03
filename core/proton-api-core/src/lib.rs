@@ -20,6 +20,8 @@ pub use requests::APIErrorDesc;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
 
+pub(crate) const DEFAULT_REDIRECT_URL: &str = "https://protonmail.ch/";
+
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
 

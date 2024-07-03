@@ -16,3 +16,18 @@
 //! Any types that used by both requests and responses should be defined in the
 //! [`common`](crate::services::proton::common) module.
 //!
+
+use crate::services::proton::common::HumanVerificationType;
+
+//  STRUCTS
+//==============================================================================
+
+/// Human verification data required for login.
+#[derive(Clone, Debug)]
+pub struct HumanVerificationData {
+    /// Type of human verification where the code originated from.
+    pub hv_type: HumanVerificationType,
+
+    /// Result of the human verification request.
+    pub token: String,
+}

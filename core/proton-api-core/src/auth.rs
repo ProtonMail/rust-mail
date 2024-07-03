@@ -1,8 +1,9 @@
-use crate::domain::{SecretString, Uid, UserId};
+use crate::domain::{Uid, UserId};
 use crate::http::RequestError;
 use proton_crypto_account::salts::KeySecret;
-use secrecy::ExposeSecret;
-use serde::{Deserialize, Serialize};
+use secrecy::{ExposeSecret, SecretString as RealSecretString};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::ops::Deref;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -12,11 +13,11 @@ pub struct Scope(pub String);
 
 /// Token used to refresh the active session.
 #[derive(Deserialize, Debug, Clone)]
-pub struct RefreshToken(pub SecretString);
+pub struct RefreshToken(pub RealSecretString);
 
 /// Authentication token for the current session.
 #[derive(Deserialize, Debug, Clone)]
-pub struct AccessToken(pub SecretString);
+pub struct AccessToken(pub RealSecretString);
 
 /// The user key secret to unlock user keys.
 #[derive(Debug, Clone)]
@@ -39,6 +40,50 @@ pub struct Auth {
     pub scope: Scope,
     /// `KeySecret` to unlock the user keys.
     pub key_secret: Option<UserKeySecret>,
+}
+
+/// TODO: Document this struct.
+#[derive(Debug, Clone)]
+pub struct SecretString(RealSecretString);
+
+impl Deref for SecretString {
+    type Target = RealSecretString;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for SecretString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(SecretString(RealSecretString::deserialize(deserializer)?))
+    }
+}
+
+impl Eq for SecretString {}
+
+impl From<RealSecretString> for SecretString {
+    fn from(value: RealSecretString) -> Self {
+        Self(value)
+    }
+}
+
+impl PartialEq for SecretString {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.expose_secret() == other.0.expose_secret()
+    }
+}
+
+impl Serialize for SecretString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str("[redacted]")
+    }
 }
 
 pub trait Store: Send + Sync + 'static {
@@ -262,13 +307,13 @@ impl UserKeySecret {
 
 impl<T: Into<String>> From<T> for AccessToken {
     fn from(value: T) -> Self {
-        Self(SecretString::new(value.into()))
+        Self(RealSecretString::new(value.into()))
     }
 }
 
 impl<T: Into<String>> From<T> for RefreshToken {
     fn from(value: T) -> Self {
-        Self(SecretString::new(value.into()))
+        Self(RealSecretString::new(value.into()))
     }
 }
 
