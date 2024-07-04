@@ -256,7 +256,7 @@ impl LocalAddressKey {
     }
 
     /// Locks an existing unlocked address key with a new user key.
-    pub fn from_unlocked<Provider: PGPProviderSync>(
+    pub fn relock_address_key<Provider: PGPProviderSync>(
         pgp_provider: &Provider,
         unlocked_address_key: &UnlockedAddressKey<Provider>,
         parent_key: &UnlockedUserKey<Provider>,
@@ -285,7 +285,7 @@ impl LocalAddressKey {
     ///
     /// Only use this method if a legacy key should be produced.
     /// In most scenarios this is not the case!
-    pub fn from_unlocked_legacy<Provider: PGPProviderSync>(
+    pub fn relock_address_key_legacy<Provider: PGPProviderSync>(
         pgp_provider: &Provider,
         unlocked_address_key: &DecryptedAddressKey<<Provider>::PrivateKey, <Provider>::PublicKey>,
         salted_password: &KeySecret,

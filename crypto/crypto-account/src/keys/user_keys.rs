@@ -219,7 +219,7 @@ impl LocalUserKey {
     /// This needs to happen for example if the user changes its password.
     /// Since the key is locked with a new secret, it must be synced with the backend,
     /// and must be considered as local only.
-    pub fn from_unlocked<Provider: PGPProviderSync>(
+    pub fn relock_user_key<Provider: PGPProviderSync>(
         pgp_provider: &Provider,
         unlocked_user_key: &UnlockedUserKey<Provider>,
         salted_password: &KeySecret,

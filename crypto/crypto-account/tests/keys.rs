@@ -212,7 +212,7 @@ fn test_user_key_change_secret() {
         .next()
         .unwrap();
     let test_secret = KeySecret::new("test_secret".into());
-    let locked_key = LocalUserKey::from_unlocked(&provider, &test_user_key, &test_secret)
+    let locked_key = LocalUserKey::relock_user_key(&provider, &test_user_key, &test_secret)
         .expect("lock should succeed");
     // Unlock ok
     locked_key
@@ -283,7 +283,7 @@ fn test_address_key_change_parent_key() {
     // Non-Legacy
     let test_address_key = unlocked_keys.unlocked_keys.into_iter().next().unwrap();
     let locked_address_key =
-        LocalAddressKey::from_unlocked(&provider, &test_address_key, &other_user_key)
+        LocalAddressKey::relock_address_key(&provider, &test_address_key, &other_user_key)
             .expect("lock should work");
 
     // Unlock ok
@@ -302,7 +302,7 @@ fn test_address_key_change_parent_key() {
     // Legacy
     let test_secret = KeySecret::new("test_secret".into());
     let locked_address_key =
-        LocalAddressKey::from_unlocked_legacy(&provider, &test_address_key, &test_secret)
+        LocalAddressKey::relock_address_key_legacy(&provider, &test_address_key, &test_secret)
             .expect("lock should work");
 
     // Unlock ok
