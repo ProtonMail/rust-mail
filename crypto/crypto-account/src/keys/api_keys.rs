@@ -165,21 +165,6 @@ pub struct LockedKey {
     pub address_forwarding_id: Option<String>, // Only available for address keys
 }
 
-impl LockedKey {
-    /// Check whether this is an address key by checking if key flags are present.
-    pub fn is_address_key(&self) -> bool {
-        self.flags.is_some()
-    }
-    /// Indicates whether this is a legacy address key.
-    ///
-    /// Returns false if the key is not an address key.
-    /// Legacy means that the address key is encrypted with the same key secret
-    /// as the user key. Thus, it does not contain an encrypted token and a token signature.
-    pub fn is_legacy_address_key(&self) -> bool {
-        self.is_address_key() && (self.token.is_none() || self.signature.is_none())
-    }
-}
-
 /// Represents a public key retrieved from the API.
 ///
 /// For example the 'core/v4/keys/all' route can be used to retrieve public keys of

@@ -159,6 +159,16 @@ impl AddressKeys {
             failed: failed_keys,
         }
     }
+
+    /// Indicates whether any legacy address keys are present.
+    ///
+    /// Legacy means that the address key is encrypted with the same key secret
+    /// as the user key. Thus, it does not contain an encrypted token or a token signature.
+    pub fn contains_legacy_keys(&self) -> bool {
+        self.0
+            .iter()
+            .any(|locked_key| locked_key.token.is_none() || locked_key.signature.is_none())
+    }
 }
 
 /// Represents a decrypted address key of a user.
