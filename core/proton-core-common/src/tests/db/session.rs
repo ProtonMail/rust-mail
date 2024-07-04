@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use crate::datatypes::RemoteId;
 use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
 use crate::db::EncryptedUserSession;
@@ -14,7 +16,6 @@ use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{registry, EnvFilter};
 
-#[cfg(test)]
 async fn new_test_connection() -> Stash {
     drop(set_global_default(
         registry()

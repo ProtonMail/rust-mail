@@ -1,17 +1,15 @@
 #![allow(clippy::module_name_repetitions)]
 
+#[cfg(test)]
+#[path = "tests/subscriber.rs"]
+mod tests;
+
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 // avoid namespace conflicts
 use crate::Event;
 use anyhow::Error as AnyhowError;
 use proton_api_core::service::ApiServiceError;
-#[cfg(test)]
-use proton_api_core::services::proton::common::RemoteId;
-#[cfg(test)]
-use proton_api_core::services::proton::responses::GetEventResponse;
-#[cfg(test)]
-use serde::Deserialize;
 use stash::stash::StashError;
 use thiserror::Error;
 
@@ -196,130 +194,4 @@ impl<T: Event> ChanneledSubscriberHandler<T> {
 
         Ok(())
     }
-}
-
-#[cfg(test)]
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-pub struct TestEvent {
-    pub event_id: RemoteId,
-    pub foo: u32,
-    pub has_more: bool,
-}
-
-#[cfg(test)]
-impl Event for TestEvent {
-    type Id = RemoteId;
-    type Response = TestEvent;
-
-    fn event_id(&self) -> &RemoteId {
-        &self.event_id
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
-}
-
-#[cfg(test)]
-impl GetEventResponse for TestEvent {}
-
-#[cfg(test)]
-#[tokio::test]
-async fn test_channeled_subscriber_handle_and_reply() {
-    let (s, mut h) = ChannelledSubscriber::new("test".into());
-
-    let task = tokio::spawn(async move {
-        h.handle_events_async(|events: &[TestEvent]| -> Result<(), SubscriberError> {
-            assert_eq!(events[0].event_id, RemoteId::from(DUMMY_EVENT_ID));
-            Ok(())
-        })
-        .await
-        .expect("failed to handle event");
-    });
-    let mut events = new_dummy_events();
-    s.on_events(&mut events)
-        .await
-        .expect("failed handle events");
-
-    task.await.expect("expected no error on join");
-}
-
-#[tokio::test]
-async fn test_channeled_subscriber_failed_to_send() {
-    let s = {
-        let (s, _) = ChannelledSubscriber::new("test".into());
-        s
-    };
-
-    let mut events = new_dummy_events();
-    assert!(matches!(
-        s.on_events(&mut events).await.expect_err("expected error"),
-        SubscriberError::Send
-    ));
-}
-
-#[tokio::test]
-async fn test_channeled_subscriber_failed_to_receive() {
-    let (s, h) = ChannelledSubscriber::new("test".into());
-
-    let task = tokio::spawn(async move {
-        h.receiver
-            .recv_async()
-            .await
-            .expect("expected to receive data");
-        drop(h);
-    });
-    let mut events = new_dummy_events();
-    assert!(matches!(
-        s.on_events(&mut events).await.expect_err("expected error"),
-        SubscriberError::Receive
-    ));
-
-    task.await.expect("expected no error on join");
-}
-
-#[tokio::test]
-async fn test_channeled_subscriber_handler_failed_to_receive() {
-    let mut h = {
-        let (_, h) = ChannelledSubscriber::new("test".into());
-        h
-    };
-
-    assert!(matches!(
-        h.handle_events_async(|_: &[TestEvent]| -> Result<(), SubscriberError> { Ok(()) })
-            .await
-            .expect_err("expected error"),
-        ChanneledSubscriberError::Receive
-    ));
-}
-
-#[tokio::test]
-async fn test_channeled_subscriber_handler_failed_to_send() {
-    let (s, mut h) = ChannelledSubscriber::new("test".into());
-
-    let task = tokio::spawn(async move {
-        let events = new_dummy_events();
-        s.sender.send_async(events).await.expect("failed to send");
-        drop(s);
-    });
-
-    task.await.expect("expected no error on join");
-    assert!(matches!(
-        h.handle_events_async(|_| -> Result<(), SubscriberError> { Ok(()) })
-            .await
-            .expect_err("expected error"),
-        ChanneledSubscriberError::Send(_)
-    ));
-}
-
-#[cfg(test)]
-const DUMMY_EVENT_ID: &str = "EVT_FOO";
-
-#[cfg(test)]
-fn new_dummy_events() -> Vec<TestEvent> {
-    vec![TestEvent {
-        event_id: RemoteId::from(DUMMY_EVENT_ID),
-        has_more: false,
-        foo: 0,
-    }]
 }

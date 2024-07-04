@@ -1,3 +1,6 @@
+#![allow(non_snake_case)]
+
+use super::*;
 use crate::background_loop::{
     BackgroundEventLoop, EventLoopErrorHandlerReply, MockEventLoopErrorHandler,
 };

@@ -18,9 +18,3 @@ pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
         .migrate(stash, VERSION_TABLE_NAME, &migrations)
         .await
 }
-
-#[tokio::test]
-async fn test_session_migration_on_empty_data_set() {
-    let stash = Stash::new(None).expect("Failed to create Stash");
-    migrate_core_db(&stash).await.expect("failed to migrate");
-}

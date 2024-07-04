@@ -4,7 +4,6 @@ use stash::orm::{Model, ResultsetChange};
 use stash::stash::Stash;
 use tokio::spawn as spawn_async;
 
-#[cfg(test)]
 #[derive(Clone, Debug, Deserialize, Model, PartialEq, Serialize)]
 #[TableName("foo")]
 pub struct Foo {

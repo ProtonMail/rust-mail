@@ -41,13 +41,14 @@
 //! ```
 //!
 pub mod background_loop;
-#[cfg(test)]
-pub mod loop_tests;
+pub mod foreground_loop;
 pub mod provider;
 pub mod store;
 pub mod subscriber;
 
-pub mod foreground_loop;
+#[cfg(test)]
+#[path = "tests/lib.rs"]
+mod tests;
 
 use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;

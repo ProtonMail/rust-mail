@@ -3,7 +3,7 @@
 use crate::datatypes::{
     CardType, ContactSendingPreferences, ContactTypes, LabelId, Labels, RemoteId,
 };
-use crate::db::new_core_test_connection;
+use crate::db::tests::new_core_test_connection;
 use crate::models::{Contact, ContactCard, ContactEmail};
 use stash::orm::Model;
 use stash::params;

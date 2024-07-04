@@ -1,9 +1,11 @@
+#![allow(non_snake_case)]
+
 use crate::datatypes::{
     DateFormat, Density, Email, Flags, HighSecurity, LogAuth, Password, Phone, ProductUsedSpace,
     RemoteId, SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
     WeekStart,
 };
-use crate::db::new_core_test_connection;
+use crate::db::tests::new_core_test_connection;
 use crate::models::{User, UserSettings};
 use proton_crypto_account::keys::{KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
