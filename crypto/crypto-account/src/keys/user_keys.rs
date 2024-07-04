@@ -221,7 +221,7 @@ impl LocalUserKey {
     /// and must be considered as local only.
     pub fn from_unlocked<Provider: PGPProviderSync>(
         pgp_provider: &Provider,
-        unlocked_user_key: &DecryptedUserKey<<Provider>::PrivateKey, <Provider>::PublicKey>,
+        unlocked_user_key: &UnlockedUserKey<Provider>,
         salted_password: &KeySecret,
     ) -> Result<Self, AccountCryptoError> {
         let private_key = pgp_provider
