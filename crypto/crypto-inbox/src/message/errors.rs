@@ -1,4 +1,4 @@
-use std::str::Utf8Error;
+use std::{str::Utf8Error, string::FromUtf8Error};
 
 use proton_crypto_account::proton_crypto::CryptoError;
 use proton_crypto_inbox_mime::ProcessMimeError;
@@ -26,4 +26,6 @@ pub enum MessageError {
     MissingMessageID,
     #[error("Session key encryption failed: {0}")]
     SessionKeyEncryption(#[from] SessionKeyError),
+    #[error("Failed to decode message body to an UTF-8 string: {0}")]
+    StringEncode(#[from] FromUtf8Error),
 }

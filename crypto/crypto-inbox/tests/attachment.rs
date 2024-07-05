@@ -2,8 +2,8 @@ use std::io::{self, Write};
 
 use base64::Engine;
 use proton_crypto_inbox::attachment::{
-    encrypt, encrypt_and_sign_to_writer, encrypt_to_writer, AttachmentDecryption,
-    AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
+    encrypt_and_sign_to_writer, encrypt_to_writer, AttachmentDecryption,
+    AttachmentEncryptedSignature, AttachmentSignature, EncryptableAttachment, KeyPackets,
 };
 
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -57,6 +57,14 @@ impl AttachmentDecryption for TestAttachmentMetdata {
 
     fn attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature> {
         &self.enc_signature
+    }
+}
+
+struct TestAttachmentRaw(&'static str);
+
+impl EncryptableAttachment for TestAttachmentRaw {
+    fn attachment_data(&self) -> &[u8] {
+        self.0.as_bytes()
     }
 }
 
@@ -180,13 +188,10 @@ fn test_attachment_re_encrypt() {
         })
         .collect();
 
-    let encrypted_attachment = encrypt(
-        &pgp_provider,
-        &pub_keys,
-        &priv_keys,
-        TEST_ATTACHMENT_PLAIN_DATA,
-    )
-    .unwrap();
+    let attachment_raw = TestAttachmentRaw(TEST_ATTACHMENT_PLAIN_DATA);
+    let encrypted_attachment = attachment_raw
+        .attachment_encrypt_and_sign(&pgp_provider, &pub_keys, &priv_keys)
+        .unwrap();
 
     let attachment_info = encrypted_attachment
         .metadata
@@ -253,13 +258,10 @@ fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
         })
         .collect();
 
-    let mut result = encrypt(
-        &pgp_provider,
-        &pub_keys,
-        &priv_keys,
-        TEST_ATTACHMENT_PLAIN_DATA,
-    )
-    .unwrap();
+    let attachment_raw = TestAttachmentRaw(TEST_ATTACHMENT_PLAIN_DATA);
+    let mut result = attachment_raw
+        .attachment_encrypt_and_sign(&pgp_provider, &pub_keys, &priv_keys)
+        .unwrap();
 
     if enc_sig {
         result.metadata.signature = None;

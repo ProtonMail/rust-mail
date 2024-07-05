@@ -81,14 +81,11 @@ fn test_encrypt_and_decrypt_draft() {
     let unlocked_address_key =
         create_account_unlocked_address_key(&pgp_provider, PRIVATE_KEY, "password");
 
-    let encrypted_draft = String::from_utf8(
-        draft
-            .encrypt_draft_body(&pgp_provider, &unlocked_address_key)
-            .unwrap(),
-    )
-    .unwrap();
+    let encrypted_draft = draft
+        .encrypt_draft_body(&pgp_provider, &unlocked_address_key)
+        .expect("encryption to succeed ");
 
-    let decryptable_message = TestMessage(false, encrypted_draft);
+    let decryptable_message = TestMessage(false, encrypted_draft.0);
 
     let plain_text = decryptable_message
         .decrypt(&pgp_provider, &[unlocked_address_key.as_ref()])
@@ -106,14 +103,11 @@ fn test_draft_decryption_fails_if_wrong_key_used() {
     let unlocked_address_key =
         create_account_unlocked_address_key(&pgp_provider, PRIVATE_KEY, "password");
 
-    let encrypted_draft = String::from_utf8(
-        draft
-            .encrypt_draft_body(&pgp_provider, &unlocked_address_key)
-            .unwrap(),
-    )
-    .unwrap();
+    let encrypted_draft = draft
+        .encrypt_draft_body(&pgp_provider, &unlocked_address_key)
+        .expect("encryption to succeed ");
 
-    let decryptable_message = TestMessage(false, encrypted_draft);
+    let decryptable_message = TestMessage(false, encrypted_draft.0);
 
     let private_key = pgp_provider
         .private_key_import(

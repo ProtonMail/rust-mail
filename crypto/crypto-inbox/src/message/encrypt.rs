@@ -31,8 +31,13 @@ impl From<Vec<u8>> for EncryptedMessageBody {
     }
 }
 
+crate::string_id! {
+    /// Represents an encrypted an signed draft.
+    EncryptedDraft
+}
+
 pub trait EncryptableDraft {
-    /// Borrows the plaintext, unencrypted, body of the draft message
+    /// Borrows the plaintext, unencrypted, body of the draft message.
     fn plaintext_message_body(&self) -> &[u8];
 
     /// Encrypts and signs the draft body using the provided address key
@@ -40,14 +45,17 @@ pub trait EncryptableDraft {
         &self,
         provider: &Provider,
         address_key: &UnlockedAddressKey<Provider>,
-    ) -> Result<Vec<u8>, MessageError> {
-        provider
+    ) -> Result<EncryptedDraft, MessageError> {
+        let encrypted_draft = provider
             .new_encryptor()
             .with_encryption_key(address_key.as_public_key())
             .with_signing_key(address_key.as_ref())
             .with_utf8()
             .encrypt_raw(self.plaintext_message_body(), DataEncoding::Armor)
-            .map_err(MessageError::Encryption)
+            .map(String::from_utf8)
+            .map_err(MessageError::Encryption)?
+            .map(EncryptedDraft)?;
+        Ok(encrypted_draft)
     }
 }
 

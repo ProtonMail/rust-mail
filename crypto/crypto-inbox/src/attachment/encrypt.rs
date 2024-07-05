@@ -61,6 +61,36 @@ pub enum AttachmentEncryptionError {
     Armor(CryptoError),
 }
 
+pub trait EncryptableAttachment {
+    /// Returns the plain attachment data.
+    fn attachment_data(&self) -> &[u8];
+
+    /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
+    ///
+    /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
+    /// containing the key packets, signatures, and encrypted signature.
+    /// If no signing keys are provided, i.e., a zero length slice, no signatures are produced.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider`    - The pgp provider instance from `proton_crypto`.
+    /// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
+    /// * `signing_keys`    - The signing keys of the user that the attachment is signed with.
+    fn attachment_encrypt_and_sign<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        encryption_keys: &[impl AsPublicKeyRef<Provider::PublicKey>],
+        signing_keys: &[impl AsRef<Provider::PrivateKey>],
+    ) -> Result<EncryptedAttachment, AttachmentEncryptionError> {
+        encrypt(
+            pgp_provider,
+            encryption_keys,
+            signing_keys,
+            self.attachment_data(),
+        )
+    }
+}
+
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
 ///
 /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
@@ -126,10 +156,11 @@ pub fn encrypt<Provider: PGPProviderSync>(
     Ok(EncryptedAttachment { metadata, data })
 }
 
-/// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
+/// Creates a encryption writer [`SigncryptedAttachmentWriter`], where each write operation results
+/// in writing encrypted data to the provided writer.
 ///
-/// The output [`SigncryptedAttachmentWriter`] is a writer where the attachment can be written to
-/// for encryption.
+/// The key packets and signatures (i.e., attachment metadata) can be accessed with [`SigncryptedAttachmentWriter::finalize`]
+/// once all data has been written.
 /// Both `encryption_keys` and `signing_keys` must contain at least one key else an error is thrown.
 ///
 /// # Parameters
@@ -189,11 +220,12 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
     Ok(attachment_writer)
 }
 
-/// Encrypts an attachment to each key in `encryption_keys` but does not produce any signatures.
+/// Creates a encryption writer, which writes the encrypted attachment data to the provided output writer
+/// but does not sign the data.
 ///
-/// The output [`EncryptedAttachmentWriter`] is a writer where the attachment can be written to
-/// for encryption.
-/// `encryption_keys`must contain at least one key else an error is thrown.
+/// The writer produces a key packet to each key in `encryption_keys`.
+/// The key packets can be accessed with [`EncryptedAttachmentWriter::finalize`]
+/// once all data has been written.
 ///
 /// # Warning
 ///
