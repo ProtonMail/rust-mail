@@ -16,6 +16,7 @@ use smart_default::SmartDefault;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
+use std::string::FromUtf8Error;
 use thiserror::Error;
 use tracing::error;
 
@@ -140,6 +141,11 @@ pub enum ApiServiceError {
     #[error("Request composition error: {0}")]
     RequestError(String),
 
+    /// There has been a failure in decoding the data returned from the external
+    /// API into valid UTF8 text.
+    #[error("UTF8 decoding error: {0}")]
+    Utf8DecodingError(FromUtf8Error),
+
     //  LOGIC ERRORS
     //==========================================================================
     /// An error has been reported by the implementing service. We don't worry
@@ -179,6 +185,37 @@ where
     /// No body data.
     #[default]
     None,
+}
+
+/// Wrapper for JSON data being returned as an API response.
+pub struct Json<T>(T);
+
+impl<T: DeserializeOwned> ApiResponse for Json<T> {
+    type Inner = T;
+
+    fn from_response(body: Bytes) -> Result<Self, ApiServiceError> {
+        let text = String::from_utf8(body.to_vec()).map_err(|err| {
+            error!("UTF-8 error: {:?}", err);
+            ApiServiceError::Utf8DecodingError(err)
+        })?;
+        Ok(Json(serde_json::from_str::<T>(&text).map_err(|err| {
+            if let Some((line, column)) = extract_line_column(&err.to_string()) {
+                let error_snippet = extract_error_snippet(&text, line, column, 1000, 50);
+                error!("JSON error: {:?}, context: {}", err, &error_snippet);
+                ApiServiceError::JsonError(err, error_snippet)
+            } else {
+                error!("JSON error: {:?}, context: unknown", err);
+                ApiServiceError::JsonError(
+                    err,
+                    "Unable to extract deserialization error context".to_owned(),
+                )
+            }
+        })?))
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        self.0
+    }
 }
 
 /// Formalisation of API requests.
@@ -258,13 +295,13 @@ pub trait ApiService {
         endpoint: &str,
         params: Option<Q>,
         headers: Option<HashMap<String, String>>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
         Q: Serialize,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
         let query = params.and_then(|p| to_query_string(p).ok());
-        self.perform_request(Request::<()> {
+        self.perform_request::<_, T>(Request::<()> {
             headers,
             method: Method::DELETE,
             url: self.get_url(endpoint, query.as_deref()),
@@ -295,13 +332,13 @@ pub trait ApiService {
         endpoint: &str,
         params: Option<Q>,
         headers: Option<HashMap<String, String>>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
         Q: Serialize,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
         let query = params.and_then(|p| to_query_string(p).ok());
-        self.perform_request(Request::<()> {
+        self.perform_request::<_, T>(Request::<()> {
             headers,
             url: self.get_url(endpoint, query.as_deref()),
             ..Default::default()
@@ -414,27 +451,20 @@ pub trait ApiService {
     ///
     /// Returns an error if deserialisation of the response data fails.
     ///
-    async fn handle_response<T>(response: Response) -> Result<T, ApiServiceError>
+    async fn handle_response<T>(response: Response) -> Result<T::Inner, ApiServiceError>
     where
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
-        let text = response.text().await.map_err(|err| {
+        let bytes = response.bytes().await.map_err(|err| {
             error!("Network error: {:?}", err);
             ApiServiceError::NetworkError(err)
         })?;
-        serde_json::from_str::<T>(&text).map_err(|err| {
-            if let Some((line, column)) = extract_line_column(&err.to_string()) {
-                let error_snippet = extract_error_snippet(&text, line, column, 1000, 50);
-                error!("JSON error: {:?}, context: {}", err, &error_snippet);
-                ApiServiceError::JsonError(err, error_snippet)
-            } else {
-                error!("JSON error: {:?}, context: unknown", err);
-                ApiServiceError::JsonError(
-                    err,
-                    "Unable to extract deserialization error context".to_owned(),
-                )
-            }
-        })
+        Ok(T::from_response(bytes)
+            .map_err(|err| {
+                error!("Response handling error: {:?}", err);
+                err
+            })?
+            .into_inner())
     }
 
     /// Gets any persistent client headers.
@@ -472,10 +502,10 @@ pub trait ApiService {
         &self,
         error: ApiServiceError,
         request: Request<J>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned;
+        T: ApiResponse;
 
     /// Sends a `PATCH` request to the specified URL.
     ///
@@ -499,12 +529,12 @@ pub trait ApiService {
         endpoint: &str,
         body: J,
         headers: Option<HashMap<String, String>>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
-        self.perform_request(Request::<J> {
+        self.perform_request::<J, T>(Request::<J> {
             body: Body::Json(body),
             headers,
             method: Method::PATCH,
@@ -538,14 +568,14 @@ pub trait ApiService {
     /// Returns an error if the request fails, or if the response indicates
     /// failure.
     ///
-    async fn perform_request<J, T>(&self, request: Request<J>) -> Result<T, ApiServiceError>
+    async fn perform_request<J, T>(&self, request: Request<J>) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
         match Self::send_request(self.prepare_request(&request)?).await {
             Ok(response) => Self::handle_response::<T>(response).await,
-            Err(err) => self.on_error(err, request).await,
+            Err(err) => self.on_error::<J, T>(err, request).await,
         }
     }
 
@@ -571,12 +601,12 @@ pub trait ApiService {
         endpoint: &str,
         body: J,
         headers: Option<HashMap<String, String>>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
-        self.perform_request(Request::<J> {
+        self.perform_request::<J, T>(Request::<J> {
             body: Body::Json(body),
             headers,
             method: Method::POST,
@@ -610,12 +640,12 @@ pub trait ApiService {
         endpoint: &str,
         body: HashMap<String, String>,
         headers: Option<HashMap<String, String>>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
         // .form(&body)
-        self.perform_request(Request::<()> {
+        self.perform_request::<_, T>(Request::<()> {
             body: Body::Form(body),
             headers,
             method: Method::POST,
@@ -696,12 +726,12 @@ pub trait ApiService {
         endpoint: &str,
         body: J,
         headers: Option<HashMap<String, String>>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
-        self.perform_request(Request::<J> {
+        self.perform_request::<J, T>(Request::<J> {
             body: Body::Json(body),
             headers,
             method: Method::PUT,
@@ -734,10 +764,10 @@ pub trait ApiService {
     /// Returns an error if the request fails, or if the response indicates
     /// failure.
     ///
-    async fn retry_request<J, T>(&self, request: Request<J>) -> Result<T, ApiServiceError>
+    async fn retry_request<J, T>(&self, request: Request<J>) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
         Self::handle_response::<T>(Self::send_request(self.prepare_request(&request)?).await?).await
     }
@@ -779,6 +809,68 @@ pub trait ApiService {
     /// * `value` - The header value.
     ///
     fn set_header(&self, name: &str, value: &str);
+}
+
+/// Representation of the types of body that can be returned from the API.
+pub trait ApiResponse: Sized {
+    /// The inner type that the response body will be converted into.
+    type Inner;
+
+    /// Converts the response body into the appropriate type.
+    ///
+    /// # Parameters
+    ///
+    /// * `body` - The response body. This is always in bytes, and gets
+    ///            converted as appropriate by the various implementations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the conversion fails.
+    ///
+    fn from_response(body: Bytes) -> Result<Self, ApiServiceError>;
+
+    /// Provides access to the inner type.
+    fn into_inner(self) -> Self::Inner;
+}
+
+impl ApiResponse for () {
+    type Inner = ();
+
+    fn from_response(_body: Bytes) -> Result<Self, ApiServiceError> {
+        Ok(())
+    }
+
+    #[allow(clippy::semicolon_if_nothing_returned)]
+    fn into_inner(self) -> Self::Inner {
+        self
+    }
+}
+
+impl ApiResponse for Bytes {
+    type Inner = Bytes;
+
+    fn from_response(body: Bytes) -> Result<Self, ApiServiceError> {
+        Ok(body)
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        self
+    }
+}
+
+impl ApiResponse for String {
+    type Inner = String;
+
+    fn from_response(body: Bytes) -> Result<Self, ApiServiceError> {
+        String::from_utf8(body.to_vec()).map_err(|err| {
+            error!("UTF-8 error: {:?}", err);
+            ApiServiceError::Utf8DecodingError(err)
+        })
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        self
+    }
 }
 
 /// Marker trait for service errors.

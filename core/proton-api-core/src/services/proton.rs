@@ -59,7 +59,9 @@ use crate::http::{
     DEFAULT_APP_VERSION, DEFAULT_HOST_URL, X_PM_HUMAN_VERIFICATION_TOKEN,
     X_PM_HUMAN_VERIFICATION_TOKEN_TYPE,
 };
-use crate::service::{ApiService, ApiServiceError, Request, ServiceError, NO_PARAMS};
+use crate::service::{
+    ApiResponse, ApiService, ApiServiceError, Body, Json, Request, ServiceError, NO_PARAMS,
+};
 use crate::services::proton::common::{Fido2Auth, RemoteId};
 use crate::services::proton::request_data::HumanVerificationData;
 use crate::services::proton::requests::{
@@ -180,10 +182,10 @@ impl ApiService for Proton {
         &self,
         error: ApiServiceError,
         _request: Request<J>,
-    ) -> Result<T, ApiServiceError>
+    ) -> Result<T::Inner, ApiServiceError>
     where
         J: Clone + Serialize + Send + Sync,
-        T: DeserializeOwned,
+        T: ApiResponse,
     {
         Err(error)
     }
@@ -236,7 +238,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn delete_auth(&self) -> Result<(), ApiServiceError> {
-        self.delete("auth/v4", NO_PARAMS, None).await
+        self.delete::<_, ()>("auth/v4", NO_PARAMS, None).await
     }
 
     /// GETs a list of addresses.
@@ -246,7 +248,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn get_addresses(&self) -> Result<GetAddressesResponse, ApiServiceError> {
-        self.get(&format!("{}/addresses", Self::BASE_PATH), NO_PARAMS, None)
+        self.get::<_, Json<_>>(&format!("{}/addresses", Self::BASE_PATH), NO_PARAMS, None)
             .await
     }
 
@@ -265,8 +267,8 @@ impl Proton {
         &self,
         token: String,
         force_web: bool,
-    ) -> Result<GetContactResponse, ApiServiceError> {
-        self.get(
+    ) -> Result<String, ApiServiceError> {
+        self.get::<_, String>(
             &format!("{}/captcha", Self::BASE_PATH),
             Some(GetCaptchaOptions {
                 force_web_messaging: force_web,
@@ -293,7 +295,7 @@ impl Proton {
         &self,
         contact_id: RemoteId,
     ) -> Result<GetContactResponse, ApiServiceError> {
-        self.get(&format!("api/contacts/{contact_id}"), NO_PARAMS, None)
+        self.get::<_, Json<_>>(&format!("api/contacts/{contact_id}"), NO_PARAMS, None)
             .await
     }
 
@@ -313,7 +315,8 @@ impl Proton {
         &self,
         options: GetContactsOptions,
     ) -> Result<GetContactsResponse, ApiServiceError> {
-        self.get("api/contacts", Some(options), None).await
+        self.get::<_, Json<_>>("api/contacts", Some(options), None)
+            .await
     }
 
     /// GETs a list of emails for contacts.
@@ -332,7 +335,8 @@ impl Proton {
         &self,
         options: GetContactsEmailsOptions,
     ) -> Result<GetContactsEmailsResponse, ApiServiceError> {
-        self.get("api/contacts/emails", Some(options), None).await
+        self.get::<_, Json<_>>("api/contacts/emails", Some(options), None)
+            .await
     }
 
     /// TODO: Document this method.
@@ -356,7 +360,7 @@ impl Proton {
     where
         T: GetEventResponse + for<'de> Deserialize<'de>,
     {
-        self.get(
+        self.get::<_, Json<_>>(
             &format!("core/v5/events/{event_id}"),
             Some(GetEventOptions {
                 conversation_counts,
@@ -374,7 +378,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn get_events_latest(&self) -> Result<GetEventsLatestResponse, ApiServiceError> {
-        self.get(
+        self.get::<_, Json<_>>(
             &format!("{}/events/latest", Self::BASE_PATH),
             NO_PARAMS,
             None,
@@ -398,7 +402,7 @@ impl Proton {
         email: String,
         internal_only: Option<bool>,
     ) -> Result<GetKeysAllResponse, ApiServiceError> {
-        self.get(
+        self.get::<_, Json<_>>(
             &format!("{}/keys/all", Self::BASE_PATH),
             Some(GetKeysAllOptions {
                 email,
@@ -416,7 +420,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn get_keys_salts(&self) -> Result<GetKeysSaltsResponse, ApiServiceError> {
-        self.get(&format!("{}/keys/salts", Self::BASE_PATH), NO_PARAMS, None)
+        self.get::<_, Json<_>>(&format!("{}/keys/salts", Self::BASE_PATH), NO_PARAMS, None)
             .await
     }
 
@@ -427,7 +431,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn get_settings(&self) -> Result<GetSettingsResponse, ApiServiceError> {
-        self.get(&format!("{}/settings", Self::BASE_PATH), NO_PARAMS, None)
+        self.get::<_, Json<_>>(&format!("{}/settings", Self::BASE_PATH), NO_PARAMS, None)
             .await
     }
 
@@ -438,7 +442,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn get_tests_ping(&self) -> Result<(), ApiServiceError> {
-        self.get("tests/ping", NO_PARAMS, None).await
+        self.get::<_, ()>("tests/ping", NO_PARAMS, None).await
     }
 
     /// TODO: Document this method.
@@ -448,7 +452,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn get_users(&self) -> Result<GetUsersResponse, ApiServiceError> {
-        self.get(&format!("{}/users", Self::BASE_PATH), NO_PARAMS, None)
+        self.get::<_, Json<_>>(&format!("{}/users", Self::BASE_PATH), NO_PARAMS, None)
             .await
     }
 
@@ -476,7 +480,7 @@ impl Proton {
                 X_PM_HUMAN_VERIFICATION_TOKEN_TYPE.to_owned(): hv.hv_type.as_str().to_owned(),
             }
         });
-        self.post("auth/v4", body, headers).await
+        self.post::<_, Json<_>>("auth/v4", body, headers).await
     }
 
     /// TODO: Document this method.
@@ -493,7 +497,7 @@ impl Proton {
         &self,
         username: String,
     ) -> Result<PostAuthInfoResponse, ApiServiceError> {
-        self.post("auth/v4/info", PostAuthInfoRequest { username }, None)
+        self.post::<_, Json<_>>("auth/v4/info", PostAuthInfoRequest { username }, None)
             .await
     }
 
@@ -513,7 +517,7 @@ impl Proton {
         uid: RemoteId,
         refresh_token: String,
     ) -> Result<PostAuthRefreshResponse, ApiServiceError> {
-        self.post(
+        self.post::<_, Json<_>>(
             "auth/v4/refresh",
             PostAuthRefreshRequest {
                 uid,
@@ -566,7 +570,7 @@ impl Proton {
         &self,
         child_client_id: Option<String>,
     ) -> Result<PostAuthSessionsForksResponse, ApiServiceError> {
-        self.post(
+        self.post::<_, Json<_>>(
             "auth/sessions/forks",
             PostAuthSessionsForksRequest {
                 child_client_id: child_client_id.unwrap_or("web-account-lite".to_owned()),
@@ -588,7 +592,7 @@ impl Proton {
     /// This method will return an error if the request fails.
     ///
     pub async fn post_auth_tfa(&self, tfa_code: String) -> Result<(), ApiServiceError> {
-        self.post(
+        self.post::<_, ()>(
             "auth/v4/2fa",
             PostAuthTfaRequest {
                 two_factor_code: tfa_code,
