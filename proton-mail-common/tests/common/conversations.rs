@@ -1,9 +1,12 @@
 use crate::common::TestContext;
-use proton_api_mail::domain::{ConversationId, LabelId};
-use proton_api_mail::proton_api_core::APIErrorDesc;
-use proton_api_mail::requests::{
-    ConversationsResponseObject, LabelConversationRequest, LabelConversationsResponse,
-    MarkConversationsReadRequest, UnlabelConversationRequest,
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::response_data::ApiErrorInfo;
+use proton_api_mail::services::proton::requests::{
+    PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
+};
+use proton_api_mail::services::proton::response_data::OperationResult;
+use proton_api_mail::services::proton::responses::{
+    PutConversationsLabelResponse, PutConversationsReadResponse, PutConversationsUnlabelResponse,
 };
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};
@@ -25,14 +28,19 @@ impl TestContext {
     ///
     pub async fn mock_label_conversation(
         &self,
-        label_id: &LabelId,
-        ids: impl IntoIterator<Item = ConversationId>,
+        label_id: &ApiRemoteId,
+        ids: Vec<ApiRemoteId>,
         spam_action: Option<bool>,
-        failed: impl IntoIterator<Item = ConversationId>,
+        failed: Vec<ApiRemoteId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
-        let request = LabelConversationRequest::new(label_id, spam_action, &ids);
-        let resp = LabelConversationsResponse {
+        let request = PutConversationsLabelRequest {
+            action: 1,
+            ids: ids.clone(),
+            label_id: label_id.clone(),
+            spam_action,
+        };
+        let resp = PutConversationsLabelResponse {
             responses: build_conv_responses(&ids, failed),
             undo_token: None,
         };
@@ -60,13 +68,16 @@ impl TestContext {
     ///
     pub async fn mock_unlabel_conversation(
         &self,
-        label_id: &LabelId,
-        ids: impl IntoIterator<Item = ConversationId>,
-        failed: impl IntoIterator<Item = ConversationId>,
+        label_id: &ApiRemoteId,
+        ids: Vec<ApiRemoteId>,
+        failed: Vec<ApiRemoteId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
-        let request = UnlabelConversationRequest::new(label_id, &ids);
-        let resp = LabelConversationsResponse {
+        let request = PutConversationsUnlabelRequest {
+            ids: ids.clone(),
+            label_id: label_id.clone(),
+        };
+        let resp = PutConversationsUnlabelResponse {
             responses: build_conv_responses(&ids, failed),
             undo_token: None,
         };
@@ -93,14 +104,13 @@ impl TestContext {
     ///
     pub async fn mock_mark_conversation_read(
         &self,
-        ids: impl IntoIterator<Item = ConversationId>,
-        failed: impl IntoIterator<Item = ConversationId>,
+        ids: Vec<ApiRemoteId>,
+        failed: Vec<ApiRemoteId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
-        let request = MarkConversationsReadRequest::new(&ids);
-        let resp = LabelConversationsResponse {
+        let request = PutConversationsReadRequest { ids: ids.clone() };
+        let resp = PutConversationsReadResponse {
             responses: build_conv_responses(&ids, failed),
-            undo_token: None,
         };
 
         Mock::given(method("PUT"))
@@ -133,15 +143,12 @@ impl TestContext {
 /// * `failed` - The list of conversation IDs for which we want to simulate
 ///              failure.
 ///
-fn build_conv_responses(
-    ids: &[ConversationId],
-    failed: impl IntoIterator<Item = ConversationId>,
-) -> Vec<ConversationsResponseObject> {
+fn build_conv_responses(ids: &[ApiRemoteId], failed: Vec<ApiRemoteId>) -> Vec<OperationResult> {
     //TODO: ET-151
     const CODE_SUCCESS: u32 = 1000;
     const CODE_FAIL: u32 = 2000;
 
-    let failed: HashSet<ConversationId> = HashSet::from_iter(failed);
+    let failed: HashSet<ApiRemoteId> = HashSet::from_iter(failed);
     ids.iter()
         .map(|id| {
             let code = if failed.contains(id) {
@@ -149,14 +156,14 @@ fn build_conv_responses(
             } else {
                 CODE_SUCCESS
             };
-            ConversationsResponseObject {
+            OperationResult {
                 id: id.clone(),
-                response: APIErrorDesc {
+                response: ApiErrorInfo {
                     code,
                     error: None,
                     details: None,
                 },
             }
         })
-        .collect::<Vec<_>>()
+        .collect()
 }

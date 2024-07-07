@@ -5,7 +5,7 @@ mod initialization;
 mod labels;
 
 use crate::mail::MailSessionError;
-use proton_mail_common as pmc;
+use proton_mail_common::MailUserContext;
 use std::sync::Arc;
 
 /// [`MailUserSession`] contains all the relevant information for an active user session, you
@@ -21,14 +21,14 @@ use std::sync::Arc;
 /// This object needs to be kept alive for the duration of an active user session.
 #[derive(uniffi::Object)]
 pub struct MailUserSession {
-    ctx: Arc<pmc::MailUserContext>,
+    ctx: Arc<MailUserContext>,
 }
 
 impl MailUserSession {
-    pub(crate) fn new(ctx: Arc<pmc::MailUserContext>) -> Arc<Self> {
+    pub(crate) fn new(ctx: Arc<MailUserContext>) -> Arc<Self> {
         Arc::new(Self { ctx })
     }
-    pub(crate) fn ctx(&self) -> Arc<pmc::MailUserContext> {
+    pub(crate) fn ctx(&self) -> Arc<MailUserContext> {
         Arc::clone(self.ctx)
     }
 }

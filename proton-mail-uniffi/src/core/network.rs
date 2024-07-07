@@ -1,5 +1,3 @@
-use proton_mail_common::proton_core_common as pcm;
-
 /// Callback when the network status in the context has changed.
 #[uniffi::export(callback_interface)]
 pub trait NetworkStatusChanged: Send + Sync {
@@ -13,7 +11,7 @@ impl From<Box<dyn NetworkStatusChanged>> for FFINetworkStatusChanged {
     }
 }
 
-impl pcm::NetworkStatusChanged for FFINetworkStatusChanged {
+impl proton_core_common::NetworkStatusChanged for FFINetworkStatusChanged {
     fn on_network_status_changed(&self, online: bool) {
         self.0.on_network_status_changed(online);
     }

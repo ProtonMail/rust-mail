@@ -107,6 +107,7 @@ pub struct GetConversationsOptions {
 #[serde(rename_all = "PascalCase")]
 pub struct GetLabelsOptions {
     /// TODO: Document this field.
+    #[serde(rename = "Type")]
     pub label_type: LabelType,
 }
 

@@ -3,20 +3,19 @@ mod attachments;
 #[cfg(test)]
 mod tests;
 
-use crate::exports::tracing::debug;
-use crate::{MailContextError, MailUserContext, MailUserContextInitializationCallback};
+use crate::datatypes::ViewMode;
+use crate::models::{Conversation, Label, MailSettings, Message, MAIL_SETTINGS_ID};
+use crate::{AppError, MailContextError, MailUserContext, MailUserContextInitializationCallback};
 pub use attachments::DecryptedAttachment;
-use proton_api_mail::domain::{
-    Conversation, Label, LabelId, MailSettings, MailSettingsViewMode, Message, MAIL_SETTINGS_ID,
-};
-use proton_api_mail::exports::anyhow;
-use proton_api_mail::proton_api_core::exports::thiserror;
-use proton_api_mail::proton_api_core::exports::tracing::error;
-use proton_api_mail::proton_api_core::http::RequestError;
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::session::CoreSession;
+use proton_core_common::datatypes::LabelId;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
+use stash::params;
 use stash::stash::StashError;
 use std::sync::Arc;
+use tracing::{debug, error};
 
 pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
@@ -48,8 +47,10 @@ pub enum MailboxError {
     ConversationError(u64),
     #[error("Conversation '{0}' has no messages")]
     ConversationHasNoMessages(u64),
+    #[error("App error: {0}")]
+    AppError(#[from] AppError),
     #[error("API request failed with error: '{0}'")]
-    APIError(RequestError),
+    APIError(#[from] ApiServiceError),
     #[error("{0}")]
     Context(
         #[from]
@@ -82,7 +83,7 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 pub struct Mailbox {
     user_ctx: Arc<MailUserContext>,
     label_id: u64,
-    view_mode: MailSettingsViewMode,
+    view_mode: ViewMode,
 }
 
 pub trait MailboxBackgroundResult<T: Send>: Send + Sync {
@@ -95,20 +96,15 @@ impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> 
     }
 }
 
-enum LabelIdMode<'a> {
-    Local(u64),
-    Remote(&'a LabelId),
-}
-
 impl Mailbox {
-    async fn new(user_ctx: Arc<MailUserContext>, label_id: u64) -> MailboxResult<Self> {
-        let Some(label) = Label::load(label_id, &user_ctx.stash()).await? else {
+    pub async fn new(user_ctx: Arc<MailUserContext>, label_id: u64) -> MailboxResult<Self> {
+        let Some(label) = Label::load(label_id, user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
         let view_mode = if let Some(view_mode) = label.view_mode() {
             view_mode
         } else {
-            MailSettings::load(MAIL_SETTINGS_ID, &user_ctx.stash())
+            MailSettings::load(MAIL_SETTINGS_ID, user_ctx.stash())
                 .await
                 .map_err(|e| {
                     error!("Failed to load mail settings: {e}");
@@ -117,7 +113,7 @@ impl Mailbox {
                 .ok()
                 .and_then(|settings| settings)
                 .map(|settings| settings.view_mode)
-                .unwrap_or(MailSettingsViewMode::Conversations)
+                .unwrap_or(ViewMode::Conversations)
         };
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
         Ok(Self {
@@ -127,8 +123,33 @@ impl Mailbox {
         })
     }
 
+    pub async fn with_remote_id(
+        user_ctx: Arc<MailUserContext>,
+        label_id: LabelId,
+    ) -> MailboxResult<Self> {
+        let label = Label::find_first("WHERE remote_id = ?", params![label_id], user_ctx.stash())
+            .await?
+            .unwrap();
+        let view_mode = label.view_mode().unwrap_or(
+            MailSettings::load(MAIL_SETTINGS_ID, user_ctx.stash())
+                .await?
+                .unwrap()
+                .view_mode,
+        );
+        debug!(
+            "Creating Mailbox ({}, view_mode={:?})",
+            label.local_id.unwrap(),
+            view_mode
+        );
+        Ok(Self {
+            label_id: label.local_id.unwrap(),
+            view_mode,
+            user_ctx,
+        })
+    }
+
     pub fn user_context(&self) -> Arc<MailUserContext> {
-        Arc::clone(self.user_ctx)
+        Arc::clone(&self.user_ctx)
     }
     pub fn label_id(&self) -> u64 {
         self.label_id
@@ -138,14 +159,14 @@ impl Mailbox {
         &self,
         cb: Box<dyn MailUserContextInitializationCallback>,
     ) -> MailboxResult<()> {
-        let Some(label) = Label::load(self.label_id, &self.user_ctx.stash()).await? else {
+        let Some(label) = Label::load(self.label_id, self.user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
         let Some(rid) = label.remote_id else {
             return Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id));
         };
 
-        self.user_ctx.initialize(rid, cb);
+        self.user_ctx.initialize(rid, cb).await;
         Ok(())
     }
 
@@ -158,7 +179,7 @@ impl Mailbox {
     /// Returns error if API request or database changes failed.
     pub async fn sync(&self, count: usize) -> MailboxResult<()> {
         let ctx = self.user_ctx.clone();
-        let Some(mut label) = Label::load(self.label_id, &ctx.stash()).await? else {
+        let Some(mut label) = Label::load(self.label_id, ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
 
@@ -166,8 +187,8 @@ impl Mailbox {
             debug!("Syncing {}({})", self.label_id, &remote_id);
 
             let initialized = match self.view_mode {
-                MailSettingsViewMode::Conversations => label.initialized_conv,
-                MailSettingsViewMode::Messages => label.initialized_msg,
+                ViewMode::Conversations => label.initialized_conv,
+                ViewMode::Messages => label.initialized_msg,
             };
             if initialized {
                 debug!("Label {} already initialized, skipping", self.label_id);
@@ -179,22 +200,22 @@ impl Mailbox {
             );
 
             match self.view_mode {
-                MailSettingsViewMode::Conversations => Conversation::sync_first_conversation_page(
+                ViewMode::Conversations => Conversation::sync_first_conversation_page(
                     remote_id,
                     count,
+                    ctx.session().api(),
                     ctx.stash(),
-                    &ctx.mail_session(),
                 )
                 .await
                 .map_err(|e| {
                     error!("Failed to sync conversations for label: {e}");
                     e
                 }),
-                MailSettingsViewMode::Messages => Message::sync_first_message_page(
+                ViewMode::Messages => Message::sync_first_message_page(
                     remote_id,
                     count,
+                    ctx.session().api(),
                     ctx.stash(),
-                    &ctx.mail_session(),
                 )
                 .await
                 .map_err(|e| {
@@ -204,10 +225,10 @@ impl Mailbox {
             }?;
 
             match self.view_mode {
-                MailSettingsViewMode::Conversations => {
+                ViewMode::Conversations => {
                     label.initialized_conv = true;
                 }
-                MailSettingsViewMode::Messages => {
+                ViewMode::Messages => {
                     label.initialized_msg = true;
                 }
             }

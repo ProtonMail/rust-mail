@@ -10,6 +10,6 @@ pub async fn create_event_tables(tx: &Tether) -> Result<(), StashError> {
         "#,
         vec![],
     )
-    .await;
+    .await?;
     Ok(())
 }

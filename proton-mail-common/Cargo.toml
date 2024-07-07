@@ -6,30 +6,42 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
 async-trait = { workspace = true }
+bitflags = {workspace = true }
 bytes = { workspace = true }
+flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
 proton-action-queue = { workspace = true }
+proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
 proton-core-common = { workspace = true }
+proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+smart-default = { workspace = true }
 stash = { workspace = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
 uniffi = { workspace = true, optional = true }
+url = { workspace = true }
 uuid = { version = "1.7", features = ["v4"] }
 
 [dev-dependencies]
 lazy_static = { workspace = true }
+proton-api-core = { workspace = true, features = ["integration_tests"] }
+proton-api-mail = { workspace = true, features = ["integration_tests"] }
+secrecy = { version = "0.8", features = ["serde"] }
 tempdir = "0.3.1"
 # anotate your tests with traced_test attribute to see log outputs.
 tempfile = "3.10.1"
 tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
+tracing-subscriber = { workspace = true }
 velcro = "0.5.4"
 wiremock = { workspace = true }
 
@@ -38,7 +50,7 @@ wiremock = { workspace = true }
 # workspace = true
 
 [features]
-uniffi = ["dep:uniffi", "proton-api-mail/uniffi", "proton-event-loop/uniffi", "proton-core-common/uniffi"]
+uniffi = ["dep:uniffi", "proton-event-loop/uniffi", "proton-core-common/uniffi"]
 
 # todo: remove when pedantic-ified and uncommend the [lints] section
 [lints.clippy]

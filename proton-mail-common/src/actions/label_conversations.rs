@@ -1,15 +1,19 @@
+use crate::models::{Conversation, Label};
+use anyhow::anyhow;
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
     SessionProvider, StoredAction,
 };
-use proton_api_mail::exports::anyhow::anyhow;
-use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
-use proton_api_mail::exports::tracing::error;
-use proton_api_mail::MailSession;
+use proton_api_core::services::proton::Proton;
+use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::datatypes::RemoteId;
+use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::Tether;
-use std::any::Any;
+use std::any::{Any, TypeId};
+use tracing::error;
 
 define_action_id!(
     LABEL_CONVERSATION_ACTION_ID,
@@ -17,7 +21,6 @@ define_action_id!(
 );
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(crate = "self::serde")]
 pub struct LabelConversationsAction {
     label_id: u64,
     ids: Vec<u64>,
@@ -50,10 +53,9 @@ impl LocalActionHandler for MarkConversationReadLocalHandler {
             )));
         }
 
-        let Some(label) = self
-            .tx
-            .label_with_id(self.action.label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?
+        let Some(label) =
+            block_on(async { Label::load_using(self.action.label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))?
         else {
             let err = anyhow!("Failed to find label with id {}", self.action.label_id);
             error!("{err}");
@@ -65,24 +67,36 @@ impl LocalActionHandler for MarkConversationReadLocalHandler {
             error!("{err}");
             return Err(ActionError::Local(err));
         }
-        self.tx
-            .label_conversations(self.action.label_id, self.action.ids.iter().cloned())
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        block_on(async {
+            Conversation::apply_label_to_multiple(
+                self.action.label_id,
+                self.action.ids.clone(),
+                self.tx.stash(),
+            )
+            .await
+            .map_err(|e| ActionError::Local(anyhow!(e)))
+        })?;
         Ok(())
     }
 }
 
 struct MarkConversationReadRemoteHandler {
     action: LabelConversationsAction,
-    session: MailSession,
+    session: Session,
     tx: Tether,
 }
 
 impl RemoteActionHandler for MarkConversationReadRemoteHandler {
     fn revert_local(&mut self) -> ActionResult<()> {
-        self.tx
-            .unlabel_conversations(self.action.label_id, self.action.ids.iter().cloned())
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        block_on(async {
+            Conversation::remove_label_from_multiple(
+                self.action.label_id,
+                self.action.ids.clone(),
+                self.tx.stash(),
+            )
+            .await
+            .map_err(|e| ActionError::Local(anyhow!(e)))
+        })?;
         Ok(())
     }
 
@@ -91,59 +105,68 @@ impl RemoteActionHandler for MarkConversationReadRemoteHandler {
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let Some(label) = self
-            .tx
-            .label_with_id(self.action.label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?
+        let Some(label) =
+            block_on(async { Label::load_using(self.action.label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))?
         else {
             let err = anyhow!("Failed to find label with id {}", self.action.label_id);
             error!("{err}");
             return Err(ActionError::Local(err));
         };
 
-        let Some(label_rid) = &label.rid else {
+        let Some(label_rid) = label.remote_id else {
             let err = anyhow!("Label {} does not have a remote id", self.action.label_id);
             error!("{err}");
             return Err(ActionError::Local(err));
         };
 
-        let conv_ids = self
-            .tx
-            .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
-            .map_err(|e| {
-                error!("Failed to resolve conversation ids: {e}");
-                ActionError::Local(anyhow!(e))
-            })?;
+        let conv_ids = block_on(async {
+            Conversation::find_remote_ids(self.action.ids.clone(), self.tx.stash()).await
+        })
+        .map_err(|e| {
+            error!("Failed to resolve conversation ids: {e}");
+            ActionError::Local(anyhow!(e))
+        })?;
         let responses = block_on(async {
-            self.session
-                .label_conversations(label_rid, &conv_ids, None)
-                .await
-                .map_err(|e| {
-                    error!("Failed to mark conversations read on API: {e}");
-                    e
-                })
+            Conversation::apply_label_to_multiple_remote::<Proton>(
+                label_rid,
+                conv_ids,
+                None,
+                self.session.api(),
+            )
+            .await
+        })
+        .map_err(|e| {
+            error!("Failed to mark conversations read on API: {e}");
+            e
         })?;
 
         let failed_messages = responses
             .into_iter()
             .filter(|r| r.response.code != 1000)
-            .map(|r| r.id)
+            .map(|r| RemoteId::from(r.id))
             .collect::<Vec<_>>();
         if !failed_messages.is_empty() {
             error!(
                 "Label conversation operation failed for: {:?}",
                 failed_messages
             );
-            let local_ids = self
-                .tx
-                .remote_to_local_conversation_ids(failed_messages.iter())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
-            self.tx
-                .unlabel_conversations(self.action.label_id, local_ids.into_iter())
-                .map_err(|e| {
-                    error!("Failed to rollback failed for conversations: {e}");
-                    ActionError::Local(anyhow!(e))
-                })?;
+            let local_ids = block_on(async {
+                Conversation::find_local_ids(failed_messages, self.tx.stash()).await
+            })
+            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            block_on(async {
+                Conversation::remove_label_from_multiple(
+                    self.action.label_id,
+                    local_ids,
+                    self.tx.stash(),
+                )
+                .await
+            })
+            .map_err(|e| {
+                error!("Failed to rollback failed for conversations: {e}");
+                ActionError::Local(anyhow!(e))
+            })?;
         }
 
         Ok(())
@@ -169,11 +192,11 @@ impl ActionFactoryInstance for LabelConversationsActionFactory {
         action: Box<dyn Any>,
         tx: Tether,
     ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
-        let type_id = action.type_id().clone();
+        let type_id = TypeId::of::<Box<dyn Any>>();
         let Ok(action) = action.downcast::<LabelConversationsAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
                 type_id,
-                std::any::TypeId::of::<LabelConversationsAction>(),
+                TypeId::of::<LabelConversationsAction>(),
             ));
         };
 
@@ -199,7 +222,7 @@ impl ActionFactoryInstance for LabelConversationsActionFactory {
         Ok(Box::new(MarkConversationReadRemoteHandler {
             action,
             tx,
-            session: MailSession::from(session),
+            session,
         }))
     }
 }

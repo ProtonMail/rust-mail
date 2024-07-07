@@ -1,6 +1,10 @@
+use crate::models::MailSettings;
 use crate::{MailContextResult, MailUserContext};
 use bytes::Bytes;
-use proton_api_mail::domain::{AddressDomainLogoDetailsBuilder, LightOrDarkMode, MailSettings};
+use proton_api_core::session::CoreSession;
+use proton_api_mail::services::proton::request_data::LightOrDarkMode;
+use proton_api_mail::services::proton::requests::GetImagesLogoOptions;
+use proton_api_mail::services::proton::ProtonMail;
 
 impl MailUserContext {
     /// Get sender image for an address.
@@ -44,29 +48,17 @@ impl MailUserContext {
             return Ok(None);
         }
 
-        let mut address_request_details = AddressDomainLogoDetailsBuilder::new().address(address);
-
-        if let Some(s) = size {
-            address_request_details = address_request_details.size(s);
-        }
-
-        if let Some(m) = mode {
-            address_request_details = address_request_details.mode(m);
-        }
-
-        if let Some(bimi_sel) = bimi_selector {
-            address_request_details = address_request_details.bimi_selector(bimi_sel);
-        }
-
-        if let Some(format) = format {
-            address_request_details = address_request_details.format(format)
-        }
-
-        let address_request_details = address_request_details.build()?;
-
         Ok(Some(
-            self.mail_session()
-                .get_address_domain_logo(address_request_details)
+            self.session()
+                .api()
+                .get_images_logo(GetImagesLogoOptions {
+                    address: Some(address),
+                    bimi_selector,
+                    format,
+                    mode,
+                    size,
+                    ..Default::default()
+                })
                 .await?,
         ))
     }

@@ -1,4 +1,5 @@
-use proton_api_mail::domain::LabelId;
+use crate::datatypes::SystemLabelId;
+use proton_core_common::datatypes::LabelId;
 use stash::params;
 use stash::stash::{StashError, Tether};
 
@@ -9,21 +10,27 @@ pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
             CREATE TABLE labels (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE DEFAULT NULL,
-                type INTEGER NOT NULL,
-                `order` INTEGER NOT NULL,
+                label_type INTEGER NOT NULL,
+                display INTEGER NOT NULL DEFAULT 0,
+                display_order INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 path TEXT DEFAULT NULL,
-                parent_id BLOB DEFAULT NULL,
+                local_parent_id INTEGER DEFAULT NULL,
+                remote_parent_id TEXT DEFAULT NULL,
                 color TEXT NOT NULL,
                 deleted INTEGER NOT NULL DEFAULT 0,
-                notified INTEGER NOT NULL DEFAULT 0,
+                notify INTEGER NOT NULL DEFAULT 0,
                 expanded INTEGER NOT NULL DEFAULT 0,
                 sticky INTEGER NOT NULL DEFAULT 0,
                 initialized_conv INTEGER NOT NULL DEFAULT 0,
                 initialized_msg INTEGER NOT NULL DEFAULT 0,
+                total_conv INTEGER NOT NULL DEFAULT 0,
+                total_msg INTEGER NOT NULL DEFAULT 0,
+                unread_conv INTEGER NOT NULL DEFAULT 0,
+                unread_msg INTEGER NOT NULL DEFAULT 0,
 
                 CONSTRAINT constraint_labels_parent_id
-                    FOREIGN KEY (parent_id)
+                    FOREIGN KEY (local_parent_id)
                     REFERENCES labels (local_id)
                     ON DELETE SET NULL
             )
@@ -38,50 +45,13 @@ pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
     )
     .await?;
     tx.execute(
-        r#"CREATE INDEX index_labels_order ON labels (`order`)"#,
-        vec![],
-    )
-    .await?;
-
-    // Label Conversation Count
-    tx.execute(
-        r#"
-            CREATE TABLE label_conversation_count (
-                local_label_id TEXT NOT NULL PRIMARY KEY,
-                total INTEGER NOT NULL,
-                unread INTEGER NOT NULL,
-                
-                CONSTRAINT constraint_label_conversation_count_label_id
-                    FOREIGN KEY (local_label_id)
-                    REFERENCES labels (local_id)
-                    ON DELETE CASCADE
-            )
-        "#,
-        vec![],
-    )
-    .await?;
-
-    // Label Message Count
-    tx.execute(
-        r#"
-            CREATE TABLE label_message_count (
-                local_label_id INTEGER NOT NULL PRIMARY KEY,
-                total INTEGER NOT NULL,
-                unread INTEGER NOT NULL,
-                
-                CONSTRAINT constraint_label_conversation_count_label_id
-                    FOREIGN KEY (local_label_id)
-                    REFERENCES labels (local_id)
-                    ON DELETE CASCADE
-            )
-        "#,
+        r#"CREATE INDEX index_labels_order ON labels (`display_order`)"#,
         vec![],
     )
     .await?;
 
     // Insert default known system
-    let sql =
-        r#"INSERT INTO labels (remote_id, type, name, color, `order`) VALUES (?,4,?,'#000000',?)"#;
+    let sql = r#"INSERT INTO labels (remote_id, label_type, name, color, display_order) VALUES (?,4,?,'#000000',?)"#;
     let labels = [
         (LabelId::inbox(), "Inbox"),
         (LabelId::starred(), "Starred"),

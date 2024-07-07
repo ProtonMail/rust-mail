@@ -30,14 +30,14 @@
 //! way.
 //!
 
-use crate::datatypes::{ConversationCount, MessageCount, MessageMetadata};
+use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::{Conversation, Label, MailSettings};
 use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, LabelEvent as ApiLabelEvent,
-    MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent,
+    MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
 };
 use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
-use proton_core_common::events::Action;
+use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_event_loop::Event;
 
@@ -176,6 +176,51 @@ pub struct MailEvent {
 
     /// TODO: Document this field.
     pub user_settings: Option<UserSettings>,
+}
+
+impl MailEvent {
+    pub fn get_core_event_user(&self) -> Option<&User> {
+        self.user.as_ref()
+    }
+    pub fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
+        self.user.as_mut()
+    }
+
+    pub fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
+        self.user_settings.as_ref()
+    }
+    pub fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
+        self.user_settings.as_mut()
+    }
+
+    pub fn get_core_event_used_space(&self) -> Option<i64> {
+        self.used_space
+    }
+
+    pub fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
+        self.product_used_space.as_ref()
+    }
+
+    pub fn get_core_event_addresses(&self) -> Option<&[Address]> {
+        self.addresses.as_deref()
+    }
+    pub fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
+        self.addresses.as_deref_mut()
+    }
+
+    pub fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
+        unimplemented!()
+    }
+    pub fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
+        unimplemented!()
+    }
+
+    pub fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
+        unimplemented!()
+    }
+    pub fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
+        unimplemented!()
+    }
 }
 
 impl Event for MailEvent {

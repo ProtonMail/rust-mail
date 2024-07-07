@@ -2,13 +2,6 @@ mod attachments;
 
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::new_live_query;
-use proton_mail_common::exports::anyhow::anyhow;
-use proton_mail_common::exports::tracing::error;
-use proton_mail_common::exports::{anyhow, thiserror};
-use proton_mail_common::proton_api_mail::domain::{
-    AddressDomainLogoError, LabelId, MailSettingsViewMode,
-};
-use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
 use stash::stash::StashError;
 use std::sync::Arc;
 
@@ -28,7 +21,7 @@ pub enum MailboxError {
         MailSessionError,
     ),
     #[error("Action Queue: {0}")]
-    ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
+    ActionQueue(#[from] proton_action_queue::QueueError),
     #[error("Invalid Action: {0}")]
     InvalidAction(anyhow::Error),
     #[error("Conversation '{0}' not found")]
@@ -82,7 +75,7 @@ impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
     pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
-        let mbox = proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), u64::new(label_id))?;
+        let mbox = proton_mail_common::Mailbox::with_id(ctx.ctx().clone(), label_id)?;
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }
@@ -92,7 +85,7 @@ impl Mailbox {
     /// Create a new mailbox for a given remote id.
     #[uniffi::constructor]
     pub async fn with_remote_id(ctx: &MailUserSession, label_id: &LabelId) -> MailboxResult<Self> {
-        let mbox = proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), label_id)?;
+        let mbox = proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), label_id).await?;
         Self::sync(mbox).await
     }
 
@@ -118,7 +111,7 @@ impl Mailbox {
 
     /// Get the mailbox's active view mode.
     #[must_use]
-    pub fn view_mode(&self) -> MailSettingsViewMode {
+    pub fn view_mode(&self) -> ViewMode {
         self.mbox.view_mode()
     }
 }

@@ -1,10 +1,11 @@
 use crate::actions::new_action_factory;
-use crate::exports::anyhow::anyhow;
-use crate::exports::tracing::error;
-use crate::{MailContextResult, MailUserContext, MailUserContext};
+use crate::{MailContextResult, MailUserContext};
+use anyhow::anyhow;
 use proton_action_queue::{Action, ActionQueue, SessionProviderError};
 use proton_api_core::session::Session;
+use stash::stash::Stash;
 use std::sync::Weak;
+use tracing::error;
 
 impl MailUserContext {
     /// Queue an action for later execution.
@@ -41,14 +42,12 @@ impl proton_action_queue::SessionProvider for SessionProvider {
     }
 }
 
-pub(super) fn new_action_queue(mail_user_context: Weak<MailUserContext>) -> ActionQueue {
+pub(super) fn new_action_queue(
+    mail_user_context: Weak<MailUserContext>,
+    stash: Stash,
+) -> ActionQueue {
     ActionQueue::new(
-        mail_user_context
-            .upgrade()
-            .unwrap()
-            .user_context
-            .stash()
-            .clone(),
+        stash,
         Box::new(SessionProvider(mail_user_context.clone())),
         new_action_factory(mail_user_context),
     )

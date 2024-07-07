@@ -1,7 +1,6 @@
-use proton_api_mail::proton_api_core::exports::serde::Serialize;
-use proton_api_mail::proton_api_core::exports::serde_json;
 use proton_sqlite3::rusqlite::types::ToSqlOutput;
 use proton_sqlite3::rusqlite::ToSql;
+use serde::Serialize;
 use stash::orm::ConversionError;
 use stash::stash::StashError;
 use std::ops::Deref;

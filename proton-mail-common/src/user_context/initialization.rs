@@ -1,7 +1,9 @@
+use crate::models::{Conversation, Label, MailSettings};
 use crate::{MailContextError, MailUserContext};
-use proton_api_mail::domain::{Conversation, LabelId, MailSettings};
-use proton_api_mail::proton_api_core::exports::tracing::{self, error, trace, Level};
-use tokio::spawn;
+use proton_api_core::session::CoreSession;
+use proton_core_common::datatypes::LabelId;
+use proton_core_common::models::{Address, User};
+use tracing::{error, trace, Level};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MailUserContextLoadingStage {
@@ -20,17 +22,14 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self, cb), fields(user_id=?self.user_id()))]
-    pub fn initialize(
+    pub async fn initialize(
         &self,
         label_id: LabelId,
         cb: Box<dyn MailUserContextInitializationCallback>,
     ) {
-        let ctx = self.clone();
-        spawn(async move {
-            if let Err((stage, err)) = ctx.initialize_async(label_id, cb.as_ref()).await {
-                cb.on_stage_err(stage, err);
-            }
-        });
+        if let Err((stage, err)) = self.initialize_async(label_id, cb.as_ref()).await {
+            cb.on_stage_err(stage, err);
+        }
     }
 
     #[tracing::instrument(level = Level::DEBUG, skip(self, cb), fields(user_id=?self.user_id()))]
@@ -50,21 +49,21 @@ impl MailUserContext {
 
         trace!("Syncing User settings");
         cb.on_stage(MailUserContextLoadingStage::User);
-        if let Err(e) = ctx.user_context.sync_user_and_settings().await {
+        if let Err(e) = User::sync_user_and_settings(ctx.session().api(), ctx.stash()).await {
             error!("Failed to sync user settings: {e}");
             return Err((MailUserContextLoadingStage::User, e.into()));
         }
 
         trace!("Syncing Mail settings");
         cb.on_stage(MailUserContextLoadingStage::MailSettings);
-        if let Err(e) = MailSettings::sync_mail_settings().await {
+        if let Err(e) = MailSettings::sync_mail_settings(ctx.session().api(), ctx.stash()).await {
             error!("Failed to sync user settings: {e}");
-            return Err((MailUserContextLoadingStage::MailSettings, e));
+            return Err((MailUserContextLoadingStage::MailSettings, e.into()));
         }
 
         trace!("Syncing Addresses");
         cb.on_stage(MailUserContextLoadingStage::Addresses);
-        if let Err(e) = ctx.user_context.sync_addresses().await {
+        if let Err(e) = Address::sync(ctx.session().api(), ctx.stash()).await {
             error!("Failed to sync addresses :{e}");
             return Err((MailUserContextLoadingStage::Addresses, e.into()));
         }
@@ -72,17 +71,20 @@ impl MailUserContext {
         // load labels
         trace!("Syncing labels");
         cb.on_stage(MailUserContextLoadingStage::Labels);
-        if let Err(e) = ctx.sync_labels().await {
+        if let Err(e) = Label::sync_labels(ctx.session().api(), ctx.stash()).await {
             error!("Failed to sync labels: {e}");
-            return Err((MailUserContextLoadingStage::Labels, e));
+            return Err((MailUserContextLoadingStage::Labels, e.into()));
         }
 
         // load conversation counters
         trace!("Syncing conversation and message counts");
         cb.on_stage(MailUserContextLoadingStage::Counters);
-        if let Err(e) = Conversation::sync_conversation_and_message_counts().await {
+        if let Err(e) =
+            Conversation::sync_conversation_and_message_counts(ctx.session().api(), ctx.stash())
+                .await
+        {
             error!("Failed to sync conversation and messages counter: {e}");
-            return Err((MailUserContextLoadingStage::Counters, e));
+            return Err((MailUserContextLoadingStage::Counters, e.into()));
         }
 
         trace!("Syncing Complete");

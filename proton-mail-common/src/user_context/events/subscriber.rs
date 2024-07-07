@@ -1,14 +1,15 @@
+use crate::events::MailEvent;
+use crate::models::Label;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
-use crate::user_context::events::MailEvent;
 use crate::MailUserContext;
+use anyhow::anyhow;
 use async_trait::async_trait;
-use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
-use proton_api_mail::proton_api_core::exports::tracing::{debug, error};
-use proton_event_loop::{Subscriber, SubscriberError};
+use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use stash::orm::Model;
 use std::sync::Weak;
+use tracing::{debug, error};
 
 pub struct MailEventSubscriber(Weak<MailUserContext>);
 
@@ -34,33 +35,45 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
         {
             for event in events {
-                let event = &event.event;
                 if let Some(labels) = &event.labels {
                     debug!("Handling label events");
-                    handle_label_events(&tx, labels)?;
+                    handle_label_events(&tx, labels).await?;
                 }
 
                 if let Some(conversations) = &event.conversations {
                     debug!("Handling conversation events");
-                    handle_conversation_events(&tx, conversations)?;
+                    handle_conversation_events(&tx, conversations)
+                        .await
+                        .map_err(|e| {
+                            error!("{e}");
+                            SubscriberError::Other(e.into())
+                        })?;
                 }
 
                 if let Some(messages) = &event.messages {
                     debug!("Handling message events");
-                    handle_message_events(&tx, messages)?;
+                    handle_message_events(&tx, messages).await.map_err(|e| {
+                        error!("{e}");
+                        SubscriberError::Other(e.into())
+                    })?;
                 }
 
                 if let Some(conversation_counts) = &event.conversation_counts {
                     debug!("Handling conversation counts");
-                    tx.create_or_update_conversation_counts(conversation_counts.iter())?;
+                    Label::create_or_update_conversation_counts(
+                        conversation_counts.clone(),
+                        tx.stash(),
+                    )
+                    .await?;
                 }
 
                 if let Some(message_counts) = &event.message_counts {
                     debug!("Handling message counts");
-                    tx.create_or_update_message_counts(message_counts.iter())?;
+                    Label::create_or_update_message_counts(message_counts.clone(), tx.stash())
+                        .await?;
                 }
 
-                if let Some(mut mail_settings) = &event.mail_settings {
+                if let Some(mail_settings) = event.mail_settings.as_mut() {
                     debug!("Handling mail settings");
                     mail_settings.save().await?;
                 }

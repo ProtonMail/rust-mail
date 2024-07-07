@@ -7,21 +7,20 @@ pub use initialization::*;
 
 use futures::executor::block_on;
 use proton_action_queue::ActionQueue;
-use proton_api_mail::proton_api_core::auth::UserKeySecret;
+use proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use std::sync::{Arc, Weak};
 
 use crate::user_context::action_queue::new_action_queue;
 use crate::{MailContext, MailContextResult};
-use proton_api_mail::proton_api_core::domain::{AddressId, UserId};
-use proton_api_mail::proton_api_core::Session;
-use proton_api_mail::MailSession;
+use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::datatypes::RemoteId;
 use proton_core_common::{LoadKeySecret, UserContext};
-use proton_event_loop::EventLoop;
+use proton_event_loop::foreground_loop::EventLoop;
 use stash::stash::Stash;
 
-struct MailUserContext {
+pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: MailContext,
     user_context: UserContext,
@@ -31,12 +30,13 @@ struct MailUserContext {
 
 impl MailUserContext {
     pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Arc<Self> {
+        let stash = user_context.stash().clone();
         Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
             user_context,
             event_loop: EventLoop::new(),
-            action_queue: new_action_queue(Weak::clone(this)),
+            action_queue: new_action_queue(Weak::clone(this), stash),
         })
     }
 
@@ -50,15 +50,11 @@ impl MailUserContext {
         self.user_context.stash()
     }
 
-    pub(crate) fn mail_session(&self) -> MailSession {
-        self.inner.user_context.session_as::<MailSession>()
-    }
-
     pub fn mail_context(&self) -> &MailContext {
         &self.mail_context
     }
 
-    pub fn user_id(&self) -> &UserId {
+    pub fn user_id(&self) -> &RemoteId {
         self.user_context.user_id()
     }
 
@@ -108,7 +104,7 @@ impl MailUserContext {
     pub async fn unlocked_address_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        address_id: &AddressId,
+        address_id: &RemoteId,
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         let keys = self
             .user_context
@@ -124,7 +120,7 @@ impl MailUserContext {
     pub async fn unlocked_address_keys_async<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        address_id: &AddressId,
+        address_id: &RemoteId,
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         // TODO: This should not be necessary and handled by the UserContext
         let secret = CloneSecretLoader(self.session().expose_key_secret().await);
@@ -142,7 +138,7 @@ impl MailUserContext {
 
     /// Ping the proton servers to see if they are responsive/alive.
     pub async fn ping(&self) -> MailContextResult<()> {
-        self.user_context.session().ping().await?;
+        self.user_context.session().api().get_tests_ping().await?;
         Ok(())
     }
 }

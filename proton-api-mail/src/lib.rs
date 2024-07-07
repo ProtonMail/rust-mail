@@ -1,9 +1,7 @@
 //! Rust bindings for the REST API for Proton
 
-pub mod domain;
-pub mod requests;
 pub mod services;
-mod session;
+pub mod session;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
 pub const MAX_PAGE_ELEMENT_COUNT_U64: u64 = 200;
@@ -11,34 +9,5 @@ pub const MAX_PAGE_ELEMENT_COUNT_U64: u64 = 200;
 pub const MAX_LIMIT_VALUE: usize = 150;
 pub const MAX_LIMIT_VALUE_U64: u64 = 150;
 
-pub mod exports {
-    pub use proton_api_core::exports::*;
-}
-
 pub use proton_api_core;
 pub use session::*;
-
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();
-
-#[cfg(feature = "uniffi")]
-mod hidden {
-    use crate::domain::{ConversationId, ExternalId, MessageFlags, MessageId, MimeType};
-
-    // Note: We need to generate at least on uniffi type which includes custom types
-    // declared in this crate or it will lead to linking issues in the binding code.
-    #[derive(uniffi::Record)]
-    struct UniffiGenCustomTypes {
-        pub cid: ConversationId,
-        pub mid: MessageId,
-        pub eid: ExternalId,
-        pub mime_type: MimeType,
-        pub msg_flags: MessageFlags,
-    }
-
-    uniffi::ffi_converter_forward!(
-        proton_api_core::domain::AddressId,
-        proton_api_core::UniFfiTag,
-        crate::UniFfiTag
-    );
-}

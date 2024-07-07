@@ -6,22 +6,26 @@ pub mod conversations;
 pub mod init;
 mod messages;
 
-use proton_api_mail::exports::crypto::salts::KeySecret;
-use proton_api_mail::proton_api_core::auth::{AccessToken, RefreshToken, Scope, UserKeySecret};
-use proton_api_mail::proton_api_core::domain::{SecretString, Uid, UserId};
-use proton_api_mail::proton_api_core::http::{APIEnvConfig, Builder};
-use proton_core_common::db::proton_sqlite3::{SqliteConnectionPool, SqliteMode};
-use proton_core_common::db::{
-    DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey, SessionSqliteConnection,
+use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
+use proton_api_core::auth::{SecretString, UserKeySecret};
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::Config;
+use proton_core_common::datatypes::RemoteId;
+use proton_core_common::db::session::{
+    DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey,
 };
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::{MailContext, MailUserContext};
+pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
+use stash::orm::Model;
+use stash::stash::Stash;
+use std::str::FromStr;
 use std::sync::Arc;
+use std::thread::Scope;
 use tempdir::TempDir;
+use url::Url;
 use wiremock::matchers::any;
 use wiremock::{Mock, MockServer, Request};
-
-use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 
 /// Test context for mail tests.
 ///
@@ -37,8 +41,8 @@ pub struct TestContext {
 
 impl TestContext {
     /// Generate a test UID.
-    fn test_uid() -> Uid {
-        Uid::from("TEST_UID")
+    fn test_uid() -> RemoteId {
+        RemoteId::from("TEST_UID")
     }
 
     /// Create and initialize test context.
@@ -49,25 +53,22 @@ impl TestContext {
     /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
-        user_id: UserId,
+        user_id: RemoteId,
     ) -> Self {
         Self::_new(Some(user_key_secret), Some(user_id)).await
     }
 
-    async fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<UserId>) -> Self {
+    async fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<RemoteId>) -> Self {
         let mock_server = MockServer::start().await;
 
         // Create client with the mock server as the base URL
-        let mut api_env_config = APIEnvConfig {
-            base_url: format!("{}/api", mock_server.uri()),
+        let mut api_config = Config {
+            base_url: format!("{}/api/", mock_server.uri()),
             allow_http: true,
             skip_srp_proof_validation: true,
             ..Default::default()
         };
-        let client = Builder::new()
-            .api_env_config(api_env_config)
-            .build()
-            .unwrap();
+        let base_url = Url::parse(&api_config.base_url).expect("Invalid URL");
 
         // Create a temporary directory for the database
         let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
@@ -88,31 +89,32 @@ impl TestContext {
             tmp_dir.path(),
             cache_path,
             keychain,
-            client,
+            base_url,
             None,
         )
+        .await
         .expect("failed to create mail context");
 
         // Generate a fake session and write it to the database
-        let pool =
-            SqliteConnectionPool::new(SqliteMode::File(tmp_dir.path().join("session.db")), false);
-        let mut conn =
-            SessionSqliteConnection::from(pool.acquire().expect("failed to acquire connection"));
+        let stash =
+            Stash::new(Some(&tmp_dir.path().join("session.db"))).expect("failed to create stash");
 
         // Create a fake session
-        let session = DecryptedUserSession {
+        let mut session = DecryptedUserSession {
             session_id: Self::test_uid(),
-            user_id: user_id.unwrap_or(UserId::from(TEST_USER_ID)),
+            user_id: user_id.unwrap_or(RemoteId::from(TEST_USER_ID)),
             name: None,
             email: TEST_USER_MAIL.to_owned(),
-            refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
-            access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
+            refresh_token: RealSecretString::from_str("REFRESHTOKEN").unwrap(),
+            access_token: RealSecretString::from_str("ACCESSTOKEN").unwrap(),
             key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
-            scopes: Scope(String::new()),
+            scopes: String::new(),
         }
         .to_encrypted_session(&encryption_key)
         .expect("failed to generate encrypted session");
-        conn.tx(|tx| tx.create_or_update_session(&session))
+        session
+            .save_using(&stash.connection())
+            .await
             .expect("failed to make changes to session db");
 
         Self {
@@ -166,9 +168,10 @@ impl TestContext {
     }
 
     /// Get the test user mail context.
-    pub fn user_context(&self) -> MailUserContext {
+    pub async fn user_context(&self) -> Arc<MailUserContext> {
         self.context
-            .user_context_from_session(&self.encrypted_user_session, None)
+            .user_context_from_session(&self.encrypted_user_session)
+            .await
             .expect("failed to create user context")
     }
 }

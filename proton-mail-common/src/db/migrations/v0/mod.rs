@@ -6,9 +6,8 @@ mod labels;
 mod messages;
 mod settings;
 
-use futures::executor::block_on;
-use proton_api_mail::exports::tracing::debug_span;
 use stash::stash::{StashError, Tether};
+use tracing::debug_span;
 
 pub struct MigrationV0 {}
 
@@ -17,33 +16,31 @@ impl proton_sqlite3::Migration for MigrationV0 {
         "proton_mail_db_v0"
     }
 
-    fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
-        block_on(async {
-            let span = debug_span!("labels");
-            let entered = span.enter();
-            labels::create_labels_tables(tx).await?;
-            drop(entered);
-            let span = debug_span!("attachments");
-            let entered = span.enter();
-            attachments::create_attachment_tables(tx).await?;
-            drop(entered);
-            let span = debug_span!("conversations");
-            let entered = span.enter();
-            conversations::create_conversation_tables(tx).await?;
-            drop(entered);
-            let span = debug_span!("messages");
-            let entered = span.enter();
-            messages::create_message_tables(tx).await?;
-            drop(entered);
-            let span = debug_span!("events");
-            let entered = span.enter();
-            events::create_event_tables(tx).await?;
-            drop(entered);
-            let span = debug_span!("settings");
-            let entered = span.enter();
-            settings::create_settings_table(tx).await?;
-            drop(entered);
-            Ok(())
-        })
+    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+        let span = debug_span!("labels");
+        let entered = span.enter();
+        labels::create_labels_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("attachments");
+        let entered = span.enter();
+        attachments::create_attachment_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("conversations");
+        let entered = span.enter();
+        conversations::create_conversation_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("messages");
+        let entered = span.enter();
+        messages::create_message_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("events");
+        let entered = span.enter();
+        events::create_event_tables(tx).await?;
+        drop(entered);
+        let span = debug_span!("settings");
+        let entered = span.enter();
+        settings::create_settings_table(tx).await?;
+        drop(entered);
+        Ok(())
     }
 }

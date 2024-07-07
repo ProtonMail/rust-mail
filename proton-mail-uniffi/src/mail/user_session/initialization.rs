@@ -1,5 +1,4 @@
 use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
-use proton_mail_common::proton_api_mail::domain::LabelId;
 
 #[uniffi::export]
 impl MailUserSession {

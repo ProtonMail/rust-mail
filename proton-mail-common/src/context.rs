@@ -1,18 +1,17 @@
 use crate::db::DBMigrationError;
-use crate::MailUserContext;
+use crate::{AppError, MailUserContext};
 use futures::executor::block_on;
-use proton_api_mail::domain::{AddressDomainLogoError, ApiError};
-use proton_api_mail::proton_api_core::exports::{anyhow, thiserror};
-use proton_api_mail::proton_api_core::http::{Client, RequestError};
-use proton_api_mail::proton_api_core::login::Flow;
-use proton_core_common::db::EncryptedUserSession;
+use proton_api_core::login::Flow;
+use proton_api_core::service::ApiServiceError;
+use proton_core_common::db::session::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError, KeyHandlingError};
-use proton_core_common::{CoreSessionCallback, NetworkStatusChanged, UserDatabaseInitializer};
+use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
 use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use url::Url;
 
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
@@ -27,20 +26,18 @@ pub enum MailContextError {
     DBMigration(#[from] DBMigrationError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
-    #[error("HTTP Error: {0}")]
-    Http(#[from] RequestError),
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_action_queue::QueueError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(KeyHandlingError),
-    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
-    AddressDomainLogoError(#[from] AddressDomainLogoError),
+    #[error("Stash Error: {0}")]
+    App(#[from] AppError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
     #[error("API Error: {0}")]
-    Api(#[from] ApiError),
+    Api(#[from] ApiServiceError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -48,13 +45,13 @@ pub enum MailContextError {
 impl From<CoreContextError> for MailContextError {
     fn from(value: CoreContextError) -> Self {
         match value {
+            CoreContextError::Api(err) => MailContextError::Api(err),
             CoreContextError::Crypto => MailContextError::Crypto,
             CoreContextError::KeyChain(err) => MailContextError::KeyChain(err),
             CoreContextError::IO(err) => MailContextError::IO(err),
             CoreContextError::DBMigration(err) => MailContextError::DBMigration(err),
             CoreContextError::KeyChainHasNoKey => MailContextError::KeyChainHasNoKey,
             CoreContextError::Other(err) => MailContextError::Other(err),
-            CoreContextError::Http(err) => MailContextError::Http(err),
             CoreContextError::PGPKeyAccess(err) => MailContextError::PGPKeyAccess(err),
             CoreContextError::Stash(err) => MailContextError::Stash(err),
         }
@@ -65,7 +62,7 @@ pub type MailContextResult<T> = Result<T, MailContextError>;
 
 #[derive(Clone)]
 pub struct MailContext {
-    core_context: Context,
+    core_context: Arc<Context>,
     // TODO: cleanup after Dan's refactor.
     mail_cache_path: PathBuf,
 }
@@ -76,7 +73,7 @@ impl MailContext {
         user_db_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
-        client: Client,
+        api_url: Url,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> Result<Self, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
@@ -86,7 +83,7 @@ impl MailContext {
             user_db_path,
             key_chain,
             initializers,
-            client,
+            api_url,
             network_callback,
         )
         .await?;
@@ -97,11 +94,8 @@ impl MailContext {
         })
     }
 
-    pub fn new_login_flow(
-        &self,
-        cb: Option<Box<dyn CoreSessionCallback>>,
-    ) -> MailContextResult<Flow> {
-        let f = self.core_context.new_login_flow(cb)?;
+    pub fn new_login_flow(&self) -> MailContextResult<Flow> {
+        let f = self.core_context.new_login_flow()?;
         Ok(f)
     }
 
@@ -113,7 +107,7 @@ impl MailContext {
     pub async fn user_context_from_login_flow(
         &self,
         login_flow: &Flow,
-    ) -> MailContextResult<MailUserContext> {
+    ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
             .user_context_from_login_flow(login_flow)
@@ -128,12 +122,8 @@ impl MailContext {
     pub async fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
-        cb: Option<Box<dyn CoreSessionCallback>>,
-    ) -> MailContextResult<MailUserContext> {
-        let ctx = self
-            .core_context
-            .user_context_from_session(session, cb)
-            .await?;
+    ) -> MailContextResult<Arc<MailUserContext>> {
+        let ctx = self.core_context.user_context_from_session(session).await?;
         Ok(MailUserContext::new(self.clone(), ctx))
     }
     /// Return the list of active session.

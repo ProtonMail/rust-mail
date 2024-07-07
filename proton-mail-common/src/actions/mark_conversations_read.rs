@@ -1,15 +1,18 @@
+use crate::models::Conversation;
+use anyhow::anyhow;
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
     SessionProvider, StoredAction,
 };
-use proton_api_mail::exports::anyhow::anyhow;
-use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
-use proton_api_mail::exports::tracing::error;
-use proton_api_mail::MailSession;
+use proton_api_core::services::proton::Proton;
+use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::datatypes::RemoteId;
+use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
-use std::any::Any;
+use std::any::{Any, TypeId};
+use tracing::error;
 
 define_action_id!(
     MARK_CONVERSATION_READ_ACTION_ID,
@@ -17,7 +20,6 @@ define_action_id!(
 );
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(crate = "self::serde")]
 pub struct MarkConversationsReadAction {
     active_label_id: u64,
     ids: Vec<u64>,
@@ -44,16 +46,16 @@ struct MarkConversationReadLocalHandler {
 
 impl LocalActionHandler for MarkConversationReadLocalHandler {
     fn apply_local(&mut self) -> ActionResult<()> {
-        self.tx
-            .mark_conversations_read(self.action.ids.iter().cloned())
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
-        Ok(())
+        block_on(async {
+            Conversation::mark_multiple_as_read(self.action.ids.clone(), self.tx.stash()).await
+        })
+        .map_err(|e| ActionError::Local(anyhow!(e)))
     }
 }
 
 struct MarkConversationReadRemoteHandler {
     action: MarkConversationsReadAction,
-    session: MailSession,
+    session: Session,
     tx: Tether,
 }
 
@@ -65,10 +67,10 @@ impl RemoteActionHandler for MarkConversationReadRemoteHandler {
             )));
         }
 
-        self.tx
-            .mark_conversations_read(self.action.ids.iter().cloned())
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
-        Ok(())
+        block_on(async {
+            Conversation::mark_multiple_as_read(self.action.ids.clone(), self.tx.stash()).await
+        })
+        .map_err(|e| ActionError::Local(anyhow!(e)))
     }
 
     fn validate_local(&mut self) -> ActionResult<ActionLocalValidationResult> {
@@ -76,43 +78,42 @@ impl RemoteActionHandler for MarkConversationReadRemoteHandler {
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let conv_ids = self
-            .tx
-            .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
-            .map_err(|e| {
-                error!("Failed to resolve conversation ids: {e}");
-                ActionError::Local(anyhow!(e))
-            })?;
+        let conv_ids = block_on(async {
+            Conversation::find_remote_ids(self.action.ids.clone(), self.tx.stash()).await
+        })
+        .map_err(|e| {
+            error!("Failed to resolve conversation ids: {e}");
+            ActionError::Local(anyhow!(e))
+        })?;
         let responses = block_on(async {
-            self.session
-                .mark_conversations_read(&conv_ids)
-                .await
-                .map_err(|e| {
-                    error!("Failed to mark conversations read on API: {e}");
-                    e
-                })
+            Conversation::mark_multiple_as_read_remote::<Proton>(conv_ids, self.session.api()).await
+        })
+        .map_err(|e| {
+            error!("Failed to mark conversations read on API: {e}");
+            e
         })?;
 
         let failed_messages = responses
             .into_iter()
             .filter(|r| r.response.code != 1000)
-            .map(|r| r.id)
+            .map(|r| RemoteId::from(r.id))
             .collect::<Vec<_>>();
         if !failed_messages.is_empty() {
             error!(
                 "Mark conversations read operation failed for: {:?}",
                 failed_messages
             );
-            let local_ids = self
-                .tx
-                .remote_to_local_conversation_ids(failed_messages.iter())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
-            self.tx
-                .mark_conversations_unread(self.action.active_label_id, local_ids.into_iter())
-                .map_err(|e| {
-                    error!("Failed to rollback failed for conversations: {e}");
-                    ActionError::Local(anyhow!(e))
-                })?;
+            let local_ids = block_on(async {
+                Conversation::find_local_ids(failed_messages, self.tx.stash()).await
+            })
+            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            block_on(async {
+                Conversation::mark_multiple_as_unread(local_ids, self.tx.stash()).await
+            })
+            .map_err(|e| {
+                error!("Failed to rollback failed for conversations: {e}");
+                ActionError::Local(anyhow!(e))
+            })?;
         }
 
         Ok(())
@@ -138,11 +139,11 @@ impl ActionFactoryInstance for MarkConversationsReadActionFactory {
         action: Box<dyn Any>,
         tx: Tether,
     ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
-        let type_id = action.type_id().clone();
+        let type_id = TypeId::of::<Box<dyn Any>>();
         let Ok(action) = action.downcast::<MarkConversationsReadAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
                 type_id,
-                std::any::TypeId::of::<MarkConversationsReadAction>(),
+                TypeId::of::<MarkConversationsReadAction>(),
             ));
         };
 
@@ -168,7 +169,7 @@ impl ActionFactoryInstance for MarkConversationsReadActionFactory {
         Ok(Box::new(MarkConversationReadRemoteHandler {
             action,
             tx,
-            session: MailSession::from(session),
+            session,
         }))
     }
 }

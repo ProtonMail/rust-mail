@@ -1,14 +1,15 @@
 use crate::db::new_test_connection;
-use proton_api_mail::domain::{MailSettings, MAIL_SETTINGS_ID};
+use crate::models::{MailSettings, MAIL_SETTINGS_ID};
+use stash::orm::Model;
 
-#[test]
-fn test_mail_settings_store_read() {
-    let (_, mut conn, _) = new_test_connection();
-    let settings = MailSettings {
-        local_id: MAIL_SETTINGS_ID,
-        display_name: "foo".to_string(),
-        signature: "bar".to_string(),
-        theme: "goose".to_string(),
+#[tokio::test]
+async fn test_mail_settings_store_read() {
+    let stash = new_test_connection().await;
+    let mut settings = MailSettings {
+        local_id: None,
+        display_name: "foo".to_owned(),
+        signature: "bar".to_owned(),
+        theme: "goose".to_owned(),
         auto_save_contacts: Default::default(),
         composer_mode: Default::default(),
         message_buttons: Default::default(),
@@ -26,9 +27,9 @@ fn test_mail_settings_store_read() {
         pm_signature_referral_link: Default::default(),
         image_proxy: 0,
         num_message_per_page: 0,
-        draft_mime_type: "text/html".to_string(),
-        receive_mime_type: "text/html".to_string(),
-        show_mime_type: "text/html".to_string(),
+        draft_mime_type: Default::default(),
+        receive_mime_type: Default::default(),
+        show_mime_type: Default::default(),
         enable_folder_color: Default::default(),
         inherit_parent_folder_color: Default::default(),
         submission_access: Default::default(),
@@ -47,9 +48,13 @@ fn test_mail_settings_store_read() {
         hide_remote_images: Default::default(),
         hide_sender_images: Default::default(),
         row_id: None,
-        stash: None,
+        stash: Some(stash.clone()),
     };
-    settings.save().await.unwrap();
-    let db_settings = MailSettings.load(MAIL_SETTINGS_ID, &conn).unwrap().unwrap();
+    settings.save_using(&stash.connection()).await.unwrap();
+    let db_settings = MailSettings::load(MAIL_SETTINGS_ID, &stash)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(db_settings, settings);
+    assert_eq!(db_settings.local_id, Some(MAIL_SETTINGS_ID));
 }

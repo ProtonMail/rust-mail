@@ -1,6 +1,5 @@
-use crate::exports::anyhow::anyhow;
-use crate::exports::serde::{self, Deserialize, Serialize};
 use crate::MailUserContext;
+use anyhow::anyhow;
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
@@ -8,13 +7,13 @@ use proton_action_queue::{
     SessionProvider, StoredAction,
 };
 use proton_event_loop::EventLoopError;
+use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::sync::{Arc, Weak};
 
 define_action_id!(EVENT_LOOP_ACTION_ID, "cccb153b-4cee-4634-90ae-6d7424e5f4d1");
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(crate = "self::serde")]
 pub struct EventLoopAction {}
 
 impl Action for EventLoopAction {
@@ -82,8 +81,8 @@ impl ActionFactoryInstance for EventLoopActionFactory {
     ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
         let Some(_) = action.downcast_ref::<EventLoopAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
-                action.type_id(),
-                std::any::TypeId::of::<EventLoopAction>(),
+                TypeId::of::<Box<dyn Any>>(),
+                TypeId::of::<EventLoopAction>(),
             ));
         };
         Ok(Box::new(EventLoopLocalActionHandler {}))

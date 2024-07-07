@@ -10,18 +10,14 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
                 address_id TEXT NOT NULL,
                 local_conversation_id INTEGER DEFAULT NULL,
                 remote_conversation_id TEXT DEFAULT NULL,
-                `order` INTEGER NOT NULL,
+                display_order INTEGER NOT NULL,
                 subject TEXT NOT NULL,
                 unread INTEGER NOT NULL,
-                sender_address TEXT NOT NULL,
-                sender_name TEXT NOT NULL,
-                sender_is_proton INTEGER NOT NULL DEFAULT 0,
-                sender_is_simple_login INTEGER NOT NULL DEFAULT 0,
-                sender_bimi_selector TEXT DEFAULT NULL,
-                sender_display_image INTEGER NOT NULL DEFAULT 0,
                 to_list TEXT DEFAULT NULL,
                 cc_list TEXT DEFAULT NULL,
                 bcc_list TEXT DEFAULT NULL,
+                reply_tos TEXT DEFAULT NULL,
+                sender TEXT DEFAULT NULL,
                 time INTEGER NOT NULL,
                 size INTEGER NOT NULL,
                 expiration_time INTEGER NOT NULL,
@@ -29,6 +25,8 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
                 is_replied_all INTEGER NOT NULL,
                 is_forwarded INTEGER NOT NULL,
                 external_id TEXT,
+                attachments INTEGER NOT NULL,
+                attachments_metadata INTEGER NOT NULL,
                 num_attachments INTEGER NOT NULL,
                 flags INTEGER NOT NULL,
                 snooze_time INTEGER NOT NULL DEFAULT 0,
@@ -36,7 +34,7 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
 
                 CONSTRAINT messages_address_id
                     FOREIGN KEY (address_id)
-                    REFERENCES addresses (id),
+                    REFERENCES addresses (remote_id),
 
                 CONSTRAINT messages_conversation_id
                     FOREIGN KEY (local_conversation_id)
@@ -139,9 +137,10 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
         indoc! {"
         CREATE TABLE message_bodies (
             local_message_id INTEGER PRIMARY KEY NOT NULL,
+            remote_message_id TEXT UNIQUE DEFAULT NULL,
             header TEXT NOT NULL,
             parsed_headers TEXT NOT NULL,
-            mime_type TEXT NOT NULL,
+            mime_type INTEGER NOT NULL,
 
             CONSTRAINT message_bodies_id
                 FOREIGN KEY (local_message_id)
@@ -151,6 +150,6 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
         },
         vec![],
     )
-    .await;
+    .await?;
     Ok(())
 }

@@ -1,6 +1,5 @@
 use crate::mail::{MailSessionError, MailUserSession};
 use proton_mail_common::db::Label;
-use proton_mail_common::proton_api_mail::domain::LabelType;
 use std::sync::Arc;
 
 #[uniffi::export]

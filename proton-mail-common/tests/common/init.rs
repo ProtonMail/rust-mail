@@ -1,35 +1,56 @@
-use crate::common::TestContext;
-use proton_api_mail::domain::{
-    Attachment, Conversation, ConversationCount, ConversationId, ConversationLabels, Label,
-    LabelId, LabelType, MailSettings, MessageAddress, MessageCount, MessageId, MessageMetadata,
-    ALL_LABEL_TYPES,
-};
-use proton_api_mail::exports::crypto::keys::{AddressKeys, UserKeys};
-use proton_api_mail::proton_api_core::domain::{
-    Address, AddressId, AddressStatus, AddressType, DateFormat, Density, Email, EventId, Flags,
-    HighSecurity, LogAuth, Password, Phone, ProductUsedSpace, SettingsFlags, TFAStatus, TimeFormat,
-    TwoFA, User, UserId, UserMnemonicStatus, UserSettings, UserType, WeekStart,
-};
-use proton_api_mail::proton_api_core::requests::{
-    GetAddressesResponse, LatestEventResponse, UserInfoResponse, UserSettingsResponse,
-};
-use proton_api_mail::requests::{
-    GetConversationCountsResponse, GetConversationResponse, GetConversationsResponse,
-    GetLabelsResponse, GetMessageCountsResponse, MailSettingsResponse, MessageMetadataResponse,
-};
-use proton_mail_common::{
-    MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
-};
-use std::collections::HashMap;
-use velcro::hash_map;
-use wiremock::matchers::{method, path, query_param};
-use wiremock::{Mock, ResponseTemplate};
-
 use super::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
     TEST_ADDRESS_KEY_SIGNATURE, TEST_ADDRESS_KEY_TOKEN, TEST_USER_ID, TEST_USER_MAIL,
 };
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
+use crate::common::TestContext;
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::response_data::{
+    Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
+    DateFormat as ApiDateFormat, Density as ApiDensity, Email as ApiEmail, Flags as ApiFlags,
+    HighSecurity as ApiHighSecurity, LogAuth as ApiLogAuth, Password as ApiPassword,
+    Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
+    TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, User as ApiUser,
+    UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
+    UserType as ApiUserType, WeekStart as ApiWeekStart,
+};
+use proton_api_core::services::proton::responses::{
+    GetAddressesResponse, GetEventsLatestResponse, GetSettingsResponse as GetCoreSettingsResponse,
+    GetUsersResponse,
+};
+use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::response_data::MessageMetadata;
+use proton_api_mail::services::proton::response_data::{
+    Attachment as ApiAttachment, Conversation as ApiConversation,
+    ConversationCount as ApiConversationCount, ConversationLabel as ApiConversationLabel,
+    Label as ApiLabel, MailSettings as ApiMailSettings, Message as ApiMessage,
+    MessageAddress as ApiMessageAddress, MessageCount as ApiMessageCount,
+    MessageMetadata as ApiMessageMetadata,
+};
+use proton_api_mail::services::proton::responses::GetMessageResponse;
+use proton_api_mail::services::proton::responses::{
+    GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
+    GetLabelsResponse, GetMessagesCountResponse, GetMessagesResponse,
+    GetSettingsResponse as GetMailSettingsResponse,
+};
+use proton_core_common::datatypes::{
+    AddressStatus, AddressType, DateFormat, Density, Email, Flags, HighSecurity, LabelId, LogAuth,
+    Password, Phone, ProductUsedSpace, RemoteId, SettingsFlags, TfaStatus, TimeFormat, TwoFa,
+    UserMnemonicStatus, UserType, WeekStart,
+};
+use proton_core_common::models::{Address, User, UserSettings};
+use proton_mail_common::datatypes::{ConversationCount, LabelType, MessageCount, SystemLabelId};
+use proton_mail_common::models::{
+    Attachment, Conversation, ConversationLabel, Label, MailSettings,
+};
+use proton_mail_common::{
+    MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
+    ALL_LABEL_TYPES,
+};
+use std::collections::HashMap;
+use velcro::hash_map;
+use wiremock::matchers::{method, path, query_param};
+use wiremock::{Mock, ResponseTemplate};
 
 /// Mail user context init callback that does nothing.
 pub struct NullCallback {}
@@ -44,34 +65,34 @@ impl MailUserContextInitializationCallback for NullCallback {
 #[derive(Clone, Default)]
 pub struct Params {
     /// Last event id. If `None`, it will be set to `0`.
-    pub last_event_id: Option<EventId>,
+    pub last_event_id: Option<ApiRemoteId>,
 
     /// User info. If `None`, some default values will be set.
-    pub user_info: Option<User>,
+    pub user_info: Option<ApiUser>,
 
     /// User settings. If `None`, some default values will be set.
-    pub user_settings: Option<UserSettings>,
+    pub user_settings: Option<ApiUserSettings>,
 
     /// List of user addresses.
-    pub addresses: Vec<Address>,
+    pub addresses: Vec<ApiAddress>,
 
     /// Mail settings. If `None`, some default values will be set.
-    pub mail_settings: Option<MailSettings>,
+    pub mail_settings: Option<ApiMailSettings>,
 
     /// List of labels by type.
-    pub labels: HashMap<LabelType, Vec<Label>>,
+    pub labels: HashMap<ApiLabelType, Vec<ApiLabel>>,
 
     /// List of conversations.
-    pub conversations: Vec<Conversation>,
+    pub conversations: Vec<ApiConversation>,
 
     /// List of attachments.
-    pub attachments: Vec<Attachment>,
+    pub attachments: Vec<ApiAttachment>,
 
     /// List of conversation counts.
-    pub conversation_count: Vec<ConversationCount>,
+    pub conversation_count: Vec<ApiConversationCount>,
 
     /// List of message counts.
-    pub message_count: Vec<MessageCount>,
+    pub message_count: Vec<ApiMessageCount>,
 }
 
 impl Params {
@@ -88,13 +109,13 @@ impl Params {
             user_settings: None,
             mail_settings: None,
             labels: hash_map! {
-                LabelType::Label: vec![Label {
-                    id: LabelId::from("mylabel"),
+                ApiLabelType::Label: vec![ApiLabel {
+                    id: ApiRemoteId::from("mylabel"),
                     parent_id: None,
-                    name: "mylabel".to_string(),
+                    name: "mylabel".to_owned(),
                     path: None,
-                    color: "".to_string(),
-                    label_type: LabelType::Label,
+                    color: String::new(),
+                    label_type: ApiLabelType::Label,
                     notify: false,
                     display: false,
                     sticky: false,
@@ -102,27 +123,27 @@ impl Params {
                     order: 0,
                 }]
             },
-            addresses: vec![Address {
-                id: AddressId::from(TEST_ADDRESS_ID),
+            addresses: vec![ApiAddress {
+                id: ApiRemoteId::from(TEST_ADDRESS_ID),
                 email: TEST_USER_MAIL.to_owned(),
                 send: true,
                 receive: true,
-                status: AddressStatus::Enabled,
+                status: ApiAddressStatus::Enabled,
                 domain_id: None,
-                address_type: AddressType::Original,
+                address_type: ApiAddressType::Original,
                 order: 0,
-                display_name: "".to_string(),
+                display_name: String::new(),
                 signature: TEST_ADDRESS_KEY_SIGNATURE.to_owned(),
                 keys: testdata_address_keys_for_user_address(),
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: Default::default(),
             }],
-            conversations: vec![Conversation {
-                id: ConversationId::from("myconv"),
+            conversations: vec![ApiConversation {
+                id: ApiRemoteId::from("myconv"),
                 order: 0,
-                subject: "Hello".to_string(),
-                senders: vec![MessageAddress {
+                subject: "Hello".to_owned(),
+                senders: vec![ApiMessageAddress {
                     address: "jsmith@test.com".to_owned(),
                     name: "John Smith".to_owned(),
                     is_proton: true,
@@ -136,8 +157,8 @@ impl Params {
                 num_attachments: 0,
                 expiration_time: 0,
                 size: 12,
-                labels: vec![ConversationLabels {
-                    id: LabelId::inbox().clone(),
+                labels: vec![ApiConversationLabel {
+                    id: LabelId::inbox().into(),
                     context_num_unread: 0,
                     context_num_messages: 1,
                     context_time: 0,
@@ -151,16 +172,16 @@ impl Params {
                 attachment_info: Default::default(),
             }],
             attachments: vec![testdata_attachment_metadata_complete(
-                MessageId::from("mymessage "),
-                ConversationId::from("myconv"),
+                ApiRemoteId::from("mymessage "),
+                ApiRemoteId::from("myconv"),
             )],
-            conversation_count: vec![ConversationCount {
-                label_id: LabelId::inbox().clone(),
+            conversation_count: vec![ApiConversationCount {
+                label_id: LabelId::inbox().into(),
                 total: 1,
                 unread: 0,
             }],
-            message_count: vec![MessageCount {
-                label_id: LabelId::inbox().clone(),
+            message_count: vec![ApiMessageCount {
+                label_id: LabelId::inbox().into(),
                 total: 1,
                 unread: 0,
             }],
@@ -183,8 +204,8 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/events/latest"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(LatestEventResponse {
-                    event_id: params.last_event_id.unwrap_or(EventId::from("0")),
+                ResponseTemplate::new(200).set_body_json(GetEventsLatestResponse {
+                    event_id: params.last_event_id.unwrap_or(ApiRemoteId::from("0")),
                 }),
             )
             .expect(1)
@@ -194,21 +215,21 @@ impl TestContext {
         // User info
         Mock::given(method("GET"))
             .and(path("/api/core/v4/users"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(UserInfoResponse {
-                user: params.user_info.unwrap_or(User {
-                    id: UserId::from(TEST_USER_ID),
+            .respond_with(ResponseTemplate::new(200).set_body_json(GetUsersResponse {
+                user: params.user_info.unwrap_or(ApiUser {
+                    id: ApiRemoteId::from(TEST_USER_ID),
                     name: None,
                     display_name: None,
                     email: TEST_USER_MAIL.to_owned(),
                     used_space: 0,
                     max_space: 0,
                     max_upload: 0,
-                    user_type: UserType::Proton,
+                    user_type: ApiUserType::Proton,
                     create_time: 0,
                     credit: 0,
-                    currency: "".to_string(),
+                    currency: String::new(),
                     keys: testdata_user_keys(),
-                    product_used_space: ProductUsedSpace {
+                    product_used_space: ApiProductUsedSpace {
                         calendar: 0,
                         contact: 0,
                         drive: 0,
@@ -216,13 +237,13 @@ impl TestContext {
                         pass: 0,
                     },
                     to_migrate: false,
-                    mnemonic_status: UserMnemonicStatus::Disabled,
+                    mnemonic_status: ApiUserMnemonicStatus::Disabled,
                     role: 0,
                     private: 0,
                     subscribed: 0,
                     services: 0,
                     delinquent: 0,
-                    flags: Flags {
+                    flags: ApiFlags {
                         protected: false,
                         onboard_checklist_storage_granted: false,
                         has_temporary_password: false,
@@ -242,41 +263,41 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/settings"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(UserSettingsResponse {
-                    user_settings: params.user_settings.unwrap_or(UserSettings {
-                        email: Email {
-                            value: "".to_string(),
+                ResponseTemplate::new(200).set_body_json(GetCoreSettingsResponse {
+                    user_settings: params.user_settings.unwrap_or(ApiUserSettings {
+                        email: ApiEmail {
+                            value: String::new(),
                             status: 0,
                             notify: 0,
                             reset: 0,
                         },
-                        password: Password {
+                        password: ApiPassword {
                             mode: 0,
                             expiration_time: None,
                         },
-                        phone: Phone {
-                            value: "".to_string(),
+                        phone: ApiPhone {
+                            value: String::new(),
                             status: 0,
                             notify: 0,
                             reset: 0,
                         },
-                        two_factor_auth: TwoFA {
-                            enabled: TFAStatus::None,
-                            allowed: TFAStatus::None,
+                        two_factor_auth: ApiTwoFa {
+                            enabled: ApiTfaStatus::None,
+                            allowed: ApiTfaStatus::None,
                             expiration_time: None,
                             registered_keys: vec![],
                         },
                         news: 0,
-                        locale: "".to_string(),
-                        log_auth: LogAuth::Disabled,
-                        invoice_text: "".to_string(),
-                        density: Density::Comfortable,
-                        week_start: WeekStart::Default,
-                        date_format: DateFormat::Default,
-                        time_format: TimeFormat::Default,
+                        locale: String::new(),
+                        log_auth: ApiLogAuth::Disabled,
+                        invoice_text: String::new(),
+                        density: ApiDensity::Comfortable,
+                        week_start: ApiWeekStart::Default,
+                        date_format: ApiDateFormat::Default,
+                        time_format: ApiTimeFormat::Default,
                         welcome: false,
                         early_access: false,
-                        flags: SettingsFlags {
+                        flags: ApiSettingsFlags {
                             welcomed: false,
                             in_app_promos_hidden: false,
                         },
@@ -285,7 +306,7 @@ impl TestContext {
                         telemetry: false,
                         crash_reports: false,
                         hide_side_panel: false,
-                        high_security: HighSecurity {
+                        high_security: ApiHighSecurity {
                             eligible: false,
                             value: false,
                         },
@@ -301,11 +322,11 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/settings"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(MailSettingsResponse {
-                    mail_settings: params.mail_settings.unwrap_or(MailSettings {
-                        display_name: "".to_string(),
-                        signature: "".to_string(),
-                        theme: "".to_string(),
+                ResponseTemplate::new(200).set_body_json(GetMailSettingsResponse {
+                    mail_settings: params.mail_settings.unwrap_or(ApiMailSettings {
+                        display_name: String::new(),
+                        signature: String::new(),
+                        theme: String::new(),
                         auto_save_contacts: false,
                         composer_mode: Default::default(),
                         message_buttons: Default::default(),
@@ -323,9 +344,9 @@ impl TestContext {
                         pm_signature_referral_link: false,
                         image_proxy: 0,
                         num_message_per_page: 0,
-                        draft_mime_type: "".to_string(),
-                        receive_mime_type: "".to_string(),
-                        show_mime_type: "".to_string(),
+                        draft_mime_type: Default::default(),
+                        receive_mime_type: Default::default(),
+                        show_mime_type: Default::default(),
                         enable_folder_color: false,
                         inherit_parent_folder_color: false,
                         submission_access: false,
@@ -364,7 +385,7 @@ impl TestContext {
 
         // Labels
         for label_type in ALL_LABEL_TYPES {
-            let labels = params.labels.remove(&label_type).unwrap_or_default();
+            let labels = params.labels.remove(&label_type.into()).unwrap_or_default();
             let resp = GetLabelsResponse { labels };
 
             Mock::given(method("GET"))
@@ -380,7 +401,7 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/messages/count"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetMessageCountsResponse {
+                ResponseTemplate::new(200).set_body_json(GetMessagesCountResponse {
                     counts: params.message_count,
                 }),
             )
@@ -392,7 +413,7 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/conversations/count"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetConversationCountsResponse {
+                ResponseTemplate::new(200).set_body_json(GetConversationsCountResponse {
                     counts: params.conversation_count,
                 }),
             )
@@ -410,7 +431,7 @@ impl TestContext {
     /// * `conversations` - The list of conversations to respond with.
     /// * `expect`        - How many times the endpoint should be called.
     ///
-    pub async fn mock_get_conversations(&self, conversations: Vec<Conversation>, expect: u64) {
+    pub async fn mock_get_conversations(&self, conversations: Vec<ApiConversation>, expect: u64) {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/conversations"))
             .respond_with(
@@ -434,11 +455,35 @@ impl TestContext {
     /// * `metadata` - The list of message to respond with.
     /// * `expect`   - How many times the endpoint should be called.
     ///
-    pub async fn mock_get_message_metadata(&self, metadata: Vec<MessageMetadata>, expect: u64) {
+    pub async fn mock_get_message_metadata(&self, metadata: Vec<ApiMessageMetadata>, expect: u64) {
+        Mock::given(method("GET"))
+            .and(path("/api/mail/v4/messages"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+                    messages: metadata,
+                    stale: false,
+                    total: 1,
+                }),
+            )
+            .expect(expect)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving message metadata.
+    ///
+    /// This function will mock the response for the given message metadata.
+    ///
+    /// # Parameters
+    ///
+    /// * `metadata` - The list of message to respond with.
+    /// * `expect`   - How many times the endpoint should be called.
+    ///
+    pub async fn mock_post_message_metadata(&self, metadata: Vec<ApiMessageMetadata>, expect: u64) {
         Mock::given(method("POST"))
             .and(path("/api/mail/v4/messages"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(MessageMetadataResponse {
+                ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                     messages: metadata,
                     stale: false,
                     total: 1,
@@ -461,8 +506,8 @@ impl TestContext {
     ///
     pub async fn mock_get_conversation_messages(
         &self,
-        conversation: Conversation,
-        messages: Vec<MessageMetadata>,
+        conversation: ApiConversation,
+        messages: Vec<ApiMessageMetadata>,
         expect: u64,
     ) {
         Mock::given(method("GET"))

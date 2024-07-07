@@ -1,10 +1,10 @@
-mod delete_conversations;
-mod event_loop;
-mod label_conversations;
-mod mark_conversations_read;
-mod mark_conversations_unread;
-mod move_conversations;
-mod unlabel_conversations;
+pub mod delete_conversations;
+pub mod event_loop;
+pub mod label_conversations;
+pub mod mark_conversations_read;
+pub mod mark_conversations_unread;
+pub mod move_conversations;
+pub mod unlabel_conversations;
 
 use crate::MailUserContext;
 pub use delete_conversations::*;
