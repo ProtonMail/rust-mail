@@ -1,18 +1,12 @@
 use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged};
-use crate::core::{FFISessionCallback, OSKeyChain, SessionCallback, StoredSession};
+use crate::core::{OSKeyChain, StoredSession};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use pmc::db;
-use pmc::db::DBMigrationError;
-use pmc::exports::proton_event_loop::EventLoopError;
-use pmc::exports::{anyhow, thiserror, tracing};
-use pmc::proton_api_mail::proton_api_core::http::{APIEnvConfig, RequestError};
-use pmc::proton_core_common::db::SessionEncryptionKey;
-use proton_mail_common as pmc;
-use proton_mail_common::exports::anyhow::anyhow;
-use proton_mail_common::proton_api_mail::domain::AddressDomainLogoError;
-use proton_mail_common::proton_api_mail::proton_api_core::http;
-use proton_mail_common::proton_core_common::CoreSessionCallback;
+use proton_core_common::db::SessionEncryptionKey;
+use proton_mail_common::db;
+use proton_mail_common::db::DBMigrationError;
+use proton_mail_common::MailContext;
+use proton_mail_common::MailContextError;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -24,7 +18,7 @@ use std::sync::Arc;
 ///
 #[derive(uniffi::Object)]
 pub struct MailSession {
-    ctx: pmc::MailContext,
+    ctx: proton_mail_common::MailContext,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -45,7 +39,7 @@ pub enum MailSessionError {
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
-    ActionQueue(#[from] proton_mail_common::exports::proton_action_queue::QueueError),
+    ActionQueue(#[from] proton_action_queue::QueueError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(anyhow::Error),
     #[error("Invalid mode: '{0}'")]
@@ -104,19 +98,19 @@ impl MailSession {
         let mail_cache_path = PathBuf::from(params.mail_cache_dir);
 
         // create directories.
-        tracing::debug!("Creating directories");
+        debug!("Creating directories");
         std::fs::create_dir_all(&session_path)?;
         std::fs::create_dir_all(&user_path)?;
         std::fs::create_dir_all(&mail_cache_path)?;
 
         // Generate session key;
-        tracing::debug!("Checking keychain");
+        debug!("Checking keychain");
         if key_chain
             .get()
             .map_err(|e| MailSessionError::KeyChain(e.to_string()))?
             .is_none()
         {
-            tracing::debug!("Key chain has no key, generating");
+            debug!("Key chain has no key, generating");
             let key = SessionEncryptionKey::random();
             key_chain.store(key.to_base64()).map_err(|e| {
                 tracing::error!("Failed to store key in keychain");
@@ -140,32 +134,23 @@ impl MailSession {
             MailSessionError::Http(RequestError::Other(anyhow!("Failed to create client: {e}")))
         })?;
 
-        tracing::debug!("Creating Context");
-        let mail_ctx = pmc::MailContext::new(
+        debug!("Creating Context");
+        let mail_ctx = MailContext::new(
             session_path,
             user_path,
             mail_cache_path,
             Arc::from(FFIKeyChain::from(key_chain)),
             client,
-            network_callback.map(
-                |v| -> Box<dyn proton_mail_common::proton_core_common::NetworkStatusChanged> {
-                    Box::new(FFINetworkStatusChanged::from(v))
-                },
-            ),
+            network_callback.map(|v| -> Box<dyn proton_core_common::NetworkStatusChanged> {
+                Box::new(FFINetworkStatusChanged::from(v))
+            }),
         )?;
         Ok(Self { ctx: mail_ctx })
     }
 
     /// Start new login flow.
-    pub fn new_login_flow(
-        &self,
-        cb: Option<Box<dyn SessionCallback>>,
-    ) -> MailSessionResult<Arc<LoginFlow>> {
-        let flow = self
-            .ctx
-            .new_login_flow(cb.map(|cb| -> Box<dyn CoreSessionCallback> {
-                Box::new(FFISessionCallback::from(cb))
-            }))?;
+    pub fn new_login_flow(&self) -> MailSessionResult<Arc<LoginFlow>> {
+        let flow = self.ctx.new_login_flow()?;
         Ok(LoginFlow::new(flow, self.ctx.clone()))
     }
 
@@ -185,13 +170,10 @@ impl MailSession {
     pub fn user_context_from_session(
         &self,
         session: &StoredSession,
-        session_cb: Option<Box<dyn SessionCallback>>,
     ) -> MailSessionResult<Arc<MailUserSession>> {
-        let session_cb = session_cb
-            .map(|cb| -> Box<dyn CoreSessionCallback> { Box::new(FFISessionCallback::from(cb)) });
         let ctx = self
             .ctx
-            .user_context_from_session(session.encrypted_session(), session_cb)?;
+            .user_context_from_session(session.encrypted_session())?;
         Ok(MailUserSession::new(ctx))
     }
 
@@ -215,21 +197,21 @@ impl MailSession {
     }
 }
 
-impl From<pmc::MailContextError> for MailSessionError {
+impl From<MailContextError> for MailSessionError {
     fn from(value: proton_mail_common::MailContextError) -> Self {
         match value {
-            pmc::MailContextError::DB(v) => MailSessionError::DB(v),
-            pmc::MailContextError::Crypto => MailSessionError::Crypto,
-            pmc::MailContextError::KeyChain(k) => MailSessionError::KeyChain(k.to_string()),
-            pmc::MailContextError::IO(io) => MailSessionError::IO(io),
-            pmc::MailContextError::DBMigration(err) => MailSessionError::DBMigration(err),
-            pmc::MailContextError::KeyChainHasNoKey => MailSessionError::KeyChainHasNoKey,
-            pmc::MailContextError::Http(err) => MailSessionError::Http(err),
-            pmc::MailContextError::EventLoop(err) => MailSessionError::EventLoop(err),
-            pmc::MailContextError::Other(err) => MailSessionError::Other(err),
-            pmc::MailContextError::ActionQueue(e) => Self::ActionQueue(e),
-            pmc::MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
-            pmc::MailContextError::AddressDomainLogoError(e) => Self::AddressDomainLogoError(e),
+            MailContextError::DB(v) => MailSessionError::DB(v),
+            MailContextError::Crypto => MailSessionError::Crypto,
+            MailContextError::KeyChain(k) => MailSessionError::KeyChain(k.to_string()),
+            MailContextError::IO(io) => MailSessionError::IO(io),
+            MailContextError::DBMigration(err) => MailSessionError::DBMigration(err),
+            MailContextError::KeyChainHasNoKey => MailSessionError::KeyChainHasNoKey,
+            MailContextError::Http(err) => MailSessionError::Http(err),
+            MailContextError::EventLoop(err) => MailSessionError::EventLoop(err),
+            MailContextError::Other(err) => MailSessionError::Other(err),
+            MailContextError::ActionQueue(e) => Self::ActionQueue(e),
+            MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
+            MailContextError::AddressDomainLogoError(e) => Self::AddressDomainLogoError(e),
         }
     }
 }

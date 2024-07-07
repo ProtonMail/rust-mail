@@ -1,16 +1,21 @@
+use crate::datatypes::SystemLabelId;
+use crate::models::{Conversation, ConversationLabel, Label};
+use anyhow::anyhow;
 use futures::executor::block_on;
 use proton_action_queue::{
     define_action_id, Action, ActionError, ActionFactoryInstance, ActionFactoryInstanceError,
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
     SessionProvider, StoredAction,
 };
-use proton_api_mail::domain::LabelId;
-use proton_api_mail::exports::anyhow::anyhow;
-use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
-use proton_api_mail::exports::tracing::error;
-use proton_api_mail::MailSession;
+use proton_api_core::services::proton::Proton;
+use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::datatypes::{LabelId, RemoteId};
+use serde::{Deserialize, Serialize};
+use stash::orm::Model;
+use stash::params;
 use stash::stash::Tether;
-use std::any::Any;
+use std::any::{Any, TypeId};
+use tracing::error;
 
 define_action_id!(
     MOVE_CONVERSATIONS_ACTION_ID,
@@ -18,7 +23,6 @@ define_action_id!(
 );
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(crate = "self::serde")]
 pub struct MoveConversationsAction {
     active_label_id: u64,
     destination_label_id: u64,
@@ -57,100 +61,146 @@ impl LocalActionHandler for MoveConversationsLocalHandler {
             )));
         }
 
-        let src_label = self
-            .tx
-            .label_with_id_or_err(self.action.active_label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
-        let dst_label = self
-            .tx
-            .label_with_id_or_err(self.action.destination_label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        let src_label =
+            block_on(async { Label::load_using(self.action.active_label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+                .and_then(|opt| opt.ok_or(ActionError::Local(anyhow!("Not found"))))?;
+        let dst_label =
+            block_on(async { Label::load_using(self.action.destination_label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+                .and_then(|opt| opt.ok_or(ActionError::Local(anyhow!("Not found"))))?;
         // If moving to trash, mark conversations as read.
-        if dst_label.rid.as_ref() == Some(LabelId::trash()) {
-            self.tx
-                .mark_conversations_read(self.action.ids.iter().cloned())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        if dst_label.remote_id == Some(LabelId::trash()) {
+            block_on(async {
+                Conversation::mark_multiple_as_read(self.action.ids.clone(), self.tx.stash()).await
+            })
+            .map_err(|e| ActionError::Local(anyhow!(e)))?;
         }
 
         // When moving in Trash or Spam, remove all labels (but AllMail)
-        if dst_label.rid.as_ref() == Some(LabelId::trash())
-            || dst_label.rid.as_ref() == Some(LabelId::spam())
+        if dst_label.remote_id == Some(LabelId::trash())
+            || dst_label.remote_id == Some(LabelId::spam())
         {
-            let all_mail_id = self
-                .tx
-                .resolve_remote_label_id(LabelId::all_mail())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            let all_mail_id = block_on(async {
+                Label::find_first(
+                    "WHERE remote_id = ?",
+                    params![LabelId::all_mail()],
+                    self.tx.stash(),
+                )
+                .await
+            })
+            .map_err(|e| ActionError::Local(anyhow!(e)))?
+            .and_then(|l| l.local_id);
             if let Some(all_mail_id) = all_mail_id {
                 for &local_conversation_id in &self.action.ids {
-                    if let Some(local_label_ids) = self
-                        .tx
-                        .conversation_label_ids(local_conversation_id)
-                        .map_err(|e| ActionError::Local(anyhow!(e)))?
-                    {
-                        local_label_ids
-                            .iter()
-                            .filter(|&&id| id != all_mail_id)
-                            .try_for_each(|&local_label_id| {
-                                self.tx
-                                    .unlabel_conversation(local_label_id, local_conversation_id)
-                                    .map_err(|e| ActionError::Local(anyhow!(e)))
-                            })?;
-                    }
+                    block_on(async {
+                        ConversationLabel::find(
+                            "WHERE conversation_id = ?",
+                            params![local_conversation_id],
+                            self.tx.stash(),
+                            None,
+                        )
+                        .await
+                    })
+                    .map_err(|e| ActionError::Local(anyhow!(e)))?
+                    .iter()
+                    .filter(|&cl| cl.local_id != Some(all_mail_id))
+                    .try_for_each(|local_label_id| {
+                        block_on(async {
+                            Conversation::remove_label_from_multiple(
+                                local_label_id.local_id.unwrap(),
+                                vec![local_conversation_id],
+                                self.tx.stash(),
+                            )
+                            .await
+                        })
+                        .map_err(|e| ActionError::Local(anyhow!(e)))
+                    })?;
                 }
             }
             // When moving out of Trash or Spam, add AlmostAllMail label
-        } else if src_label.rid.as_ref() == Some(LabelId::trash())
-            || src_label.rid.as_ref() == Some(LabelId::spam())
+        } else if src_label.remote_id == Some(LabelId::trash())
+            || src_label.remote_id == Some(LabelId::spam())
         {
-            let almost_all_mail_id = self
-                .tx
-                .resolve_remote_label_id(LabelId::almost_all_mail())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            let almost_all_mail_id = block_on(async {
+                Label::find_first(
+                    "WHERE remote_id = ?",
+                    params![LabelId::almost_all_mail()],
+                    self.tx.stash(),
+                )
+                .await
+            })
+            .map_err(|e| ActionError::Local(anyhow!(e)))?
+            .and_then(|l| l.local_id);
             if let Some(almost_all_mail_id) = almost_all_mail_id {
-                self.tx
-                    .label_conversations(almost_all_mail_id, self.action.ids.iter().cloned())
-                    .map_err(|e| ActionError::Local(anyhow!(e)))?;
+                block_on(async {
+                    Conversation::apply_label_to_multiple(
+                        almost_all_mail_id,
+                        self.action.ids.clone(),
+                        self.tx.stash(),
+                    )
+                    .await
+                    .map_err(|e| ActionError::Local(anyhow!(e)))
+                })?;
             }
         }
 
         if src_label.is_movable_folder() {
-            self.tx
-                .unlabel_conversations(self.action.active_label_id, self.action.ids.iter().cloned())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            block_on(async {
+                Conversation::remove_label_from_multiple(
+                    self.action.active_label_id,
+                    self.action.ids.clone(),
+                    self.tx.stash(),
+                )
+                .await
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+            })?;
         }
-        self.tx
-            .label_conversations(
+        block_on(async {
+            Conversation::apply_label_to_multiple(
                 self.action.destination_label_id,
-                self.action.ids.iter().cloned(),
+                self.action.ids.clone(),
+                self.tx.stash(),
             )
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            .await
+            .map_err(|e| ActionError::Local(anyhow!(e)))
+        })?;
         Ok(())
     }
 }
 
 struct MoveConversationsRemoteHandler {
     action: MoveConversationsAction,
-    session: MailSession,
+    session: Session,
     tx: Tether,
 }
 
 impl RemoteActionHandler for MoveConversationsRemoteHandler {
     fn revert_local(&mut self) -> ActionResult<()> {
-        let src_label = self
-            .tx
-            .label_with_id_or_err(self.action.active_label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        let src_label =
+            block_on(async { Label::load_using(self.action.active_label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+                .and_then(|opt| opt.ok_or(ActionError::Local(anyhow!("Not found"))))?;
         if src_label.is_movable_folder() {
-            self.tx
-                .label_conversations(self.action.active_label_id, self.action.ids.iter().cloned())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            block_on(async {
+                Conversation::apply_label_to_multiple(
+                    self.action.active_label_id,
+                    self.action.ids.clone(),
+                    self.tx.stash(),
+                )
+                .await
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+            })?;
         }
-        self.tx
-            .unlabel_conversations(
+        block_on(async {
+            Conversation::remove_label_from_multiple(
                 self.action.destination_label_id,
-                self.action.ids.iter().cloned(),
+                self.action.ids.clone(),
+                self.tx.stash(),
             )
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            .await
+            .map_err(|e| ActionError::Local(anyhow!(e)))
+        })?;
         Ok(())
     }
 
@@ -159,16 +209,16 @@ impl RemoteActionHandler for MoveConversationsRemoteHandler {
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let src_label = self
-            .tx
-            .label_with_id_or_err(self.action.active_label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
-        let dst_label = self
-            .tx
-            .label_with_id_or_err(self.action.destination_label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        let src_label =
+            block_on(async { Label::load_using(self.action.active_label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+                .and_then(|opt| opt.ok_or(ActionError::Local(anyhow!("Not found"))))?;
+        let dst_label =
+            block_on(async { Label::load_using(self.action.destination_label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+                .and_then(|opt| opt.ok_or(ActionError::Local(anyhow!("Not found"))))?;
 
-        let Some(dst_rid) = dst_label.rid.as_ref() else {
+        let Some(dst_rid) = dst_label.remote_id else {
             return Err(ActionError::Local(anyhow!(
                 "Label {} does not have a remote id",
                 self.action.destination_label_id
@@ -177,55 +227,69 @@ impl RemoteActionHandler for MoveConversationsRemoteHandler {
 
         let src_is_folder = src_label.is_movable_folder();
 
-        let conv_ids = self
-            .tx
-            .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
-            .map_err(|e| {
-                error!("Failed to resolve conversation ids: {e}");
-                ActionError::Local(anyhow!(e))
-            })?;
+        let conv_ids = block_on(async {
+            Conversation::find_remote_ids(self.action.ids.clone(), self.tx.stash()).await
+        })
+        .map_err(|e| {
+            error!("Failed to resolve conversation ids: {e}");
+            ActionError::Local(anyhow!(e))
+        })?;
         let responses = block_on(async {
-            {
-                self.session
-                    .label_conversations(dst_rid, &conv_ids, None)
-                    .await
-            }
-            .map_err(|e| {
-                error!("Failed to move conversations on API: {e}");
-                e
-            })
+            Conversation::apply_label_to_multiple_remote::<Proton>(
+                dst_rid,
+                conv_ids,
+                None,
+                self.session.api(),
+            )
+            .await
+        })
+        .map_err(|e| {
+            error!("Failed to move conversations on API: {e}");
+            e
         })?;
 
         let failed_messages = responses
             .into_iter()
             .filter(|r| r.response.code != 1000)
-            .map(|r| r.id)
+            .map(|r| RemoteId::from(r.id))
             .collect::<Vec<_>>();
         if !failed_messages.is_empty() {
             error!(
                 "Move conversations operation failed for: {:?}",
                 failed_messages
             );
-            let local_ids = self
-                .tx
-                .remote_to_local_conversation_ids(failed_messages.iter())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            let local_ids = block_on(async {
+                Conversation::find_local_ids(failed_messages, self.tx.stash()).await
+            })
+            .map_err(|e| ActionError::Local(anyhow!(e)))?;
 
             if src_is_folder {
-                self.tx
-                    .label_conversations(self.action.active_label_id, local_ids.iter().cloned())
-                    .map_err(|e| {
-                        error!("Failed to rollback failed for conversations: {e}");
-                        ActionError::Local(anyhow!(e))
-                    })?;
-            }
-
-            self.tx
-                .unlabel_conversations(self.action.destination_label_id, local_ids.into_iter())
+                block_on(async {
+                    Conversation::apply_label_to_multiple(
+                        self.action.active_label_id,
+                        local_ids.clone(),
+                        self.tx.stash(),
+                    )
+                    .await
+                })
                 .map_err(|e| {
                     error!("Failed to rollback failed for conversations: {e}");
                     ActionError::Local(anyhow!(e))
                 })?;
+            }
+
+            block_on(async {
+                Conversation::remove_label_from_multiple(
+                    self.action.destination_label_id,
+                    local_ids.clone(),
+                    self.tx.stash(),
+                )
+                .await
+            })
+            .map_err(|e| {
+                error!("Failed to rollback failed for conversations: {e}");
+                ActionError::Local(anyhow!(e))
+            })?;
         }
 
         Ok(())
@@ -251,11 +315,11 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
         action: Box<dyn Any>,
         tx: Tether,
     ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
-        let type_id = action.type_id().clone();
+        let type_id = TypeId::of::<Box<dyn Any>>();
         let Ok(action) = action.downcast::<MoveConversationsAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
                 type_id,
-                std::any::TypeId::of::<MoveConversationsAction>(),
+                TypeId::of::<MoveConversationsAction>(),
             ));
         };
 
@@ -281,7 +345,7 @@ impl ActionFactoryInstance for MoveConversationsActionFactory {
         Ok(Box::new(MoveConversationsRemoteHandler {
             action,
             tx,
-            session: MailSession::from(session),
+            session,
         }))
     }
 }

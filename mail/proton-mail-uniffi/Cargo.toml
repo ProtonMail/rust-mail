@@ -19,5 +19,8 @@ tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
 uniffi = { workspace = true }
 
+[dev-dependencies]
+proton-api-mail = { workspace = true, features = ["integration_tests"] }
+
 [lints]
 workspace = true

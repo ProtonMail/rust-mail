@@ -1,4 +1,3 @@
-use proton_mail_common::exports::tracing::level_filters::LevelFilter;
 use std::path::Path;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;

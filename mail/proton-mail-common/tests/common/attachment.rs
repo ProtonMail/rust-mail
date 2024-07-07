@@ -1,29 +1,27 @@
-use std::{fmt::format, io};
-
-use proton_api_mail::{
-    domain::{
-        Attachment, AttachmentId, AttachmentMetadata, ConversationId, Disposition, MessageId,
-    },
-    proton_api_core::domain::AddressId,
-    requests::GetAttachmentMetadataResponse,
+use super::{account::TEST_ADDRESS_ID, TestContext};
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_mail::services::proton::response_data::{
+    Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
+    Disposition as ApiDisposition, MimeType as ApiMimeType,
 };
+use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
+use proton_core_common::datatypes::RemoteId;
 use proton_crypto_inbox::attachment::KeyPackets;
+use std::{fmt::format, io};
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
-
-use super::{account::TEST_ADDRESS_ID, TestContext};
 
 const TEST_ATTACHMENT_ID: &str =
     "5OkOlBi3Swa4cHRyChyUazwt8GYDBLIAX-ZYnGg8-nAHNKjj5EgR5uH-GePQFaWQPgS60aoJ1Dl2s6UI4BmwNw==";
 
 /// The metadata for the default attachment.
-pub fn testdata_attachment_metadata() -> AttachmentMetadata {
-    AttachmentMetadata {
-        id: AttachmentId::from(TEST_ATTACHMENT_ID),
+pub fn testdata_attachment_metadata() -> ApiAttachmentMetadata {
+    ApiAttachmentMetadata {
+        id: ApiRemoteId::from(TEST_ATTACHMENT_ID),
         size: 61,
         name: "attachment.txt".to_owned(),
-        mime_type: "text/plain".to_owned(),
-        disposition: Disposition::Attachment,
+        mime_type: ApiMimeType::TextPlain,
+        disposition: ApiDisposition::Attachment,
     }
 }
 
@@ -31,11 +29,11 @@ pub fn testdata_attachment_metadata() -> AttachmentMetadata {
 ///
 /// The attachment is encrypted with the default test account address key.
 pub fn testdata_attachment_metadata_complete(
-    message_id: MessageId,
-    conversation_id: ConversationId,
-) -> Attachment {
+    message_id: ApiRemoteId,
+    conversation_id: ApiRemoteId,
+) -> ApiAttachment {
     let metadata = testdata_attachment_metadata();
-    Attachment {
+    ApiAttachment {
         id: metadata.id.clone(),
         name: metadata.name.clone(),
         size: metadata.size,
@@ -45,7 +43,7 @@ pub fn testdata_attachment_metadata_complete(
         signature: None,
         enc_signature: None,
         sender: None,
-        address_id: AddressId::from(TEST_ADDRESS_ID),
+        address_id: ApiRemoteId::from(TEST_ADDRESS_ID),
         message_id,
         conversation_id,
         is_auto_forwardee: false,
@@ -76,7 +74,7 @@ impl TestContext {
     ///
     /// * `attachment` - The metadata to return as a response.
     ///
-    pub async fn mock_get_attachment_metadata(&self, attachment: Attachment) {
+    pub async fn mock_get_attachment_metadata(&self, attachment: ApiAttachment) {
         let path_for_attachment = format!("api/mail/v4/attachments/{}/metadata", attachment.id);
         Mock::given(method("GET"))
             .and(path(path_for_attachment))
@@ -101,7 +99,7 @@ impl TestContext {
     ///
     pub async fn mock_get_attachment_data(
         &self,
-        attachment_id: AttachmentId,
+        attachment_id: ApiRemoteId,
         attachment_content: Vec<u8>,
     ) {
         let path_for_attachment = format!("api/mail/v4/attachments/{}", attachment_id);

@@ -1,7 +1,6 @@
 use crate::mail::settings::MailUserSettings;
 use crate::mail::MailUserSession;
 use crate::mail::{MailSessionError, MailSessionResult};
-use proton_mail_common::proton_api_mail::domain::LightOrDarkMode;
 use std::sync::Arc;
 
 #[uniffi::export]

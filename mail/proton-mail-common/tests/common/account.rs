@@ -1,6 +1,6 @@
 use std::iter;
 
-use proton_api_mail::proton_api_core::auth::UserKeySecret;
+use proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::{
     proton_crypto::new_srp_provider,
     proton_crypto_account::{

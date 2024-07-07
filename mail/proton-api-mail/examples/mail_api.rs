@@ -1,10 +1,10 @@
-use proton_api_core::auth::{new_arc_auth_store, InMemoryStore};
-use proton_api_core::exports::tracing::level_filters::LevelFilter;
-use proton_api_core::http::APIEnvConfig;
 use proton_api_core::login::Flow;
-use proton_api_core::{http, Session};
-use proton_api_mail::MailSession;
+use proton_api_core::services::proton::Config;
+use proton_api_core::session::{CoreSession, Session};
+use proton_api_mail::services::proton::requests::GetMessagesOptions;
+use proton_api_mail::services::proton::ProtonMail;
 use std::io::{stdin, stdout, BufRead, Write};
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -24,20 +24,14 @@ async fn main() {
     tracing_subscriber::registry().with(file_subscriber).init();
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
-    let api_env_config = APIEnvConfig::default();
 
-    let client = http::Builder::new()
-        .api_env_config(api_env_config)
-        .debug()
-        .build()
-        .unwrap();
-
-    let auth_store = new_arc_auth_store(InMemoryStore::default());
-    let session = Session::new(client, auth_store);
+    let session = Session::new(Config {
+        ..Default::default()
+    });
 
     let mut login_flow = Flow::new(session.clone());
     login_flow
-        .login(&user_email, &user_password, None)
+        .login(user_email, user_password, None)
         .await
         .unwrap();
 
@@ -59,7 +53,7 @@ async fn main() {
 
                 let totp = line.trim_end_matches('\n');
 
-                match login_flow.submit_totp(totp).await {
+                match login_flow.submit_totp(totp.to_owned()).await {
                     Ok(_) => {
                         break;
                     }
@@ -75,17 +69,19 @@ async fn main() {
     let user = login_flow.reset_and_take_user().unwrap();
     println!("User ID is {}", user.id);
 
-    let mail_session = MailSession::new(session.clone());
-
-    let messages = mail_session
-        .message_metadata(range(0, 10))
+    let messages = session
+        .api()
+        .get_messages(GetMessagesOptions {
+            limit: Some(10),
+            ..Default::default()
+        })
         .await
         .unwrap()
         .messages;
 
     for m in messages {
-        let m = mail_session.message(&m.id).await.unwrap();
-        println!("{:?}", m.attachments);
+        let m = session.api().get_message(m.id).await.unwrap();
+        println!("{:?}", m.message.attachments);
     }
 
     session.logout().await.unwrap();

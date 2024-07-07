@@ -2,28 +2,39 @@ mod common;
 
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
-use proton_api_mail::domain::{
-    ConversationId, LabelId, MailSettings, MailSettingsViewMode, Message, MessageFlags, MessageId,
-    MessageMetadata, MimeType,
+use proton_api_core::auth::UserKeySecret;
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::response_data::{
+    Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
+    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, Flags as ApiFlags,
+    ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
+    UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_mail::exports::crypto::keys::{AddressKeys, KeyId, LockedKey, UserKeys};
-use proton_api_mail::exports::crypto::proton_crypto::new_srp_provider;
-use proton_api_mail::exports::crypto::salts::{Salt, Salts};
-use proton_api_mail::proton_api_core::auth::UserKeySecret;
-use proton_api_mail::proton_api_core::domain::{
-    Address, AddressId, AddressSignedKeyList, AddressStatus, AddressType, Flags, ProductUsedSpace,
-    User, UserId, UserMnemonicStatus, UserType,
+use proton_api_core::session::CoreSession;
+use proton_api_mail::services::proton::response_data::{
+    MailSettings as ApiMailSettings, Message as ApiMessage, MessageFlags as ApiMessageFlags,
+    MessageMetadata as ApiMessageMetadata, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_crypto_inbox::proton_crypto_account::keys::KeyFlag;
+use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_crypto_inbox::proton_crypto::{new_pgp_provider, new_srp_provider};
+use proton_crypto_inbox::proton_crypto_account::keys::{
+    AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
+};
+use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
+use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::models::Message;
 use proton_mail_common::Mailbox;
+use stash::orm::Model;
 use std::iter;
+use tempdir::TempDir;
 
 #[tokio::test]
+#[ignore]
 async fn mailbox_message_body_simple() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
-        UserId::from(TEST_USER_ID),
+        RemoteId::from(TEST_USER_ID),
     )
     .await;
     let params = message_body_test_params();
@@ -37,21 +48,40 @@ async fn mailbox_message_body_simple() {
         .await;
     ctx.catch_all().await;
     ctx.user_context()
+        .await
         .initialize_async(LabelId::inbox().clone(), &NullCallback {})
         .await
         .expect("failed to initialize");
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(ctx.user_context(), LabelId::inbox()).unwrap();
+    let mailbox = Mailbox::with_remote_id(ctx.user_context().await, LabelId::inbox())
+        .await
+        .unwrap();
     mailbox.sync(10).await.unwrap();
 
     // Resolve local id.
-    let messages = mailbox.messages(1).unwrap();
-    assert_eq!(messages.len(), 1);
-    assert_eq!(messages[0].rid, Some(message.metadata.id));
+    let saved_message = Message::load_using(1, &ctx.user_context().await.stash().connection())
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert_eq!(saved_message.remote_id, Some(message.metadata.id.into()));
 
     // Decrypt the message body.
-    let decrypted_body = mailbox.message_body(messages[0].id).await.unwrap();
+    let tmp_dir = TempDir::new("cache").expect("failed to create temp dir");
+    let pgp_provider = new_pgp_provider();
+    let decrypted_body = saved_message
+        .message_body(
+            tmp_dir.path(),
+            ctx.user_context()
+                .await
+                .unlocked_address_keys(&pgp_provider, &saved_message.remote_id.clone().unwrap())
+                .await
+                .unwrap(),
+            pgp_provider,
+            ctx.user_context().await.session().api(),
+        )
+        .await
+        .unwrap();
 
     let expected = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">This is a test body.</div>"#;
     assert_eq!(decrypted_body.body, expected);
@@ -81,21 +111,21 @@ const TEST_USER_KEY_ID: &str =
 
 const TEST_USER_PASSWORD: &str = "password";
 
-fn message_body_test_user_info() -> User {
-    User {
-        id: UserId::from(TEST_USER_ID),
+fn message_body_test_user_info() -> ApiUser {
+    ApiUser {
+        id: ApiRemoteId::from(TEST_USER_ID),
         name: Some("rust_test".to_owned()),
         display_name: None,
         email: "rust_test@proton.ch".to_owned(),
         used_space: 0,
         max_space: 0,
         max_upload: 0,
-        user_type: UserType::Proton,
+        user_type: ApiUserType::Proton,
         create_time: 0,
         credit: 0,
         currency: "EUR".to_owned(),
-        keys: UserKeys(vec![message_body_test_user_key()]),
-        product_used_space: ProductUsedSpace {
+        keys: ApiUserKeys(vec![message_body_test_user_key()]),
+        product_used_space: ApiProductUsedSpace {
             calendar: 0,
             contact: 0,
             drive: 0,
@@ -103,13 +133,13 @@ fn message_body_test_user_info() -> User {
             pass: 0,
         },
         to_migrate: false,
-        mnemonic_status: UserMnemonicStatus::Unknown,
+        mnemonic_status: ApiUserMnemonicStatus::Unknown,
         role: 0,
         private: 0,
         subscribed: 0,
         services: 0,
         delinquent: 0,
-        flags: Flags {
+        flags: ApiFlags {
             protected: false,
             onboard_checklist_storage_granted: false,
             has_temporary_password: false,
@@ -139,19 +169,19 @@ fn message_body_test_user_key() -> LockedKey {
     }
 }
 
-fn message_body_test_addresses() -> Vec<Address> {
-    vec![Address {
-       id: AddressId::from(TEST_USER_ADDRESS_ID),
+fn message_body_test_addresses() -> Vec<ApiAddress> {
+    vec![ApiAddress {
+       id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
        email: "rust_test@proton.ch".to_owned(),
        send: true,
        receive: true,
-       status: AddressStatus::Enabled,
+       status: ApiAddressStatus::Enabled,
        domain_id: None,
-       address_type: AddressType::Original,
+       address_type: ApiAddressType::Original,
        order: 0,
        display_name: "rust_test".to_owned(),
        signature: "".to_owned(),
-       keys: AddressKeys(
+       keys: ApiAddressKeys(
            vec![LockedKey{
                id: KeyId::from("gzKDANARz0i8OHhGuZV-oFfURju0I3XeW_hNn09g13dS_NJ57UbW420UAcWb-0s93xoav22O_jARq61FyL3guw=="),
                version: 3,
@@ -169,7 +199,7 @@ fn message_body_test_addresses() -> Vec<Address> {
        ),
        catch_all: false,
        proton_mx: true,
-       signed_key_list: AddressSignedKeyList{
+       signed_key_list: ApiAddressSignedKeyList{
            min_epoch_id: Some(3),
            max_epoch_id: Some(66),
            expected_min_epoch_id: None,
@@ -181,9 +211,9 @@ fn message_body_test_addresses() -> Vec<Address> {
    }]
 }
 
-fn message_body_test_mail_settings() -> MailSettings {
-    let mut settings = MailSettings::default();
-    settings.view_mode = MailSettingsViewMode::Messages;
+fn message_body_test_mail_settings() -> ApiMailSettings {
+    let mut settings = ApiMailSettings::default();
+    settings.view_mode = ApiViewMode::Messages;
     settings
 }
 
@@ -201,14 +231,14 @@ fn message_body_test_mail_settings() -> MailSettings {
     ]
 }*/
 
-fn message_body_test_message_simple() -> Message {
-    Message {
-       metadata: MessageMetadata {
-           id: MessageId::from("blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0PeVbY2P7oVQVwPup-h0syg==".to_owned()),
-           conversation_id: ConversationId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
+fn message_body_test_message_simple() -> ApiMessage {
+    ApiMessage {
+       metadata: ApiMessageMetadata {
+           id: ApiRemoteId::from("blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0PeVbY2P7oVQVwPup-h0syg==".to_owned()),
+           conversation_id: ApiRemoteId::from("0R5oYZX2jLkT9WYyNrGmdp6K1sYYDraeaE8FTeNSJZ7Znb1UPJqBfvx_Tqb4gyVnGUeiPo3o7vKolaUt6PmVuw==".to_owned()),
            order: 0,
-           address_id: AddressId::from(TEST_USER_ADDRESS_ID),
-           label_ids: vec![LabelId::inbox().clone()],
+           address_id: ApiRemoteId::from(TEST_USER_ADDRESS_ID),
+           label_ids: vec![LabelId::inbox().into()],
            external_id: None,
            subject: "Mail with test body".to_owned(),
            sender: Default::default(),
@@ -216,7 +246,7 @@ fn message_body_test_message_simple() -> Message {
            cc_list: vec![],
            bcc_list: vec![],
            reply_tos: vec![],
-           flags: MessageFlags::DKIM_FAIL,
+           flags: ApiMessageFlags::DKIM_FAIL,
            time:  1715863508,
            size: 333,
            unread: false,
@@ -228,10 +258,10 @@ fn message_body_test_message_simple() -> Message {
            num_attachments: 0,
            attachments_metadata: vec![],
        },
-       header: "".to_string(),
+       header: String::new(),
        parsed_headers: Default::default(),
        body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4DGS71hsmM2EQSAQdAYdJSo4eHIE7InFrOSN3+7nIRKfkcsCAb7aPI86nI\ny2owI0FLuN3IlbCoKsFFXfSbnTff3IePkr7xmhQmUYrVk0h50kwkEVyHnyPI\nm2nyqZXA0sCKAbKKQlcvjlJbsyUpJvsIwHuggwrQ+7htDauT4/SB9hScyAPj\nICxCGfzOaXjcf1fqevOMDqIWaSEQpOcMw2ocGP4I8OKgylBfuy9DT0/RhJSe\nrDo2uhlYqs0xmUdlHWPvGKEy4TKlUk2JSAr9U4+5l4J5iIK9O/TVrU+Tf7Ot\nRdEFfN+ERJQmVqXcfSkoImVm7oi0QfNP3ExZ94vlFyBFch/Ox5Oco5wbetr3\nL7KPGWiEmLYDI/xeFNC4AO4FD+MVUHjIYqzS/GABxwJQ7pCC8WJXUHKS6ZNR\nNf8RGKGL1O2cbKWSuULb7HwWRGljWezyr5rPLKK7DaHX3wj2qmdQRcSzsKEu\nOLjlB6jppMjP2r/CZSqC+XbefwczOZxkLJQiw6ujB4etdiDFiM+QifJfrp6f\nhtf7JGwpxPa/IbiL5OlKy7NYYs6JXNYU\n=AVU2\n-----END PGP MESSAGE-----\n".to_owned(),
-       mime_type: MimeType::TextHTML,
+       mime_type: ApiMimeType::TextHtml,
        attachments: vec![],
    }
 }

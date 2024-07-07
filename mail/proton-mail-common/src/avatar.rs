@@ -1,8 +1,7 @@
+use crate::datatypes::MessageAddress;
 use crate::proton_color::proton_color;
-use proton_api_mail::domain::MessageAddress;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct AvatarInformation {
     pub text: String,
     pub color: String,

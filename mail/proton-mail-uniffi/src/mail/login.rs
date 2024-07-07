@@ -1,12 +1,6 @@
 use crate::mail::{MailSessionResult, MailUserSession};
 use futures::executor::block_on;
-use proton_mail_common as pmc;
-use proton_mail_common::exports::{anyhow, thiserror};
-use proton_mail_common::proton_api_mail::proton_api_core::domain::{
-    ExposeSecret, HumanVerification, SecretString, TwoFactorAuth,
-};
-use proton_mail_common::proton_api_mail::proton_api_core::http::RequestError;
-use proton_mail_common::proton_api_mail::proton_api_core::login::Flow as CoreLoginFlow;
+use proton_api_core::login::Flow as CoreLoginFlow;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
@@ -31,7 +25,7 @@ use uniffi::deps::anyhow::anyhow;
 #[derive(uniffi::Object)]
 pub struct LoginFlow {
     flow: Arc<Mutex<CoreLoginFlow>>,
-    ctx: pmc::MailContext,
+    ctx: proton_mail_common::MailContext,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -64,7 +58,7 @@ pub enum LoginFlowError {
 pub type LoginFlowResult<T> = Result<T, LoginFlowError>;
 
 impl LoginFlow {
-    pub(crate) fn new(flow: CoreLoginFlow, ctx: pmc::MailContext) -> Arc<Self> {
+    pub(crate) fn new(flow: CoreLoginFlow, ctx: proton_mail_common::MailContext) -> Arc<Self> {
         Arc::new(Self {
             flow: Arc::new(Mutex::new(flow)),
             ctx,
@@ -127,9 +121,9 @@ impl LoginFlow {
     }
 }
 
-impl From<proton_mail_common::proton_api_mail::proton_api_core::login::Error> for LoginFlowError {
-    fn from(value: proton_mail_common::proton_api_mail::proton_api_core::login::Error) -> Self {
-        use proton_mail_common::proton_api_mail::proton_api_core::login::Error as LFE;
+impl From<proton_api_core::login::Error> for LoginFlowError {
+    fn from(value: proton_api_core::login::Error) -> Self {
+        use proton_api_core::login::Error as LFE;
         match value {
             LFE::Request(e) => LoginFlowError::Request(e),
             LFE::Unsupported2FA(e) => LoginFlowError::Unsupported2FA(e),

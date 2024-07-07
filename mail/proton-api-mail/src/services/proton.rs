@@ -44,8 +44,8 @@ use proton_api_core::services::proton::Proton;
 use velcro::hash_map;
 
 pub trait ProtonMail: ApiService {
-    const BASE_PATH_CORE: &'static str = "/core/v4";
-    const BASE_PATH_MAIL: &'static str = "/mail/v4";
+    const BASE_PATH_CORE: &'static str = "core/v4";
+    const BASE_PATH_MAIL: &'static str = "mail/v4";
 
     /// TODO: Document this method.
     ///

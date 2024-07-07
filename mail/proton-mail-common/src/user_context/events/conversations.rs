@@ -1,27 +1,37 @@
-use proton_api_mail::domain::ConversationEvent;
-use proton_api_mail::proton_api_core::domain::Action;
-use proton_api_mail::proton_api_core::exports::tracing::warn;
-use stash::stash::{StashError, Tether};
+use crate::events::ConversationEvent;
+use crate::models::Conversation;
+use crate::AppError;
+use proton_core_common::events::Action;
+use stash::params;
+use stash::stash::Tether;
+use tracing::warn;
 
-pub fn handle_conversation_events(
+pub async fn handle_conversation_events(
     tx: &Tether,
     conversation_events: &[ConversationEvent],
-) -> Result<(), StashError> {
+) -> Result<(), AppError> {
     for conversation_event in conversation_events {
         match conversation_event.action {
             Action::Delete => {
-                tx.delete_remote_conversation(&conversation_event.id)?;
+                tx.stash()
+                    .execute(
+                        "DELETE FROM conversations WHERE remote_id = ?",
+                        params![conversation_event.remote_id.clone()],
+                    )
+                    .await?;
             }
             Action::Create => {
-                if let Some(conversation) = &conversation_event.conversation {
-                    tx.create_conversation(conversation)?;
+                if let Some(conversation) = conversation_event.conversation.clone() {
+                    Conversation::create_or_update_conversations(vec![conversation], tx.stash())
+                        .await?;
                 } else {
                     warn!("Received create without conversation");
                 }
             }
             Action::Update | Action::UpdateFlags => {
-                if let Some(conversation) = &conversation_event.conversation {
-                    tx.update_conversation(conversation)?;
+                if let Some(conversation) = conversation_event.conversation.clone() {
+                    Conversation::create_or_update_conversations(vec![conversation], tx.stash())
+                        .await?;
                 } else {
                     warn!("Received update without conversation");
                 }

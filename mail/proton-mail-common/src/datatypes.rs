@@ -38,6 +38,7 @@
 //!
 
 use crate::models::MessageBodyMetadata;
+use core::fmt;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
@@ -66,7 +67,8 @@ use stash::exports::{
 };
 use stash::sql_using_serde;
 use std::collections::HashMap;
-use std::ops::Deref;
+use std::fmt::{Display, Formatter};
+use std::ops::{Deref, DerefMut};
 use tracing::warn;
 
 //  ENUMS
@@ -325,29 +327,37 @@ impl ToSql for MessageButtons {
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MimeType {
     /// TODO: Document this variant.
-    MessageRFC822 = 1,
+    ApplicationJson = 1,
 
     /// TODO: Document this variant.
-    MultipartMixed = 2,
+    ApplicationPdf = 2,
 
     /// TODO: Document this variant.
-    MultipartRelated = 3,
+    MessageRfc822 = 3,
+
+    /// TODO: Document this variant.
+    MultipartMixed = 4,
+
+    /// TODO: Document this variant.
+    MultipartRelated = 5,
 
     /// TODO: Document this variant.
     #[default]
-    TextHTML = 4,
+    TextHtml = 6,
 
     /// TODO: Document this variant.
-    TextPlain = 5,
+    TextPlain = 7,
 }
 
 impl From<ApiMimeType> for MimeType {
     fn from(value: ApiMimeType) -> Self {
         match value {
-            ApiMimeType::MessageRFC822 => Self::MessageRFC822,
+            ApiMimeType::ApplicationJson => Self::ApplicationJson,
+            ApiMimeType::ApplicationPdf => Self::ApplicationPdf,
+            ApiMimeType::MessageRfc822 => Self::MessageRfc822,
             ApiMimeType::MultipartMixed => Self::MultipartMixed,
             ApiMimeType::MultipartRelated => Self::MultipartRelated,
-            ApiMimeType::TextHTML => Self::TextHTML,
+            ApiMimeType::TextHtml => Self::TextHtml,
             ApiMimeType::TextPlain => Self::TextPlain,
         }
     }
@@ -356,11 +366,13 @@ impl From<ApiMimeType> for MimeType {
 impl FromSql for MimeType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match u8::column_result(value)? {
-            1 => Ok(Self::MessageRFC822),
-            2 => Ok(Self::MultipartMixed),
-            3 => Ok(Self::MultipartRelated),
-            4 => Ok(Self::TextHTML),
-            5 => Ok(Self::TextPlain),
+            1 => Ok(Self::ApplicationJson),
+            2 => Ok(Self::ApplicationPdf),
+            3 => Ok(Self::MessageRfc822),
+            4 => Ok(Self::MultipartMixed),
+            5 => Ok(Self::MultipartRelated),
+            6 => Ok(Self::TextHtml),
+            7 => Ok(Self::TextPlain),
             v => Err(FromSqlError::OutOfRange(i64::from(v))),
         }
     }
@@ -917,7 +929,7 @@ impl Serialize for AttachmentSignature {
 sql_using_serde!(AttachmentSignature);
 
 /// TODO: Document this struct.
-// TODO: This does not get saved directly in the databases, so perhaps could be
+// TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConversationCount {
@@ -1006,7 +1018,7 @@ pub struct EncryptedMessageBody {
 impl DecryptableMessage for EncryptedMessageBody {
     /// TODO: Document this method.
     fn message_id(&self) -> Option<&str> {
-        self.metadata.remote_id.as_ref().map(|v| v.as_ref())
+        self.metadata.remote_message_id.as_ref().map(|v| v.as_ref())
     }
 
     /// TODO: Document this method.
@@ -1072,12 +1084,47 @@ impl Serialize for KeyPackets {
 sql_using_serde!(KeyPackets);
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct LabelIds {
-    pub value: Vec<LabelId>,
+pub struct LabelColor(String);
+
+impl LabelColor {
+    pub fn purple() -> Self {
+        Self("#8080FF".into())
+    }
+
+    pub fn black() -> Self {
+        Self("#000000".into())
+    }
 }
 
-sql_using_serde!(LabelIds);
+impl Display for LabelColor {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<String> for LabelColor {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for LabelColor {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl FromSql for LabelColor {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        value.as_str().map(|s| LabelColor(s.to_string()))
+    }
+}
+
+impl ToSql for LabelColor {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::from(self.0.clone()))
+    }
+}
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -1221,14 +1268,50 @@ impl From<ApiMessageAttachmentInfo> for MessageAttachmentInfo {
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
+pub struct MessageAttachmentInfos {
+    pub value: HashMap<String, MessageAttachmentInfo>,
+}
+
+impl Deref for MessageAttachmentInfos {
+    type Target = HashMap<String, MessageAttachmentInfo>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl DerefMut for MessageAttachmentInfos {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+sql_using_serde!(MessageAttachmentInfos);
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
 pub struct MessageAttachments {
     pub value: Vec<MessageAttachment>,
+}
+
+impl Deref for MessageAttachments {
+    type Target = Vec<MessageAttachment>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl DerefMut for MessageAttachments {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
 }
 
 sql_using_serde!(MessageAttachments);
 
 /// TODO: Document this struct.
-// TODO: This does not get saved directly in the databases, so perhaps could be
+// TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MessageCount {

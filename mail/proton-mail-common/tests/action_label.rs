@@ -2,28 +2,46 @@ mod common;
 
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
-use proton_api_mail::domain::{
-    Conversation, ConversationCount, ConversationId, ConversationLabels, Label, LabelId, LabelType,
-    MessageCount,
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::response_data::{
+    Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_mail::exports::crypto::keys::AddressKeys;
-use proton_api_mail::proton_api_core::domain::{Address, AddressId, AddressStatus, AddressType};
+use proton_api_core::session::CoreSession;
+use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::response_data::{
+    Conversation as ApiConversation, ConversationCount as ApiConversationCount,
+    ConversationLabel as ApiConversationLabel, Label as ApiLabel, MessageCount as ApiMessageCount,
+};
+use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
+use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
+use stash::orm::Model;
 use velcro::hash_map;
 
 #[tokio::test]
 async fn test_label_custom_label() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context();
+    let user_ctx = ctx.user_context().await;
 
     let (init_params, conv_id, label_id, _) = test_init_params_label();
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
     ctx.mock_get_conversations(conversations, 1).await;
-    ctx.mock_label_conversation(&label_id, std::iter::once(conv_id.clone()), None, [])
-        .await;
-    ctx.mock_unlabel_conversation(&label_id, std::iter::once(conv_id.clone()), [])
-        .await;
+    ctx.mock_label_conversation(
+        &label_id.clone().into(),
+        vec![conv_id.clone().into()],
+        None,
+        vec![],
+    )
+    .await;
+    ctx.mock_unlabel_conversation(
+        &label_id.clone().into(),
+        vec![conv_id.clone().into()],
+        vec![],
+    )
+    .await;
     ctx.catch_all().await;
     let cb = NullCallback {};
     user_ctx
@@ -32,21 +50,38 @@ async fn test_label_custom_label() {
         .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+        .await
         .expect("failed to create mailbox");
 
     // Sync the mailbox
     mailbox_inbox.sync(10).await.unwrap();
 
-    let mailbox_label =
-        Mailbox::with_remote_id(user_ctx.clone(), &label_id).expect("failed to create mailbox");
+    let mailbox_label = Mailbox::with_remote_id(user_ctx.clone(), label_id.clone())
+        .await
+        .expect("failed to create mailbox");
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
+    let remote_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+        .await
+        .unwrap()
+        .unwrap()
+        .remote_id
+        .unwrap();
+
+    let label = Label::load(mailbox_label.label_id(), ctx.user_context().await.stash())
+        .await
+        .unwrap()
+        .unwrap();
 
     // Label conversation.
-    mailbox_inbox
-        .label_conversations(mailbox_label.label_id(), std::iter::once(local_conv_id))
-        .unwrap();
+    Conversation::apply_label_to_multiple_remote(
+        label.remote_id.clone().unwrap(),
+        vec![remote_conv_id.clone()],
+        None,
+        ctx.user_context().await.session().api(),
+    )
+    .await
+    .unwrap();
     // execute the action.
     user_ctx
         .execute_pending_actions()
@@ -54,9 +89,13 @@ async fn test_label_custom_label() {
         .expect("failed to flush queue");
 
     // Unlabel conversation.
-    mailbox_inbox
-        .unlabel_conversations(mailbox_label.label_id(), std::iter::once(local_conv_id))
-        .unwrap();
+    Conversation::remove_label_from_multiple_remote(
+        label.remote_id.unwrap(),
+        vec![remote_conv_id],
+        ctx.user_context().await.session().api(),
+    )
+    .await
+    .unwrap();
     // execute the action.
     user_ctx
         .execute_pending_actions()
@@ -67,21 +106,25 @@ async fn test_label_custom_label() {
 #[tokio::test]
 async fn test_label_starred() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context();
+    let user_ctx = ctx.user_context().await;
 
     let (init_params, conv_id, _, _) = test_init_params_label();
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
     ctx.mock_get_conversations(conversations, 1).await;
     ctx.mock_label_conversation(
-        LabelId::starred(),
-        std::iter::once(conv_id.clone()),
+        &LabelId::starred().into(),
+        vec![conv_id.clone().into()],
         None,
-        [],
+        vec![],
     )
     .await;
-    ctx.mock_unlabel_conversation(LabelId::starred(), std::iter::once(conv_id.clone()), [])
-        .await;
+    ctx.mock_unlabel_conversation(
+        &LabelId::starred().into(),
+        vec![conv_id.clone().into()],
+        vec![],
+    )
+    .await;
     ctx.catch_all().await;
     let cb = NullCallback {};
     user_ctx
@@ -90,21 +133,38 @@ async fn test_label_starred() {
         .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+        .await
         .expect("failed to create mailbox");
 
     // Sync the mailbox
     mailbox_inbox.sync(10).await.unwrap();
 
     let mailbox_label = Mailbox::with_remote_id(user_ctx.clone(), LabelId::starred())
+        .await
         .expect("failed to create mailbox");
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
+    let remote_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+        .await
+        .unwrap()
+        .unwrap()
+        .remote_id
+        .unwrap();
+
+    let label = Label::load(mailbox_label.label_id(), ctx.user_context().await.stash())
+        .await
+        .unwrap()
+        .unwrap();
 
     // Label conversation.
-    mailbox_inbox
-        .label_conversations(mailbox_label.label_id(), std::iter::once(local_conv_id))
-        .unwrap();
+    Conversation::apply_label_to_multiple_remote(
+        label.remote_id.clone().unwrap(),
+        vec![remote_conv_id.clone()],
+        None,
+        ctx.user_context().await.session().api(),
+    )
+    .await
+    .unwrap();
     // execute the action.
     user_ctx
         .execute_pending_actions()
@@ -112,9 +172,13 @@ async fn test_label_starred() {
         .expect("failed to flush queue");
 
     // Unlabel conversation.
-    mailbox_inbox
-        .unlabel_conversations(mailbox_label.label_id(), std::iter::once(local_conv_id))
-        .unwrap();
+    Conversation::remove_label_from_multiple_remote(
+        label.remote_id.unwrap(),
+        vec![remote_conv_id],
+        ctx.user_context().await.session().api(),
+    )
+    .await
+    .unwrap();
     // execute the action.
     user_ctx
         .execute_pending_actions()
@@ -125,7 +189,7 @@ async fn test_label_starred() {
 #[tokio::test]
 async fn test_label_fails_when_labelling_folders() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context();
+    let user_ctx = ctx.user_context().await;
 
     let (init_params, _, _, folder_id) = test_init_params_label();
     let conversations = init_params.conversations.clone();
@@ -139,60 +203,77 @@ async fn test_label_fails_when_labelling_folders() {
         .expect("failed to initialize");
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+        .await
         .expect("failed to create mailbox");
 
     // Sync the mailbox
     mailbox_inbox.sync(10).await.unwrap();
 
-    let mailbox_folder =
-        Mailbox::with_remote_id(user_ctx.clone(), &folder_id).expect("failed to create mailbox");
+    let mailbox_folder = Mailbox::with_remote_id(user_ctx.clone(), folder_id.clone())
+        .await
+        .expect("failed to create mailbox");
+
+    let label = Label::load(mailbox_folder.label_id(), ctx.user_context().await.stash())
+        .await
+        .unwrap()
+        .unwrap();
 
     // Get the conversation id
-    let local_conv_id = mailbox_inbox.conversations(10).unwrap().first().unwrap().id;
+    let remote_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+        .await
+        .unwrap()
+        .unwrap()
+        .remote_id
+        .unwrap();
 
     // Label conversation, should fail.
-    mailbox_inbox
-        .label_conversations(mailbox_folder.label_id(), std::iter::once(local_conv_id))
-        .unwrap_err();
+    Conversation::apply_label_to_multiple_remote(
+        label.remote_id.unwrap(),
+        vec![remote_conv_id],
+        None,
+        ctx.user_context().await.session().api(),
+    )
+    .await
+    .unwrap_err();
 }
-fn test_init_params_label() -> (TestParams, ConversationId, LabelId, LabelId) {
+fn test_init_params_label() -> (TestParams, RemoteId, LabelId, LabelId) {
     let folder_id = LabelId::from("myfolder");
     let label_id = LabelId::from("mylabel");
-    let conv_id = ConversationId::from("conv_id");
+    let conv_id = RemoteId::from("conv_id");
     let labels = hash_map! {
-        LabelType::Folder: vec![Label {
-            id: folder_id.clone(),
+        ApiLabelType::Folder: vec![ApiLabel {
+            id: folder_id.clone().into(),
             parent_id: None,
-            name: "myfolder".to_string(),
+            name: "myfolder".to_owned(),
             path: None,
-            color: "".to_string(),
-            label_type: LabelType::Folder,
+            color: String::new(),
+            label_type: ApiLabelType::Folder,
             notify: false,
             display: false,
             sticky: false,
             expanded: false,
             order: 0,
         }],
-        LabelType::System: vec![Label {
-            id: LabelId::starred().clone(),
+        ApiLabelType::System: vec![ApiLabel {
+            id: LabelId::starred().clone().into(),
             parent_id: None,
-            name: "myfolder".to_string(),
+            name: "myfolder".to_owned(),
             path: None,
-            color: "".to_string(),
-            label_type: LabelType::System,
+            color: String::new(),
+            label_type: ApiLabelType::System,
             notify: false,
             display: false,
             sticky: false,
             expanded: false,
             order: 0,
         }],
-        LabelType::Label: vec![Label {
-            id: label_id.clone(),
+        ApiLabelType::Label: vec![ApiLabel {
+            id: label_id.clone().into(),
             parent_id: None,
-            name: "mylabel".to_string(),
+            name: "mylabel".to_owned(),
             path: None,
-            color: "".to_string(),
-            label_type: LabelType::Label,
+            color: String::new(),
+            label_type: ApiLabelType::Label,
             notify: false,
             display: false,
             sticky: false,
@@ -207,26 +288,26 @@ fn test_init_params_label() -> (TestParams, ConversationId, LabelId, LabelId) {
             user_settings: None,
             mail_settings: None,
             labels,
-            addresses: vec![Address {
-                id: AddressId::from("myaddress"),
-                email: "foo@bar.com".to_string(),
+            addresses: vec![ApiAddress {
+                id: ApiRemoteId::from("myaddress"),
+                email: "foo@bar.com".to_owned(),
                 send: true,
                 receive: true,
-                status: AddressStatus::Enabled,
+                status: ApiAddressStatus::Enabled,
                 domain_id: None,
-                address_type: AddressType::Original,
+                address_type: ApiAddressType::Original,
                 order: 0,
-                display_name: "".to_string(),
-                signature: "".to_string(),
-                keys: AddressKeys(vec![]),
+                display_name: String::new(),
+                signature: String::new(),
+                keys: ApiAddressKeys(vec![]),
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: Default::default(),
             }],
-            conversations: vec![Conversation {
-                id: conv_id.clone(),
+            conversations: vec![ApiConversation {
+                id: conv_id.clone().into(),
                 order: 0,
-                subject: "Hello".to_string(),
+                subject: "Hello".to_owned(),
                 senders: vec![],
                 recipients: vec![],
                 num_messages: 1,
@@ -234,8 +315,8 @@ fn test_init_params_label() -> (TestParams, ConversationId, LabelId, LabelId) {
                 num_attachments: 0,
                 expiration_time: 0,
                 size: 12,
-                labels: vec![ConversationLabels {
-                    id: LabelId::inbox().clone(),
+                labels: vec![ApiConversationLabel {
+                    id: LabelId::inbox().clone().into(),
                     context_num_unread: 0,
                     context_num_messages: 0,
                     context_time: 0,
@@ -248,13 +329,13 @@ fn test_init_params_label() -> (TestParams, ConversationId, LabelId, LabelId) {
                 attachments_metadata: vec![],
                 attachment_info: Default::default(),
             }],
-            conversation_count: vec![ConversationCount {
-                label_id: LabelId::inbox().clone(),
+            conversation_count: vec![ApiConversationCount {
+                label_id: LabelId::inbox().clone().into(),
                 total: 1,
                 unread: 0,
             }],
-            message_count: vec![MessageCount {
-                label_id: LabelId::inbox().clone(),
+            message_count: vec![ApiMessageCount {
+                label_id: LabelId::inbox().clone().into(),
                 total: 1,
                 unread: 0,
             }],

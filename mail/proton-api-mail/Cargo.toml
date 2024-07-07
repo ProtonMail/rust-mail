@@ -16,24 +16,25 @@ stash = { workspace = true }
 thiserror = "1"
 tokio = { workspace = true }
 tracing = { workspace = true }
-uniffi = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_with = "3.8.1"
-smart-default = "0.7.1"
+smart-default = { workspace = true }
 velcro = { workspace = true }
 
 [dev-dependencies]
 bytes = "1.6.0"
+proton-api-core = { workspace = true, features = ["integration_tests"] }
+proton-api-mail = { workspace = true, features = ["integration_tests"] }
 reqwest = { version = "0.12.2", features = ["stream"] }
 tracing-subscriber = { workspace = true }
 wiremock = { workspace = true }
 
 [features]
 default = []
+integration_tests = []
 sql = ["proton-api-core/sql"]
-uniffi = ["dep:uniffi", "proton-api-core/uniffi"]
 
 [lints]
 workspace = true

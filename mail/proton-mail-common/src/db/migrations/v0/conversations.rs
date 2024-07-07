@@ -6,17 +6,19 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
             CREATE TABLE conversations (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE DEFAULT NULL,
-                `order` INTEGER NOT NULL,
+                display_order INTEGER NOT NULL,
                 subject TEXT NOT NULL,
-                senders TEXT NOT NULL,
-                recipients TEXT NOT NULL,
+                senders TEXT DEFAULT NULL,
+                recipients TEXT DEFAULT NULL,
                 num_messages INTEGER NOT NULL,
                 num_unread INTEGER NOT NULL,
                 num_attachments INTEGER NOT NULL,
+                attachment_info TEXT DEFAULT NULL,
+                attachments_metadata TEXT DEFAULT NULL,
                 expiration_time INTEGER NOT NULL,
                 size INTEGER NOT NULL,
-                deleted INTEGER NOT NULL DEFAULT 0,
-                has_messages INTEGER NOT NULL DEFAULT 0
+                display_snooze_reminder INTEGER NOT NULL DEFAULT 0,
+                deleted INTEGER NOT NULL DEFAULT 0
             )
         "#,
         vec![],
@@ -33,16 +35,18 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
     tx.execute(
         r#"
             CREATE TABLE conversation_labels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 local_conversation_id INTEGER NOT NULL,
+                remote_conversation_id TEXT DEFAULT NULL,
                 local_label_id INTEGER NOT NULL,
-                ctx_time INTEGER NOT NULL,
-                ctx_size INTEGER NOT NULL,
-                ctx_num_messages INTEGER NOT NULL,
-                ctx_num_unread INTEGER NOT NULL,
-                ctx_num_attachments INTEGER NOT NULL,
-                ctx_expiration_time INTEGER NOT NULL,
-                ctx_snooze_time INTEGER NOT NULL,
+                remote_label_id TEXT DEFAULT NULL,
+                context_time INTEGER NOT NULL,
+                context_size INTEGER NOT NULL,
+                context_num_messages INTEGER NOT NULL,
+                context_num_unread INTEGER NOT NULL,
+                context_num_attachments INTEGER NOT NULL,
+                context_expiration_time INTEGER NOT NULL,
+                context_snooze_time INTEGER NOT NULL,
 
                 UNIQUE(local_conversation_id, local_label_id),
 

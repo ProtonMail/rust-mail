@@ -1,6 +1,4 @@
-use proton_mail_common::proton_api_mail::proton_api_core::exports::anyhow::anyhow;
-use proton_mail_common::proton_api_mail::proton_api_core::exports::thiserror;
-use proton_mail_common::proton_core_common::os::{KeyChain, KeyChainError};
+use proton_core_common::os::{KeyChain, KeyChainError};
 
 /// Errors for keychain operations.
 #[derive(Debug, thiserror::Error, uniffi::Error)]

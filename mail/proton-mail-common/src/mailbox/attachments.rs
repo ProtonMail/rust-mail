@@ -1,7 +1,8 @@
-use std::io;
-
+use crate::datatypes::AttachmentMetadata;
+use crate::models::Attachment;
 use crate::{MailContextError, MailUserContext, Mailbox, MailboxError, MailboxResult};
-use proton_api_mail::domain::{Attachment, AttachmentMetadata};
+use proton_api_core::session::CoreSession;
+use proton_crypto_inbox::attachment::AttachmentDecryption;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
 };
@@ -50,7 +51,7 @@ impl Mailbox {
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(&user_context.mail_session())
+                .sync_complete_metadata(user_context.session().api())
                 .await
                 .map_err(MailContextError::from)?;
             // Load the complete attachment metadata.
@@ -61,11 +62,10 @@ impl Mailbox {
 
         // Load the attachment content.
         // TODO: Lets opt for a stream in the future
-        let attachment_source_reader = user_context
-            .mail_session()
-            .attachment_content(remote_attachment_id.clone())
-            .await
-            .map_err(MailContextError::from)?;
+        let attachment_source_reader =
+            Attachment::fetch_content(remote_attachment_id.clone(), user_context.session().api())
+                .await
+                .map_err(MailContextError::from)?;
 
         // Decrypt it.
         let pgp_provider = new_pgp_provider();
@@ -91,7 +91,7 @@ async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
 
     let signature_verification = {
         let address_keys = mail_user_ctx
-            .unlocked_address_keys_async(pgp_provider, &attachment_info.address_id)
+            .unlocked_address_keys_async(pgp_provider, &attachment_info.remote_address_id)
             .await?;
 
         // TODO: Load the sender verification keys for correct signature verification.
@@ -109,7 +109,13 @@ async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
     };
 
     let result = DecryptedAttachment {
-        attachment_metadata: attachment_info.into(),
+        attachment_metadata: AttachmentMetadata {
+            remote_id: attachment_info.remote_id,
+            disposition: attachment_info.disposition,
+            mime_type: attachment_info.mime_type,
+            name: attachment_info.name,
+            size: attachment_info.size,
+        },
         content: result_buffer,
         verification_result: signature_verification,
     };

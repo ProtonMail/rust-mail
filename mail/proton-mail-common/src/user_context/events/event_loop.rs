@@ -1,88 +1,29 @@
 use crate::actions::EventLoopAction;
+use crate::events::MailEvent;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextResult, MailUserContext};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::executor::block_on;
-use proton_api_mail::proton_api_core;
-use proton_api_mail::proton_api_core::domain::{
-    Address, ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, User, UserSettings,
-};
-use proton_api_mail::proton_api_core::exports::anyhow;
-use proton_api_mail::proton_api_core::exports::anyhow::anyhow;
-use proton_api_mail::proton_api_core::exports::serde::{self, Deserialize, Serialize};
-use proton_api_mail::proton_api_core::exports::tracing::error;
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::session::CoreSession;
+use proton_api_mail::services::proton::response_data::MailEvent as ApiMailEvent;
+use proton_core_common::datatypes::RemoteId;
 use proton_core_common::CoreEventSubscriber;
+use proton_event_loop::provider::Provider;
+use proton_event_loop::store::Store;
+use proton_event_loop::subscriber::Subscriber;
 use proton_event_loop::EventLoopError;
 use stash::datatypes::QueryResultString;
 use stash::params;
 use std::sync::Weak;
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
-#[serde(crate = "self::serde")]
-pub struct MailEvent {
-    #[serde(flatten)]
-    pub(super) event: proton_api_mail::domain::MailEvent,
-}
-
-impl Event for MailEvent {
-    fn event_id(&self) -> &EventId {
-        self.event.event_id()
-    }
-
-    fn has_more(&self) -> bool {
-        self.event.has_more()
-    }
-}
-
-impl proton_core_common::CoreEvent for MailEvent {
-    fn get_core_event_user(&self) -> Option<&User> {
-        self.event.user.as_ref()
-    }
-    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
-        self.event.user.as_mut()
-    }
-
-    fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
-        self.event.user_settings.as_ref()
-    }
-    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
-        self.event.user_settings.as_mut()
-    }
-
-    fn get_core_event_used_space(&self) -> Option<i64> {
-        self.event.used_space
-    }
-
-    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
-        self.event.product_used_space.as_ref()
-    }
-
-    fn get_core_event_addresses(&self) -> Option<&[proton_api_core::domain::Address]> {
-        self.event.addresses.as_deref()
-    }
-    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
-        self.event.addresses.as_deref_mut()
-    }
-
-    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
-        unimplemented!()
-    }
-    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        unimplemented!()
-    }
-
-    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
-        unimplemented!()
-    }
-    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        unimplemented!()
-    }
-}
+use tracing::error;
 
 const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 
-impl proton_event_loop::Store for MailUserContext {
-    fn load(&self) -> anyhow::Result<Option<EventId>> {
+impl Store for MailUserContext {
+    fn load(&self) -> anyhow::Result<Option<ApiRemoteId>> {
         let conn = self.user_context.stash();
         Ok(block_on(async {
             conn.query::<_, QueryResultString>(
@@ -97,15 +38,15 @@ impl proton_event_loop::Store for MailUserContext {
         })?
         .into_iter()
         .next()
-        .map(|result| EventId::from(result.value)))
+        .map(|result| ApiRemoteId::from(result.value)))
     }
 
-    fn store(&self, id: &EventId) -> anyhow::Result<()> {
+    fn store(&self, id: ApiRemoteId) -> anyhow::Result<()> {
         let conn = self.user_context.stash();
         block_on(async {
             conn.execute(
                 "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                params![MAIL_EVENT_TYPE_ID, id.clone()],
+                params![MAIL_EVENT_TYPE_ID, RemoteId::from(id)],
             )
             .await
             .map_err(|e| {
@@ -118,15 +59,18 @@ impl proton_event_loop::Store for MailUserContext {
 }
 
 #[async_trait]
-impl proton_event_loop::Provider<MailEvent> for MailUserContext {
-    async fn get_latest_event_id(&self) -> proton_api_core::http::Result<EventId> {
-        self.session().get_latest_event().await
+impl Provider<MailEvent> for MailUserContext {
+    async fn get_latest_event_id(&self) -> Result<ApiRemoteId, ApiServiceError> {
+        Ok(self.session().api().get_events_latest().await?.event_id)
     }
 
-    async fn get_event(&self, event_id: &EventId) -> proton_api_core::http::Result<MailEvent> {
-        self.session()
-            .get_event_with_conv_and_msg_counts::<MailEvent>(event_id)
-            .await
+    async fn get_event(&self, event_id: &ApiRemoteId) -> Result<MailEvent, ApiServiceError> {
+        Ok(self
+            .session()
+            .api()
+            .get_event::<ApiMailEvent>(event_id.clone(), true, true)
+            .await?
+            .into())
     }
 }
 
@@ -136,11 +80,14 @@ impl MailUserContext {
     }
 
     pub async fn poll_event_loop(&self) -> Result<(), EventLoopError> {
-        let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
+        let _core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
         let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
         //TODO: better way to store this.
-        let subscribers: [Box<dyn proton_event_loop::Subscriber<MailEvent>>; 2] =
-            [Box::new(core_subscriber), Box::new(mail_subscriber)];
+        // TODO: Temporarily disabled core events here - the new event handler will
+        // TODO: deal with all of this
+        // let subscribers: [Box<dyn Subscriber<MailEvent>>; 2] =
+        //     [Box::new(core_subscriber), Box::new(mail_subscriber)];
+        let subscribers: [Box<dyn Subscriber<MailEvent>>; 1] = [Box::new(mail_subscriber)];
         self.event_loop.poll(self, self, &subscribers).await
     }
 }

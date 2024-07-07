@@ -8,17 +8,19 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
             CREATE TABLE attachments (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE DEFAULT NULL,
+                local_conversation_id INTEGER DEFAULT NULL,
+                remote_conversation_id TEXT DEFAULT NULL,
+                local_message_id INTEGER DEFAULT NULL,
+                remote_message_id TEXT DEFAULT NULL,
                 name TEXT NOT NULL,
                 size INTEGER NOT NULL,
-                mime_type TEXT NOT NULL,
-                address_id TEXT DEFAULT NULL,
+                mime_type INTEGER NOT NULL,
+                remote_address_id TEXT DEFAULT NULL,
                 key_packets TEXT DEFAULT NULL,
                 signature TEXT DEFAULT NULL,
                 enc_signature TEXT DEFAULT NULL,
-                disposition TEXT NOT NULL,
+                disposition INTEGER NOT NULL,
                 sender TEXT DEFAULT NULL,
-                local_conversation_id INTEGER DEFAULT NULL,
-                message_id INTEGER DEFAULT NULL,
                 is_auto_forwardee INTEGER NOT NULL DEFAULT 0,
                 content_id TEXT DEFAULT NULL,
                 transfer_encoding TEXT DEFAULT NULL,
@@ -26,8 +28,8 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
                 image_height TEXT DEFAULT NULL,
 
                 CONSTRAINT attachments_address_id
-                    FOREIGN KEY (address_id)
-                    REFERENCES addresses (id),
+                    FOREIGN KEY (remote_address_id)
+                    REFERENCES addresses (remote_id),
 
                 CONSTRAINT attachments_conversation_id
                     FOREIGN KEY (local_conversation_id)
@@ -48,6 +50,6 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
         "CREATE UNIQUE INDEX index_attachments_rid ON attachments (remote_id)",
         vec![],
     )
-    .await;
+    .await?;
     Ok(())
 }

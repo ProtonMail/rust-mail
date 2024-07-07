@@ -1,7 +1,4 @@
 use proton_mail_common::db::proton_sqlite3::rusqlite::Error;
-use proton_mail_common::exports::anyhow;
-use proton_mail_common::exports::anyhow::anyhow;
-use proton_mail_common::exports::thiserror;
 
 #[macro_export]
 macro_rules! new_live_query {

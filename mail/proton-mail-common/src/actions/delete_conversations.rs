@@ -1,3 +1,5 @@
+use crate::models::{Conversation, Label};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::executor::block_on;
 use proton_action_queue::{
@@ -5,12 +7,13 @@ use proton_action_queue::{
     ActionId, ActionLocalValidationResult, ActionResult, LocalActionHandler, RemoteActionHandler,
     SessionProvider, StoredAction,
 };
-use proton_api_mail::exports::anyhow::anyhow;
-use proton_api_mail::exports::serde::{self, Deserialize, Serialize};
-use proton_api_mail::exports::tracing::error;
-use proton_api_mail::MailSession;
+use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::datatypes::RemoteId;
+use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::Tether;
-use std::any::Any;
+use std::any::{Any, TypeId};
+use tracing::error;
 
 define_action_id!(
     DELETE_CONVERSATION_ACTION_ID,
@@ -18,7 +21,6 @@ define_action_id!(
 );
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(crate = "self::serde")]
 pub struct DeleteConversationsAction {
     label_id: u64,
     ids: Vec<u64>,
@@ -50,25 +52,37 @@ impl LocalActionHandler for DeleteConversationLocalHandler {
                 "No conversations in this action"
             )));
         }
-        self.tx
-            .mark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        block_on(async {
+            Conversation::delete_multiple(
+                self.action.ids.clone(),
+                self.action.label_id,
+                self.tx.stash(),
+            )
+            .await
+            .map_err(|e| ActionError::Local(anyhow!(e)))
+        })?;
         Ok(())
     }
 }
 
 struct DeleteConversationRemoteHandler {
     action: DeleteConversationsAction,
-    session: MailSession,
+    session: Session,
     tx: Tether,
 }
 
 #[async_trait]
-impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler {
+impl RemoteActionHandler for DeleteConversationRemoteHandler {
     fn revert_local(&mut self) -> ActionResult<()> {
-        self.tx
-            .unmark_conversations_as_deleted(self.action.label_id, self.action.ids.iter().cloned())
-            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+        block_on(async {
+            Conversation::undelete_multiple(
+                self.action.ids.clone(),
+                self.action.label_id,
+                self.tx.stash(),
+            )
+            .await
+            .map_err(|e| ActionError::Local(anyhow!(e)))
+        })?;
         Ok(())
     }
 
@@ -77,10 +91,9 @@ impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler {
     }
 
     fn apply_remote(&mut self) -> ActionResult<()> {
-        let Some(label) = self
-            .tx
-            .label_with_id(self.action.label_id)
-            .map_err(|e| ActionError::Local(anyhow!(e)))?
+        let Some(label) =
+            block_on(async { Label::load_using(self.action.label_id, &self.tx).await })
+                .map_err(|e| ActionError::Local(anyhow!(e)))?
         else {
             return Err(ActionError::Local(anyhow!(
                 "Could not resolve label with id {}",
@@ -88,23 +101,22 @@ impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler {
             )));
         };
 
-        let Some(label_id) = label.rid else {
+        let Some(label_id) = label.remote_id else {
             return Err(ActionError::Local(anyhow!(
                 "Label {} has no remote id",
                 self.action.label_id
             )));
         };
 
-        let conv_ids = self
-            .tx
-            .local_to_remote_conversation_ids(self.action.ids.iter().cloned())
-            .map_err(|e| {
-                error!("Failed to resolve conversation ids: {e}");
-                ActionError::Local(anyhow!(e))
-            })?;
+        let conv_ids = block_on(async {
+            Conversation::find_remote_ids(self.action.ids.clone(), self.tx.stash()).await
+        })
+        .map_err(|e| {
+            error!("Failed to resolve conversation ids: {e}");
+            ActionError::Local(anyhow!(e))
+        })?;
         let responses = block_on(async {
-            self.session
-                .delete_conversations(&label_id, &conv_ids)
+            Conversation::delete_multiple_remote(conv_ids, label_id, self.session.api())
                 .await
                 .map_err(|e| {
                     error!("Failed to delete conversations on API: {e}");
@@ -115,20 +127,27 @@ impl<'t> RemoteActionHandler for DeleteConversationRemoteHandler {
         let failed_messages = responses
             .into_iter()
             .filter(|r| r.response.code != 1000)
-            .map(|r| r.id)
+            .map(|r| RemoteId::from(r.id))
             .collect::<Vec<_>>();
         if !failed_messages.is_empty() {
             error!("Delete operation failed for: {:?}", failed_messages);
-            let local_ids = self
-                .tx
-                .remote_to_local_conversation_ids(failed_messages.iter())
-                .map_err(|e| ActionError::Local(anyhow!(e)))?;
-            self.tx
-                .unmark_conversations_as_deleted(self.action.label_id, local_ids.into_iter())
-                .map_err(|e| {
-                    error!("Failed to rollback failed conversations: {e}");
-                    ActionError::Local(anyhow!(e))
-                })?;
+            let local_ids = block_on(async {
+                Conversation::find_local_ids(failed_messages, self.tx.stash()).await
+            })
+            .map_err(|e| ActionError::Local(anyhow!(e)))?;
+            block_on(async {
+                Conversation::undelete_multiple(
+                    local_ids.clone(),
+                    self.action.label_id,
+                    self.tx.stash(),
+                )
+                .await
+                .map_err(|e| ActionError::Local(anyhow!(e)))
+            })
+            .map_err(|e| {
+                error!("Failed to rollback failed conversations: {e}");
+                ActionError::Local(anyhow!(e))
+            })?;
         }
 
         Ok(())
@@ -154,11 +173,11 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
         action: Box<dyn Any>,
         tx: Tether,
     ) -> Result<Box<dyn LocalActionHandler>, ActionFactoryInstanceError> {
-        let type_id = action.type_id().clone();
+        let type_id = TypeId::of::<Box<dyn Any>>();
         let Ok(action) = action.downcast::<DeleteConversationsAction>() else {
             return Err(ActionFactoryInstanceError::InvalidType(
                 type_id,
-                std::any::TypeId::of::<DeleteConversationsAction>(),
+                TypeId::of::<DeleteConversationsAction>(),
             ));
         };
 
@@ -184,7 +203,7 @@ impl ActionFactoryInstance for DeleteConversationsActionFactory {
         Ok(Box::new(DeleteConversationRemoteHandler {
             action,
             tx,
-            session: MailSession::from(session),
+            session,
         }))
     }
 }

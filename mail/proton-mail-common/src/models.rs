@@ -27,16 +27,16 @@
 //! a specific need.
 //!
 
+use crate::actions::MoveConversationsAction;
 use crate::datatypes::{
-    AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentMetadatas,
-    AttachmentSignature, ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody,
-    Disposition, EncryptedMessageBody, KeyPackets, LabelIds, LabelType, MessageAddress,
-    MessageAddresses, MessageAttachmentInfo, MessageAttachments, MessageButtons, MessageCount,
-    MessageFlags, MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme,
-    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
-    ViewMode,
+    AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
+    ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
+    EncryptedMessageBody, KeyPackets, LabelColor, LabelType, MessageAddress, MessageAddresses,
+    MessageAttachmentInfos, MessageAttachments, MessageButtons, MessageCount, MessageFlags,
+    MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme, PmSignature, ShowImages,
+    ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
 };
-use crate::{AppError, ALL_LABEL_TYPES};
+use crate::{AppError, MailUserContext, MailboxResult, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
 use proton_api_core::service::ApiServiceError;
@@ -45,9 +45,8 @@ use proton_api_mail::services::proton::requests::{
 };
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, Conversation as ApiConversation,
-    ConversationLabels as ApiConversationLabels, Label as ApiLabel,
-    MailSettings as ApiMailSettings, Message as ApiMessage, MessageMetadata as ApiMessageMetadata,
-    OperationResult,
+    ConversationLabel as ApiConversationLabel, Label as ApiLabel, MailSettings as ApiMailSettings,
+    Message as ApiMessage, MessageMetadata as ApiMessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
     GetAttachmentMetadataResponse, GetMessagesResponse,
@@ -63,7 +62,6 @@ use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use smart_default::SmartDefault;
-use stash::datatypes::QueryResultU64;
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -71,6 +69,7 @@ use stash::params;
 use stash::stash::{Stash, StashError};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tracing::{debug, error};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
@@ -93,11 +92,23 @@ pub struct Attachment {
 
     /// TODO: Document this field.
     #[DbField]
-    pub address_id: RemoteId,
+    pub remote_address_id: RemoteId,
 
     /// TODO: Document this field.
     #[DbField]
-    pub conversation_id: RemoteId,
+    pub local_conversation_id: Option<u64>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub remote_conversation_id: RemoteId,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub local_message_id: Option<u64>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub remote_message_id: RemoteId,
 
     /// TODO: Document this field.
     #[DbField]
@@ -114,10 +125,6 @@ pub struct Attachment {
     /// TODO: Document this field.
     #[DbField]
     pub key_packets: KeyPackets,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub message_id: RemoteId,
 
     /// TODO: Document this field.
     #[DbField]
@@ -281,13 +288,15 @@ impl From<ApiAttachment> for Attachment {
         Self {
             local_id: None,
             remote_id: Some(value.id.into()),
-            address_id: value.address_id.into(),
-            conversation_id: value.conversation_id.into(),
+            remote_address_id: value.address_id.into(),
+            local_conversation_id: None,
+            remote_conversation_id: value.conversation_id.into(),
+            local_message_id: None,
+            remote_message_id: value.message_id.into(),
             disposition: value.disposition.into(),
             enc_signature: value.enc_signature.clone().map(|v| v.into()),
             is_auto_forwardee: value.is_auto_forwardee,
             key_packets: value.key_packets.clone().into(),
-            message_id: value.message_id.into(),
             mime_type: value.mime_type.into(),
             name: value.name,
             real_enc_signature: value.enc_signature,
@@ -305,6 +314,7 @@ impl From<ApiAttachment> for Attachment {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversations")]
+#[ModelActions(on_load, on_save)]
 pub struct Conversation {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -321,10 +331,16 @@ pub struct Conversation {
     pub remote_id: Option<RemoteId>,
 
     /// TODO: Document this field.
-    pub attachment_info: HashMap<String, MessageAttachmentInfo>,
+    #[DbField]
+    pub attachment_info: MessageAttachmentInfos,
 
     /// TODO: Document this field.
-    pub attachments_metadata: Vec<AttachmentMetadata>,
+    #[DbField]
+    pub attachments_metadata: AttachmentMetadatas,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub deleted: bool,
 
     /// TODO: Document this field.
     #[DbField]
@@ -335,7 +351,7 @@ pub struct Conversation {
     pub expiration_time: u64,
 
     /// TODO: Document this field.
-    pub labels: Vec<ConversationLabels>,
+    pub labels: Vec<ConversationLabel>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -351,13 +367,15 @@ pub struct Conversation {
 
     /// TODO: Document this field.
     #[DbField]
-    pub order: u64,
+    pub display_order: u64,
 
+    #[DbField]
     /// TODO: Document this field.
-    pub recipients: Vec<MessageAddress>,
+    pub recipients: MessageAddresses,
 
+    #[DbField]
     /// TODO: Document this field.
-    pub senders: Vec<MessageAddress>,
+    pub senders: MessageAddresses,
 
     /// TODO: Document this field.
     #[DbField]
@@ -409,16 +427,16 @@ impl Conversation {
                 WITH
                     conv_msgs
                 AS (
-                    SELECT id, ? AS label_id FROM messages WHERE conversation_id = ?
+                    SELECT local_id, ? AS label_id FROM messages WHERE local_conversation_id = ?
                 )
                 INSERT OR IGNORE INTO
-                    message_labels (message_id, label_id)
+                    message_labels (local_message_id, local_label_id)
                 SELECT
                     *
                 FROM
                     conv_msgs
-                RETURNING
-                    message_id
+                -- RETURNING
+                --    message_id
                 "
                     ),
                     params![label_id, id],
@@ -471,10 +489,10 @@ impl Conversation {
         conversations: Vec<Conversation>,
         stash: &Stash,
     ) -> Result<Vec<u64>, AppError> {
-        let tx = stash.transaction().await?;
         let mut ids = Vec::with_capacity(conversations.len());
 
         for mut conv in conversations {
+            conv.stash = Some(stash.clone());
             if let Some(existing) = Self::find(
                 "WHERE remote_id = ?",
                 params![conv.remote_id.clone()],
@@ -488,126 +506,21 @@ impl Conversation {
                 conv.local_id = existing.local_id;
                 conv.row_id = existing.row_id;
                 conv.stash = existing.stash;
-
-                // Remove any labels that are no longer associated with this conversation.
-                if !conv.labels.is_empty() {
-                    #[allow(trivial_casts)]
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            conversation_labels
-                        WHERE
-                            local_conversation_id = ?
-                            AND local_label_id NOT IN (
-                                SELECT local_id FROM labels WHERE remote_id IN ({})
-                            )
-                        ",
-                            vec!["?"; conv.labels.len()].join(",")
-                        ),
-                        vec![Box::new(conv.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
-                            .into_iter()
-                            .chain(conv.labels.iter().map(|label| {
-                                Box::new(label.remote_id.clone()) as Box<dyn ToSql + Send>
-                            }))
-                            .collect(),
-                    )
-                    .await?;
-                } else {
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            conversation_labels
-                        WHERE
-                            local_conversation_id = ?
-                        ",
-                        ),
-                        params![conv.local_id],
-                    )
-                    .await?;
-                }
-
-                // Remove any attachments that are no longer associated with this conversation.
-                if !conv.attachments_metadata.is_empty() {
-                    #[allow(trivial_casts)]
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            conversation_attachments
-                        WHERE
-                            local_conversation_id = ?
-                            AND local_attachment_id NOT IN ({})
-                        ",
-                            vec!["?"; conv.attachments_metadata.len()].join(",")
-                        ),
-                        vec![Box::new(conv.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
-                            .into_iter()
-                            .chain(conv.attachments_metadata.iter().map(|attachment| {
-                                Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
-                            }))
-                            .collect(),
-                    )
-                    .await?;
-                } else {
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            conversation_attachments
-                        WHERE
-                            local_conversation_id = ?
-                        ",
-                        ),
-                        params![conv.local_id],
-                    )
-                    .await?;
-                }
             }
-            conv.save_using(&tx).await?;
+            conv.save().await?;
 
             for mut label in conv.labels {
-                label.save_using(&tx).await?;
+                label.save().await?;
             }
-            for mut _attachment in conv.attachments_metadata {
+            for mut _attachment in conv.attachments_metadata.value {
                 // TODO
-                // attachment.save_using(&tx).await?;
+                // attachment.save().await?;
                 continue;
             }
 
             ids.push(conv.local_id.unwrap());
         }
-        tx.commit().await?;
         Ok(ids)
-    }
-
-    pub async fn create_or_update_conversation_counts(
-        counts: Vec<ConversationCount>,
-        stash: &Stash,
-    ) -> Result<(), StashError> {
-        let tx = stash.transaction().await?;
-        for count in counts {
-            tx.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO
-                        label_conversation_count
-                    VALUES
-                        (SELECT id FROM labels WHERE rid = ?), ?, ?)
-                        ON CONFLICT
-                            (label_id)
-                        DO UPDATE SET
-                            total = excluded.total,
-                            unread = excluded.unread
-                    "
-                ),
-                params![count.label_id, count.total, count.unread],
-            )
-            .await?;
-        }
-        tx.commit().await?;
-        Ok(())
     }
 
     /// Delete multiple conversations.
@@ -638,13 +551,13 @@ impl Conversation {
             SET
                 deleted = 1
             WHERE
-                conversation_id IN ({})
+                local_conversation_id IN ({})
                 AND deleted = 0
-                AND id IN (
-                    SELECT message_id FROM message_labels WHERE label_id = ?
+                AND local_id IN (
+                    SELECT local_message_id FROM message_labels WHERE local_label_id = ?
                 )
             RETURNING
-                id
+                local_id
             ",
                     ids.iter()
                         .map(ToString::to_string)
@@ -770,7 +683,7 @@ impl Conversation {
     /// * `label`    - TODO: Document this parameter.
     /// * `messages` - TODO: Document this parameter.
     ///
-    pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<RemoteId> {
+    pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<u64> {
         if messages.is_empty() {
             return None;
         }
@@ -784,7 +697,7 @@ impl Conversation {
 
             for msg in messages.iter().rev() {
                 if msg.unread && !msg.flags.is_draft() {
-                    last_unread.clone_from(&msg.remote_id);
+                    last_unread.clone_from(&msg.local_id);
                 } else if last_unread.is_some() {
                     break;
                 }
@@ -797,7 +710,7 @@ impl Conversation {
         let mut iter = messages.iter().rev();
         let msg = iter.next()?;
         if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
-            return msg.remote_id.clone();
+            return msg.local_id;
         }
 
         let mut last_unread = None;
@@ -805,7 +718,7 @@ impl Conversation {
         // last consecutive message that is not a draft or sent auto-reply
         for msg in iter {
             if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
-                last_unread.clone_from(&msg.remote_id);
+                last_unread.clone_from(&msg.local_id);
             } else if last_unread.is_some() {
                 break;
             }
@@ -820,7 +733,188 @@ impl Conversation {
     pub fn is_starred(&self) -> bool {
         self.labels
             .iter()
-            .any(|l| l.remote_id == Some(LabelId::starred()))
+            .any(|l| l.remote_label_id == Some(LabelId::starred()))
+    }
+
+    /// Extends [`Model::load()`] to pre-load child records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    async fn on_load(&mut self, stash: &Stash) -> Result<(), StashError> {
+        self.labels = ConversationLabel::find(
+            "WHERE local_conversation_id = ?",
+            params![self.local_id],
+            stash,
+            None,
+        )
+        .await?;
+
+        // Example... not good to do this here, though, as the total number comes
+        // from the API.
+        // self.num_messages = stash.query::<_, QueryResultU64>(
+        //     "SELECT COUNT(*) as value FROM messages WHERE local_conversation_id = ?",
+        //     params![self.local_id],
+        // ).await?.into_iter().next().unwrap().value;
+
+        Ok(())
+    }
+
+    /// Extends [`Model::save()`] to set the contact id for children.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    ///
+    pub async fn on_save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash().cloned() else {
+            debug!("No stash available");
+            return Err(StashError::NoStashAvailable);
+        };
+
+        // Remove any labels that are no longer associated with this conversation.
+        if !self.labels.is_empty() {
+            #[allow(trivial_casts)]
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    conversation_labels
+                WHERE
+                    local_conversation_id = ?
+                    AND remote_label_id NOT IN ({})
+                ",
+                        vec!["?"; self.labels.len()].join(",")
+                    ),
+                    vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                        .into_iter()
+                        .chain(self.labels.iter().map(|label| {
+                            Box::new(label.remote_label_id.clone()) as Box<dyn ToSql + Send>
+                        }))
+                        .collect(),
+                )
+                .await?;
+        } else {
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    conversation_labels
+                WHERE
+                    local_conversation_id = ?
+                ",
+                    ),
+                    params![self.local_id],
+                )
+                .await?;
+        }
+
+        // Remove any attachments that are no longer associated with this conversation.
+        if !self.attachments_metadata.value.is_empty() {
+            #[allow(trivial_casts)]
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    conversation_attachments
+                WHERE
+                    local_conversation_id = ?
+                    AND local_attachment_id NOT IN ({})
+                ",
+                        vec!["?"; self.attachments_metadata.value.len()].join(",")
+                    ),
+                    vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                        .into_iter()
+                        .chain(self.attachments_metadata.value.iter().map(|attachment| {
+                            Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
+                        }))
+                        .collect(),
+                )
+                .await?;
+        } else {
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    conversation_attachments
+                WHERE
+                    local_conversation_id = ?
+                ",
+                    ),
+                    params![self.local_id],
+                )
+                .await?;
+        }
+
+        for label in &mut self.labels {
+            if label.local_id.is_none() {
+                if let Some(db_conv_label) = ConversationLabel::find_first(
+                    "WHERE remote_conversation_id = ? AND remote_label_id = ?",
+                    params![
+                        label.remote_conversation_id.clone(),
+                        label.remote_label_id.clone()
+                    ],
+                    &stash,
+                )
+                .await?
+                {
+                    label.local_id = db_conv_label.local_id;
+                    label.row_id = db_conv_label.row_id;
+                    label.local_label_id = db_conv_label.local_label_id;
+                    label.remote_label_id = db_conv_label.remote_label_id;
+                } else if let Some(db_label) = Label::find_first(
+                    "WHERE remote_id = ?",
+                    params![label.remote_label_id.clone()],
+                    &stash,
+                )
+                .await?
+                {
+                    label.local_label_id = db_label.local_id;
+                } else {
+                    let mut db_label = Label {
+                        local_id: None,
+                        remote_id: label.remote_label_id.clone(),
+                        local_parent_id: None,
+                        remote_parent_id: None,
+                        color: LabelColor::default(),
+                        display: false,
+                        expanded: false,
+                        initialized_conv: false,
+                        display_order: 0,
+                        path: None,
+                        sticky: false,
+                        total_conv: 0,
+                        total_msg: 0,
+                        unread_conv: 0,
+                        unread_msg: 0,
+                        name: "".to_owned(),
+                        label_type: LabelType::Label,
+                        stash: Some(stash.clone()),
+                        initialized_msg: false,
+                        notify: false,
+                        row_id: None,
+                    };
+                    db_label.save().await?;
+                    label.local_label_id = db_label.local_id;
+                }
+            }
+            label.local_conversation_id = self.local_id;
+            label.remote_conversation_id.clone_from(&self.remote_id);
+            label.stash = Some(stash.clone());
+            label.save().await.or_else(|err| match err {
+                StashError::NoRowsUpdated => Ok(()),
+                _ => {
+                    error!("Failed to save conversation label: {err}");
+                    Err(err)
+                }
+            })?;
+        }
+        Ok(())
     }
 
     /// Mark multiple conversations as read.
@@ -907,6 +1001,22 @@ impl Conversation {
             .map(|r| r.responses)
     }
 
+    pub async fn move_conversations(
+        active_label_id: u64,
+        destination_label_id: u64,
+        ids: impl IntoIterator<Item = u64>,
+        mail_user_ctx: Arc<MailUserContext>,
+    ) -> MailboxResult<()> {
+        mail_user_ctx
+            .queue_action(MoveConversationsAction::new(
+                active_label_id,
+                destination_label_id,
+                ids,
+            ))
+            .await?;
+        Ok(())
+    }
+
     /// Unlabel multiple conversations.
     ///
     /// # Parameters
@@ -935,17 +1045,17 @@ impl Conversation {
                 WITH
                     conv_msgs
                 AS (
-                    SELECT id, unread FROM messages WHERE conversation_id = ?1
+                    SELECT local_id, unread FROM messages WHERE local_conversation_id = ?1
                 )
                 DELETE FROM
                     message_labels
                 WHERE
-                    message_id IN (
-                        SELECT id FROM messages WHERE conversation_id = ?1
+                    local_message_id IN (
+                        SELECT local_id FROM messages WHERE local_conversation_id = ?1
                     )
-                    AND message_labels.label_id = ?2
+                    AND message_labels.local_label_id = ?2
                 RETURNING
-                    message_id
+                    local_message_id
                 "
                     ),
                     params![label_id, id],
@@ -999,8 +1109,8 @@ impl Conversation {
         let conversation_counts = Conversation::fetch_counts(api).await?;
         let message_counts = Message::fetch_counts(api).await?;
         let tx = stash.transaction().await?;
-        Conversation::create_or_update_conversation_counts(conversation_counts, tx.stash()).await?;
-        Message::create_or_update_message_counts(message_counts, tx.stash()).await?;
+        Label::create_or_update_conversation_counts(conversation_counts, tx.stash()).await?;
+        Label::create_or_update_message_counts(message_counts, tx.stash()).await?;
         tx.commit().await?;
         Ok(())
     }
@@ -1080,12 +1190,14 @@ impl Conversation {
             SET
                 deleted = 0
             WHERE
-                conversation_id IN ({})
+                local_conversation_id IN ({})
                 AND deleted = 1
-                AND id IN (
-                    SELECT message_id FROM message_labels WHERE label_id = ?
+                AND local_id IN (
+                    SELECT local_message_id FROM message_labels WHERE local_label_id = ?
                 )
-            RETURNING id",
+            RETURNING
+                local_id
+                ",
                     ids.iter()
                         .map(ToString::to_string)
                         .collect::<Vec<String>>()
@@ -1127,25 +1239,34 @@ impl From<ApiConversation> for Conversation {
         Self {
             local_id: None,
             remote_id: Some(value.id.into()),
-            attachment_info: value
-                .attachment_info
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            attachments_metadata: value
-                .attachments_metadata
-                .into_iter()
-                .map(|v| v.into())
-                .collect(),
+            attachment_info: MessageAttachmentInfos {
+                value: value
+                    .attachment_info
+                    .into_iter()
+                    .map(|(k, v)| (k, v.into()))
+                    .collect(),
+            },
+            attachments_metadata: AttachmentMetadatas {
+                value: value
+                    .attachments_metadata
+                    .into_iter()
+                    .map(|v| v.into())
+                    .collect(),
+            },
+            deleted: false,
             display_snooze_reminder: value.display_snooze_reminder,
             expiration_time: value.expiration_time,
             labels: value.labels.into_iter().map(|v| v.into()).collect(),
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
             num_unread: value.num_unread,
-            order: value.order,
-            recipients: value.recipients.into_iter().map(|v| v.into()).collect(),
-            senders: value.senders.into_iter().map(|v| v.into()).collect(),
+            display_order: value.order,
+            recipients: MessageAddresses {
+                value: value.recipients.into_iter().map(|v| v.into()).collect(),
+            },
+            senders: MessageAddresses {
+                value: value.senders.into_iter().map(|v| v.into()).collect(),
+            },
             size: value.size,
             subject: value.subject,
             row_id: None,
@@ -1157,7 +1278,7 @@ impl From<ApiConversation> for Conversation {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversation_labels")]
-pub struct ConversationLabels {
+pub struct ConversationLabel {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
     /// within the set of all records of this type, and is important for
@@ -1166,11 +1287,21 @@ pub struct ConversationLabels {
     #[IdField(autoincrement)]
     pub local_id: Option<u64>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
+    /// TODO: Document this field.
     #[DbField]
-    pub remote_id: Option<LabelId>,
+    pub local_conversation_id: Option<u64>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub remote_conversation_id: Option<RemoteId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub local_label_id: Option<u64>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub remote_label_id: Option<LabelId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1213,11 +1344,14 @@ pub struct ConversationLabels {
     pub stash: Option<Stash>,
 }
 
-impl From<ApiConversationLabels> for ConversationLabels {
-    fn from(value: ApiConversationLabels) -> Self {
+impl From<ApiConversationLabel> for ConversationLabel {
+    fn from(value: ApiConversationLabel) -> Self {
         Self {
             local_id: None,
-            remote_id: Some(value.id.into()),
+            local_conversation_id: None,
+            remote_conversation_id: None,
+            local_label_id: None,
+            remote_label_id: Some(value.id.into()),
             context_expiration_time: value.context_expiration_time,
             context_num_attachments: value.context_num_attachments,
             context_num_messages: value.context_num_messages,
@@ -1251,11 +1385,15 @@ pub struct Label {
 
     /// TODO: Document this field.
     #[DbField]
-    pub parent_id: Option<LabelId>,
+    pub local_parent_id: Option<u64>,
 
     /// TODO: Document this field.
     #[DbField]
-    pub color: String,
+    pub remote_parent_id: Option<LabelId>,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub color: LabelColor,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1287,7 +1425,7 @@ pub struct Label {
 
     /// TODO: Document this field.
     #[DbField]
-    pub order: u32,
+    pub display_order: u32,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1296,6 +1434,22 @@ pub struct Label {
     /// TODO: Document this field.
     #[DbField]
     pub sticky: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub total_conv: u64,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub total_msg: u64,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub unread_conv: u64,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub unread_msg: u64,
 
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
@@ -1344,6 +1498,59 @@ impl Label {
             .into())
     }
 
+    pub async fn create_or_update_conversation_counts(
+        counts: Vec<ConversationCount>,
+        stash: &Stash,
+    ) -> Result<(), StashError> {
+        let tx = stash.transaction().await?;
+        for count in counts {
+            tx.execute(
+                formatdoc!(
+                    r"
+                    UPDATE
+                        labels
+                    SET
+                        total_conv = ?,
+                        unread_conv = ?
+                    WHERE
+                        remote_id = ?
+                    "
+                ),
+                params![count.total, count.unread, count.label_id],
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    pub async fn create_or_update_message_counts(
+        counts: Vec<MessageCount>,
+        stash: &Stash,
+    ) -> Result<(), StashError> {
+        let tx = stash.transaction().await?;
+        for count in counts {
+            tx.execute(
+                formatdoc!(
+                    r"
+                    UPDATE
+                        labels
+                    SET
+                        total_msg = ?,
+                        unread_msg = ?
+                    WHERE
+                        remote_id = ?
+                    "
+                ),
+                params![count.total, count.unread, count.label_id],
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    /// TODO: Document this function.
     pub fn is_applicable_label(&self) -> bool {
         self.label_type == LabelType::Label
             || self
@@ -1352,6 +1559,7 @@ impl Label {
                 .map_or(false, |rid| *rid == LabelId::starred())
     }
 
+    /// TODO: Document this function.
     pub fn is_movable_folder(&self) -> bool {
         self.label_type == LabelType::Folder
             || self.remote_id.as_ref().map_or(false, |rid| {
@@ -1384,128 +1592,35 @@ impl Label {
             );
         }
         debug!("Storing labels into database");
-        let tx = stash.transaction().await?;
         for label in all_labels.iter_mut() {
-            label.save_using(&tx).await?;
+            let db_label = Label::find_first(
+                "WHERE remote_id = ?",
+                params![label.remote_id.clone()],
+                stash,
+            )
+            .await?;
+            if let Some(mut db_label) = db_label {
+                db_label.color = label.color.clone();
+                db_label.display = label.display;
+                db_label.expanded = label.expanded;
+                db_label.initialized_conv = label.initialized_conv;
+                db_label.initialized_msg = label.initialized_msg;
+                db_label.name.clone_from(&label.name);
+                db_label.notify = label.notify;
+                db_label.path.clone_from(&label.path);
+                db_label.sticky = label.sticky;
+                db_label.total_conv = label.total_conv;
+                db_label.total_msg = label.total_msg;
+                db_label.unread_conv = label.unread_conv;
+                db_label.unread_msg = label.unread_msg;
+                db_label.set_stash(stash);
+                db_label.save().await?;
+            } else {
+                label.set_stash(stash);
+                label.save().await?;
+            }
         }
-        tx.commit().await?;
         Ok(())
-    }
-
-    /// Get the total count of associated conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn total_conversations(&self) -> Result<u64, StashError> {
-        let stash = self.stash.as_ref().ok_or(StashError::NoStashAvailable)?;
-        let id = Some(self.local_id).ok_or(StashError::IdNotSet)?;
-        Ok(stash
-            .query::<_, QueryResultU64>(
-                formatdoc!(
-                    r"
-                    SELECT
-                        total AS value
-                    FROM
-                        label_conversation_count
-                    WHERE
-                        local_label_id = ?
-                    ",
-                ),
-                params![id],
-            )
-            .await?
-            .first()
-            .map(|r| r.value)
-            .unwrap_or(0))
-    }
-
-    /// Get the total count of associated messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn total_messages(&self) -> Result<u64, StashError> {
-        let stash = self.stash.as_ref().ok_or(StashError::NoStashAvailable)?;
-        let id = Some(self.local_id).ok_or(StashError::IdNotSet)?;
-        Ok(stash
-            .query::<_, QueryResultU64>(
-                formatdoc!(
-                    r"
-                    SELECT
-                        total AS value
-                    FROM
-                        label_message_count
-                    WHERE
-                        local_label_id = ?
-                    ",
-                ),
-                params![id],
-            )
-            .await?
-            .first()
-            .map(|r| r.value)
-            .unwrap_or(0))
-    }
-
-    /// Get the count of associated unread conversations.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn unread_conversations(&self) -> Result<u64, StashError> {
-        let stash = self.stash.as_ref().ok_or(StashError::NoStashAvailable)?;
-        let id = Some(self.local_id).ok_or(StashError::IdNotSet)?;
-        Ok(stash
-            .query::<_, QueryResultU64>(
-                formatdoc!(
-                    r"
-                    SELECT
-                        unread AS value
-                    FROM
-                        label_conversation_count
-                    WHERE
-                        local_label_id = ?
-                    ",
-                ),
-                params![id],
-            )
-            .await?
-            .first()
-            .map(|r| r.value)
-            .unwrap_or(0))
-    }
-
-    /// Get the count of associated unread messages.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn unread_messages(&self) -> Result<u64, StashError> {
-        let stash = self.stash.as_ref().ok_or(StashError::NoStashAvailable)?;
-        let id = Some(self.local_id).ok_or(StashError::IdNotSet)?;
-        Ok(stash
-            .query::<_, QueryResultU64>(
-                formatdoc!(
-                    r"
-                    SELECT
-                        unread AS value
-                    FROM
-                        label_message_count
-                    WHERE
-                        local_label_id = ?
-                    ",
-                ),
-                params![id],
-            )
-            .await?
-            .first()
-            .map(|r| r.value)
-            .unwrap_or(0))
     }
 
     /// TODO: Document this function.
@@ -1545,9 +1660,9 @@ impl Label {
 
     /// Return the preferred view mode for this label.
     ///
-    /// If this function returns [`None`] we should use the
-    /// [`ViewMode`] defined in the user's [`MailSettings`],
-    /// otherwise the returned value should be used.
+    /// If this function returns [`None`] we should use the [`ViewMode`] defined
+    /// in the user's [`MailSettings`], otherwise the returned value should be
+    /// used.
     ///
     pub fn view_mode(&self) -> Option<ViewMode> {
         let remote_id = self.remote_id.as_ref()?;
@@ -1569,8 +1684,10 @@ impl From<ApiLabel> for Label {
         Self {
             local_id: None,
             remote_id: Some(value.id.into()),
-            parent_id: value.parent_id.map(|id| id.into()),
-            color: value.color,
+            local_parent_id: None,
+            remote_parent_id: value.parent_id.map(|id| id.into()),
+            color: value.color.into(),
+            display_order: value.order,
             display: value.display,
             expanded: value.expanded,
             initialized_conv: false,
@@ -1578,9 +1695,12 @@ impl From<ApiLabel> for Label {
             label_type: value.label_type.into(),
             name: value.name,
             notify: value.notify,
-            order: value.order,
-            path: None,
-            sticky: false,
+            path: value.path,
+            sticky: value.sticky,
+            total_conv: 0,
+            total_msg: 0,
+            unread_conv: 0,
+            unread_msg: 0,
             row_id: None,
             stash: None,
         }
@@ -1590,7 +1710,7 @@ impl From<ApiLabel> for Label {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[allow(clippy::struct_excessive_bools)]
-#[TableName("settings")]
+#[TableName("mail_settings")]
 pub struct MailSettings {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -1791,9 +1911,13 @@ impl MailSettings {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_mail_settings<PM: ProtonMail>(api: &PM) -> Result<(), AppError> {
+    pub async fn sync_mail_settings<PM: ProtonMail>(
+        api: &PM,
+        stash: &Stash,
+    ) -> Result<(), AppError> {
         let mut settings = MailSettings::from(api.get_settings().await.map(|r| r.mail_settings)?);
         debug!("Storing labels into database");
+        settings.set_stash(stash);
         settings.save().await?;
         Ok(())
     }
@@ -1852,6 +1976,7 @@ impl From<ApiMailSettings> for MailSettings {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
+#[ModelActions(on_load, on_save)]
 pub struct Message {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -1873,7 +1998,7 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub remote_conversation_id: RemoteId,
+    pub remote_conversation_id: Option<RemoteId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1892,7 +2017,6 @@ pub struct Message {
     pub bcc_list: MessageAddresses,
 
     /// TODO: Document this field.
-    #[DbField]
     pub body: String,
 
     /// TODO: Document this field.
@@ -1901,14 +2025,17 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
+    pub deleted: bool,
+
+    /// TODO: Document this field.
+    #[DbField]
     pub expiration_time: u64,
 
     /// TODO: Document this field.
     #[DbField]
-    pub external_id: Option<ExternalId>,
+    pub external_id: Option<RemoteId>,
 
     /// TODO: Document this field.
-    #[DbField]
     pub header: String,
 
     /// TODO: Document this field.
@@ -1928,11 +2055,9 @@ pub struct Message {
     pub is_replied_all: bool,
 
     /// TODO: Document this field.
-    #[DbField]
-    pub label_ids: LabelIds,
+    pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
-    #[DbField]
     pub mime_type: MimeType,
 
     /// TODO: Document this field.
@@ -1941,10 +2066,9 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub order: u64,
+    pub display_order: u64,
 
     /// TODO: Document this field.
-    #[DbField]
     // Unfortunately, some values returned in this struct are either
     // arrays or strings.
     pub parsed_headers: ParsedHeaders,
@@ -2011,7 +2135,6 @@ impl Message {
         metadata: Vec<ApiMessageMetadata>,
         stash: &Stash,
     ) -> Result<Vec<u64>, AppError> {
-        let tx = stash.transaction().await?;
         let mut ids = Vec::with_capacity(metadata.len());
 
         for metadata in metadata {
@@ -2034,6 +2157,8 @@ impl Message {
                 cc_list: MessageAddresses {
                     value: metadata.cc_list.into_iter().map(|v| v.into()).collect(),
                 },
+                deleted: false,
+                display_order: metadata.order,
                 expiration_time: metadata.expiration_time,
                 external_id: metadata.external_id.map(|v| v.into()),
                 flags: metadata.flags.into(),
@@ -2041,17 +2166,14 @@ impl Message {
                 is_forwarded: metadata.is_forwarded,
                 is_replied: metadata.is_replied,
                 is_replied_all: metadata.is_replied_all,
-                label_ids: LabelIds {
-                    value: metadata.label_ids.into_iter().map(|v| v.into()).collect(),
-                },
+                label_ids: metadata.label_ids.into_iter().map(|v| v.into()).collect(),
                 local_conversation_id: None,
                 mime_type: MimeType::TextPlain,
                 num_attachments: metadata.num_attachments,
-                order: metadata.order,
                 parsed_headers: ParsedHeaders {
                     headers: HashMap::new(),
                 },
-                remote_conversation_id: metadata.conversation_id.into(),
+                remote_conversation_id: Some(metadata.conversation_id.into()),
                 reply_tos: MessageAddresses {
                     value: metadata.reply_tos.into_iter().map(|v| v.into()).collect(),
                 },
@@ -2080,132 +2202,12 @@ impl Message {
                 message.local_id = existing.local_id;
                 message.row_id = existing.row_id;
                 message.stash = existing.stash;
-
-                // Remove any labels that are no longer associated with this conversation.
-                if !message.label_ids.value.is_empty() {
-                    #[allow(trivial_casts)]
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            message_labels
-                        WHERE
-                            local_message_id = ?
-                            AND local_label_id NOT IN (
-                                SELECT local_id FROM labels WHERE remote_id IN ({})
-                            )
-                        ",
-                            vec!["?"; message.label_ids.value.len()].join(",")
-                        ),
-                        vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
-                            .into_iter()
-                            .chain(
-                                message
-                                    .label_ids
-                                    .value
-                                    .iter()
-                                    .map(|label| Box::new(label.clone()) as Box<dyn ToSql + Send>),
-                            )
-                            .collect(),
-                    )
-                    .await?;
-                } else {
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            message_labels
-                        WHERE
-                            local_message_id = ?
-                        ",
-                        ),
-                        params![message.local_id],
-                    )
-                    .await?;
-                }
-
-                // Remove any attachments that are no longer associated with this conversation.
-                if !message.attachments_metadata.value.is_empty() {
-                    #[allow(trivial_casts)]
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            message_attachments
-                        WHERE
-                            local_message_id = ?
-                            AND local_attachment_id NOT IN ({})
-                        ",
-                            vec!["?"; message.attachments_metadata.value.len()].join(",")
-                        ),
-                        vec![Box::new(message.remote_id.clone().unwrap()) as Box<dyn ToSql + Send>]
-                            .into_iter()
-                            .chain(message.attachments_metadata.value.iter().map(|attachment| {
-                                Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
-                            }))
-                            .collect(),
-                    )
-                    .await?;
-                } else {
-                    tx.execute(
-                        formatdoc!(
-                            "
-                        DELETE FROM
-                            message_attachments
-                        WHERE
-                            local_message_id = ?
-                        ",
-                        ),
-                        params![message.local_id],
-                    )
-                    .await?;
-                }
             }
-            message.save_using(&tx).await?;
-
-            for mut _label in message.label_ids.value {
-                // TODO
-                // label.save_using(&tx).await?;
-                continue;
-            }
-            for mut _attachment in message.attachments_metadata.value {
-                // TODO
-                // attachment.save_using(&tx).await?;
-                continue;
-            }
+            message.save().await?;
 
             ids.push(message.local_id.unwrap());
         }
-        tx.commit().await?;
         Ok(ids)
-    }
-
-    pub async fn create_or_update_message_counts(
-        counts: Vec<MessageCount>,
-        stash: &Stash,
-    ) -> Result<(), StashError> {
-        let tx = stash.transaction().await?;
-        for count in counts {
-            tx.execute(
-                formatdoc!(
-                    r"
-                    INSERT INTO
-                        label_message_count
-                    VALUES
-                        (SELECT id FROM labels WHERE rid = ?), ?, ?)
-                        ON CONFLICT
-                            (label_id)
-                        DO UPDATE SET
-                            total = excluded.total,
-                            unread = excluded.unread
-                    "
-                ),
-                params![count.label_id, count.total, count.unread],
-            )
-            .await?;
-        }
-        tx.commit().await?;
-        Ok(())
     }
 
     /// Delete multiple messages.
@@ -2269,6 +2271,200 @@ impl Message {
         api.get_messages(filter).await
     }
 
+    /// Extends [`Model::load()`] to pre-load child records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    async fn on_load(&mut self, stash: &Stash) -> Result<(), StashError> {
+        // TODO: This should come later... the relationship between attachments and
+        // TODO: their metadata is really weird and needs sorting out, but is beyond
+        // TODO: current scope.
+        // message.attachments = Attachment::find(
+        //     "WHERE local_message_id = ?",
+        //     params![message.local_id],
+        //     stash,
+        //     None,
+        // )
+        //     .await?;
+
+        self.label_ids = Label::find(
+            "WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?)",
+            params![self.local_id],
+            stash,
+            None,
+        )
+            .await?.into_iter().map(|l| l.remote_id.unwrap()).collect();
+
+        if let Some(body) = MessageBodyMetadata::find_first(
+            "WHERE local_message_id = ?",
+            params![self.local_id],
+            stash,
+        )
+        .await?
+        {
+            self.header = body.header;
+            self.mime_type = body.mime_type;
+            self.parsed_headers = body.parsed_headers;
+        }
+
+        // TODO: The message body might need to be loaded in here, but it's not
+        // TODO: totally clear how best to do that seeing as the cache feature
+        // TODO: requires some additional parameters such as the path. So this can
+        // TODO: currently be done as a subsequent manual step.
+
+        Ok(())
+    }
+
+    /// Extends [`Model::save()`] to set the contact id for children.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    ///
+    pub async fn on_save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash().cloned() else {
+            debug!("No stash available");
+            return Err(StashError::NoStashAvailable);
+        };
+
+        // Remove any labels that are no longer associated with this message.
+        if !self.label_ids.is_empty() {
+            #[allow(trivial_casts)]
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    message_labels
+                WHERE
+                    local_message_id = ?
+                    AND local_label_id NOT IN (
+                        SELECT local_id FROM labels WHERE remote_id IN ({})
+                    )
+                ",
+                        vec!["?"; self.label_ids.len()].join(",")
+                    ),
+                    vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                        .into_iter()
+                        .chain(
+                            self.label_ids
+                                .iter()
+                                .map(|label| Box::new(label.clone()) as Box<dyn ToSql + Send>),
+                        )
+                        .collect(),
+                )
+                .await?;
+        } else {
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    message_labels
+                WHERE
+                    local_message_id = ?
+                ",
+                    ),
+                    params![self.local_id],
+                )
+                .await?;
+        }
+
+        // Remove any attachments that are no longer associated with this conversation.
+        if !self.attachments_metadata.value.is_empty() {
+            #[allow(trivial_casts)]
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    message_attachments
+                WHERE
+                    local_message_id = ?
+                    AND local_attachment_id NOT IN ({})
+                ",
+                        vec!["?"; self.attachments_metadata.value.len()].join(",")
+                    ),
+                    vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                        .into_iter()
+                        .chain(self.attachments_metadata.value.iter().map(|attachment| {
+                            Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
+                        }))
+                        .collect(),
+                )
+                .await?;
+        } else {
+            stash
+                .execute(
+                    formatdoc!(
+                        "
+                DELETE FROM
+                    message_attachments
+                WHERE
+                    local_message_id = ?
+                ",
+                    ),
+                    params![self.local_id],
+                )
+                .await?;
+        }
+
+        for label_id in &mut self.label_ids {
+            let local_label_id = if let Some(db_label) =
+                Label::find_first("WHERE remote_id = ?", params![label_id.clone()], &stash).await?
+            {
+                db_label.local_id
+            } else {
+                let mut db_label = Label {
+                    local_id: None,
+                    remote_id: Some(label_id.clone()),
+                    local_parent_id: None,
+                    remote_parent_id: None,
+                    color: LabelColor::default(),
+                    display: false,
+                    expanded: false,
+                    initialized_conv: false,
+                    display_order: 0,
+                    path: None,
+                    sticky: false,
+                    total_conv: 0,
+                    total_msg: 0,
+                    unread_conv: 0,
+                    unread_msg: 0,
+                    name: "".to_owned(),
+                    label_type: LabelType::Label,
+                    stash: Some(stash.clone()),
+                    initialized_msg: false,
+                    notify: false,
+                    row_id: None,
+                };
+                db_label.save().await?;
+                db_label.local_id
+            };
+            stash
+                .execute(
+                    r#"
+                INSERT OR IGNORE INTO
+                    message_labels (local_message_id, local_label_id)
+                VALUES
+                    (?, ?)
+                "#,
+                    params![self.local_id, local_label_id],
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// TODO: Document this method.
+    #[inline]
+    #[must_use]
+    pub fn is_starred(&self) -> bool {
+        self.label_ids.iter().any(|l| *l == LabelId::starred())
+    }
+
     /// Get the message's body.
     ///
     /// This will attempt to fetch the message data from the servers if it has
@@ -2292,10 +2488,7 @@ impl Message {
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         api: &PM,
-    ) -> Result<DecryptedMessageBody, AppError>
-    where
-        UnlockedAddressKeys<P>: AsRef<P::PrivateKey>,
-    {
+    ) -> Result<DecryptedMessageBody, AppError> {
         // Fetch metadata first to sync contents and cache.
         let metadata = self.sync_message_body(cache_path, api).await?;
 
@@ -2442,7 +2635,7 @@ impl Message {
             // create message in the database and store body in the cache.
             let mut metadata = MessageBodyMetadata {
                 local_message_id: message.local_id,
-                remote_id: message.remote_id.clone(),
+                remote_message_id: message.remote_id.clone(),
                 header: message.header.clone(),
                 parsed_headers: message.parsed_headers,
                 mime_type: message.mime_type,
@@ -2475,7 +2668,7 @@ impl From<ApiMessage> for Message {
             local_id: None,
             remote_id: Some(value.metadata.id.into()),
             local_conversation_id: None,
-            remote_conversation_id: value.metadata.conversation_id.into(),
+            remote_conversation_id: Some(value.metadata.conversation_id.into()),
             address_id: value.metadata.address_id.into(),
             attachments: MessageAttachments {
                 value: value.attachments.into_iter().map(|v| v.into()).collect(),
@@ -2505,6 +2698,8 @@ impl From<ApiMessage> for Message {
                     .map(|v| v.into())
                     .collect(),
             },
+            deleted: false,
+            display_order: value.metadata.order,
             expiration_time: value.metadata.expiration_time,
             external_id: value.metadata.external_id.map(|v| v.into()),
             header: value.header,
@@ -2512,17 +2707,14 @@ impl From<ApiMessage> for Message {
             is_forwarded: value.metadata.is_forwarded,
             is_replied: value.metadata.is_replied,
             is_replied_all: value.metadata.is_replied_all,
-            label_ids: LabelIds {
-                value: value
-                    .metadata
-                    .label_ids
-                    .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
-            },
+            label_ids: value
+                .metadata
+                .label_ids
+                .into_iter()
+                .map(|v| v.into())
+                .collect(),
             mime_type: value.mime_type.into(),
             num_attachments: value.metadata.num_attachments,
-            order: value.metadata.order,
             parsed_headers: ParsedHeaders {
                 headers: value.parsed_headers,
             },
@@ -2579,7 +2771,7 @@ pub struct MessageBodyMetadata {
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
     #[DbField]
-    pub remote_id: Option<RemoteId>,
+    pub remote_message_id: Option<RemoteId>,
 
     /// TODO: Document this field.
     #[DbField]
