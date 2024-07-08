@@ -10,6 +10,7 @@ use proton_event_loop::Event;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
+use std::sync::Weak;
 use tracing::{debug, error, Level};
 
 pub trait CoreEvent: Event {
@@ -42,10 +43,11 @@ pub trait CoreEventSubscriberConnectionProvider: Send + Sync {
     /// Return error if the connection or the user id can not be obtained.
     fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)>;
 }
-pub struct CoreEventSubscriber<T: CoreEventSubscriberConnectionProvider>(T);
+pub struct CoreEventSubscriber<T: CoreEventSubscriberConnectionProvider>(Weak<T>);
 
 impl<T: CoreEventSubscriberConnectionProvider> CoreEventSubscriber<T> {
-    pub fn new(provider: T) -> Self {
+    #[must_use]
+    pub fn new(provider: Weak<T>) -> Self {
         Self(provider)
     }
 }
@@ -60,10 +62,15 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
 
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
     async fn on_events(&self, events: &mut [E]) -> Result<(), SubscriberError> {
-        let (user_id, stash) = self.0.get_user_id_and_db_connection().map_err(|e| {
-            error!("Failed to get DB connection :{e}");
-            SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
-        })?;
+        let (user_id, stash) = self
+            .0
+            .upgrade()
+            .unwrap()
+            .get_user_id_and_db_connection()
+            .map_err(|e| {
+                error!("Failed to get DB connection :{e}");
+                SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
+            })?;
         let tx = stash.transaction().await?;
         {
             for event in events.iter_mut() {

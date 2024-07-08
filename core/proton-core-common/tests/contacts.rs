@@ -16,6 +16,7 @@ use proton_event_loop::subscriber::Subscriber;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
+use std::sync::Arc;
 
 mod common;
 
@@ -143,9 +144,9 @@ async fn test_sync_and_load_contacts_mixed() {
 
 #[tokio::test]
 async fn test_sync_and_delete_event_contact() {
-    let ctx: TestContext = TestContext::new().await;
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
-    let test_event_subscriber = CoreEventSubscriber::new(&ctx);
+    let test_event_subscriber = CoreEventSubscriber::new(Arc::downgrade(&ctx));
 
     let test_contacts = create_test_remote_partial_contacts();
     let test_contacts_email = create_test_remote_contact_emails();
@@ -207,9 +208,9 @@ async fn test_sync_and_delete_event_contact() {
 
 #[tokio::test]
 async fn test_sync_and_modify_event_contact() {
-    let ctx: TestContext = TestContext::new().await;
+    let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
-    let test_event_subscriber = CoreEventSubscriber::new(&ctx);
+    let test_event_subscriber = CoreEventSubscriber::new(Arc::downgrade(&ctx));
 
     let test_contacts = create_test_remote_partial_contacts();
     let test_contacts_email = create_test_remote_contact_emails();

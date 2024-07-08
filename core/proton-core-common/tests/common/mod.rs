@@ -24,7 +24,7 @@ use serde::Deserialize;
 use stash::orm::Model;
 use stash::stash::Stash;
 use std::io::stdout;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tempdir::TempDir;
 use tracing::subscriber::set_global_default;
 use tracing::Level;
@@ -52,7 +52,8 @@ impl UserDatabaseInitializer for TestCoreDatabaseInitializer {
 /// we can bypass authentication. It also spins up a mock server.
 ///
 pub struct TestContext {
-    context: Context,
+    this: Weak<Self>,
+    context: Arc<Context>,
     mock_server: MockServer,
     _tmp_dir: TempDir,
     encrypted_user_session: EncryptedUserSession,
@@ -65,7 +66,7 @@ impl TestContext {
     }
 
     /// Create and initialize test context.
-    pub async fn new() -> Self {
+    pub async fn new() -> Arc<Self> {
         drop(set_global_default(
             registry()
                 .with(EnvFilter::new("debug,stash=debug"))
@@ -134,12 +135,13 @@ impl TestContext {
             .await
             .expect("failed to make changes to session db");
 
-        Self {
+        Arc::new_cyclic(|this| Self {
+            this: Weak::clone(this),
             mock_server,
             context: core_context,
             _tmp_dir: tmp_dir,
             encrypted_user_session: session,
-        }
+        })
     }
 
     /// Get the mail context.
@@ -194,7 +196,7 @@ impl TestContext {
     }
 }
 
-impl CoreEventSubscriberConnectionProvider for &TestContext {
+impl CoreEventSubscriberConnectionProvider for TestContext {
     fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
         let user_ctx = block_on(async { self.user_context().await });
         Ok((user_ctx.user_id().clone(), user_ctx.stash().clone()))

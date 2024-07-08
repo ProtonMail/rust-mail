@@ -18,7 +18,7 @@ use stash::params;
 use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 use tokio::sync::RwLock as AsyncRwLock;
 use tracing::{debug, error, Level};
@@ -55,12 +55,9 @@ pub trait NetworkStatusChanged: Send + Sync {
 pub type CoreContextResult<T> = Result<T, CoreContextError>;
 
 /// Context for core operations.
-#[derive(Clone)]
+#[allow(dead_code)]
 pub struct Context {
-    inner: Arc<ContextInner>,
-}
-
-struct ContextInner {
+    this: Weak<Self>,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
     session_stash: Stash,
@@ -94,7 +91,7 @@ impl Context {
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
         api_url: Url,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
-    ) -> CoreContextResult<Self> {
+    ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let session_db_path = session_db_path.into();
         let user_db_path = user_db_path.into();
@@ -104,24 +101,23 @@ impl Context {
         let stash = Stash::new(Some(&session_db_path))?;
         migrate_session_db(&stash).await?;
 
-        Ok(Self {
-            inner: Arc::new(ContextInner {
-                network_connected: AtomicBool::new(true),
-                user_db_path,
-                key_chain,
-                session_stash: stash,
-                user_db_initializers: initializers,
-                api: Proton::new(
-                    ApiConfig {
-                        base_url: api_url.to_string(),
-                        ..Default::default()
-                    },
-                    None,
-                    Arc::new(AsyncRwLock::new(None)),
-                ),
-                network_callback,
-            }),
-        })
+        Ok(Arc::new_cyclic(|this| Self {
+            this: Weak::clone(this),
+            network_connected: AtomicBool::new(true),
+            user_db_path,
+            key_chain,
+            session_stash: stash,
+            user_db_initializers: initializers,
+            api: Proton::new(
+                ApiConfig {
+                    base_url: api_url.to_string(),
+                    ..Default::default()
+                },
+                None,
+                Arc::new(AsyncRwLock::new(None)),
+            ),
+            network_callback,
+        }))
     }
 
     /// Get available sessions.
@@ -129,7 +125,7 @@ impl Context {
     /// # Errors
     /// Returns error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> Result<Vec<EncryptedUserSession>, StashError> {
-        EncryptedUserSession::find(String::new(), vec![], &self.inner.session_stash, None).await
+        EncryptedUserSession::find(String::new(), vec![], &self.session_stash, None).await
     }
 
     /// Create a new login flow for a new user.
@@ -138,14 +134,10 @@ impl Context {
     pub fn new_login_flow(&self) -> CoreContextResult<Flow> {
         // Check if we have an encryption key
         let _ = self.get_encryption_key()?;
-        let _core_session = Session::new(
-            None,
-            self.inner.session_stash.clone(),
-            self.inner.key_chain.clone(),
-        );
+        let _core_session = Session::new(None, self.session_stash.clone(), self.key_chain.clone());
 
         let session = ApiCoreSession::new(ApiConfig {
-            base_url: self.inner.api.base_url().to_string(),
+            base_url: self.api.base_url().to_string(),
             ..Default::default()
         });
         Ok(Flow::new(session))
@@ -193,12 +185,12 @@ impl Context {
         let user_id = session.user_id.clone();
         let _core_session = Session::new(
             Some(decrypted_session),
-            self.inner.session_stash.clone(),
-            self.inner.key_chain.clone(),
+            self.session_stash.clone(),
+            self.key_chain.clone(),
         );
         debug!("Creating session");
         let session = ApiCoreSession::new(ApiConfig {
-            base_url: self.inner.api.base_url().to_string(),
+            base_url: self.api.base_url().to_string(),
             ..Default::default()
         });
         let ctx = UserContext::new(session, stash, user_id);
@@ -206,10 +198,10 @@ impl Context {
     }
 
     pub fn set_network_connected(&self, value: bool) {
-        let old_value = self.inner.network_connected.load(Ordering::Acquire);
+        let old_value = self.network_connected.load(Ordering::Acquire);
         if old_value != value {
-            self.inner.network_connected.store(value, Ordering::Release);
-            if let Some(cb) = &self.inner.network_callback {
+            self.network_connected.store(value, Ordering::Release);
+            if let Some(cb) = &self.network_callback {
                 cb.on_network_status_changed(value);
             }
         }
@@ -220,7 +212,7 @@ impl Context {
     /// # Errors
     /// Returns error if data can not be removed or the db operation failed.
     pub async fn delete_session(&self, session: &EncryptedUserSession) -> CoreContextResult<()> {
-        let db_path = get_user_db_path(&self.inner.user_db_path, &session.user_id);
+        let db_path = get_user_db_path(&self.user_db_path, &session.user_id);
         std::fs::remove_file(db_path).map_err(|e| {
             let e = anyhow!("Failed to erase user database: {e}");
             error!("{e}");
@@ -229,8 +221,7 @@ impl Context {
 
         //TODO(ET-231): User cache paths.
 
-        self.inner
-            .session_stash
+        self.session_stash
             .execute(
                 "DELETE FROM core_sessions WHERE user_id =?",
                 params![session.user_id.clone()],
@@ -247,16 +238,11 @@ impl Context {
     /// Check whether a network connection is available.
     #[must_use]
     pub fn is_network_corrected(&self) -> bool {
-        self.inner.network_connected.load(Ordering::Relaxed)
+        self.network_connected.load(Ordering::Relaxed)
     }
 
     fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
-        let Some(key) = self
-            .inner
-            .key_chain
-            .get()
-            .map_err(CoreContextError::KeyChain)?
-        else {
+        let Some(key) = self.key_chain.get().map_err(CoreContextError::KeyChain)? else {
             return Err(CoreContextError::KeyChainHasNoKey);
         };
         let key = SecretString::new(key);
@@ -264,14 +250,14 @@ impl Context {
     }
 
     async fn new_user_db_pool(&self, user_id: &RemoteId) -> Result<Stash, MigratorError> {
-        let user_db_path = get_user_db_path(&self.inner.user_db_path, user_id);
+        let user_db_path = get_user_db_path(&self.user_db_path, user_id);
         let stash = Stash::new(Some(&user_db_path))?;
         debug!("initializing core database");
         // initialize core db
         migrate_core_db(&stash).await?;
         debug!("initializing user ");
         // initialize user db
-        for initializer in &self.inner.user_db_initializers {
+        for initializer in &self.user_db_initializers {
             initializer.initialize(&stash)?;
         }
 
