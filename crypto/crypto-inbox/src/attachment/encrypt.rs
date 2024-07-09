@@ -76,6 +76,10 @@ pub trait EncryptableAttachment {
     /// * `pgp_provider`    - The pgp provider instance from `proton_crypto`.
     /// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
     /// * `signing_keys`    - The signing keys of the user that the attachment is signed with.
+    ///
+    /// # Errors
+    ///
+    /// One of encryption, signing, or encoding steps fails.
     fn attachment_encrypt_and_sign<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
@@ -103,6 +107,10 @@ pub trait EncryptableAttachment {
 /// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
 /// * `signing_keys`    - The signing keys of the user that the attachment is signed with.
 /// * `attachment_data` - The attachment data to encrypt.
+///
+/// # Errors
+///
+/// One of encryption, signing, or encoding steps fails.
 pub fn encrypt<Provider: PGPProviderSync>(
     pgp_provider: &Provider,
     encryption_keys: &[impl AsPublicKeyRef<Provider::PublicKey>],
@@ -169,6 +177,10 @@ pub fn encrypt<Provider: PGPProviderSync>(
 /// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
 /// * `signing_keys`    - The signing keys of the user that the attachment is signed with.
 /// * `attachment_data` - A writer where the encrypted attachment is written to.
+///
+/// # Errors
+///
+/// One of encryption, signing, or encoding steps fails.
 pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
     pgp_provider: &'a Provider,
     encryption_keys: &'a [impl AsPublicKeyRef<Provider::PublicKey>],
@@ -236,6 +248,10 @@ pub fn encrypt_and_sign_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
 /// * `pgp_provider`    - The pgp provider instance from `proton_crypto`.
 /// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
 /// * `attachment_data` - A writer where the encrypted attachment is written to.
+///
+/// # Errors
+///
+/// One of encryption, signing, or encoding steps fails.
 pub fn encrypt_to_writer<'a, Provider: PGPProviderSync, W: Write + 'a>(
     pgp_provider: &'a Provider,
     encryption_keys: &'a [impl AsPublicKeyRef<Provider::PublicKey>],
@@ -412,6 +428,9 @@ where
     /// Finalizes the encryption and returns the `EncryptedAttachmentMetadata`.
     ///
     /// Must be called once all attachment data has been written to this writer.
+    /// # Errors
+    ///
+    /// Writing final encryption and signature output fails.
     pub fn finalize(self) -> Result<EncryptedAttachmentMetadata, AttachmentEncryptionError> {
         let detached_signature_bytes = self
             .writer
@@ -459,6 +478,10 @@ impl<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>>
     /// Finalizes the encryption and returns the [`EncryptedAttachmentMetadata`].
     ///
     /// Must be called once all attachment data has been written to this writer.
+    ///
+    /// # Errors
+    ///
+    /// Writing final encryption output fails.
     pub fn finalize(self) -> Result<EncryptedAttachmentMetadata, AttachmentEncryptionError> {
         self.1
             .finalize()

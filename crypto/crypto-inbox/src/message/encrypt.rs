@@ -40,7 +40,18 @@ pub trait EncryptableDraft {
     /// Borrows the plaintext, unencrypted, body of the draft message.
     fn plaintext_message_body(&self) -> &[u8];
 
-    /// Encrypts and signs the draft body using the provided address key
+    /// Encrypts and signs the draft body using the provided `address_key`.
+    ///
+    /// The output is an armored `OpenPGP` message encoding the encrypted draft.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The pgp provider instance from [`proton_crypto`].
+    /// * `address_key`  - The encryption keys of the recipients to encrypt the attachment to.
+    ///
+    /// # Errors
+    ///
+    /// The encryption or encoding fails.
     fn encrypt_draft_body<Provider: PGPProviderSync>(
         &self,
         provider: &Provider,
