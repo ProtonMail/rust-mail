@@ -1,50 +1,81 @@
-//! Proton Mail UTM Stripper
-//! A simple library to remove UTM parameters from URLs.
-
+//! This module provides features to strip UTM trackers from an URL as well as a transformer
+//! pass which strips all UTM trackers from HTML links.
+//!
+//! UTM Codes (or UTM Tags) are a way to track traffic that is coming to your website from a
+//! specific platform. UTM codes have two components: the tracking variable and the UTM parameters.
+//! There are five parameters that you can use for tracking traffic. These parameters are source,
+//! medium, campaign, term (keyword), and content.
+//!
+use kuchikiki::NodeRef;
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use url::Url;
 
-/// Removes UTM parameters from a URL Object
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("Invalid Selector")]
+    Selector,
+    #[error("Url: {0}")]
+    Url(#[from] url::ParseError),
+}
+
+/// Strip UTM trackers from all HTML links in the given `document`.
+///
+/// # Errors
+/// Returns error if an HTML href attribute is not a valid url.
+pub fn strip(document: &NodeRef) -> Result<String, Error> {
+    let select = document.select("[href]").map_err(|()| Error::Selector)?;
+
+    for element in select {
+        let mut attributes = element.attributes.borrow_mut();
+        let Some(value) = attributes.get_mut("href") else {
+            continue;
+        };
+
+        let new_value = strip_from_string(value)?;
+        *value = new_value.to_string();
+    }
+
+    Ok(document.to_string())
+}
+
+/// Removes UTM parameters from a given `url`.
 ///
 /// # Example
 ///
 /// ```
 /// use url::Url;
-/// use proton_mail_utm_stripper::remove_utm_parameters_from_url;
+/// use proton_mail_html_transformer::utm::strip_from_url;
 ///
 /// if let Ok(url) = Url::parse("https://example.com/?utm_source=example") {
-///     let new_url = remove_utm_parameters_from_url(&url);
+///     let new_url = strip_from_url(&url);
 ///     assert_eq!(new_url.as_str(), "https://example.com/");
 /// }
 /// ```
 ///
-/// # Arguments
-///
-/// * `entry_url` - The Url to remove UTM parameters from.
 #[must_use]
-pub fn remove_utm_parameters_from_url(entry_url: &Url) -> Url {
+pub fn strip_from_url(url: &Url) -> Url {
     // TODO: [ET-84] We should not clone the URL, but we need to do it for now.
-    let mut url = entry_url.clone();
-    url.set_query(None);
+    let mut stripped_url = url.clone();
+    stripped_url.set_query(None);
 
-    for (key, value) in entry_url.query_pairs() {
+    for (key, value) in url.query_pairs() {
         if !GLOBAL_RULES.contains(&key.to_lowercase().as_ref()) {
-            url.query_pairs_mut().append_pair(&key, &value);
+            stripped_url.query_pairs_mut().append_pair(&key, &value);
         }
     }
 
-    url
+    stripped_url
 }
 
-/// Removes UTM parameters from a string.
+/// Removes UTM parameters from an `url` defined as a string.
 ///
 /// # Errors
 ///
-/// Will return `Err` if `entry_url` cannot be parsed into a `Url`
-pub fn remove_utm_parameters_from_string(entry_url: &str) -> Result<Url, url::ParseError> {
-    let url = Url::parse(entry_url)?;
-    Ok(remove_utm_parameters_from_url(&url))
+/// Will return error if `url` cannot be parsed into an [`Url`]
+pub fn strip_from_string(url: &str) -> Result<Url, url::ParseError> {
+    let url = Url::parse(url)?;
+    Ok(strip_from_url(&url))
 }
 
 lazy_static! {
@@ -178,17 +209,42 @@ lazy_static! {
     ]);
 }
 
-mod tests {
-    #[test]
-    fn test_remove_utm_parameters() {
-        use crate::remove_utm_parameters_from_string;
+#[test]
+fn remove_from_url() {
+    let url = "https://example.com/?UTM_SOURCE=example&utm_medium=example&utm_campaign=example&UserID=123";
+    let new_url = strip_from_string(url).unwrap();
+    assert_eq!(new_url.as_str(), "https://example.com/?UserID=123");
 
-        let url = "https://example.com/?UTM_SOURCE=example&utm_medium=example&utm_campaign=example&UserID=123";
-        let new_url = remove_utm_parameters_from_string(url).unwrap();
-        assert_eq!(new_url.as_str(), "https://example.com/?UserID=123");
+    let url = "panda"; // Invalid URL
+    let new_url = strip_from_string(url);
+    assert_eq!(new_url.is_err(), true);
+}
 
-        let url = "panda"; // Invalid URL
-        let new_url = remove_utm_parameters_from_string(url);
-        assert_eq!(new_url.is_err(), true);
-    }
+#[test]
+fn remove_with_transformer() {
+    use crate::{Options, Transformer};
+    use kuchikiki::traits::*;
+    let input = r##"
+<html>
+    <body>
+        <a href="https://ads.com?utm_source=tracker">bar</a>
+    </body>
+</html>
+"##;
+
+    let expected = r##"
+<html>
+    <body>
+        <a href="https://ads.com/">bar</a>
+    </body>
+</html>
+"##;
+
+    // Parse and print so the results have the same formatting.
+    let expected = kuchikiki::parse_html().one(expected).to_string();
+
+    // Reparse html so that it generates the same output format.
+    let transformer = Transformer::new(Options::new().strip_utm());
+    let output = transformer.transform_to_string(input).unwrap();
+    assert_eq!(expected, output);
 }

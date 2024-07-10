@@ -1,0 +1,15 @@
+[package]
+name = "proton-mail-html-transformer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+scraper.workspace = true
+url.workspace = true
+html5ever = "0.27"
+thiserror.workspace = true
+kuchikiki = "0.8.2"
+lazy_static.workspace = true
+
+[lints]
+workspace = true
