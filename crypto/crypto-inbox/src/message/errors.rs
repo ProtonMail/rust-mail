@@ -14,6 +14,8 @@ pub enum MessageError {
     Decryption(CryptoError),
     #[error("Problem with provided key: {0}")]
     KeyProblem(CryptoError),
+    #[error("Message import failed: {0}")]
+    ImportProblem(CryptoError),
     #[error("Failed to decode message body to utf-8 string: {0}")]
     BodyDecode(#[from] Utf8Error),
     #[error("Failed to decode mime message body: {0}")]
