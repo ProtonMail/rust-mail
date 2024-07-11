@@ -28,6 +28,7 @@ use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 
 // NOTE: each new transformation pass should be its own module.
+mod ios;
 pub mod utm;
 
 // Re-export in order to access node type.
@@ -37,20 +38,20 @@ pub use kuchikiki;
 ///
 /// By default, other than the sanitization stage, all the remaining stages need to
 /// be enabled manually.
+#[derive(Default)]
 pub struct Options {
     strip_utm: bool,
+    inject_ios_content_size: bool,
 }
 
-impl Default for Options {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 impl Options {
     /// Create a new instance.
     #[must_use]
     pub fn new() -> Self {
-        Self { strip_utm: false }
+        Self {
+            strip_utm: false,
+            inject_ios_content_size: false,
+        }
     }
 
     /// Enable stripping of UTM tracking codes.
@@ -61,6 +62,15 @@ impl Options {
         self.strip_utm = true;
         self
     }
+
+    /// Inject metadata for iOS web view.
+    ///
+    /// See [`ios::inject_content_size()`] for more details.
+    #[must_use]
+    pub fn inject_ios_content_size(mut self) -> Self {
+        self.inject_ios_content_size = true;
+        self
+    }
 }
 
 /// Errors that may occur during transformation.
@@ -69,6 +79,9 @@ pub enum Error {
     /// Error occurred during UTM pass.
     #[error("Utm: {0}")]
     Utm(#[from] utm::Error),
+    /// Error occurred during iOS pass.
+    #[error("iOS: {0}")]
+    Ios(#[from] ios::Error),
 }
 
 /// HTML content transformer.
@@ -118,6 +131,10 @@ impl Transformer {
     pub fn transform_parsed(&self, document: NodeRef) -> Result<NodeRef, Error> {
         if self.options.strip_utm {
             utm::strip(&document)?;
+        }
+
+        if self.options.inject_ios_content_size {
+            ios::inject_content_size(&document)?;
         }
 
         Ok(document)
