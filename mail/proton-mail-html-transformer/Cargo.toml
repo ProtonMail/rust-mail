@@ -6,9 +6,10 @@ edition = "2021"
 [dependencies]
 scraper.workspace = true
 url.workspace = true
-html5ever = "0.27"
 thiserror.workspace = true
-kuchikiki = "0.8.2"
+kuchikiki = "=0.8.2"
+# kuchikiki requires this verion of html5ever at this time.
+html5ever = "=0.26"
 lazy_static.workspace = true
 
 [lints]
