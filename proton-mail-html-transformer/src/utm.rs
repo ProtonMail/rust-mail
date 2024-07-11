@@ -22,6 +22,7 @@ pub enum Error {
 /// Strip UTM trackers from all HTML links in the given `document`.
 ///
 /// # Errors
+///
 /// Returns error if an HTML href attribute is not a valid url.
 pub fn strip(document: &NodeRef) -> Result<String, Error> {
     let select = document.select("[href]").map_err(|()| Error::Selector)?;
@@ -243,8 +244,11 @@ fn remove_with_transformer() {
     // Parse and print so the results have the same formatting.
     let expected = kuchikiki::parse_html().one(expected).to_string();
 
-    // Reparse html so that it generates the same output format.
-    let transformer = Transformer::new(Options::new().strip_utm());
-    let output = transformer.transform_to_string(input).unwrap();
+    let options = Options {
+        strip_utm: true,
+        inject_ios_content_size: false,
+    };
+    let transformer = Transformer::new(options);
+    let output = transformer.transform(input).unwrap().to_string();
     assert_eq!(expected, output);
 }

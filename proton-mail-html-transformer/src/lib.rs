@@ -10,17 +10,21 @@
 //!
 //! ```
 //! use proton_mail_html_transformer::{Options, Transformer};
+//!
 //! let html = "..";
+//!
 //! // Create the transformed.
-//! let transformer = Transformer::new(Options::new().strip_utm());
+//! let options = Options {
+//!     strip_utm: true,
+//!     inject_ios_content_size: false
+//! };
+//! let transformer = Transformer::new(options);
 //!
 //! // Retrieve the parsed and transformed html.
 //! let parsed = transformer.transform(html).unwrap();
 //! // Convert back to textual representation
 //! let transformed_html = parsed.to_string();
 //!
-//! // Equivalent step that directly converts to String.
-//! let transformed_html = transformer.transform_to_string(html);
 //! ```
 //!
 
@@ -31,46 +35,20 @@ use kuchikiki::NodeRef;
 mod ios;
 pub mod utm;
 
-// Re-export in order to access node type.
-pub use kuchikiki;
-
 /// Control the transformer behavior by selecting which transformations to apply.
 ///
 /// By default, other than the sanitization stage, all the remaining stages need to
 /// be enabled manually.
 #[derive(Default)]
 pub struct Options {
-    strip_utm: bool,
-    inject_ios_content_size: bool,
-}
-
-impl Options {
-    /// Create a new instance.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            strip_utm: false,
-            inject_ios_content_size: false,
-        }
-    }
-
-    /// Enable stripping of UTM tracking codes.
+    /// If true, enable stripping of UTM tracking codes.
     ///
     /// See [`utm::strip()`] for more details.
-    #[must_use]
-    pub fn strip_utm(mut self) -> Self {
-        self.strip_utm = true;
-        self
-    }
-
-    /// Inject metadata for iOS web view.
+    pub strip_utm: bool,
+    /// If true, inject metadata for iOS web view.
     ///
     /// See [`ios::inject_content_size()`] for more details.
-    #[must_use]
-    pub fn inject_ios_content_size(mut self) -> Self {
-        self.inject_ios_content_size = true;
-        self
-    }
+    pub inject_ios_content_size: bool,
 }
 
 /// Errors that may occur during transformation.
@@ -88,11 +66,12 @@ pub enum Error {
 ///
 /// Behavior of the transformer is controlled via the [`Options`] type.
 pub struct Transformer {
+    /// Transform options.
     options: Options,
 }
 
 impl Transformer {
-    /// Create a new transform with the given `options`.
+    /// Create a new [`Transformer`] with the given `options`.
     #[must_use]
     pub fn new(options: Options) -> Self {
         Self { options }
@@ -104,21 +83,12 @@ impl Transformer {
     /// transformations and/or inspection.
     ///
     /// # Errors
+    ///
     /// Returns error if any of the transformation passes fail.
     pub fn transform(&self, document: &str) -> Result<NodeRef, Error> {
         let document = kuchikiki::parse_html().one(document);
 
         self.transform_parsed(document)
-    }
-
-    /// Transform an HTML `document`.
-    ///
-    /// This method returns the parsed HTML content as an HTML string.
-    ///
-    /// # Errors
-    /// Returns error if any of the transformation passes fail.
-    pub fn transform_to_string(&self, str: &str) -> Result<String, Error> {
-        self.transform(str).map(|v| v.to_string())
     }
 
     /// Transform a previously parsed HTML `document`.
@@ -127,6 +97,7 @@ impl Transformer {
     /// transformations and/or inspection.
     ///
     /// # Errors
+    ///
     /// Returns error if any of the transformation passes fail.
     pub fn transform_parsed(&self, document: NodeRef) -> Result<NodeRef, Error> {
         if self.options.strip_utm {
