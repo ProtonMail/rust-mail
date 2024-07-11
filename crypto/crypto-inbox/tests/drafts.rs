@@ -1,6 +1,9 @@
-use proton_crypto_account::keys::{DecryptedAddressKey, KeyFlag, KeyId};
 use proton_crypto_inbox::message::{DecryptableMessage, EncryptableDraft};
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
+
+mod common;
+use common::create_account_unlocked_address_key;
+
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 
 const PRIVATE_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -68,28 +71,11 @@ impl DecryptableMessage for TestMessage {
 #[test]
 fn test_encrypt_and_decrypt_draft() {
     let pgp_provider = new_pgp_provider();
-    let private_key = pgp_provider
-        .private_key_import(
-            PRIVATE_KEY.as_bytes(),
-            "password".as_bytes(),
-            DataEncoding::Armor,
-        )
-        .unwrap();
-    let public_key = pgp_provider
-        .private_key_to_public_key(&private_key)
-        .unwrap();
     let message = "hello_world";
     let draft = TestDraft(message.as_bytes().to_owned());
 
-    let fourty_two: u32 = 42;
-
-    let unlocked_address_key = DecryptedAddressKey {
-        id: KeyId("hello".to_owned()),
-        flags: KeyFlag::from(fourty_two),
-        primary: true,
-        private_key,
-        public_key,
-    };
+    let unlocked_address_key =
+        create_account_unlocked_address_key(&pgp_provider, PRIVATE_KEY, "password");
 
     let encrypted_draft = String::from_utf8(
         draft
@@ -110,28 +96,11 @@ fn test_encrypt_and_decrypt_draft() {
 #[test]
 fn test_draft_decryption_fails_if_wrong_key_used() {
     let pgp_provider = new_pgp_provider();
-    let private_key = pgp_provider
-        .private_key_import(
-            PRIVATE_KEY.as_bytes(),
-            "password".as_bytes(),
-            DataEncoding::Armor,
-        )
-        .unwrap();
-    let public_key = pgp_provider
-        .private_key_to_public_key(&private_key)
-        .unwrap();
     let message = "hello_world";
     let draft = TestDraft(message.as_bytes().to_owned());
 
-    let fourty_two: u32 = 42;
-
-    let unlocked_address_key = DecryptedAddressKey {
-        id: KeyId("hello".to_owned()),
-        flags: KeyFlag::from(fourty_two),
-        primary: true,
-        private_key,
-        public_key,
-    };
+    let unlocked_address_key =
+        create_account_unlocked_address_key(&pgp_provider, PRIVATE_KEY, "password");
 
     let encrypted_draft = String::from_utf8(
         draft

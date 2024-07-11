@@ -20,4 +20,8 @@ pub enum MessageError {
     NotSupportedMime,
     #[error("Missing message identifier for mime decryption")]
     MissingMessageID,
+    #[error("Invalid session key")]
+    InvalidSessionKey,
+    #[error("Problem with the provided session key: {0}")]
+    SessionKeyProblem(CryptoError),
 }

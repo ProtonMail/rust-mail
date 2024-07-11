@@ -1,4 +1,7 @@
-use proton_crypto_account::proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey};
+use proton_crypto_account::{
+    keys::{DecryptedAddressKey, KeyFlag, KeyId, UnlockedAddressKey},
+    proton_crypto::crypto::{AsPublicKeyRef, PrivateKey, PublicKey},
+};
 use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
 
 pub const TEST_DECRYPTION_KEY: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -47,13 +50,33 @@ impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
     }
 }
 
+#[allow(clippy::missing_panics_doc, dead_code)]
 pub fn get_test_address_keys<T: PGPProviderSync>(
     pgp_provider: &T,
 ) -> Vec<TestAddressKey<T::PrivateKey>> {
     get_test_address_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
 }
 
-#[allow(clippy::missing_panics_doc)]
+#[allow(clippy::missing_panics_doc, dead_code)]
+pub fn create_account_unlocked_address_key<T: PGPProviderSync>(
+    provider: &T,
+    source: &str,
+    passphrase: &str,
+) -> UnlockedAddressKey<T> {
+    let private_key = provider
+        .private_key_import(source, passphrase, DataEncoding::Armor)
+        .unwrap();
+    let public_key = provider.private_key_to_public_key(&private_key).unwrap();
+    DecryptedAddressKey {
+        id: KeyId::from("address key"),
+        private_key,
+        public_key,
+        flags: KeyFlag::default(),
+        primary: true,
+    }
+}
+
+#[allow(clippy::missing_panics_doc, dead_code)]
 pub fn get_test_address_key_source<T: PGPProviderSync>(
     pgp_provider: &T,
     source: &str,
@@ -65,6 +88,7 @@ pub fn get_test_address_key_source<T: PGPProviderSync>(
     vec![TestAddressKey(decryption_key)]
 }
 
+#[allow(clippy::missing_panics_doc, dead_code)]
 pub fn get_test_public_address_keys<T: PGPProviderSync>(
     pgp_provider: &T,
 ) -> Vec<TestAddressPublicKey<T::PublicKey>> {

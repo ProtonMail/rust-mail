@@ -11,6 +11,7 @@ proton-crypto-inbox-mime = { workspace = true }
 thiserror = { workspace = true }
 serde = { version="1", features = ["derive"]}
 base64 = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 serde_json = "1.0"
