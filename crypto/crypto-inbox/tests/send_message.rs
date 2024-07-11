@@ -1,5 +1,4 @@
-use proton_crypto_account::keys::{KeyFlag, KeyId};
-use proton_crypto_inbox::message::{EncryptableDraft, EncryptableMessage};
+use proton_crypto_inbox::message::{GettablePGPMessage, SessionKeyAndDataPacketsExtractable};
 use proton_crypto_inbox::proton_crypto::crypto::{
     DataEncoding, Encryptor, EncryptorSync, PGPProviderSync, SessionKey, SessionKeyAlgorithm,
 };
@@ -27,11 +26,13 @@ qnK1SNfocPNfh//OecgiqA4=
 
 struct TestEncryptedDraft(pub String);
 
-impl EncryptableMessage for TestEncryptedDraft {
-    fn encrypted_draft(&self) -> &[u8] {
+impl GettablePGPMessage for TestEncryptedDraft {
+    fn pgp_message(&self) -> &[u8] {
         self.0.as_bytes()
     }
 }
+
+impl SessionKeyAndDataPacketsExtractable for TestEncryptedDraft {}
 
 #[test]
 fn test_extract_keys_and_data_from_draft() {

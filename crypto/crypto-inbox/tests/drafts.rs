@@ -1,5 +1,7 @@
-use proton_crypto_inbox::message::{DecryptableMessage, EncryptableDraft};
-use proton_crypto_inbox::proton_crypto::crypto::{DataEncoding, PGPProviderSync};
+use proton_crypto_inbox::{
+    message::{DecryptableMessage, EncryptableDraft, GettablePGPMessage},
+    proton_crypto::crypto::{DataEncoding, PGPProviderSync},
+};
 
 mod common;
 use common::create_account_unlocked_address_key;
@@ -54,13 +56,15 @@ impl EncryptableDraft for TestDraft {
 
 struct TestMessage(pub bool, pub String);
 
+impl GettablePGPMessage for TestMessage {
+    fn pgp_message(&self) -> &[u8] {
+        self.1.as_bytes()
+    }
+}
+
 impl DecryptableMessage for TestMessage {
     fn message_is_mime(&self) -> bool {
         self.0
-    }
-
-    fn message_encrypted_body(&self) -> &[u8] {
-        self.1.as_bytes()
     }
 
     fn message_id(&self) -> Option<&str> {

@@ -5,6 +5,7 @@ use proton_crypto_account::proton_crypto::crypto::{
 use proton_crypto_inbox_mime::{MimeProcessor, ProcessMime, ProcessedMessage};
 
 use super::utils::to_sanitized_string;
+use super::GettablePGPMessage;
 use super::MessageError;
 use super::VerifiableBody;
 
@@ -43,7 +44,7 @@ impl DecryptedBody {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub trait DecryptableMessage {
+pub trait DecryptableMessage: GettablePGPMessage {
     /// Borrows the unique id of the message.
     fn message_id(&self) -> Option<&str>;
     /// Indicates wether the message is mime.
@@ -52,8 +53,6 @@ pub trait DecryptableMessage {
     ///
     /// Must return true if the `MIMEType` of the message is `multipart/mixed`.
     fn message_is_mime(&self) -> bool;
-    /// Returns a reference to the encrypted body of the message.
-    fn message_encrypted_body(&self) -> &[u8];
     /// Decrypts the body of the message.
     ///
     /// This method does not perform signature verification, but returns a
@@ -68,11 +67,11 @@ pub trait DecryptableMessage {
             decrypt_mime(
                 pgp_provider,
                 decryption_keys,
-                self.message_encrypted_body(),
+                self.pgp_message(),
                 self.message_id().ok_or(MessageError::MissingMessageID)?,
             )
         } else {
-            decrypt_normal(pgp_provider, decryption_keys, self.message_encrypted_body())
+            decrypt_normal(pgp_provider, decryption_keys, self.pgp_message())
         }
     }
     /// Decrypts the body of the message with a password (EO encrypt-once feature).
@@ -85,7 +84,7 @@ pub trait DecryptableMessage {
             .new_decryptor()
             .with_passphrase(passphrase.as_ref())
             .with_ut8_sanitization()
-            .decrypt(self.message_encrypted_body(), DataEncoding::Armor)
+            .decrypt(self.pgp_message(), DataEncoding::Armor)
             .map_err(MessageError::Decryption)?;
         let decoded_message = std::str::from_utf8(decrypted_message.as_bytes())?;
         Ok(DecryptedBody::Plain(decoded_message.to_owned()))

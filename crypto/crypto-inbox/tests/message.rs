@@ -1,4 +1,4 @@
-use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
+use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody, GettablePGPMessage};
 use proton_crypto_inbox::proton_crypto::crypto::VerificationError;
 
 mod common;
@@ -312,13 +312,15 @@ const TEST_EXPECTED_BODY_MIME_GO: &str = r"Pak
 
 struct TestMessage(pub bool, pub String);
 
+impl GettablePGPMessage for TestMessage {
+    fn pgp_message(&self) -> &[u8] {
+        self.1.as_bytes()
+    }
+}
+
 impl DecryptableMessage for TestMessage {
     fn message_is_mime(&self) -> bool {
         self.0
-    }
-
-    fn message_encrypted_body(&self) -> &[u8] {
-        self.1.as_bytes()
     }
 
     fn message_id(&self) -> Option<&str> {

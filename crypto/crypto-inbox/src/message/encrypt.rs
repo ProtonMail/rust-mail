@@ -8,6 +8,8 @@ use proton_crypto_account::{
 
 use crate::message::errors::MessageError;
 
+use super::GettablePGPMessage;
+
 pub trait EncryptableDraft {
     // Borrows the plaintext, unencrypted, body of the draft message
     fn plaintext_message_body(&self) -> &[u8];
@@ -28,16 +30,14 @@ pub trait EncryptableDraft {
     }
 }
 
-pub trait EncryptableMessage {
-    fn encrypted_draft(&self) -> &[u8];
-
+pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
     fn extract_session_key_and_data_packets<T: PGPProviderSync>(
         &self,
         provider: &T,
         decryption_keys: &[impl AsRef<T::PrivateKey>],
     ) -> Result<(T::SessionKey, Vec<u8>), MessageError> {
         let message = provider
-            .pgp_message_import(self.encrypted_draft(), DataEncoding::Armor)
+            .pgp_message_import(self.pgp_message(), DataEncoding::Armor)
             .map_err(MessageError::ImportProblem)?;
 
         let key_packets = message.as_key_packets().to_owned();
