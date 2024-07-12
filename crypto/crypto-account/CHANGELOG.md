@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - ET-781: encrypt and sign vcards (#81)
-- Change locking variant of an existing key (#82)
+- Change locking variant of an existing key (#80)
+- Generate singed key lists (SKL) (#82)
 
 ## [0.4.0] - 2024-06-26
 
