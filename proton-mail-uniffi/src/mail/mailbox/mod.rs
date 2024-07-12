@@ -66,6 +66,8 @@ pub enum MailboxError {
     DB(#[from] proton_mail_common::db::DBError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(anyhow::Error),
+    #[error("Html Transform: {0}")]
+    HtmlTransformer(#[from] proton_mail_common::exports::proton_mail_html_transformer::Error),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -216,6 +218,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             proton_mail_common::MailboxError::ConversationHasNoMessages(e) => {
                 Self::ConversationHasNoMessages(e)
             }
+            proton_mail_common::MailboxError::HtmlTransformer(e) => Self::HtmlTransformer(e),
         }
     }
 }

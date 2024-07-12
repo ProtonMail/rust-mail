@@ -53,21 +53,21 @@ pub struct DecryptedMessageBody {
 impl DecryptedMessageBody {
     /// The message id of which this body belongs to.
     pub fn id(&self) -> u64 {
-        self.message.metadata.id.value()
+        self.message.metadata().id.value()
     }
 
     /// The mime type of the message.
     pub fn mime_type(&self) -> MimeType {
-        self.message.metadata.mime_type
+        self.message.metadata().mime_type
     }
     /// Returns the decrypted body of the message.
     pub fn body(&self) -> String {
-        self.message.body.clone()
+        self.message.body().to_owned()
     }
 
     /// Returns the header strings associated with the message.
     pub fn header_string(&self) -> String {
-        self.message.metadata.header.clone()
+        self.message.metadata().header.clone()
     }
 
     /// Retrieve a parsed header value for a given `key`.
