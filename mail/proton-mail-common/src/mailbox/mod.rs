@@ -67,6 +67,8 @@ pub enum MailboxError {
     DB(#[from] crate::db::DBError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
+    #[error("Html Transform: {0}")]
+    HtmlTransformer(#[from] proton_mail_html_transformer::Error),
 }
 
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:

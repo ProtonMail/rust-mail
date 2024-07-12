@@ -24,6 +24,7 @@ pub mod exports {
     pub use proton_api_mail::exports::*;
     pub use proton_core_common;
     pub use proton_event_loop;
+    pub use proton_mail_html_transformer;
 }
 
 #[cfg(feature = "uniffi")]

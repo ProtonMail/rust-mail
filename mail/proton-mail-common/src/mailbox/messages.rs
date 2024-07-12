@@ -9,6 +9,7 @@ use crate::{
 use proton_api_mail::domain::{MailSettingsViewMode, MimeType};
 use proton_api_mail::exports::anyhow::anyhow;
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
+use proton_mail_html_transformer::{Options, Transformer};
 
 impl Mailbox {
     /// Create a new live query for messages.
@@ -96,16 +97,15 @@ impl Mailbox {
             })?;
 
         match decrypted_body {
-            DecryptedBody::Plain(body) => Ok(DecryptedMessageBody {
-                metadata: encrypted_msg.metadata,
-                body,
-            }),
+            DecryptedBody::Plain(body) => {
+                Ok(DecryptedMessageBody::new(encrypted_msg.metadata, body)?)
+            }
             DecryptedBody::Mime(multipart) => {
                 //TODO(ET-263): Handle multipart messages.
-                Ok(DecryptedMessageBody {
-                    metadata: encrypted_msg.metadata,
-                    body: multipart.body,
-                })
+                Ok(DecryptedMessageBody::new(
+                    encrypted_msg.metadata,
+                    multipart.body,
+                )?)
             }
         }
     }
@@ -114,9 +114,9 @@ impl Mailbox {
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
     /// Metadata associated with the message body
-    pub metadata: LocalMessageBodyMetadata,
+    metadata: LocalMessageBodyMetadata,
     /// The decrypted message contents.
-    pub body: String,
+    body: String,
 }
 
 /// A message parsed header value can either be a string or an array of strings.
@@ -127,6 +127,29 @@ pub enum ParsedHeaderValue {
 }
 
 impl DecryptedMessageBody {
+    pub fn new(
+        metadata: LocalMessageBodyMetadata,
+        body: String,
+    ) -> Result<Self, proton_mail_html_transformer::Error> {
+        if !matches!(metadata.mime_type, MimeType::TextHTML) {
+            return Ok(Self { metadata, body });
+        }
+        // TODO(ET-384): Preserve original html string and parsed result
+        // so it can be modified on demand without having to reparse.
+        let options = Options {
+            strip_utm: true,
+            #[cfg(target_os = "ios")]
+            inject_ios_content_size: true,
+            #[cfg(not(target_os = "ios"))]
+            inject_ios_content_size: false,
+        };
+
+        let transformer = Transformer::new(options);
+        let body = transformer.transform(&body)?.to_string();
+
+        Ok(Self { metadata, body })
+    }
+
     /// Retrieve a parsed header value for a given `key`.
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
         let value = self.metadata.parsed_headers.get(key)?;
@@ -154,6 +177,18 @@ impl DecryptedMessageBody {
                 None
             }
         }
+    }
+
+    /// Access the message's body.
+    #[inline]
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+
+    /// Access the message's body metadata.
+    #[inline]
+    pub fn metadata(&self) -> &LocalMessageBodyMetadata {
+        &self.metadata
     }
 }
 
