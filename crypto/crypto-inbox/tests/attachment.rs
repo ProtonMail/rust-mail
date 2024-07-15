@@ -9,7 +9,7 @@ use proton_crypto_inbox::attachment::{
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 
 mod common;
-use common::{get_test_address_keys, get_test_public_address_keys};
+use common::{create_test_recipient_keys, get_test_address_keys, get_test_public_address_keys};
 
 const TEST_ATTACHMENT_METADATA_KP: &str = "wV4Di5gBfuEszfESAQdAUGm56qPuhgLjuStIEcL07fKh10ptOYc0UnB2kTwqqhMw2ivOpsuDSOM17OPsxG35znCodjKBxM1O+DeFuYhel8TsuJjNxKltBgv/jVs48LGw";
 
@@ -161,6 +161,82 @@ fn test_attachment_decrypt_stream_encrypted_signature() {
     test_attachment_decrypt_stream_helper(&attachment_metadata);
 }
 
+#[test]
+fn test_attachment_encrypt_decrypt() {
+    test_attachment_encrypt_decrypt_helper(false);
+}
+
+#[test]
+fn test_attachment_encrypt_decrypt_encrypted_signature() {
+    test_attachment_encrypt_decrypt_helper(true);
+}
+
+#[test]
+fn test_attachment_re_encrypt() {
+    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+
+    let priv_keys = get_test_address_keys(&pgp_provider);
+    let pub_keys: Vec<_> = priv_keys
+        .iter()
+        .map(|key| {
+            pgp_provider
+                .private_key_to_public_key(key.as_ref())
+                .unwrap()
+        })
+        .collect();
+
+    let encrypted_attachment = encrypt(
+        &pgp_provider,
+        &pub_keys,
+        &priv_keys,
+        TEST_ATTACHMENT_PLAIN_DATA,
+    )
+    .unwrap();
+
+    let attachment_info = encrypted_attachment
+        .metadata
+        .decrypt_attachment_info(&pgp_provider, &priv_keys)
+        .expect("must decrypt");
+
+    let (recipients_priv, recipients_priv_pub) = create_test_recipient_keys(&pgp_provider);
+
+    let key_packets = attachment_info
+        .session_key
+        .encrypt_to_recipients(&pgp_provider, &recipients_priv_pub)
+        .expect("encrypt towards recipient should work");
+
+    let enc_signatures = recipients_priv_pub
+        .iter()
+        .map(|recipient| {
+            attachment_info
+                .encrypt_signature_to_recipient(&pgp_provider, recipient)
+                .expect("encrypt signature must succeed")
+        })
+        .collect::<Vec<_>>();
+
+    for ((private_key, key_packet), enc_signature) in recipients_priv
+        .iter()
+        .zip(key_packets.into_iter())
+        .zip(enc_signatures.into_iter())
+    {
+        let metadata = TestAttachmentMetdata {
+            key_packets: KeyPackets(key_packet.0),
+            signature: None,
+            enc_signature,
+        };
+        let dec_result = metadata
+            .decrypt(
+                &pgp_provider,
+                &[private_key],
+                &pub_keys,
+                &encrypted_attachment.data,
+            )
+            .expect("should decrypt");
+        assert_eq!(dec_result.as_bytes(), TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
+        assert!(dec_result.verification_result().is_ok());
+    }
+}
+
 fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
@@ -209,16 +285,6 @@ fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
 
     let verification_result = decrypted_attachment_wrong.verification_result();
     assert!(verification_result.is_err());
-}
-
-#[test]
-fn test_attachment_encrypt_decrypt() {
-    test_attachment_encrypt_decrypt_helper(false);
-}
-
-#[test]
-fn test_attachment_encrypt_decrypt_encrypted_signature() {
-    test_attachment_encrypt_decrypt_helper(true);
 }
 
 fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {

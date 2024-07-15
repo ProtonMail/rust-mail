@@ -10,7 +10,7 @@ pub use encrypt::*;
 
 use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
 
-use crate::string_id;
+use crate::{keys::KeyPacket, string_id};
 
 string_id! {
     /// Encrypted session keys of an attachment.
@@ -18,6 +18,10 @@ string_id! {
 }
 
 impl KeyPackets {
+    pub fn from_vec(value: Vec<KeyPacket>) -> Self {
+        Self(value.into_iter().map(|a| a.0).collect::<String>())
+    }
+
     pub(crate) fn new_from_bytes(key_packets: &[u8]) -> Self {
         KeyPackets(BASE_64.encode(key_packets))
     }

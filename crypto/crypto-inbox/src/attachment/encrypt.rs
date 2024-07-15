@@ -11,6 +11,8 @@ use proton_crypto_account::proton_crypto::{
     CryptoError,
 };
 
+use crate::keys::{InboxSessionKey, SessionKeyError};
+
 use super::{AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
 
 /// Type for encryption metadata belonging to a specific encrypted attachment.
@@ -53,6 +55,8 @@ pub enum AttachmentEncryptionError {
     SessionKeyGeneration(CryptoError),
     #[error("Session key encryption failed: {0}")]
     SessionKeyEncryption(CryptoError),
+    #[error("Invalid session key: {0}")]
+    SessionKeyProblem(#[from] SessionKeyError),
 }
 
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
@@ -431,5 +435,45 @@ impl<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>>
             key_packets: self.0,
         };
         Ok(metadata)
+    }
+}
+
+/// Represents decrypted attachment information that can be re-encrypted for new recipients.
+pub struct DecryptedAttachmentInfo {
+    /// The decrypted session key used to encrypt the attachment.
+    ///
+    /// [`InboxSessionKey`] provides methods to re-encrypt the session key for new recipients.
+    pub session_key: InboxSessionKey,
+    /// Internal attachment detached signature bytes.
+    pub(crate) detached_signature_bytes: Option<Vec<u8>>,
+}
+
+impl DecryptedAttachmentInfo {
+    /// Encrypts the internal signature towards a new recipient if present.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The pgp provider instance from [`proton_crypto_account::proton_crypto`].
+    /// * `recipient`    - The recipient's `OpenPGP` encryption key to encrypt the signature to.
+    ///
+    /// # Errors
+    ///
+    /// An [`AttachmentEncryptionError::SignatureEncryption`] if signature encryption fails.
+    pub fn encrypt_signature_to_recipient<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        recipient: &Provider::PublicKey,
+    ) -> Result<Option<AttachmentEncryptedSignature>, AttachmentEncryptionError> {
+        let Some(signature_bytes) = &self.detached_signature_bytes else {
+            return Ok(None);
+        };
+        let encrypted_signature = pgp_provider
+            .new_encryptor()
+            .with_encryption_key(recipient)
+            .encrypt_raw(signature_bytes, DataEncoding::Armor)
+            .map(String::from_utf8)
+            .map_err(AttachmentEncryptionError::SignatureEncryption)?
+            .map(AttachmentEncryptedSignature)?;
+        Ok(Some(encrypted_signature))
     }
 }

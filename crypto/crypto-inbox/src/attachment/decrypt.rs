@@ -2,13 +2,18 @@ use std::io;
 
 use proton_crypto_account::proton_crypto::{
     crypto::{
-        AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
-        PGPProviderSync, VerificationResult, VerifiedData, VerifiedDataReader,
+        ArmorerSync, AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync,
+        DetachedSignatureVariant, PGPProviderSync, VerificationResult, VerifiedData,
+        VerifiedDataReader,
     },
     CryptoError,
 };
 
-use super::{AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
+use crate::keys::{InboxSessionKey, SessionKeyError};
+
+use super::{
+    AttachmentEncryptedSignature, AttachmentSignature, DecryptedAttachmentInfo, KeyPackets,
+};
 
 /// Errors thrown by attachment decryption.
 #[derive(Debug, thiserror::Error)]
@@ -23,6 +28,10 @@ pub enum AttachmentDecryptionError {
     AttachmentDecryptionWrite(io::Error),
     #[error("Failed to decrypt encrypted detached signature: {0}")]
     EncryptedSignatureDecryption(CryptoError),
+    #[error("Failed to unarmor signature: {0}")]
+    Unarmor(CryptoError),
+    #[error("Failed to export session key: {0}")]
+    SessionKeyExport(#[from] SessionKeyError),
 }
 
 /// Represents decryption result of a decrypted attachment.
@@ -72,10 +81,13 @@ impl<'a, R: io::Read + 'a, T: Decryptor<'a>> DecryptedAttachmentReader<'a, R, T>
 pub trait AttachmentDecryption {
     /// Borrows the key packets of the attachment.
     fn attachment_key_packets(&self) -> &KeyPackets;
+
     /// Borrows the signature of the attachment if any.
     fn attachment_signature(&self) -> &Option<AttachmentSignature>;
+
     /// Borrows the encrypted signature of the attachment if any.
     fn attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature>;
+
     /// Decrypts an attachment based on its metadata.
     ///
     /// Decrypts the attachment session key from the key packets with the `decryption_keys`,
@@ -127,6 +139,7 @@ pub trait AttachmentDecryption {
             .map_err(AttachmentDecryptionError::AttachmentDecryption)
             .map(DecryptedAttachment)
     }
+
     /// Decrypts an attachment from an attachment reader based on its metadata.
     ///
     /// Decrypts the attachment session key from the key packets with the `decryption_keys`,
@@ -171,6 +184,57 @@ pub trait AttachmentDecryption {
             .decrypt_stream(attachment_data, DataEncoding::Bytes)
             .map_err(AttachmentDecryptionError::AttachmentDecryption)
             .map(DecryptedAttachmentReader)
+    }
+
+    /// Decrypts the attachment metadata and exposes it via [`DecryptedAttachmentInfo`].
+    ///
+    /// [`DecryptedAttachmentInfo`] allows re-encrypting the data for new recipients.
+    /// This is useful when converting a draft to a sent message.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
+    /// * `decryption_keys` - The `OpenPGP` decryption keys used to decrypt the attachment metadata.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`AttachmentDecryptionError`] if decryption fails.
+    fn decrypt_attachment_info<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        decryption_keys: &[impl AsRef<Provider::PrivateKey>],
+    ) -> Result<DecryptedAttachmentInfo, AttachmentDecryptionError> {
+        let key_packet_bytes = self.attachment_key_packets().decode()?;
+        let signature_option = self.attachment_signature();
+        let enc_signature_option = self.attachment_encrypted_signature();
+        let session_key = pgp_provider
+            .new_decryptor()
+            .with_decryption_key_refs(decryption_keys)
+            .decrypt_session_key(key_packet_bytes)
+            .map_err(AttachmentDecryptionError::SessionKeyDecryption)?;
+
+        let detached_signature_bytes = if let Some(attachment_signature) = signature_option {
+            let unarmored_signature = pgp_provider
+                .armorer()
+                .unarmor(&attachment_signature.0)
+                .map_err(AttachmentDecryptionError::Unarmor)?;
+            Some(unarmored_signature)
+        } else if let Some(attachment_signature) = enc_signature_option {
+            let detached_signature = pgp_provider
+                .new_decryptor()
+                .with_decryption_key_refs(decryption_keys)
+                .decrypt(attachment_signature.0.as_bytes(), DataEncoding::Armor)
+                .map(VerifiedData::into_vec)
+                .map_err(AttachmentDecryptionError::EncryptedSignatureDecryption)?;
+            Some(detached_signature)
+        } else {
+            None
+        };
+
+        Ok(DecryptedAttachmentInfo {
+            session_key: InboxSessionKey::import_from_pgp_provider(&session_key)?,
+            detached_signature_bytes,
+        })
     }
 }
 
