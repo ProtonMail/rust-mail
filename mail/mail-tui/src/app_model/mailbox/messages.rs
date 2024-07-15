@@ -287,7 +287,7 @@ impl DecryptedMessage {
         decrypted_body: DecryptedMessageBody,
         content: Option<String>,
     ) -> Self {
-        let text = content.as_deref().unwrap_or(decrypted_body.body.as_str());
+        let text = content.as_deref().unwrap_or(decrypted_body.body());
         let num_lines = text.chars().filter(|c| *c == '\n').count();
 
         let date = date_from_timestamp(metadata.time);
@@ -353,19 +353,19 @@ impl DecryptedMessage {
         let text = self
             .content
             .as_deref()
-            .unwrap_or(self.decrypted_body.body.as_str());
+            .unwrap_or(self.decrypted_body.body());
         let paragraph = ScrollableParagraph::new(Paragraph::new(text), self.num_lines);
         frame.render_stateful_widget(paragraph, message_area, &mut self.scroll_state);
     }
 }
 
 pub(super) fn process_message(message: &DecryptedMessageBody) -> anyhow::Result<Option<String>> {
-    match message.metadata.mime_type {
+    match message.metadata().mime_type {
         MimeType::TextPlain => Ok(None),
-        MimeType::TextHTML => html_to_text(message.body.as_str()).map(Some),
+        MimeType::TextHTML => html_to_text(message.body()).map(Some),
         _ => Err(anyhow!(
             "Unsupported mime type: {:?}",
-            message.metadata.mime_type
+            message.metadata().mime_type
         )),
     }
 }
