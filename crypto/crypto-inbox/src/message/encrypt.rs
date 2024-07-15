@@ -15,10 +15,10 @@ pub trait EncryptableDraft {
     fn plaintext_message_body(&self) -> &[u8];
 
     // Encrypts and signs the draft body using the provided address_key
-    fn encrypt_draft_body<T: PGPProviderSync>(
+    fn encrypt_draft_body<Provider: PGPProviderSync>(
         &self,
-        provider: &T,
-        address_key: &UnlockedAddressKey<T>,
+        provider: &Provider,
+        address_key: &UnlockedAddressKey<Provider>,
     ) -> Result<Vec<u8>, MessageError> {
         provider
             .new_encryptor()
@@ -31,16 +31,16 @@ pub trait EncryptableDraft {
 }
 
 pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
-    fn extract_session_key_and_data_packets<T: PGPProviderSync>(
+    fn extract_session_key_and_data_packets<Provider: PGPProviderSync>(
         &self,
-        provider: &T,
-        decryption_keys: &[impl AsRef<T::PrivateKey>],
-    ) -> Result<(T::SessionKey, Vec<u8>), MessageError> {
+        provider: &Provider,
+        decryption_keys: &[impl AsRef<Provider::PrivateKey>],
+    ) -> Result<(Provider::SessionKey, Vec<u8>), MessageError> {
         let message = provider
             .pgp_message_import(self.pgp_message(), DataEncoding::Armor)
             .map_err(MessageError::ImportProblem)?;
 
-        let key_packets = message.as_key_packets().to_owned();
+        let key_packets = message.as_key_packets();
         let data_packets = message.as_data_packet().to_owned();
 
         let decrypted_session_key = provider
