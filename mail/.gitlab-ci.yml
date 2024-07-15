@@ -191,14 +191,14 @@ deploy-proton-mail-message-detector:
     CARGO_MANIFEST_OPTIONS: "--manifest-path proton-mail-message-detector/Cargo.toml"
   when: manual
 
-deploy-proton-mail-utm-stripper:
+deploy-proton-mail-html-transformer:
   extends: .deploy_to_protonvpn_repository
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   variables:
-    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-mail-utm-stripper/Cargo.toml"
-    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-mail-utm-stripper/Cargo.toml"
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-mail-html-transformer/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-mail-html-transformer/Cargo.toml"
   when: manual
 
 deploy-proton-mail-common:
