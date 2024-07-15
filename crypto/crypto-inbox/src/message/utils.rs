@@ -1,6 +1,7 @@
 use super::MessageError;
 
 pub trait GettablePGPMessage {
+    /// Return a byte slice of a PGP message
     fn pgp_message(&self) -> &[u8];
 }
 

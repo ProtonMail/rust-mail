@@ -11,10 +11,10 @@ use crate::message::errors::MessageError;
 use super::GettablePGPMessage;
 
 pub trait EncryptableDraft {
-    // Borrows the plaintext, unencrypted, body of the draft message
+    /// Borrows the plaintext, unencrypted, body of the draft message
     fn plaintext_message_body(&self) -> &[u8];
 
-    // Encrypts and signs the draft body using the provided address_key
+    /// Encrypts and signs the draft body using the provided address key
     fn encrypt_draft_body<Provider: PGPProviderSync>(
         &self,
         provider: &Provider,
@@ -31,6 +31,8 @@ pub trait EncryptableDraft {
 }
 
 pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
+    /// Extracts the session key and data packets from a PGP message.  The session key returned is decrypted and ready for
+    /// use, the data packets returned remain encrypted with the session key
     fn extract_session_key_and_data_packets<Provider: PGPProviderSync>(
         &self,
         provider: &Provider,
