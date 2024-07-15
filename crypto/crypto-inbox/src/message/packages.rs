@@ -2,15 +2,14 @@
 use proton_crypto_account::{
     keys::UnlockedAddressKey,
     proton_crypto::{
-        crypto::{
-            AsPublicKeyRef, DataEncoding, Encryptor, EncryptorSync, PGPProviderSync,
-            SessionKeyAlgorithm,
-        },
+        crypto::{DataEncoding, Encryptor, EncryptorSync, PGPProviderSync, SessionKeyAlgorithm},
         utils::remove_trailing_spaces,
     },
 };
 
-use super::{KeyPacket, MessageError, MessageSessionKey};
+use crate::keys::InboxSessionKey;
+
+use super::MessageError;
 
 const MEGABYTE: usize = 1024 * 1024;
 
@@ -26,87 +25,19 @@ pub enum PackageMimeType {
 /// Represents an encrypted `package` body for sending emails.
 ///
 /// Sending an email with Proton involves creating an encrypted package for each MIME type of the email body.
-/// Depending on the recipients' preferences, key packets or the message session key are attached to it.
-/// This type provides methods to produce this information.
+/// Depending on the recipients' preferences, either key packets or the message session key are attached to it.
+/// This type provides methods to generate this information.
 #[derive(Clone, Eq, PartialEq)]
 pub struct EncryptedPackageBody {
     /// The mime type of the package.
     pub mime_type: PackageMimeType,
-    /// The message session key the package is encrypted with.
-    pub session_key: MessageSessionKey,
+    /// The message session key with which the package is encrypted.
+    ///
+    /// Provides methods to re-encrypt the message for new recipients
+    /// or to expose the session key.
+    pub session_key: InboxSessionKey,
     /// The encrypted body of the package in byte format.
     pub encrypted_body: Vec<u8>, // TODO: Use new type from Rob's MR.
-}
-
-impl EncryptedPackageBody {
-    /// Creates a key packet for the provided recipient public key.
-    ///
-    /// Encrypts the internal symmetric message session key with the provided public key
-    /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as key packet in Proton context).
-    ///
-    /// # Parameters
-    ///
-    /// * `pgp_provider`  - The pgp provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `recipient_key` - The recipient public key to encrypt the key packet to.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`MessageError::Encryption`] error if the encryption fails or [`MessageError::SessionKeyProblem`] if
-    /// there is an issue with the internal session key.
-    pub fn key_packet<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-        recipient_key: &impl AsPublicKeyRef<Provider::PublicKey>,
-    ) -> Result<KeyPacket, MessageError> {
-        let session_key = self
-            .session_key
-            .export_to_pgp_provider(pgp_provider)
-            .map_err(MessageError::SessionKeyProblem)?;
-        pgp_provider
-            .new_encryptor()
-            .with_encryption_key(recipient_key.as_public_key())
-            .encrypt_session_key(&session_key)
-            .map(|key_packet| KeyPacket::new_from_bytes(key_packet.as_ref()))
-            .map_err(MessageError::Encryption)
-    }
-
-    /// Creates a key packet for each provided recipient public key.
-    ///
-    /// Encrypts the internal symmetric message session key with the provided public key
-    /// using `OpenPGP`. The output is a `OpenPGP` PKESK packet (referred to as key packet in Proton context).
-    /// The key packets are returned in order of the provided recipient public keys.
-    ///
-    /// # Parameters
-    ///
-    /// * `pgp_provider`  - The pgp provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `recipient_key` - The recipient public key to encrypt the key packet to.
-    ///
-    /// # Errors
-    ///
-    /// Returns an [`MessageError::Encryption`] error if the encryption fails or [`MessageError::SessionKeyProblem`] if
-    /// there is an issue with the internal session key.
-    pub fn key_packets<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-        recipient_keys: &[impl AsPublicKeyRef<Provider::PublicKey>],
-    ) -> Result<Vec<KeyPacket>, MessageError> {
-        let session_key = self
-            .session_key
-            .export_to_pgp_provider(pgp_provider)
-            .map_err(MessageError::SessionKeyProblem)?;
-        // Encrypt the session key to each recipient key.
-        let mut key_packets = Vec::with_capacity(recipient_keys.len());
-        for encryption_key in recipient_keys {
-            let key_packet = pgp_provider
-                .new_encryptor()
-                .with_encryption_key(encryption_key.as_public_key())
-                .encrypt_session_key(&session_key)
-                .map(|key_packet| KeyPacket::new_from_bytes(key_packet.as_ref()))
-                .map_err(MessageError::Encryption)?;
-            key_packets.push(key_packet);
-        }
-        Ok(key_packets)
-    }
 }
 
 pub trait EncryptablePackage {
@@ -121,7 +52,7 @@ pub trait EncryptablePackage {
     /// Signs and encrypts the package body, preparing it for sending.
     ///
     /// The returned [`EncryptedPackageBody`] can be used to create individual key packets
-    /// for each recipient address of the package. It also allows extracting the message
+    /// for each recipient address of the package. It also allows extraction of the message
     /// session key to enable the server to decrypt the content for cleartext recipients.
     ///
     /// # Parameters
@@ -164,7 +95,7 @@ pub trait EncryptablePackage {
 
         Ok(EncryptedPackageBody {
             mime_type: self.package_mime_type(),
-            session_key: MessageSessionKey::import_from_pgp_provider(&session_key)?,
+            session_key: InboxSessionKey::import_from_pgp_provider(&session_key)?,
             encrypted_body,
         })
     }

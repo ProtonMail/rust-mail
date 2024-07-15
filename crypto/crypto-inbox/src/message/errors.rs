@@ -3,6 +3,8 @@ use std::str::Utf8Error;
 use proton_crypto_account::proton_crypto::CryptoError;
 use proton_crypto_inbox_mime::ProcessMimeError;
 
+use crate::keys::SessionKeyError;
+
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::module_name_repetitions)]
 pub enum MessageError {
@@ -20,8 +22,6 @@ pub enum MessageError {
     NotSupportedMime,
     #[error("Missing message identifier for mime decryption")]
     MissingMessageID,
-    #[error("Invalid session key")]
-    InvalidSessionKey,
-    #[error("Problem with the provided session key: {0}")]
-    SessionKeyProblem(CryptoError),
+    #[error("Session key encryption failed: {0}")]
+    SessionKeyEncryption(#[from] SessionKeyError),
 }

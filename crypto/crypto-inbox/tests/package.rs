@@ -134,7 +134,8 @@ fn test_package_with_key_packets_create() {
 
     let (recipients_priv, recipients_priv_pub) = create_test_recipient_keys(&pgp_provider);
     let key_packets = encrypted_package
-        .key_packets(&pgp_provider, &recipients_priv_pub)
+        .session_key
+        .encrypt_to_recipients(&pgp_provider, &recipients_priv_pub)
         .expect("key packet create must succeed");
     for (key_packet, recipient_key) in key_packets.iter().zip(recipients_priv.iter()) {
         let mut message = key_packet.decode().expect("decode must succeed");
