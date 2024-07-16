@@ -1,3 +1,5 @@
+use crate::message::errors::MessageError;
+use base64::{prelude::BASE64_STANDARD, Engine};
 use proton_crypto_account::{
     keys::UnlockedAddressKey,
     proton_crypto::crypto::{
@@ -6,9 +8,24 @@ use proton_crypto_account::{
     },
 };
 
-use crate::message::errors::MessageError;
-
 use super::GettablePGPMessage;
+
+pub struct EncryptedMessageBody {
+    body: Vec<u8>,
+}
+
+impl EncryptedMessageBody {
+    pub fn new(body: Vec<u8>) -> EncryptedMessageBody {
+        EncryptedMessageBody { body }
+    }
+    pub fn in_base64(&self) -> String {
+        BASE64_STANDARD.encode(&self.body)
+    }
+
+    pub fn raw_bytes(&self) -> &[u8] {
+        &self.body
+    }
+}
 
 pub trait EncryptableDraft {
     /// Borrows the plaintext, unencrypted, body of the draft message
@@ -39,7 +56,7 @@ pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
         &self,
         provider: &Provider,
         decryption_keys: &[impl AsRef<Provider::PrivateKey>],
-    ) -> Result<(Provider::SessionKey, Vec<u8>), MessageError> {
+    ) -> Result<(Provider::SessionKey, EncryptedMessageBody), MessageError> {
         let message = provider
             .pgp_message_import(self.pgp_message(), DataEncoding::Armor)
             .map_err(MessageError::ImportProblem)?;
@@ -53,6 +70,9 @@ pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
             .decrypt_session_key(key_packets)
             .map_err(MessageError::Decryption)?;
 
-        Ok((decrypted_session_key, data_packets))
+        Ok((
+            decrypted_session_key,
+            EncryptedMessageBody::new(data_packets),
+        ))
     }
 }

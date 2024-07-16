@@ -73,8 +73,6 @@ fn test_extract_keys_and_data_from_draft() {
         .extract_session_key_and_data_packets(&pgp_provider, &[&private_key])
         .expect("extracting packets should not fail");
 
-    assert_ne!(0, data_packets.len());
-
     let exported_key = key_packets.export().as_ref().to_owned();
 
     assert_eq!(
@@ -85,7 +83,7 @@ fn test_extract_keys_and_data_from_draft() {
     let decrypted_data = pgp_provider
         .new_decryptor()
         .with_session_key(key_packets)
-        .decrypt(data_packets, DataEncoding::Bytes)
+        .decrypt(data_packets.raw_bytes(), DataEncoding::Bytes)
         .expect("decryption is not expected to fail");
 
     let decrypted_data = decrypted_data.as_bytes();
