@@ -32,7 +32,9 @@ pub trait EncryptableDraft {
 
 pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
     /// Extracts the session key and data packets from a PGP message.  The session key returned is decrypted and ready for
-    /// use, the data packets returned remain encrypted with the session key
+    /// use, the data packets returned remain encrypted with the session key.
+    ///
+    /// The data packets returned are not armored and returned as the raw bytes of the PGP message.
     fn extract_session_key_and_data_packets<Provider: PGPProviderSync>(
         &self,
         provider: &Provider,
