@@ -439,7 +439,7 @@ impl<'a, W: Write + 'a, ProvEncryptor: Encryptor<'a>>
 }
 
 /// Represents decrypted attachment information that can be re-encrypted for new recipients.
-pub struct DecryptedAttachmentInfo {
+pub struct ExtractedAttachmentInfo {
     /// The decrypted session key used to encrypt the attachment.
     ///
     /// [`InboxSessionKey`] provides methods to re-encrypt the session key for new recipients.
@@ -448,7 +448,7 @@ pub struct DecryptedAttachmentInfo {
     pub(crate) detached_signature_bytes: Option<Vec<u8>>,
 }
 
-impl DecryptedAttachmentInfo {
+impl ExtractedAttachmentInfo {
     /// Encrypts the internal signature towards a new recipient if present.
     ///
     /// # Parameters

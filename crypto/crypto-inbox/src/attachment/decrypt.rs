@@ -12,7 +12,7 @@ use proton_crypto_account::proton_crypto::{
 use crate::keys::{InboxSessionKey, SessionKeyError};
 
 use super::{
-    AttachmentEncryptedSignature, AttachmentSignature, DecryptedAttachmentInfo, KeyPackets,
+    AttachmentEncryptedSignature, AttachmentSignature, ExtractedAttachmentInfo, KeyPackets,
 };
 
 /// Errors thrown by attachment decryption.
@@ -186,9 +186,9 @@ pub trait AttachmentDecryption {
             .map(DecryptedAttachmentReader)
     }
 
-    /// Decrypts the attachment metadata and exposes it via [`DecryptedAttachmentInfo`].
+    /// Decrypts the attachment metadata and exposes it via [`ExtractedAttachmentInfo`].
     ///
-    /// [`DecryptedAttachmentInfo`] allows re-encrypting the data for new recipients.
+    /// [`ExtractedAttachmentInfo`] allows re-encrypting the data for new recipients.
     /// This is useful when converting a draft to a sent message.
     ///
     /// # Parameters
@@ -203,7 +203,7 @@ pub trait AttachmentDecryption {
         &self,
         pgp_provider: &Provider,
         decryption_keys: &[impl AsRef<Provider::PrivateKey>],
-    ) -> Result<DecryptedAttachmentInfo, AttachmentDecryptionError> {
+    ) -> Result<ExtractedAttachmentInfo, AttachmentDecryptionError> {
         let key_packet_bytes = self.attachment_key_packets().decode()?;
         let signature_option = self.attachment_signature();
         let enc_signature_option = self.attachment_encrypted_signature();
@@ -231,7 +231,7 @@ pub trait AttachmentDecryption {
             None
         };
 
-        Ok(DecryptedAttachmentInfo {
+        Ok(ExtractedAttachmentInfo {
             session_key: InboxSessionKey::import_from_pgp_provider(&session_key)?,
             detached_signature_bytes,
         })
