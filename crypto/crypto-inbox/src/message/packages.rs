@@ -69,7 +69,7 @@ pub trait EncryptablePackage {
         address_key: &UnlockedAddressKey<Provider>,
     ) -> Result<EncryptedPackageBody, MessageError> {
         let body = self.package_body_content();
-        // TODO: Might want to generate a session key based one the recipients keys
+        // TODO: Might want to generate a session key based on the recipients keys
         // The session key is currently hardcoded to AES-256.
         let session_key = pgp_provider
             .session_key_generate(SessionKeyAlgorithm::default())
@@ -86,7 +86,7 @@ pub trait EncryptablePackage {
         if self.package_mime_type() == PackageMimeType::Multipart && body.len() > MEGABYTE {
             encryptor = encryptor.with_compression();
         }
-        // We need to strip trailing spaces itn the content for compatibility.
+        // We need to strip trailing spaces in the content for compatibility.
         let transformed_content =
             remove_trailing_spaces(std::str::from_utf8(self.package_body_content())?);
         let encrypted_body = encryptor

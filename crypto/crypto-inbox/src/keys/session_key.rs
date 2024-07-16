@@ -99,22 +99,60 @@ impl InboxSessionKey {
     /// # Errors
     ///
     /// Returns a [`SessionKeyError::InvalidSessionKey`] if the session key is invalid.
-    /// This can happen if no session key algorithm can be retrieved or if the algorithm is not
-    /// compatible with the exported bytes.
+    /// This can happen if no session key algorithm can be retrieved.
     pub fn import_from_pgp_provider<Sk: SessionKey>(
         session_key: &Sk,
     ) -> Result<Self, SessionKeyError> {
         let session_key_bytes: SessionKeyBytes =
             SessionKeyBytes(session_key.export().as_ref().to_owned());
-        let session_key_algorithm = session_key
-            .algorithm()
-            .ok_or(SessionKeyError::InvalidSessionKey)?;
-        if !session_key_algorithm.is_compatible(session_key_bytes.as_ref()) {
-            return Err(SessionKeyError::InvalidSessionKey);
+        let session_key_algorithm = session_key.algorithm();
+        if session_key_algorithm == SessionKeyAlgorithm::Unknown {
+            // Can happen for session keys extracted from v6 PKESK packets.
+            // `import_from_pgp_provider_with_algorithm` should be called in this case.
+            return Err(SessionKeyError::InvalidSessionKey(
+                "no associated algorithm found".to_owned(),
+            ));
         }
         Ok(InboxSessionKey {
             session_key_bytes,
             session_key_algorithm,
+        })
+    }
+
+    /// Imports an inbox session key from a session key used by an `OpenPGP` provider
+    /// (See [`proton_crypto_account::proton_crypto`]).
+    ///
+    /// # Parameters
+    ///
+    /// * `session_key` - The session key to import.
+    /// * `algorithm`   - The expected session key algorithm the session key belongs to.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SessionKeyError::InvalidSessionKey`] if the session key is invalid.
+    /// This can happen if the provided algorithm does not match the extracted session key algorithm
+    /// if any is extracted.
+    pub fn import_from_pgp_provider_with_algorithm<Sk: SessionKey>(
+        session_key: &Sk,
+        algorithm: SessionKeyAlgorithm,
+    ) -> Result<Self, SessionKeyError> {
+        let session_key_bytes: SessionKeyBytes =
+            SessionKeyBytes(session_key.export().as_ref().to_owned());
+        let session_key_algorithm = session_key.algorithm();
+        match session_key_algorithm {
+            SessionKeyAlgorithm::Aes128 | SessionKeyAlgorithm::Aes256 => {
+                if session_key_algorithm != algorithm {
+                    return Err(SessionKeyError::InvalidSessionKey(
+                        "algorithms do not match".to_owned(),
+                    ));
+                }
+            }
+            SessionKeyAlgorithm::Unknown => (),
+        };
+
+        Ok(InboxSessionKey {
+            session_key_bytes,
+            session_key_algorithm: algorithm,
         })
     }
 
