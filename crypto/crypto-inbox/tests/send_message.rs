@@ -83,7 +83,7 @@ fn test_extract_keys_and_data_from_draft() {
     let decrypted_data = pgp_provider
         .new_decryptor()
         .with_session_key(key_packets)
-        .decrypt(data_packets.raw_bytes(), DataEncoding::Bytes)
+        .decrypt(data_packets.as_ref(), DataEncoding::Bytes)
         .expect("decryption is not expected to fail");
 
     let decrypted_data = decrypted_data.as_bytes();

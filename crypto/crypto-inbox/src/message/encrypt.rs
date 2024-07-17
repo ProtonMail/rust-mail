@@ -10,20 +10,24 @@ use proton_crypto_account::{
 
 use super::GettablePGPMessage;
 
-pub struct EncryptedMessageBody {
-    body: Vec<u8>,
-}
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct EncryptedMessageBody(Vec<u8>);
 
 impl EncryptedMessageBody {
-    pub fn new(body: Vec<u8>) -> EncryptedMessageBody {
-        EncryptedMessageBody { body }
+    pub fn to_base64_string(&self) -> String {
+        BASE64_STANDARD.encode(&self.0)
     }
-    pub fn in_base64(&self) -> String {
-        BASE64_STANDARD.encode(&self.body)
-    }
+}
 
-    pub fn raw_bytes(&self) -> &[u8] {
-        &self.body
+impl AsRef<[u8]> for EncryptedMessageBody {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl From<Vec<u8>> for EncryptedMessageBody {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
     }
 }
 
@@ -72,7 +76,7 @@ pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
 
         Ok((
             decrypted_session_key,
-            EncryptedMessageBody::new(data_packets),
+            EncryptedMessageBody::from(data_packets),
         ))
     }
 }
