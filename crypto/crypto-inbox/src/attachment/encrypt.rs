@@ -57,6 +57,8 @@ pub enum AttachmentEncryptionError {
     SessionKeyEncryption(CryptoError),
     #[error("Invalid session key: {0}")]
     SessionKeyProblem(#[from] SessionKeyError),
+    #[error("Failed to armor PGP type: {0}")]
+    Armor(CryptoError),
 }
 
 /// Encrypts an attachment to each key in `encryption_keys` and produces a signature for each key in `signing_keys`.
@@ -475,5 +477,32 @@ impl ExtractedAttachmentInfo {
             .map_err(AttachmentEncryptionError::SignatureEncryption)?
             .map(AttachmentEncryptedSignature)?;
         Ok(Some(encrypted_signature))
+    }
+
+    /// Returns the internal signature as an armored PGP Signature without encrypting it.
+    ///
+    /// This function uses the PGP provider to armor the internal signature.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`AttachmentEncryptionError::Armor`] if armoring the signature fails.
+    pub fn signature<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+    ) -> Result<Option<AttachmentSignature>, AttachmentEncryptionError> {
+        let Some(signature_bytes) = &self.detached_signature_bytes else {
+            return Ok(None);
+        };
+        let armored_signature = pgp_provider
+            .armorer()
+            .armor_signature(signature_bytes)
+            .map(String::from_utf8)
+            .map_err(AttachmentEncryptionError::Armor)?
+            .map(AttachmentSignature)?;
+        Ok(Some(armored_signature))
     }
 }
