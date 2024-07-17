@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Logic to encrypt and sign packages for sending emails (#86)
+- Logic to extract the session key and data packet from a PGP message (#85)
+- New trait for GettablePGPMessages used by DecryptableMessages and SessionKeyAndDataPacketsExtractable (#85)
 
 ## [0.4.2] - 2024-06-26
 
