@@ -1,3 +1,4 @@
+mod avatar_information;
 mod logging;
 mod login;
 mod mailbox;
