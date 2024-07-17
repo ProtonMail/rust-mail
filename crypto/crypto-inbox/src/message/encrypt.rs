@@ -56,6 +56,16 @@ pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
     /// use, the data packets returned remain encrypted with the session key.
     ///
     /// The data packets returned are not armored and returned as the raw bytes of the PGP message.
+    ///
+    /// # Parameters
+    ///
+    /// * `provider` - The PGP implementation providing the functions required for message importing, separation, and decryption.
+    /// * `decryption_keys` - The set of PGP private keys to be used when attempting to decrypt the session key packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `MessageError` if the PGP message may not be imported (if it is malformed), or if decrypting the session key packet
+    /// fails.
     fn extract_session_key_and_data_packets<Provider: PGPProviderSync>(
         &self,
         provider: &Provider,
