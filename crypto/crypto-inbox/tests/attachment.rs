@@ -60,7 +60,7 @@ impl AttachmentDecryption for TestAttachmentMetdata {
     }
 }
 
-fn get_test_attachment_metadata() -> TestAttachmentMetdata {
+fn create_test_attachment_metadata() -> TestAttachmentMetdata {
     TestAttachmentMetdata {
         key_packets: KeyPackets::from(TEST_ATTACHMENT_METADATA_KP),
         signature: Some(AttachmentSignature::from(TEST_ATTACHMENT_METADATA_SIG)),
@@ -70,7 +70,7 @@ fn get_test_attachment_metadata() -> TestAttachmentMetdata {
     }
 }
 
-fn get_test_attachment_metadata_enc_sig_only() -> TestAttachmentMetdata {
+fn create_test_attachment_metadata_enc_sig_only() -> TestAttachmentMetdata {
     TestAttachmentMetdata {
         key_packets: KeyPackets::from(TEST_ATTACHMENT_METADATA_KP),
         signature: None,
@@ -80,7 +80,7 @@ fn get_test_attachment_metadata_enc_sig_only() -> TestAttachmentMetdata {
     }
 }
 
-fn get_test_attachment_encrypted_data() -> Vec<u8> {
+fn create_test_attachment_encrypted_data() -> Vec<u8> {
     let b64 = base64::engine::general_purpose::GeneralPurpose::new(
         &base64::alphabet::STANDARD,
         base64::engine::general_purpose::PAD,
@@ -88,76 +88,27 @@ fn get_test_attachment_encrypted_data() -> Vec<u8> {
     b64.decode(TEST_ATTACHMENT_ENC_DATA).unwrap()
 }
 
-fn test_attachment_decrypt_helper(attachment_metadata: &impl AttachmentDecryption) {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
-
-    let decryption_keys = get_test_address_keys(&pgp_provider);
-    let verification_keys = get_test_public_address_keys(&pgp_provider);
-
-    let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
-    let decrypted_attachment = attachment_metadata
-        .decrypt(
-            &pgp_provider,
-            &decryption_keys,
-            &verification_keys,
-            enc_data,
-        )
-        .unwrap();
-
-    assert_eq!(
-        decrypted_attachment.as_ref(),
-        TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
-    );
-
-    let verification_result = decrypted_attachment.verification_result();
-    assert!(verification_result.is_ok());
-}
-
-fn test_attachment_decrypt_stream_helper(attachment_metadata: &impl AttachmentDecryption) {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
-
-    let decryption_keys = get_test_address_keys(&pgp_provider);
-    let verification_keys = get_test_public_address_keys(&pgp_provider);
-
-    let enc_data: Vec<u8> = get_test_attachment_encrypted_data();
-    let mut output_buffer = Vec::new();
-    let enc_data_reader: &[u8] = enc_data.as_ref();
-    let mut verification_reader = attachment_metadata
-        .decrypt_from_reader(
-            &pgp_provider,
-            &decryption_keys,
-            &verification_keys,
-            enc_data_reader,
-        )
-        .unwrap();
-    io::copy(&mut verification_reader, &mut output_buffer).unwrap();
-    assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
-
-    let verification_result = verification_reader.verification_result();
-    assert!(verification_result.is_ok());
-}
-
 #[test]
 fn test_attachment_decrypt() {
-    let attachment_metadata = get_test_attachment_metadata();
+    let attachment_metadata = create_test_attachment_metadata();
     test_attachment_decrypt_helper(&attachment_metadata);
 }
 
 #[test]
 fn test_attachment_decrypt_encrypted_signature() {
-    let attachment_metadata = get_test_attachment_metadata_enc_sig_only();
+    let attachment_metadata = create_test_attachment_metadata_enc_sig_only();
     test_attachment_decrypt_helper(&attachment_metadata);
 }
 
 #[test]
 fn test_attachment_decrypt_stream() {
-    let attachment_metadata = get_test_attachment_metadata();
+    let attachment_metadata = create_test_attachment_metadata();
     test_attachment_decrypt_stream_helper(&attachment_metadata);
 }
 
 #[test]
 fn test_attachment_decrypt_stream_encrypted_signature() {
-    let attachment_metadata = get_test_attachment_metadata_enc_sig_only();
+    let attachment_metadata = create_test_attachment_metadata_enc_sig_only();
     test_attachment_decrypt_stream_helper(&attachment_metadata);
 }
 
@@ -169,6 +120,50 @@ fn test_attachment_encrypt_decrypt() {
 #[test]
 fn test_attachment_encrypt_decrypt_encrypted_signature() {
     test_attachment_encrypt_decrypt_helper(true);
+}
+
+#[test]
+fn test_attachment_encrypt_decrypt_stream() {
+    test_attachment_encrypt_decrypt_stream_helper(false);
+}
+
+#[test]
+fn test_attachment_encrypt_decrypt_encrypted_signature_stream() {
+    test_attachment_encrypt_decrypt_stream_helper(true);
+}
+
+#[test]
+fn test_attachment_encrypt_decrypt_encrypted_no_signatures_stream() {
+    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+
+    let priv_keys = get_test_address_keys(&pgp_provider);
+    let pub_keys: Vec<_> = priv_keys
+        .iter()
+        .map(|key| {
+            pgp_provider
+                .private_key_to_public_key(key.as_ref())
+                .unwrap()
+        })
+        .collect();
+    let mut data = Vec::with_capacity(TEST_ATTACHMENT_PLAIN_DATA.len());
+    let metadata = {
+        let mut attachment_writer = encrypt_to_writer(&pgp_provider, &pub_keys, &mut data).unwrap();
+        attachment_writer
+            .write_all(TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
+            .unwrap();
+        attachment_writer.finalize().unwrap()
+    };
+
+    let decrypted_attachment = metadata
+        .decrypt(&pgp_provider, &priv_keys, &pub_keys, &data)
+        .unwrap();
+
+    assert_eq!(
+        decrypted_attachment.as_ref(),
+        TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
+    );
+    let verification_result = decrypted_attachment.verification_result();
+    assert!(verification_result.is_err());
 }
 
 #[test]
@@ -220,7 +215,7 @@ fn test_attachment_re_encrypt() {
         .zip(enc_signatures.into_iter())
     {
         let metadata = TestAttachmentMetdata {
-            key_packets: KeyPackets(key_packet.0),
+            key_packets: KeyPackets::from(key_packet.0),
             signature: None,
             enc_signature,
         };
@@ -234,6 +229,14 @@ fn test_attachment_re_encrypt() {
             .expect("should decrypt");
         assert_eq!(dec_result.as_bytes(), TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
         assert!(dec_result.verification_result().is_ok());
+
+        let dec_result_fail = metadata.decrypt(
+            &pgp_provider,
+            &priv_keys,
+            &pub_keys,
+            &encrypted_attachment.data,
+        );
+        assert!(dec_result_fail.is_err());
     }
 }
 
@@ -336,46 +339,51 @@ fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
     assert!(verification_result.is_err());
 }
 
-#[test]
-fn test_attachment_encrypt_decrypt_stream() {
-    test_attachment_encrypt_decrypt_stream_helper(false);
-}
-
-#[test]
-fn test_attachment_encrypt_decrypt_encrypted_signature_stream() {
-    test_attachment_encrypt_decrypt_stream_helper(true);
-}
-
-#[test]
-fn test_attachment_encrypt_decrypt_encrypted_no_signatures_stream() {
+fn test_attachment_decrypt_helper(attachment_metadata: &impl AttachmentDecryption) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let priv_keys = get_test_address_keys(&pgp_provider);
-    let pub_keys: Vec<_> = priv_keys
-        .iter()
-        .map(|key| {
-            pgp_provider
-                .private_key_to_public_key(key.as_ref())
-                .unwrap()
-        })
-        .collect();
-    let mut data = Vec::with_capacity(TEST_ATTACHMENT_PLAIN_DATA.len());
-    let metadata = {
-        let mut attachment_writer = encrypt_to_writer(&pgp_provider, &pub_keys, &mut data).unwrap();
-        attachment_writer
-            .write_all(TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
-            .unwrap();
-        attachment_writer.finalize().unwrap()
-    };
+    let decryption_keys = get_test_address_keys(&pgp_provider);
+    let verification_keys = get_test_public_address_keys(&pgp_provider);
 
-    let decrypted_attachment = metadata
-        .decrypt(&pgp_provider, &priv_keys, &pub_keys, &data)
+    let enc_data: Vec<u8> = create_test_attachment_encrypted_data();
+    let decrypted_attachment = attachment_metadata
+        .decrypt(
+            &pgp_provider,
+            &decryption_keys,
+            &verification_keys,
+            enc_data,
+        )
         .unwrap();
 
     assert_eq!(
         decrypted_attachment.as_ref(),
         TEST_ATTACHMENT_PLAIN_DATA.as_bytes()
     );
+
     let verification_result = decrypted_attachment.verification_result();
-    assert!(verification_result.is_err());
+    assert!(verification_result.is_ok());
+}
+
+fn test_attachment_decrypt_stream_helper(attachment_metadata: &impl AttachmentDecryption) {
+    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+
+    let decryption_keys = get_test_address_keys(&pgp_provider);
+    let verification_keys = get_test_public_address_keys(&pgp_provider);
+
+    let enc_data: Vec<u8> = create_test_attachment_encrypted_data();
+    let mut output_buffer = Vec::new();
+    let enc_data_reader: &[u8] = enc_data.as_ref();
+    let mut verification_reader = attachment_metadata
+        .decrypt_from_reader(
+            &pgp_provider,
+            &decryption_keys,
+            &verification_keys,
+            enc_data_reader,
+        )
+        .unwrap();
+    io::copy(&mut verification_reader, &mut output_buffer).unwrap();
+    assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());
+
+    let verification_result = verification_reader.verification_result();
+    assert!(verification_result.is_ok());
 }
