@@ -13,7 +13,7 @@ use proton_crypto_account::proton_crypto::{
 
 use crate::keys::{InboxSessionKey, SessionKeyError};
 
-use super::{AttachmentDecryption, AttachmentEncryptedSignature, AttachmentSignature, KeyPackets};
+use super::{AttachmentEncryptedSignature, AttachmentSignature, DecryptableAttachment, KeyPackets};
 
 /// Type for encryption metadata belonging to a specific encrypted attachment.
 ///
@@ -375,7 +375,7 @@ fn encrypt_attachment_without_signing<T: PGPProviderSync>(
     Ok(EncryptedAttachment { metadata, data })
 }
 
-impl AttachmentDecryption for EncryptedAttachmentMetadata {
+impl DecryptableAttachment for EncryptedAttachmentMetadata {
     fn attachment_key_packets(&self) -> &KeyPackets {
         &self.key_packets
     }

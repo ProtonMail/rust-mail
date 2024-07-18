@@ -2,8 +2,8 @@ use std::io::{self, Write};
 
 use base64::Engine;
 use proton_crypto_inbox::attachment::{
-    encrypt_and_sign_to_writer, encrypt_to_writer, AttachmentDecryption,
-    AttachmentEncryptedSignature, AttachmentSignature, EncryptableAttachment, KeyPackets,
+    encrypt_and_sign_to_writer, encrypt_to_writer, AttachmentEncryptedSignature,
+    AttachmentSignature, DecryptableAttachment, EncryptableAttachment, KeyPackets,
 };
 
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -46,7 +46,7 @@ struct TestAttachmentMetdata {
     enc_signature: Option<AttachmentEncryptedSignature>,
 }
 
-impl AttachmentDecryption for TestAttachmentMetdata {
+impl DecryptableAttachment for TestAttachmentMetdata {
     fn attachment_key_packets(&self) -> &KeyPackets {
         &self.key_packets
     }
@@ -341,7 +341,7 @@ fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
     assert!(verification_result.is_err());
 }
 
-fn test_attachment_decrypt_helper(attachment_metadata: &impl AttachmentDecryption) {
+fn test_attachment_decrypt_helper(attachment_metadata: &impl DecryptableAttachment) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
     let decryption_keys = get_test_address_keys(&pgp_provider);
@@ -366,7 +366,7 @@ fn test_attachment_decrypt_helper(attachment_metadata: &impl AttachmentDecryptio
     assert!(verification_result.is_ok());
 }
 
-fn test_attachment_decrypt_stream_helper(attachment_metadata: &impl AttachmentDecryption) {
+fn test_attachment_decrypt_stream_helper(attachment_metadata: &impl DecryptableAttachment) {
     let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
     let decryption_keys = get_test_address_keys(&pgp_provider);

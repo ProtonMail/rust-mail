@@ -78,7 +78,7 @@ impl<'a, R: io::Read + 'a, T: Decryptor<'a>> DecryptedAttachmentReader<'a, R, T>
 
 /// Provides default implementation for attachment decryption
 /// and only requires to implement the view methods on the attachment metadata.
-pub trait AttachmentDecryption {
+pub trait DecryptableAttachment {
     /// Borrows the key packets of the attachment.
     fn attachment_key_packets(&self) -> &KeyPackets;
 
