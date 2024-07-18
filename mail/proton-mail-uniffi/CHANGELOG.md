@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+- The following functions have been exposed:
+    - avatar_information_from_name_and_email
+    - avatar_information_from_message_addresses
+    - avatar_information_from_message_address
+
 ## [0.10.32] - 2024-07-15
 
 ### Added
