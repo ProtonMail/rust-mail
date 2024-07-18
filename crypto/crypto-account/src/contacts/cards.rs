@@ -28,6 +28,8 @@ pub enum ContactCardType {
     EncryptedAndSigned = 3,
 }
 
+/// `DecryptableVerifiableCard` provides the ability to access the data from within contact cards, decrypting encrypted data
+/// and verifying and signatures present
 pub trait DecryptableVerifiableCard {
     /// Returns the card's crypto type.
     fn card_type(&self) -> ContactCardType;
@@ -40,6 +42,11 @@ pub trait DecryptableVerifiableCard {
 
     /// Returns the plain text data from the card.  If the card has been encrypted, it is decrypted.  If the card
     /// is signed, the signature is verified.
+    ///
+    /// # Parameters
+    /// * `provider` - The pgp provider instance from [`proton_crypto`].
+    /// * `decryption_keys` - The set of keys which will be used to decrypt the contact card
+    /// * `verification_keys` - The set of keys which will be used to verify the signature on the contact card
     ///
     /// # Errors
     /// When decryption or signature verification fail
@@ -89,12 +96,22 @@ pub trait DecryptableVerifiableCard {
     }
 }
 
+/// `EncryptableAndSignableCard` provides the ability to sign or encrypt and sign contact vcards
 pub trait EncryptableAndSignableCard {
     /// Returns a slice of the plaintext card data comprising a contact v-card.
     fn plaintext_card_data(&self) -> &[u8];
 
     /// Encrypt and and sign the plaintext card data.  This will produce two output values: the encrypted card
     /// and the detached signature calculated over the plaintext card data.
+    ///
+    /// # Parameters
+    /// * `provider` - The PGP provider instance from [`proton_crypto`].
+    /// * `user_key` - The PGP keys that the contact vcard is to be encrypted to and signed by
+    ///
+    /// # Errors
+    /// Returns a `CardCryptoError` if the encryption, or signing fails.  Or alternatively if there are issues
+    /// writing the plaintext vcard data to the stream encryptor or performing the string encoding of the ciphertext
+    /// or detached signature.
     fn encrypt_and_sign_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
@@ -129,7 +146,14 @@ pub trait EncryptableAndSignableCard {
         ))
     }
 
-    /// Sign the plaintext card data.
+    /// Create a detached signature for plaintext, contact vcard data.
+    ///
+    /// # Parameters
+    /// * `provider` - The PGP provider instance from [`proton_crypto`].
+    /// * `user_key` - The PGP keys that the contact vcard is to be signed by.
+    ///
+    /// # Errors
+    /// Returns a `CardCryptoError` if signing the card fails or encoding the armored signature into a string fails
     fn sign_sync<T: PGPProviderSync>(
         &self,
         provider: &T,
