@@ -241,13 +241,9 @@ mod tests {
 
     #[test]
     fn disable_remote_elements() {
-        let options = crate::Options {
-            disable_remote_content: true,
-            ..Default::default()
-        };
-
-        let transformer = Transformer::new(options);
-        let output = transformer.transform(TEST_DOCUMENT).unwrap();
+        let mut transformer = Transformer::new(TEST_DOCUMENT);
+        transformer.disable_remote_content().unwrap();
+        let output = transformer.to_string();
 
         let expected = kuchikiki::parse_html().one(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED);
         assert_eq!(expected.to_string(), output.to_string());
@@ -255,15 +251,9 @@ mod tests {
 
     #[test]
     fn enable_remote_elements() {
-        let options = crate::Options {
-            enable_remote_content: true,
-            ..Default::default()
-        };
-
-        let transformer = Transformer::new(options);
-        let output = transformer
-            .transform(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED)
-            .unwrap();
+        let mut transformer = Transformer::new(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED);
+        transformer.enable_remote_content().unwrap();
+        let output = transformer.to_string();
 
         let expected = kuchikiki::parse_html().one(TEST_DOCUMENT);
         assert_eq!(expected.to_string(), output.to_string());
@@ -271,20 +261,10 @@ mod tests {
 
     #[test]
     fn disable_enable_remote_elements_cycle() {
-        let options = crate::Options {
-            disable_remote_content: true,
-            ..Default::default()
-        };
-
-        let transformer = Transformer::new(options);
-        let output = transformer.transform(TEST_DOCUMENT).unwrap();
-
-        let transformer = Transformer::new(crate::Options {
-            enable_remote_content: true,
-            ..Default::default()
-        });
-
-        let output = transformer.transform_parsed(output).unwrap();
+        let mut transformer = Transformer::new(TEST_DOCUMENT);
+        transformer.disable_remote_content().unwrap();
+        transformer.enable_remote_content().unwrap();
+        let output = transformer.to_string();
 
         let expected = kuchikiki::parse_html().one(TEST_DOCUMENT);
         assert_eq!(expected.to_string(), output.to_string());
