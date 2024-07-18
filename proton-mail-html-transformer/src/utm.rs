@@ -24,7 +24,7 @@ pub enum Error {
 /// # Errors
 ///
 /// Returns error if an HTML href attribute is not a valid url.
-pub fn strip(document: &NodeRef) -> Result<String, Error> {
+pub fn strip(document: &NodeRef) -> Result<(), Error> {
     let select = document.select("[href]").map_err(|()| Error::Selector)?;
 
     for element in select {
@@ -37,7 +37,7 @@ pub fn strip(document: &NodeRef) -> Result<String, Error> {
         *value = new_value.to_string();
     }
 
-    Ok(document.to_string())
+    Ok(())
 }
 
 /// Removes UTM parameters from a given `url`.
@@ -223,7 +223,7 @@ fn remove_from_url() {
 
 #[test]
 fn remove_with_transformer() {
-    use crate::{Options, Transformer};
+    use crate::Transformer;
     use kuchikiki::traits::*;
     let input = r##"
 <html>
@@ -244,11 +244,8 @@ fn remove_with_transformer() {
     // Parse and print so the results have the same formatting.
     let expected = kuchikiki::parse_html().one(expected).to_string();
 
-    let options = Options {
-        strip_utm: true,
-        ..Default::default()
-    };
-    let transformer = Transformer::new(options);
-    let output = transformer.transform(input).unwrap().to_string();
+    let mut transformer = Transformer::new(input);
+    transformer.strip_utm().unwrap();
+    let output = transformer.to_string();
     assert_eq!(expected, output);
 }

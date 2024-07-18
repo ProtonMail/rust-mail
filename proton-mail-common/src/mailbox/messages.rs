@@ -9,7 +9,7 @@ use crate::{
 use proton_api_mail::domain::{MailSettingsViewMode, MimeType};
 use proton_api_mail::exports::anyhow::anyhow;
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
-use proton_mail_html_transformer::{Options, Transformer};
+use proton_mail_html_transformer::Transformer;
 
 impl Mailbox {
     /// Create a new live query for messages.
@@ -136,19 +136,17 @@ impl DecryptedMessageBody {
         }
         // TODO(ET-384): Preserve original html string and parsed result
         // so it can be modified on demand without having to reparse.
-        let options = Options {
-            strip_utm: true,
-            #[cfg(target_os = "ios")]
-            inject_ios_content_size: true,
-            #[cfg(not(target_os = "ios"))]
-            inject_ios_content_size: false,
-            ..Default::default()
-        };
 
-        let transformer = Transformer::new(options);
-        let body = transformer.transform(&body)?.to_string();
+        let mut transformer = Transformer::new(&body);
+        transformer.strip_utm()?;
 
-        Ok(Self { metadata, body })
+        #[cfg(target_os = "ios")]
+        transformer.inject_ios_content_size()?;
+
+        Ok(Self {
+            metadata,
+            body: transformer.to_string(),
+        })
     }
 
     /// Retrieve a parsed header value for a given `key`.
