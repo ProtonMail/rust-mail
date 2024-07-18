@@ -246,7 +246,7 @@ fn remove_with_transformer() {
 
     let options = Options {
         strip_utm: true,
-        inject_ios_content_size: false,
+        ..Default::default()
     };
     let transformer = Transformer::new(options);
     let output = transformer.transform(input).unwrap().to_string();

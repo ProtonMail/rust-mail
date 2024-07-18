@@ -63,8 +63,8 @@ fn inject_with_existing_head_element() {
     let expected = r##"<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></meta></head><body></body></html>"##;
 
     let options = Options {
-        strip_utm: false,
         inject_ios_content_size: true,
+        ..Default::default()
     };
     let transformer = Transformer::new(options);
     let output = transformer.transform(input).unwrap().to_string();
@@ -78,8 +78,8 @@ fn inject_without_existing_head_element() {
     let expected = r##"<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></meta></head><body></body></html>"##;
 
     let options = Options {
-        strip_utm: false,
         inject_ios_content_size: true,
+        ..Default::default()
     };
     let transformer = Transformer::new(options);
     let output = transformer.transform(input).unwrap().to_string();
@@ -97,8 +97,8 @@ fn inject_without_existing_viewport_entry() {
     let expected = r##"<html><head><meta name="viewport" content="width=device-width, initial-scale=0.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"></meta></head><body></body></html>"##;
 
     let options = Options {
-        strip_utm: false,
         inject_ios_content_size: true,
+        ..Default::default()
     };
     let transformer = Transformer::new(options);
     let output = transformer.transform(input).unwrap().to_string();

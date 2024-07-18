@@ -142,6 +142,7 @@ impl DecryptedMessageBody {
             inject_ios_content_size: true,
             #[cfg(not(target_os = "ios"))]
             inject_ios_content_size: false,
+            ..Default::default()
         };
 
         let transformer = Transformer::new(options);

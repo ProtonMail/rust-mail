@@ -16,7 +16,8 @@
 //! // Create the transformed.
 //! let options = Options {
 //!     strip_utm: true,
-//!     inject_ios_content_size: false
+//!     inject_ios_content_size: false,
+//!     ..Default::default()
 //! };
 //! let transformer = Transformer::new(options);
 //!
@@ -33,6 +34,7 @@ use kuchikiki::NodeRef;
 
 // NOTE: each new transformation pass should be its own module.
 mod ios;
+mod remote_content;
 pub mod utm;
 
 /// Control the transformer behavior by selecting which transformations to apply.
@@ -40,6 +42,7 @@ pub mod utm;
 /// By default, other than the sanitization stage, all the remaining stages need to
 /// be enabled manually.
 #[derive(Default)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Options {
     /// If true, enable stripping of UTM tracking codes.
     ///
@@ -49,6 +52,9 @@ pub struct Options {
     ///
     /// See [`ios::inject_content_size()`] for more details.
     pub inject_ios_content_size: bool,
+
+    pub disable_remote_content: bool,
+    pub enable_remote_content: bool,
 }
 
 /// Errors that may occur during transformation.
@@ -60,6 +66,9 @@ pub enum Error {
     /// Error occurred during iOS pass.
     #[error("iOS: {0}")]
     Ios(#[from] ios::Error),
+    /// Error occurred during Remote Content pass.
+    #[error("Remote Content: {0}")]
+    RemoteContent(#[from] remote_content::Error),
 }
 
 /// HTML content transformer.
@@ -102,6 +111,14 @@ impl Transformer {
     pub fn transform_parsed(&self, document: NodeRef) -> Result<NodeRef, Error> {
         if self.options.strip_utm {
             utm::strip(&document)?;
+        }
+
+        if self.options.disable_remote_content {
+            remote_content::disable_remote_content(&document)?;
+        }
+
+        if self.options.enable_remote_content {
+            remote_content::undo_disable_remote_content(&document)?;
         }
 
         if self.options.inject_ios_content_size {
