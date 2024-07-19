@@ -12,10 +12,12 @@ use proton_core_common::db::proton_sqlite3::Observed;
 use proton_core_common::db::DBResult;
 use proton_mail_common::db::{LocalConversation, LocalConversationId, LocalLabelId};
 use proton_mail_common::exports::tracing;
+use proton_mail_common::settings::MailSettings;
 use proton_mail_common::{MailContext, Mailbox, MailboxResult};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::Frame;
+use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
@@ -160,6 +162,7 @@ impl StateHandler for ConversationsState {
         ctx: &MailContext,
         message: Message,
         mbox: &Mailbox,
+        mail_settings: &Arc<MailSettings>,
         sender: &BackgroundSender,
     ) -> Option<Messages> {
         match &mut self.messages {
@@ -212,7 +215,7 @@ impl StateHandler for ConversationsState {
                     self.close_conversation();
                     return None;
                 }
-                state.update(ctx, message, mbox, sender)
+                state.update(ctx, message, mbox, mail_settings, sender)
             }
         }
     }

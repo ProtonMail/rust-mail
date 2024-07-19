@@ -16,11 +16,15 @@ use proton_core_common::db::DBResult;
 use proton_mail_common::db::{LocalConversationId, LocalMessageId, LocalMessageMetadata};
 use proton_mail_common::exports::tracing;
 use proton_mail_common::proton_api_mail::domain::MimeType;
-use proton_mail_common::{DecryptedMessageBody, MailContext, Mailbox, MailboxResult};
+use proton_mail_common::settings::MailSettings;
+use proton_mail_common::{
+    proton_api_mail, DecryptedMessage as DecryptedMessageBody, MailContext, Mailbox, MailboxResult,
+};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 use ratatui::Frame;
+use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
@@ -80,6 +84,7 @@ impl MessagesState {
         &mut self,
         ctx: &MailContext,
         mbox: &Mailbox,
+        mail_settings: Arc<MailSettings>,
         sender: &BackgroundSender,
     ) {
         let Some(metadata) = self.selected_message() else {
@@ -89,9 +94,13 @@ impl MessagesState {
 
         let mbox = mbox.clone();
         let sender = sender.clone();
-
         ctx.async_runtime().spawn(async move {
-            let decrypted = match mbox.message_body(metadata.id).await {
+            //TODO: improve
+            let settings = match &*mail_settings.value() {
+                Ok(s) => s.clone(),
+                Err(_) => proton_api_mail::domain::MailSettings::default(),
+            };
+            let decrypted = match mbox.message_body(metadata.id, &settings).await {
                 Ok(m) => m,
                 Err(e) => {
                     let e = anyhow!("Failed to get message body {e}");
@@ -190,6 +199,7 @@ impl StateHandler for MessagesState {
         ctx: &MailContext,
         message: Message,
         mbox: &Mailbox,
+        mail_settings: &Arc<MailSettings>,
         sender: &BackgroundSender,
     ) -> Option<Messages> {
         let Message::MessageState(message) = message else {
@@ -198,7 +208,7 @@ impl StateHandler for MessagesState {
 
         match message {
             MessageMessage::OpenMessageBody => {
-                self.open_message_body(ctx, mbox, sender);
+                self.open_message_body(ctx, mbox, mail_settings.clone(), sender);
             }
             MessageMessage::OpenMessageBodyResult(r) => {
                 self.display_message(r);
@@ -236,6 +246,12 @@ pub struct DecryptedMessage {
     bcc_list: String,
     label_list: String,
 }
+
+/// # Safety
+///
+/// The `NodeRef` type is not send by default, but the data is not shared outside of the crate
+/// so it is safe.
+unsafe impl Send for DecryptedMessage {}
 
 enum DecryptedMessageStatus {
     None,

@@ -12,10 +12,12 @@ use proton_core_common::db::DBResult;
 use proton_mail_common::db::{LabelItemCount, LocalLabel, LocalLabelId};
 use proton_mail_common::exports::tracing;
 use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
+use proton_mail_common::settings::MailSettings;
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult};
 use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
 
@@ -39,6 +41,7 @@ pub(super) trait StateHandler {
         ctx: &MailContext,
         message: Message,
         mbox: &Mailbox,
+        mail_settings: &Arc<MailSettings>,
         sender: &BackgroundSender,
     ) -> Option<Messages>;
     fn view(&mut self, frame: &mut Frame, area: Rect);
@@ -46,6 +49,7 @@ pub(super) trait StateHandler {
 pub struct Model {
     ctx: MailUserContext,
     mailbox: Mailbox,
+    mail_settings: Arc<MailSettings>,
     label: LocalLabel,
     item_count_query: Option<Observed>,
     item_count: Option<LabelItemCount>,
@@ -59,9 +63,11 @@ impl Model {
         let label = ctx
             .get_label_with_remote_id(LabelId::inbox())?
             .ok_or(MailboxError::RemoteLabelNotFound(LabelId::inbox().clone()))?;
+        let mail_settings = MailSettings::new(&ctx, None);
         Ok(Self {
             ctx,
             mailbox,
+            mail_settings: Arc::new(mail_settings),
             state: State::new_syncing(),
             label,
             item_count_query: None,
@@ -305,7 +311,8 @@ impl AppStateHandler for Model {
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
             Message::OpenUnlabelItemPopup(item) => self.open_unlabel_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
-                self.state.update(ctx, message, &self.mailbox, sender)
+                self.state
+                    .update(ctx, message, &self.mailbox, &self.mail_settings, sender)
             }
             Message::ItemCountRefreshed(count) => {
                 self.item_count_refreshed(count);
@@ -400,12 +407,13 @@ impl StateHandler for State {
         ctx: &MailContext,
         message: Message,
         mbox: &Mailbox,
+        mail_settings: &Arc<MailSettings>,
         sender: &BackgroundSender,
     ) -> Option<Messages> {
         match self {
             State::Syncing(_) => None,
-            State::Conversations(state) => state.update(ctx, message, mbox, sender),
-            State::Messages(state) => state.update(ctx, message, mbox, sender),
+            State::Conversations(state) => state.update(ctx, message, mbox, mail_settings, sender),
+            State::Messages(state) => state.update(ctx, message, mbox, mail_settings, sender),
         }
     }
 
