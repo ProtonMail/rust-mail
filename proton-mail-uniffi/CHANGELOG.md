@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - avatar_information_from_message_addresses
     - avatar_information_from_message_address
 - Disable/Enable remote image in HTML content in `DecryptedMessageBody`.
+- Add `rust_log_*` functions to log into the rust log.
 
 ### Changed
 
