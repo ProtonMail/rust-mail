@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - avatar_information_from_name_and_email
     - avatar_information_from_message_addresses
     - avatar_information_from_message_address
+- Disable/Enable remote image in HTML content in `DecryptedMessageBody`.
+
+### Changed
+
+- Renamed `DecryptedMessageBody` into `DecryptedMessage`.
 
 ## [0.10.32] - 2024-07-15
 

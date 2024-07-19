@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+- Disable/Enable remote image in HTML content in `DecryptedMessageBody`.
+
+### Changed
+
+- Renamed `DecryptedMessageBody` into `DecryptedMessage`.
+- Renamed `DecryptedMessageBodyError` into `DecryptedMessageError`.
+
 ## [0.5.29] - 2024-07-15
 
 ### Added
 
-- Strip UTM parameters from HTML content
-- [iOS] Inject viewport metadata for web view
+- Strip UTM parameters from HTML content.
+- [iOS] Inject viewport metadata for web view.
 
 ## [0.5.28] - 2024-07-02
 

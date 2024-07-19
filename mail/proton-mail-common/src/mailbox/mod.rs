@@ -2,11 +2,12 @@ mod attachments;
 mod conversation;
 mod messages;
 
+mod decrypted_message;
 #[cfg(test)]
 mod tests;
 
 pub use attachments::DecryptedAttachment;
-pub use messages::{DecryptedMessageBody, ParsedHeaderValue};
+pub use decrypted_message::{DecryptedMessage, DecryptedMessageError, ParsedHeaderValue};
 
 use crate::db::proton_sqlite3::{InProcessTrackerService, Observable};
 use crate::db::{
@@ -67,8 +68,8 @@ pub enum MailboxError {
     DB(#[from] crate::db::DBError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
-    #[error("Html Transform: {0}")]
-    HtmlTransformer(#[from] proton_mail_html_transformer::Error),
+    #[error("Decrypted Message: {0}")]
+    DecryptedMessage(#[from] DecryptedMessageError),
 }
 
 /// Abstraction trait to make it easier to integrate mail in different target platforms. E.g.:
