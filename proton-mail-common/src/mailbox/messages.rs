@@ -1,15 +1,13 @@
-use crate::db::serde_json::Value;
 use crate::db::{LocalMessageBodyMetadata, LocalMessageId, LocalMessageMetadata, MessageQuery};
 use crate::exports::crypto::proton_crypto::new_pgp_provider;
-use crate::exports::tracing;
 use crate::exports::tracing::error;
 use crate::{
-    MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder, MailboxResult,
+    DecryptedMessage, MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder,
+    MailboxResult,
 };
-use proton_api_mail::domain::{MailSettingsViewMode, MimeType};
+use proton_api_mail::domain::{MailSettings, MailSettingsViewMode, MimeType};
 use proton_api_mail::exports::anyhow::anyhow;
-use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
-use proton_mail_html_transformer::Transformer;
+use proton_crypto_inbox::message::DecryptableMessage;
 
 impl Mailbox {
     /// Create a new live query for messages.
@@ -54,7 +52,11 @@ impl Mailbox {
     /// # Errors
     /// Returns error if the message failed to download, the db query failed or the message
     /// body could not be written to the cache.
-    pub async fn message_body(&self, id: LocalMessageId) -> MailboxResult<DecryptedMessageBody> {
+    pub async fn message_body(
+        &self,
+        id: LocalMessageId,
+        mail_settings: &MailSettings,
+    ) -> MailboxResult<DecryptedMessage> {
         // Fetch metadata first to sync contents and cache.
         let metadata = self.user_ctx.sync_message_body(id).await?;
 
@@ -96,103 +98,19 @@ impl Mailbox {
                 e
             })?;
 
-        match decrypted_body {
-            DecryptedBody::Plain(body) => {
-                Ok(DecryptedMessageBody::new(encrypted_msg.metadata, body)?)
-            }
-            DecryptedBody::Mime(multipart) => {
-                //TODO(ET-263): Handle multipart messages.
-                Ok(DecryptedMessageBody::new(
-                    encrypted_msg.metadata,
-                    multipart.body,
-                )?)
-            }
-        }
+        Ok(DecryptedMessage::new(
+            mail_settings,
+            encrypted_msg.metadata,
+            decrypted_body,
+        )?)
     }
 }
 
-/// Consists of the message's body metadata and decrypted content.
-pub struct DecryptedMessageBody {
-    /// Metadata associated with the message body
-    metadata: LocalMessageBodyMetadata,
-    /// The decrypted message contents.
-    body: String,
-}
-
-/// A message parsed header value can either be a string or an array of strings.
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
-pub enum ParsedHeaderValue {
-    String(String),
-    Array(Vec<String>),
-}
-
-impl DecryptedMessageBody {
-    pub fn new(
-        metadata: LocalMessageBodyMetadata,
-        body: String,
-    ) -> Result<Self, proton_mail_html_transformer::Error> {
-        if !matches!(metadata.mime_type, MimeType::TextHTML) {
-            return Ok(Self { metadata, body });
-        }
-        // TODO(ET-384): Preserve original html string and parsed result
-        // so it can be modified on demand without having to reparse.
-
-        let mut transformer = Transformer::new(&body);
-        transformer.strip_utm()?;
-
-        #[cfg(target_os = "ios")]
-        transformer.inject_ios_content_size()?;
-
-        Ok(Self {
-            metadata,
-            body: transformer.to_string(),
-        })
-    }
-
-    /// Retrieve a parsed header value for a given `key`.
-    pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
-        let value = self.metadata.parsed_headers.get(key)?;
-        match value {
-            Value::String(s) => Some(ParsedHeaderValue::String(s.clone())),
-            Value::Array(array) => {
-                let mut result = Vec::with_capacity(array.len());
-                for (idx, item) in array.iter().enumerate() {
-                    if let Value::String(str) = item {
-                        result.push(str.clone());
-                    } else {
-                        tracing::warn!(
-                            "Header array value {key}[{idx}] of message {} has invalid value type",
-                            self.metadata.id
-                        );
-                    }
-                }
-                Some(ParsedHeaderValue::Array(result))
-            }
-            _ => {
-                tracing::warn!(
-                    "Header value {key} of message {} has invalid value type",
-                    self.metadata.id
-                );
-                None
-            }
-        }
-    }
-
-    /// Access the message's body.
-    #[inline]
-    pub fn body(&self) -> &str {
-        &self.body
-    }
-
-    /// Access the message's body metadata.
-    #[inline]
-    pub fn metadata(&self) -> &LocalMessageBodyMetadata {
-        &self.metadata
-    }
-}
-
+/// Wrapper type to hook into the [`EncryptedMessageBody`] trait.
 struct EncryptedMessageBody {
+    /// Associated metadata.
     pub metadata: LocalMessageBodyMetadata,
+    /// Encrypted body.
     pub encrypted_body: String,
 }
 
