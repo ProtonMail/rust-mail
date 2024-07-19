@@ -38,7 +38,7 @@ impl KeyChain for AppKeyChain {
     }
 
     fn delete(&self) -> Result<(), KeyChainError> {
-        if let Err(e) = self.entry.delete_password() {
+        if let Err(e) = self.entry.delete_credential() {
             if !matches!(e, keyring::Error::NoEntry) {
                 return Err(KeyChainError::from(anyhow!(e)));
             }

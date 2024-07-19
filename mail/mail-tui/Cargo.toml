@@ -10,20 +10,26 @@ dirs = "5"
 anyhow = "1"
 thiserror = "1"
 crossterm = "0.27.0"
-ratatui = { version = "0.26.1", features = ["all-widgets"] }
+ratatui = { version = "0.27.0", features = ["all-widgets"] }
 secrecy = "0.8"
 log = "0.4"
-tui-input = "0.8"
+tui-input = "0.9"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 tracing-error = "0.2"
-keyring = "2.3"
 hex = "0.4"
 tui-logger = { version = "0.11", features = ["tracing-support"] }
 unicode-width = "0.1"
 chrono = { version = "0.4" }
-throbber-widgets-tui = "0.5.0"
+throbber-widgets-tui = "0.6.0"
 scopeguard = "1.2"
 html2text = "0.12.5"
+
+[target.'cfg(target_os="linux")'.dependencies]
+keyring = { version = "3.0.3", features = ["linux-native"] }
+
+[target.'cfg(target_os="macos")'.dependencies]
+keyring = { version = "3.0.3", features = ["apple-native"] }
+
 
 [dependencies.proton-async]
 #path = "../../proton-api-core/proton-async"

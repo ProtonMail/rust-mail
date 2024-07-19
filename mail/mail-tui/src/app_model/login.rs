@@ -145,7 +145,7 @@ impl AppStateHandler for Model {
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let area = area.inner(&Margin {
+        let area = area.inner(Margin {
             horizontal: 10,
             vertical: 2,
         });

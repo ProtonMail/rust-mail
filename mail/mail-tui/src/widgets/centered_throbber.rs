@@ -46,7 +46,7 @@ impl<'a> StatefulWidget for CenteredThrobber<'a> {
             Constraint::Min(10),
             Constraint::Percentage(50),
         ])
-        .areas(content.inner(&Margin {
+        .areas(content.inner(Margin {
             horizontal: 1,
             vertical: 1,
         }));

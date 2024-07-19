@@ -302,7 +302,7 @@ impl Model<Messages> for AppModel {
             ])
             .flex(Flex::SpaceAround)
             .areas(box_area);
-            let popup_area = box_area.inner(&Margin {
+            let popup_area = box_area.inner(Margin {
                 horizontal: 1,
                 vertical: 1,
             });
@@ -441,7 +441,7 @@ impl Popup for ErrorDialog {
             Constraint::Length(2),
         ])
         .flex(Flex::Center)
-        .areas(area.inner(&Margin::new(2, 2)));
+        .areas(area.inner(Margin::new(2, 2)));
         frame.render_widget(Block::new().white().on_red(), area);
         frame.render_widget(
             Paragraph::new(self.error.to_string())
@@ -501,7 +501,7 @@ impl BackgroundProgress {
             Constraint::Min(10),
             Constraint::Percentage(50),
         ])
-        .areas(content.inner(&Margin {
+        .areas(content.inner(Margin {
             horizontal: 1,
             vertical: 1,
         }));
