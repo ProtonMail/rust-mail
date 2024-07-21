@@ -965,6 +965,9 @@ impl OperationLogic for Query {
         if let Some(query) = statement.expanded_sql() {
             debug!("Query: {query}");
         }
+        if let Ok(ref records) = rows {
+            debug!("Rows: {}", records.0.len());
+        }
         rows.map_err(StashError::DeserializationError)
     }
 }
@@ -2471,6 +2474,10 @@ impl Worker {
         receiver: QueueReceiver<Operation>,
         stash: Stash,
     ) -> Result<(), StashError> {
+        match path {
+            Some(path) => debug!("New Stash with file: {:?}", path),
+            None => debug!("New Stash with in-memory database"),
+        }
         let manager = path.map_or_else(
             SqliteConnectionManager::memory,
             SqliteConnectionManager::file,

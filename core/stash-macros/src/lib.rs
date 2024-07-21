@@ -990,7 +990,9 @@ fn generate_from_row_values_impl(
                 row.get(
                     columns.iter().position(|c| c == stringify!(#field_ident))
                         .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#field_ident).to_owned()))?
-                )?
+                ).map_err(|error| {
+                    stash::orm::ConversionError::FromSqlConversionError(stringify!(#field_ident).to_owned(), error)
+                })?
             }
         }
     })

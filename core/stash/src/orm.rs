@@ -58,6 +58,12 @@ pub enum ConversionError {
     #[error("Deserialization error{}: {1}", .0.as_ref().map(|column| format!(r#" for column "{column}""#)).unwrap_or_default())]
     DeserializationError(Option<String>, String),
 
+    /// SQL type conversion error from [`rusqlite`], specifically when trying to
+    /// convert a value from the database into a Rust type using the [`FromSql`]
+    /// implementation.
+    #[error("FromSql conversion error for column \"{0}\": {1}")]
+    FromSqlConversionError(String, SqliteError),
+
     /// The row data returned from the database query is missing a column
     /// according to the expectations of the record type.
     #[error("Missing column: \"{0}\"")]
@@ -959,7 +965,7 @@ where
 /// `stash::converter()` (note: this is not a public function).
 ///
 #[derive(Debug)]
-pub struct DbRecords(Vec<Box<dyn Any + Send + 'static>>);
+pub struct DbRecords(pub(crate) Vec<Box<dyn Any + Send + 'static>>);
 
 impl<T: 'static + Send> FromIterator<Box<T>> for DbRecords {
     fn from_iter<I: IntoIterator<Item = Box<T>>>(iter: I) -> Self {
