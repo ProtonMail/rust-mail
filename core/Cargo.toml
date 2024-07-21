@@ -40,7 +40,8 @@ serde-aux = "4.5"
 serde_json = "1"
 serde_repr = "0.1"
 stash = { version = "0.1.0", path = "stash" }
-tempdir = "0.3"
+tempdir = "0.3.1"
+tempfile = "3.10.1"
 thiserror = "1"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"

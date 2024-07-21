@@ -185,3 +185,11 @@ pub mod exports {
     };
     pub use rusqlite::{Error as SqliteError, Row};
 }
+
+/// Use of crates that are used in integration tests, to prevent lint warnings.
+#[cfg(test)]
+mod integration_test_package_usage {
+    use futures as _;
+    use tempdir as _;
+    use tempfile as _;
+}
