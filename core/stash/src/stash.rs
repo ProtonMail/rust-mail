@@ -442,6 +442,7 @@ impl Deref for AgnosticConnection<'_> {
 /// # See also
 ///
 /// * [`Command`]
+/// * [`Information`]
 /// * [`Instruction`]
 /// * [`Notification`]
 /// * [`OperationLogic`]
@@ -477,6 +478,9 @@ enum Operation {
     /// Starts a new transaction.
     StartTransaction(Command),
 
+    /// Requests statistics about the database usage and current status.
+    Statistics(Information),
+
     /// Subscribes to notifications of changes made to the database.
     Subscribe(Subscription),
 }
@@ -498,7 +502,7 @@ impl Operation {
             | Self::RollbackTransaction(ref mut command)
             | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
             Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
-            Self::Publish(_) => {}
+            Self::Publish(_) | Self::Statistics(_) => {}
             Self::Query(ref mut query) => query.send_back(Err(error)),
             Self::Subscribe(ref mut subscription) => subscription.send_back(Err(error)),
         }
@@ -619,6 +623,7 @@ pub enum StashError {
 ///
 /// # See also
 ///
+/// * [`Information`]
 /// * [`Instruction`]
 /// * [`Notification`]
 /// * [`Operation`]
@@ -663,6 +668,63 @@ impl OperationLogic for Command {
     }
 }
 
+/// An information request to be executed by the worker.
+///
+/// This is used for system-defined information requests (i.e. those where the
+/// user does not control the types) such obtaining statistics.
+///
+/// At present the only possible response is [`Stats`], but this will be
+/// expanded in future.
+///
+/// # See also
+///
+/// * [`Command`]
+/// * [`Instruction`]
+/// * [`Notification`]
+/// * [`Operation`]
+/// * [`Query`]
+/// * [`Subscription`]
+///
+struct Information {
+    /// The communication channel used to send the result of the operation back
+    /// to the caller.
+    channel: Option<OneshotSender<Result<Stats, StashError>>>,
+}
+
+impl OperationLogic for Information {
+    type Output = Stats;
+
+    fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>> {
+        self.channel.take()
+    }
+
+    /// Carries out a command.
+    ///
+    /// **Note: This function does not actually do anything, as the operational
+    /// context for information requests is the [`Operation`] variant they are
+    /// wrapped in.**
+    ///
+    /// # Parameters
+    ///
+    /// * `connection` - The database connection to use for the operation.
+    /// * `stash`      - The associated [`Stash`] instance for the operation.
+    ///
+    /// # Errors
+    ///
+    /// None.
+    ///
+    fn run(
+        &self,
+        _connection: &AgnosticConnection<'_>,
+        _stash: Stash,
+    ) -> Result<Stats, StashError> {
+        // This is fake and is never actually called. It's here to obey the trait
+        // interface, which might be changed in future to separate runnable and
+        // non-runnable operations.
+        Ok(Stats::default())
+    }
+}
+
 /// An operation to be executed by the worker, which does not return any data.
 ///
 /// This is used for operations such as `INSERT`, `UPDATE`, and `DELETE`, where
@@ -672,6 +734,7 @@ impl OperationLogic for Command {
 /// # See also
 ///
 /// * [`Command`]
+/// * [`Information`]
 /// * [`Notification`]
 /// * [`Operation`]
 /// * [`Query`]
@@ -809,6 +872,7 @@ impl PartialEq for Notification {
 /// # See also
 ///
 /// * [`Command`]
+/// * [`Information`]
 /// * [`Instruction`]
 /// * [`Notification`]
 /// * [`Operation`]
@@ -1280,6 +1344,28 @@ impl Stash {
         Ok(receiver)
     }
 
+    /// Gets statistics about the current state of the [`Stash`] instance.
+    ///
+    /// # Errors
+    ///
+    /// Technically, the only errors that can occur will come from interaction
+    /// with the queues, either the worker queue or one-shot channel. Neither of
+    /// these should fail under normal circumstances.
+    ///
+    pub async fn stats(&self) -> Result<Stats, StashError> {
+        let (that_end, this_end) = oneshot::channel();
+        let info = Operation::Statistics(Information {
+            channel: Some(that_end),
+        });
+        self.queue
+            .send_async(info)
+            .await
+            .map_err(|err| StashError::QueueError(err.to_string()))?;
+        this_end
+            .await
+            .map_err(|err| StashError::OneShotError(err.to_string()))?
+    }
+
     /// Starts a new transaction against a new connection.
     ///
     /// This function starts a new transaction on a new database connection. All
@@ -1325,6 +1411,42 @@ impl PartialEq for Stash {
     }
 }
 
+/// Statistics about the current state of the [`Stash`] instance.
+#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub struct Stats {
+    /// The number of active subscribers to database change notifications.
+    pub active_subscriber_count: usize,
+
+    /// The number of active tethers, i.e. database connections. Note that these
+    /// may or may not be technically active. It includes those created and not
+    /// yet used, as well as those used and finished with and not yet
+    /// cleaned-up.
+    pub active_tether_count: usize,
+
+    /// A list of the pointers to [`Weak`] references to the active tethers.
+    /// These pointers may or may not be valid by the time they are read, as the
+    /// tethers may have been dropped. If the [`Weak`]s were stored here, then
+    /// if they are dropped by the time they are read it becomes impossible to
+    /// report their value, making it hard to match against logs. Therefore, the
+    /// pointer values are stored here for matching purposes, but not actually
+    /// used for memory interaction (which would be unsafe, and require some
+    /// additional tracking). Note that to be thread-safe, the pointers are
+    /// stored as [`usize`] instead of `*const ()`.
+    pub active_tethers: Vec<usize>,
+
+    /// The number of commands executed since the [`Stash`] instance was
+    /// created.
+    pub total_commands_run: usize,
+
+    /// The number of notifications sent to subscribers since the [`Stash`]
+    /// instance was created.
+    pub total_notifications_sent: usize,
+
+    /// The number of queries executed since the [`Stash`] instance was created.
+    pub total_queries_run: usize,
+}
+
 /// A subscription operation to be executed by the worker.
 ///
 /// This is used for subscribing to [`Notification`]s, such as database change
@@ -1333,6 +1455,7 @@ impl PartialEq for Stash {
 /// # See also
 ///
 /// * [`Command`]
+/// * [`Information`]
 /// * [`Instruction`]
 /// * [`Notification`]
 /// * [`Operation`]
@@ -1877,6 +2000,16 @@ impl TetheredWorker {
                     command.send_back(Err(StashError::TransactionAlreadyStarted));
                 }
             }
+            Operation::Statistics(_) => {
+                // Technically, these cannot occur here, as information requests are global
+                // in scope and not connection-specific. We should never get here. If we do,
+                // it means there is an error in the logic of this module. Note that we
+                // cannot return an error to the original caller, as there is no oneshot
+                // channel for notifications, plus the context would not make any sense.
+                warn!(
+                    "Unexpectedly reached Statistics variant in TetheredWorker::handle_operation()"
+                );
+            }
             Operation::Subscribe(mut subscription) => {
                 // Technically, these cannot occur here, as subscription operations are
                 // global in scope and not connection-specific. We should never get here. If
@@ -2271,6 +2404,20 @@ impl Worker {
                     vec![],
                 ));
             }
+            Operation::Statistics(mut command) => {
+                debug!("Stash: Statistics request");
+                command.send_back(Ok(Stats {
+                    active_subscriber_count: self.subscribers.len(),
+                    active_tether_count: self.tethers.len(),
+                    active_tethers: self.tethers.keys().map(|&ptr| ptr as usize).collect(),
+                    // TODO
+                    total_commands_run: 0,
+                    // TODO
+                    total_notifications_sent: 0,
+                    // TODO
+                    total_queries_run: 0,
+                }));
+            }
             Operation::Subscribe(mut subscription) => {
                 debug!("Stash: Subscription request");
                 self.subscribers.push(subscription.queue.clone());
@@ -2360,7 +2507,9 @@ impl Worker {
                     | Operation::RollbackTransaction(ref command)
                     | Operation::StartTransaction(ref command) => command.conn_handle.clone(),
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
-                    Operation::Publish(_) | Operation::Subscribe(_) => None,
+                    Operation::Publish(_) | Operation::Statistics(_) | Operation::Subscribe(_) => {
+                        None
+                    }
                     Operation::Query(ref query) => query.conn_handle.clone(),
                 };
                 match conn_handle {
