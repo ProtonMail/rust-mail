@@ -5,7 +5,7 @@ use crate::{
     DecryptedMessage, MailContextError, Mailbox, MailboxError, MailboxObservableQueryBuilder,
     MailboxResult,
 };
-use proton_api_mail::domain::{MailSettings, MailSettingsViewMode, MimeType};
+use proton_api_mail::domain::{MailSettingsViewMode, MimeType};
 use proton_api_mail::exports::anyhow::anyhow;
 use proton_crypto_inbox::message::DecryptableMessage;
 
@@ -52,11 +52,7 @@ impl Mailbox {
     /// # Errors
     /// Returns error if the message failed to download, the db query failed or the message
     /// body could not be written to the cache.
-    pub async fn message_body(
-        &self,
-        id: LocalMessageId,
-        mail_settings: &MailSettings,
-    ) -> MailboxResult<DecryptedMessage> {
+    pub async fn message_body(&self, id: LocalMessageId) -> MailboxResult<DecryptedMessage> {
         // Fetch metadata first to sync contents and cache.
         let metadata = self.user_ctx.sync_message_body(id).await?;
 
@@ -98,8 +94,16 @@ impl Mailbox {
                 e
             })?;
 
+        let mail_settings = self
+            .user_ctx
+            .db_read(|conn| conn.mail_settings())
+            .map_err(|e| {
+                error!("Failed to read mail settings: {e}");
+                e
+            })?;
+
         Ok(DecryptedMessage::new(
-            mail_settings,
+            &mail_settings,
             encrypted_msg.metadata,
             decrypted_body,
         )?)

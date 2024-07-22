@@ -1,6 +1,5 @@
 use crate::mail::mailbox::DEFAULT_CONVERSATION_COUNT;
 use crate::mail::mailbox::{Observable, SharedLive, SharedLiveQueryBuilder};
-use crate::mail::settings::MailUserSettings;
 use crate::mail::{Mailbox, MailboxError, MailboxLiveQueryUpdatedCallback};
 use crate::new_live_query;
 use proton_mail_common::db::proton_sqlite3::InProcessTrackerService;
@@ -35,19 +34,11 @@ impl Mailbox {
     /// # Errors
     /// Returns error if the network request, the database query, reading/writing
     /// the body to the cache or decrypting the body failed.
-    pub async fn message_body(
-        &self,
-        id: u64,
-        mail_settings: &MailUserSettings,
-    ) -> Result<DecryptedMessage, MailboxError> {
-        let settings = mail_settings.value().unwrap_or_default();
+    pub async fn message_body(&self, id: u64) -> Result<DecryptedMessage, MailboxError> {
         let mbox = self.mbox.clone();
         self.uniffi_async(async move {
             Ok(DecryptedMessage {
-                message: RwLock::new(
-                    mbox.message_body(LocalMessageId::from(id), &settings)
-                        .await?,
-                ),
+                message: RwLock::new(mbox.message_body(LocalMessageId::from(id)).await?),
             })
         })
         .await
