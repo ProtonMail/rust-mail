@@ -11,17 +11,11 @@ use stash::stash::Stash;
 
 #[tokio::test]
 async fn test_full_contact() {
-    let conn = new_core_test_connection().await;
-    let tx = conn
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
-    let mut full_contact = create_test_full_contact(&conn);
+    let stash = new_core_test_connection().await;
+    let mut full_contact = create_test_full_contact(&stash);
+    full_contact.stash = Some(stash.clone());
     full_contact.row_id = None;
-    full_contact
-        .save_using(&tx)
-        .await
-        .expect("failed to create contact");
+    full_contact.save().await.expect("failed to create contact");
     let id = full_contact
         .row_id
         .clone()
@@ -31,10 +25,9 @@ async fn test_full_contact() {
         .clone()
         .expect("failed to get contact id");
     full_contact
-        .save_using(&tx)
+        .save()
         .await
         .expect("failed to overwrite contact");
-    tx.commit().await.expect("Failed to commit transaction");
     let id_second = full_contact
         .row_id
         .clone()
@@ -42,7 +35,7 @@ async fn test_full_contact() {
     assert_eq!(id, 1);
     assert_eq!(id, id_second);
     // Query the full contact with cards
-    let mut contact_with_cards = Contact::load_using(remote_id, &tx)
+    let mut contact_with_cards = Contact::load(remote_id, &stash)
         .await
         .expect("query contact with cards failed")
         .expect("expected to find contact");
@@ -55,31 +48,24 @@ async fn test_full_contact() {
 
 #[tokio::test]
 async fn test_partial_contact() {
-    let conn = new_core_test_connection().await;
-    let tx = conn
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
+    let stash = new_core_test_connection().await;
     let mut partial_contacts = create_test_partial_contacts();
-    let mut contact_emails = create_test_contact_emails(&conn);
+    let mut contact_emails = create_test_contact_emails(&stash);
     // Insert all partial contacts
     for contact in &mut partial_contacts {
+        contact.stash = Some(stash.clone());
         contact.row_id = None;
-        contact
-            .save_using(&tx)
-            .await
-            .expect("failed to create contact");
+        contact.save().await.expect("failed to create contact");
     }
     // Insert all contact mails
     for contact_email in &mut contact_emails {
         contact_email.row_id = None;
         contact_email.remote_contact_id = partial_contacts.first().unwrap().remote_id.clone();
         contact_email
-            .save_using(&tx)
+            .save()
             .await
             .expect("failed to create contact email");
     }
-    tx.commit().await.expect("Failed to commit transaction");
 
     assert_eq!(partial_contacts.first().unwrap().row_id.unwrap(), 1);
     assert_eq!(contact_emails.first().unwrap().row_id.unwrap(), 1);
@@ -88,7 +74,7 @@ async fn test_partial_contact() {
     let mail = ContactEmail::find_first(
         "WHERE canonical_email = ?",
         params!["contact_email_1@contact.test"],
-        &conn,
+        &stash,
     )
     .await
     .expect("failed to query email")
@@ -96,13 +82,13 @@ async fn test_partial_contact() {
     assert_eq!(mail.canonical_email, "contact_email_1@contact.test");
 
     // Query all test contact mails.
-    let mails = ContactEmail::find("LIMIT 100", vec![], &conn, None)
+    let mails = ContactEmail::find("LIMIT 100", vec![], &stash, None)
         .await
         .expect("failed to query email");
     assert_eq!(mails.len(), contact_emails.len());
 
     // Query all contacts.
-    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+    let mut contacts = Contact::find("LIMIT 100", vec![], &stash, None)
         .await
         .expect("failed to query contacts");
     let contact = contacts.first_mut().unwrap();
@@ -113,7 +99,7 @@ async fn test_partial_contact() {
     assert_eq!(contact.emails().await.unwrap().len(), contact_emails.len());
 
     // Query specific contact.
-    let mut contact_single = Contact::load(contact.remote_id.clone().unwrap(), &conn)
+    let mut contact_single = Contact::load(contact.remote_id.clone().unwrap(), &stash)
         .await
         .expect("failed to query contacts")
         .expect("expected to find contact");

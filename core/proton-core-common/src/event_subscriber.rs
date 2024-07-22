@@ -71,37 +71,40 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 error!("Failed to get DB connection :{e}");
                 SubscriberError::Other(anyhow!("Failed to get db connection: {e}"))
             })?;
-        let tx = stash.transaction().await?;
         {
             for event in events.iter_mut() {
                 if let Some(user) = event.get_core_event_user_mut() {
                     debug!("Handling user event");
-                    user.save_using(&tx).await.map_err(|e| {
+                    user.set_stash(&stash);
+                    user.save().await.map_err(|e| {
                         error!("Failed to update user: {e}");
                         e
                     })?;
                 }
                 if let Some(settings) = event.get_core_event_user_settings_mut() {
                     debug!("Handling user setting event");
-                    settings.save_using(&tx).await.map_err(|e| {
+                    settings.set_stash(&stash);
+                    settings.save().await.map_err(|e| {
                         error!("Failed to update user settings:{e}");
                         e
                     })?;
                 }
                 if let Some(used_space) = event.get_core_event_used_space() {
                     debug!("Handling user space event");
-                    let mut user = User::load_using(user_id.clone(), &tx).await?.unwrap();
+                    let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.used_space = used_space;
-                    user.save_using(&tx).await.map_err(|e| {
+                    user.set_stash(&stash);
+                    user.save().await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e
                     })?;
                 }
                 if let Some(used_product_space) = event.get_core_event_used_product_space() {
                     debug!("Handling user product space event");
-                    let mut user = User::load_using(user_id.clone(), &tx).await?.unwrap();
+                    let mut user = User::load(user_id.clone(), &stash).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
-                    user.save_using(&tx).await.map_err(|e| {
+                    user.set_stash(&stash);
+                    user.save().await.map_err(|e| {
                         error!("Failed to update used space:{e}");
                         e
                     })?;
@@ -117,19 +120,16 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
                 }
                 if let Some(contacts) = event.get_core_event_contacts_mut() {
                     debug!("Handling contact events");
-                    handle_contact_event(&tx, contacts).await?;
+                    handle_contact_event(&stash.connection(), contacts).await?;
                 }
                 if let Some(contact_emails) = event.get_core_event_contact_emails_mut() {
                     debug!("Handling contact email events");
-                    handle_contact_email_event(&tx, contact_emails).await?;
+                    handle_contact_email_event(&stash.connection(), contact_emails).await?;
                 }
             }
             Ok(())
         }
-        .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))?;
-        tx.commit()
-            .await
-            .map_err(|e| SubscriberError::Other(anyhow!("Failed to commit transaction: {e}")))
+        .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))
     }
 }
 

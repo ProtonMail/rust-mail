@@ -288,8 +288,11 @@ impl Contact {
         for email in &mut self.contact_emails {
             email.remote_contact_id.clone_from(&self.remote_id);
         }
-        let Some(stash) = self.stash() else {
-            return Err(StashError::NoStashAvailable);
+        let stash = {
+            let Some(stash) = self.stash() else {
+                return Err(StashError::NoStashAvailable);
+            };
+            stash.clone()
         };
         stash
             .execute(
@@ -300,6 +303,7 @@ impl Contact {
         for card in &mut self.cards {
             card.local_id = None;
             card.row_id = None;
+            card.set_stash(&stash);
             card.save().await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e
@@ -361,18 +365,13 @@ impl Contact {
         // TODO: There should be one transaction for the whole sync.
         let mut page_index = 0;
         // Reset the database state by deleting all contacts.
-        async {
-            let tx = stash.transaction().await?;
-            tx.execute("DELETE FROM contacts", vec![]).await?;
-            tx.execute("DELETE FROM contact_emails", vec![]).await?;
-            tx.execute("DELETE FROM contact_cards", vec![]).await?;
-            tx.execute("DELETE FROM contact_email_labels", vec![])
-                .await?;
-            tx.commit().await?;
-            Ok(())
-        }
-        .await
-        .map_err(|err: StashError| {
+        stash.execute("DELETE FROM contacts", vec![]).await?;
+        stash.execute("DELETE FROM contact_emails", vec![]).await?;
+        stash.execute("DELETE FROM contact_cards", vec![]).await?;
+        stash
+            .execute("DELETE FROM contact_email_labels", vec![])
+            .await?;
+        Ok(()).map_err(|err: StashError| {
             error!("Failed to reset contact tables: {err}");
             err
         })?;
@@ -395,19 +394,13 @@ impl Contact {
                 .map(Contact::from)
                 .collect();
             if !contacts.is_empty() {
-                async {
-                    let tx = stash.transaction().await?;
-                    for contact in &mut contacts {
-                        contact.save_using(&tx).await?;
-                    }
-                    tx.commit().await?;
-                    Ok(())
+                for contact in &mut contacts {
+                    contact.stash = Some(stash.clone());
+                    contact.save().await.map_err(|err: StashError| {
+                        error!("Failed to sync contacts for page {page_index} to db: {err}");
+                        err
+                    })?;
                 }
-                .await
-                .map_err(|err: StashError| {
-                    error!("Failed to sync contacts for page {page_index} to db: {err}");
-                    err
-                })?;
             }
             debug!(
                 "Synced page {} of partial contacts, {} contacts fetched",
@@ -441,19 +434,13 @@ impl Contact {
                 .map(ContactEmail::from)
                 .collect();
             if !contact_emails.is_empty() {
-                async {
-                    let tx = stash.transaction().await?;
-                    for contact_email in &mut contact_emails {
-                        contact_email.save_using(&tx).await?;
-                    }
-                    tx.commit().await?;
-                    Ok(())
+                for contact_email in &mut contact_emails {
+                    contact_email.stash = Some(stash.clone());
+                    contact_email.save().await.map_err(|err: StashError| {
+                        error!("Failed to sync contact emails for page {page_index} to db: {err}");
+                        err
+                    })?;
                 }
-                .await
-                .map_err(|err: StashError| {
-                    error!("Failed to sync contact emails for page {page_index} to db: {err}");
-                    err
-                })?;
             }
             debug!(
                 "Synced page {} of contact emails, {} contact emails fetched",
@@ -508,12 +495,8 @@ impl Contact {
                 contact_with_card.row_id = existing.row_id;
             }
         }
-        let tx = stash.transaction().await.map_err(|err| {
-            error!("Failed to start transaction: {err}");
-            err
-        })?;
         contact_with_card.set_stash(stash);
-        contact_with_card.save_using(&tx).await.map_err(|err| {
+        contact_with_card.save().await.map_err(|err| {
             error!("Failed to sync full contact to db: {err}");
             err
         })?;
@@ -530,15 +513,12 @@ impl Contact {
                     email.row_id = existing.row_id;
                 }
             }
-            email.save_using(&tx).await.map_err(|e| {
+            email.set_stash(stash);
+            email.save().await.map_err(|e| {
                 error!("Failed to update contact emails: {e}");
                 e
             })?;
         }
-        tx.commit().await.map_err(|err| {
-            error!("Failed to commit transaction: {err}");
-            err
-        })?;
         Ok(())
     }
 }
