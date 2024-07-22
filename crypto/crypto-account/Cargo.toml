@@ -15,6 +15,7 @@ base64 = { workspace = true }
 futures = { version="0.3.30", features = ["async-await"]}
 zeroize = { workspace = true }
 hex = { workspace = true }
+rusqlite = {workspace = true}
 
 [lints]
 workspace = true

@@ -9,7 +9,7 @@ use proton_crypto::crypto::{
 use serde::{Deserialize, Serialize};
 
 use crate::{errors::CardCryptoError, keys::UnlockedUserKey};
-
+use rusqlite::types::{FromSql, ToSql, ToSqlOutput};
 crate::string_id! {
     /// An armored signature calculated on a plaintext vcard of a contact
     CardSignature

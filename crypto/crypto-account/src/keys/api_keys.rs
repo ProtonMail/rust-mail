@@ -2,10 +2,10 @@ use super::{bool_from_integer, bool_to_integer};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-use serde_repr::{Deserialize_repr, Serialize_repr};
-
 use super::SignedKeyList;
 use crate::{FLAG_EMAIL_NO_ENCRYPT, FLAG_EMAIL_NO_SIGN, FLAG_NOT_COMPROMISED, FLAG_NOT_OBSOLETE};
+use rusqlite::types::{FromSql, ToSql, ToSqlOutput};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Hash, Clone, Copy)]
 #[repr(u32)]

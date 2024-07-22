@@ -40,6 +40,18 @@ macro_rules! string_id {
                 &self.0
             }
         }
+
+        impl ToSql for $name {
+            fn to_sql(&self) -> Result<ToSqlOutput, rusqlite::Error> {
+                self.0.to_sql()
+            }
+        }
+
+        impl FromSql for $name {
+            fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+                Ok(Self(value.as_str()?.to_owned()))
+            }
+        }
     };
 }
 
