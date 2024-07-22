@@ -1,7 +1,7 @@
 //! DEPRECATED
 //!
 
-mod migration;
+pub mod migration;
 mod tracker;
 
 #[cfg(test)]

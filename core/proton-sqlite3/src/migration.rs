@@ -13,6 +13,7 @@ use thiserror::Error;
 use tracing::debug;
 
 /// Migration Unit.
+#[allow(async_fn_in_trait)]
 pub trait Migration {
     /// Migration name.
     fn name(&self) -> &str;
@@ -25,7 +26,7 @@ pub trait Migration {
     /// # Errors
     ///
     /// Returns error if the migration failed to run.
-    fn migrate(&self, tx: &Tether) -> Result<(), StashError>;
+    async fn migrate(&self, tx: &Tether) -> Result<(), StashError>;
 }
 
 /// Possible errors that may occur during a migration.
@@ -78,11 +79,11 @@ impl Migrator {
     ///
     /// Return error if the migration fails.
     ///
-    pub async fn migrate(
+    pub async fn migrate<M: Migration>(
         &self,
         stash: &Stash,
         version_table_name: &str,
-        migrations: &[Box<dyn Migration>],
+        migrations: &[M],
     ) -> Result<usize, MigratorError> {
         let tx = stash.transaction().await?;
         let expected_version = version_from_migration_list(migrations);
@@ -110,7 +111,7 @@ impl Migrator {
     }
 }
 
-fn version_from_migration_list(m: &[Box<dyn Migration>]) -> usize {
+fn version_from_migration_list<M: Migration>(m: &[M]) -> usize {
     m.len()
 }
 async fn get_current_table_version(
@@ -169,18 +170,18 @@ ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION
     Ok(())
 }
 
-async fn run_migrations(
+async fn run_migrations<M: Migration>(
     tx: &Tether,
     table_name: &str,
     current_version: usize,
-    migrations: &[Box<dyn Migration>],
+    migrations: &[M],
 ) -> Result<(), StashError> {
     for (i, m) in migrations.iter().enumerate().skip(current_version) {
         let span = tracing::debug_span!("migration", version = i, name = m.name());
         {
             let _entered = span.enter();
             debug!("Starting migration");
-            m.migrate(tx)?;
+            m.migrate(tx).await?;
             debug!("Migration complete");
             let next_version = i + 1;
             set_version_table_version(tx, table_name, next_version).await?;

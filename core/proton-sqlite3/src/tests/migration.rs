@@ -11,25 +11,21 @@ async fn test_migration() {
 
     // first version
     let version = migrator
-        .migrate(&stash, TEST_TABLE_NAME, &[create_migration_1()])
+        .migrate(&stash, TEST_TABLE_NAME, &[M1 {}])
         .await
         .expect("Failed to run migration");
     assert_eq!(version, 1);
 
     // second version
     let version = migrator
-        .migrate(
-            &stash,
-            TEST_TABLE_NAME,
-            &[create_migration_1(), create_migration_2()],
-        )
+        .migrate(&stash, TEST_TABLE_NAME, &[M2 {}])
         .await
         .expect("Failed to run migration");
     assert_eq!(version, 2);
 
     // fail on downgrade
     let err = migrator
-        .migrate(&stash, TEST_TABLE_NAME, &[create_migration_1()])
+        .migrate(&stash, TEST_TABLE_NAME, &[M1 {}])
         .await
         .expect_err("Migration should fail");
 
@@ -46,46 +42,39 @@ async fn test_migration_with_different_table_ids() {
 
     // first version
     let version = migrator
-        .migrate(&stash, TEST_TABLE_NAME_1, &[create_migration_1()])
+        .migrate(&stash, TEST_TABLE_NAME_1, &[M1 {}])
         .await
         .expect("Failed to run migration");
     assert_eq!(version, 1);
 
     // second version
     let version = migrator
-        .migrate(&stash, TEST_TABLE_NAME_2, &[create_migration_2()])
+        .migrate(&stash, TEST_TABLE_NAME_2, &[M2 {}])
         .await
         .expect("Failed to run migration");
     assert_eq!(version, 1);
 }
 
-fn create_migration_1() -> Box<dyn Migration> {
-    struct M {}
+struct M1 {}
 
-    impl Migration for M {
-        fn name(&self) -> &str {
-            "m1"
-        }
-        fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
-            block_on(async { tx.execute("CREATE TABLE test1 (ID INTEGER)", vec![]).await })?;
-            Ok(())
-        }
+impl Migration for M1 {
+    fn name(&self) -> &str {
+        "m1"
     }
-
-    Box::new(M {})
+    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+        block_on(async { tx.execute("CREATE TABLE test1 (ID INTEGER)", vec![]).await })?;
+        Ok(())
+    }
 }
-fn create_migration_2() -> Box<dyn Migration> {
-    struct M {}
 
-    impl Migration for M {
-        fn name(&self) -> &str {
-            "m2"
-        }
-        fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
-            block_on(async { tx.execute("CREATE TABLE test2 (ID INTEGER)", vec![]).await })?;
-            Ok(())
-        }
+struct M2 {}
+
+impl Migration for M2 {
+    fn name(&self) -> &str {
+        "m2"
     }
-
-    Box::new(M {})
+    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+        block_on(async { tx.execute("CREATE TABLE test2 (ID INTEGER)", vec![]).await })?;
+        Ok(())
+    }
 }

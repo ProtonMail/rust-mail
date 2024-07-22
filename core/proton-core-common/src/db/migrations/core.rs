@@ -1,6 +1,6 @@
 //! Migrations for core data types.
-use proton_sqlite3::{Migration, Migrator, MigratorError};
-use stash::params;
+use crate::db::migrations::core::v0::V0;
+use proton_sqlite3::{Migrator, MigratorError};
 use stash::stash::Stash;
 
 pub mod v0;
@@ -11,7 +11,7 @@ pub mod v0;
 /// Returns error if the migration failed.
 pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     const VERSION_TABLE_NAME: &str = "proton_core_version";
-    let migrations: Vec<Box<dyn Migration>> = params![v0::V0 {}];
+    let migrations = vec![V0 {}];
 
     let migrator = Migrator::new();
     migrator

@@ -12,7 +12,7 @@ impl Migration for V0 {
         "proton_core_v0"
     }
 
-    fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
         addresses::create_tables(tx)?;
         user_settings::create_tables(tx)?;
         user::create_tables(tx)?;

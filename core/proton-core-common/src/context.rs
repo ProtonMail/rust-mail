@@ -1,6 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
 use crate::datatypes::RemoteId;
-use crate::db::{migrate_core_db, migrate_session_db, EncryptedUserSession, SessionEncryptionKey};
+use crate::db::migrations::{migrate_core_db, migrate_session_db};
+use crate::db::session::{EncryptedUserSession, SessionEncryptionKey};
 use crate::os::{KeyChain, KeyChainError};
 use crate::session::Session;
 use crate::user_context::{UserContext, UserDatabaseInitializer};

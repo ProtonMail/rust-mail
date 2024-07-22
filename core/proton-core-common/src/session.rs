@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 #![allow(clippy::struct_field_names)]
 
-use crate::db::{
+use crate::db::session::{
     DecryptedUserSession, EncryptedAccessToken, EncryptedKeySecret, EncryptedRefreshToken,
     EncryptedUserSession, SessionEncryptionKey,
 };

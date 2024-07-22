@@ -7,14 +7,11 @@
 mod addresses;
 mod contacts;
 mod core;
-mod migrations;
-pub(crate) mod session;
+pub mod migrations;
+pub mod session;
 
 #[cfg(test)]
 #[path = "tests/db.rs"]
 mod tests;
-
-pub use migrations::*;
-pub use session::*;
 
 pub use proton_sqlite3;

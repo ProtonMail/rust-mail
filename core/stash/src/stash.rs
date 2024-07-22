@@ -2474,8 +2474,9 @@ impl Worker {
         receiver: QueueReceiver<Operation>,
         stash: Stash,
     ) -> Result<(), StashError> {
+        #[allow(clippy::single_match_else)]
         match path {
-            Some(path) => debug!("New Stash with file: {:?}", path),
+            Some(p) => debug!("New Stash with file: {:?}", p),
             None => debug!("New Stash with in-memory database"),
         }
         let manager = path.map_or_else(

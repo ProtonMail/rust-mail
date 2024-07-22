@@ -2,7 +2,7 @@
 
 use crate::datatypes::RemoteId;
 use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
-use crate::db::EncryptedUserSession;
+use crate::db::session::EncryptedUserSession;
 use proton_api_core::auth::UserKeySecret;
 use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;

@@ -3,7 +3,6 @@
 mod tests;
 
 use crate::{Action, ActionId, ActionPriority};
-use futures::executor::block_on;
 use proton_sqlite3::{rusqlite, Migration, MigratorError};
 use rusqlite::types::{FromSql, FromSqlResult, ToSqlOutput, ValueRef};
 use rusqlite::ToSql;
@@ -113,7 +112,7 @@ impl ActionStore {
         {
             let _entered = span.enter();
             let migrator = proton_sqlite3::Migrator::new();
-            let migrations: Vec<Box<dyn Migration>> = params![ActionTableMigrationV1 {}];
+            let migrations = vec![ActionTableMigrationV1 {}];
 
             let version = migrator
                 .migrate(stash, ACTION_VERSION_TABLE_NAME, &migrations)
@@ -213,26 +212,24 @@ impl Migration for ActionTableMigrationV1 {
         "action_table_v1"
     }
 
-    fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
-        block_on(async {
-            // create actions table
-            let query = format!(
-                "CREATE TABLE {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_ID} \
+    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+        // create actions table
+        let query = format!(
+            "CREATE TABLE {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_ID} \
 INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, {ACTION_TABLE_FIELD_ACTION_ID} BLOB NOT NULL, \
 {ACTION_TABLE_FIELD_VERSION} INTEGER NOT NULL, {ACTION_TABLE_FIELD_PRIORITY} INTEGER NOT NULL, \
 {ACTION_TABLE_FIELD_DATE_TIME} INTEGER DEFAULT (datetime('now')), \
 {ACTION_TABLE_FIELD_DATA} BLOB NOT NULL)"
-            );
-            tx.execute(query, vec![]).await?;
+        );
+        tx.execute(query, vec![]).await?;
 
-            // Create index on Priority & Date
-            let query= format!("CREATE INDEX {ACTION_TABLE_PRIORITY_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_PRIORITY})");
-            tx.execute(query, vec![]).await?;
+        // Create index on Priority & Date
+        let query= format!("CREATE INDEX {ACTION_TABLE_PRIORITY_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_PRIORITY})");
+        tx.execute(query, vec![]).await?;
 
-            let query= format!("CREATE INDEX {ACTION_TABLE_DATE_TIME_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_DATE_TIME})");
-            tx.execute(query, vec![]).await?;
+        let query= format!("CREATE INDEX {ACTION_TABLE_DATE_TIME_INDEX_NAME} ON {ACTION_TABLE_NAME} ({ACTION_TABLE_FIELD_DATE_TIME})");
+        tx.execute(query, vec![]).await?;
 
-            Ok(())
-        })
+        Ok(())
     }
 }

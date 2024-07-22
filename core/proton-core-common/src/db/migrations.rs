@@ -1,5 +1,5 @@
 mod core;
-mod session;
+pub mod session;
 
 #[cfg(test)]
 #[path = "../tests/db/migrations.rs"]

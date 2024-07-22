@@ -12,7 +12,7 @@ use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{
-    db::{DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey},
+    db::session::{DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey},
     os::{InMemoryKeyChain, KeyChain},
     Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
     UserDatabaseInitializer,

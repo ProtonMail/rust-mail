@@ -7,7 +7,7 @@ impl proton_sqlite3::Migration for V0 {
     fn name(&self) -> &str {
         "proton_core_db_v0"
     }
-    fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
+    async fn migrate(&self, tx: &Tether) -> Result<(), StashError> {
         block_on(async {
             tx.execute(
                 r"
