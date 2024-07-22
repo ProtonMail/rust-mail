@@ -142,6 +142,22 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// implement the `From` trait for the field type, and the `ToSql` and `FromSql`
 /// traits for the database operations.
 ///
+/// # Customisation of actions
+///
+/// The `Model` trait implementation can be customised with additional actions
+/// that are called when the model is loaded or saved to/from the database.
+/// These actions can be defined by adding the `ModelActions` attribute to the
+/// struct, with the actions specified as a comma-separated list. The available
+/// actions are:
+///
+///   - `on_load`: This action is called when the model is loaded from the
+///                database, and triggered by "load" and "find" operations.
+///   - `on_save`: This action is called when the model is saved to the
+///                database. It is triggered by "save" operations.
+///  
+/// In both cases the custom action occurs after the normal operation has
+/// been carried out.
+///
 /// # Examples
 ///
 /// ## Example 1
@@ -246,7 +262,10 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
-#[proc_macro_derive(Model, attributes(DbField, IdField, RowIdField, StashField, TableName))]
+#[proc_macro_derive(
+    Model,
+    attributes(DbField, IdField, ModelActions, RowIdField, StashField, TableName)
+)]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -255,6 +274,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
     // Extract attributes
     let table_name = extract_table_name(&input);
+    let (has_on_load, has_on_save) = extract_model_actions(&input);
     let fields = extract_fields(&input, "Model");
     let (id_field, id_type, is_optional, is_autoincrement) = extract_id_field(&fields);
     let row_id_field = extract_row_id_field(&fields);
@@ -294,6 +314,74 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     );
     let fn_id_value_impl = generate_fn_id_value_impl(&id_field, is_optional);
     let fn_set_id_value_impl = generate_fn_set_id_value_impl(&id_field, is_optional);
+
+    // Generation custom action code
+    let on_load_impl = if has_on_load {
+        quote! {
+            async fn find<Q: Into<String> + Send>(
+                query_logic: Q,
+                params: Vec<Box<dyn stash::exports::ToSql + Send>>,
+                stash: &stash::stash::Stash,
+                queue: Option<flume::Sender<stash::orm::ResultsetChange<Self, Self::IdType>>>,
+            ) -> Result<Vec<Self>, stash::stash::StashError> {
+                let mut instances = stash::orm::perform_find(query_logic, params, stash, queue).await?;
+                for instance in instances.iter_mut() {
+                    instance.on_load(stash).await?;
+                }
+                Ok(instances)
+            }
+            async fn find_first<Q: Into<String> + Send>(
+                query_logic: Q,
+                params: Vec<Box<dyn stash::exports::ToSql + Send>>,
+                stash: &stash::stash::Stash,
+            ) -> Result<Option<Self>, stash::stash::StashError> {
+                let mut instance: Option<Self> = stash::orm::perform_find(query_logic, params, stash, None).await?.into_iter().next();
+                match instance {
+                    Some(mut i) => {
+                        i.on_load(stash).await?;
+                        Ok(Some(i))
+                    },
+                    None => Ok(None),
+                }
+            }
+            async fn load(id: Self::IdType, stash: &stash::stash::Stash) -> Result<Option<Self>, stash::stash::StashError> {
+                let mut instance: Option<Self> = stash::orm::perform_load(id, stash, None).await?;
+                match instance {
+                    Some(mut i) => {
+                        i.on_load(stash).await?;
+                        Ok(Some(i))
+                    },
+                    None => Ok(None),
+                }
+            }
+            async fn load_using(id: Self::IdType, tether: &stash::stash::Tether) -> Result<Option<Self>, stash::stash::StashError> {
+                let mut instance: Option<Self> = stash::orm::perform_load(id, tether.stash(), Some(tether)).await?;
+                match instance {
+                    Some(mut i) => {
+                        i.on_load(tether.stash()).await?;
+                        Ok(Some(i))
+                    },
+                    None => Ok(None),
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+    let on_save_impl = if has_on_save {
+        quote! {
+            async fn save(&mut self) -> Result<(), stash::stash::StashError> {
+                stash::orm::perform_save(self, None).await?;
+                self.on_save().await
+            }
+            async fn save_using(&mut self, tether: &stash::stash::Tether) -> Result<(), stash::stash::StashError> {
+                stash::orm::perform_save(self, Some(tether)).await?;
+                self.on_save().await
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
@@ -375,6 +463,9 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             fn table_name() -> &'static str {
                 #table_name
             }
+
+            #on_load_impl
+            #on_save_impl
         }
     })
     .into()
@@ -598,6 +689,47 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
     )
 }
 
+/// Extract the model actions from the struct attributes.
+///
+/// This function extracts the model actions from the struct attributes. It is
+/// expected that there is no more than one attribute with the name
+/// `ModelActions`, but it can be omitted.
+///
+/// # Parameters
+///
+/// * `input` - The input from the derive macro, which should be a struct.
+///
+/// # Panics
+///
+/// This function panics if the `TableName` attribute is missing.
+///
+fn extract_model_actions(input: &DeriveInput) -> (bool, bool) {
+    let mut on_load = false;
+    let mut on_save = false;
+
+    for attr in &input.attrs {
+        if attr.path().is_ident("ModelActions") {
+            attr.parse_args_with(|input: ParseStream| {
+                while !input.is_empty() {
+                    let ident: Ident = input.parse()?;
+                    match ident.to_string().as_str() {
+                        "on_load" => on_load = true,
+                        "on_save" => on_save = true,
+                        _ => return Err(input.error("expected `on_load` or `on_save`")),
+                    }
+                    if input.is_empty() {
+                        break;
+                    }
+                    input.parse::<Token![,]>()?;
+                }
+                Ok(())
+            })
+            .expect("Failed to parse ModelActions");
+        }
+    }
+
+    (on_load, on_save)
+}
 /// Extract the field that is marked as the `row_id` field.
 ///
 /// This function extracts the field that is marked as the `row_id` field from

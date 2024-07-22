@@ -440,76 +440,7 @@ where
         stash: &Stash,
         queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
     ) -> Result<Vec<Self>, StashError> {
-        let query = formatdoc!(
-            "
-            SELECT
-                rowid AS rowid, *
-            FROM
-                {}
-            {}
-        ",
-            Self::table_name(),
-            query_logic.into(),
-        );
-        let records = stash.query(query, params).await?;
-
-        // Set up listener for changes to the result set, if requested.
-        #[allow(clippy::shadow_reuse)]
-        if let Some(queue) = queue {
-            let mut ids: HashMap<u64, Self::IdType> = records
-                .iter()
-                .map(|record: &Self| {
-                    let row_id = record.row_id().ok_or(StashError::MissingRowId)?;
-                    let id = record.id_value()?;
-                    Ok((row_id, id))
-                })
-                .collect::<Result<HashMap<u64, Self::IdType>, StashError>>()?;
-            let receiver = stash.subscribe().await?;
-            let stash_clone = stash.clone();
-
-            // Spawn a thread to listen for notifications
-            drop(spawn_async(async move {
-                let changed_query = formatdoc!(
-                    "
-                    SELECT
-                        rowid AS rowid, *
-                    FROM
-                        {}
-                    WHERE
-                        rowid = ?
-                    LIMIT
-                        1
-                ",
-                    Self::table_name(),
-                );
-                loop {
-                    match receiver.recv_async().await {
-                        Ok(notification) => {
-                            if let Some(change) = Self::handle_notification(
-                                notification,
-                                &mut ids,
-                                &stash_clone,
-                                &changed_query,
-                            )
-                            .await
-                            {
-                                if queue.send_async(change).await.is_err() {
-                                    // In theory this should never happen, but we also can't do anything with it
-                                    error!("Queue error: Failed to send a ResultsetChange to a subscriber");
-                                }
-                            }
-                        }
-                        Err(error) => {
-                            // In theory this should never happen, but we also can't do anything with it
-                            error!("Lost connection to change feed: {error}");
-                            break;
-                        }
-                    }
-                }
-            }));
-        }
-
-        Ok(records)
+        perform_find(query_logic, params, stash, queue).await
     }
 
     /// Finds the first record in a result set using specific query logic.
@@ -552,7 +483,7 @@ where
         params: Vec<Box<dyn ToSql + Send>>,
         stash: &Stash,
     ) -> Result<Option<Self>, StashError> {
-        Ok(Self::find(query_logic, params, stash, None)
+        Ok(perform_find(query_logic, params, stash, None)
             .await?
             .into_iter()
             .next())
@@ -1033,6 +964,127 @@ pub fn from_rows<T: DbRecord>(
     Ok(results)
 }
 
+/// Finds records in the database using specific query logic.
+///
+/// This function carries out the actual finding logic, allowing the
+/// [`Model::find()`] and [`Model::find_first()`] functions to call it, along
+/// with any `on_load()` custom logic that may be required.
+///
+/// For full usage details, see [`Model::find()`].
+///
+/// # Parameters
+///
+/// * `query_logic` - The query logic to use for finding the records. This
+///                   should be a string that represents the conditions,
+///                   ordering, offset, and limit for the query, as may be
+///                   required. It can be empty. Note that each part of the
+///                   logic is optional — so if conditions are passed, for
+///                   instance, the `WHERE` keyword needs to be included.
+/// * `params`      - The parameters to use in the query. These should be in the
+///                   order they are expected in the query logic, and match with
+///                   any expectations set in the query logic.
+/// * `stash`       - The database, i.e. [`Stash`], to use for finding the
+///                   records.
+/// * `queue`       - An optional queue to send changes to. If this is provided,
+///                   the function will listen for changes to the result set and
+///                   send them to the queue. This is useful for live updates.
+///
+/// # Errors
+///
+/// See [`Stash::query()`].
+///
+/// # See also
+///
+/// * [`Model::find()`]
+/// * [`Model::find_first()`]
+/// * [`Model::load()`]
+/// * [`Stash::query()`]
+/// * [`params!`](crate::utils::params)
+///
+pub async fn perform_find<Q, T>(
+    query_logic: Q,
+    params: Vec<Box<dyn ToSql + Send>>,
+    stash: &Stash,
+    queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
+) -> Result<Vec<T>, StashError>
+where
+    Q: Into<String> + Send,
+    T: Model,
+{
+    let query = formatdoc!(
+        "
+            SELECT
+                rowid AS rowid, *
+            FROM
+                {}
+            {}
+        ",
+        T::table_name(),
+        query_logic.into(),
+    );
+    let records = stash.query(query, params).await?;
+
+    // Set up listener for changes to the result set, if requested.
+    #[allow(clippy::shadow_reuse)]
+    if let Some(queue) = queue {
+        let mut ids: HashMap<u64, T::IdType> = records
+            .iter()
+            .map(|record: &T| {
+                let row_id = record.row_id().ok_or(StashError::MissingRowId)?;
+                let id = record.id_value()?;
+                Ok((row_id, id))
+            })
+            .collect::<Result<HashMap<u64, T::IdType>, StashError>>()?;
+        let receiver = stash.subscribe().await?;
+        let stash_clone = stash.clone();
+
+        // Spawn a thread to listen for notifications
+        drop(spawn_async(async move {
+            let changed_query = formatdoc!(
+                "
+                    SELECT
+                        rowid AS rowid, *
+                    FROM
+                        {}
+                    WHERE
+                        rowid = ?
+                    LIMIT
+                        1
+                ",
+                T::table_name(),
+            );
+            loop {
+                match receiver.recv_async().await {
+                    Ok(notification) => {
+                        if let Some(change) = T::handle_notification(
+                            notification,
+                            &mut ids,
+                            &stash_clone,
+                            &changed_query,
+                        )
+                        .await
+                        {
+                            if queue.send_async(change).await.is_err() {
+                                // In theory this should never happen, but we also can't do anything with it
+                                error!(
+                                    "Queue error: Failed to send a ResultsetChange to a subscriber"
+                                );
+                            }
+                        }
+                    }
+                    Err(error) => {
+                        // In theory this should never happen, but we also can't do anything with it
+                        error!("Lost connection to change feed: {error}");
+                        break;
+                    }
+                }
+            }
+        }));
+    }
+
+    Ok(records)
+}
+
 /// Loads a record from the database by ID.
 ///
 /// This function retrieves a single record from the database by its unique ID,
@@ -1065,7 +1117,7 @@ pub fn from_rows<T: DbRecord>(
 /// * [`Stash::load()`]
 /// * [`Tether::load()`]
 ///
-pub(crate) async fn perform_load<T, I>(
+pub async fn perform_load<T, I>(
     id: I,
     stash: &Stash,
     tether: Option<&Tether>,
@@ -1134,7 +1186,10 @@ where
 /// * [`Model::save_using()`]
 ///
 #[allow(clippy::too_many_lines)]
-async fn perform_save<M: Model>(model: &mut M, tether: Option<&Tether>) -> Result<(), StashError> {
+pub async fn perform_save<M: Model>(
+    model: &mut M,
+    tether: Option<&Tether>,
+) -> Result<(), StashError> {
     // If the ID field is auto-incrementing then it is fully managed by the
     // database, and we exclude it from the list here.
     let (fields, values) = if M::id_is_autoincrementing() {
