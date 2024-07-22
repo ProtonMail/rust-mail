@@ -3,7 +3,9 @@
 use crate::app::Command;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{ConversationMessage, Item, LiveQueryBuilder, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{
+    BackgroundSender, ConversationMessage, Item, LiveQueryBuilder, Message, ITEM_LIMIT,
+};
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
@@ -30,11 +32,11 @@ pub struct ConversationsState {
 }
 
 impl ConversationsState {
-    pub fn new(mbox: &Mailbox) -> MailboxResult<Self> {
+    pub fn new(mbox: &Mailbox, sender: BackgroundSender) -> MailboxResult<Self> {
         let conversations = mbox.conversations(ITEM_LIMIT)?;
         Ok(Self {
             _query: mbox.new_conversation_query(
-                LiveQueryBuilder::new(conversations_refreshed_converter),
+                LiveQueryBuilder::new(conversations_refreshed_converter, sender),
                 ITEM_LIMIT,
             )?,
             table_state: ScrollableTableState::new(Some(0)),
@@ -44,11 +46,16 @@ impl ConversationsState {
     }
 
     #[must_use]
-    fn open_conversation(&mut self, mbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
+    fn open_conversation(
+        &mut self,
+        mbox: &Mailbox,
+        id: LocalConversationId,
+        sender: BackgroundSender,
+    ) -> Command<Messages> {
         self.messages = MessagesStatus::Loading(ThrobberState::default());
         let mbox = mbox.clone();
         Command::task(async move {
-            let result = MessagesState::from_conversation(&mbox, id)
+            let result = MessagesState::from_conversation(&mbox, id, sender)
                 .await
                 .map_err(|e| {
                     let e = anyhow!("Failed to open conversation {id}: {e}");
@@ -169,6 +176,7 @@ impl StateHandler for ConversationsState {
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
+        sender: &BackgroundSender,
     ) -> Command<Messages> {
         match &mut self.messages {
             MessagesStatus::None => {
@@ -193,7 +201,9 @@ impl StateHandler for ConversationsState {
                     ConversationMessage::UnlabelConversation(id, label_id) => {
                         unlabel_conversation(mbox, id, label_id)
                     }
-                    ConversationMessage::OpenConversation(id) => self.open_conversation(mbox, id),
+                    ConversationMessage::OpenConversation(id) => {
+                        self.open_conversation(mbox, id, sender.clone())
+                    }
                     ConversationMessage::Refreshed(conversations) => {
                         self.conversations_refreshed(conversations);
                         Command::None
@@ -217,7 +227,7 @@ impl StateHandler for ConversationsState {
                     self.close_conversation();
                     return Command::None;
                 }
-                state.update(ctx, message, mbox, mail_settings)
+                state.update(ctx, message, mbox, mail_settings, sender)
             }
         }
     }

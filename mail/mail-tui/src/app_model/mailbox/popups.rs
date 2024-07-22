@@ -63,7 +63,7 @@ impl crate::app_model::Popup for MoveItemPopup {
                         anyhow!("Not Yet Implemented"),
                     )),
                 })
-                .unwrap_or(Command::None),
+                .unwrap_or_default(),
             _ => Command::None,
         }
     }
@@ -139,7 +139,7 @@ impl crate::app_model::Popup for LabelItemPopup {
                         anyhow!("Not Yet Implemented"),
                     )),
                 })
-                .unwrap_or(Command::None),
+                .unwrap_or_default(),
             _ => Command::None,
         }
     }

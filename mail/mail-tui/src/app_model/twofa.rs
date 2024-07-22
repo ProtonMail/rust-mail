@@ -1,4 +1,5 @@
 use crate::app::Command;
+use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{context_init, login, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::messages::Messages::DismissBackgroundProgress;
@@ -47,7 +48,12 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages> {
+    fn update(
+        &mut self,
+        ctx: &MailContext,
+        message: Messages,
+        _: &BackgroundSender,
+    ) -> Command<Messages> {
         let Messages::TwoFA(message) = message else {
             return Command::None;
         };

@@ -2,7 +2,7 @@ use crate::app::Command;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{Item, LiveQueryBuilder, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{BackgroundSender, Item, LiveQueryBuilder, Message, ITEM_LIMIT};
 use crate::app_model::{AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
@@ -12,6 +12,7 @@ use proton_core_common::db::proton_sqlite3::Observed;
 use proton_core_common::db::DBResult;
 use proton_mail_common::db::{LabelItemCount, LocalLabel, LocalLabelId};
 use proton_mail_common::exports::tracing;
+use proton_mail_common::exports::tracing::error;
 use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
 use proton_mail_common::settings::MailSettings;
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult};
@@ -43,6 +44,7 @@ pub(super) trait StateHandler {
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
+        sender: &BackgroundSender,
     ) -> Command<Messages>;
     fn view(&mut self, frame: &mut Frame, area: Rect);
 }
@@ -76,7 +78,7 @@ impl Model {
         })
     }
 
-    fn init_background_worker(&mut self) {
+    fn init_background_worker(&mut self, bg_sender: BackgroundSender) {
         if self.cancel_token.is_some() {
             return;
         }
@@ -85,15 +87,15 @@ impl Model {
         let (sender, receiver) = std::sync::mpsc::channel();
         self.cancel_token = Some(sender);
         std::thread::spawn(move || {
-            background_worker(&ctx, &receiver);
+            background_worker(&ctx, &receiver, &bg_sender);
         });
     }
 
     #[must_use]
-    fn sync_mailbox(&mut self, mbox: Mailbox) -> Command<Messages> {
+    fn sync_mailbox(&mut self, mbox: Mailbox, sender: BackgroundSender) -> Command<Messages> {
         self.state = State::new_syncing();
         // Create the background worker.
-        self.init_background_worker();
+        self.init_background_worker(sender);
 
         Command::task(async {
             let label = match mbox.user_context().get_label(mbox.label_id()) {
@@ -131,7 +133,7 @@ impl Model {
         })
     }
 
-    fn build_item_count_query(&mut self) -> Command<Messages> {
+    fn build_item_count_query(&mut self, sender: BackgroundSender) -> Command<Messages> {
         self.item_count_query = None;
         self.item_count = None;
         let local_label = match self
@@ -148,7 +150,7 @@ impl Model {
         });
         match self
             .mailbox
-            .new_label_item_count_query(LiveQueryBuilder::new(label_item_count_converter))
+            .new_label_item_count_query(LiveQueryBuilder::new(label_item_count_converter, sender))
         {
             Ok(q) => {
                 self.item_count_query = Some(q);
@@ -158,21 +160,31 @@ impl Model {
         }
     }
 
-    fn open_conversation_view(&mut self, mbox: Mailbox, label: LocalLabel) -> Command<Messages> {
+    fn open_conversation_view(
+        &mut self,
+        mbox: Mailbox,
+        label: LocalLabel,
+        sender: BackgroundSender,
+    ) -> Command<Messages> {
         self.mailbox = mbox;
-        match ConversationsState::new(&self.mailbox) {
+        match ConversationsState::new(&self.mailbox, sender.clone()) {
             Ok(state) => {
                 self.state = State::Conversations(state);
                 self.label = label;
-                self.build_item_count_query()
+                self.build_item_count_query(sender)
             }
             Err(e) => Command::message(Messages::from(e)),
         }
     }
 
-    fn open_message_view(&mut self, mbox: Mailbox, label: LocalLabel) -> Command<Messages> {
+    fn open_message_view(
+        &mut self,
+        mbox: Mailbox,
+        label: LocalLabel,
+        sender: &BackgroundSender,
+    ) -> Command<Messages> {
         self.mailbox = mbox;
-        let state = match MessagesState::new(&self.mailbox) {
+        let state = match MessagesState::new(&self.mailbox, sender.clone()) {
             Ok(state) => state,
             Err(e) => {
                 return Command::message(e.into());
@@ -180,7 +192,7 @@ impl Model {
         };
         self.label = label;
         self.state = State::Messages(state);
-        self.build_item_count_query()
+        self.build_item_count_query(sender.clone())
     }
 
     fn item_count_refreshed(&mut self, item_count: LabelItemCount) {
@@ -270,15 +282,22 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages> {
+    fn update(
+        &mut self,
+        ctx: &MailContext,
+        message: Messages,
+        sender: &BackgroundSender,
+    ) -> Command<Messages> {
         let Messages::Mailbox(message) = message else {
             return Command::None;
         };
 
         match message {
-            Message::Sync(mbox) => self.sync_mailbox(mbox),
-            Message::OpenConversationView(mbox, label) => self.open_conversation_view(mbox, label),
-            Message::OpenMessageView(mbox, label) => self.open_message_view(mbox, label),
+            Message::Sync(mbox) => self.sync_mailbox(mbox, sender.clone()),
+            Message::OpenConversationView(mbox, label) => {
+                self.open_conversation_view(mbox, label, sender.clone())
+            }
+            Message::OpenMessageView(mbox, label) => self.open_message_view(mbox, label, sender),
             Message::OpenLabelSelectPopup => self.open_label_select_popup(),
             Message::SelectLabel(label_id) => self.select_label(label_id),
             Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
@@ -286,7 +305,7 @@ impl AppStateHandler for Model {
             Message::OpenUnlabelItemPopup(item) => self.open_unlabel_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state
-                    .update(ctx, message, &self.mailbox, &self.mail_settings)
+                    .update(ctx, message, &self.mailbox, &self.mail_settings, sender)
             }
             Message::ItemCountRefreshed(count) => {
                 self.item_count_refreshed(count);
@@ -382,11 +401,12 @@ impl StateHandler for State {
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
+        sender: &BackgroundSender,
     ) -> Command<Messages> {
         match self {
             State::Syncing(_) => Command::None,
-            State::Conversations(state) => state.update(ctx, message, mbox, mail_settings),
-            State::Messages(state) => state.update(ctx, message, mbox, mail_settings),
+            State::Conversations(state) => state.update(ctx, message, mbox, mail_settings, sender),
+            State::Messages(state) => state.update(ctx, message, mbox, mail_settings, sender),
         }
     }
 
@@ -415,7 +435,7 @@ impl From<Model> for AppState {
     }
 }
 
-fn background_worker(context: &MailUserContext, reader: &Receiver<()>) {
+fn background_worker(context: &MailUserContext, reader: &Receiver<()>, sender: &BackgroundSender) {
     let interval = Duration::from_secs(15);
     loop {
         if let Err(e) = reader.recv_timeout(interval) {
@@ -426,10 +446,15 @@ fn background_worker(context: &MailUserContext, reader: &Receiver<()>) {
         if let Err(e) = context.execute_pending_actions() {
             let e = anyhow!("Failed to flush actions: {e}");
             tracing::error!("{e}");
-            send_background(Command::message(Messages::DisplayError(
-                Some("Action Queue".to_owned()),
-                e,
-            )));
+            if sender
+                .send(Command::message(Messages::DisplayError(
+                    Some("Action Queue".to_owned()),
+                    e,
+                )))
+                .is_err()
+            {
+                error!("Failed to send message from worker");
+            }
         }
 
         if let Err(e) = context
@@ -439,10 +464,15 @@ fn background_worker(context: &MailUserContext, reader: &Receiver<()>) {
         {
             let e = anyhow!("Failed to poll events: {e}");
             tracing::error!("{e}");
-            send_background(Command::message(Messages::DisplayError(
-                Some("Event Loop".to_owned()),
-                e,
-            )));
+            if sender
+                .send(Command::message(Messages::DisplayError(
+                    Some("Event Loop".to_owned()),
+                    e,
+                )))
+                .is_err()
+            {
+                error!("Failed to send message from worker");
+            }
         }
     }
 }

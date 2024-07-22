@@ -1,4 +1,5 @@
 use crate::app::Command;
+use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{mailbox, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
@@ -40,7 +41,12 @@ impl AppStateHandler for Model {
         Command::none()
     }
 
-    fn update(&mut self, _: &MailContext, message: Messages) -> Command<Messages> {
+    fn update(
+        &mut self,
+        _: &MailContext,
+        message: Messages,
+        _: &BackgroundSender,
+    ) -> Command<Messages> {
         let Messages::ContextInit(message) = message else {
             return Command::None;
         };

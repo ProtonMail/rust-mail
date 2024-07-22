@@ -1,4 +1,5 @@
 use crate::app::Command;
+use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{login, mailbox, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
@@ -60,7 +61,12 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages> {
+    fn update(
+        &mut self,
+        ctx: &MailContext,
+        message: Messages,
+        _sender: &BackgroundSender,
+    ) -> Command<Messages> {
         let Messages::SessionSelect(message) = message else {
             return Command::None;
         };

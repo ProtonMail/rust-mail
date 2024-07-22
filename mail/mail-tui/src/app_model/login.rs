@@ -1,4 +1,5 @@
 use crate::app::Command;
+use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{context_init, twofa, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
@@ -67,7 +68,12 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages> {
+    fn update(
+        &mut self,
+        ctx: &MailContext,
+        message: Messages,
+        _: &BackgroundSender,
+    ) -> Command<Messages> {
         let Messages::Login(message) = message else {
             return Command::None;
         };

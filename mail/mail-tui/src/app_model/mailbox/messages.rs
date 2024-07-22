@@ -2,7 +2,9 @@
 
 use crate::app::Command;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{LiveQueryBuilder, Message, MessageMessage, ITEM_LIMIT};
+use crate::app_model::mailbox::{
+    BackgroundSender, LiveQueryBuilder, Message, MessageMessage, ITEM_LIMIT,
+};
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
 use crate::widgets::{
@@ -39,10 +41,10 @@ pub struct MessagesState {
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
 impl MessagesState {
-    pub fn new(mbox: &Mailbox) -> MailboxResult<Self> {
+    pub fn new(mbox: &Mailbox, sender: BackgroundSender) -> MailboxResult<Self> {
         let messages = mbox.messages(ITEM_LIMIT)?;
         let query = mbox.new_messages_query(
-            LiveQueryBuilder::new(messages_refreshed_converter),
+            LiveQueryBuilder::new(messages_refreshed_converter, sender),
             ITEM_LIMIT,
         )?;
 
@@ -57,11 +59,12 @@ impl MessagesState {
     pub async fn from_conversation(
         mbox: &Mailbox,
         conversation_id: LocalConversationId,
+        sender: BackgroundSender,
     ) -> MailboxResult<Self> {
         let (to_select_id, messages) = mbox.conversation_messages(conversation_id).await?;
         let query = mbox
             .new_conversation_message_query(
-                LiveQueryBuilder::new(messages_refreshed_converter),
+                LiveQueryBuilder::new(messages_refreshed_converter, sender),
                 conversation_id,
             )
             .await?;
@@ -197,6 +200,7 @@ impl StateHandler for MessagesState {
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
+        _: &BackgroundSender,
     ) -> Command<Messages> {
         let Message::MessageState(message) = message else {
             return Command::None;

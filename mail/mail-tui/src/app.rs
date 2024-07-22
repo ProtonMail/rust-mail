@@ -1,8 +1,8 @@
 use crate::TerminalType;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
+use proton_async::runtime::MultiThreaded;
 use proton_async::sync::mpsc::{unbounded, Receiver, Sender};
-use proton_mail_common::exports::parking_lot::RwLock;
 use proton_mail_common::exports::tracing::error;
 use ratatui::prelude::*;
 use std::future::Future;
@@ -20,12 +20,16 @@ pub trait Model<Message> {
     fn handle_event(&mut self, event: event::Event) -> Command<Message>;
     /// Called when a message has been received.
     ///
-    /// If a `Message` is returned, [`update`] will be called until no more messages are returned.
+    /// If a [`Command`] is returned, [`update`] will be called until no more messages are returned.
     ///
-    /// To send a message from a background thread, clone the provided `sender`.
-    fn update(&mut self, message: Message) -> Command<Message>;
+    /// If you want to run an async tasks in the background return [`Command::task`]. The `sender`
+    /// is passed here for situations where you are running something on a dedicated thread and
+    /// need to communicate back to the main thread.
+    fn update(&mut self, message: Message, sender: &Sender<Command<Message>>) -> Command<Message>;
     /// Called to display the appication.
     fn view(&mut self, frame: &mut Frame);
+
+    fn runtime(&self) -> &MultiThreaded;
 }
 pub struct App<M: Model<Message>, Message: Send + 'static> {
     model: M,
@@ -37,7 +41,6 @@ pub struct App<M: Model<Message>, Message: Send + 'static> {
 impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
     pub fn new(model: M) -> Self {
         let (sender, receiver) = unbounded();
-        Self::set_background_sender(sender.clone());
         Self {
             model,
             quit: false,
@@ -64,10 +67,10 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
             }
 
             // handle input
-            let cur_message = self.poll_events()?;
+            let message = self.poll_events()?;
 
             // Apply updates from input.
-            self.handle_command(cur_message);
+            self.handle_command(message);
         }
 
         Ok(())
@@ -101,43 +104,22 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
         pending.push(command);
         while let Some(command) = pending.pop() {
             match command {
-                Command::None => return,
+                Command::None => {}
                 Command::Message(message) => {
-                    pending.push(self.model.update(message));
+                    pending.push(self.model.update(message, &self.bg_sender));
                 }
                 Command::Task(future) => {
                     let sender = self.bg_sender.clone();
-                    proton_async::runtime::spawn(async move {
+                    self.model.runtime().spawn(async move {
                         let command = future.await;
                         if sender.send(command).is_err() {
                             error!("Failed to send background command");
                         }
                     });
-                    return;
                 }
                 Command::Batch(commands) => pending.extend(commands.into_iter().rev()),
             }
         }
-    }
-
-    // TODO: find a cleaner way to handle this.
-    // Some callbacks need to have a way to register background messages outside regular flow
-    fn get_global_sender() -> &'static RwLock<Option<Sender<Command<Message>>>> {
-        static GLOBAL_SENDER: RwLock<Option<Sender<Command<Message>>>> = RwLock::new(None);
-        &GLOBAL_SENDER
-    }
-    pub fn send_background(message: Command<Message>) {
-        let guard = Self::get_global_sender().read();
-        if let Some(sender) = &*guard {
-            if sender.send(message).is_err() {
-                error!("Failed to send background message");
-            }
-        }
-    }
-
-    fn set_background_sender(sender: Sender<Command<Message>>) {
-        let mut guard = Self::get_global_sender().write();
-        *guard = Some(sender);
     }
 }
 
