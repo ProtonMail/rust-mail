@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Logic to extract the session key and data packet from a PGP message (#85)
 - New trait for GettablePGPMessages used by DecryptableMessages and SessionKeyAndDataPacketsExtractable (#85)
 - Utility to re-encrypt attachments to new recipients (#88)
+- Attachment encryption functions are now packaged under a new EncryptableAttachment trait (#83)
+- AttachmentDecryption trait renamed to DecryptableAttachment (#83)
+- Draft encryption function now returns a new EncryptedDraft string_id! type (#83)
 
 ## [0.4.2] - 2024-06-26
 
