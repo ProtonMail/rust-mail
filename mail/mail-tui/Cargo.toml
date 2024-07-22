@@ -25,7 +25,7 @@ scopeguard = "1.2"
 html2text = "0.12.5"
 
 [target.'cfg(target_os="linux")'.dependencies]
-keyring = { version = "3.0.3", features = ["sync-secret-service"] }
+keyring = { version = "3.0.3", features = ["linux-native"] }
 
 [target.'cfg(target_os="macos")'.dependencies]
 keyring = { version = "3.0.3", features = ["apple-native"] }
