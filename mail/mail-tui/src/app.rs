@@ -2,7 +2,10 @@ use crate::TerminalType;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 use proton_async::sync::mpsc::{unbounded, Receiver, Sender};
+use proton_mail_common::exports::tracing::error;
 use ratatui::prelude::*;
+use std::future::Future;
+use std::pin::Pin;
 
 /// Behavior specification for the model.
 pub trait Model<Message> {
@@ -98,5 +101,62 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
             return Ok(self.model.handle_event(event));
         }
         Ok(None)
+    }
+
+    fn handle_command(&mut self, mut command: Command<Message>) {
+        match command {
+            Command::None => return,
+            Command::Message(mut message) => {
+                while let Some(m) = self.model.update(message, &self.bg_sender) {
+                    message = m;
+                }
+            }
+            Command::Task(future) => {
+                let sender = self.bg_sender.clone();
+                proton_async::runtime::spawn(async move {
+                    let command = future.await;
+                    if sender.send(command).is_err() {
+                        error!("Failed to send background command");
+                    }
+                });
+                return;
+            }
+            Command::Batch(commands) => {
+                for command in commands {
+                    self.handle_command(command)
+                }
+            }
+        }
+    }
+}
+
+/// Execute an action in the application.
+pub enum Command<Message> {
+    None,
+    Message(Message),
+    Task(Pin<Box<dyn Future<Output = Command<Message>> + Send + 'static>>),
+    Batch(Vec<Command<Message>>),
+}
+
+impl<Message> Command<Message> {
+    /// This command does nothing.
+    pub fn none() -> Self {
+        Self::None
+    }
+
+    /// This command sends the `message` to the model.
+    pub fn message(message: Message) -> Self {
+        Self::Message(message)
+    }
+
+    /// This command spawns `task` in a new async task and then sends the result back to
+    /// the main application.
+    pub fn task(task: impl Future<Output = Command<Message>> + Send + 'static) -> Self {
+        Self::Task(Box::pin(task))
+    }
+
+    /// This command runs the supplied `commands` in order.
+    pub fn batch(commands: impl IntoIterator<Item = Command<Message>>) -> Self {
+        Self::Batch(Vec::from_iter(commands))
     }
 }
