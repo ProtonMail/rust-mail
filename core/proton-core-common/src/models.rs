@@ -45,7 +45,7 @@ use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Stash, StashError};
 use tracing::{debug, error};
 
 /// TODO: Document this struct.
@@ -177,6 +177,7 @@ impl From<ApiAddress> for Address {
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
+#[ModelActions(on_save)]
 pub struct Contact {
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -274,14 +275,13 @@ impl Contact {
         Ok(&self.contact_emails)
     }
 
-    /// Overrides [`Model::save()`] to set the contact id for children.
+    /// Extends [`Model::save()`] to set the contact id for children.
     ///
     /// # Errors
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        Model::save(self).await?;
+    pub async fn on_save(&mut self) -> Result<(), StashError> {
         for card in &mut self.cards {
             card.remote_contact_id.clone_from(&self.remote_id);
         }
@@ -305,41 +305,6 @@ impl Contact {
             card.row_id = None;
             card.set_stash(&stash);
             card.save().await.map_err(|e| {
-                error!("Failed to update contact cards: {e}");
-                e
-            })?;
-        }
-        Ok(())
-    }
-
-    /// Overrides [`Model::save_using()`] to set the contact id for children.
-    ///
-    /// # Parameters
-    ///
-    /// See [`Model::save()`].
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn save_using(&mut self, tether: &Tether) -> Result<(), StashError> {
-        Model::save_using(self, tether).await?;
-        for card in &mut self.cards {
-            card.remote_contact_id.clone_from(&self.remote_id);
-        }
-        for email in &mut self.contact_emails {
-            email.remote_contact_id.clone_from(&self.remote_id);
-        }
-        tether
-            .execute(
-                "DELETE FROM contact_cards WHERE remote_contact_id = ?",
-                params![self.remote_id.clone()],
-            )
-            .await?;
-        for card in &mut self.cards {
-            card.local_id = None;
-            card.row_id = None;
-            card.save_using(tether).await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e
             })?;
