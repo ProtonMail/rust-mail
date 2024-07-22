@@ -1,5 +1,7 @@
 use super::MessageError;
 
+/// `GettablePGPMessage` is a trait for unifying how structs return encrypted PGP messages for use
+/// in operations like decryption or separating keys and data packets
 pub trait GettablePGPMessage {
     /// Return a byte slice of a PGP message
     fn pgp_message(&self) -> &[u8];
