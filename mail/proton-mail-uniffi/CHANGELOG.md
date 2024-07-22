@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.10.34] - 2024-07-22
+
+### Changed
+
+- `DecryptedMessage` now reads mail settings from the database.
+
 ## [0.10.33] - 2024-07-19
 
 ### Added
