@@ -1,5 +1,7 @@
-use crate::app_model::{context_init, login, AppState, AppStateHandler, BackgroundSender};
+use crate::app::Command;
+use crate::app_model::{context_init, login, AppState, AppStateHandler};
 use crate::messages::Messages;
+use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
@@ -31,28 +33,23 @@ impl Model {
 }
 
 impl AppStateHandler for Model {
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(k) = event else {
-            return None;
+            return Command::None;
         };
         match k.code {
-            KeyCode::Esc => Some(Message::Abort.into()),
-            KeyCode::Enter => Some(Message::Submit.into()),
+            KeyCode::Esc => Command::message(Message::Abort.into()),
+            KeyCode::Enter => Command::message(Message::Submit.into()),
             _ => {
                 self.input_state.handle_event(&event);
-                None
+                Command::None
             }
         }
     }
 
-    fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        sender: &BackgroundSender,
-    ) -> Option<Messages> {
+    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages> {
         let Messages::TwoFA(message) = message else {
-            return None;
+            return Command::None;
         };
 
         match message {
@@ -60,56 +57,61 @@ impl AppStateHandler for Model {
                 if let Some(_flow) = self.flow.take() {
                     //TODO: Logout
                 }
-                Some(Messages::SwitchAppState(login::Model::new().into()))
+                Command::message(Messages::SwitchAppState(login::Model::new().into()))
             }
             Message::Submit => {
                 if self.input_state.value().is_empty() {
-                    return Some(Messages::DisplayError(
+                    return Command::message(Messages::DisplayError(
                         None,
                         anyhow! {"Two factor code can not be empty"},
                     ));
                 }
 
                 let Some(mut flow) = self.flow.take() else {
-                    return Some(Messages::DisplayError(None, anyhow!("Invalid State")));
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Invalid State"),
+                    ));
                 };
 
-                let sender = sender.clone();
                 let code = self.input_state.value().to_owned();
-                ctx.async_runtime().spawn(async move {
-                    scopeguard::defer! {
-                        sender.send(Messages::DismissBackgroundProgress);
-                    }
-                    if let Err(e) = flow.submit_totp(&code).await {
-                        sender.send(Message::TwoFAFailed(flow, e).into());
-                    } else {
-                        sender.send(Message::TwoFASuccess(flow).into());
-                    }
-                });
+                Command::batch([
+                    Command::Message(Messages::DisplayBackgroundProgress(
+                        "Submitting Two Factor Code ...".to_owned(),
+                    )),
+                    Command::task(async move {
+                        let message = if let Err(e) = flow.submit_totp(&code).await {
+                            Message::TwoFAFailed(flow, e).into()
+                        } else {
+                            Message::TwoFASuccess(flow).into()
+                        };
 
-                Some(Messages::DisplayBackgroundProgress(
-                    "Submitting Two Factor Code ...".to_owned(),
-                ))
+                        Command::batch([
+                            Command::message(message),
+                            Command::message(DismissBackgroundProgress),
+                        ])
+                    }),
+                ])
             }
             Message::TwoFASuccess(flow) => {
                 if flow.is_logged_in() {
                     match ctx.user_context_from_login_flow(&flow) {
-                        Ok(context) => Some(Messages::SwitchAppState(
+                        Ok(context) => Command::message(Messages::SwitchAppState(
                             context_init::Model::new(context).into(),
                         )),
                         Err(e) => {
                             let e = anyhow!("Failed to login: {e}");
                             tracing::error!("{e}");
-                            Some(Messages::DisplayError(None, e))
+                            Command::message(Messages::DisplayError(None, e))
                         }
                     }
                 } else {
-                    Some(Messages::DisplayError(None, anyhow!("Invalid State")))
+                    Command::message(Messages::DisplayError(None, anyhow!("Invalid State")))
                 }
             }
             Message::TwoFAFailed(flow, err) => {
                 self.flow = Some(flow);
-                Some(Messages::DisplayError(None, anyhow!("{err}")))
+                Command::message(Messages::DisplayError(None, anyhow!("{err}")))
             }
         }
     }

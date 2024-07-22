@@ -1,3 +1,4 @@
+use crate::app::Command;
 use crate::app_model::mailbox::{ConversationMessage, Item, Message};
 use crate::messages::Messages;
 use crate::widgets::{AsList, ScrollableList, ScrollableListState};
@@ -37,27 +38,33 @@ impl crate::app_model::Popup for MoveItemPopup {
         Some("Select Folder to Move to".to_owned())
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(key) = event else {
-            return None;
+            return Command::None;
         };
 
         match key.code {
             KeyCode::Up => {
                 self.list_state.prev();
-                None
+                Command::None
             }
             KeyCode::Down => {
                 self.list_state.next();
-                None
+                Command::None
             }
-            KeyCode::Enter => self.selected_label_id().map(|id| match self.item {
-                Item::Conversation(item_id) => {
-                    ConversationMessage::MoveConversation(item_id, id).into()
-                }
-                Item::Message(_) => Messages::DisplayError(None, anyhow!("Not Yet Implemented")),
-            }),
-            _ => None,
+            KeyCode::Enter => self
+                .selected_label_id()
+                .map(|id| match self.item {
+                    Item::Conversation(item_id) => {
+                        Command::message(ConversationMessage::MoveConversation(item_id, id).into())
+                    }
+                    Item::Message(_) => Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Not Yet Implemented"),
+                    )),
+                })
+                .unwrap_or(Command::None),
+            _ => Command::None,
         }
     }
 
@@ -99,31 +106,41 @@ impl crate::app_model::Popup for LabelItemPopup {
         })
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(key) = event else {
-            return None;
+            return Command::None;
         };
 
         match key.code {
             KeyCode::Up => {
                 self.list_state.prev();
-                None
+                Command::None
             }
             KeyCode::Down => {
                 self.list_state.next();
-                None
+                Command::None
             }
-            KeyCode::Enter => self.selected_label_id().map(|id| match self.item {
-                Item::Conversation(item_id) => {
-                    if self.apply {
-                        ConversationMessage::LabelConversation(item_id, id).into()
-                    } else {
-                        ConversationMessage::UnlabelConversation(item_id, id).into()
+            KeyCode::Enter => self
+                .selected_label_id()
+                .map(|id| match self.item {
+                    Item::Conversation(item_id) => {
+                        if self.apply {
+                            Command::message(
+                                ConversationMessage::LabelConversation(item_id, id).into(),
+                            )
+                        } else {
+                            Command::message(
+                                ConversationMessage::UnlabelConversation(item_id, id).into(),
+                            )
+                        }
                     }
-                }
-                Item::Message(_) => Messages::DisplayError(None, anyhow!("Not Yet Implemented")),
-            }),
-            _ => None,
+                    Item::Message(_) => Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Not Yet Implemented"),
+                    )),
+                })
+                .unwrap_or(Command::None),
+            _ => Command::None,
         }
     }
 
@@ -223,21 +240,21 @@ impl crate::app_model::Popup for LabelSelectPopup {
         Some("Select Label".to_owned())
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(key) = event else {
-            return None;
+            return Command::None;
         };
 
         match key.code {
             KeyCode::Up => {
                 let (_, list_state) = self.selected_label_list();
                 list_state.prev();
-                None
+                Command::None
             }
             KeyCode::Down => {
                 let (_, list_state) = self.selected_label_list();
                 list_state.next();
-                None
+                Command::None
             }
             KeyCode::Tab => {
                 if key.modifiers.intersects(KeyModifiers::SHIFT) {
@@ -245,17 +262,21 @@ impl crate::app_model::Popup for LabelSelectPopup {
                 } else {
                     self.switch_to_next_tab();
                 }
-                None
+                Command::None
             }
             KeyCode::Enter => {
                 let (labels, list_state) = self.selected_label_list();
-                let index = list_state.selected()?;
-                let label = labels.get(index)?;
+                let Some(index) = list_state.selected() else {
+                    return Command::None;
+                };
+                let Some(label) = labels.get(index) else {
+                    return Command::None;
+                };
 
-                Some(Message::SelectLabel(label.id).into())
+                Command::message(Message::SelectLabel(label.id).into())
             }
 
-            _ => None,
+            _ => Command::None,
         }
     }
 

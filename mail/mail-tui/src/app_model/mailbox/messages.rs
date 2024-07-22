@@ -1,8 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
+use crate::app::Command;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{LiveQueryBuilder, Message, MessageMessage, ITEM_LIMIT};
-use crate::app_model::BackgroundSender;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
 use crate::widgets::{
@@ -39,10 +39,10 @@ pub struct MessagesState {
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
 impl MessagesState {
-    pub fn new(mbox: &Mailbox, background_sender: BackgroundSender) -> MailboxResult<Self> {
+    pub fn new(mbox: &Mailbox) -> MailboxResult<Self> {
         let messages = mbox.messages(ITEM_LIMIT)?;
         let query = mbox.new_messages_query(
-            LiveQueryBuilder::new(messages_refreshed_converter, background_sender),
+            LiveQueryBuilder::new(messages_refreshed_converter),
             ITEM_LIMIT,
         )?;
 
@@ -57,12 +57,11 @@ impl MessagesState {
     pub async fn from_conversation(
         mbox: &Mailbox,
         conversation_id: LocalConversationId,
-        background_sender: BackgroundSender,
     ) -> MailboxResult<Self> {
         let (to_select_id, messages) = mbox.conversation_messages(conversation_id).await?;
         let query = mbox
             .new_conversation_message_query(
-                LiveQueryBuilder::new(messages_refreshed_converter, background_sender.clone()),
+                LiveQueryBuilder::new(messages_refreshed_converter),
                 conversation_id,
             )
             .await?;
@@ -82,19 +81,19 @@ impl MessagesState {
 
     pub fn open_message_body(
         &mut self,
-        ctx: &MailContext,
+        _: &MailContext,
         mbox: &Mailbox,
         mail_settings: Arc<MailSettings>,
-        sender: &BackgroundSender,
-    ) {
+    ) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
-            return;
+            return Command::None;
         };
 
         let mbox = mbox.clone();
-        let sender = sender.clone();
-        ctx.async_runtime().spawn(async move {
+        self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
+
+        Command::task(async move {
             //TODO: improve
             let settings = match &*mail_settings.value() {
                 Ok(s) => s.clone(),
@@ -105,18 +104,15 @@ impl MessagesState {
                 Err(e) => {
                     let e = anyhow!("Failed to get message body {e}");
                     tracing::error!("{e}");
-                    sender.send(e.into());
-                    return;
+                    return Command::message(e.into());
                 }
             };
 
             let result = process_message(&decrypted)
                 .map(|m| Box::new(DecryptedMessage::new(metadata, decrypted, m)));
 
-            sender.send(MessageMessage::OpenMessageBodyResult(result).into());
-        });
-
-        self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
+            Command::message(MessageMessage::OpenMessageBodyResult(result).into())
+        })
     }
 
     fn display_message(&mut self, message: anyhow::Result<Box<DecryptedMessage>>) {
@@ -146,9 +142,9 @@ impl MessagesState {
 }
 
 impl StateHandler for MessagesState {
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(key) = event else {
-            return None;
+            return Command::None;
         };
 
         if matches!(
@@ -156,7 +152,7 @@ impl StateHandler for MessagesState {
             DecryptedMessageStatus::Success(_) | DecryptedMessageStatus::Error(_)
         ) && key.code == KeyCode::Esc
         {
-            return Some(MessageMessage::CloseMessageBody.into());
+            return Command::message(MessageMessage::CloseMessageBody.into());
         }
 
         if let DecryptedMessageStatus::Success(state) = &mut self.open_message {
@@ -164,13 +160,13 @@ impl StateHandler for MessagesState {
                 KeyCode::Up => {
                     if key.modifiers.intersects(KeyModifiers::SHIFT) {
                         state.scroll_state.scroll_up();
-                        return None;
+                        return Command::None;
                     }
                 }
                 KeyCode::Down => {
                     if key.modifiers.intersects(KeyModifiers::SHIFT) {
                         state.scroll_state.scroll_down();
-                        return None;
+                        return Command::None;
                     }
                 }
                 _ => {}
@@ -180,17 +176,18 @@ impl StateHandler for MessagesState {
         match key.code {
             KeyCode::Up => {
                 self.table_state.prev();
-                None
+                Command::None
             }
             KeyCode::Down => {
                 self.table_state.next();
-                None
+                Command::None
             }
-            KeyCode::Char('s') => Some(Message::OpenLabelSelectPopup.into()),
+            KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
             KeyCode::Enter => self
                 .selected_message_id()
-                .map(|_| MessageMessage::OpenMessageBody.into()),
-            _ => None,
+                .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
+                .unwrap_or_default(),
+            _ => Command::None,
         }
     }
 
@@ -200,15 +197,14 @@ impl StateHandler for MessagesState {
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
-        sender: &BackgroundSender,
-    ) -> Option<Messages> {
+    ) -> Command<Messages> {
         let Message::MessageState(message) = message else {
-            return None;
+            return Command::None;
         };
 
         match message {
             MessageMessage::OpenMessageBody => {
-                self.open_message_body(ctx, mbox, mail_settings.clone(), sender);
+                return self.open_message_body(ctx, mbox, mail_settings.clone());
             }
             MessageMessage::OpenMessageBodyResult(r) => {
                 self.display_message(r);
@@ -218,7 +214,7 @@ impl StateHandler for MessagesState {
             }
             MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
         }
-        None
+        Command::None
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
@@ -394,13 +390,15 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
 
-fn messages_refreshed_converter(messages: DBResult<Vec<LocalMessageMetadata>>) -> Messages {
-    match messages {
+fn messages_refreshed_converter(
+    messages: DBResult<Vec<LocalMessageMetadata>>,
+) -> Command<Messages> {
+    Command::message(match messages {
         Ok(m) => MessageMessage::Refreshed(m).into(),
         Err(e) => {
             let e = anyhow!("Message list Query error: {e}");
             tracing::error!("{e}");
             e.into()
         }
-    }
+    })
 }

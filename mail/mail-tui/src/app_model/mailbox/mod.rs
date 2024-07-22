@@ -7,8 +7,8 @@ pub use model::Model;
 use proton_core_common::db::DBResult;
 use std::marker::PhantomData;
 
+use crate::app::Command;
 use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
-use crate::app_model::BackgroundSender;
 use crate::messages::Messages;
 use proton_core_common::db::proton_sqlite3::{InProcessTrackerService, Observable, Observed};
 use proton_mail_common::db::{
@@ -75,15 +75,15 @@ pub enum Item {
 }
 
 pub trait ToObservableMessage<T>: Send + Sync + 'static {
-    fn to_message(&self, value: DBResult<T>) -> Messages;
+    fn to_message(&self, value: DBResult<T>) -> Command<Messages>;
 }
 
 impl<T, F> ToObservableMessage<T> for F
 where
     T: 'static,
-    F: Fn(DBResult<T>) -> Messages + Send + Sync + 'static,
+    F: Fn(DBResult<T>) -> Command<Messages> + Send + Sync + 'static,
 {
-    fn to_message(&self, value: DBResult<T>) -> Messages {
+    fn to_message(&self, value: DBResult<T>) -> Command<Messages> {
         self(value)
     }
 }
@@ -91,15 +91,13 @@ where
 pub struct LiveQueryBuilder<Q: Observable, T: ToObservableMessage<Q::Output>> {
     _p: PhantomData<Q>,
     converter: T,
-    background_sender: BackgroundSender,
 }
 
 impl<Q: Observable, T: ToObservableMessage<Q::Output>> LiveQueryBuilder<Q, T> {
-    pub fn new(converter: T, background_sender: BackgroundSender) -> Self {
+    pub fn new(converter: T) -> Self {
         Self {
             _p: PhantomData,
             converter,
-            background_sender,
         }
     }
 }
@@ -111,9 +109,8 @@ impl<Q: Observable, T: ToObservableMessage<Q::Output>> MailboxObservableQueryBui
 
     fn build(self, tracker: InProcessTrackerService, query: Q) -> Self::Output {
         let converter = self.converter;
-        let sender = self.background_sender;
         Observed::new(tracker, query, move |result: DBResult<Q::Output>| {
-            sender.send(converter.to_message(result));
+            send_background(converter.to_message(result));
         })
     }
 }

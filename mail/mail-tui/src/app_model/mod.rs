@@ -4,13 +4,12 @@ pub mod mailbox;
 pub mod session_select;
 pub mod twofa;
 
-use crate::app::Model;
+use crate::app::{Command, Model};
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
 use proton_async::runtime;
-use proton_async::sync::mpsc::Sender;
 use proton_mail_common::exports::tracing;
 use proton_mail_common::exports::tracing::level_filters::LevelFilter;
 use proton_mail_common::proton_api_mail::proton_api_core::http::Builder;
@@ -43,43 +42,17 @@ pub enum AppState {
     Mailbox(mailbox::Model),
 }
 
-/// Convenience wrapper which logs errors.
-///
-/// Errors should only occur if the application has been terminated before a background task.
-#[derive(Clone)]
-pub struct BackgroundSender(Sender<Messages>);
-
-impl BackgroundSender {
-    pub fn send(&self, msg: Messages) {
-        if self.0.send(msg).is_err() {
-            tracing::error!("Failed to send message, channel may be closed");
-        }
-    }
-
-    #[allow(unused)]
-    pub async fn send_async(&self, msg: Messages) {
-        if self.0.send_async(msg).await.is_err() {
-            tracing::error!("Failed to send message, channel may be closed");
-        }
-    }
-}
-
 /// Trait to enforce behavior on each of the app states.
 pub trait AppStateHandler {
     /// Called when we enter this state.
-    fn on_state_enter(&mut self) -> Option<Messages> {
-        None
+    fn on_state_enter(&mut self) -> Command<Messages> {
+        Command::None
     }
 
     /// Called when there is an input event.
-    fn handle_event(&mut self, event: Event) -> Option<Messages>;
+    fn handle_event(&mut self, event: Event) -> Command<Messages>;
     /// Called when there is a message to be handled.
-    fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        sender: &BackgroundSender,
-    ) -> Option<Messages>;
+    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages>;
     /// Called to display the current state.
     fn view(&mut self, frame: &mut Frame, area: Rect);
 
@@ -96,8 +69,8 @@ pub trait Popup {
     /// Popup title to be drawn around the box.
     fn title(&self) -> Option<String>;
     /// Handle input event.
-    fn handle_event(&mut self, _: Event) -> Option<Messages> {
-        None
+    fn handle_event(&mut self, _: Event) -> Command<Messages> {
+        Command::None
     }
     /// Display popup contents.
     fn view(&mut self, frame: &mut Frame, area: Rect);
@@ -185,26 +158,26 @@ impl AppModel {
 }
 
 impl Model<Messages> for AppModel {
-    fn on_ready(&mut self) -> Option<Messages> {
+    fn on_ready(&mut self) -> Command<Messages> {
         self.state.on_state_enter()
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         if self.bg_progress.is_some() {
-            return None;
+            return Command::None;
         }
 
         if let Event::Key(key) = &event {
             if key.kind == KeyEventKind::Press && key.code == KeyCode::F(2) {
                 self.display_log = !self.display_log;
-                return None;
+                return Command::None;
             }
         }
 
         if let Some(popup) = &mut self.popup {
             if let Event::Key(key) = &event {
                 if key.kind == KeyEventKind::Press && key.code == KeyCode::Esc {
-                    return Some(Messages::DismissPopup);
+                    return Command::message(Messages::DismissPopup);
                 }
             }
 
@@ -219,30 +192,30 @@ impl Model<Messages> for AppModel {
         self.state.handle_event(event)
     }
 
-    fn update(&mut self, message: Messages, sender: &Sender<Messages>) -> Option<Messages> {
+    fn update(&mut self, message: Messages) -> Command<Messages> {
         let message = match message {
             Messages::DisplayBackgroundProgress(text) => {
                 self.bg_progress = Some(BackgroundProgress::new(text));
-                return None;
+                return Command::None;
             }
             Messages::DismissBackgroundProgress => {
                 self.bg_progress = None;
-                return None;
+                return Command::None;
             }
             Messages::DisplayError(title, error) => {
                 self.set_error(title.unwrap_or("Error".to_owned()), error);
-                return None;
+                return Command::None;
             }
             Messages::DismissPopup => {
                 self.popup = None;
-                return None;
+                return Command::None;
             }
             Messages::RaisePopup(popup) => {
                 if self.popup.is_some() {
                     tracing::warn!("Raising new popup over existing");
                 }
                 self.popup = Some(popup);
-                return None;
+                return Command::None;
             }
             Messages::SwitchAppState(new_state) => {
                 self.state = new_state;
@@ -251,8 +224,7 @@ impl Model<Messages> for AppModel {
             _ => message,
         };
 
-        let sender = BackgroundSender(sender.clone());
-        self.state.update(&self.context, message, &sender)
+        self.state.update(&self.context, message)
     }
 
     fn view(&mut self, frame: &mut Frame) {
@@ -318,7 +290,7 @@ impl Model<Messages> for AppModel {
 }
 
 impl AppStateHandler for AppState {
-    fn on_state_enter(&mut self) -> Option<Messages> {
+    fn on_state_enter(&mut self) -> Command<Messages> {
         match self {
             AppState::SessionSelect(state) => state.on_state_enter(),
             AppState::Login(state) => state.on_state_enter(),
@@ -328,7 +300,7 @@ impl AppStateHandler for AppState {
         }
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         match self {
             AppState::SessionSelect(state) => state.handle_event(event),
             AppState::Login(state) => state.handle_event(event),
@@ -338,18 +310,13 @@ impl AppStateHandler for AppState {
         }
     }
 
-    fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        sender: &BackgroundSender,
-    ) -> Option<Messages> {
+    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages> {
         match self {
-            AppState::SessionSelect(state) => state.update(ctx, message, sender),
-            AppState::Login(state) => state.update(ctx, message, sender),
-            AppState::TwoFA(state) => state.update(ctx, message, sender),
-            AppState::ContextInit(state) => state.update(ctx, message, sender),
-            AppState::Mailbox(state) => state.update(ctx, message, sender),
+            AppState::SessionSelect(state) => state.update(ctx, message),
+            AppState::Login(state) => state.update(ctx, message),
+            AppState::TwoFA(state) => state.update(ctx, message),
+            AppState::ContextInit(state) => state.update(ctx, message),
+            AppState::Mailbox(state) => state.update(ctx, message),
         }
     }
 
@@ -429,8 +396,8 @@ impl Popup for ErrorDialog {
         Some(self.source.clone())
     }
 
-    fn handle_event(&mut self, _: Event) -> Option<Messages> {
-        Some(Messages::DismissPopup)
+    fn handle_event(&mut self, _: Event) -> Command<Messages> {
+        Command::message(Messages::DismissPopup)
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {

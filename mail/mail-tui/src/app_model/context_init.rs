@@ -1,4 +1,5 @@
-use crate::app_model::{mailbox, AppState, AppStateHandler, BackgroundSender};
+use crate::app::Command;
+use crate::app_model::{mailbox, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
@@ -32,28 +33,22 @@ impl Model {
 }
 
 impl AppStateHandler for Model {
-    fn on_state_enter(&mut self) -> Option<Messages> {
-        Some(Message::Init.into())
+    fn on_state_enter(&mut self) -> Command<Messages> {
+        Command::message(Message::Init.into())
     }
-    fn handle_event(&mut self, _: Event) -> Option<Messages> {
-        None
+    fn handle_event(&mut self, _: Event) -> Command<Messages> {
+        Command::none()
     }
 
-    fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        sender: &BackgroundSender,
-    ) -> Option<Messages> {
+    fn update(&mut self, _: &MailContext, message: Messages) -> Command<Messages> {
         let Messages::ContextInit(message) = message else {
-            return None;
+            return Command::None;
         };
 
         match message {
             Message::Init => {
                 let user_ctx = self.ctx.clone();
-                let sender = sender.clone();
-                ctx.async_runtime().spawn(async move {
+                Command::task(async move {
                     tracing::info!("Initializing user account");
                     let cb = InitCallback {};
                     let msg = if let Err((stage, e)) = user_ctx
@@ -66,15 +61,16 @@ impl AppStateHandler for Model {
                         Message::InitComplete.into()
                     };
 
-                    sender.send(msg);
-                });
-                None
+                    Command::message(msg)
+                })
             }
-            Message::InitComplete => Some(match mailbox::Model::new(self.ctx.clone()) {
-                Ok(model) => Messages::SwitchAppState(model.into()),
-                Err(e) => e.into(),
-            }),
-            Message::InitFailed(e) => Some(Messages::DisplayError(None, anyhow!("{e}"))),
+            Message::InitComplete => match mailbox::Model::new(self.ctx.clone()) {
+                Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
+                Err(e) => Command::message(e.into()),
+            },
+            Message::InitFailed(e) => {
+                Command::message(Messages::DisplayError(None, anyhow!("{e}")))
+            }
         }
     }
 

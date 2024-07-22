@@ -1,4 +1,5 @@
-use crate::app_model::{context_init, twofa, AppState, AppStateHandler, BackgroundSender};
+use crate::app::Command;
+use crate::app_model::{context_init, twofa, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
@@ -48,32 +49,27 @@ impl Model {
 }
 
 impl AppStateHandler for Model {
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(k) = event else {
-            return None;
+            return Command::None;
         };
         match k.code {
             KeyCode::Esc => {
                 //TODO: return to previous state?
-                None
+                Command::none()
             }
-            KeyCode::Enter => Some(Message::Submit.into()),
-            KeyCode::Tab => Some(Message::ToggleInput.into()),
+            KeyCode::Enter => Command::message(Message::Submit.into()),
+            KeyCode::Tab => Command::message(Message::ToggleInput.into()),
             _ => {
                 self.active_text_input_state_mut().handle_event(&event);
-                None
+                Command::none()
             }
         }
     }
 
-    fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        sender: &BackgroundSender,
-    ) -> Option<Messages> {
+    fn update(&mut self, ctx: &MailContext, message: Messages) -> Command<Messages> {
         let Messages::Login(message) = message else {
-            return None;
+            return Command::None;
         };
 
         match message {
@@ -84,13 +80,13 @@ impl AppStateHandler for Model {
                     ActiveInput::Password => ActiveInput::Email,
                 };
                 self.active_text_input_state_mut().set_selected(true);
-                None
+                Command::None
             }
             Message::Submit => {
                 if self.password_input_state.value().is_empty()
                     || self.email_input_state.value().is_empty()
                 {
-                    return Some(Messages::DisplayError(
+                    return Command::message(Messages::DisplayError(
                         None,
                         anyhow! {"Email and Password can not be empty"},
                     ));
@@ -99,48 +95,51 @@ impl AppStateHandler for Model {
                 let mut flow = match ctx.new_login_flow(None) {
                     Ok(f) => f,
                     Err(e) => {
-                        return Some(e.into());
+                        return Command::message(e.into());
                     }
                 };
 
-                let sender = sender.clone();
                 let email = self.email_input_state.value().trim().to_owned();
                 let password = SecretString::new(self.password_input_state.value().to_owned());
-                ctx.async_runtime().spawn(async move {
-                    scopeguard::defer! {
-                        sender.send(Messages::DismissBackgroundProgress);
-                    }
-                    if let Err(e) = flow
-                        .login(email.as_str(), password.expose_secret().as_str(), None)
-                        .await
-                    {
-                        sender.send(Message::LoginFailed(e).into());
-                    } else {
-                        sender.send(Message::LoginSuccess(flow).into());
-                    }
-                });
-
-                Some(Messages::DisplayBackgroundProgress(
-                    "Performing Login ...".to_owned(),
-                ))
+                Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Performing Login ...".to_owned(),
+                    )),
+                    Command::task(async move {
+                        let message = if let Err(e) = flow
+                            .login(email.as_str(), password.expose_secret().as_str(), None)
+                            .await
+                        {
+                            Message::LoginFailed(e).into()
+                        } else {
+                            Message::LoginSuccess(flow).into()
+                        };
+                        Command::batch([
+                            Command::Message(Messages::DismissBackgroundProgress),
+                            Command::message(message),
+                        ])
+                    }),
+                ])
             }
             Message::LoginSuccess(flow) => {
                 if flow.is_awaiting_2fa() {
-                    Some(Messages::SwitchAppState(twofa::Model::new(flow).into()))
+                    Command::message(Messages::SwitchAppState(twofa::Model::new(flow).into()))
                 } else {
                     match ctx.user_context_from_login_flow(&flow) {
-                        Ok(context) => Some(Messages::SwitchAppState(
+                        Ok(context) => Command::message(Messages::SwitchAppState(
                             context_init::Model::new(context).into(),
                         )),
                         Err(e) => {
                             let e = anyhow!("Failed to login: {e}");
                             tracing::error!("{e}");
-                            Some(Messages::DisplayError(None, e))
+                            Command::message(Messages::DisplayError(None, e))
                         }
                     }
                 }
             }
-            Message::LoginFailed(err) => Some(Messages::DisplayError(None, anyhow!("{err}"))),
+            Message::LoginFailed(err) => {
+                Command::message(Messages::DisplayError(None, anyhow!("{err}")))
+            }
         }
     }
 

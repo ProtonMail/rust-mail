@@ -1,9 +1,9 @@
 #![allow(clippy::module_name_repetitions)]
 
+use crate::app::Command;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{ConversationMessage, Item, LiveQueryBuilder, Message, ITEM_LIMIT};
-use crate::app_model::BackgroundSender;
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
@@ -30,11 +30,11 @@ pub struct ConversationsState {
 }
 
 impl ConversationsState {
-    pub fn new(mbox: &Mailbox, background_sender: BackgroundSender) -> MailboxResult<Self> {
+    pub fn new(mbox: &Mailbox) -> MailboxResult<Self> {
         let conversations = mbox.conversations(ITEM_LIMIT)?;
         Ok(Self {
             _query: mbox.new_conversation_query(
-                LiveQueryBuilder::new(conversations_refreshed_converter, background_sender),
+                LiveQueryBuilder::new(conversations_refreshed_converter),
                 ITEM_LIMIT,
             )?,
             table_state: ScrollableTableState::new(Some(0)),
@@ -43,17 +43,12 @@ impl ConversationsState {
         })
     }
 
-    fn open_conversation(
-        &mut self,
-        ctx: &MailContext,
-        mbox: &Mailbox,
-        sender: &BackgroundSender,
-        id: LocalConversationId,
-    ) {
+    #[must_use]
+    fn open_conversation(&mut self, mbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
+        self.messages = MessagesStatus::Loading(ThrobberState::default());
         let mbox = mbox.clone();
-        let sender = sender.clone();
-        ctx.async_runtime().spawn(async move {
-            let result = MessagesState::from_conversation(&mbox, id, sender.clone())
+        Command::task(async move {
+            let result = MessagesState::from_conversation(&mbox, id)
                 .await
                 .map_err(|e| {
                     let e = anyhow!("Failed to open conversation {id}: {e}");
@@ -61,10 +56,8 @@ impl ConversationsState {
                     e
                 })
                 .map(Box::new);
-            sender.send(ConversationMessage::OpenConversationResult(result).into());
-        });
-
-        self.messages = MessagesStatus::Loading(ThrobberState::default());
+            Command::message(ConversationMessage::OpenConversationResult(result).into())
+        })
     }
 
     fn open_conversation_result(
@@ -104,18 +97,18 @@ impl ConversationsState {
 }
 
 impl StateHandler for ConversationsState {
-    fn handle_event(&mut self, event: Event) -> Option<Messages> {
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(key) = &event else {
-            return None;
+            return Command::None;
         };
         match &mut self.messages {
             MessagesStatus::None => {}
-            MessagesStatus::Loading(_) => return None,
+            MessagesStatus::Loading(_) => return Command::None,
             MessagesStatus::Ready(message_state) => {
                 let is_esc = key.code == KeyCode::Esc;
                 let msg = message_state.handle_event(event);
                 return if msg.is_none() && is_esc {
-                    Some(ConversationMessage::CloseConversation.into())
+                    Command::message(ConversationMessage::CloseConversation.into())
                 } else {
                     msg
                 };
@@ -125,35 +118,48 @@ impl StateHandler for ConversationsState {
         match key.code {
             KeyCode::Up => {
                 self.table_state.prev();
-                None
+                Command::None
             }
             KeyCode::Down => {
                 self.table_state.next();
-                None
+                Command::None
             }
-            KeyCode::Char('s') => Some(Message::OpenLabelSelectPopup.into()),
+            KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
             KeyCode::Char('u') => self
                 .selected_conversation()
-                .map(|id| ConversationMessage::MarkConversationUnread(id).into()),
+                .map(|id| Command::message(ConversationMessage::MarkConversationUnread(id).into()))
+                .unwrap_or_default(),
             KeyCode::Char('r') => self
                 .selected_conversation()
-                .map(|id| ConversationMessage::MarkConversationRead(id).into()),
+                .map(|id| Command::message(ConversationMessage::MarkConversationRead(id).into()))
+                .unwrap_or_default(),
             KeyCode::Char('d') => self
                 .selected_conversation()
-                .map(|id| ConversationMessage::DeleteConversation(id).into()),
+                .map(|id| Command::message(ConversationMessage::DeleteConversation(id).into()))
+                .unwrap_or_default(),
             KeyCode::Char('m') => self
                 .selected_conversation()
-                .map(|id| Message::OpenMoveItemPopup(Item::Conversation(id)).into()),
+                .map(|id| {
+                    Command::message(Message::OpenMoveItemPopup(Item::Conversation(id)).into())
+                })
+                .unwrap_or_default(),
             KeyCode::Char('l') => self
                 .selected_conversation()
-                .map(|id| Message::OpenLabelItemPopup(Item::Conversation(id)).into()),
+                .map(|id| {
+                    Command::message(Message::OpenLabelItemPopup(Item::Conversation(id)).into())
+                })
+                .unwrap_or_default(),
             KeyCode::Char('L') => self
                 .selected_conversation()
-                .map(|id| Message::OpenUnlabelItemPopup(Item::Conversation(id)).into()),
+                .map(|id| {
+                    Command::message(Message::OpenUnlabelItemPopup(Item::Conversation(id)).into())
+                })
+                .unwrap_or_default(),
             KeyCode::Enter => self
                 .selected_conversation()
-                .map(|id| ConversationMessage::OpenConversation(id).into()),
-            _ => None,
+                .map(|id| Command::message(ConversationMessage::OpenConversation(id).into()))
+                .unwrap_or_default(),
+            _ => Command::None,
         }
     }
 
@@ -163,12 +169,11 @@ impl StateHandler for ConversationsState {
         message: Message,
         mbox: &Mailbox,
         mail_settings: &Arc<MailSettings>,
-        sender: &BackgroundSender,
-    ) -> Option<Messages> {
+    ) -> Command<Messages> {
         match &mut self.messages {
             MessagesStatus::None => {
                 let Message::ConversationState(message) = message else {
-                    return None;
+                    return Command::None;
                 };
 
                 match message {
@@ -180,23 +185,20 @@ impl StateHandler for ConversationsState {
                     }
                     ConversationMessage::DeleteConversation(id) => delete_conversation(mbox, id),
                     ConversationMessage::MoveConversation(id, label_id) => {
-                        Some(move_conversation(mbox, id, label_id))
+                        move_conversation(mbox, id, label_id)
                     }
                     ConversationMessage::LabelConversation(id, label_id) => {
-                        Some(label_conversation(mbox, id, label_id))
+                        label_conversation(mbox, id, label_id)
                     }
                     ConversationMessage::UnlabelConversation(id, label_id) => {
-                        Some(unlabel_conversation(mbox, id, label_id))
+                        unlabel_conversation(mbox, id, label_id)
                     }
-                    ConversationMessage::OpenConversation(id) => {
-                        self.open_conversation(ctx, mbox, sender, id);
-                        None
-                    }
+                    ConversationMessage::OpenConversation(id) => self.open_conversation(mbox, id),
                     ConversationMessage::Refreshed(conversations) => {
                         self.conversations_refreshed(conversations);
-                        None
+                        Command::None
                     }
-                    _ => None,
+                    _ => Command::None,
                 }
             }
 
@@ -207,15 +209,15 @@ impl StateHandler for ConversationsState {
                     self.open_conversation_result(r);
                 }
 
-                None
+                Command::None
             }
             MessagesStatus::Ready(state) => {
                 if let Message::ConversationState(ConversationMessage::CloseConversation) = &message
                 {
                     self.close_conversation();
-                    return None;
+                    return Command::None;
                 }
-                state.update(ctx, message, mbox, mail_settings, sender)
+                state.update(ctx, message, mbox, mail_settings)
             }
         }
     }
@@ -248,35 +250,35 @@ enum MessagesStatus {
     Ready(Box<MessagesState>),
 }
 
-fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Option<Messages> {
+fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
     match mailbox.mark_conversations_read(std::iter::once(id)) {
-        Ok(()) => None,
+        Ok(()) => Command::None,
         Err(e) => {
             let e = anyhow!("Failed to mark conversation as read: {e}");
             tracing::error!("{e}");
-            Some(e.into())
+            Command::message(e.into())
         }
     }
 }
 
-fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Option<Messages> {
+fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
     match mailbox.mark_conversations_unread(std::iter::once(id)) {
-        Ok(()) => None,
+        Ok(()) => Command::None,
         Err(e) => {
             let e = anyhow!("Failed to mark conversation as read: {e}");
             tracing::error!("{e}");
-            Some(e.into())
+            Command::message(e.into())
         }
     }
 }
 
-fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Option<Messages> {
+fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
     match mailbox.delete_conversations(std::iter::once(id)) {
-        Ok(()) => None,
+        Ok(()) => Command::None,
         Err(e) => {
             let e = anyhow!("Failed to delete conversation: {e}");
             tracing::error!("{e}");
-            Some(e.into())
+            Command::message(e.into())
         }
     }
 }
@@ -285,54 +287,62 @@ fn move_conversation(
     mailbox: &Mailbox,
     conversation_id: LocalConversationId,
     label_id: LocalLabelId,
-) -> Messages {
-    match mailbox.move_conversations(label_id, std::iter::once(conversation_id)) {
-        Ok(()) => Messages::DismissPopup,
-        Err(e) => {
-            let e = anyhow!("Failed to move conversation: {e}");
-            tracing::error!("{e}");
-            e.into()
-        }
-    }
+) -> Command<Messages> {
+    Command::message(
+        match mailbox.move_conversations(label_id, std::iter::once(conversation_id)) {
+            Ok(()) => Messages::DismissPopup,
+            Err(e) => {
+                let e = anyhow!("Failed to move conversation: {e}");
+                tracing::error!("{e}");
+                e.into()
+            }
+        },
+    )
 }
 
 fn label_conversation(
     mailbox: &Mailbox,
     conversation_id: LocalConversationId,
     label_id: LocalLabelId,
-) -> Messages {
-    match mailbox.label_conversations(label_id, std::iter::once(conversation_id)) {
-        Ok(()) => Messages::DismissPopup,
-        Err(e) => {
-            let e = anyhow!("Failed to label conversation: {e}");
-            tracing::error!("{e}");
-            e.into()
-        }
-    }
+) -> Command<Messages> {
+    Command::message(
+        match mailbox.label_conversations(label_id, std::iter::once(conversation_id)) {
+            Ok(()) => Messages::DismissPopup,
+            Err(e) => {
+                let e = anyhow!("Failed to label conversation: {e}");
+                tracing::error!("{e}");
+                e.into()
+            }
+        },
+    )
 }
 
 fn unlabel_conversation(
     mailbox: &Mailbox,
     conversation_id: LocalConversationId,
     label_id: LocalLabelId,
-) -> Messages {
-    match mailbox.unlabel_conversations(label_id, std::iter::once(conversation_id)) {
-        Ok(()) => Messages::DismissPopup,
-        Err(e) => {
-            let e = anyhow!("Failed to unlabel conversation: {e}");
-            tracing::error!("{e}");
-            e.into()
-        }
-    }
+) -> Command<Messages> {
+    Command::message(
+        match mailbox.unlabel_conversations(label_id, std::iter::once(conversation_id)) {
+            Ok(()) => Messages::DismissPopup,
+            Err(e) => {
+                let e = anyhow!("Failed to unlabel conversation: {e}");
+                tracing::error!("{e}");
+                e.into()
+            }
+        },
+    )
 }
 
-fn conversations_refreshed_converter(conversations: DBResult<Vec<LocalConversation>>) -> Messages {
-    match conversations {
+fn conversations_refreshed_converter(
+    conversations: DBResult<Vec<LocalConversation>>,
+) -> Command<Messages> {
+    Command::message(match conversations {
         Ok(c) => ConversationMessage::Refreshed(c).into(),
         Err(e) => {
             let e = anyhow!("Conversation list Query error: {e}");
             tracing::error!("{e}");
             e.into()
         }
-    }
+    })
 }
