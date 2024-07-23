@@ -4,6 +4,7 @@ mod images;
 mod initialization;
 
 pub use initialization::*;
+use std::path::PathBuf;
 
 use futures::executor::block_on;
 use proton_action_queue::ActionQueue;
@@ -31,11 +32,11 @@ pub struct MailUserContext {
 impl MailUserContext {
     pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Arc<Self> {
         let stash = user_context.stash().clone();
-		let cache_path = mail_context.mail_cache_path(user_context.user_id());
-		std::fs::create_dir_all(cache_path).map_err(|e| {
-			tracing::error!("Failed to create mail cache path: {e}");
-			e
-		})?;
+        let cache_path = mail_context.mail_cache_path(user_context.user_id());
+        let _ = std::fs::create_dir_all(cache_path).map_err(|e| {
+            tracing::error!("Failed to create mail cache path: {e}");
+            e
+        });
         Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
@@ -138,7 +139,7 @@ impl MailUserContext {
 
     /// Returns the cache path for mail related resource.
     pub fn mail_cache_path(&self) -> PathBuf {
-        self.inner.mail_context.mail_cache_path(self.user_id())
+        self.mail_context.mail_cache_path(self.user_id())
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {
