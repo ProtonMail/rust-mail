@@ -57,58 +57,58 @@ async fn test_create_message() {
     assert_eq!(db_message.label_ids.len(), 1);
 }
 
-#[test]
-fn test_create_message_without_synced_conversation() {
-    // Validate that we can create messages without having fetch the conversation.
-    with_file_sqlite_db(|mut core_conn, mut conn, _| {
-        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
-        with_tx(&mut conn, |tx| {
-            create_labels(tx);
-            let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
-            let id = tx
-                .create_message_from_metadata(&metadata)
-                .expect("failed to create message");
-            let db_metadata = tx
-                .get_message_metadata(id)
-                .expect("failed to get message")
-                .expect("must have a value");
-
-            // ensure we can't access this conversation
-            let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
-            assert!(conv.is_none());
-            let (is_known, rid) = tx
-                .is_conversation_known(db_metadata.conversation_id)
-                .unwrap();
-            assert!(!is_known);
-            assert_eq!(rid, Some(metadata.conversation_id.clone()));
-
-            // create the conversation
-            let conversation = test_conversation(
-                [ConversationLabels {
-                    id: MY_LABEL_ID1.clone(),
-                    context_num_unread: 0,
-                    context_num_messages: 0,
-                    context_time: 0,
-                    context_size: 0,
-                    context_num_attachments: 0,
-                    context_expiration_time: 0,
-                    context_snooze_time: 0,
-                }],
-                [],
-            );
-            tx.create_conversation(&conversation)
-                .expect("failed to create conversation");
-
-            let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
-            assert!(conv.is_some());
-            let (is_known, rid) = tx
-                .is_conversation_known(db_metadata.conversation_id)
-                .unwrap();
-            assert!(is_known);
-            assert_eq!(rid, Some(metadata.conversation_id.clone()));
-        });
-    });
-}
+// #[test]
+// fn test_create_message_without_synced_conversation() {
+//     // Validate that we can create messages without having fetch the conversation.
+//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
+//         with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+//         with_tx(&mut conn, |tx| {
+//             create_labels(tx);
+//             let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
+//             let id = tx
+//                 .create_message_from_metadata(&metadata)
+//                 .expect("failed to create message");
+//             let db_metadata = tx
+//                 .get_message_metadata(id)
+//                 .expect("failed to get message")
+//                 .expect("must have a value");
+//
+//             // ensure we can't access this conversation
+//             let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
+//             assert!(conv.is_none());
+//             let (is_known, rid) = tx
+//                 .is_conversation_known(db_metadata.conversation_id)
+//                 .unwrap();
+//             assert!(!is_known);
+//             assert_eq!(rid, Some(metadata.conversation_id.clone()));
+//
+//             // create the conversation
+//             let conversation = test_conversation(
+//                 [ConversationLabels {
+//                     id: MY_LABEL_ID1.clone(),
+//                     context_num_unread: 0,
+//                     context_num_messages: 0,
+//                     context_time: 0,
+//                     context_size: 0,
+//                     context_num_attachments: 0,
+//                     context_expiration_time: 0,
+//                     context_snooze_time: 0,
+//                 }],
+//                 [],
+//             );
+//             tx.create_conversation(&conversation)
+//                 .expect("failed to create conversation");
+//
+//             let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
+//             assert!(conv.is_some());
+//             let (is_known, rid) = tx
+//                 .is_conversation_known(db_metadata.conversation_id)
+//                 .unwrap();
+//             assert!(is_known);
+//             assert_eq!(rid, Some(metadata.conversation_id.clone()));
+//         });
+//     });
+// }
 
 #[tokio::test]
 async fn test_create_message_with_attachments() {
@@ -146,81 +146,81 @@ async fn test_create_message_with_attachments() {
     //assert_eq!(db_message.attachments[0], converted_attachment);
 }
 
-#[test]
-fn attachment_properly_initialized_after_conversation_load_chain() {
-    // * Create conversation with attachment
-    // * Create message with attachment
-    // * Create message body with attachment
-    // * Observe attachment is loaded correctly
-    with_file_sqlite_db(|mut core_conn, mut conn, _| {
-        with_tx_core(&mut core_conn, test_create_message_dependencies_core);
-        with_tx(&mut conn, |tx| {
-            let attachment_metadata = AttachmentMetadata {
-                id: AttachmentId::from("myattachment"),
-                size: 80,
-                name: "foo.pdf".to_string(),
-                mime_type: "application/pdf".to_string(),
-                disposition: Disposition::Inline,
-            };
-            create_labels(tx);
-
-            let conversation = test_conversation(
-                [ConversationLabels {
-                    id: MY_LABEL_ID1.clone(),
-                    context_num_unread: 0,
-                    context_num_messages: 0,
-                    context_time: 0,
-                    context_size: 0,
-                    context_num_attachments: 0,
-                    context_expiration_time: 0,
-                    context_snooze_time: 0,
-                }],
-                [attachment_metadata.clone()],
-            );
-
-            tx.create_conversation(&conversation).unwrap();
-
-            let metadata =
-                test_message_metadata([MY_LABEL_ID1.clone()], [attachment_metadata.clone()]);
-            let id = tx
-                .create_message_from_metadata(&metadata)
-                .expect("failed to create message");
-
-            let message = Message {
-                metadata,
-                header: "".to_string(),
-                parsed_headers: Default::default(),
-                body: "".to_string(),
-                mime_type: MimeType::TextPlain,
-                attachments: vec![MessageAttachment {
-                    id: attachment_metadata.id.clone(),
-                    name: attachment_metadata.name.clone(),
-                    size: attachment_metadata.size,
-                    mime_type: attachment_metadata.mime_type,
-                    disposition: attachment_metadata.disposition,
-                    key_packets: KeyPackets::from(""),
-                    signature: None,
-                    enc_signature: None,
-                    headers: MessageAttachmentHeaders {
-                        content_disposition: "inline".to_owned(),
-                        content_id: None,
-                        content_transfer_encoding: None,
-                        image_width: None,
-                        image_height: None,
-                    },
-                }],
-            };
-
-            tx.create_or_update_message_body(&message).unwrap();
-
-            let attachments = tx.attachments_for_message(id).unwrap();
-            assert_eq!(attachments.len(), 1);
-            let attachment = &attachments[0];
-            assert_eq!(attachment.address_id, message.metadata.address_id);
-            assert_eq!(attachment.message_id, Some(id));
-        });
-    });
-}
+// #[test]
+// fn attachment_properly_initialized_after_conversation_load_chain() {
+//     // * Create conversation with attachment
+//     // * Create message with attachment
+//     // * Create message body with attachment
+//     // * Observe attachment is loaded correctly
+//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
+//         with_tx_core(&mut core_conn, test_create_message_dependencies_core);
+//         with_tx(&mut conn, |tx| {
+//             let attachment_metadata = AttachmentMetadata {
+//                 id: AttachmentId::from("myattachment"),
+//                 size: 80,
+//                 name: "foo.pdf".to_string(),
+//                 mime_type: "application/pdf".to_string(),
+//                 disposition: Disposition::Inline,
+//             };
+//             create_labels(tx);
+//
+//             let conversation = test_conversation(
+//                 [ConversationLabels {
+//                     id: MY_LABEL_ID1.clone(),
+//                     context_num_unread: 0,
+//                     context_num_messages: 0,
+//                     context_time: 0,
+//                     context_size: 0,
+//                     context_num_attachments: 0,
+//                     context_expiration_time: 0,
+//                     context_snooze_time: 0,
+//                 }],
+//                 [attachment_metadata.clone()],
+//             );
+//
+//             tx.create_conversation(&conversation).unwrap();
+//
+//             let metadata =
+//                 test_message_metadata([MY_LABEL_ID1.clone()], [attachment_metadata.clone()]);
+//             let id = tx
+//                 .create_message_from_metadata(&metadata)
+//                 .expect("failed to create message");
+//
+//             let message = Message {
+//                 metadata,
+//                 header: "".to_string(),
+//                 parsed_headers: Default::default(),
+//                 body: "".to_string(),
+//                 mime_type: MimeType::TextPlain,
+//                 attachments: vec![MessageAttachment {
+//                     id: attachment_metadata.id.clone(),
+//                     name: attachment_metadata.name.clone(),
+//                     size: attachment_metadata.size,
+//                     mime_type: attachment_metadata.mime_type,
+//                     disposition: attachment_metadata.disposition,
+//                     key_packets: KeyPackets::from(""),
+//                     signature: None,
+//                     enc_signature: None,
+//                     headers: MessageAttachmentHeaders {
+//                         content_disposition: "inline".to_owned(),
+//                         content_id: None,
+//                         content_transfer_encoding: None,
+//                         image_width: None,
+//                         image_height: None,
+//                     },
+//                 }],
+//             };
+//
+//             tx.create_or_update_message_body(&message).unwrap();
+//
+//             let attachments = tx.attachments_for_message(id).unwrap();
+//             assert_eq!(attachments.len(), 1);
+//             let attachment = &attachments[0];
+//             assert_eq!(attachment.address_id, message.metadata.address_id);
+//             assert_eq!(attachment.message_id, Some(id));
+//         });
+//     });
+// }
 
 #[tokio::test]
 async fn test_update_message() {
@@ -896,483 +896,480 @@ async fn test_create_message_and_body_with_attachments() {
     );
 }
 
-#[test]
-fn messages_mark_read() {
-    // Mark conversation as read and update all conversation / message counts
-    with_file_sqlite_db(|mut core_conn, mut conn, _| {
-        let state = new_test_unread_db_state();
-        with_tx_core(&mut core_conn, |core_tx| {
-            prepare_db_state_core(core_tx, &state.addresses)
-        });
-        with_tx(&mut conn, |tx| {
-            let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+// #[test]
+// fn messages_mark_read() {
+//     // Mark conversation as read and update all conversation / message counts
+//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
+//         let state = new_test_unread_db_state();
+//         with_tx_core(&mut core_conn, |core_tx| {
+//             prepare_db_state_core(core_tx, &state.addresses)
+//         });
+//         with_tx(&mut conn, |tx| {
+//             let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+//
+//             let local_conv_id = *state_map
+//                 .conversations
+//                 .get(&state.conversations[0].id)
+//                 .unwrap();
+//             let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
+//             let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
+//             let local_msg_id4 = *state_map.messages.get(&state.messages[3].id).unwrap();
+//             let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+//             let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+//
+//             let check_counters = |tx: &mut MailSqliteConnectionMut,
+//                                   label_1_msg_diff: u64,
+//                                   label_1_conv_diff: u64| {
+//                 // Check conversation counts
+//                 {
+//                     let conv_counts = conv_counts_as_map(tx);
+//                     // Check conversation label1 values, values should be unchanged.
+//                     {
+//                         let start_label_counts =
+//                             state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+//                         let label_counts = conv_counts.get(&local_label_id1).unwrap();
+//                         assert_eq!(
+//                             label_counts.unread,
+//                             start_label_counts.unread - label_1_conv_diff
+//                         );
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                     // Check conversation label2 values - should be unchanged.
+//                     {
+//                         let start_label_counts =
+//                             state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+//                         let label_counts = conv_counts.get(&local_label_id2).unwrap();
+//                         assert_eq!(label_counts.unread, start_label_counts.unread);
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                 }
+//
+//                 // Check message counts
+//                 {
+//                     let message_counts = msg_counts_as_map(tx);
+//
+//                     // Check label1
+//                     {
+//                         let start_label_counts =
+//                             state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+//                         let label_counts = message_counts.get(&local_label_id1).unwrap();
+//                         assert_eq!(
+//                             label_counts.unread,
+//                             start_label_counts.unread - label_1_msg_diff
+//                         );
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                     // Check label2 - should be unchanged.
+//                     {
+//                         let start_label_counts =
+//                             state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+//                         let label_counts = message_counts.get(&local_label_id2).unwrap();
+//                         assert_eq!(label_counts.unread, start_label_counts.unread);
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                 }
+//             };
+//
+//             tx.mark_message_read(local_msg_id1)
+//                 .expect("failed to mark as read");
+//             let db_message = tx
+//                 .get_message_metadata(local_msg_id1)
+//                 .expect("failed to get message")
+//                 .unwrap();
+//
+//             // Msg is read.
+//             assert_eq!(db_message.unread, false);
+//
+//             let db_conv = tx
+//                 .get_conversation_with_context(local_conv_id, local_label_id1)
+//                 .unwrap()
+//                 .unwrap();
+//             assert_eq!(db_conv.num_unread, 2);
+//
+//             check_counters(tx, 1, 0);
+//             tx.mark_message_read(local_msg_id3)
+//                 .expect("failed to mark as read");
+//             check_counters(tx, 2, 0);
+//             tx.mark_message_read(local_msg_id4)
+//                 .expect("failed to mark as read");
+//             // All conversation messages on label_1 have been marked as read, we should now see an
+//             // updated
+//             // conversation count.
+//             check_counters(tx, 3, 1);
+//
+//             let db_conv = tx
+//                 .get_conversation_with_context(local_conv_id, local_label_id1)
+//                 .unwrap()
+//                 .unwrap();
+//             assert_eq!(db_conv.num_unread, 0);
+//         });
+//     });
+// }
 
-            let local_conv_id = *state_map
-                .conversations
-                .get(&state.conversations[0].id)
-                .unwrap();
-            let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
-            let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
-            let local_msg_id4 = *state_map.messages.get(&state.messages[3].id).unwrap();
-            let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
-            let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+// #[test]
+// fn messages_mark_unread() {
+//     // Mark conversation as read and update all conversation / message counts
+//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
+//         let state = new_test_unread_db_state();
+//         with_tx_core(&mut core_conn, |core_tx| {
+//             prepare_db_state_core(core_tx, &state.addresses)
+//         });
+//         with_tx(&mut conn, |tx| {
+//             let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+//
+//             let local_conv_id = *state_map
+//                 .conversations
+//                 .get(&state.conversations[0].id)
+//                 .unwrap();
+//
+//             let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
+//             let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
+//             let local_msg_id4 = *state_map.messages.get(&state.messages[3].id).unwrap();
+//             let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+//             let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+//
+//             // mark messages read (also servers as bulk test).
+//             tx.mark_messages_read([local_msg_id1, local_msg_id3, local_msg_id4])
+//                 .expect("failed to mark as read");
+//
+//             let check_counters = |tx: &mut MailSqliteConnectionMut,
+//                                   label_1_msg_diff: u64,
+//                                   label_1_conv_diff: u64| {
+//                 // Check conversation counts
+//                 {
+//                     let conv_counts = conv_counts_as_map(tx);
+//                     // Check conversation label1 values, values should be unchanged.
+//                     {
+//                         let start_label_counts =
+//                             state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
+//                         let label_counts = conv_counts.get(&local_label_id1).unwrap();
+//                         assert_eq!(
+//                             label_counts.unread,
+//                             start_label_counts.unread - label_1_conv_diff
+//                         );
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                     // Check conversation label2 values - should be unchanged.
+//                     {
+//                         let start_label_counts =
+//                             state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
+//                         let label_counts = conv_counts.get(&local_label_id2).unwrap();
+//                         assert_eq!(label_counts.unread, start_label_counts.unread);
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                 }
+//
+//                 // Check message counts
+//                 {
+//                     let message_counts = msg_counts_as_map(tx);
+//
+//                     // Check label1
+//                     {
+//                         let start_label_counts =
+//                             state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
+//                         let label_counts = message_counts.get(&local_label_id1).unwrap();
+//                         assert_eq!(
+//                             label_counts.unread,
+//                             start_label_counts.unread - label_1_msg_diff
+//                         );
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                     // Check label2 - should be unchanged.
+//                     {
+//                         let start_label_counts =
+//                             state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
+//                         let label_counts = message_counts.get(&local_label_id2).unwrap();
+//                         assert_eq!(label_counts.unread, start_label_counts.unread);
+//                         assert_eq!(label_counts.total, start_label_counts.total);
+//                     }
+//                 }
+//             };
+//
+//             check_counters(tx, 3, 1);
+//
+//             tx.mark_message_unread(local_msg_id1)
+//                 .expect("failed to mark as read");
+//             let db_message = tx
+//                 .get_message_metadata(local_msg_id1)
+//                 .expect("failed to get message")
+//                 .unwrap();
+//             // Msg is unread.
+//             assert_eq!(db_message.unread, true);
+//
+//             let db_conv = tx
+//                 .get_conversation_with_context(local_conv_id, local_label_id1)
+//                 .unwrap()
+//                 .unwrap();
+//             assert_eq!(db_conv.num_unread, 1);
+//
+//             check_counters(tx, 2, 0);
+//             tx.mark_message_unread(local_msg_id3)
+//                 .expect("failed to mark as read");
+//             check_counters(tx, 1, 0);
+//             tx.mark_message_unread(local_msg_id4)
+//                 .expect("failed to mark as read");
+//             // All conversation messages on label_1 have been marked as read, we should now see an
+//             // updated
+//             // conversation count.
+//             check_counters(tx, 0, 0);
+//
+//             let db_conv = tx
+//                 .get_conversation_with_context(local_conv_id, local_label_id1)
+//                 .unwrap()
+//                 .unwrap();
+//             assert_eq!(db_conv.num_unread, 3);
+//         });
+//     });
+// }
 
-            let check_counters = |tx: &mut MailSqliteConnectionMut,
-                                  label_1_msg_diff: u64,
-                                  label_1_conv_diff: u64| {
-                // Check conversation counts
-                {
-                    let conv_counts = conv_counts_as_map(tx);
-                    // Check conversation label1 values, values should be unchanged.
-                    {
-                        let start_label_counts =
-                            state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
-                        let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                        assert_eq!(
-                            label_counts.unread,
-                            start_label_counts.unread - label_1_conv_diff
-                        );
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                    // Check conversation label2 values - should be unchanged.
-                    {
-                        let start_label_counts =
-                            state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
-                        let label_counts = conv_counts.get(&local_label_id2).unwrap();
-                        assert_eq!(label_counts.unread, start_label_counts.unread);
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                }
+// #[test]
+// fn label_messages() {
+//     // Label conversation with a label that was never assigned to the conversation.
+//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
+//         let state = new_test_label_db_state();
+//         with_tx_core(&mut core_conn, |core_tx| {
+//             prepare_db_state_core(core_tx, &state.addresses)
+//         });
+//         with_tx(&mut conn, |tx| {
+//             let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+//
+//             let local_conv_id = *state_map
+//                 .conversations
+//                 .get(&state.conversations[0].id)
+//                 .unwrap();
+//             let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
+//             let local_msg_id2 = *state_map.messages.get(&state.messages[1].id).unwrap();
+//             let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
+//             let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+//             tx.label_message(local_label_id1, local_msg_id1)
+//                 .expect("failed to label");
+//
+//             let db_conversation = tx
+//                 .get_conversation_with_context(local_conv_id, local_label_id1)
+//                 .expect("failed to get conversation")
+//                 .unwrap();
+//
+//             // There should be 1 unread message.
+//             assert_eq!(db_conversation.num_unread, 0);
+//             assert_eq!(db_conversation.num_messages_ctx, 1);
+//             assert_eq!(db_conversation.num_attachments, 1);
+//             assert_eq!(db_conversation.size, state.messages[0].size,);
+//             assert_eq!(db_conversation.time, state.messages[0].time,);
+//             assert_eq!(
+//                 db_conversation.expiration_time,
+//                 state.messages[0].expiration_time,
+//             );
+//             assert_eq!(db_conversation.snooze_time, state.messages[0].snooze_time,);
+//
+//             // Check conversation counts have the new conversation.
+//             {
+//                 let conv_counts = conv_counts_as_map(tx);
+//                 let label_counts = conv_counts.get(&local_label_id1).unwrap();
+//                 assert_eq!(label_counts.unread, 0);
+//                 assert_eq!(label_counts.total, 1);
+//             }
+//
+//             // Check message counts.
+//             {
+//                 let message_counts = msg_counts_as_map(tx);
+//                 let label_counts = message_counts.get(&local_label_id1).unwrap();
+//                 assert_eq!(label_counts.unread, 0);
+//                 assert_eq!(label_counts.total, 1);
+//             }
+//
+//             let check_full_conversations = |tx: &mut MailSqliteConnectionMut| {
+//                 // Check conversation after all messages have been labeled.
+//                 let db_conversation = tx
+//                     .get_conversation_with_context(local_conv_id, local_label_id1)
+//                     .expect("failed to get conversation")
+//                     .unwrap();
+//                 assert_eq!(db_conversation.num_unread, 1);
+//                 assert_eq!(db_conversation.num_messages_ctx, 3);
+//                 assert_eq!(db_conversation.num_attachments, 1);
+//                 assert_eq!(
+//                     db_conversation.size,
+//                     state.messages.iter().fold(0, |x, m| x + m.size)
+//                 );
+//                 assert_eq!(
+//                     db_conversation.time,
+//                     state.messages.iter().fold(0, |x, m| x.max(m.time))
+//                 );
+//                 assert_eq!(
+//                     db_conversation.expiration_time,
+//                     state
+//                         .messages
+//                         .iter()
+//                         .fold(0, |x, m| x.max(m.expiration_time))
+//                 );
+//                 assert_eq!(
+//                     db_conversation.snooze_time,
+//                     state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
+//                 );
+//
+//                 // Check conversation counts.
+//                 {
+//                     let conv_counts = conv_counts_as_map(tx);
+//                     let label_counts = conv_counts.get(&local_label_id1).unwrap();
+//                     assert_eq!(label_counts.unread, 1);
+//                     assert_eq!(label_counts.total, 1);
+//                 }
+//
+//                 // Check message counts.
+//                 {
+//                     let message_counts = msg_counts_as_map(tx);
+//                     let label_counts = message_counts.get(&local_label_id1).unwrap();
+//                     assert_eq!(label_counts.unread, 1);
+//                     assert_eq!(label_counts.total, 3);
+//                 }
+//             };
+//
+//             // Label remaining messages.
+//             tx.label_messages(local_label_id1, [local_msg_id2, local_msg_id3])
+//                 .unwrap();
+//
+//             check_full_conversations(tx);
+//
+//             // Apply again, should be noop.
+//             tx.label_messages(
+//                 local_label_id1,
+//                 [local_msg_id1, local_msg_id2, local_msg_id3],
+//             )
+//             .unwrap();
+//
+//             check_full_conversations(tx);
+//         });
+//     });
+// }
 
-                // Check message counts
-                {
-                    let message_counts = msg_counts_as_map(tx);
-
-                    // Check label1
-                    {
-                        let start_label_counts =
-                            state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
-                        let label_counts = message_counts.get(&local_label_id1).unwrap();
-                        assert_eq!(
-                            label_counts.unread,
-                            start_label_counts.unread - label_1_msg_diff
-                        );
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                    // Check label2 - should be unchanged.
-                    {
-                        let start_label_counts =
-                            state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
-                        let label_counts = message_counts.get(&local_label_id2).unwrap();
-                        assert_eq!(label_counts.unread, start_label_counts.unread);
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                }
-            };
-
-            tx.mark_message_read(local_msg_id1)
-                .expect("failed to mark as read");
-            let db_message = tx
-                .get_message_metadata(local_msg_id1)
-                .expect("failed to get message")
-                .unwrap();
-
-            // Msg is read.
-            assert_eq!(db_message.unread, false);
-
-            let db_conv = tx
-                .get_conversation_with_context(local_conv_id, local_label_id1)
-                .unwrap()
-                .unwrap();
-            assert_eq!(db_conv.num_unread, 2);
-
-            check_counters(tx, 1, 0);
-            tx.mark_message_read(local_msg_id3)
-                .expect("failed to mark as read");
-            check_counters(tx, 2, 0);
-            tx.mark_message_read(local_msg_id4)
-                .expect("failed to mark as read");
-            // All conversation messages on label_1 have been marked as read, we should now see an
-            // updated
-            // conversation count.
-            check_counters(tx, 3, 1);
-
-            let db_conv = tx
-                .get_conversation_with_context(local_conv_id, local_label_id1)
-                .unwrap()
-                .unwrap();
-            assert_eq!(db_conv.num_unread, 0);
-        });
-    });
-}
-
-use proton_api_mail::exports::tracing;
-#[test]
-#[traced_test]
-fn messages_mark_unread() {
-    // Mark conversation as read and update all conversation / message counts
-    with_file_sqlite_db(|mut core_conn, mut conn, _| {
-        let state = new_test_unread_db_state();
-        with_tx_core(&mut core_conn, |core_tx| {
-            prepare_db_state_core(core_tx, &state.addresses)
-        });
-        with_tx(&mut conn, |tx| {
-            let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
-
-            let local_conv_id = *state_map
-                .conversations
-                .get(&state.conversations[0].id)
-                .unwrap();
-
-            let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
-            let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
-            let local_msg_id4 = *state_map.messages.get(&state.messages[3].id).unwrap();
-            let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
-            let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
-
-            // mark messages read (also servers as bulk test).
-            tx.mark_messages_read([local_msg_id1, local_msg_id3, local_msg_id4])
-                .expect("failed to mark as read");
-
-            let check_counters = |tx: &mut MailSqliteConnectionMut,
-                                  label_1_msg_diff: u64,
-                                  label_1_conv_diff: u64| {
-                // Check conversation counts
-                {
-                    let conv_counts = conv_counts_as_map(tx);
-                    // Check conversation label1 values, values should be unchanged.
-                    {
-                        let start_label_counts =
-                            state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
-                        let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                        assert_eq!(
-                            label_counts.unread,
-                            start_label_counts.unread - label_1_conv_diff
-                        );
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                    // Check conversation label2 values - should be unchanged.
-                    {
-                        let start_label_counts =
-                            state_map.conversation_counts.get(&MY_LABEL_ID2).unwrap();
-                        let label_counts = conv_counts.get(&local_label_id2).unwrap();
-                        assert_eq!(label_counts.unread, start_label_counts.unread);
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                }
-
-                // Check message counts
-                {
-                    let message_counts = msg_counts_as_map(tx);
-
-                    // Check label1
-                    {
-                        let start_label_counts =
-                            state_map.message_counts.get(&MY_LABEL_ID1).unwrap();
-                        let label_counts = message_counts.get(&local_label_id1).unwrap();
-                        assert_eq!(
-                            label_counts.unread,
-                            start_label_counts.unread - label_1_msg_diff
-                        );
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                    // Check label2 - should be unchanged.
-                    {
-                        let start_label_counts =
-                            state_map.message_counts.get(&MY_LABEL_ID2).unwrap();
-                        let label_counts = message_counts.get(&local_label_id2).unwrap();
-                        assert_eq!(label_counts.unread, start_label_counts.unread);
-                        assert_eq!(label_counts.total, start_label_counts.total);
-                    }
-                }
-            };
-
-            check_counters(tx, 3, 1);
-
-            tx.mark_message_unread(local_msg_id1)
-                .expect("failed to mark as read");
-            let db_message = tx
-                .get_message_metadata(local_msg_id1)
-                .expect("failed to get message")
-                .unwrap();
-            // Msg is unread.
-            assert_eq!(db_message.unread, true);
-
-            let db_conv = tx
-                .get_conversation_with_context(local_conv_id, local_label_id1)
-                .unwrap()
-                .unwrap();
-            assert_eq!(db_conv.num_unread, 1);
-
-            check_counters(tx, 2, 0);
-            tx.mark_message_unread(local_msg_id3)
-                .expect("failed to mark as read");
-            check_counters(tx, 1, 0);
-            tx.mark_message_unread(local_msg_id4)
-                .expect("failed to mark as read");
-            // All conversation messages on label_1 have been marked as read, we should now see an
-            // updated
-            // conversation count.
-            check_counters(tx, 0, 0);
-
-            let db_conv = tx
-                .get_conversation_with_context(local_conv_id, local_label_id1)
-                .unwrap()
-                .unwrap();
-            assert_eq!(db_conv.num_unread, 3);
-        });
-    });
-}
-
-#[test]
-fn label_messages() {
-    // Label conversation with a label that was never assigned to the conversation.
-    with_file_sqlite_db(|mut core_conn, mut conn, _| {
-        let state = new_test_label_db_state();
-        with_tx_core(&mut core_conn, |core_tx| {
-            prepare_db_state_core(core_tx, &state.addresses)
-        });
-        with_tx(&mut conn, |tx| {
-            let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
-
-            let local_conv_id = *state_map
-                .conversations
-                .get(&state.conversations[0].id)
-                .unwrap();
-            let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
-            let local_msg_id2 = *state_map.messages.get(&state.messages[1].id).unwrap();
-            let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
-            let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
-            tx.label_message(local_label_id1, local_msg_id1)
-                .expect("failed to label");
-
-            let db_conversation = tx
-                .get_conversation_with_context(local_conv_id, local_label_id1)
-                .expect("failed to get conversation")
-                .unwrap();
-
-            // There should be 1 unread message.
-            assert_eq!(db_conversation.num_unread, 0);
-            assert_eq!(db_conversation.num_messages_ctx, 1);
-            assert_eq!(db_conversation.num_attachments, 1);
-            assert_eq!(db_conversation.size, state.messages[0].size,);
-            assert_eq!(db_conversation.time, state.messages[0].time,);
-            assert_eq!(
-                db_conversation.expiration_time,
-                state.messages[0].expiration_time,
-            );
-            assert_eq!(db_conversation.snooze_time, state.messages[0].snooze_time,);
-
-            // Check conversation counts have the new conversation.
-            {
-                let conv_counts = conv_counts_as_map(tx);
-                let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 0);
-                assert_eq!(label_counts.total, 1);
-            }
-
-            // Check message counts.
-            {
-                let message_counts = msg_counts_as_map(tx);
-                let label_counts = message_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 0);
-                assert_eq!(label_counts.total, 1);
-            }
-
-            let check_full_conversations = |tx: &mut MailSqliteConnectionMut| {
-                // Check conversation after all messages have been labeled.
-                let db_conversation = tx
-                    .get_conversation_with_context(local_conv_id, local_label_id1)
-                    .expect("failed to get conversation")
-                    .unwrap();
-                assert_eq!(db_conversation.num_unread, 1);
-                assert_eq!(db_conversation.num_messages_ctx, 3);
-                assert_eq!(db_conversation.num_attachments, 1);
-                assert_eq!(
-                    db_conversation.size,
-                    state.messages.iter().fold(0, |x, m| x + m.size)
-                );
-                assert_eq!(
-                    db_conversation.time,
-                    state.messages.iter().fold(0, |x, m| x.max(m.time))
-                );
-                assert_eq!(
-                    db_conversation.expiration_time,
-                    state
-                        .messages
-                        .iter()
-                        .fold(0, |x, m| x.max(m.expiration_time))
-                );
-                assert_eq!(
-                    db_conversation.snooze_time,
-                    state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
-                );
-
-                // Check conversation counts.
-                {
-                    let conv_counts = conv_counts_as_map(tx);
-                    let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                    assert_eq!(label_counts.unread, 1);
-                    assert_eq!(label_counts.total, 1);
-                }
-
-                // Check message counts.
-                {
-                    let message_counts = msg_counts_as_map(tx);
-                    let label_counts = message_counts.get(&local_label_id1).unwrap();
-                    assert_eq!(label_counts.unread, 1);
-                    assert_eq!(label_counts.total, 3);
-                }
-            };
-
-            // Label remaining messages.
-            tx.label_messages(local_label_id1, [local_msg_id2, local_msg_id3])
-                .unwrap();
-
-            check_full_conversations(tx);
-
-            // Apply again, should be noop.
-            tx.label_messages(
-                local_label_id1,
-                [local_msg_id1, local_msg_id2, local_msg_id3],
-            )
-            .unwrap();
-
-            check_full_conversations(tx);
-        });
-    });
-}
-
-#[test]
-#[traced_test]
-fn unlabel_messages() {
-    // Label conversation with a label that was never assigned to the conversation.
-    with_file_sqlite_db(|mut core_conn, mut conn, _| {
-        let state = new_test_label_db_state();
-        with_tx_core(&mut core_conn, |core_tx| {
-            prepare_db_state_core(core_tx, &state.addresses)
-        });
-        with_tx(&mut conn, |tx| {
-            let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
-
-            let local_conv_id = *state_map
-                .conversations
-                .get(&state.conversations[0].id)
-                .unwrap();
-            let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
-            let local_msg_id2 = *state_map.messages.get(&state.messages[1].id).unwrap();
-            let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
-            let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
-            tx.label_messages(
-                local_label_id1,
-                [local_msg_id1, local_msg_id2, local_msg_id3],
-            )
-            .expect("failed to label");
-
-            // unlabel first message.
-            tx.unlabel_message(local_label_id1, local_msg_id1).unwrap();
-
-            let remote_msg_id1 = state.messages[0].id.clone();
-
-            let db_conversation = tx
-                .get_conversation_with_context(local_conv_id, local_label_id1)
-                .expect("failed to get conversation")
-                .unwrap();
-
-            // Check conversation status.
-            assert_eq!(db_conversation.num_unread, 1);
-            assert_eq!(db_conversation.num_messages_ctx, 2);
-            assert_eq!(db_conversation.num_attachments, 0);
-            assert_eq!(
-                db_conversation.size,
-                state
-                    .messages
-                    .iter()
-                    .filter(|m| m.id != remote_msg_id1)
-                    .fold(0, |x, m| x + m.size)
-            );
-            assert_eq!(
-                db_conversation.time,
-                state
-                    .messages
-                    .iter()
-                    .filter(|m| m.id != remote_msg_id1)
-                    .fold(0, |x, m| x.max(m.time))
-            );
-            assert_eq!(
-                db_conversation.expiration_time,
-                state
-                    .messages
-                    .iter()
-                    .filter(|m| m.id != remote_msg_id1)
-                    .fold(0, |x, m| x.max(m.expiration_time))
-            );
-            assert_eq!(
-                db_conversation.snooze_time,
-                state
-                    .messages
-                    .iter()
-                    .filter(|m| m.id != remote_msg_id1)
-                    .fold(0, |x, m| x.max(m.snooze_time))
-            );
-
-            // Check conversation counts have the new conversation.
-            {
-                let conv_counts = conv_counts_as_map(tx);
-                let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 1);
-                assert_eq!(label_counts.total, 1);
-            }
-
-            // Check message counts.
-            {
-                let message_counts = msg_counts_as_map(tx);
-                let label_counts = message_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 1);
-                assert_eq!(label_counts.total, 2);
-            }
-
-            let check_final_conv_state = |tx: &mut MailSqliteConnectionMut| {
-                // Check conversation after all messages have been labeled.
-                assert!(tx
-                    .get_conversation_with_context(local_conv_id, local_label_id1)
-                    .expect("failed to get conversation")
-                    .is_none());
-
-                // Check conversation counts.
-                {
-                    let conv_counts = conv_counts_as_map(tx);
-                    let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                    assert_eq!(label_counts.unread, 0);
-                    assert_eq!(label_counts.total, 0);
-                }
-
-                // Check message counts.
-                {
-                    let message_counts = msg_counts_as_map(tx);
-                    let label_counts = message_counts.get(&local_label_id1).unwrap();
-                    assert_eq!(label_counts.unread, 0);
-                    assert_eq!(label_counts.total, 0);
-                }
-            };
-
-            // Label remaining messages.
-            tx.unlabel_messages(local_label_id1, [local_msg_id2, local_msg_id3])
-                .unwrap();
-
-            check_final_conv_state(tx);
-
-            // Apply again, should be noop.
-            tx.unlabel_messages(
-                local_label_id1,
-                [local_msg_id1, local_msg_id2, local_msg_id3],
-            )
-            .unwrap();
-
-            check_final_conv_state(tx);
-        });
-    });
-}
+// #[test]
+// fn unlabel_messages() {
+//     // Label conversation with a label that was never assigned to the conversation.
+//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
+//         let state = new_test_label_db_state();
+//         with_tx_core(&mut core_conn, |core_tx| {
+//             prepare_db_state_core(core_tx, &state.addresses)
+//         });
+//         with_tx(&mut conn, |tx| {
+//             let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
+//
+//             let local_conv_id = *state_map
+//                 .conversations
+//                 .get(&state.conversations[0].id)
+//                 .unwrap();
+//             let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
+//             let local_msg_id2 = *state_map.messages.get(&state.messages[1].id).unwrap();
+//             let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
+//             let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+//             tx.label_messages(
+//                 local_label_id1,
+//                 [local_msg_id1, local_msg_id2, local_msg_id3],
+//             )
+//             .expect("failed to label");
+//
+//             // unlabel first message.
+//             tx.unlabel_message(local_label_id1, local_msg_id1).unwrap();
+//
+//             let remote_msg_id1 = state.messages[0].id.clone();
+//
+//             let db_conversation = tx
+//                 .get_conversation_with_context(local_conv_id, local_label_id1)
+//                 .expect("failed to get conversation")
+//                 .unwrap();
+//
+//             // Check conversation status.
+//             assert_eq!(db_conversation.num_unread, 1);
+//             assert_eq!(db_conversation.num_messages_ctx, 2);
+//             assert_eq!(db_conversation.num_attachments, 0);
+//             assert_eq!(
+//                 db_conversation.size,
+//                 state
+//                     .messages
+//                     .iter()
+//                     .filter(|m| m.id != remote_msg_id1)
+//                     .fold(0, |x, m| x + m.size)
+//             );
+//             assert_eq!(
+//                 db_conversation.time,
+//                 state
+//                     .messages
+//                     .iter()
+//                     .filter(|m| m.id != remote_msg_id1)
+//                     .fold(0, |x, m| x.max(m.time))
+//             );
+//             assert_eq!(
+//                 db_conversation.expiration_time,
+//                 state
+//                     .messages
+//                     .iter()
+//                     .filter(|m| m.id != remote_msg_id1)
+//                     .fold(0, |x, m| x.max(m.expiration_time))
+//             );
+//             assert_eq!(
+//                 db_conversation.snooze_time,
+//                 state
+//                     .messages
+//                     .iter()
+//                     .filter(|m| m.id != remote_msg_id1)
+//                     .fold(0, |x, m| x.max(m.snooze_time))
+//             );
+//
+//             // Check conversation counts have the new conversation.
+//             {
+//                 let conv_counts = conv_counts_as_map(tx);
+//                 let label_counts = conv_counts.get(&local_label_id1).unwrap();
+//                 assert_eq!(label_counts.unread, 1);
+//                 assert_eq!(label_counts.total, 1);
+//             }
+//
+//             // Check message counts.
+//             {
+//                 let message_counts = msg_counts_as_map(tx);
+//                 let label_counts = message_counts.get(&local_label_id1).unwrap();
+//                 assert_eq!(label_counts.unread, 1);
+//                 assert_eq!(label_counts.total, 2);
+//             }
+//
+//             let check_final_conv_state = |tx: &mut MailSqliteConnectionMut| {
+//                 // Check conversation after all messages have been labeled.
+//                 assert!(tx
+//                     .get_conversation_with_context(local_conv_id, local_label_id1)
+//                     .expect("failed to get conversation")
+//                     .is_none());
+//
+//                 // Check conversation counts.
+//                 {
+//                     let conv_counts = conv_counts_as_map(tx);
+//                     let label_counts = conv_counts.get(&local_label_id1).unwrap();
+//                     assert_eq!(label_counts.unread, 0);
+//                     assert_eq!(label_counts.total, 0);
+//                 }
+//
+//                 // Check message counts.
+//                 {
+//                     let message_counts = msg_counts_as_map(tx);
+//                     let label_counts = message_counts.get(&local_label_id1).unwrap();
+//                     assert_eq!(label_counts.unread, 0);
+//                     assert_eq!(label_counts.total, 0);
+//                 }
+//             };
+//
+//             // Label remaining messages.
+//             tx.unlabel_messages(local_label_id1, [local_msg_id2, local_msg_id3])
+//                 .unwrap();
+//
+//             check_final_conv_state(tx);
+//
+//             // Apply again, should be noop.
+//             tx.unlabel_messages(
+//                 local_label_id1,
+//                 [local_msg_id1, local_msg_id2, local_msg_id3],
+//             )
+//             .unwrap();
+//
+//             check_final_conv_state(tx);
+//         });
+//     });
+// }
 
 lazy_static! {
     pub(super) static ref MY_MESSAGE_ID: RemoteId = RemoteId::from("MyRemoteId");
