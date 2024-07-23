@@ -20,7 +20,7 @@ use proton_mail_common::exports::tracing;
 use proton_mail_common::proton_api_mail::domain::MimeType;
 use proton_mail_common::settings::MailSettings;
 use proton_mail_common::{
-    proton_api_mail, DecryptedMessage as DecryptedMessageBody, MailContext, Mailbox, MailboxResult,
+    DecryptedMessage as DecryptedMessageBody, MailContext, Mailbox, MailboxResult,
 };
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
@@ -82,12 +82,7 @@ impl MessagesState {
         })
     }
 
-    pub fn open_message_body(
-        &mut self,
-        _: &MailContext,
-        mbox: &Mailbox,
-        mail_settings: Arc<MailSettings>,
-    ) -> Command<Messages> {
+    pub fn open_message_body(&mut self, _: &MailContext, mbox: &Mailbox) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
             return Command::None;
@@ -97,12 +92,7 @@ impl MessagesState {
         self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
 
         Command::task(async move {
-            //TODO: improve
-            let settings = match &*mail_settings.value() {
-                Ok(s) => s.clone(),
-                Err(_) => proton_api_mail::domain::MailSettings::default(),
-            };
-            let decrypted = match mbox.message_body(metadata.id, &settings).await {
+            let decrypted = match mbox.message_body(metadata.id).await {
                 Ok(m) => m,
                 Err(e) => {
                     let e = anyhow!("Failed to get message body {e}");
@@ -199,7 +189,7 @@ impl StateHandler for MessagesState {
         ctx: &MailContext,
         message: Message,
         mbox: &Mailbox,
-        mail_settings: &Arc<MailSettings>,
+        _: &Arc<MailSettings>,
         _: &BackgroundSender,
     ) -> Command<Messages> {
         let Message::MessageState(message) = message else {
@@ -208,7 +198,7 @@ impl StateHandler for MessagesState {
 
         match message {
             MessageMessage::OpenMessageBody => {
-                return self.open_message_body(ctx, mbox, mail_settings.clone());
+                return self.open_message_body(ctx, mbox);
             }
             MessageMessage::OpenMessageBodyResult(r) => {
                 self.display_message(r);
