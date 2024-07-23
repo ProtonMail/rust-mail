@@ -1,6 +1,6 @@
 [package]
 name = "proton-sqlite3"
-version = "0.6.2"
+version = "0.7.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -9,11 +9,11 @@ edition = "2021"
 fixedbitset = "0.5"
 flume = { workspace = true }
 futures = { workspace = true }
-notify = { version = "6", default-features  = false, features = ["macos_fsevent"], optional = true }
+notify = { version = "6", default-features = false, features = ["macos_fsevent"], optional = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
 rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid", "chrono", "functions", "trace"] }
-serde = { workspace = true}
+serde = { workspace = true }
 slotmap = "1"
 stash = { workspace = true }
 thiserror = { workspace = true }

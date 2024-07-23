@@ -19,42 +19,42 @@ stages:
   - deploy
 
 .do_fmt_check:
-   script:
-     - cargo fmt --check
+  script:
+    - cargo fmt --check
 
 .do_clippy_check:
-   script:
-     - !reference [.script-config-git, script]
-     - cargo clippy -- -D warnings
+  script:
+    - !reference [ .script-config-git, script ]
+    - cargo clippy -- -D warnings
 
 format:
   stage: lint
   script:
-    - !reference [.do_fmt_check, script]
+    - !reference [ .do_fmt_check, script ]
 
 clippy:
   stage: lint
   script:
-    - !reference [.do_clippy_check, script]
+    - !reference [ .do_clippy_check, script ]
 
 build:
   stage: build
   script:
-    - !reference [.script-config-git, script]
+    - !reference [ .script-config-git, script ]
     - cargo build
     - cargo test
 
 build-uniffi:
   stage: build
   script:
-    - !reference [.script-config-git, script]
+    - !reference [ .script-config-git, script ]
     - cargo build --features="uniffi"
 
 
 build-android:
   stage: build
   script:
-    - !reference [.script-config-git, script]
+    - !reference [ .script-config-git, script ]
     - cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --release
 
 
@@ -64,7 +64,7 @@ build-macos:
   image: "inbox-rust:1.78.0"
   stage: build
   script:
-    - !reference [.script-config-git, script]
+    - !reference [ .script-config-git, script ]
     - cargo build --release
     - cargo test
 
@@ -74,7 +74,7 @@ build-ios:
   image: "inbox-rust:1.78.0"
   stage: build
   script:
-    - !reference [.script-config-git, script]
+    - !reference [ .script-config-git, script ]
     - cargo build --release --target --target x86_64-apple-ios
     - cargo build --release --target --target aarch64-apple-ios-sim
     - cargo build --release --target --target aarch64-apple-ios
@@ -128,4 +128,24 @@ deploy-proton-core-common:
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-core-common/Cargo.toml"
     CARGO_MANIFEST_OPTIONS: "--manifest-path proton-core-common/Cargo.toml"
+  when: manual
+
+deploy-stash-macros:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path stash-macros/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path stash-macros/Cargo.toml"
+  when: manual
+
+deploy-stash:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.78.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path stash/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path stash/Cargo.toml"
   when: manual
