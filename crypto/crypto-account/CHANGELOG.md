@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+- Add rusqlite ToSql and FromSql traits to the string_id! macro (#92)
+
 ## [0.4.1] - 2024-07-22
 
 ### Added
