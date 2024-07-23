@@ -1,22 +1,23 @@
 //! Rust bindings for the REST API for Proton
 
-#[macro_use]
-pub mod utils;
-
 pub mod auth;
 mod crypto_clock;
-pub mod domain;
-pub mod exports;
-pub mod http;
 pub mod login;
-pub mod requests;
-mod session;
-
-pub use session::*;
-
-pub use requests::APIErrorDesc;
+pub mod service;
+pub mod services;
+pub mod session;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
+pub const SYNC_CONTACT_PAGE_SIZE: usize = 1000;
+
+pub(crate) const DEFAULT_HOST_URL: &str = "https://mail.proton.me/api/";
+pub(crate) const DEFAULT_REDIRECT_URL: &str = "https://protonmail.ch/";
+pub(crate) const DEFAULT_APP_VERSION: &str = "Other";
+#[allow(unused)] // it is used by the http implementations
+pub(crate) const X_PM_APP_VERSION_HEADER: &str = "X-Pm-Appversion";
+pub(crate) const X_PM_UID_HEADER: &str = "X-Pm-Uid";
+pub(crate) const X_PM_HUMAN_VERIFICATION_TOKEN: &str = "X-Pm-Human-Verification-Token";
+pub(crate) const X_PM_HUMAN_VERIFICATION_TOKEN_TYPE: &str = "X-Pm-Human-Verification-Token-Type";
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!();
@@ -25,17 +26,5 @@ uniffi::setup_scaffolding!();
 mod hidden {
     // At least one export with the custom types needs to happen or they will not be resolved
     // in the generated code.
-    #[derive(uniffi::Record)]
-    struct Dummy {
-        pub user_id: crate::domain::UserId,
-        pub uid: crate::domain::Uid,
-        pub aid: crate::domain::AddressId,
-        pub ceid: crate::domain::ContactEmailId,
-        pub cid: crate::domain::ContactId,
-        pub cs: crate::domain::CardSignature,
-        pub cd: crate::domain::CardData,
-        pub cdl: crate::domain::ContactLabelId,
-        pub ct: crate::domain::ContactType,
-        pub cu: crate::domain::ContactUid,
-    }
+    // TODO: Check this once everything else works
 }

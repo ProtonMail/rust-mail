@@ -3,13 +3,13 @@ use crate::{
     Action, ActionError, ActionFactory, ActionFactoryError, ActionLocalValidationResult,
     ActionStore, SessionProvider, StoredActionId,
 };
-use proton_api_core::exports::thiserror;
 use proton_sqlite3::rusqlite;
 use stash::stash::{Stash, StashError};
+use thiserror::Error;
 use tracing::{debug, error, warn, Level};
 
 /// Errors which can occur while operating on the queue.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum QueueError {
     #[error("Action failed: {0}")]
     Action(#[from] ActionError),

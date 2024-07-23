@@ -5,6 +5,7 @@ use futures::executor::block_on;
 use stash::datatypes::QueryResultU64;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether};
+use thiserror::Error;
 use tracing::debug;
 
 /// Migration Unit.
@@ -24,7 +25,7 @@ pub trait Migration {
 }
 
 /// Possible errors that may occur during a migration.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum MigratorError {
     /// Database has an invalid version.
     #[error("Found invalid version {0}")]

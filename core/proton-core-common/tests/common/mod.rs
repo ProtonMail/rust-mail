@@ -1,33 +1,38 @@
-use futures::executor::block_on;
-use std::io::stdout;
-use std::sync::Arc;
-use tracing::subscriber::set_global_default;
-use tracing::Level;
-use tracing_subscriber::fmt::layer;
-use tracing_subscriber::fmt::writer::MakeWriterExt;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{registry, EnvFilter};
-
 use account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
-use proton_api_core::{
-    auth::{AccessToken, RefreshToken, Scope, UserKeySecret},
-    domain::{
-        Address, ContactEmailEvent, ContactEvent, Event, EventId, ProductUsedSpace, SecretString,
-        Uid, User, UserId, UserSettings,
-    },
-    exports::serde::{self, Deserialize, Serialize},
-    http::{APIEnvConfig, Builder},
+use futures::executor::block_on;
+use proton_api_core::auth::UserKeySecret;
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::response_data::{
+    Action as ApiAction, Address as ApiAddress, ContactEmailEvent as ApiContactEmailEvent,
+    ContactEvent as ApiContactEvent, User as ApiUser, UserSettings as ApiUserSettings,
 };
+use proton_api_core::services::proton::responses::GetEventResponse;
+use proton_api_core::services::proton::Config as ApiConfig;
+use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
+use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
+use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{
     db::{DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey},
     os::{InMemoryKeyChain, KeyChain},
     Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
     UserDatabaseInitializer,
 };
+use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
+use secrecy::SecretString;
+use serde::Deserialize;
 use stash::orm::Model;
 use stash::stash::Stash;
+use std::io::stdout;
+use std::sync::Arc;
 use tempdir::TempDir;
+use tracing::subscriber::set_global_default;
+use tracing::Level;
+use tracing_subscriber::fmt::layer;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{registry, EnvFilter};
+use url::Url;
 use wiremock::{matchers::any, Mock, MockServer, Request};
 
 pub mod account;
@@ -55,8 +60,8 @@ pub struct TestContext {
 
 impl TestContext {
     /// Generate a test UID.
-    fn test_uid() -> Uid {
-        Uid::from("TEST_UID")
+    fn test_uid() -> RemoteId {
+        RemoteId::from("TEST_UID")
     }
 
     /// Create and initialize test context.
@@ -67,20 +72,17 @@ impl TestContext {
                 .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
         ));
         let user_key_secret: Option<UserKeySecret> = None;
-        let user_id: Option<UserId> = None;
+        let user_id: Option<RemoteId> = None;
         let mock_server = MockServer::start().await;
 
         // Create client with the mock server as the base URL
-        let api_env_config = APIEnvConfig {
-            base_url: format!("{}/api", mock_server.uri()),
+        let api_env_config = ApiConfig {
+            base_url: format!("{}/api/", mock_server.uri()),
             allow_http: true,
             skip_srp_proof_validation: true,
             ..Default::default()
         };
-        let client = Builder::new()
-            .api_env_config(api_env_config)
-            .build()
-            .unwrap();
+        let base_url = Url::parse(&api_env_config.base_url).expect("Invalid URL");
 
         // Create a temporary directory for the database
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
@@ -103,7 +105,7 @@ impl TestContext {
             tmp_dir.path(),
             keychain,
             initializers,
-            client,
+            base_url,
             None,
         )
         .await
@@ -116,13 +118,13 @@ impl TestContext {
         // Create a fake session
         let mut session = DecryptedUserSession {
             session_id: Self::test_uid(),
-            user_id: user_id.unwrap_or(UserId::from(TEST_USER_ID)),
+            user_id: user_id.unwrap_or(RemoteId::from(TEST_USER_ID)),
             name: None,
             email: TEST_USER_MAIL.to_owned(),
-            refresh_token: RefreshToken(SecretString::new("REFRESHTOKEN".to_string())),
-            access_token: AccessToken(SecretString::new("ACCESSTOKEN".to_string())),
+            refresh_token: SecretString::new("REFRESHTOKEN".to_owned()),
+            access_token: SecretString::new("ACCESSTOKEN".to_owned()),
             key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
-            scopes: Scope(String::new()),
+            scopes: String::new(),
         }
         .to_encrypted_session(&encryption_key)
         .expect("failed to generate encrypted session");
@@ -186,39 +188,76 @@ impl TestContext {
     /// Get the test user context.
     pub async fn user_context(&self) -> UserContext {
         self.context
-            .user_context_from_session(&self.encrypted_user_session, None)
+            .user_context_from_session(&self.encrypted_user_session)
             .await
             .expect("failed to create user context")
     }
 }
 
 impl CoreEventSubscriberConnectionProvider for &TestContext {
-    fn get_user_id_and_db_connection(
-        &self,
-    ) -> proton_api_core::exports::anyhow::Result<(UserId, Stash)> {
+    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
         let user_ctx = block_on(async { self.user_context().await });
         Ok((user_ctx.user_id().clone(), user_ctx.stash().clone()))
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
-#[serde(crate = "self::serde")]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TestApiCoreEvent {
+    pub event_id: ApiRemoteId,
+    pub action: ApiAction,
+    pub address: Option<Vec<ApiAddress>>,
+    pub contact_emails: Option<Vec<ApiContactEmailEvent>>,
+    pub contacts: Option<Vec<ApiContactEvent>>,
+    pub has_more: bool,
+    pub user: Option<ApiUser>,
+    pub user_settings: Option<ApiUserSettings>,
+}
+
+impl GetEventResponse for TestApiCoreEvent {}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TestCoreEvent {
-    pub event_id: EventId,
+    pub event_id: RemoteId,
+    pub action: Action,
+    pub address: Option<Vec<Address>>,
+    pub contact_emails: Option<Vec<ContactEmailEvent>>,
+    pub contacts: Option<Vec<ContactEvent>>,
+    pub has_more: bool,
     pub user: Option<User>,
     pub user_settings: Option<UserSettings>,
-    pub address: Option<Vec<Address>>,
-    pub contacts: Option<Vec<ContactEvent>>,
-    pub contact_emails: Option<Vec<ContactEmailEvent>>,
 }
 
 impl Event for TestCoreEvent {
-    fn event_id(&self) -> &EventId {
+    type Id = RemoteId;
+    type Response = TestApiCoreEvent;
+
+    fn event_id(&self) -> &Self::Id {
         &self.event_id
     }
 
     fn has_more(&self) -> bool {
         false
+    }
+}
+
+impl From<TestApiCoreEvent> for TestCoreEvent {
+    fn from(value: TestApiCoreEvent) -> Self {
+        Self {
+            event_id: value.event_id.into(),
+            action: value.action.into(),
+            address: value
+                .address
+                .map(|vec| vec.into_iter().map(Address::from).collect()),
+            contact_emails: value
+                .contact_emails
+                .map(|vec| vec.into_iter().map(ContactEmailEvent::from).collect()),
+            contacts: value
+                .contacts
+                .map(|vec| vec.into_iter().map(ContactEvent::from).collect()),
+            has_more: value.has_more,
+            user: value.user.map(User::from),
+            user_settings: value.user_settings.map(UserSettings::from),
+        }
     }
 }
 
@@ -270,12 +309,14 @@ impl CoreEvent for TestCoreEvent {
 impl Default for TestCoreEvent {
     fn default() -> Self {
         Self {
-            event_id: EventId::from("test_event"),
-            user: Option::default(),
-            user_settings: Option::default(),
-            address: Option::default(),
-            contacts: Option::default(),
-            contact_emails: Option::default(),
+            event_id: RemoteId::from("test_event"),
+            action: Action::Create,
+            address: None,
+            contact_emails: None,
+            contacts: None,
+            has_more: false,
+            user: None,
+            user_settings: None,
         }
     }
 }

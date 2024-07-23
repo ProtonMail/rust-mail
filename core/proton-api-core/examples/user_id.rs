@@ -1,7 +1,7 @@
-use proton_api_core::auth::{new_arc_auth_store, InMemoryStore};
-use proton_api_core::http::APIEnvConfig;
 use proton_api_core::login::Flow;
-use proton_api_core::{http, Session};
+use proton_api_core::services::proton::Config as ApiConfig;
+use proton_api_core::session::{CoreSession, Session};
+use reqwest::Url;
 pub use tokio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::level_filters::LevelFilter;
@@ -27,23 +27,17 @@ async fn main() {
     let user_password = std::env::var("PAPI_USER_PASSWORD").unwrap();
     let app_version = std::env::var("PAPI_APP_VERSION").unwrap();
 
-    let api_env_config = APIEnvConfig {
+    let api_env_config = ApiConfig {
         app_version,
         ..Default::default()
     };
+    let base_url = Url::parse(&api_env_config.base_url).expect("Invalid URL");
 
-    let client = http::Builder::new()
-        .api_env_config(api_env_config)
-        .debug()
-        .build()
-        .unwrap();
-
-    let auth_store = new_arc_auth_store(InMemoryStore::default());
-    let session = Session::new(client, auth_store);
+    let session = Session::new(api_env_config);
 
     let mut login_flow = Flow::new(session.clone());
     login_flow
-        .login(&user_email, &user_password, None)
+        .login(user_email, user_password, None)
         .await
         .unwrap();
 
@@ -65,7 +59,7 @@ async fn main() {
 
                 let totp = line.trim_end_matches('\n');
 
-                match login_flow.submit_totp(totp).await {
+                match login_flow.submit_totp(totp.to_owned()).await {
                     Ok(_) => {
                         break;
                     }
@@ -112,7 +106,7 @@ async fn main() {
     let user = login_flow.reset_and_take_user().unwrap();
     println!("User ID is {}", user.id);
 
-    let settings = session.get_user_settings().await.unwrap();
+    let settings = session.api().get_settings().await.unwrap();
     println!("User settings is {:?}", settings);
 
     session.logout().await.unwrap();

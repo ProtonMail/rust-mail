@@ -1,13 +1,14 @@
-use proton_api_core::{
-    domain::{Contact, ContactEmail},
-    requests::{GetAllContactsPartialResponse, GetContactEmailsResponse, GetFullContactResponse},
+use super::TestContext;
+use proton_api_core::services::proton::response_data::{
+    ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
+};
+use proton_api_core::services::proton::responses::{
+    GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
 };
 use wiremock::{
     matchers::{method, path},
     Mock, ResponseTemplate,
 };
-
-use super::TestContext;
 
 impl TestContext {
     /// Generate new mock for retrieving contacts without emails and cards from the API.
@@ -16,9 +17,9 @@ impl TestContext {
     ///
     /// * `contacts` - The contacts that should be in the mocked return.
     ///
-    pub async fn mock_get_all_contacts_partial_request(&self, contacts: Vec<Contact>) {
+    pub async fn mock_get_all_contacts_partial_request(&self, contacts: Vec<ApiContactBasic>) {
         let num_contacts = contacts.len() as u64;
-        let response = GetAllContactsPartialResponse {
+        let response = GetContactsResponse {
             contacts,
             total: num_contacts,
         };
@@ -36,9 +37,9 @@ impl TestContext {
     ///
     /// * `contacts` - The contacts that should be in the mocked return.
     ///
-    pub async fn mock_get_all_contact_emails_request(&self, contact_emails: Vec<ContactEmail>) {
+    pub async fn mock_get_all_contact_emails_request(&self, contact_emails: Vec<ApiContactEmail>) {
         let num_contacts = contact_emails.len() as u64;
-        let response = GetContactEmailsResponse {
+        let response = GetContactsEmailsResponse {
             contact_emails,
             total: num_contacts,
         };
@@ -56,15 +57,10 @@ impl TestContext {
     ///
     /// * `contacts` - The contacts that should be in the mocked return.
     ///
-    pub async fn mock_get_full_contact(&self, contact: Contact) {
+    pub async fn mock_get_full_contact(&self, contact: ApiContactFull) {
         Mock::given(method("GET"))
-            .and(path(format!(
-                "/api/contacts/{}",
-                &contact.remote_id.as_ref().unwrap()
-            )))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetFullContactResponse { contact }),
-            )
+            .and(path(format!("/api/contacts/{}", &contact.id)))
+            .respond_with(ResponseTemplate::new(200).set_body_json(GetContactResponse { contact }))
             .expect(1)
             .mount(self.mock_server())
             .await;

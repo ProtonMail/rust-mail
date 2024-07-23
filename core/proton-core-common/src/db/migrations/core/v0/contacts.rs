@@ -65,7 +65,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         tx.execute(
             r"
             CREATE TABLE contact_cards (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_contact_id TEXT NOT NULL,
                 card_type INTEGER NOT NULL,
                 data TEXT NOT NULL,

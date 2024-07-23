@@ -6,7 +6,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         tx.execute(
             r"
         CREATE TABLE users (
-            id TEXT PRIMARY KEY,
+            remote_id TEXT PRIMARY KEY,
             name TEXT,
             display_name TEXT,
             email TEXT NOT NULL,
@@ -51,7 +51,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
 
             CONSTRAINT user_keys_id
                 FOREIGN KEY (user_id)
-                REFERENCES users (id)
+                REFERENCES users (remote_id)
         )",
             vec![],
         )

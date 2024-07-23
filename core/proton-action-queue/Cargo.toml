@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
 log = "0.4.20"
@@ -16,6 +17,7 @@ rmp = "0.8"
 rmp-serde = "1.1"
 serde = { version = "1.0.195", features = ["derive"] }
 stash = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = "0.1"
 uuid = { workspace = true }

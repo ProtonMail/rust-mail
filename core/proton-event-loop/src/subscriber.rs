@@ -3,23 +3,26 @@
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 // avoid namespace conflicts
-use proton_api_core::domain::Event;
-use proton_api_core::exports::anyhow;
+use crate::Event;
+use anyhow::Error as AnyhowError;
+use proton_api_core::service::ApiServiceError;
 #[cfg(test)]
-use proton_api_core::exports::serde;
+use proton_api_core::services::proton::common::RemoteId;
 #[cfg(test)]
-use proton_api_core::exports::serde::{Deserialize, Serialize};
-use proton_api_core::exports::thiserror;
+use proton_api_core::services::proton::responses::GetEventResponse;
+#[cfg(test)]
+use serde::Deserialize;
 use stash::stash::StashError;
+use thiserror::Error;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum SubscriberError {
-    /// Http error should be returned when the error resulted due to an API or Network error.
+    /// API error should be returned when the error resulted due to an API or Network error.
     #[error("{0}")]
-    Http(proton_api_core::http::RequestError),
+    Api(#[from] ApiServiceError),
     /// Subscriber specific errors should be returned here.
     #[error("{0}")]
-    Other(anyhow::Error),
+    Other(AnyhowError),
     /// Failed to send to the subscriber.
     #[error("Failed to send data to subscriber")]
     Send,
@@ -98,7 +101,7 @@ pub struct ChanneledSubscriberHandler<T: Event> {
 
 /// Error returned by `ChanneledSubscriberHandler` which includes errors when receiving events or transmitting
 /// replies.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum ChanneledSubscriberError {
     /// Failed to receive events from the channel.
     #[error("Failed to receive events from channel")]
@@ -196,16 +199,38 @@ impl<T: Event> ChanneledSubscriberHandler<T> {
 }
 
 #[cfg(test)]
-proton_api_core::declare_event!(TestEvent,{foo:u32});
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TestEvent {
+    pub event_id: RemoteId,
+    pub foo: u32,
+    pub has_more: bool,
+}
 
+#[cfg(test)]
+impl Event for TestEvent {
+    type Id = RemoteId;
+    type Response = TestEvent;
+
+    fn event_id(&self) -> &RemoteId {
+        &self.event_id
+    }
+
+    fn has_more(&self) -> bool {
+        self.has_more
+    }
+}
+
+#[cfg(test)]
+impl GetEventResponse for TestEvent {}
+
+#[cfg(test)]
 #[tokio::test]
 async fn test_channeled_subscriber_handle_and_reply() {
-    use proton_api_core::domain::EventId;
     let (s, mut h) = ChannelledSubscriber::new("test".into());
 
     let task = tokio::spawn(async move {
         h.handle_events_async(|events: &[TestEvent]| -> Result<(), SubscriberError> {
-            assert_eq!(events[0].event_id, EventId::from(DUMMY_EVENT_ID));
+            assert_eq!(events[0].event_id, RemoteId::from(DUMMY_EVENT_ID));
             Ok(())
         })
         .await
@@ -292,10 +317,9 @@ const DUMMY_EVENT_ID: &str = "EVT_FOO";
 
 #[cfg(test)]
 fn new_dummy_events() -> Vec<TestEvent> {
-    use proton_api_core::domain::{EventId, More};
     vec![TestEvent {
-        event_id: EventId::from(DUMMY_EVENT_ID),
-        more: More::No,
+        event_id: RemoteId::from(DUMMY_EVENT_ID),
+        has_more: false,
         foo: 0,
     }]
 }

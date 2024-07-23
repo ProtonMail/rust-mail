@@ -1,15 +1,16 @@
-use proton_api_core::exports::anyhow;
-use proton_api_core::exports::thiserror;
-use proton_api_core::Session;
+use anyhow::Error as AnyhowError;
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::session::Session;
+use thiserror::Error;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum SessionProviderError {
     #[error("{0}")]
-    Http(#[source] proton_api_core::http::RequestError),
+    Api(#[source] ApiServiceError),
     #[error("{0}")]
-    Client(#[source] anyhow::Error),
+    Client(#[source] AnyhowError),
     #[error("{0}")]
-    Other(#[source] anyhow::Error),
+    Other(#[source] AnyhowError),
 }
 
 /// Provide a session for remote state execution.
@@ -25,7 +26,7 @@ impl SessionProvider for AlwaysErrorSessionProvider {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Error)]
 pub enum SqliteConnectionProviderError {
     #[error("DB: {0}")]
     DB(
@@ -34,5 +35,5 @@ pub enum SqliteConnectionProviderError {
         proton_sqlite3::rusqlite::Error,
     ),
     #[error("{0}")]
-    Other(#[source] anyhow::Error),
+    Other(#[source] AnyhowError),
 }

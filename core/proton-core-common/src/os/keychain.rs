@@ -1,4 +1,4 @@
-use proton_api_core::exports::parking_lot::Mutex;
+use parking_lot::Mutex;
 use std::error::Error;
 use std::fmt::Formatter;
 
