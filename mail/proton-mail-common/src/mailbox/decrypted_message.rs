@@ -1,16 +1,18 @@
+#![allow(dead_code)]
+
 //! Everything related to processing a decrypted message.
 
-use crate::db::serde_json::Value;
-use crate::db::LocalMessageBodyMetadata;
-use crate::exports::{thiserror, tracing};
-use proton_api_mail::domain::{MailSettings, MimeType};
+use crate::datatypes::MimeType;
+use crate::models::{MailSettings, MessageBodyMetadata};
 use proton_crypto_inbox::message::DecryptedBody;
 use proton_mail_html_transformer::Transformer;
+use serde_json::from_str as from_json_str;
+use serde_json::Value;
 
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessage {
     /// Metadata associated with the message body
-    metadata: LocalMessageBodyMetadata,
+    metadata: MessageBodyMetadata,
     /// The decrypted message contents.
     body: Type,
 }
@@ -129,7 +131,7 @@ impl DecryptedMessage {
     /// be applied to the message.
     pub fn new(
         mail_settings: &MailSettings,
-        metadata: LocalMessageBodyMetadata,
+        metadata: MessageBodyMetadata,
         decrypted_body: DecryptedBody,
     ) -> Result<Self, DecryptedMessageError> {
         let body = match decrypted_body {
@@ -140,7 +142,7 @@ impl DecryptedMessage {
             }
         };
 
-        if !matches!(metadata.mime_type, MimeType::TextHTML) {
+        if !matches!(metadata.mime_type, MimeType::TextHtml) {
             return Ok(Self {
                 metadata,
                 body: Type::Text(body),
@@ -155,7 +157,7 @@ impl DecryptedMessage {
 
     /// Retrieve a parsed header value for a given `key`.
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
-        let value = self.metadata.parsed_headers.get(key)?;
+        let value = from_json_str(self.metadata.parsed_headers.headers.get(key)?).ok()?;
         match value {
             Value::String(s) => Some(ParsedHeaderValue::String(s.clone())),
             Value::Array(array) => {
@@ -165,8 +167,8 @@ impl DecryptedMessage {
                         result.push(str.clone());
                     } else {
                         tracing::warn!(
-                            "Header array value {key}[{idx}] of message {} has invalid value type",
-                            self.metadata.id
+                            "Header array value {key}[{idx}] of message {:?} has invalid value type",
+                            self.metadata.remote_message_id
                         );
                     }
                 }
@@ -174,8 +176,8 @@ impl DecryptedMessage {
             }
             _ => {
                 tracing::warn!(
-                    "Header value {key} of message {} has invalid value type",
-                    self.metadata.id
+                    "Header value {key} of message {:?} has invalid value type",
+                    self.metadata.remote_message_id
                 );
                 None
             }
@@ -193,7 +195,7 @@ impl DecryptedMessage {
 
     /// Access the message's body metadata.
     #[inline]
-    pub fn metadata(&self) -> &LocalMessageBodyMetadata {
+    pub fn metadata(&self) -> &MessageBodyMetadata {
         &self.metadata
     }
 

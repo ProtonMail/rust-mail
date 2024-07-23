@@ -5,6 +5,7 @@ mod decrypted_message;
 mod tests;
 
 use crate::datatypes::ViewMode;
+use crate::mailbox::decrypted_message::DecryptedMessageError;
 use crate::models::{Conversation, Label, MailSettings, Message, MAIL_SETTINGS_ID};
 use crate::{AppError, MailContextError, MailUserContext, MailUserContextInitializationCallback};
 pub use attachments::DecryptedAttachment;

@@ -3,13 +3,14 @@ use crate::{AppError, MailUserContext};
 use futures::executor::block_on;
 use proton_api_core::login::Flow;
 use proton_api_core::service::ApiServiceError;
+use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::session::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
 use stash::stash::{Stash, StashError};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use url::Url;
 
@@ -150,8 +151,8 @@ impl MailContext {
     }
 
     /// Path where mail content should be cached for user with `user_id`.
-    pub fn mail_cache_path(&self, user_id: &UserId) -> PathBuf {
-        self.mail_cache_path.join(user_id.as_ref())
+    pub fn mail_cache_path(&self, user_id: &RemoteId) -> PathBuf {
+        self.mail_cache_path.join(user_id.to_string())
     }
 }
 
