@@ -1,6 +1,6 @@
 [package]
 name = "proton-core-common"
-version = "0.5.11"
+version = "0.5.12"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -16,6 +16,7 @@ proton-api-core = { workspace = true, features = ["sql"] }
 proton-crypto-account = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
+quick_cache.workspace = true
 secrecy = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }

@@ -45,7 +45,7 @@ impl Session {
     ///
     pub async fn fork(&self) -> Result<String, ApiServiceError> {
         self.api
-            .post_auth_sessions_forks(None)
+            .post_auth_sessions_forks(Some(self.api.config().app_version.clone()))
             .await
             .map(|r| r.selector)
     }
