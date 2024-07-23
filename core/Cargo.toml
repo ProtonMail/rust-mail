@@ -39,7 +39,7 @@ serde = { version = "1", features = ["derive"] }
 serde-aux = "4.5"
 serde_json = "1"
 serde_repr = "0.1"
-stash = { version = "0.1.0", path = "stash" }
+stash = { version = "0.1.0", path = "stash", registry = "proton" }
 tempdir = "0.3.1"
 tempfile = "3.10.1"
 thiserror = "1"
