@@ -5,9 +5,9 @@ members = [
     "proton-mail-common",
     "proton-mail-html-transformer",
     "proton-mail-message-detector",
-#    "proton-mail-uniffi",
+    #    "proton-mail-uniffi",
     "proton-mail-wasm",
-#    "uniffi-bindgen",
+    #    "uniffi-bindgen",
 ]
 
 [workspace.dependencies]
@@ -19,16 +19,16 @@ flume = "0.11"
 futures = "0.3.30"
 indoc = "2"
 lazy_static = "1"
-proton-action-queue = { version = "=0.5.13", registry = "proton" }
-proton-api-core = { version = "=0.5.7", registry = "proton", features = ["sql", "uniffi"] }
+proton-action-queue = { version = "=0.6.0", registry = "proton" }
+proton-api-core = { version = "=0.6.0", registry = "proton", features = ["sql", "uniffi"] }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail", features = ["sql"] }
-proton-core-common = { version = "=0.5.11", registry = "proton" }
+proton-core-common = { version = "=0.6.0", registry = "proton" }
 proton-crypto-account = { version = "=0.3.0", registry = "proton" }
 proton-crypto-inbox = { version = "=0.3.0", registry = "proton" }
-proton-event-loop = { version = "=0.6.13", registry = "proton" }
+proton-event-loop = { version = "=0.7.0", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common" }
 proton-mail-message-detector = { path = "proton-mail-message-detector" }
-proton-sqlite3 = { version = "=0.6.2", registry = "proton" }
+proton-sqlite3 = { version = "=0.7.0", registry = "proton" }
 scraper = "0.19.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.117"
