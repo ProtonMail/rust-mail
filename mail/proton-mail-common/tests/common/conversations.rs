@@ -4,9 +4,12 @@ use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
 };
-use proton_api_mail::services::proton::response_data::OperationResult;
+use proton_api_mail::services::proton::response_data::{
+    Conversation as ApiConversation, MessageMetadata, OperationResult,
+};
 use proton_api_mail::services::proton::responses::{
-    PutConversationsLabelResponse, PutConversationsReadResponse, PutConversationsUnlabelResponse,
+    GetConversationResponse, GetConversationsResponse, PutConversationsLabelResponse,
+    PutConversationsReadResponse, PutConversationsUnlabelResponse,
 };
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};
@@ -127,7 +130,7 @@ impl TestContext {
     ///
     pub async fn mock_get_conversation(
         &self,
-        conversation: Conversation,
+        conversation: ApiConversation,
         messages: Vec<MessageMetadata>,
     ) {
         let resp = GetConversationResponse {
