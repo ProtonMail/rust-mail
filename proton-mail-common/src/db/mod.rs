@@ -63,13 +63,3 @@ pub(crate) async fn new_test_connection_file() -> (Stash, TempDir) {
     migrate_db(&stash).await.expect("failed to migrate");
     (stash, db_dir)
 }
-
-#[cfg(feature = "uniffi")]
-mod type_forwarding {
-    // Required due to https://github.com/mozilla/uniffi-rs/issues/1988.
-
-    use proton_core_common::datatypes::{LabelId, RemoteId};
-
-    uniffi::ffi_converter_forward!(RemoteId, proton_api_mail::UniFfiTag, crate::UniFfiTag);
-    uniffi::ffi_converter_forward!(LabelId, proton_api_mail::UniFfiTag, crate::UniFfiTag);
-}

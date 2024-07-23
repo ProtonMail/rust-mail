@@ -1,0 +1,16 @@
+[package]
+name = "proton-mail-html-transformer"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+scraper.workspace = true
+url.workspace = true
+thiserror.workspace = true
+kuchikiki = "=0.8.2"
+# kuchikiki requires this verion of html5ever at this time.
+html5ever = "=0.26"
+lazy_static.workspace = true
+
+[lints]
+workspace = true

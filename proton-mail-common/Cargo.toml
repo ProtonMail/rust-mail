@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-common"
-version = "0.5.23"
+version = "0.5.31"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,17 +20,18 @@ proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
+proton-mail-html-transformer = { version = "0.2.0", path = "../proton-mail-html-transformer", registry = "proton" }
 proton-sqlite3 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 smart-default = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 tokio = { workspace = true }
-uniffi = { workspace = true, optional = true }
+tracing = { workspace = true }
+uniffi = { optional = true, workspace = true }
 url = { workspace = true }
-uuid = { version = "1.7", features = ["v4"] }
+uuid = { version = "1.8.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 lazy_static = { workspace = true }
@@ -38,10 +39,9 @@ proton-api-core = { workspace = true, features = ["integration_tests"] }
 proton-api-mail = { workspace = true, features = ["integration_tests"] }
 secrecy = { version = "0.8", features = ["serde"] }
 tempdir = "0.3.1"
-# anotate your tests with traced_test attribute to see log outputs.
 tempfile = "3.10.1"
-tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 tracing-subscriber = { workspace = true }
+tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 velcro = "0.5.4"
 wiremock = { workspace = true }
 

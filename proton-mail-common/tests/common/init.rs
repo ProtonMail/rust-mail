@@ -455,32 +455,8 @@ impl TestContext {
     /// * `metadata` - The list of message to respond with.
     /// * `expect`   - How many times the endpoint should be called.
     ///
-    pub async fn mock_get_message_metadata(&self, metadata: Vec<ApiMessageMetadata>, expect: u64) {
+    pub async fn mock_get_message_metadata(&self, metadata: Vec<MessageMetadata>, expect: u64) {
         Mock::given(method("GET"))
-            .and(path("/api/mail/v4/messages"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
-                    messages: metadata,
-                    stale: false,
-                    total: 1,
-                }),
-            )
-            .expect(expect)
-            .mount(self.mock_server())
-            .await;
-    }
-
-    /// Generate new mock expectations for retrieving message metadata.
-    ///
-    /// This function will mock the response for the given message metadata.
-    ///
-    /// # Parameters
-    ///
-    /// * `metadata` - The list of message to respond with.
-    /// * `expect`   - How many times the endpoint should be called.
-    ///
-    pub async fn mock_post_message_metadata(&self, metadata: Vec<ApiMessageMetadata>, expect: u64) {
-        Mock::given(method("POST"))
             .and(path("/api/mail/v4/messages"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetMessagesResponse {

@@ -83,8 +83,8 @@ async fn mailbox_message_body_simple() {
         .await
         .unwrap();
 
-    let expected = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">This is a test body.</div>"#;
-    assert_eq!(decrypted_body.body, expected);
+    let expected = r#"<html><head></head><body><div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">This is a test body.</div></body></html>"#;
+    assert_eq!(decrypted_body.body(), expected);
 }
 
 fn message_body_test_params() -> TestParams {

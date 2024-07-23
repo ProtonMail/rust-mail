@@ -50,6 +50,8 @@ pub enum MailboxError {
     MessageDecryption(anyhow::Error),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
+    #[error("Decrypted Message: {0}")]
+    DecryptedMessage(#[from] proton_mail_common::DecryptedMessageError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -164,6 +166,7 @@ impl From<proton_mail_common::MailboxError> for MailboxError {
             proton_mail_common::MailboxError::ConversationHasNoMessages(e) => {
                 Self::ConversationHasNoMessages(e)
             }
+            proton_mail_common::MailboxError::DecryptedMessage(e) => Self::DecryptedMessage(e),
         }
     }
 }

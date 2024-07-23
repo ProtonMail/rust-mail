@@ -28,6 +28,7 @@
 //!
 
 pub mod core;
+mod log;
 mod macros;
 pub mod mail;
 pub mod message_detector;

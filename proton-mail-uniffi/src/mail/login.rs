@@ -66,6 +66,8 @@ impl LoginFlow {
     }
 }
 
+pub enum LoginResult {}
+
 #[uniffi::export]
 impl LoginFlow {
     /// Login with user and password.

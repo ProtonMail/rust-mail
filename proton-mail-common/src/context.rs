@@ -149,9 +149,9 @@ impl MailContext {
         self.core_context.is_network_corrected()
     }
 
-    /// Path where mail content should be cached.
-    pub fn mail_cache_path(&self) -> &Path {
-        &self.mail_cache_path
+    /// Path where mail content should be cached for user with `user_id`.
+    pub fn mail_cache_path(&self, user_id: &UserId) -> PathBuf {
+        self.mail_cache_path.join(user_id.as_ref())
     }
 }
 
