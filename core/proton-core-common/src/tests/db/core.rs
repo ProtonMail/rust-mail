@@ -7,7 +7,7 @@ use crate::datatypes::{
 };
 use crate::db::tests::new_core_test_connection;
 use crate::models::{User, UserSettings};
-use proton_crypto_account::keys::{KeyId, LockedKey, UserKeys as RealUserKeys};
+use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
 use stash::stash::Stash;
 
@@ -162,7 +162,7 @@ fn new_test_user(stash: Stash) -> User {
             LockedKey {
                 id: KeyId::from("My_key_id"),
                 version: 3,
-                private_key: "my_private_key".to_owned(),
+                private_key: ArmoredPrivateKey::from("my_private_key".to_owned()),
                 token: None,
                 signature: None,
                 activation: None,
@@ -176,7 +176,7 @@ fn new_test_user(stash: Stash) -> User {
             LockedKey {
                 id: KeyId::from("My_key_id2"),
                 version: 3,
-                private_key: "my_private_key2".to_owned(),
+                private_key: ArmoredPrivateKey::from("my_private_key2".to_owned()),
                 token: None,
                 signature: None,
                 activation: None,

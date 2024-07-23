@@ -3,7 +3,10 @@
 use crate::datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, RemoteId};
 use crate::db::tests::new_core_test_connection;
 use crate::models::Address;
-use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, KeyId, LockedKey};
+use proton_crypto_account::keys::{
+    AddressKeys as RealAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyId, KeyTokenSignature,
+    LockedKey,
+};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
@@ -102,9 +105,9 @@ fn create_test_address(stash: &Stash) -> Address {
             LockedKey {
                 id: KeyId::from("key_id"),
                 version: 0,
-                private_key: "SOME_PRIVATE_KEY".to_owned(),
-                token: Some("SOME_TOKEN_".to_owned()),
-                signature: Some("SOME_SIGNATURE".to_owned()),
+                private_key: ArmoredPrivateKey::from("SOME_PRIVATE_KEY".to_owned()),
+                token: Some(EncryptedKeyToken::from("SOME_TOKEN_".to_owned())),
+                signature: Some(KeyTokenSignature::from("SOME_SIGNATURE".to_owned())),
                 activation: None,
                 primary: true,
                 active: true,
@@ -116,9 +119,9 @@ fn create_test_address(stash: &Stash) -> Address {
             LockedKey {
                 id: KeyId::from("key_id2"),
                 version: 0,
-                private_key: "SOME_PRIVATE_KEY2".to_owned(),
-                token: Some("SOME_TOKEN_2".to_owned()),
-                signature: Some("SOME_SIGNATURE2".to_owned()),
+                private_key: ArmoredPrivateKey::from("SOME_PRIVATE_KEY2".to_owned()),
+                token: Some(EncryptedKeyToken::from("SOME_TOKEN_2".to_owned())),
+                signature: Some(KeyTokenSignature::from("SOME_SIGNATURE2".to_owned())),
                 activation: None,
                 primary: true,
                 active: true,
@@ -130,9 +133,9 @@ fn create_test_address(stash: &Stash) -> Address {
             LockedKey {
                 id: KeyId::from("key_id3"),
                 version: 0,
-                private_key: "SOME_PRIVATE_KEY3".to_owned(),
-                token: Some("SOME_TOKEN_3".to_owned()),
-                signature: Some("SOME_SIGNATURE3".to_owned()),
+                private_key: ArmoredPrivateKey::from("SOME_PRIVATE_KEY3".to_owned()),
+                token: Some(EncryptedKeyToken::from("SOME_TOKEN_3".to_owned())),
+                signature: Some(KeyTokenSignature::from("SOME_SIGNATURE3".to_owned())),
                 activation: None,
                 primary: true,
                 active: true,
@@ -144,9 +147,9 @@ fn create_test_address(stash: &Stash) -> Address {
             LockedKey {
                 id: KeyId::from("key_id4"),
                 version: 0,
-                private_key: "SOME_PRIVATE_KEY4".to_owned(),
-                token: Some("SOME_TOKEN_4".to_owned()),
-                signature: Some("SOME_SIGNATURE4".to_owned()),
+                private_key: ArmoredPrivateKey::from("SOME_PRIVATE_KEY4".to_owned()),
+                token: Some(EncryptedKeyToken::from("SOME_TOKEN_4".to_owned())),
+                signature: Some(KeyTokenSignature::from("SOME_SIGNATURE4".to_owned())),
                 activation: None,
                 primary: true,
                 active: true,

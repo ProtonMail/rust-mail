@@ -12,7 +12,7 @@ use core::fmt;
 use proton_crypto_account::keys::{DecryptedUserKey, KeyId, LockedKey, UnlockResult};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider as SrpProvider;
-use proton_crypto_account::salts::{KeySecret, Salt, Salts};
+use proton_crypto_account::salts::{KeySalt, KeySecret, Salt, Salts};
 use secrecy::{ExposeSecret, SecretVec};
 use std::fmt::{Debug, Formatter};
 use thiserror::Error;
@@ -318,7 +318,7 @@ impl Flow {
                 .into_iter()
                 .map(|salt| Salt {
                     id: KeyId(salt.id.to_string()),
-                    key_salt: salt.key_salt,
+                    key_salt: salt.key_salt.map(KeySalt::from),
                 }),
         );
 

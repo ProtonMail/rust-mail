@@ -1,7 +1,7 @@
 use proton_api_core::auth::UserKeySecret;
-use proton_crypto_account::keys::{KeyId, LockedKey};
+use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey};
 use proton_crypto_account::proton_crypto::new_srp_provider;
-use proton_crypto_account::salts::{Salt, Salts};
+use proton_crypto_account::salts::{KeySalt, Salt, Salts};
 use std::iter;
 // Test data from Proton black user: rust_test@proton.black, pw: TEST_USER_PASSWORD
 
@@ -19,7 +19,7 @@ fn testdata_locked_user_key() -> LockedKey {
     LockedKey {
         id: KeyId::from(TEST_USER_KEY_ID),
         version: 3,
-        private_key: TEST_USER_KEY.to_owned(),
+        private_key: ArmoredPrivateKey::from(TEST_USER_KEY.to_owned()),
         token: None,
         signature: None,
         activation: None,
@@ -36,7 +36,7 @@ fn testdata_locked_user_key() -> LockedKey {
 pub fn testdata_user_secret() -> UserKeySecret {
     let salts = Salts::new(iter::once(Salt {
         id: KeyId::from(TEST_USER_KEY_ID),
-        key_salt: Some("6bIzN4A8bOwmsiEuCPj74g==".to_owned()),
+        key_salt: Some(KeySalt::from("6bIzN4A8bOwmsiEuCPj74g==".to_owned())),
     }));
     let locked_key = testdata_locked_user_key();
     let srp_provider = new_srp_provider();

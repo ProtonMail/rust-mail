@@ -326,8 +326,13 @@ impl CryptoKeyManager {
         let user_keys = self
             .user_keys(pgp_provider, secret_load_fn, user_ctx)
             .await?;
+        let passphrase = secret_load_fn
+            .key_secret()
+            .map(|user_key_secret| user_key_secret.0);
         // Unlock the address keys.
-        let unlock_result = address.keys.unlock(pgp_provider, &user_keys);
+        let unlock_result = address
+            .keys
+            .unlock(pgp_provider, &user_keys, passphrase.as_ref());
         if unlock_result.unlocked_keys.is_empty() {
             return Err(KeyHandlingError::AddressKeyUnlock(unlock_result.failed.len()).into());
         }
