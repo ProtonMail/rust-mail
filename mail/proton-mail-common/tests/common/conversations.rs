@@ -122,6 +122,30 @@ impl TestContext {
             .await;
     }
 
+    /// Generate new mock expectations for retrieving a `conversation` and associated `messages`'s
+    /// metadata.
+    ///
+    pub async fn mock_get_conversation(
+        &self,
+        conversation: Conversation,
+        messages: Vec<MessageMetadata>,
+    ) {
+        let resp = GetConversationResponse {
+            conversation,
+            messages,
+        };
+
+        Mock::given(method("GET"))
+            .and(path(format!(
+                "/api/mail/v4/conversations/{}",
+                resp.conversation.id
+            )))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
     pub async fn mock_get_image_for_conversation(&self, response: Vec<u8>) {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/images/logo"))

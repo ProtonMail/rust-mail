@@ -29,6 +29,7 @@ pub mod exports {
     pub use proton_api_mail;
     pub use proton_core_common;
     pub use proton_event_loop;
+    pub use proton_mail_html_transformer;
 }
 
 use thiserror::Error;
@@ -55,20 +56,48 @@ pub enum AppError {
 }
 
 // #[cfg(feature = "uniffi")]
-// mod hidden {
-//     use proton_api_core::services::proton::common::RemoteId;
-//     use crate::services::proton::response_data::{MessageFlags, MimeType};
+// mod type_forwarding {
+//     // Required due to https://github.com/mozilla/uniffi-rs/issues/1988.
 //
-//     // Note: We need to generate at least on uniffi type which includes custom types
-//     // declared in this crate or it will lead to linking issues in the binding code.
-//     #[derive(uniffi::Record)]
-//     struct UniffiGenCustomTypes {
-//         pub cid: RemoteId,
-//         pub mid: RemoteId,
-//         pub eid: RemoteId,
-//         pub mime_type: MimeType,
-//         pub msg_flags: MessageFlags,
-//     }
+//     uniffi::ffi_converter_forward!(
+//         proton_api_mail::domain::ConversationId,
+//         proton_api_mail::UniFfiTag,
+//         crate::UniFfiTag
+//     );
 //
-//     uniffi::ffi_converter_forward!(RemoteId, proton_api_core::UniFfiTag, crate::UniFfiTag);
+//     uniffi::ffi_converter_forward!(
+//         proton_api_mail::domain::AttachmentId,
+//         proton_api_mail::UniFfiTag,
+//         crate::UniFfiTag
+//     );
+//
+//     uniffi::ffi_converter_forward!(
+//         proton_api_mail::domain::LabelId,
+//         proton_api_mail::UniFfiTag,
+//         crate::UniFfiTag
+//     );
+//
+//     uniffi::ffi_converter_forward!(
+//         proton_api_mail::domain::MessageId,
+//         proton_api_mail::UniFfiTag,
+//         crate::UniFfiTag
+//     );
+//
+//     uniffi::ffi_converter_forward!(
+//         proton_api_mail::domain::ExternalId,
+//         proton_api_mail::UniFfiTag,
+//         crate::UniFfiTag
+//     );
+//
+//     uniffi::ffi_converter_forward!(
+//         proton_api_mail::domain::MessageFlags,
+//         proton_api_mail::UniFfiTag,
+//         crate::UniFfiTag
+//     );
+//
+//     uniffi::ffi_converter_forward!(
+//         proton_api_mail::proton_api_core::domain::AddressId,
+//         proton_api_mail::proton_api_core::UniFfiTag,
+//         crate::UniFfiTag
+//     );
 // }

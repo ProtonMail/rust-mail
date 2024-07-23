@@ -1,5 +1,6 @@
 mod attachments;
 
+mod decrypted_message;
 #[cfg(test)]
 mod tests;
 
@@ -67,6 +68,8 @@ pub enum MailboxError {
     Stash(#[from] StashError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
+    #[error("Decrypted Message: {0}")]
+    DecryptedMessage(#[from] DecryptedMessageError),
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;
