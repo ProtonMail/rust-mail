@@ -9,7 +9,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 // bcrypt prefix and salt (first 29 bytes)
 const PREFIX_LEN: usize = 29;
 
-use rusqlite::types::{FromSql, ToSql, ToSqlOutput};
 crate::string_id! {
     // A base64 encoded key salt.
     KeySalt

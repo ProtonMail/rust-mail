@@ -11,7 +11,7 @@ use super::{
     bool_from_integer, bool_to_integer, DecryptedAddressKey, KeyFlag, UnlockedAddressKey,
     UnlockedUserKey,
 };
-use rusqlite::types::{FromSql, ToSql, ToSqlOutput};
+
 pub const KT_SKL_VERIFICATION_CONTEXT_VALUE: &str = "key-transparency.key-list";
 
 crate::string_id! {
