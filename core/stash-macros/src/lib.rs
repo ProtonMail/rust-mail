@@ -476,7 +476,6 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 /// This struct is used to parse the `via` attribute, which is used to specify
 /// a wrapper type for a field in the `DbRecord` and `Model` derive macros.
 ///
-#[derive(Debug)]
 struct ViaIntermediary(Option<Path>);
 
 impl Parse for ViaIntermediary {
