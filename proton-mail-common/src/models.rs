@@ -688,36 +688,31 @@ impl Conversation {
         if messages.is_empty() {
             return None;
         }
+        let mut last_unread = None;
 
         if label.label_type == LabelType::Label
             || label.label_type == LabelType::Folder
             || label.remote_id == Some(LabelId::starred())
         {
-            // last consecutive that is not a draft
-            let mut last_unread = None;
-
             for msg in messages.iter().rev() {
                 if msg.unread && !msg.flags.is_draft() {
                     last_unread.clone_from(&msg.local_id);
                 } else if last_unread.is_some() {
-                    break;
+                    return last_unread;
                 }
             }
-
-            return last_unread;
         };
 
-        // In any other location check if the last message is unread.
-        let mut iter = messages.iter().rev();
-        let msg = iter.next()?;
-        if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
-            return msg.local_id;
-        }
-
-        let mut last_unread = None;
+        // TODO: Verify why this code was added.
+        // // In any other location check if the last message is unread.
+        // let mut iter = messages.iter().rev();
+        // let msg = iter.next()?;
+        // if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
+        //     return msg.local_id;
+        // }
 
         // last consecutive message that is not a draft or sent auto-reply
-        for msg in iter {
+        for msg in messages.iter().rev() {
             if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
                 last_unread.clone_from(&msg.local_id);
             } else if last_unread.is_some() {
@@ -725,7 +720,13 @@ impl Conversation {
             }
         }
 
-        last_unread
+        last_unread.or_else(|| {
+            messages
+                .iter()
+                .rev()
+                .find(|m| !m.flags.is_draft())
+                .and_then(|m| m.local_id)
+        })
     }
 
     /// TODO: Document this method.
