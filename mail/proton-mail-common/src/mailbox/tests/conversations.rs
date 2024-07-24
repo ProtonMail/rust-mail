@@ -2,294 +2,207 @@ use crate::datatypes::{LabelColor, LabelType, MessageAddress, MessageFlags, Syst
 use crate::models::{Conversation, Label, Message};
 use proton_core_common::datatypes::{LabelId, RemoteId};
 
-mod drafts {
-    use super::*;
-    use lazy_static::lazy_static;
-    use test_case::test_case;
+use lazy_static::lazy_static;
+use test_case::test_case;
 
-    lazy_static! {
-        static ref STARRED: Label = new_label(LabelType::System, Some(LabelId::drafts().clone()));
-        static ref LABEL: Label = new_label(LabelType::Label, None);
-        static ref FOLDER: Label = new_label(LabelType::Folder, None);
-        static ref INBOX: Label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
-    }
-
-    #[test_case(
-        &[], None; "TEST1 - empty messages"
-    )]
-    #[test_case(
-        &[(MessageFlags::RECEIVED, false),], Some(0); "TEST2 - read - recieved message"
-    )]
-    #[test_case(
-        &[(MessageFlags::empty(), false),], Some(0); "TEST3 - read - draft message"
-    )]
-    #[test_case(
-        &[(MessageFlags::OPENED, false),], Some(0); "TEST4 - read - draft & opened message"
-    )]
-    #[test_case(
-        &[(MessageFlags::OPENED, true),], Some(0); "TEST5 - unread - draft & opened message"
-    )]
-    #[test_case(
-        &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true),], Some(0); "TEST6 - unread - recieved & opened message"
-    )]
-    #[test_case(
-        &[(MessageFlags::RECEIVED, true),], Some(0); "TEST7 - unread - recieved message"
-    )]
-    #[test_case(
-        &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),], Some(0); "TEST8 - unread - recieved & internal message"
-    )]
-    #[test_case(
-        &[(MessageFlags::SENT | MessageFlags::INTERNAL, true),], Some(0); "TEST9 - unread - opened & internal message"
-    )]
-    #[test_case(
-        &[
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::RECEIVED, false),
-            (MessageFlags::RECEIVED | MessageFlags::INTERNAL | MessageFlags::OPENED, true),
-            (MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),
-
-        ], Some(2); "TEST10 - all unread - recieved | internal | opened messages"
-    )]
-    #[test_case(
-        &[
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::empty(), true),
-
-        ], Some(0); "TEST11 - all unread - recieved | draft messages"
-    )]
-    #[test_case(
-        &[
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::empty(), false),
-
-        ], Some(0); "TEST12 - some unread - recieved | draft messages"
-    )]
-    #[test_case(
-        &[
-            (MessageFlags::SENT, true),
-            (MessageFlags::SENT, true),
-            (MessageFlags::empty(), false),
-
-        ], Some(0); "TEST13 - some unread - sent | draft messages"
-    )]
-    #[test_case(
-        &[
-            (MessageFlags::SENT | MessageFlags::RECEIVED, true),
-            (MessageFlags::SENT | MessageFlags::RECEIVED, true),
-            (MessageFlags::empty(), false),
-
-        ], Some(0); "TEST14 - some unread - sent & received | draft messages"
-    )]
-    #[test_case(
-        &[
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::empty(), true),
-            (MessageFlags::RECEIVED, true),
-            (MessageFlags::empty(), true),
-
-        ], Some(3); "TEST15 - all unread - received | draft messages"
-    )]
-    fn draft_messages(messages: &[(MessageFlags, bool)], expected_id: Option<u64>) {
-        let messages = messages
-            .iter()
-            .enumerate()
-            .map(|(id, (flags, unread))| message_metadata_with_flags(id as u64, *flags, *unread))
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            dbg!(Conversation::first_unread_message(&STARRED, &messages)),
-            dbg!(expected_id)
-        );
-        assert_eq!(
-            Conversation::first_unread_message(&LABEL, &messages),
-            expected_id
-        );
-        assert_eq!(
-            Conversation::first_unread_message(&FOLDER, &messages),
-            expected_id
-        );
-        assert_eq!(
-            Conversation::first_unread_message(&INBOX, &messages),
-            expected_id
-        );
-    }
+lazy_static! {
+    static ref STARRED: Label = new_label(LabelType::System, Some(LabelId::starred().clone()));
+    static ref LABEL: Label = new_label(LabelType::Label, None);
+    static ref FOLDER: Label = new_label(LabelType::Folder, None);
+    static ref INBOX: Label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
+    static ref DRAFTS: Label = new_label(LabelType::System, Some(LabelId::drafts().clone())); // There is no conversations in drafts - this is theoretical case
+    static ref ALL_LABELS: Vec<&'static Label> =
+        vec![&STARRED, &LABEL, &FOLDER, &INBOX, &DRAFTS];
+    static ref MOVED_CONV_LABELS: Vec<&'static Label> =
+        vec![&STARRED, &LABEL, &FOLDER];
+    static ref INBOX_AND_DRAFTS_LABELS: Vec<&'static Label> = vec![&INBOX, &DRAFTS];
 }
 
-// TODO: Extend test_cases to cover all scenarios bellow
-#[test]
-fn first_unread_conversation_message_in_starred_or_custom_label_or_folder() {
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread
-    // 3: unread
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(3, MessageFlags::RECEIVED, true),
-    ];
+#[test_case(
+    &ALL_LABELS, &[], None; "TEST1 - empty messages"
+)]
+#[test_case(
+    &MOVED_CONV_LABELS, &[(MessageFlags::RECEIVED, false),], None; "TEST2A - read - recieved message"
+)]
+#[test_case(
+    &INBOX_AND_DRAFTS_LABELS, &[(MessageFlags::RECEIVED, false),], Some(0); "TEST2B - read - recieved message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::empty(), false),], None; "TEST3 - read - draft message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::OPENED, false),], None; "TEST4 - read - draft & opened message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::OPENED, true),], None; "TEST5 - unread - draft & opened message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true),], Some(0); "TEST6 - unread - recieved & opened message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, true),], Some(0); "TEST7 - unread - recieved message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),], Some(0); "TEST8 - unread - recieved & internal message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::SENT | MessageFlags::INTERNAL, true),], Some(0); "TEST9 - unread - opened & internal message"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED | MessageFlags::INTERNAL | MessageFlags::OPENED, true),
+        (MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),
 
-    let label_starred = new_label(LabelType::System, Some(LabelId::starred().clone()));
-    let label_label = new_label(LabelType::Label, None);
-    let label_folder = new_label(LabelType::Folder, None);
+    ], Some(2); "TEST10 - all unread - recieved | internal | opened messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
 
-    let unread_id = Conversation::first_unread_message(&label_starred, &messages);
-    assert_eq!(unread_id, Some(2));
-    let unread_id = Conversation::first_unread_message(&label_folder, &messages);
-    assert_eq!(unread_id, Some(2));
-    let unread_id = Conversation::first_unread_message(&label_label, &messages);
-    assert_eq!(unread_id, Some(2));
-}
+    ], Some(0); "TEST11 - all unread - recieved | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), false),
 
-#[test]
-fn first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft(
+    ], Some(0); "TEST12 - some unread - recieved | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::SENT, true),
+        (MessageFlags::SENT, true),
+        (MessageFlags::empty(), false),
+
+    ], Some(0); "TEST13 - some unread - sent | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::SENT | MessageFlags::RECEIVED, true),
+        (MessageFlags::SENT | MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), false),
+
+    ], Some(0); "TEST14 - some unread - sent & received | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+
+    ], Some(3); "TEST15 - all unread - received | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+    ], Some(2); "TEST16 - first_unread_conversation_message_in_starred_or_custom_label_or_folder"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true),
+    ], Some(3); "TEST17 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+    ], Some(2); "TEST18 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::empty(), true),
+    ], Some(0); "TEST19 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+    ], Some(2); "TEST20 - first_unread_conversation_message_default_last_consecutive_unread"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+    ], Some(2); "TEST21 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::SENT | MessageFlags::AUTO, true),
+    ], Some(2); "TEST22 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
+)]
+#[test_case(
+    &MOVED_CONV_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::SENT | MessageFlags::AUTO, true),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, false),
+    ], Some(2); "TEST23A - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
+)]
+#[test_case(
+    &INBOX_AND_DRAFTS_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::SENT | MessageFlags::AUTO, true),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, false),
+    ], Some(0); "TEST23B - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+    ], Some(0); "TEST24 - oldest_unread_message_selected_in_unread_chain"
+)]
+fn find_conversation_message_id(
+    labels: &[&Label],
+    messages: &[(MessageFlags, bool)],
+    expected_id: Option<u64>,
 ) {
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread + Draft
-    // 3: unread
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::empty(), true),
-        message_metadata_with_flags(3, MessageFlags::RECEIVED, true),
-    ];
+    let messages = messages
+        .iter()
+        .enumerate()
+        .map(|(id, (flags, unread))| message_metadata_with_flags(id as u64, *flags, *unread))
+        .collect::<Vec<_>>();
 
-    let label_folder = new_label(LabelType::Folder, None);
-
-    let unread_id = Conversation::first_unread_message(&label_folder, &messages);
-    assert_eq!(unread_id, Some(3));
-
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread
-    // 3: unread + Draft
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(3, MessageFlags::empty(), true),
-    ];
-
-    let unread_id = Conversation::first_unread_message(&label_folder, &messages);
-    assert_eq!(unread_id, Some(2));
-
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread + Draft
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::empty(), true),
-    ];
-
-    let unread_id = Conversation::first_unread_message(&label_folder, &messages);
-    assert_eq!(unread_id, Some(0));
+    for label in labels {
+        assert_eq!(
+            Conversation::first_unread_message(&label, &messages),
+            expected_id,
+            "Test failed for label: {:?}, {:?}",
+            label.label_type,
+            label.remote_id
+        );
+    }
 }
-
-#[test]
-fn first_unread_conversation_message_default_last_consecutive_unread() {
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread
-    // 3: unread
-    // 4: read
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(3, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(4, MessageFlags::RECEIVED, false),
-    ];
-
-    let label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
-    let unread_id = Conversation::first_unread_message(&label, &messages);
-    assert_eq!(unread_id, Some(2));
-}
-
-#[test]
-fn first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send()
-{
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread
-    // 3: unread
-    // 4: unread + Draft
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(3, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(4, MessageFlags::empty(), true),
-    ];
-
-    let label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
-    let unread_id = Conversation::first_unread_message(&label, &messages);
-    assert_eq!(unread_id, Some(2));
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread
-    // 3: unread
-    // 4: unread + Auto Send
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(3, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(4, MessageFlags::SENT | MessageFlags::AUTO, true),
-    ];
-
-    let unread_id = Conversation::first_unread_message(&label, &messages);
-    assert_eq!(unread_id, Some(2));
-}
-
-#[test]
-fn first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send() {
-    // Messages are tagged as
-    // 0: unread
-    // 1: read
-    // 2: unread + Auto Send
-    // 3: unread + Draft
-    // 4: read
-    let messages = [
-        message_metadata_with_flags(0, MessageFlags::RECEIVED, true),
-        message_metadata_with_flags(1, MessageFlags::RECEIVED, false),
-        message_metadata_with_flags(2, MessageFlags::SENT | MessageFlags::AUTO, true),
-        message_metadata_with_flags(3, MessageFlags::empty(), true),
-        message_metadata_with_flags(4, MessageFlags::RECEIVED, false),
-    ];
-
-    let label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
-    let unread_id = Conversation::first_unread_message(&label, &messages);
-    assert_eq!(unread_id, Some(0));
-}
-
-// #[test]
-// fn oldest_unread_message_selected_in_unread_chain() {
-//     // Messages are tagged as
-//     // 0: unread
-//     // 1: unread
-//     // 2: unread
-//     let messages = [
-//         message_metadata_with_flags(LocalMessageId::new(0), MessageFlags::RECEIVED, true),
-//         message_metadata_with_flags(LocalMessageId::new(1), MessageFlags::RECEIVED, true),
-//         message_metadata_with_flags(LocalMessageId::new(2), MessageFlags::RECEIVED, true),
-//     ];
-//
-//     let label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
-//     let unread_id = first_unread_message_in_conversation(&label, &messages);
-//     assert_eq!(unread_id, Some(LocalMessageId::new(0)));
-// }
 
 fn message_metadata_with_flags(id: u64, flags: MessageFlags, unread: bool) -> Message {
     Message {
