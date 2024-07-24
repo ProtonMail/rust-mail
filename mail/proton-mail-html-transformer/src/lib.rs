@@ -26,11 +26,13 @@
 
 use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
+use sanitizer::strip_whitelist;
 use std::fmt::{Display, Formatter};
 
 // NOTE: each new transformation pass should be its own module.
 mod ios;
 mod remote_content;
+mod sanitizer;
 pub mod utm;
 
 /// Errors that may occur during transformation.
@@ -135,10 +137,62 @@ impl Transformer {
     pub fn inject_ios_content_size(&mut self) -> Result<(), Error> {
         Ok(ios::inject_content_size(&self.document)?)
     }
+
+    /// This function removes the tags and attributes defined in the [`sanitizer_consts`](crate::sanitizer_consts) file.
+    ///
+    /// Such a whitelist come from the JS library [DOMPurify](https://github.com/cure53/DOMPurify) with a few exceptions:
+    /// - Extra allowed tags: `<proton-src />`, `<base />`
+    /// - Extra allowed attributes: `proton-src`, `target`
+    /// - Extra disallowed tags: `style`, `input`, `form`
+    /// - Extra disallowed attributes `srcset`, `for`
+    /// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
+    ///
+    /// # Remarks
+    ///
+    /// This is a destructive operation and can not be undone.
+    pub fn strip_whitelist(&self) {
+        strip_whitelist(self.document.clone());
+    }
 }
 
 impl Display for Transformer {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.document.to_string())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn acceptable_html() {
+        let html = include_str!("../tests/htmls/acceptable.html");
+        let t = Transformer::new(html);
+        t.strip_whitelist();
+        let unsanitized_html = t.to_string();
+
+        let t = Transformer::new(html);
+        t.strip_whitelist();
+        let html = t.to_string();
+        assert_eq!(unsanitized_html, html);
+    }
+
+    #[test]
+    fn strip_bad_html() {
+        let html = include_str!("../tests/htmls/strip_bad.html");
+
+        let t = Transformer::new(html);
+        t.strip_whitelist();
+        insta::assert_snapshot!(t);
+    }
+
+    #[test]
+    fn email_privacy_tester() {
+        let html = include_str!("../tests/htmls/email_privacy_tester.html");
+
+        let t = Transformer::new(html);
+        t.strip_whitelist();
+        insta::assert_snapshot!(t);
     }
 }
