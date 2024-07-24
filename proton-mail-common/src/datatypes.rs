@@ -82,7 +82,6 @@ use tracing::warn;
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum AlmostAllMail {
     /// TODO: Document this variant.
     AllMail = 0,
@@ -120,7 +119,6 @@ impl ToSql for AlmostAllMail {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ComposerDirection {
     /// TODO: Document this variant.
     #[default]
@@ -158,7 +156,6 @@ impl ToSql for ComposerDirection {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ComposerMode {
     /// TODO: Document this variant.
     #[default]
@@ -196,7 +193,6 @@ impl ToSql for ComposerMode {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Disposition {
     /// TODO: Document this variant.
     Attachment = 1,
@@ -233,7 +229,6 @@ impl ToSql for Disposition {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum LabelType {
     /// TODO: Document this field.
     Label = 1,
@@ -291,7 +286,6 @@ impl ToSql for LabelType {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageButtons {
     /// TODO: Document this variant.
     #[default]
@@ -329,7 +323,6 @@ impl ToSql for MessageButtons {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MimeType {
     /// TODO: Document this variant.
     ApplicationJson = 1,
@@ -392,7 +385,6 @@ impl ToSql for MimeType {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum NextMessageOnMove {
     /// TODO: Document this variant.
     #[default]
@@ -434,7 +426,6 @@ impl ToSql for NextMessageOnMove {
 
 /// A message parsed header value can either be a string or an array of strings.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ParsedHeaderValue {
     /// TODO: Document this variant.
     Array(Vec<String>),
@@ -446,7 +437,6 @@ pub enum ParsedHeaderValue {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum PgpScheme {
     /// TODO: Document this variant.
     Inline = 8,
@@ -485,7 +475,6 @@ impl ToSql for PgpScheme {
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum PmSignature {
     /// TODO: Document this variant.
     #[default]
@@ -528,7 +517,6 @@ impl ToSql for PmSignature {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ShowImages {
     /// TODO: Document this variant.
     DoNotAutoLoad = 0,
@@ -576,7 +564,6 @@ impl ToSql for ShowImages {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ShowMoved {
     /// TODO: Document this variant.
     #[default]
@@ -624,7 +611,6 @@ impl ToSql for ShowMoved {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum SpamAction {
     /// TODO: Document this variant.
     DoNothing = 0,
@@ -661,7 +647,6 @@ impl ToSql for SpamAction {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum SwipeAction {
     /// TODO: Document this variant.
     Trash = 0,
@@ -714,7 +699,6 @@ impl ToSql for SwipeAction {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ViewLayout {
     /// TODO: Document this variant.
     #[default]
@@ -752,7 +736,6 @@ impl ToSql for ViewLayout {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ViewMode {
     /// TODO: Document this variant.
     #[default]
@@ -1454,9 +1437,6 @@ bitflags::bitflags! {
         const FLAG_AUTO_FORWARDEE = 1 << 35;
     }
 }
-
-#[cfg(feature = "uniffi")]
-uniffi::custom_newtype!(MessageFlags, u64);
 
 impl MessageFlags {
     /// Check whether this message is an auto-sent reply.

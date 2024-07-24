@@ -34,9 +34,6 @@ pub mod exports {
 
 use thiserror::Error;
 
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();
-
 pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::Label,
     LabelType::ContactGroup,
@@ -54,50 +51,3 @@ pub enum AppError {
     #[error("Other error: {0}")]
     Other(String),
 }
-
-// #[cfg(feature = "uniffi")]
-// mod type_forwarding {
-//     // Required due to https://github.com/mozilla/uniffi-rs/issues/1988.
-//
-//     uniffi::ffi_converter_forward!(
-//         proton_api_mail::domain::ConversationId,
-//         proton_api_mail::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-//
-//     uniffi::ffi_converter_forward!(
-//         proton_api_mail::domain::AttachmentId,
-//         proton_api_mail::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-//
-//     uniffi::ffi_converter_forward!(
-//         proton_api_mail::domain::LabelId,
-//         proton_api_mail::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-//
-//     uniffi::ffi_converter_forward!(
-//         proton_api_mail::domain::MessageId,
-//         proton_api_mail::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-//
-//     uniffi::ffi_converter_forward!(
-//         proton_api_mail::domain::ExternalId,
-//         proton_api_mail::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-//
-//     uniffi::ffi_converter_forward!(
-//         proton_api_mail::domain::MessageFlags,
-//         proton_api_mail::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-//
-//     uniffi::ffi_converter_forward!(
-//         proton_api_mail::proton_api_core::domain::AddressId,
-//         proton_api_mail::proton_api_core::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-// }
