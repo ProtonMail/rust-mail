@@ -5,16 +5,18 @@ use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::requests::GetImagesLogoOptions;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::LabelId;
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::cache::ImagesLogoKey;
+use proton_mail_common::datatypes::{MessageAddress, SystemLabelId};
 use proton_mail_common::models::{Conversation, MailSettings, MAIL_SETTINGS_ID};
-use proton_mail_common::Mailbox;
+use proton_mail_common::{MailUserContext, Mailbox};
 use stash::orm::Model;
 use std::fs;
 
 #[tokio::test]
-async fn test_get_sender_image() {
+async fn get_sender_image() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
@@ -36,6 +38,8 @@ async fn test_get_sender_image() {
             expanded: false,
             order: 0,
         });
+    let user_context = ctx.user_context().await;
+
     let conversations = params.conversations.clone();
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 1).await;
@@ -77,4 +81,89 @@ async fn test_get_sender_image() {
         .expect("failed to get image")
         .expect("should have value");
     assert_eq!(fs::read(image_path).unwrap(), b"abcdef");
+}
+
+#[tokio::test]
+async fn get_sender_image_from_cache() {
+    // Set up a user and initialise the inbox
+    let ctx = TestContext::new().await;
+    let mut params = TestParams::default_basic();
+    params
+        .labels
+        .get_mut(&ApiLabelType::Label)
+        .unwrap()
+        .push(ApiLabel {
+            id: ApiRemoteId::from("testlabel"),
+            parent_id: None,
+            name: "testlabel".to_owned(),
+            path: None,
+            color: String::new(),
+            label_type: ApiLabelType::Label,
+            notify: false,
+            display: false,
+            sticky: false,
+            expanded: false,
+            order: 0,
+        });
+    let user_context = ctx.user_context().await;
+
+    let conversations = params.conversations.clone();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.catch_all().await;
+    user_context
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
+
+    // Create a mailbox
+    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+        .await
+        .unwrap();
+
+    mailbox.sync(1).await.expect("mailbox sync failed");
+    let local_conversation = Conversation::find_first("", vec![], user_context.stash())
+        .await
+        .unwrap()
+        .unwrap();
+    let sender = &local_conversation.senders.value.first().unwrap();
+    let mail_settings = MailSettings::load(MAIL_SETTINGS_ID, user_context.stash())
+        .await
+        .expect("failed to load mail settings")
+        .unwrap();
+
+    let key = create_test_key(sender);
+    image_logo_cache_add_item(&user_context, key, "abcdef");
+
+    let image = user_context
+        .image_for_sender(
+            &mail_settings,
+            sender.address.clone(),
+            sender.bimi_selector.clone(),
+            sender.display_sender_image,
+            None,
+            None,
+            None,
+        )
+        .await
+        .expect("failed to get image")
+        .expect("should have value");
+    assert_eq!(std::str::from_utf8(&image.to_vec()).unwrap(), "abcdef");
+}
+
+fn image_logo_cache_len(context: &MailUserContext) -> usize {
+    context.images_logo_cache().len()
+}
+
+fn image_logo_cache_add_item(context: &MailUserContext, key: ImagesLogoKey, value: &str) {
+    context
+        .images_logo_cache()
+        .add_item(key, value.as_bytes())
+        .unwrap();
+}
+
+fn create_test_key(message_address: &&MessageAddress) -> ImagesLogoKey {
+    let mut options = GetImagesLogoOptions::default();
+    options.address = Some(message_address.address.clone());
+    ImagesLogoKey(options)
 }
