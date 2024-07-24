@@ -11,13 +11,20 @@ kuchikiki = "=0.8.2"
 # kuchikiki requires this verion of html5ever at this time.
 html5ever = "=0.26"
 lazy_static.workspace = true
+cargo-insta = "1.39.0"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
 criterion = "0.5.1"
+insta = { version = "1.39.0", features = ["toml"] }
+
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3
 
 [[bench]]
 name = "parsing_html"
 harness = false
+

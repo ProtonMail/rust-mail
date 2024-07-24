@@ -1,0 +1,16 @@
+---
+source: proton-mail-html-transformer/src/sanitizer.rs
+expression: html
+---
+<html><head>
+   </head>
+   <body>
+      <div>
+         <a>foo</a>
+         <base target="_blank">bar
+      </div>
+
+      
+   
+
+</body></html>
