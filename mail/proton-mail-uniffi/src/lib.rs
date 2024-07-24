@@ -1,30 +1,121 @@
-//! Uniffi Bindings for everything related to mail.
+//! UniFFI bindings for Proton Mail.
 //!
-//! # Getting Started
+//! # Getting started
 //!
-//! An application is expected to initialize a `MailContext` which needs to be kept alive
-//! for the lifetime of the application.
+//! When a client using the FFI bindings starts, it needs to establish a
+//! connection to the underlying subsystem via the Rust libraries. This is done
+//! by creating a new context/session object, which needs to be kept alive for
+//! the lifetime of the application in order to maintain access to resources
+//! such as the local database and continue the processing of background tasks.
 //!
-//! Next a [`MailUserContext`] needs to be created in other to access all the user settings and
-//! labels ([`Mailbox`]). You can obtain one by performing a login of a new user with
-//! [`mail::MailSession::new_login_flow`] or by using an existing session with
-//! [`mail::MailSession::user_context_from_session`]. You now have access to all the labels and
-//! user related settings.
+//! TODO: Update the section below once contexts/sessions are fully-unified
 //!
-//! Finally, to access the conversations you need to create a [`Mailbox`] for the active label.
-//! Once a mailbox has been created you need to create a live query for the conversation of that
-//! mailbox with [`mail::Mailbox::new_conversation_live_query`].
+//! This is done by creating a [`MailSession`](mail::MailSession), which is a
+//! manual process i.e. the client should call a constructor such as
+//! [`MailSession::new()`](mail::MailSession::create()) and pass in the required
+//! information. After this, a [`MailUserSession`](mail::MailUserSession) needs
+//! to be created in other to access all the user settings and labels. This
+//! second step is done automatically when establishing an authentication
+//! context.
 //!
-//! [MailContext]: mail::MailSession
-//! [MailBox]: mail::Mailbox
-//! [MailUserContext]: mail::MailUserSession
+//! # Features and concepts
 //!
-//! # Actions
+//! ## Authentication
 //!
-//! Mutable changes to the domain will all generate actions that are queue for execution a time that
-//! makes sense for the client.
-//! To execute any pending actions call [`mail::MailUserSession::execute_pending_action`] to execute one action
-//! or [`mail::MailUserSession::execute_pending_actions`] to execute all pending actions.
+//! There are two routes in to establishing an authentication context:
+//!
+//!   1. You can obtain one by performing fresh login using [`new_login_flow()`](mail::MailSession::new_login_flow()),
+//!      or
+//!   2. You can use an existing session with
+//!      [`user_context_from_session()`](mail::MailSession::user_context_from_session()).
+//!
+//! Once logged in, you will have access to all the labels and user-related
+//! settings.
+//!
+//! TODO: Expand this section with step-by-step instructions
+//!
+//! ## Mailboxes
+//!
+//! In the jargon used by Proton Mail, a "mailbox" is a view onto a "thing" that
+//! "contains" messages/conversations. This might be a folder or label, and so
+//! the term "mailbox" does not align with the entire account as might be
+//! traditionally expected.
+//!
+//! To access the conversations and messages you need to create a [`Mailbox`](mail::Mailbox)
+//! for the active label. You then need to create a live query for the
+//! conversations of that mailbox with [`new_conversation_live_query()`](mail::Mailbox::new_conversation_live_query()).
+//!
+//! ## Actions
+//!
+//! Any data changes will generate actions that are queued for execution at a
+//! time that makes sense for the client.
+//!
+//! To execute any pending actions immediately, call
+//! [`execute_pending_action()`](mail::MailUserSession::execute_pending_action())
+//! to execute one action, or [`execute_pending_actions()`](mail::MailUserSession::execute_pending_actions())
+//! to execute all pending actions.
+//!
+//! # Layout
+//!
+//! The FFI bindings are split into a number of modules, each of which
+//! corresponds to a different area of functionality, broadly correlating with
+//! the Rust internals, but that is not mandatory. Each overall FFI "package" is
+//! focused on a specific Proton application, with this one being Proton Mail.
+//! Each package contains everything needed to run and operate that product and
+//! manage its resources and operations. Therefore, there are a number of pieces
+//! of functionality that are common or "core", and these are shared so that all
+//! packages present those fundamental components (a good example being login).
+//!
+//! Broadly, the structure is as follows:
+//!
+//!   - [`core`]: Core functionality that is common to all Proton applications.
+//!               Here you will find the login and session management.
+//!   - [`mail`]: The Proton Mail application's specific functionality, with
+//!               everything needed to manage mailboxes, conversations,
+//!               messages, and labels.
+//!
+//! In addition to particular features, there are also concepts that are
+//! established in core and then extended in the product, such as actions,
+//! contexts/sessions, and events.
+//!
+//! # TODO: Add more information on contexts/sessions when fully-unified
+//! # TODO: Add more information on events when new event system is in place
+//!
+//! Finally, there are also small utilities that are exposed under their own
+//! module namespaces.
+//!
+//! # TODO: Check the above after the facade is complete, in case it changes
+//!
+//! # Rust internals
+//!
+//! The actual internal structure and operations of the wider Rust libraries are
+//! hidden away, and not exposed directly through the FFI bindings. Instead, a
+//! facade is in place, which operates as a translation layer between the public
+//! interface and private internals. This is for a number of reasons:
+//!
+//!   - It allows full independence so that changes can be made on either side
+//!     without concern. This means that the Rust team can change and maintain
+//!     the internal codebase as seen fit for Rust development, and meanwhile
+//!     the exported functionality can be amended to suit the needs and desires
+//!     of the teams consuming the interface.
+//!
+//!   - It allows for a more stable interface. The FFI bindings are a contract
+//!     between the Rust libraries and the client, and by keeping the internals
+//!     hidden, the contract is more stable and less likely to change.
+//!
+//!   - It allows Rust development to take place using all Rust features without
+//!     concern, as any incompatibilities with UniFFI will be handled by the
+//!     facade.
+//!
+//! This facade is a parallel of the approach used when communicating with the
+//! Proton REST API from the Rust libraries, which is in place for similar
+//! reasons, and both are expressions of a driver or adaptor pattern.
+//!
+//! *Note to Rust developers: The documentation in this crate is aimed primarily
+//! at the client developers, who will be using the exposed bindings. All
+//! functionality herein is lightweight, and for the purpose of translation
+//! only, and so for any internal information please refer to the internal Rust
+//! crates that are the subject of the translations.*
 //!
 
 pub mod core;
