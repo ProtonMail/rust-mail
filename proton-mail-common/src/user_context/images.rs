@@ -1,3 +1,4 @@
+use crate::cache::ImagesLogoKey;
 use crate::models::MailSettings;
 use crate::{MailContextResult, MailUserContext};
 use proton_core_common::datatypes::LightOrDarkMode;
