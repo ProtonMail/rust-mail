@@ -22,10 +22,7 @@ lazy_static! {
     &ALL_LABELS, &[], None; "TEST1 - empty messages"
 )]
 #[test_case(
-    &MOVED_CONV_LABELS, &[(MessageFlags::RECEIVED, false),], None; "TEST2A - read - recieved message"
-)]
-#[test_case(
-    &INBOX_AND_DRAFTS_LABELS, &[(MessageFlags::RECEIVED, false),], Some(0); "TEST2B - read - recieved message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, false),], Some(0); "TEST2 - read - recieved message"
 )]
 #[test_case(
     &ALL_LABELS, &[(MessageFlags::empty(), false),], None; "TEST3 - read - draft message"
@@ -181,6 +178,13 @@ lazy_static! {
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, true),
     ], Some(0); "TEST24 - oldest_unread_message_selected_in_unread_chain"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, false),
+    ], Some(2); "TEST25 - all read"
 )]
 fn find_conversation_message_id(
     labels: &[&Label],
