@@ -85,7 +85,7 @@ pub struct MailContext {
     core_context: Arc<Context>,
     // TODO: cleanup after Dan's refactor.
     mail_cache_path: PathBuf,
-    mail_cache_size: u32,
+    pub(crate) mail_cache_size: u32,
 }
 
 impl MailContext {
@@ -139,7 +139,7 @@ impl MailContext {
                 self.mail_cache_size,
             )
             .await?;
-        Ok(MailUserContext::new(self.clone(), ctx).await)
+        MailUserContext::new(self.clone(), ctx)
     }
 
     /// Create a new context from an existing session.

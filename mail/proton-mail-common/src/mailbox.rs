@@ -10,6 +10,7 @@ pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
+use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LabelId;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
@@ -72,6 +73,10 @@ pub enum MailboxError {
     MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
     #[error("Decrypted Message: {0}")]
     DecryptedMessage(#[from] DecryptedMessageError),
+    #[error("Cache error: {0}")]
+    Cache(#[from] CacheError),
+    #[error("IO error: {0}")]
+    IO(#[from] std::io::Error),
 }
 
 pub type MailboxResult<T> = Result<T, MailboxError>;

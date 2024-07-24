@@ -1,4 +1,5 @@
 mod action_queue;
+pub mod cache;
 mod events;
 mod images;
 mod initialization;
@@ -15,7 +16,15 @@ use futures::executor::block_on;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::Proton;
+use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
+use std::sync::{Arc, Weak};
+
+use crate::user_context::action_queue::new_action_queue;
+use crate::user_context::cache::{AttachmentKey, Cache, ImagesLogoKey, MessageKey};
+use crate::{MailContext, MailContextResult};
 use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::{LoadKeySecret, UserContext};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -30,24 +39,42 @@ pub struct MailUserContext {
     user_context: UserContext,
     event_loop: EventLoop,
     action_queue: Queue,
+    cache: Cache,
 }
 
 impl MailUserContext {
-    pub(crate) async fn new(mail_context: MailContext, user_context: UserContext) -> Arc<Self> {
+    pub(crate) async fn new(
+        mail_context: MailContext,
+        user_context: UserContext,
+    ) -> MailContextResult<Arc<Self>> {
         let stash = user_context.stash().clone();
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
-        let _ = std::fs::create_dir_all(cache_path).map_err(|e| {
+        let _ = std::fs::create_dir_all(cache_path.clone()).map_err(|e| {
             tracing::error!("Failed to create mail cache path: {e}");
             e
         });
+        let cache = Cache::new(cache_path, mail_context.mail_cache_size)?;
         let action_queue = new_action_queue(stash).await.unwrap();
-        Arc::new_cyclic(|this| Self {
+        Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
             user_context,
             event_loop: EventLoop::new(),
             action_queue,
-        })
+            cache,
+        }))
+    }
+
+    pub fn attachements_cache(&self) -> &ProtonCache<AttachmentKey> {
+        &self.cache.attachments_cache
+    }
+
+    pub fn images_logo_cache(&self) -> &ProtonCache<ImagesLogoKey> {
+        &self.cache.images_logo_cache
+    }
+
+    pub fn messages_cache(&self) -> &ProtonCache<MessageKey> {
+        &self.cache.messages_cache
     }
 
     pub fn session(&self) -> &Session {
