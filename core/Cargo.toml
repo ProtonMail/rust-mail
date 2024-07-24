@@ -47,7 +47,6 @@ tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uniffi = { version = "0.27" }
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.8.0", features = ["serde", "v4"] }
 velcro = "0.5.4"

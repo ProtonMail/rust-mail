@@ -29,13 +29,11 @@ stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-uniffi = { workspace = true, optional = true }
 velcro = { workspace = true }
 
 [features]
 default = []
 integration_tests = []
-uniffi = ["dep:uniffi"]
 sql = ["dep:proton-sqlite3"]
 
 [dev-dependencies]

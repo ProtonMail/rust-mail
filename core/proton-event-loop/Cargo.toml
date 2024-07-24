@@ -24,7 +24,6 @@ mockall = { workspace = true }
 
 [features]
 default = []
-uniffi = ["proton-api-core/uniffi"]
 
 [lints]
 workspace = true

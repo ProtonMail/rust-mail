@@ -44,19 +44,11 @@ build:
     - cargo build
     - cargo test
 
-build-uniffi:
-  stage: build
-  script:
-    - !reference [ .script-config-git, script ]
-    - cargo build --features="uniffi"
-
-
 build-android:
   stage: build
   script:
     - !reference [ .script-config-git, script ]
     - cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --release
-
 
 build-macos:
   tags:

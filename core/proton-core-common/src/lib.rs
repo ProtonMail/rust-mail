@@ -14,21 +14,3 @@ pub use context::*;
 pub use event_subscriber::*;
 pub use session::*;
 pub use user_context::*;
-
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();
-
-// #[cfg(feature = "uniffi")]
-// mod hidden {
-//     use crate::datatypes::RemoteId;
-//
-//     uniffi::ffi_converter_forward!(
-//         RemoteId,
-//         proton_api_core::UniFfiTag,
-//         crate::UniFfiTag
-//     );
-// }
-
-// struct OptionalStash(Option<Stash>);
-//
-// uniffi::custom_newtype!(OptionalStash, None);

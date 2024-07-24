@@ -117,7 +117,6 @@ impl ServiceError for ProtonApiServiceError {}
 
 /// The configuration for the Proton API service.
 #[derive(Clone, Debug, Eq, PartialEq, SmartDefault)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct Config {
     /// TODO: Document this field.
     pub allow_http: bool,

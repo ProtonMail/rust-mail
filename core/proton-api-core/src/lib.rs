@@ -18,13 +18,3 @@ pub(crate) const X_PM_APP_VERSION_HEADER: &str = "X-Pm-Appversion";
 pub(crate) const X_PM_UID_HEADER: &str = "X-Pm-Uid";
 pub(crate) const X_PM_HUMAN_VERIFICATION_TOKEN: &str = "X-Pm-Human-Verification-Token";
 pub(crate) const X_PM_HUMAN_VERIFICATION_TOKEN_TYPE: &str = "X-Pm-Human-Verification-Token-Type";
-
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();
-
-#[cfg(feature = "uniffi")]
-mod hidden {
-    // At least one export with the custom types needs to happen or they will not be resolved
-    // in the generated code.
-    // TODO: Check this once everything else works
-}

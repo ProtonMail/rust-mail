@@ -400,8 +400,6 @@ use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
 use tokio::time::Instant;
 use tracing::{debug, error, warn};
-#[cfg(feature = "uniffi")]
-use uniffi::Error as UniffiError;
 
 /// A dual-nature connection wrapper.
 ///
@@ -511,8 +509,6 @@ impl Operation {
 
 /// Error type for the [`Stash`] module.
 #[derive(Debug, Error)]
-#[cfg_attr(feature = "uniffi", derive(UniffiError))]
-#[cfg_attr(feature = "uniffi", uniffi(flat_error))]
 #[non_exhaustive]
 pub enum StashError {
     /// There was a problem with deserialising the query results. This means

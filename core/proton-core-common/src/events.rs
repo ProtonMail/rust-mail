@@ -40,7 +40,6 @@ use proton_event_loop::Event;
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Action {
     /// TODO: Document this field.
     Delete = 0,

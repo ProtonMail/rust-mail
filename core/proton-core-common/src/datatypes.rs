@@ -67,7 +67,6 @@ use zeroize::Zeroize;
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum AddressStatus {
     /// TODO: Document this field.
     Disabled = 0,
@@ -109,7 +108,6 @@ impl ToSql for AddressStatus {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum AddressType {
     /// TODO: Document this variant.
     Original = 1,
@@ -161,7 +159,6 @@ impl ToSql for AddressType {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum CardType {
     /// TODO: Document this variant.
     ClearText = 0,
@@ -208,7 +205,6 @@ impl ToSql for CardType {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ContactSendingPreferences {
     /// TODO: Document this variant.
     Custom = 0,
@@ -245,7 +241,6 @@ impl ToSql for ContactSendingPreferences {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum DateFormat {
     /// TODO: Document this variant.
     Default = 0,
@@ -292,7 +287,6 @@ impl ToSql for DateFormat {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum Density {
     /// TODO: Document this variant.
     Comfortable = 0,
@@ -329,7 +323,6 @@ impl ToSql for Density {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum EarlyAccess {
     /// TODO: Document this variant.
     Regular = 0,
@@ -366,7 +359,6 @@ impl ToSql for EarlyAccess {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum LogAuth {
     /// TODO: Document this variant.
     Disabled = 0,
@@ -408,7 +400,6 @@ impl ToSql for LogAuth {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum TfaStatus {
     /// TODO: Document this variant.
     #[default]
@@ -456,7 +447,6 @@ impl ToSql for TfaStatus {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum TimeFormat {
     /// TODO: Document this variant.
     Default = 0,
@@ -498,7 +488,6 @@ impl ToSql for TimeFormat {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum UserMnemonicStatus {
     /// TODO: Document this variant.
     Disabled = 0,
@@ -550,7 +539,6 @@ impl ToSql for UserMnemonicStatus {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum UserType {
     /// TODO: Document this variant.
     Proton = 1,
@@ -592,7 +580,6 @@ impl ToSql for UserType {
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum WeekStart {
     /// TODO: Document this variant.
     Default = 0,

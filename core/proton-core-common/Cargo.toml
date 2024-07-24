@@ -24,7 +24,6 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-uniffi = { workspace = true, optional = true }
 url = { workspace = true }
 zeroize = { workspace = true }
 
@@ -35,6 +34,3 @@ proton-api-core = { workspace = true, features = ["sql", "integration_tests"] }
 
 [lints]
 workspace = true
-
-[features]
-uniffi = ["proton-api-core/uniffi", "dep:uniffi", "proton-event-loop/uniffi"]
