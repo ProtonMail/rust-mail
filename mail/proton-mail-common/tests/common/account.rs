@@ -1,6 +1,10 @@
 use std::iter;
 
 use proton_api_core::auth::UserKeySecret;
+use proton_crypto_account::{
+    keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature},
+    salts::KeySalt,
+};
 use proton_crypto_inbox::{
     proton_crypto::new_srp_provider,
     proton_crypto_account::{
@@ -34,7 +38,7 @@ fn testdata_locked_user_key() -> LockedKey {
     LockedKey {
         id: KeyId::from(TEST_USER_KEY_ID),
         version: 3,
-        private_key: TEST_USER_KEY.to_owned(),
+        private_key: ArmoredPrivateKey::from(TEST_USER_KEY.to_owned()),
         token: None,
         signature: None,
         activation: None,
@@ -51,9 +55,11 @@ fn testdata_locked_address_key() -> LockedKey {
     LockedKey {
         id: KeyId::from(TEST_ADDRESS_KEY_ID),
         version: 3,
-        private_key: TEST_ADDRESS_KEY.to_owned(),
-        token: Some(TEST_ADDRESS_KEY_TOKEN.to_owned()),
-        signature: Some(TEST_ADDRESS_KEY_SIGNATURE.to_owned()),
+        private_key: ArmoredPrivateKey::from(TEST_ADDRESS_KEY.to_owned()),
+        token: Some(EncryptedKeyToken::from(TEST_ADDRESS_KEY_TOKEN.to_owned())),
+        signature: Some(KeyTokenSignature::from(
+            TEST_ADDRESS_KEY_SIGNATURE.to_owned(),
+        )),
         activation: None,
         primary: true,
         active: true,
@@ -73,7 +79,7 @@ pub fn testdata_user_keys() -> UserKeys {
 pub fn testdata_user_secret() -> UserKeySecret {
     let salts = Salts::new(iter::once(Salt {
         id: KeyId::from(TEST_USER_KEY_ID),
-        key_salt: Some("6bIzN4A8bOwmsiEuCPj74g==".to_owned()),
+        key_salt: Some(KeySalt::from("6bIzN4A8bOwmsiEuCPj74g==".to_owned())),
     }));
     let locked_key = testdata_locked_user_key();
     let srp_provider = new_srp_provider();

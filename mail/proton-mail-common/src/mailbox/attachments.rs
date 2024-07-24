@@ -2,7 +2,7 @@ use crate::datatypes::AttachmentMetadata;
 use crate::models::Attachment;
 use crate::{MailContextError, MailUserContext, Mailbox, MailboxError, MailboxResult};
 use proton_api_core::session::CoreSession;
-use proton_crypto_inbox::attachment::AttachmentDecryption;
+use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
 };

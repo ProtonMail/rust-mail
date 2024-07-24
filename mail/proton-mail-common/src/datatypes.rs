@@ -59,7 +59,7 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
-use proton_crypto_inbox::message::DecryptableMessage;
+use proton_crypto_inbox::message::{DecryptableMessage, GettablePGPMessage};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value as JsonValue;
 use stash::exports::{
@@ -1015,6 +1015,14 @@ pub struct EncryptedMessageBody {
     pub metadata: MessageBodyMetadata,
 }
 
+impl GettablePGPMessage for EncryptedMessageBody {
+    /// Return the encrypted body of the message, this is a PGP message which
+    /// may then go on to be decrypted
+    fn pgp_message(&self) -> &[u8] {
+        self.encrypted_body.as_bytes()
+    }
+}
+
 impl DecryptableMessage for EncryptedMessageBody {
     /// TODO: Document this method.
     fn message_id(&self) -> Option<&str> {
@@ -1024,11 +1032,6 @@ impl DecryptableMessage for EncryptedMessageBody {
     /// TODO: Document this method.
     fn message_is_mime(&self) -> bool {
         self.metadata.mime_type == MimeType::MultipartMixed
-    }
-
-    /// TODO: Document this method.
-    fn message_encrypted_body(&self) -> &[u8] {
-        self.encrypted_body.as_bytes()
     }
 }
 
