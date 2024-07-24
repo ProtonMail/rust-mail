@@ -23,8 +23,8 @@ proton-action-queue = { version = "=0.6.0", registry = "proton" }
 proton-api-core = { version = "=0.6.0", registry = "proton", features = ["sql", "uniffi"] }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail", features = ["sql"] }
 proton-core-common = { version = "=0.6.0", registry = "proton" }
-proton-crypto-account = { version = "=0.3.0", registry = "proton" }
-proton-crypto-inbox = { version = "=0.3.0", registry = "proton" }
+proton-crypto-account = { version = "=0.4.2", registry = "proton" }
+proton-crypto-inbox = { version = "=0.5.1", registry = "proton" }
 proton-event-loop = { version = "=0.7.0", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common" }
 proton-mail-message-detector = { path = "proton-mail-message-detector" }

@@ -55,8 +55,9 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::attachment::{
-    AttachmentDecryption, AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
-    AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
+    AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
+    AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
+    KeyPackets as RealKeyPackets,
 };
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
@@ -269,7 +270,7 @@ impl Attachment {
 // TODO: The use of the "Real" wrappers is because the source types don't
 // TODO: implement the traits we need. At a later date we should implement those
 // TODO: traits directly on the source types, and remove these wrappers.
-impl AttachmentDecryption for Attachment {
+impl DecryptableAttachment for Attachment {
     fn attachment_key_packets(&self) -> &RealKeyPackets {
         self.real_key_packets.as_ref().unwrap()
     }
