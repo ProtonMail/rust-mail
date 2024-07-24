@@ -689,41 +689,42 @@ impl Conversation {
             return None;
         }
 
-        if label.label_type == LabelType::Label
-            || label.label_type == LabelType::Folder
-            || label.remote_id == Some(LabelId::starred())
-        {
+        fn first_consecutive_unread_msg(
+            messages: &[Message],
+            filter: impl Fn(&Message) -> bool,
+        ) -> Option<u64> {
             let mut last_unread = None;
 
             for msg in messages.iter().rev() {
-                if msg.unread && !msg.flags.is_draft() {
+                if filter(msg) {
                     last_unread.clone_from(&msg.local_id);
                 } else if last_unread.is_some() {
                     break;
                 }
             }
 
-            return last_unread;
-        };
-
-        let mut last_unread = None;
-
-        // last consecutive message that is not a draft or sent auto-reply
-        for msg in messages.iter().rev() {
-            if msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto()) {
-                last_unread.clone_from(&msg.local_id);
-            } else if last_unread.is_some() {
-                break;
-            }
+            last_unread
         }
 
-        last_unread.or_else(|| {
-            messages
-                .iter()
-                .rev()
-                .find(|m| !m.flags.is_draft())
-                .and_then(|m| m.local_id)
-        })
+        let converstaion_was_moved = label.label_type == LabelType::Label
+            || label.label_type == LabelType::Folder
+            || label.remote_id == Some(LabelId::starred());
+
+        if converstaion_was_moved {
+            first_consecutive_unread_msg(messages, |msg| msg.unread && !msg.flags.is_draft())
+        } else {
+            let last_unread = first_consecutive_unread_msg(messages, |msg| {
+                msg.unread && !(msg.flags.is_draft() || msg.flags.is_sent_auto())
+            });
+
+            last_unread.or_else(|| {
+                messages
+                    .iter()
+                    .rev()
+                    .find(|m| !m.flags.is_draft())
+                    .and_then(|m| m.local_id)
+            })
+        }
     }
 
     /// TODO: Document this method.
