@@ -31,7 +31,6 @@ stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-uniffi = { optional = true, workspace = true }
 url = { workspace = true }
 uuid = { version = "1.8.0", features = ["serde", "v4"] }
 
@@ -53,7 +52,6 @@ wiremock = { workspace = true }
 # workspace = true
 
 [features]
-uniffi = ["dep:uniffi"]
 integration_tests = []
 
 # todo: remove when pedantic-ified and uncommend the [lints] section

@@ -120,7 +120,6 @@ impl HtmlMessage {
 }
 
 /// A message parsed header value can either be a string or an array of strings.
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum ParsedHeaderValue {
     String(String),
     Array(Vec<String>),

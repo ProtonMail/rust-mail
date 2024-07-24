@@ -22,8 +22,6 @@ uniffi = { workspace = true }
 [dev-dependencies]
 bytes = { workspace = true }
 proton-api-mail = { workspace = true, features = ["integration_tests"] }
-proton-mail-common = { path = "../proton-mail-common", features = ["uniffi"] }
-proton-mail-message-detector = { path = "../proton-mail-message-detector" }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [lints]
