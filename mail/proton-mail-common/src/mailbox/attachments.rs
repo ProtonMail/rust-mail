@@ -94,12 +94,14 @@ impl Mailbox {
                 .remote_id
                 .clone()
                 .ok_or(MailboxError::AttachmentDoesNotHaveRemoteId(attachment_id))?;
-            Ok(Attachment::fetch_content(
+            let content = Attachment::fetch_content(
                 remote_attachment_id.clone(),
                 user_context.session().api(),
             )
             .await
-            .map_err(MailContextError::from)?)
+            .map_err(MailContextError::from)?;
+            cache.add_item(key, content.as_ref())?;
+            Ok(content)
         }
     }
 }

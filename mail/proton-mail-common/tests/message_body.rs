@@ -23,12 +23,13 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
 };
 use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
+use proton_mail_common::cache::MessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
-use proton_mail_common::Mailbox;
+use proton_mail_common::{MailUserContext, Mailbox};
 use stash::orm::Model;
+use std::io::read_to_string;
 use std::iter;
-use tempdir::TempDir;
 
 #[tokio::test]
 #[ignore]
@@ -40,6 +41,7 @@ async fn mailbox_message_body_simple() {
     )
     .await;
     let params = message_body_test_params();
+    let user_context = ctx.user_context().await;
 
     let message = message_body_test_message_simple();
 
@@ -49,44 +51,50 @@ async fn mailbox_message_body_simple() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
     ctx.catch_all().await;
-    ctx.user_context()
-        .await
+    user_context
         .initialize_async(LabelId::inbox().clone(), &NullCallback {})
         .await
         .expect("failed to initialize");
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(ctx.user_context().await, LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
         .await
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
     // Resolve local id.
-    let saved_message = Message::load(1, &ctx.user_context().await.stash().connection())
+    let saved_message = Message::load(1, &user_context.stash().connection())
         .await
         .unwrap()
         .expect("failed to load message");
     assert_eq!(saved_message.remote_id, Some(message.metadata.id.into()));
 
+    // No message cached
+    assert_eq!(messages_cache_len(&user_context), 0);
+
     // Decrypt the message body.
-    let tmp_dir = TempDir::new("cache").expect("failed to create temp dir");
     let pgp_provider = new_pgp_provider();
     let decrypted_body = saved_message
         .message_body(
-            tmp_dir.path(),
-            ctx.user_context()
-                .await
+            user_context.messages_cache(),
+            user_context
                 .unlocked_address_keys(&pgp_provider, &saved_message.remote_id.clone().unwrap())
                 .await
                 .unwrap(),
             pgp_provider,
-            ctx.user_context().await.session().api(),
+            user_context.session().api(),
         )
         .await
         .unwrap();
 
-    let expected = r#"<html><head></head><body><div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">This is a test body.</div></body></html>"#;
-    assert_eq!(decrypted_body.body, expected);
+    assert_eq!(decrypted_body.body, TEST_MESSAGE_BODY_DECRYPTED);
+
+    // Now a message is cached and it's the right one
+    assert_eq!(messages_cache_len(&user_context), 1);
+    assert_eq!(
+        messages_cache_get_item(&user_context, saved_message.local_id.unwrap()),
+        Some(message.body)
+    )
 }
 
 fn message_body_test_params() -> TestParams {
@@ -112,6 +120,8 @@ const TEST_USER_KEY_ID: &str =
     "aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ==";
 
 const TEST_USER_PASSWORD: &str = "password";
+
+const TEST_MESSAGE_BODY_DECRYPTED: &str = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">This is a test body.</div>"#;
 
 fn message_body_test_user_info() -> ApiUser {
     ApiUser {
@@ -279,4 +289,17 @@ pub fn message_body_test_user_secret() -> UserKeySecret {
         .salt_for_key(&srp_provider, &locked_key.id, TEST_USER_PASSWORD.as_bytes())
         .map(UserKeySecret)
         .unwrap()
+}
+
+fn messages_cache_len(context: &MailUserContext) -> usize {
+    context.messages_cache().len()
+}
+
+fn messages_cache_get_item(context: &MailUserContext, key: u64) -> Option<String> {
+    let key = MessageKey(key);
+    context
+        .messages_cache()
+        .get_item(&key)
+        .unwrap()
+        .map(|f| read_to_string(f).unwrap())
 }

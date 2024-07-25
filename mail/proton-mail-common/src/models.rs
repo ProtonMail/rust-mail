@@ -31,6 +31,8 @@
 #[path = "tests/models.rs"]
 mod tests;
 
+use crate::actions::MoveConversationsAction;
+use crate::cache::MessageKey;
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
     ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
@@ -59,6 +61,7 @@ use proton_api_mail::services::proton::responses::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
+use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -76,6 +79,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error};
 
@@ -2849,29 +2853,13 @@ impl Message {
     ///
     pub async fn message_body<P: PgpProviderSync, PM: ProtonMail>(
         &self,
-        cache_path: &Path,
+        cache: &ProtonCache<MessageKey>,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         api: &PM,
     ) -> Result<DecryptedMessageBody, AppError> {
         // Fetch metadata first to sync contents and cache.
-        let metadata = self.sync_message_body(cache_path, api).await?;
-
-        // TODO(ET-231): Read body from cache.
-        let encrypted_body =
-            std::fs::read_to_string(self.message_cache_path(cache_path)).map_err(|e| {
-                error!("Failed to read encrypted message body from cache: {e}");
-                AppError::Other(
-                    r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned(),
-                )
-            })?;
-
-        // Decrypt message.
-
-        let encrypted_msg = EncryptedMessageBody {
-            metadata,
-            encrypted_body,
-        };
+        let encrypted_msg = self.sync_message_body(cache, api).await?;
 
         //TODO: Verify signature.
         let (decrypted_body, _) = encrypted_msg
@@ -3002,14 +2990,74 @@ impl Message {
     ///
     pub async fn sync_message_body<PM: ProtonMail>(
         &self,
-        cache_path: &Path,
+        cache: &ProtonCache<MessageKey>,
         api: &PM,
-    ) -> Result<MessageBodyMetadata, AppError> {
+    ) -> Result<EncryptedMessageBody, AppError> {
+        let (metadata, body) = self.get_message_metadata(api).await?;
+        let encrypted_body = if let Some(body) = body {
+            body
+        } else if let Some(body) = self.get_message_body_from_cache(cache)? {
+            body
+        } else {
+            let message = self.get_message_from_remote(api).await?;
+            self.write_message_body_in_cache(cache, &message.body)?;
+            message.body
+        };
+        Ok(EncryptedMessageBody {
+            encrypted_body,
+            metadata,
+        })
+    }
+
+    /// Try to get message body from cache
+    ///
+    /// # Errors
+    ///   * Cache error when getting item
+    ///   * Can't read file
+    fn get_message_body_from_cache(
+        &self,
+        cache: &ProtonCache<MessageKey>,
+    ) -> Result<Option<String>, AppError> {
+        if let Some(local_id) = self.local_id {
+            let key = MessageKey(local_id);
+            if let Some(mut reader) = cache.get_item(&key)? {
+                let mut message = String::new();
+                reader.read_to_string(&mut message)?;
+                Ok(Some(message))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get message body from cache
+    ///
+    /// # Errors
+    ///   * Cache error when adding item
+    ///
+    fn write_message_body_in_cache(
+        &self,
+        cache: &ProtonCache<MessageKey>,
+        body: &str,
+    ) -> Result<(), AppError> {
+        if let Some(local_id) = self.local_id {
+            let key = MessageKey(local_id);
+            cache.add_item(key, body.as_bytes())?;
+        }
+        Ok(())
+    }
+
+    async fn get_message_metadata<PM: ProtonMail>(
+        &self,
+        api: &PM,
+    ) -> Result<(MessageBodyMetadata, Option<String>), AppError> {
         let Some(conn) = self.stash() else {
             return Err(StashError::NoStashAvailable.into());
         };
-        // TODO(ET-231): Use caching solution.
-        let metadata = if let Some(metadata) =
+
+        if let Some(metadata) =
             MessageBodyMetadata::find("WHERE id = ?", params![self.local_id], conn, None)
                 .await
                 .map_err(|e| {
@@ -3019,22 +3067,9 @@ impl Message {
                 .into_iter()
                 .next()
         {
-            metadata
+            Ok((metadata, None))
         } else {
-            // metadata is not there it is either missing or the message does not exist.
-            let remote_id = self.remote_id.clone().ok_or(AppError::Other(
-                "MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned(),
-            ))?;
-            // sync the message body
-            let message = Message::from(
-                api.get_message(remote_id.into())
-                    .await
-                    .map(|v| v.message)
-                    .map_err(|e| {
-                        error!("Failed to retrieve message: {e}");
-                        ApiServiceError::UnknownError("MailContextError::from(e)".to_owned())
-                    })?,
-            );
+            let message = self.get_message_from_remote(api).await?;
 
             // create message in the database and store body in the cache.
             let mut metadata = MessageBodyMetadata {
@@ -3051,18 +3086,25 @@ impl Message {
                 e
             })?;
 
-            // TODO(ET-231): Write to cache.
-            std::fs::write(self.message_cache_path(cache_path), &message.body).map_err(|e| {
-                error!("Failed to write message body: {e}");
-                AppError::Other(
-                    r#"MailboxError::Context(MailContextError::Other(anyhow!("{e}")))"#.to_owned(),
-                )
-            })?;
+            Ok((metadata, Some(message.body)))
+        }
+    }
 
-            metadata
-        };
-
-        Ok(metadata)
+    async fn get_message_from_remote<PM: ProtonMail>(&self, api: &PM) -> Result<Message, AppError> {
+        // metadata is not there it is either missing or the message does not exist.
+        let remote_id = self.remote_id.clone().ok_or(AppError::Other(
+            "MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned(),
+        ))?;
+        // sync the message body
+        Ok(Message::from(
+            api.get_message(remote_id.into())
+                .await
+                .map(|v| v.message)
+                .map_err(|e| {
+                    error!("Failed to retrieve message: {e}");
+                    ApiServiceError::UnknownError("MailContextError::from(e)".to_owned())
+                })?,
+        ))
     }
 }
 
