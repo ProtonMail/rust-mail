@@ -7,7 +7,7 @@ pub use initialization::*;
 use std::path::PathBuf;
 
 use futures::executor::block_on;
-use proton_action_queue::ActionQueue;
+use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
@@ -26,23 +26,24 @@ pub struct MailUserContext {
     mail_context: MailContext,
     user_context: UserContext,
     event_loop: EventLoop,
-    action_queue: ActionQueue,
+    action_queue: Queue,
 }
 
 impl MailUserContext {
-    pub(crate) fn new(mail_context: MailContext, user_context: UserContext) -> Arc<Self> {
+    pub(crate) async fn new(mail_context: MailContext, user_context: UserContext) -> Arc<Self> {
         let stash = user_context.stash().clone();
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
         let _ = std::fs::create_dir_all(cache_path).map_err(|e| {
             tracing::error!("Failed to create mail cache path: {e}");
             e
         });
+        let action_queue = new_action_queue(stash).await.unwrap();
         Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
             user_context,
             event_loop: EventLoop::new(),
-            action_queue: new_action_queue(Weak::clone(this), stash),
+            action_queue,
         })
     }
 

@@ -19,7 +19,7 @@ flume = "0.11"
 futures = "0.3.30"
 indoc = "2"
 lazy_static = "1"
-proton-action-queue = { version = "=0.6.1", registry = "proton" }
+proton-action-queue = { version = "=0.7.0", registry = "proton" }
 proton-api-core = { version = "=0.6.1", registry = "proton", features = ["sql", "uniffi"] }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail", features = ["sql"] }
 proton-core-common = { version = "=0.6.2", registry = "proton" }

@@ -60,7 +60,7 @@ pub enum MailboxError {
         MailContextError,
     ),
     #[error("Action Queue: {0}")]
-    ActionQueue(#[from] proton_action_queue::QueueError),
+    ActionQueue(#[from] proton_action_queue::queue::Error),
     #[error("Mailbox is not in the right view mode for the current operation")]
     InvalidViewMode,
     #[error("Action is not valid: {0}")]

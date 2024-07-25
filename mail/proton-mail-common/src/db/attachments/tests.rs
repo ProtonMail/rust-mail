@@ -124,7 +124,7 @@ async fn create_attachment_dependencies(
         display_order: 0,
         display_name: String::new(),
         signature: String::new(),
-        keys: AddressKeys(RealAddressKeys(vec![])),
+        keys: AddressKeys::from(RealAddressKeys::new(vec![])),
         catch_all: false,
         proton_mx: false,
         signed_key_list: Default::default(),

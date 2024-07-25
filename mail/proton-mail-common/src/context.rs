@@ -1,6 +1,9 @@
+use crate::actions::ActionError;
 use crate::db::DBMigrationError;
 use crate::{AppError, MailUserContext};
 use futures::executor::block_on;
+use proton_action_queue::action::Action;
+use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::Flow;
 use proton_api_core::service::ApiServiceError;
 use proton_core_common::datatypes::RemoteId;
@@ -30,7 +33,11 @@ pub enum MailContextError {
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
-    ActionQueue(#[from] proton_action_queue::QueueError),
+    ActionQueue(#[from] proton_action_queue::queue::Error),
+    #[error("Action: {0}")]
+    Action(ActionError),
+    #[error("QueuedAction: {0}")]
+    QueuedAction(#[from] QueuedError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(KeyHandlingError),
     #[error("Stash Error: {0}")]
@@ -58,9 +65,16 @@ impl From<CoreContextError> for MailContextError {
         }
     }
 }
-
 pub type MailContextResult<T> = Result<T, MailContextError>;
 
+impl<T: Action<Error = ActionError>> From<QueueActionError<T>> for MailContextError {
+    fn from(value: QueueActionError<T>) -> Self {
+        match value {
+            QueueActionError::Action(e) => Self::Action(e),
+            QueueActionError::Queue(e) => Self::ActionQueue(e),
+        }
+    }
+}
 #[derive(Clone)]
 pub struct MailContext {
     core_context: Arc<Context>,
@@ -113,7 +127,7 @@ impl MailContext {
             .core_context
             .user_context_from_login_flow(login_flow)
             .await?;
-        Ok(MailUserContext::new(self.clone(), ctx))
+        Ok(MailUserContext::new(self.clone(), ctx).await)
     }
 
     /// Create a new context from an existing session.
@@ -125,7 +139,7 @@ impl MailContext {
         session: &EncryptedUserSession,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self.core_context.user_context_from_session(session).await?;
-        Ok(MailUserContext::new(self.clone(), ctx))
+        Ok(MailUserContext::new(self.clone(), ctx).await)
     }
     /// Return the list of active session.
     ///
@@ -162,7 +176,7 @@ impl UserDatabaseInitializer for MailUserDatabaseInitializer {
     fn initialize(&self, stash: &Stash) -> Result<(), DBMigrationError> {
         block_on(async {
             crate::db::migrations::migrate_db(stash).await?;
-            proton_action_queue::ActionStore::init_tables(stash).await?;
+            //proton_action_queue::ActionStore::init_tables(stash).await?;
             Ok(())
         })
     }

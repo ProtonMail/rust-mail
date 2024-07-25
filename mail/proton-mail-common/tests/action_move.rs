@@ -13,6 +13,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
+use proton_mail_common::actions::conversations;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
@@ -89,14 +90,14 @@ async fn test_move_between_folders() {
     assert!(!has_conversation(&mailbox_folder, local_conv_id).await);
 
     // submit action
-    Conversation::move_conversations(
-        mailbox_inbox.label_id(),
-        mailbox_folder.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_inbox.label_id(),
+            mailbox_folder.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     // message should no longer be in inbox and only in the folder
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
@@ -114,14 +115,14 @@ async fn test_move_between_folders() {
     assert!(has_conversation(&mailbox_folder, local_conv_id).await);
 
     // Move conv back to inbox.
-    Conversation::move_conversations(
-        mailbox_inbox.label_id(),
-        mailbox_folder.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_folder.label_id(),
+            mailbox_inbox.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     // message should no longer be in folder and only in the inbox
     assert!(has_conversation(&mailbox_inbox, local_conv_id).await);
@@ -200,14 +201,14 @@ async fn test_move_from_label_does_not_unlabel() {
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
 
     // submit action
-    Conversation::move_conversations(
-        mailbox_inbox.label_id(),
-        mailbox_label.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_inbox.label_id(),
+            mailbox_label.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     // message should be in inbox and the label.
     assert!(has_conversation(&mailbox_inbox, local_conv_id).await);
@@ -315,14 +316,14 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     // actions
     //   + move conversation into trash
 
-    Conversation::move_conversations(
-        mailbox_inbox.label_id(),
-        mailbox_trash.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_inbox.label_id(),
+            mailbox_trash.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     // results
     //   + labels = [ AllMail ]
@@ -333,11 +334,6 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     assert!(!has_conversation(&mailbox_label, local_conv_id).await);
     assert!(has_conversation(&mailbox_all_mail, local_conv_id).await);
 
-    user_ctx
-        .execute_pending_actions()
-        .await
-        .expect("failed to flush queue");
-
     assert!(!has_conversation(&mailbox_inbox, local_conv_id).await);
     assert!(has_conversation(&mailbox_trash, local_conv_id).await);
     assert!(!has_conversation(&mailbox_label, local_conv_id).await);
@@ -345,14 +341,14 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
 
     // Move conversation back in Inbox
     //  + conversation should only be in Inbox
-    Conversation::move_conversations(
-        mailbox_trash.label_id(),
-        mailbox_inbox.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_trash.label_id(),
+            mailbox_inbox.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     assert!(has_conversation(&mailbox_inbox, local_conv_id).await);
     assert!(!has_conversation(&mailbox_trash, local_conv_id).await);
@@ -450,14 +446,14 @@ async fn test_move_into_spam_remove_labels() {
     // actions
     //   + move conversation into spam
 
-    Conversation::move_conversations(
-        mailbox_inbox.label_id(),
-        mailbox_spam.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_inbox.label_id(),
+            mailbox_spam.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     // results
     //   + labels = [ AllMail ]
@@ -537,15 +533,14 @@ async fn move_out_of_trash_set_almost_all_mail() {
 
     // actions
     //   + move conversation into inbox
-
-    Conversation::move_conversations(
-        mailbox_trash.label_id(),
-        mailbox_inbox.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_trash.label_id(),
+            mailbox_inbox.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     // results
     //   + conversation in AlmostAllMail
@@ -624,14 +619,14 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     // actions
     //   + move conversation into inbox
 
-    Conversation::move_conversations(
-        mailbox_spam.label_id(),
-        mailbox_inbox.label_id(),
-        [local_conv_id],
-        mailbox_inbox.user_context(),
-    )
-    .await
-    .expect("failed to move");
+    user_ctx
+        .execute_action(conversations::Move::new(
+            mailbox_spam.label_id(),
+            mailbox_inbox.label_id(),
+            [local_conv_id],
+        ))
+        .await
+        .expect("failed to move");
 
     // results
     //   + conversation in AlmostAllMail
