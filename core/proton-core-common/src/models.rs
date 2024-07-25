@@ -137,7 +137,6 @@ impl Address {
     /// TODO: Document the errors.
     ///
     pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
-        let tx = stash.transaction().await?;
         for mut address in api
             .get_addresses()
             .await?
@@ -145,7 +144,8 @@ impl Address {
             .into_iter()
             .map(Address::from)
         {
-            address.save_using(&tx).await?;
+            address.set_stash(stash);
+            address.save().await?;
         }
 
         Ok(())
