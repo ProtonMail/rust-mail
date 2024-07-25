@@ -32,7 +32,7 @@ use std::fmt::{Display, Formatter};
 // NOTE: each new transformation pass should be its own module.
 mod ios;
 mod remote_content;
-mod sanitizer;
+pub mod sanitizer;
 mod transforms;
 pub mod utm;
 

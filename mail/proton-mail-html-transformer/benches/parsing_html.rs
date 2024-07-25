@@ -1,7 +1,10 @@
 #![allow(clippy::pedantic)]
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use proton_mail_html_transformer::Transformer;
+use proton_mail_html_transformer::{
+    sanitizer::{strip_whitelist, strip_whitelist_2},
+    Transformer,
+};
 
 pub fn parse(c: &mut Criterion) {
     let html = include_str!("./amos_landing.html");
@@ -15,21 +18,13 @@ pub fn parse_inner(c: &mut Criterion, html: &str) {
         b.iter(|| Transformer::new(black_box(html)).to_string())
     });
 
+    let tr = Transformer::new(black_box(html));
     c.bench_function("disable remote content", |b| {
-        b.iter(|| {
-            Transformer::new(black_box(html))
-                .disable_remote_content()
-                .unwrap()
-                .to_string()
-        })
+        b.iter(|| tr.clone().disable_remote_content().unwrap().to_string())
     });
 
     c.bench_function("strip", |b| {
-        b.iter(|| {
-            Transformer::new(black_box(html))
-                .strip_whitelist()
-                .to_string()
-        })
+        b.iter(|| strip_whitelist(tr.document().clone()))
     });
 }
 
