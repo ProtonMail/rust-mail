@@ -1,7 +1,6 @@
-use crate::actions::EventLoopAction;
 use crate::events::MailEvent;
 use crate::user_context::events::subscriber::MailEventSubscriber;
-use crate::{MailContextResult, MailUserContext};
+use crate::MailUserContext;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use futures::executor::block_on;
@@ -75,9 +74,9 @@ impl Provider<MailEvent> for MailUserContext {
 }
 
 impl MailUserContext {
-    pub async fn queue_event_loop_poll(&self) -> MailContextResult<()> {
-        self.queue_action(EventLoopAction {}).await
-    }
+    //pub async fn queue_event_loop_poll(&self) -> MailContextResult<()> {
+    // //self.queue_action(EventLoopAction {}).await
+    //}
 
     pub async fn poll_event_loop(&self) -> Result<(), EventLoopError> {
         let _core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));

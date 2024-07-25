@@ -1,48 +1,48 @@
-pub mod delete_conversations;
-pub mod event_loop;
-pub mod label_conversations;
-pub mod mark_conversations_read;
-pub mod mark_conversations_unread;
-pub mod move_conversations;
-pub mod unlabel_conversations;
+pub mod conversations;
+use proton_action_queue::action::Factory;
+use proton_api_core::service::ApiServiceError;
+use proton_core_common::datatypes::LabelId;
+use stash::stash::StashError;
 
-use crate::MailUserContext;
-pub use delete_conversations::*;
-pub use event_loop::*;
-pub use label_conversations::*;
-pub use mark_conversations_read::*;
-pub use mark_conversations_unread::*;
-pub use move_conversations::*;
-use proton_action_queue::ActionFactory;
-use std::sync::Weak;
-pub use unlabel_conversations::*;
+#[derive(Debug, thiserror::Error)]
+pub enum ActionError {
+    #[error("Http: {0}")]
+    Http(#[from] ApiServiceError),
+    #[error("Stash: {0}")]
+    Stash(#[from] StashError),
+    #[error("Label ({0}) not found")]
+    LabelNotFound(u64),
+    #[error("Remote Label ({0}) not found")]
+    RemoteLabelNotFound(LabelId),
+    #[error("Label ({0}) has no remote id")]
+    LabelHasNoRemoteId(u64),
+    #[error("No input provided")]
+    NoInput,
+    #[error("Other: {0}")]
+    Other(anyhow::Error),
+}
 
-pub(crate) fn new_action_factory(mail_user_context: Weak<MailUserContext>) -> ActionFactory {
-    let mut factory = ActionFactory::new();
+impl proton_action_queue::action::Error for ActionError {
+    fn request_error(&self) -> Option<&ApiServiceError> {
+        match self {
+            Self::Http(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+pub(crate) fn new_action_factory() -> Factory {
+    let mut factory = Factory::new();
     const ERR_MSG: &str = "Double Factory registration";
+    factory.register::<conversations::Delete>().expect(ERR_MSG);
+    factory.register::<conversations::Unlabel>().expect(ERR_MSG);
+    factory.register::<conversations::Label>().expect(ERR_MSG);
     factory
-        .register(Box::new(DeleteConversationsActionFactory::new()))
-        .expect(ERR_MSG);
-
-    factory
-        .register(Box::new(MarkConversationsReadActionFactory::new()))
-        .expect(ERR_MSG);
-    factory
-        .register(Box::new(MarkConversationsUnreadActionFactory::new()))
+        .register::<conversations::MarkRead>()
         .expect(ERR_MSG);
     factory
-        .register(Box::new(LabelConversationsActionFactory::new()))
+        .register::<conversations::MarkUnread>()
         .expect(ERR_MSG);
-    factory
-        .register(Box::new(UnlabelConversationsActionFactory::new()))
-        .expect(ERR_MSG);
-    factory
-        .register(Box::new(MoveConversationsActionFactory::new()))
-        .expect(ERR_MSG);
-
-    factory
-        .register(Box::new(EventLoopActionFactory::new(mail_user_context)))
-        .expect(ERR_MSG);
-
+    factory.register::<conversations::Move>().expect(ERR_MSG);
     factory
 }

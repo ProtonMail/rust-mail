@@ -27,7 +27,6 @@
 //! a specific need.
 //!
 
-use crate::actions::MoveConversationsAction;
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
     ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
@@ -36,9 +35,10 @@ use crate::datatypes::{
     MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme, PmSignature, ShowImages,
     ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
 };
-use crate::{AppError, MailUserContext, MailboxResult, ALL_LABEL_TYPES};
+use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
+use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::requests::{
     GetConversationsOptions, GetMessagesOptions, PostLabelsRequest, PutLabelRequest,
@@ -63,14 +63,14 @@ use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use smart_default::SmartDefault;
+use stash::datatypes::QueryResultU64;
 use stash::exports::ToSql;
-use stash::macros::Model;
+use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashError};
+use stash::stash::{Stash, StashError, Tether};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use tracing::{debug, error};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
@@ -406,7 +406,7 @@ impl Conversation {
     ///
     /// * `label_id` - TODO: Document this parameter.
     /// * `ids`      - The IDs of the conversations to label.
-    /// * `stash`    - The stash to use for the database connection.
+    /// * `tether`   - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -415,13 +415,13 @@ impl Conversation {
     pub async fn apply_label_to_multiple(
         label_id: u64,
         ids: Vec<u64>,
-        stash: &Stash,
+        tether: &Tether,
     ) -> Result<(), StashError> {
         // TODO: This used to do more, but the additional behaviour will be
         // TODO: covered when these operations are refactored.
         for id in ids {
             // label all conversation messages
-            stash
+            tether
                 .execute(
                     formatdoc!(
                         r"
@@ -530,7 +530,7 @@ impl Conversation {
     ///
     /// * `ids`      - The IDs of the conversations to delete.
     /// * `label_id` - TODO: Document this parameter.
-    /// * `stash`    - The stash to use for the database connection.
+    /// * `tether`   - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -539,11 +539,11 @@ impl Conversation {
     pub async fn delete_multiple(
         ids: Vec<u64>,
         label_id: u64,
-        stash: &Stash,
+        tether: &Tether,
     ) -> Result<usize, StashError> {
         // TODO: This used to do more, but the additional behaviour will be
         // TODO: covered when these operations are refactored.
-        stash
+        tether
             .execute(
                 formatdoc!(
                     r"
@@ -618,7 +618,7 @@ impl Conversation {
     /// # Parameters
     ///
     /// * `remote_ids` - The remote IDs to find local IDs for.
-    /// * `stash`      - The stash to use for the database connection.
+    /// * `tether`     - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -626,22 +626,20 @@ impl Conversation {
     ///
     pub async fn find_local_ids(
         remote_ids: Vec<RemoteId>,
-        stash: &Stash,
+        tether: &Tether,
     ) -> Result<Vec<u64>, StashError> {
-        let mut ids = Vec::new();
+        let mut ids = Vec::with_capacity(remote_ids.len());
+        let query = format!(
+            "SELECT local_id FROM {} WHERE remote_id = ?",
+            Self::table_name()
+        );
         for remote_id in remote_ids {
-            if let Some(conv) = Self::find(
-                "WHERE remote_id = ?",
-                params![remote_id.clone()],
-                stash,
-                None,
-            )
-            .await?
-            .first()
+            if let Some(id) = tether
+                .query_row::<_, QueryResultU64>(&query, params![remote_id])
+                .await
+                .optional()?
             {
-                if let Some(local_id) = conv.local_id {
-                    ids.push(local_id);
-                }
+                ids.push(id.value)
             }
         }
         Ok(ids)
@@ -652,7 +650,7 @@ impl Conversation {
     /// # Parameters
     ///
     /// * `local_ids` - The local IDs to find remote IDs for.
-    /// * `stash`     - The stash to use for the database connection.
+    /// * `tether`    - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -660,14 +658,27 @@ impl Conversation {
     ///
     pub async fn find_remote_ids(
         local_ids: Vec<u64>,
-        stash: &Stash,
+        tether: &Tether,
     ) -> Result<Vec<RemoteId>, StashError> {
-        let mut ids = Vec::new();
+        let mut ids = Vec::with_capacity(local_ids.len());
+        let query = format!(
+            "SELECT remote_id FROM {} WHERE local_id = ? AND remote_id IS NOT NULL",
+            Self::table_name()
+        );
+
+        #[derive(Debug, DbRecord, Eq, PartialEq, Clone)]
+        struct Record {
+            #[DbField]
+            remote_id: RemoteId,
+        }
+
         for local_id in local_ids {
-            if let Some(conv) = Self::load(local_id, stash).await? {
-                if let Some(remote_id) = conv.remote_id {
-                    ids.push(remote_id);
-                }
+            if let Some(id) = tether
+                .query_row::<_, Record>(&query, params![local_id])
+                .await
+                .optional()?
+            {
+                ids.push(id.remote_id)
             }
         }
         Ok(ids)
@@ -920,15 +931,15 @@ impl Conversation {
     /// # Parameters
     ///
     /// * `ids`   - The IDs of the conversations to mark as read.
-    /// * `stash` - The stash to use for the database connection.
+    /// * `tether` - The tether to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_multiple_as_read(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
+    pub async fn mark_multiple_as_read(ids: Vec<u64>, stash: &Tether) -> Result<(), StashError> {
         for id in ids {
-            if let Some(mut conv) = Conversation::load(id, stash).await? {
+            if let Some(mut conv) = Conversation::load_using(id, stash).await? {
                 conv.num_unread = 0;
                 conv.save().await?;
             }
@@ -960,18 +971,18 @@ impl Conversation {
     ///
     /// # Parameters
     ///
-    /// * `ids`   - The IDs of the conversations to mark as unread.
-    /// * `stash` - The stash to use for the database connection.
+    /// * `ids`    - The IDs of the conversations to mark as unread.
+    /// * `tether` - The tether to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_multiple_as_unread(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
+    pub async fn mark_multiple_as_unread(ids: Vec<u64>, tether: &Tether) -> Result<(), StashError> {
         // TODO: This is simplified, and will be updated when these operations are
         // TODO: refactored
         for id in ids {
-            if let Some(mut conv) = Conversation::load(id, stash).await? {
+            if let Some(mut conv) = Conversation::load_using(id, tether).await? {
                 conv.num_unread = 1;
                 conv.save().await?;
             }
@@ -999,29 +1010,13 @@ impl Conversation {
             .map(|r| r.responses)
     }
 
-    pub async fn move_conversations(
-        active_label_id: u64,
-        destination_label_id: u64,
-        ids: impl IntoIterator<Item = u64>,
-        mail_user_ctx: Arc<MailUserContext>,
-    ) -> MailboxResult<()> {
-        mail_user_ctx
-            .queue_action(MoveConversationsAction::new(
-                active_label_id,
-                destination_label_id,
-                ids,
-            ))
-            .await?;
-        Ok(())
-    }
-
     /// Unlabel multiple conversations.
     ///
     /// # Parameters
     ///
     /// * `label_id` - TODO: Document this parameter.
     /// * `ids`      - The IDs of the conversations to unlabel.
-    /// * `stash`    - The stash to use for the database connection.
+    /// * `tether`   - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1030,13 +1025,13 @@ impl Conversation {
     pub async fn remove_label_from_multiple(
         label_id: u64,
         ids: Vec<u64>,
-        stash: &Stash,
+        tether: &Tether,
     ) -> Result<(), StashError> {
         // TODO: This used to do more, but the additional behaviour will be
         // TODO: covered when these operations are refactored.
         for id in ids {
             // label all conversation messages
-            stash
+            tether
                 .execute(
                     formatdoc!(
                         r"
@@ -1175,11 +1170,11 @@ impl Conversation {
     pub async fn undelete_multiple(
         ids: Vec<u64>,
         label_id: u64,
-        stash: &Stash,
+        tether: &Tether,
     ) -> Result<usize, StashError> {
         // TODO: This used to do more, but the additional behaviour will be
         // TODO: covered when these operations are refactored.
-        stash
+        tether
             .execute(
                 formatdoc!(
                     r"
@@ -1340,6 +1335,30 @@ pub struct ConversationLabel {
     /// present for convenience.
     #[StashField]
     pub stash: Option<Stash>,
+}
+
+impl ConversationLabel {
+    /// Get all local label ids for a given `conversation_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn labels_ids_for_conversation(
+        conversation_id: u64,
+        tether: &Tether,
+    ) -> Result<Vec<u64>, StashError> {
+        let query = format!(
+            "SELECT local_id FROM {} WHERE local_conversation_id = ?",
+            Self::table_name()
+        );
+
+        Ok(tether
+            .query::<_, QueryResultU64>(&query, params![conversation_id])
+            .await?
+            .into_iter()
+            .map(|v| v.value)
+            .collect())
+    }
 }
 
 impl From<ApiConversationLabel> for ConversationLabel {
@@ -1675,6 +1694,38 @@ impl Label {
         }
 
         None
+    }
+
+    /// Find local IDs for the given remote IDs.
+    ///
+    /// # Parameters
+    ///
+    /// * `remote_ids` - The remote IDs to find local IDs for.
+    /// * `tether`     - The tether to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be read from the database.
+    ///
+    pub async fn find_local_ids(
+        remote_ids: Vec<LabelId>,
+        tether: &Tether,
+    ) -> Result<Vec<u64>, StashError> {
+        let mut ids = Vec::with_capacity(remote_ids.len());
+        let query = format!(
+            "SELECT local_id FROM {} WHERE remote_id = ?",
+            Self::table_name()
+        );
+        for remote_id in remote_ids {
+            if let Some(id) = tether
+                .query_row::<_, QueryResultU64>(&query, params![remote_id])
+                .await
+                .optional()?
+            {
+                ids.push(id.value)
+            }
+        }
+        Ok(ids)
     }
 }
 

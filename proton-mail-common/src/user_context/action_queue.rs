@@ -1,54 +1,50 @@
-use crate::actions::new_action_factory;
+use crate::actions::{new_action_factory, ActionError};
 use crate::{MailContextResult, MailUserContext};
-use anyhow::anyhow;
-use proton_action_queue::{Action, ActionQueue, SessionProviderError};
-use proton_api_core::session::Session;
+use proton_action_queue::action::{Action, Id as ActionId};
+use proton_action_queue::queue::{ActionStatus, Queue};
 use stash::stash::Stash;
-use std::sync::Weak;
-use tracing::error;
 
 impl MailUserContext {
+    /// Execute an action immediately.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the action could not be executed.
+    pub async fn execute_action<T: Action<Error = ActionError>>(
+        &self,
+        action: T,
+    ) -> MailContextResult<ActionStatus<T::Output>> {
+        Ok(self
+            .action_queue
+            .apply_action(self.session(), action)
+            .await?)
+    }
     /// Queue an action for later execution.
-    pub async fn queue_action<T: Action>(&self, action: T) -> MailContextResult<()> {
-        self.action_queue.queue_action(&action).await?;
-        Ok(())
+    ///
+    /// # Errors
+    ///
+    /// Return error if the action could not be queued.
+    pub async fn queue_action<T: Action<Error = ActionError>>(
+        &self,
+        action: T,
+    ) -> MailContextResult<ActionId> {
+        Ok(self.action_queue.queue_action(action).await?)
     }
 
     /// Execute exactly one pending action in the queue.
     pub async fn execute_pending_action(&self) -> MailContextResult<()> {
-        self.action_queue.consume_pending_with_limit(1).await?;
-        Ok(())
+        Ok(self
+            .action_queue
+            .execute_with_limit(self.session(), 1)
+            .await?)
     }
 
     /// Execute all pending actions in the queue.
     pub async fn execute_pending_actions(&self) -> MailContextResult<()> {
-        self.action_queue.consume_pending().await?;
-        Ok(())
+        Ok(self.action_queue.execute_all(self.session()).await?)
     }
 }
 
-struct SessionProvider(Weak<MailUserContext>);
-
-impl proton_action_queue::SessionProvider for SessionProvider {
-    fn retrieve_session(&self) -> Result<Session, SessionProviderError> {
-        let Some(ctx) = self.0.upgrade() else {
-            error!("Could not upgrade context, does it still exist");
-            return Err(SessionProviderError::Other(anyhow!(
-                "Could not upgrade context"
-            )));
-        };
-
-        Ok(ctx.user_context.session().clone())
-    }
-}
-
-pub(super) fn new_action_queue(
-    mail_user_context: Weak<MailUserContext>,
-    stash: Stash,
-) -> ActionQueue {
-    ActionQueue::new(
-        stash,
-        Box::new(SessionProvider(mail_user_context.clone())),
-        new_action_factory(mail_user_context),
-    )
+pub(super) async fn new_action_queue(stash: Stash) -> proton_action_queue::queue::Result<Queue> {
+    Queue::with_factory(stash, new_action_factory()).await
 }
