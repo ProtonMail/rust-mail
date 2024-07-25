@@ -459,18 +459,18 @@ async fn test_conversation_undelete_all_mail() {
 
     let local_conv_id1 = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_conv_id2 = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
     Conversation::delete_multiple(
         vec![local_conv_id1, local_conv_id2],
         all_mail_label,
-        &tx.stash(),
+        tx.stash(),
     )
     .await
     .expect("failed to mark as deleted");
@@ -478,7 +478,7 @@ async fn test_conversation_undelete_all_mail() {
     Conversation::delete_multiple(
         vec![local_conv_id1, local_conv_id2],
         all_mail_label,
-        &tx.stash(),
+        tx.stash(),
     )
     .await
     .expect("failed to mark conversations as undeleted");
@@ -562,11 +562,11 @@ async fn test_conversation_delete_all_mail() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], all_mail_label, &tx.stash())
+    Conversation::delete_multiple(vec![local_conv_id], all_mail_label, tx.stash())
         .await
         .expect("failed to mark as deleted");
 
@@ -655,7 +655,7 @@ async fn test_conversation_delete_all_mail() {
         .conversations
         .get(&state.conversations[1].remote_id.clone().unwrap())
         .unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], all_mail_label, &tx.stash())
+    Conversation::delete_multiple(vec![local_conv_id], all_mail_label, tx.stash())
         .await
         .expect("failed to mark conv as deleted");
 
@@ -702,11 +702,11 @@ async fn test_conversation_delete() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id1, &tx.stash())
+    Conversation::delete_multiple(vec![local_conv_id], local_label_id1, tx.stash())
         .await
         .expect("failed to mark as deleted");
 
@@ -782,7 +782,7 @@ async fn test_conversation_delete() {
     }
 
     // Deleting conv1 in label 2  should remove all traces of the  conversation
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id2, &tx.stash())
+    Conversation::delete_multiple(vec![local_conv_id], local_label_id2, tx.stash())
         .await
         .expect("failed to mark conv as deleted");
 
@@ -852,21 +852,21 @@ async fn test_conversation_undelete() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id1, &tx.stash())
+    Conversation::delete_multiple(vec![local_conv_id], local_label_id1, tx.stash())
         .await
         .expect("failed to mark as deleted");
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id2, &tx.stash())
+    Conversation::delete_multiple(vec![local_conv_id], local_label_id2, tx.stash())
         .await
         .expect("failed to mark as deleted");
 
-    Conversation::undelete_multiple(vec![local_conv_id], local_label_id1, &tx.stash())
+    Conversation::undelete_multiple(vec![local_conv_id], local_label_id1, tx.stash())
         .await
         .expect("Failed to mark as undeleted");
-    Conversation::undelete_multiple(vec![local_conv_id], local_label_id2, &tx.stash())
+    Conversation::undelete_multiple(vec![local_conv_id], local_label_id2, tx.stash())
         .await
         .expect("Failed to mark as undeleted");
 
@@ -956,7 +956,7 @@ async fn test_conversation_counts() {
         },
     ];
 
-    Label::create_or_update_conversation_counts(counts.clone(), &tx.stash())
+    Label::create_or_update_conversation_counts(counts.clone(), tx.stash())
         .await
         .expect("failed to creat counters");
     let db_labels = Label::find(String::new(), vec![], tx.stash(), None)
@@ -994,7 +994,7 @@ async fn test_conversation_mark_read_no_message_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
@@ -1051,7 +1051,7 @@ async fn test_conversation_mark_read() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
@@ -1103,7 +1103,7 @@ async fn test_conversation_mark_read() {
         {
             let (unread, _) = message_counts_for_conversation(
                 &state.messages,
-                &state.conversations[0].remote_id.as_ref().unwrap(),
+                state.conversations[0].remote_id.as_ref().unwrap(),
                 &MY_LABEL_ID1.clone().into(),
             );
             let start_label_counts = state_map
@@ -1140,7 +1140,7 @@ async fn test_conversation_mark_unread_no_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
@@ -1199,7 +1199,7 @@ async fn test_conversation_mark_unread() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
@@ -1282,7 +1282,7 @@ async fn test_conversation_label_with_message_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1340,7 +1340,7 @@ async fn test_conversation_double_label_with_message_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1420,7 +1420,7 @@ async fn test_conversation_label_partially() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1478,7 +1478,7 @@ async fn test_conversation_label_without_message_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1522,7 +1522,7 @@ async fn test_conversation_double_label_without_message_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1571,7 +1571,7 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1623,7 +1623,7 @@ async fn test_conversation_unlabel_with_message_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1662,7 +1662,7 @@ async fn test_conversation_unlabel_without_message_metadata() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &stash)
@@ -1691,10 +1691,7 @@ lazy_static! {
 pub(in crate::db::conversations) async fn create_labels(tx: &Tether) -> Vec<u64> {
     let mut labels = [test_label1(), test_label2()];
     for label in &mut labels {
-        label
-            .save_using(&tx)
-            .await
-            .expect("failed to create labels");
+        label.save_using(tx).await.expect("failed to create labels");
         assert!(Label::find_first(
             "WHERE remote_id = ?",
             params![label.remote_id.clone().unwrap()],
@@ -1712,7 +1709,7 @@ pub(in crate::db::conversations) async fn create_labels(tx: &Tether) -> Vec<u64>
 pub(in crate::db::conversations) async fn create_address(core_tx: &Tether) {
     let mut address = test_address();
     address
-        .save_using(&core_tx)
+        .save_using(core_tx)
         .await
         .expect("failed to create address");
 }

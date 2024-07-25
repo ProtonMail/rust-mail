@@ -79,9 +79,8 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path(path_for_attachment))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetAttachmentMetadataResponse {
-                    attachment: attachment,
-                }),
+                ResponseTemplate::new(200)
+                    .set_body_json(GetAttachmentMetadataResponse { attachment }),
             )
             .expect(1)
             .mount(self.mock_server())

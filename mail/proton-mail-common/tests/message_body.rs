@@ -193,7 +193,7 @@ fn message_body_test_addresses() -> Vec<ApiAddress> {
                activation: None,
                primary: true,
                active: true,
-               flags: Some(KeyFlag::from(3u32)),
+               flags: Some(KeyFlag::from(3_u32)),
                recovery_secret: None,
                recovery_secret_signature: None,
                address_forwarding_id: None,

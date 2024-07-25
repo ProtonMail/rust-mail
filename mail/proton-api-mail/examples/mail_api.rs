@@ -54,7 +54,7 @@ async fn main() {
                 let totp = line.trim_end_matches('\n');
 
                 match login_flow.submit_totp(totp.to_owned()).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         break;
                     }
                     Err(e) => {

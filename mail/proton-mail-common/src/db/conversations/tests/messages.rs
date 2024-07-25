@@ -299,7 +299,7 @@ async fn test_message_counts() {
         },
     ];
 
-    Label::create_or_update_message_counts(counts.clone(), &tx.stash())
+    Label::create_or_update_message_counts(counts.clone(), tx.stash())
         .await
         .expect("failed to creat counters");
     let db_labels = Label::find(String::new(), vec![], tx.stash(), None)
@@ -340,7 +340,7 @@ pub async fn test_delete_local_message() {
 
     let local_conv_id = *state_map
         .conversations
-        .get(&state.conversations[0].remote_id.as_ref().unwrap())
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     {
         // Delete 3rd message from 1st conversation.
@@ -362,18 +362,17 @@ pub async fn test_delete_local_message() {
         for label in &mut message.label_ids {
             let local_label_id = *state_map
                 .labels
-                .get(&label)
+                .get(label)
                 .expect("Failed to resolve label");
             let conv_count = conv_counts.get(&local_label_id).unwrap();
-            let start_conv_count = state_map.conversation_counts.get(&label).unwrap();
-            let start_msg_count = state_map.message_counts.get(&label).unwrap();
+            let start_conv_count = state_map.conversation_counts.get(label).unwrap();
+            let start_msg_count = state_map.message_counts.get(label).unwrap();
 
             let local_conv = Conversation::load(local_conv_id, tx.stash())
                 .await
                 .unwrap()
                 .unwrap();
-            let remote_conversation_label =
-                find_conversation_label(&state.conversations[0], &label);
+            let remote_conversation_label = find_conversation_label(&state.conversations[0], label);
 
             assert_eq!(
                 local_conv.num_messages,
@@ -560,18 +559,17 @@ pub async fn test_undelete_local_message() {
         for label in &mut message.label_ids {
             let local_label_id = *state_map
                 .labels
-                .get(&label)
+                .get(label)
                 .expect("Failed to resolve label");
             let conv_count = conv_counts.get(&local_label_id).unwrap();
-            let start_conv_count = state_map.conversation_counts.get(&label).unwrap();
-            let start_msg_count = state_map.message_counts.get(&label).unwrap();
+            let start_conv_count = state_map.conversation_counts.get(label).unwrap();
+            let start_msg_count = state_map.message_counts.get(label).unwrap();
 
             let local_conv = Conversation::load(local_conv_id, tx.stash())
                 .await
                 .unwrap()
                 .unwrap();
-            let remote_conversation_label =
-                find_conversation_label(&state.conversations[0], &label);
+            let remote_conversation_label = find_conversation_label(&state.conversations[0], label);
 
             assert_eq!(
                 local_conv.num_messages,
@@ -705,7 +703,7 @@ async fn test_create_message_and_body() {
         remote_message_id: db_message.remote_id.clone(),
         header: db_message.header.clone(),
         parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type.clone(),
+        mime_type: db_message.mime_type,
         row_id: None,
         stash: Some(stash.clone()),
     };
@@ -728,7 +726,7 @@ async fn test_create_message_and_body() {
         remote_message_id: db_message.remote_id.clone(),
         header: db_message.header.clone(),
         parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type.clone(),
+        mime_type: db_message.mime_type,
         row_id: Some(1),
         stash: Some(stash.clone()),
     };
@@ -769,7 +767,7 @@ async fn test_update_message_and_body() {
         remote_message_id: db_message.remote_id.clone(),
         header: db_message.header.clone(),
         parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type.clone(),
+        mime_type: db_message.mime_type,
         row_id: None,
         stash: Some(stash.clone()),
     };
@@ -796,7 +794,7 @@ async fn test_update_message_and_body() {
         remote_message_id: db_message.remote_id.clone(),
         header: db_message.header.clone(),
         parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type.clone(),
+        mime_type: db_message.mime_type,
         row_id: Some(1),
         stash: Some(stash.clone()),
     };
@@ -863,7 +861,7 @@ async fn test_create_message_and_body_with_attachments() {
         remote_message_id: db_message.remote_id.clone(),
         header: db_message.header.clone(),
         parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type.clone(),
+        mime_type: db_message.mime_type,
         row_id: db_message.row_id,
         stash: Some(stash.clone()),
     };

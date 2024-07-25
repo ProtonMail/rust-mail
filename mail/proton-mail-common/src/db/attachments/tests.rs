@@ -53,8 +53,8 @@ async fn test_attachment_create_with_metadata() {
         id: api_attachment.id.clone(),
         size: api_attachment.size,
         name: api_attachment.name.clone(),
-        mime_type: api_attachment.mime_type.clone(),
-        disposition: api_attachment.disposition.clone(),
+        mime_type: api_attachment.mime_type,
+        disposition: api_attachment.disposition,
     };
     let (_, _, _) = create_attachment_dependencies(&tx, Some(metadata))
         .await
@@ -63,7 +63,7 @@ async fn test_attachment_create_with_metadata() {
     attachment.save_using(&tx).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
-    let mut expected = Attachment::from(attachment.clone());
+    let mut expected = attachment.clone();
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
     let db_attachment = Attachment::load(local_id.unwrap(), &stash)
@@ -131,7 +131,7 @@ async fn create_attachment_dependencies(
         row_id: None,
         stash: None,
     }
-    .save_using(&tx)
+    .save_using(tx)
     .await?;
 
     let local_conv_ids = Conversation::create_or_update_conversations(
