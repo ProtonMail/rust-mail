@@ -1,13 +1,9 @@
 use html5ever::tendril::TendrilSink;
 use kuchikiki::{Attribute, ExpandedName, NodeRef};
 
-use crate::Error;
-
-#[allow(clippy::needless_pass_by_value)]
-pub fn inject_style(document: NodeRef) -> Result<(), Error> {
-    let element = document
-        .select_first("head")
-        .map_err(|()| Error::HeadElementNotFoundInjectingStyle)?;
+#[allow(clippy::missing_panics_doc)]
+pub fn inject_style(document: NodeRef) {
+    let element = document.select_first("head").unwrap(); // kuckikiki always adds it
 
     let style = "
 <style>
@@ -21,7 +17,6 @@ pub fn inject_style(document: NodeRef) -> Result<(), Error> {
     let style = kuchikiki::parse_html().one(style);
 
     element.as_node().append(style);
-    Ok(())
 }
 
 #[allow(clippy::missing_panics_doc)] // The select is well formed.
@@ -53,7 +48,18 @@ mod test {
     #[test]
     fn inject_style() {
         let html = include_str!("../tests/htmls/empty.html");
-        let html = Transformer::new(html).inject_style().unwrap().to_string();
+        let html = Transformer::new(html).inject_style().to_string();
+        insta::assert_snapshot!(html);
+    }
+
+    #[test]
+    fn inject_style_fail() {
+        let html = r"
+        <div>
+          ain't no `head` here boss
+        </div>
+        ";
+        let html = Transformer::new(html).inject_style().to_string();
         insta::assert_snapshot!(html);
     }
 
