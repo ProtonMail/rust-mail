@@ -11,18 +11,12 @@ use stash::orm::Model;
 use std::path::PathBuf;
 
 use crate::user_context::action_queue::new_action_queue;
+use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
 use crate::{MailContext, MailContextError, MailContextResult};
 use futures::executor::block_on;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::Proton;
-use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
-use std::sync::{Arc, Weak};
-
-use crate::user_context::action_queue::new_action_queue;
-use crate::user_context::cache::{AttachmentKey, Cache, ImagesLogoKey, MessageKey};
-use crate::{MailContext, MailContextResult};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::RemoteId;
@@ -49,10 +43,6 @@ impl MailUserContext {
     ) -> MailContextResult<Arc<Self>> {
         let stash = user_context.stash().clone();
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
-        let _ = std::fs::create_dir_all(cache_path.clone()).map_err(|e| {
-            tracing::error!("Failed to create mail cache path: {e}");
-            e
-        });
         let cache = Cache::new(cache_path, mail_context.mail_cache_size)?;
         let action_queue = new_action_queue(stash).await.unwrap();
         Ok(Arc::new_cyclic(|this| Self {
@@ -65,15 +55,13 @@ impl MailUserContext {
         }))
     }
 
-    pub fn attachements_cache(&self) -> &ProtonCache<AttachmentKey> {
+    /// Return a reference on the attachments cache
+    pub fn attachements_cache(&self) -> &ProtonCache<CacheAttachmentConfig> {
         &self.cache.attachments_cache
     }
 
-    pub fn images_logo_cache(&self) -> &ProtonCache<ImagesLogoKey> {
-        &self.cache.images_logo_cache
-    }
-
-    pub fn messages_cache(&self) -> &ProtonCache<MessageKey> {
+    /// Return a reference on the message body cache
+    pub fn messages_cache(&self) -> &ProtonCache<CacheMessageConfig> {
         &self.cache.messages_cache
     }
 

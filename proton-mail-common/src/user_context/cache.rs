@@ -1,22 +1,14 @@
 use crate::MailContextResult;
-use proton_api_mail::services::proton::requests::GetImagesLogoOptions;
-use proton_core_common::cache::{CacheKey, ProtonCache, WeightingStrategy};
+use proton_core_common::cache::{CacheConfig, ProtonCache, WeightingStrategy};
 use std::ffi::OsString;
 use std::path::PathBuf;
-use uuid::Uuid;
-
-const ATTACHMENTS_CACHE_RATIO: u32 = 1;
-const USER_IMAGE_CACHE_RATIO: u32 = 1;
-const CACHE_RATIO_SUM: u32 = ATTACHMENTS_CACHE_RATIO + USER_IMAGE_CACHE_RATIO;
 
 /// Structure to group all caches
 pub struct Cache {
     /// Cache for message bodies
-    pub messages_cache: ProtonCache<MessageKey>,
-    /// Cache for user images
-    pub images_logo_cache: ProtonCache<ImagesLogoKey>,
+    pub messages_cache: ProtonCache<CacheMessageConfig>,
     /// cache for attachments
-    pub attachments_cache: ProtonCache<AttachmentKey>,
+    pub attachments_cache: ProtonCache<CacheAttachmentConfig>,
 }
 
 impl Cache {
@@ -24,47 +16,37 @@ impl Cache {
         // Since message body are weightless, any size would do the same, i.e. live forever
         let messages_cache = ProtonCache::new(root_path.join("messages"), size)?;
 
-        let user_images_cache = ProtonCache::new(
-            root_path.join("user_images"),
-            size * USER_IMAGE_CACHE_RATIO / CACHE_RATIO_SUM,
-        )?;
-
-        let attachments_cache = ProtonCache::new(
-            root_path.join("attachments"),
-            size * ATTACHMENTS_CACHE_RATIO / CACHE_RATIO_SUM,
-        )?;
+        let attachments_cache = ProtonCache::new(root_path.join("attachments"), size)?;
 
         Ok(Self {
             messages_cache,
-            images_logo_cache: user_images_cache,
             attachments_cache,
         })
     }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct AttachmentKey(pub u64);
-impl CacheKey for AttachmentKey {
-    fn to_filename(&self) -> OsString {
-        format!("{}", self.0).into()
-    }
-}
+pub struct CacheAttachmentConfig;
+impl CacheConfig for CacheAttachmentConfig {
+    type Key = u64;
 
-/// Cache key for User Images
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct ImagesLogoKey(pub GetImagesLogoOptions);
-impl CacheKey for ImagesLogoKey {
-    fn to_filename(&self) -> OsString {
-        // `AddressDomainLogoDetails` contains to many possible configuration to build a unique filename from it
-        Uuid::new_v4().to_string().into()
+    // TODO: Cloning VerificationResult provoke a loop between Clone and ToOwned
+    // type ExtraMetadata = Arc<Mutex<Option<VerificationResult>>>;
+    type ExtraMetadata = ();
+
+    fn key_to_filename(key: &Self::Key) -> OsString {
+        format!("{key}").into()
     }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct MessageKey(pub u64);
-impl CacheKey for MessageKey {
-    fn to_filename(&self) -> OsString {
-        format!("{}", self.0).into()
+pub struct CacheMessageConfig;
+impl CacheConfig for CacheMessageConfig {
+    type Key = u64;
+    type ExtraMetadata = ();
+
+    fn key_to_filename(key: &Self::Key) -> OsString {
+        format!("{key}").into()
     }
 
     fn weighting_strategy() -> WeightingStrategy {

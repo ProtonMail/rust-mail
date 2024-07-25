@@ -7,6 +7,7 @@ use anyhow::anyhow;
 use proton_action_queue::queue::Error as QueueError;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
+use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::DecryptedMessageError;
@@ -66,6 +67,10 @@ pub enum MailboxError {
     Stash(#[from] StashError),
     #[error("Decrypted Message: {0}")]
     DecryptedMessage(#[from] DecryptedMessageError),
+    #[error("Cache error: {0}")]
+    Cache(#[from] CacheError),
+    #[error("IO error: {0}")]
+    IO(#[from] std::io::Error),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -197,6 +202,8 @@ impl From<RealMailboxError> for MailboxError {
             RealMailboxError::MessageNotFound(e) => Self::MessageNotFound(e),
             RealMailboxError::AppError(e) => Self::AppError(e),
             RealMailboxError::NoExclusiveLocationFound(e) => Self::NoExclusiveLocationFound(e),
+            RealMailboxError::Cache(e) => Self::Cache(e),
+            RealMailboxError::IO(e) => Self::IO(e),
         }
     }
 }

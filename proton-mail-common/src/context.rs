@@ -139,7 +139,7 @@ impl MailContext {
                 self.mail_cache_size,
             )
             .await?;
-        MailUserContext::new(self.clone(), ctx)
+        MailUserContext::new(self.clone(), ctx).await
     }
 
     /// Create a new context from an existing session.
@@ -154,7 +154,7 @@ impl MailContext {
             .core_context
             .user_context_from_session(session, self.mail_cache_path.clone(), self.mail_cache_size)
             .await?;
-        Ok(MailUserContext::new(self.clone(), ctx).await)
+        MailUserContext::new(self.clone(), ctx).await
     }
     /// Return the list of active session.
     ///

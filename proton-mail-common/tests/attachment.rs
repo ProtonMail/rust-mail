@@ -3,14 +3,13 @@ mod common;
 use crate::common::attachment::{testdata_attachment_data, testdata_expected_attachment_decrypted};
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
+use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
 use proton_core_common::datatypes::LabelId;
-use proton_crypto_inbox::proton_crypto::crypto::VerificationError;
-use proton_mail_common::cache::AttachmentKey;
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
-use proton_mail_common::{MailUserContext, Mailbox};
+use proton_mail_common::Mailbox;
 use stash::orm::Model;
-use stash::params;
+use std::fs;
 
 #[tokio::test]
 #[ignore]
@@ -46,26 +45,11 @@ async fn test_load_attachment_buffer() {
         .await
         .expect("failed to load conversation")
         .unwrap();
-    let attachment_remote_id = local_conversation
-        .attachments_metadata
-        .value
-        .first()
-        .unwrap()
-        .remote_id
-        .clone();
-    let attachment_local_id = Attachment::find_first(
-        "WHERE remote_id = ?",
-        params![attachment_remote_id],
-        user_context.stash(),
-    )
-    .await
-    .expect("failed to load attachment")
-    .unwrap()
-    .local_id
-    .unwrap();
+
+    let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Cache is empty
-    assert_eq!(attachments_cache_len(&user_context), 0);
+    assert!(user_context.attachements_cache().is_empty());
 
     // Load and decrypt attachment.
     let decryption_result = mailbox
@@ -73,17 +57,16 @@ async fn test_load_attachment_buffer() {
         .await
         .expect("decryption should not fail");
     assert_eq!(
-        decryption_result.content,
+        fs::read(decryption_result.data_path).unwrap(),
         testdata_expected_attachment_decrypted(),
         "attachments should be equal"
     );
-    assert!(
-        matches!(
-            decryption_result.verification_result,
-            Err(VerificationError::NotSigned(_))
-        ),
-        "There should be no signatures to verify"
-    );
+    assert_eq!(user_context.attachements_cache().len(), 1);
+    mailbox
+        .load_attachment_to_buffer(attachment_local_id)
+        .await
+        .expect("decryption should not fail");
+    assert_eq!(user_context.attachements_cache().len(), 1);
 }
 
 #[tokio::test]
@@ -118,30 +101,13 @@ async fn load_attachment_from_cache() {
         .await
         .expect("failed to load conversation")
         .unwrap();
-    let attachment_remote_id = local_conversation
-        .attachments_metadata
-        .value
-        .first()
-        .unwrap()
-        .remote_id
-        .clone();
-    let attachment_local_id = Attachment::find_first(
-        "WHERE remote_id = ?",
-        params![attachment_remote_id],
-        user_context.stash(),
-    )
-    .await
-    .expect("failed to load attachment")
-    .unwrap()
-    .local_id
-    .unwrap();
+    let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Add another value into cache
-    attachments_cache_add_item(
-        &user_context,
-        attachment_local_id,
-        &testdata_attachment_data(),
-    );
+    user_context
+        .attachements_cache()
+        .add_item(attachment_local_id, &testdata_attachment_data())
+        .unwrap();
 
     // Load and decrypt attachment.
     let decryption_result = mailbox
@@ -149,26 +115,127 @@ async fn load_attachment_from_cache() {
         .await
         .expect("decryption should not fail");
     assert_eq!(
-        decryption_result.content,
+        fs::read(decryption_result.data_path).unwrap(),
         testdata_expected_attachment_decrypted(),
         "attachments should be equal"
     );
-    assert!(
-        matches!(
-            decryption_result.verification_result,
-            Err(VerificationError::NotSigned(_))
-        ),
-        "There should be no signatures to verify"
+}
+
+#[tokio::test]
+// TODO: work with https://gitlab.protontech.ch/rust/proton-api-core/-/merge_requests/92
+async fn load_attachment_content_first_time() {
+    // Setup
+    //   * Create an attachment
+    //   * Check cache is empty
+    let ctx = TestContext::new().await;
+    let params = TestParams::default_basic();
+    let user_context = ctx.user_context().await;
+    let test_attachment = params.attachments.first().unwrap();
+    let mut attachment: Attachment = test_attachment.clone().into();
+    let attachment_local_id = 42;
+    attachment.local_id = Some(attachment_local_id);
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
+        .await;
+    ctx.catch_all().await;
+    user_context
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
+
+    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+        .await
+        .unwrap();
+
+    ctx.catch_all().await;
+
+    assert!(user_context.attachements_cache().is_empty());
+
+    // Action:
+    //   * Get attachment
+    let data_path = mailbox
+        .get_attachment_content(attachment_local_id, &attachment)
+        .await
+        .unwrap();
+
+    // Validate:
+    //   * attachment is the decrypted one
+    //   * cache contain an item now
+    assert_eq!(
+        fs::read(data_path).unwrap(),
+        testdata_expected_attachment_decrypted(),
+        "attachments should be equal"
+    );
+    assert_eq!(user_context.attachements_cache().len(), 1);
+}
+
+#[tokio::test]
+// TODO: work with https://gitlab.protontech.ch/rust/proton-api-core/-/merge_requests/92
+async fn load_attachment_content_from_cache() {
+    // Setup
+    //   * Create an attachment
+    //   * Add attachment data into cache
+    let ctx = TestContext::new().await;
+    let params = TestParams::default_basic();
+    let user_context = ctx.user_context().await;
+    let test_attachment = params.attachments.first().unwrap();
+    let attachment_local_id = 42;
+    let attachment = get_attachment(attachment_local_id, test_attachment);
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    user_context
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
+
+    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+        .await
+        .unwrap();
+
+    ctx.catch_all().await;
+
+    user_context
+        .attachements_cache()
+        .add_item(attachment_local_id, b"abcdef")
+        .unwrap();
+
+    // Action:
+    //   * Get attachment
+    let data_path = mailbox
+        .get_attachment_content(attachment_local_id, &attachment)
+        .await
+        .unwrap();
+
+    // Validate:
+    //   * attachment is the same as the one in cache
+    assert_eq!(
+        fs::read(data_path).unwrap(),
+        b"abcdef",
+        "attachments should be equal"
     );
 }
 
-fn attachments_cache_len(context: &MailUserContext) -> usize {
-    context.attachements_cache().len()
-}
-
-fn attachments_cache_add_item(context: &MailUserContext, key: u64, value: &[u8]) {
-    context
-        .attachements_cache()
-        .add_item(AttachmentKey(key), value)
-        .unwrap();
+fn get_attachment(id: u64, attachment: &ApiAttachment) -> Attachment {
+    Attachment {
+        local_id: Some(id),
+        remote_id: Some(attachment.id.clone().into()),
+        remote_address_id: attachment.address_id.clone().into(),
+        local_conversation_id: None,
+        remote_conversation_id: attachment.conversation_id.clone().into(),
+        local_message_id: None,
+        remote_message_id: attachment.message_id.clone().into(),
+        disposition: Disposition::Attachment,
+        enc_signature: None,
+        is_auto_forwardee: false,
+        key_packets: Some(attachment.key_packets.clone().into()),
+        mime_type: attachment.mime_type.into(),
+        name: attachment.name.clone(),
+        sender: None,
+        signature: None,
+        size: attachment.size,
+        row_id: None,
+        stash: None,
+    }
 }
