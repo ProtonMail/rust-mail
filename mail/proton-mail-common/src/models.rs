@@ -31,8 +31,7 @@
 #[path = "tests/models.rs"]
 mod tests;
 
-use crate::actions::MoveConversationsAction;
-use crate::cache::MessageKey;
+use crate::cache::CacheMessageConfig;
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
     ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
@@ -2853,7 +2852,7 @@ impl Message {
     ///
     pub async fn message_body<P: PgpProviderSync, PM: ProtonMail>(
         &self,
-        cache: &ProtonCache<MessageKey>,
+        cache: &ProtonCache<CacheMessageConfig>,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         api: &PM,
@@ -2990,10 +2989,10 @@ impl Message {
     ///
     pub async fn sync_message_body<PM: ProtonMail>(
         &self,
-        cache: &ProtonCache<MessageKey>,
+        cache: &ProtonCache<CacheMessageConfig>,
         api: &PM,
     ) -> Result<EncryptedMessageBody, AppError> {
-        let (metadata, body) = self.get_message_metadata(api).await?;
+        let (metadata, body) = self.sync_message_metadata(cache, api).await?;
         let encrypted_body = if let Some(body) = body {
             body
         } else if let Some(body) = self.get_message_body_from_cache(cache)? {
@@ -3016,11 +3015,10 @@ impl Message {
     ///   * Can't read file
     fn get_message_body_from_cache(
         &self,
-        cache: &ProtonCache<MessageKey>,
+        cache: &ProtonCache<CacheMessageConfig>,
     ) -> Result<Option<String>, AppError> {
         if let Some(local_id) = self.local_id {
-            let key = MessageKey(local_id);
-            if let Some(mut reader) = cache.get_item(&key)? {
+            if let Some(mut reader) = cache.get_item(&local_id)? {
                 let mut message = String::new();
                 reader.read_to_string(&mut message)?;
                 Ok(Some(message))
@@ -3039,33 +3037,38 @@ impl Message {
     ///
     fn write_message_body_in_cache(
         &self,
-        cache: &ProtonCache<MessageKey>,
+        cache: &ProtonCache<CacheMessageConfig>,
         body: &str,
     ) -> Result<(), AppError> {
         if let Some(local_id) = self.local_id {
-            let key = MessageKey(local_id);
-            cache.add_item(key, body.as_bytes())?;
+            cache.add_item(local_id, body.as_bytes())?;
         }
         Ok(())
     }
 
-    async fn get_message_metadata<PM: ProtonMail>(
+    /// Sync message metadata
+    async fn sync_message_metadata<PM: ProtonMail>(
         &self,
+        cache: &ProtonCache<CacheMessageConfig>,
         api: &PM,
     ) -> Result<(MessageBodyMetadata, Option<String>), AppError> {
         let Some(conn) = self.stash() else {
             return Err(StashError::NoStashAvailable.into());
         };
 
-        if let Some(metadata) =
-            MessageBodyMetadata::find("WHERE id = ?", params![self.local_id], conn, None)
-                .await
-                .map_err(|e| {
-                    error!("Failed to retrieve message body metadata from db: {e}");
-                    e
-                })?
-                .into_iter()
-                .next()
+        if let Some(metadata) = MessageBodyMetadata::find(
+            "WHERE local_message_id = ?",
+            params![self.local_id],
+            conn,
+            None,
+        )
+        .await
+        .map_err(|e| {
+            error!("Failed to retrieve message body metadata from db: {e}");
+            e
+        })?
+        .into_iter()
+        .next()
         {
             Ok((metadata, None))
         } else {
@@ -3085,11 +3088,12 @@ impl Message {
                 error!("Failed to store message body metadata in db: {e}");
                 e
             })?;
-
+            self.write_message_body_in_cache(cache, &message.body)?;
             Ok((metadata, Some(message.body)))
         }
     }
 
+    /// Get message from remote
     async fn get_message_from_remote<PM: ProtonMail>(&self, api: &PM) -> Result<Message, AppError> {
         // metadata is not there it is either missing or the message does not exist.
         let remote_id = self.remote_id.clone().ok_or(AppError::Other(

@@ -1,8 +1,6 @@
 use crate::datatypes::AttachmentMetadata;
 use crate::models::Attachment;
-use crate::user_context::cache::AttachmentKey;
-use crate::{MailContextError, MailUserContext, Mailbox, MailboxError, MailboxResult};
-use bytes::Bytes;
+use crate::{MailContextError, Mailbox, MailboxError, MailboxResult};
 use proton_api_core::session::CoreSession;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
@@ -10,9 +8,9 @@ use proton_crypto_inbox::proton_crypto::crypto::{
 };
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use stash::orm::Model;
-use std::io;
 use std::io::Read;
-use std::sync::Arc;
+use std::path::PathBuf;
+use tracing::error;
 
 /// A decrypted attachment returned by [`Mailbox::load_attachment_to_buffer`].
 #[derive(Debug)]
@@ -20,9 +18,15 @@ pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
     pub attachment_metadata: AttachmentMetadata,
     /// Content buffer of the attachment
-    pub content: Vec<u8>,
-    /// The result of the signature verification.
-    pub verification_result: VerificationResult,
+    // TODO: it's ok on mobile to have decrypted attachments in file system. However it's not the
+    //       case for desktop. So add an alternative code (behind a feature) later to handle
+    //       attachment differently:
+    //         * Cache crypted data
+    //         * Decrypt
+    //         * Add an alternative to this field like `pub content: Vec<u8>`
+    pub data_path: PathBuf,
+    // /// The result of the signature verification.
+    // pub verification_result: VerificationResult,
 }
 
 impl Mailbox {
@@ -43,81 +47,99 @@ impl Mailbox {
         &self,
         attachment_id: u64,
     ) -> MailboxResult<DecryptedAttachment> {
+        let attachment = self.sync_attachment(attachment_id).await?;
+        let data_path = self
+            .get_attachment_content(attachment_id, &attachment)
+            .await?;
+        Ok(DecryptedAttachment {
+            attachment_metadata: AttachmentMetadata {
+                remote_id: attachment.remote_id,
+                disposition: attachment.disposition,
+                mime_type: attachment.mime_type,
+                name: attachment.name,
+                size: attachment.size,
+            },
+            data_path,
+        })
+    }
+
+    /// Get decrypted attachment content
+    ///
+    /// Content is cached in file system
+    pub async fn get_attachment_content(
+        &self,
+        attachment_id: u64,
+        attachment: &Attachment,
+    ) -> MailboxResult<PathBuf> {
+        let user_context = self.user_context();
+        let cache = user_context.attachements_cache();
+
+        if let Some(data_path) = cache.get_item_path(&attachment_id) {
+            Ok(data_path)
+        } else {
+            let pgp_provider = new_pgp_provider();
+            let remote_attachment_id = attachment
+                .remote_id
+                .clone()
+                .ok_or(MailboxError::AttachmentDoesNotHaveRemoteId(attachment_id))?;
+            let encrypted_content = Attachment::fetch_content(
+                remote_attachment_id.clone(),
+                user_context.session().api(),
+            )
+            .await
+            .inspect_err(|e| {
+                error!("Failed to fetch attachment({attachment_id}) from API: {e})")
+            })?;
+            let (decrypted_content, _verification_result) = self
+                .decrypt_attachment(&pgp_provider, attachment, encrypted_content.as_ref())
+                .await
+                .inspect_err(|e| error!("Failed to decrypt attachment({attachment_id}): {e})"))?;
+            let data_path = cache
+                .add_item(attachment_id, decrypted_content.as_ref())
+                .inspect_err(|e| {
+                    error!("Failed to add attachment({attachment_id} into cache: {e})")
+                })?;
+            Ok(data_path)
+        }
+    }
+
+    /// Sync attachment metadata
+    async fn sync_attachment(&self, attachment_id: u64) -> MailboxResult<Attachment> {
         let user_context = self.user_context();
         let mut attachment = Attachment::load(attachment_id, user_context.stash())
-            .await?
+            .await
+            .inspect_err(|e| error!("Failed to load attachment({attachment_id}) from DB: {e})"))?
             .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
                 .sync_complete_metadata(user_context.session().api())
                 .await
+                .inspect_err(|e| {
+                    error!("Failed to sync attachment({attachment_id}) metadata: {e})")
+                })
                 .map_err(MailContextError::from)?;
             // Load the complete attachment metadata.
             attachment = Attachment::load(attachment_id, user_context.stash())
                 .await?
                 .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
         }
-
-        // Load the attachment content.
-        // TODO: Lets opt for a stream in the future
-        let attachment_source_reader = self.get_attachment_data(attachment_id, &attachment).await?;
-
-        // Decrypt it.
-        let pgp_provider = new_pgp_provider();
-        decrypt_attachment_to_buffer(
-            &pgp_provider,
-            attachment,
-            user_context,
-            attachment_source_reader.as_ref(),
-        )
-        .await
+        Ok(attachment)
     }
 
-    // Get the data of an attachment.
-    // First try to get it from cache if it's not present, get it from remote
-    async fn get_attachment_data(
+    /// Decrypt attachment content
+    async fn decrypt_attachment<Provider: PGPProviderSync>(
         &self,
-        attachment_id: u64,
-        attachment: &Attachment,
-    ) -> MailboxResult<Bytes> {
+        pgp_provider: &Provider,
+        attachment_info: &Attachment,
+        data: impl Read,
+    ) -> MailboxResult<(Vec<u8>, VerificationResult)> {
         let user_context = self.user_context();
-        let cache = user_context.attachements_cache();
-        let key = AttachmentKey(attachment_id);
 
-        if let Some(mut file) = cache.get_item(&key)? {
-            let mut content = Vec::new();
-            file.read_to_end(&mut content)?;
-            Ok(content.into())
-        } else {
-            let remote_attachment_id = attachment
-                .remote_id
-                .clone()
-                .ok_or(MailboxError::AttachmentDoesNotHaveRemoteId(attachment_id))?;
-            let content = Attachment::fetch_content(
-                remote_attachment_id.clone(),
-                user_context.session().api(),
-            )
-            .await
-            .map_err(MailContextError::from)?;
-            cache.add_item(key, content.as_ref())?;
-            Ok(content)
-        }
-    }
-}
+        let mut result_buffer: Vec<u8> =
+            Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
 
-/// Helper function to decrypt the attachment.
-async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
-    pgp_provider: &Provider,
-    attachment_info: Attachment,
-    mail_user_ctx: Arc<MailUserContext>,
-    data: impl io::Read,
-) -> MailboxResult<DecryptedAttachment> {
-    let mut result_buffer: Vec<u8> =
-        Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
-
-    let signature_verification = {
-        let address_keys = mail_user_ctx
+        let address_keys = user_context
             .unlocked_address_keys_async(pgp_provider, &attachment_info.remote_address_id)
             .await?;
 
@@ -132,20 +154,7 @@ async fn decrypt_attachment_to_buffer<Provider: PGPProviderSync>(
         )?;
         std::io::copy(&mut decrypting_reader, &mut result_buffer)
             .map_err(|e| MailboxError::AttachmentDecryptionIO(e.to_string()))?;
-        decrypting_reader.verification_result()
-    };
-
-    let result = DecryptedAttachment {
-        attachment_metadata: AttachmentMetadata {
-            remote_id: attachment_info.remote_id,
-            disposition: attachment_info.disposition,
-            mime_type: attachment_info.mime_type,
-            name: attachment_info.name,
-            size: attachment_info.size,
-        },
-        content: result_buffer,
-        verification_result: signature_verification,
-    };
-
-    Ok(result)
+        let signature_verification = decrypting_reader.verification_result();
+        Ok((result_buffer, signature_verification))
+    }
 }

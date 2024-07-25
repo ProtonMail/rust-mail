@@ -1,10 +1,5 @@
-use std::sync::Arc;
-
 use crate::mail::datatypes::AttachmentMetadata;
-use crate::{
-    core::SignatureVerificationResult,
-    mail::{Mailbox, MailboxError},
-};
+use crate::mail::{Mailbox, MailboxError};
 
 /// Returned by [`Mailbox::load_attachment_to_buffer`].
 #[derive(Debug, Clone, uniffi::Record)]
@@ -12,17 +7,17 @@ pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
     pub attachment_metadata: AttachmentMetadata,
     /// The attachment content.
-    pub content: Vec<u8>,
-    /// The result of the signature verification.
-    pub verification_result: Arc<SignatureVerificationResult>,
+    pub data_path: String,
+    // /// The result of the signature verification.
+    // pub verification_result: Arc<SignatureVerificationResult>,
 }
 
 impl From<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
     fn from(value: proton_mail_common::DecryptedAttachment) -> Self {
         Self {
             attachment_metadata: value.attachment_metadata.into(),
-            content: value.content,
-            verification_result: Arc::new(value.verification_result.into()),
+            data_path: value.data_path.to_str().expect("valid path").to_owned(),
+            //            verification_result: Arc::new(value.verification_result.into()),
         }
     }
 }

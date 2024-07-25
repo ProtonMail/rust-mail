@@ -23,16 +23,15 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
 };
 use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
-use proton_mail_common::cache::MessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
-use proton_mail_common::{MailUserContext, Mailbox};
+use proton_mail_common::Mailbox;
 use stash::orm::Model;
 use std::io::read_to_string;
 use std::iter;
 
 #[tokio::test]
-#[ignore]
+// TODO: work with https://gitlab.protontech.ch/rust/proton-api-core/-/merge_requests/92
 async fn mailbox_message_body_simple() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::with_user_secret_and_user_id(
@@ -46,10 +45,9 @@ async fn mailbox_message_body_simple() {
     let message = message_body_test_message_simple();
 
     ctx.setup_user(params.clone()).await;
-    ctx.mock_get_message_metadata(vec![message.metadata.clone()], 1)
-        .await;
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
+    ctx.mock_get_messages(message.metadata.clone()).await;
     ctx.catch_all().await;
     user_context
         .initialize_async(LabelId::inbox().clone(), &NullCallback {})
@@ -70,31 +68,40 @@ async fn mailbox_message_body_simple() {
     assert_eq!(saved_message.remote_id, Some(message.metadata.id.into()));
 
     // No message cached
-    assert_eq!(messages_cache_len(&user_context), 0);
+    let cache = user_context.messages_cache();
+    assert!(cache.is_empty());
 
     // Decrypt the message body.
     let pgp_provider = new_pgp_provider();
+    let local_id = saved_message.local_id.unwrap();
+    let address_id = saved_message.address_id.clone();
+    let address_keys = user_context
+        .unlocked_address_keys(&pgp_provider, &address_id)
+        .await
+        .unwrap();
+    let api = user_context.session().api();
     let decrypted_body = saved_message
-        .message_body(
-            user_context.messages_cache(),
-            user_context
-                .unlocked_address_keys(&pgp_provider, &saved_message.remote_id.clone().unwrap())
-                .await
-                .unwrap(),
-            pgp_provider,
-            user_context.session().api(),
-        )
+        .message_body(cache, address_keys.clone(), pgp_provider, api)
         .await
         .unwrap();
 
     assert_eq!(decrypted_body.body, TEST_MESSAGE_BODY_DECRYPTED);
 
     // Now a message is cached and it's the right one
-    assert_eq!(messages_cache_len(&user_context), 1);
-    assert_eq!(
-        messages_cache_get_item(&user_context, saved_message.local_id.unwrap()),
-        Some(message.body)
-    )
+    assert_eq!(cache.len(), 1);
+    let item = cache
+        .get_item(&local_id)
+        .unwrap()
+        .map(|f| read_to_string(f).unwrap());
+    assert_eq!(item, Some(message.body));
+
+    let pgp_provider = new_pgp_provider();
+    // Only one call to API is done
+    saved_message
+        .message_body(cache, address_keys, pgp_provider, api)
+        .await
+        .unwrap();
+    assert_eq!(cache.len(), 1);
 }
 
 fn message_body_test_params() -> TestParams {
@@ -289,17 +296,4 @@ pub fn message_body_test_user_secret() -> UserKeySecret {
         .salt_for_key(&srp_provider, &locked_key.id, TEST_USER_PASSWORD.as_bytes())
         .map(UserKeySecret)
         .unwrap()
-}
-
-fn messages_cache_len(context: &MailUserContext) -> usize {
-    context.messages_cache().len()
-}
-
-fn messages_cache_get_item(context: &MailUserContext, key: u64) -> Option<String> {
-    let key = MessageKey(key);
-    context
-        .messages_cache()
-        .get_item(&key)
-        .unwrap()
-        .map(|f| read_to_string(f).unwrap())
 }
