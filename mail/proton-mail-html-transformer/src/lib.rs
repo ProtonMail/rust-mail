@@ -45,11 +45,14 @@ pub enum Error {
     /// Error occurred during UTM pass.
     #[error("Utm: {0}")]
     Utm(#[from] utm::Error),
-    #[error("Could not find <head> element in document")]
-    HeadElementNotFound,
+    /// Error occurred during iOS pass.
+    #[error("iOS: {0}")]
+    Ios(#[from] ios::Error),
     /// Error occurred during Remote Content pass.
     #[error("Remote Content: {0}")]
     RemoteContent(#[from] remote_content::Error),
+    #[error("Could not find <head> element in document")]
+    HeadElementNotFound,
 }
 
 /// HTML content transformer.
