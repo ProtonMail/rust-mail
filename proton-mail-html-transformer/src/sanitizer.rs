@@ -2,7 +2,7 @@
 #![allow(clippy::needless_pass_by_value)]
 use std::collections::HashSet;
 
-use kuchikiki::{iter::NodeEdge, NodeData, NodeRef};
+use kuchikiki::{iter::NodeEdge, Node, NodeData, NodeRef};
 
 lazy_static::lazy_static! {
     static ref TAG_SET: HashSet<&'static str> = TAGS.into();
@@ -10,32 +10,26 @@ lazy_static::lazy_static! {
 }
 
 pub fn strip_whitelist(doc: NodeRef) {
-    // We place all of the elements into a vec first because mutating while iterating is A Bad Idea
-    // NB: elements are refcounted.
-    let mut del = vec![];
-    for node in doc.traverse_inclusive() {
-        // We only care about elements.
-        if let NodeEdge::Start(node_ref) = node {
-            let NodeData::Element(element) = node_ref.data() else {
-                continue;
-            };
+    doc.traverse_inclusive()
+        .filter_map(|node| match node {
+            NodeEdge::Start(node_ref) => Some(node_ref),
+            NodeEdge::End(_) => None,
+        })
+        .filter_map(|node_ref| match node_ref.data() {
+            NodeData::Element(e) => {
+                let tag_name: &str = &e.name.local;
 
-            // If the tag is in the whitelist
-            let tag_name: &str = &element.name.local;
-            if !TAG_SET.contains(tag_name) {
-                del.push(node_ref.clone());
-                continue;
+                if !TAG_SET.contains(tag_name) {
+                    return Some(node_ref);
+                }
+
+                let mut attrs = e.attributes.borrow_mut();
+                attrs.map.retain(|name, _| ATTR_SET.contains(&&*name.local));
+                None
             }
-
-            // If the attribute is in the whitelist
-            let mut attrs = element.attributes.borrow_mut();
-            attrs.map.retain(|name, _| ATTR_SET.contains(&&*name.local));
-        }
-    }
-
-    for d in del {
-        d.detach();
-    }
+            _ => None,
+        })
+        .for_each(|node| node.detach());
 }
 
 pub const ATTRS: [&str; 112] = [
