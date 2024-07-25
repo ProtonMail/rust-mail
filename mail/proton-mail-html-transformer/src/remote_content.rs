@@ -10,8 +10,6 @@ use kuchikiki::{Attributes, ExpandedName, NodeRef};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Invalid Selector: {0}")]
-    Selector(String),
     #[error("Url: {0}")]
     Url(#[from] url::ParseError),
 }

@@ -55,7 +55,7 @@ pub fn parse_inner(c: &mut Criterion, html: &str) {
     c.bench_function("inject style", |b| {
         b.iter(|| {
             let tr = tr.clone();
-            transforms::inject_style(tr.document().clone()).unwrap();
+            transforms::inject_style(tr.document().clone());
         })
     });
 
@@ -73,11 +73,9 @@ pub fn parse_inner(c: &mut Criterion, html: &str) {
                 .strip_utm()
                 .unwrap()
                 .inject_ios_content_size()
-                .unwrap()
                 .disable_remote_content()
                 .unwrap()
                 .inject_style()
-                .unwrap()
                 .add_noreferrer();
         })
     });

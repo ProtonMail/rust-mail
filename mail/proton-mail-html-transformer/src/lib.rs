@@ -45,15 +45,9 @@ pub enum Error {
     /// Error occurred during UTM pass.
     #[error("Utm: {0}")]
     Utm(#[from] utm::Error),
-    /// Error occurred during iOS pass.
-    #[error("iOS: {0}")]
-    Ios(#[from] ios::Error),
     /// Error occurred during Remote Content pass.
     #[error("Remote Content: {0}")]
     RemoteContent(#[from] remote_content::Error),
-    // Error occurred during style injection
-    #[error("Could not find <head> element in document while injecting style.")]
-    HeadElementNotFoundInjectingStyle,
 }
 
 /// HTML content transformer.
@@ -63,7 +57,7 @@ pub enum Error {
 ///
 /// Each pass is exposed as separate method. Some of the passes are destructive in nature, while
 /// others can be undone. See each method for more details.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Transformer {
     ///Parsed document.
     document: NodeRef,
@@ -144,9 +138,9 @@ impl Transformer {
     /// # Errors
     ///
     /// Returns errors if the pass failed.
-    pub fn inject_ios_content_size(&mut self) -> Result<&mut Self, Error> {
-        ios::inject_content_size(self.document.clone())?;
-        Ok(self)
+    pub fn inject_ios_content_size(&mut self) -> &mut Self {
+        ios::inject_content_size(self.document.clone());
+        self
     }
 
     /// This function removes disallowed tags and attributes.
@@ -168,9 +162,9 @@ impl Transformer {
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
-    pub fn inject_style(&mut self) -> Result<&mut Self, Error> {
-        transforms::inject_style(self.document.clone())?;
-        Ok(self)
+    pub fn inject_style(&mut self) -> &mut Self {
+        transforms::inject_style(self.document.clone());
+        self
     }
 
     ///

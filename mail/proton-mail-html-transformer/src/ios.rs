@@ -5,13 +5,7 @@ use html5ever::{namespace_url, ns, QualName};
 use kuchikiki::{Attributes, ElementData, NodeData, NodeRef};
 use std::cell::RefCell;
 
-/// Errors that arise from iOS transformation passes.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Could not find <head> element in document")]
-    HeadElementNotFound,
-}
-
+#[allow(clippy::missing_panics_doc)]
 /// This pass injects a `meta` element into the HTML `head` element.
 ///
 /// This is currently required to ensure the iOS web view resizes to fit the
@@ -26,10 +20,8 @@ pub enum Error {
 /// # Errors
 ///
 /// Returns error if we could not find the `head` element in the document.
-pub fn inject_content_size(document: NodeRef) -> Result<(), Error> {
-    let element = document
-        .select_first("head")
-        .map_err(|()| Error::HeadElementNotFound)?;
+pub fn inject_content_size(document: NodeRef) {
+    let element = document.select_first("head").unwrap(); // kuckikiki always adds it
 
     let mut attributes = Attributes {
         // need to include another crate otherwise.
@@ -51,8 +43,6 @@ pub fn inject_content_size(document: NodeRef) -> Result<(), Error> {
     element
         .as_node()
         .append(NodeRef::new(NodeData::Element(data)));
-
-    Ok(())
 }
 
 #[test]
@@ -62,7 +52,7 @@ fn inject_with_existing_head_element() {
     let expected = r#"<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></meta></head><body></body></html>"#;
 
     let mut transformer = crate::Transformer::new(input);
-    transformer.inject_ios_content_size().unwrap();
+    transformer.inject_ios_content_size();
     let output = transformer.to_string();
     assert_eq!(expected, output);
 }
@@ -73,7 +63,7 @@ fn inject_without_existing_head_element() {
     let expected = r#"<html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></meta></head><body></body></html>"#;
 
     let mut transformer = crate::Transformer::new(input);
-    transformer.inject_ios_content_size().unwrap();
+    transformer.inject_ios_content_size();
     let output = transformer.to_string();
     assert_eq!(expected, output);
 }
@@ -88,7 +78,7 @@ fn inject_without_existing_viewport_entry() {
     let expected = r#"<html><head><meta name="viewport" content="width=device-width, initial-scale=0.0"><meta name="viewport" content="width=device-width, initial-scale=1.0"></meta></head><body></body></html>"#;
 
     let mut transformer = crate::Transformer::new(input);
-    transformer.inject_ios_content_size().unwrap();
+    transformer.inject_ios_content_size();
     let output = transformer.to_string();
     assert_eq!(expected, output);
 }

@@ -13,8 +13,6 @@ use url::Url;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Invalid Selector")]
-    Selector,
     #[error("Url: {0}")]
     Url(#[from] url::ParseError),
 }
