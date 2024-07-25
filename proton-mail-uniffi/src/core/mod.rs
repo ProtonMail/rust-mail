@@ -1,4 +1,5 @@
 mod crypto;
+pub mod datatypes;
 mod keychain;
 mod network;
 mod session;

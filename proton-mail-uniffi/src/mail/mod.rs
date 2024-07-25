@@ -1,4 +1,5 @@
 mod avatar_information;
+pub mod datatypes;
 mod logging;
 mod login;
 mod mailbox;
