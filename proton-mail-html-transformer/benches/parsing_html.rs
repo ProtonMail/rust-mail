@@ -17,17 +17,18 @@ pub fn parse_inner(c: &mut Criterion, html: &str) {
 
     c.bench_function("disable remote content", |b| {
         b.iter(|| {
-            let mut t = Transformer::new(black_box(html));
-            t.disable_remote_content().unwrap();
-            t.to_string();
+            Transformer::new(black_box(html))
+                .disable_remote_content()
+                .unwrap()
+                .to_string()
         })
     });
 
     c.bench_function("strip", |b| {
         b.iter(|| {
-            let t = Transformer::new(black_box(html));
-            t.strip_whitelist();
-            t.to_string();
+            Transformer::new(black_box(html))
+                .strip_whitelist()
+                .to_string()
         })
     });
 }

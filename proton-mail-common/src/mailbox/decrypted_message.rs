@@ -78,8 +78,9 @@ impl HtmlMessage {
         }
 
         self.with_transformer(|t| {
-            Ok(t.enable_remote_content()
-                .map_err(proton_mail_html_transformer::Error::from)?)
+            t.enable_remote_content()
+                .map_err(proton_mail_html_transformer::Error::from)?;
+            Ok(())
         })?;
 
         self.remote_content_enabled = true;
@@ -98,8 +99,9 @@ impl HtmlMessage {
         }
 
         self.with_transformer(|t| {
-            Ok(t.disable_remote_content()
-                .map_err(proton_mail_html_transformer::Error::from)?)
+            t.enable_remote_content()
+                .map_err(proton_mail_html_transformer::Error::from)?;
+            Ok(())
         })?;
 
         self.remote_content_enabled = false;
