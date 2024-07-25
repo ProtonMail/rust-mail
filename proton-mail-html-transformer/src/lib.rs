@@ -168,40 +168,21 @@ impl Transformer {
         transforms::inject_style(self.document.clone())?;
         Ok(self)
     }
+
+    /// This function overrides all `rel` attributes in `<a>` tags to be [noreferrer](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/noreferrer)
+    /// See [this article](https://mathiasbynens.github.io/rel-noopener/) to see how the lack of it could be abused
+    ///
+    /// # Remarks
+    ///
+    /// This is a destructive operation and can not be undone.
+    pub fn add_noreferrer(&mut self) -> &mut Self {
+        transforms::add_noreferrer(self.document.clone());
+        self
+    }
 }
 
 impl Display for Transformer {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.document.to_string())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn acceptable_html() {
-        let html = include_str!("../tests/htmls/acceptable.html");
-
-        let unsanitized_html = Transformer::new(html).strip_whitelist().to_string();
-        let html = Transformer::new(html).strip_whitelist().to_string();
-        assert_eq!(unsanitized_html, html);
-    }
-
-    #[test]
-    fn strip_bad_html() {
-        let html = include_str!("../tests/htmls/strip_bad.html");
-
-        let html = Transformer::new(html).strip_whitelist().to_string();
-        insta::assert_snapshot!(html);
-    }
-
-    #[test]
-    fn email_privacy_tester() {
-        let html = include_str!("../tests/htmls/email_privacy_tester.html");
-
-        let html = Transformer::new(html).strip_whitelist().to_string();
-        insta::assert_snapshot!(html);
     }
 }

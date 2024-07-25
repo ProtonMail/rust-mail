@@ -1,0 +1,9 @@
+---
+source: proton-mail-html-transformer/src/transforms.rs
+expression: html
+---
+<html><head></head><body><div>
+          <a href="proton.me" ref="noreferrer">
+          </a><a href="proton.me" rel="foobar" ref="noreferrer">
+        </a></div><a href="proton.me" rel="foobar" ref="noreferrer">
+        </a></body></html>
