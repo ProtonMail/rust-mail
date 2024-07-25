@@ -1,5 +1,5 @@
 use html5ever::tendril::TendrilSink;
-use kuchikiki::NodeRef;
+use kuchikiki::{Attribute, ExpandedName, NodeRef};
 
 use crate::Error;
 
@@ -24,13 +24,25 @@ pub fn inject_style(document: NodeRef) -> Result<(), Error> {
     Ok(())
 }
 
-#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::missing_panics_doc)] // The select is well formed.
+/// This function overrides all `rel` attributes in `<a>` tags to be [noreferrer.](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/noreferrer)
+///
+/// See [this article](https://mathiasbynens.github.io/rel-noopener/) to see how the lack of it could be abused
 pub fn add_noreferrer(document: NodeRef) {
+    let exp_name = ExpandedName::new(html5ever::namespace_url!(""), "ref");
+    let attr = Attribute {
+        prefix: None,
+        value: "noreferrer".to_string(),
+    };
+
     let anchors = document.select("a").unwrap();
 
     for anchor in anchors {
         let mut attrs = anchor.attributes.borrow_mut();
-        _ = attrs.insert("ref", "noreferrer".to_string());
+        attrs
+            .map
+            .entry(exp_name.clone())
+            .or_insert_with(|| attr.clone());
     }
 }
 

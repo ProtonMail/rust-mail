@@ -133,11 +133,7 @@ async fn test_delete_remote() {
     .await
     .expect("failed to delete local label");
 
-    let remote_labels = labels
-        .iter()
-        .skip(1)
-        .cloned()
-        .collect::<Vec<_>>();
+    let remote_labels = labels.iter().skip(1).cloned().collect::<Vec<_>>();
 
     let local_labels = Label::find(String::new(), vec![], &stash, None)
         .await
