@@ -33,6 +33,7 @@ use std::fmt::{Display, Formatter};
 mod ios;
 mod remote_content;
 mod sanitizer;
+mod transforms;
 pub mod utm;
 
 /// Errors that may occur during transformation.
@@ -41,9 +42,8 @@ pub enum Error {
     /// Error occurred during UTM pass.
     #[error("Utm: {0}")]
     Utm(#[from] utm::Error),
-    /// Error occurred during iOS pass.
-    #[error("iOS: {0}")]
-    Ios(#[from] ios::Error),
+    #[error("Could not find <head> element in document")]
+    HeadElementNotFound,
     /// Error occurred during Remote Content pass.
     #[error("Remote Content: {0}")]
     RemoteContent(#[from] remote_content::Error),
@@ -157,6 +157,16 @@ impl Transformer {
     pub fn strip_whitelist(&mut self) -> &mut Self {
         strip_whitelist(self.document.clone());
         self
+    }
+
+    /// This function adds dark mode support. This fails if the html doesn't have a head tag.
+    ///
+    /// # Remarks
+    ///
+    /// This is a destructive operation and can not be undone.
+    pub fn inject_style(&mut self) -> Result<&mut Self, Error> {
+        transforms::inject_style(self.document.clone())?;
+        Ok(self)
     }
 }
 

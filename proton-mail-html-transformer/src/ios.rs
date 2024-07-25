@@ -1,16 +1,10 @@
 //! iOS specific transformations required to correctly display content in the
 //! OS's web view.
 
+use crate::Error;
 use html5ever::{namespace_url, ns, QualName};
 use kuchikiki::{Attributes, ElementData, NodeData, NodeRef};
 use std::cell::RefCell;
-
-/// Errors that arise from iOS transformation passes.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("Could not find <head> element in document")]
-    HeadElementNotFound,
-}
 
 /// This pass injects a `meta` element into the HTML `head` element.
 ///
