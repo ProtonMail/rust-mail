@@ -25,6 +25,7 @@ use crate::datatypes::LabelType;
 use proton_api_core::service::ApiServiceError;
 pub use proton_api_mail;
 pub use proton_core_common;
+use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LabelId;
 use stash::stash::StashError;
 
@@ -50,6 +51,10 @@ pub enum AppError {
     RemoteLabelDoesNotExist(LabelId),
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
+    #[error("Cache error: {0}")]
+    Cache(#[from] CacheError),
+    #[error("IO error: {0}")]
+    IO(#[from] std::io::Error),
     #[error("Other error: {0}")]
     Other(String),
 }
