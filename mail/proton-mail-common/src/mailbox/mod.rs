@@ -1,6 +1,6 @@
 mod attachments;
 
-mod decrypted_message;
+pub mod decrypted_message;
 
 #[cfg(test)]
 mod tests;
@@ -249,5 +249,10 @@ impl Mailbox {
         } else {
             Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id))
         }
+    }
+
+    /// The mailbox's current view mode.
+    pub fn view_mode(&self) -> ViewMode {
+        self.view_mode
     }
 }

@@ -34,8 +34,47 @@
 //! for the application is in the internal types and not the FFI types; and
 //! the distinction allows customisation of how the FFI types work.
 //!
-
-use proton_core_common::datatypes::{LabelId, RemoteId};
+//! # Notable exclusions
+//!
+//! The following fields are excluded from represented types (in addition to
+//! internal database fields):
+//!
+//!   - [`Attachment::real_enc_signature`](proton_mail_common::models::Attachment::real_enc_signature)
+//!   - [`Attachment::real_key_packets`](proton_mail_common::models::Attachment::real_key_packets)
+//!   - [`Attachment::real_signature`](proton_mail_common::models::Attachment::real_signature)
+//!   - [`Conversation::labels`](proton_mail_common::models::Message::label_ids)
+//!   - [`Message::body`](proton_mail_common::models::Message::body)
+//!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
+//!
+use crate::core::datatypes::{LabelId, RemoteId};
+use proton_mail_common::datatypes::{
+    AlmostAllMail as RealAlmostAllMail,
+    AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
+    AttachmentMetadata as RealAttachmentMetadata, AttachmentMetadatas as RealAttachmentMetadatas,
+    AttachmentSignature as RealAttachmentSignature, ComposerDirection as RealComposerDirection,
+    ComposerMode as RealComposerMode, ConversationCount as RealConversationCount,
+    DecryptedMessageBody as RealDecryptedMessageBody, Disposition as RealDisposition,
+    EncryptedMessageBody as RealEncryptedMessageBody, KeyPackets as RealKeyPackets,
+    LabelColor as RealLabelColor, LabelType as RealLabelType, MessageAddress as RealMessageAddress,
+    MessageAddresses as RealMessageAddresses, MessageAttachment as RealMessageAttachment,
+    MessageAttachmentHeaders as RealMessageAttachmentHeaders,
+    MessageAttachmentInfo as RealMessageAttachmentInfo,
+    MessageAttachmentInfos as RealMessageAttachmentInfos,
+    MessageAttachments as RealMessageAttachments, MessageButtons as RealMessageButtons,
+    MessageCount as RealMessageCount, MessageFlags as RealMessageFlags, MimeType as RealMimeType,
+    MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
+    NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
+    ParsedHeaders as RealParsedHeaders, PgpScheme as RealPgpScheme, PmSignature as RealPmSignature,
+    RemoteIds as RealRemoteIds, ShowImages as RealShowImages, ShowMoved as RealShowMoved,
+    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, ViewLayout as RealViewLayout,
+    ViewMode as RealViewMode,
+};
+use proton_mail_common::models::{
+    Attachment as RealAttachment, Conversation as RealConversation,
+    ConversationLabel as RealConversationLabel, Label as RealLabel,
+    MailSettings as RealMailSettings, Message as RealMessage,
+    MessageBodyMetadata as RealMessageBodyMetadata,
+};
 use smart_default::SmartDefault;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
@@ -56,6 +95,24 @@ pub enum AlmostAllMail {
     AlmostAllMail = 1,
 }
 
+impl From<AlmostAllMail> for RealAlmostAllMail {
+    fn from(value: AlmostAllMail) -> Self {
+        match value {
+            AlmostAllMail::AllMail => RealAlmostAllMail::AllMail,
+            AlmostAllMail::AlmostAllMail => RealAlmostAllMail::AlmostAllMail,
+        }
+    }
+}
+
+impl From<RealAlmostAllMail> for AlmostAllMail {
+    fn from(value: RealAlmostAllMail) -> Self {
+        match value {
+            RealAlmostAllMail::AllMail => AlmostAllMail::AllMail,
+            RealAlmostAllMail::AlmostAllMail => AlmostAllMail::AlmostAllMail,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -66,6 +123,24 @@ pub enum ComposerDirection {
 
     /// TODO: Document this variant.
     RightToLeft = 1,
+}
+
+impl From<ComposerDirection> for RealComposerDirection {
+    fn from(value: ComposerDirection) -> Self {
+        match value {
+            ComposerDirection::LeftToRight => RealComposerDirection::LeftToRight,
+            ComposerDirection::RightToLeft => RealComposerDirection::RightToLeft,
+        }
+    }
+}
+
+impl From<RealComposerDirection> for ComposerDirection {
+    fn from(value: RealComposerDirection) -> Self {
+        match value {
+            RealComposerDirection::LeftToRight => ComposerDirection::LeftToRight,
+            RealComposerDirection::RightToLeft => ComposerDirection::RightToLeft,
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -80,6 +155,24 @@ pub enum ComposerMode {
     Maximized = 1,
 }
 
+impl From<ComposerMode> for RealComposerMode {
+    fn from(value: ComposerMode) -> Self {
+        match value {
+            ComposerMode::Normal => RealComposerMode::Normal,
+            ComposerMode::Maximized => RealComposerMode::Maximized,
+        }
+    }
+}
+
+impl From<RealComposerMode> for ComposerMode {
+    fn from(value: RealComposerMode) -> Self {
+        match value {
+            RealComposerMode::Normal => ComposerMode::Normal,
+            RealComposerMode::Maximized => ComposerMode::Maximized,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -89,6 +182,24 @@ pub enum Disposition {
 
     /// TODO: Document this variant.
     Inline = 2,
+}
+
+impl From<Disposition> for RealDisposition {
+    fn from(value: Disposition) -> Self {
+        match value {
+            Disposition::Attachment => RealDisposition::Attachment,
+            Disposition::Inline => RealDisposition::Inline,
+        }
+    }
+}
+
+impl From<RealDisposition> for Disposition {
+    fn from(value: RealDisposition) -> Self {
+        match value {
+            RealDisposition::Attachment => Disposition::Attachment,
+            RealDisposition::Inline => Disposition::Inline,
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -108,6 +219,28 @@ pub enum LabelType {
     System = 4,
 }
 
+impl From<LabelType> for RealLabelType {
+    fn from(value: LabelType) -> Self {
+        match value {
+            LabelType::Label => RealLabelType::Label,
+            LabelType::ContactGroup => RealLabelType::ContactGroup,
+            LabelType::Folder => RealLabelType::Folder,
+            LabelType::System => RealLabelType::System,
+        }
+    }
+}
+
+impl From<RealLabelType> for LabelType {
+    fn from(value: RealLabelType) -> Self {
+        match value {
+            RealLabelType::Label => LabelType::Label,
+            RealLabelType::ContactGroup => LabelType::ContactGroup,
+            RealLabelType::Folder => LabelType::Folder,
+            RealLabelType::System => LabelType::System,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -118,6 +251,24 @@ pub enum MessageButtons {
 
     /// TODO: Document this variant.
     UnreadFirst = 1,
+}
+
+impl From<MessageButtons> for RealMessageButtons {
+    fn from(value: MessageButtons) -> Self {
+        match value {
+            MessageButtons::ReadFirst => RealMessageButtons::ReadFirst,
+            MessageButtons::UnreadFirst => RealMessageButtons::UnreadFirst,
+        }
+    }
+}
+
+impl From<RealMessageButtons> for MessageButtons {
+    fn from(value: RealMessageButtons) -> Self {
+        match value {
+            RealMessageButtons::ReadFirst => MessageButtons::ReadFirst,
+            RealMessageButtons::UnreadFirst => MessageButtons::UnreadFirst,
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -147,6 +298,34 @@ pub enum MimeType {
     TextPlain = 7,
 }
 
+impl From<MimeType> for RealMimeType {
+    fn from(value: MimeType) -> Self {
+        match value {
+            MimeType::ApplicationJson => RealMimeType::ApplicationJson,
+            MimeType::ApplicationPdf => RealMimeType::ApplicationPdf,
+            MimeType::MessageRfc822 => RealMimeType::MessageRfc822,
+            MimeType::MultipartMixed => RealMimeType::MultipartMixed,
+            MimeType::MultipartRelated => RealMimeType::MultipartRelated,
+            MimeType::TextHtml => RealMimeType::TextHtml,
+            MimeType::TextPlain => RealMimeType::TextPlain,
+        }
+    }
+}
+
+impl From<RealMimeType> for MimeType {
+    fn from(value: RealMimeType) -> Self {
+        match value {
+            RealMimeType::ApplicationJson => MimeType::ApplicationJson,
+            RealMimeType::ApplicationPdf => MimeType::ApplicationPdf,
+            RealMimeType::MessageRfc822 => MimeType::MessageRfc822,
+            RealMimeType::MultipartMixed => MimeType::MultipartMixed,
+            RealMimeType::MultipartRelated => MimeType::MultipartRelated,
+            RealMimeType::TextHtml => MimeType::TextHtml,
+            RealMimeType::TextPlain => MimeType::TextPlain,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -162,6 +341,26 @@ pub enum NextMessageOnMove {
     EnabledExplicit = 2,
 }
 
+impl From<NextMessageOnMove> for RealNextMessageOnMove {
+    fn from(value: NextMessageOnMove) -> Self {
+        match value {
+            NextMessageOnMove::DisabledExplicit => RealNextMessageOnMove::DisabledExplicit,
+            NextMessageOnMove::DisabledImplicit => RealNextMessageOnMove::DisabledImplicit,
+            NextMessageOnMove::EnabledExplicit => RealNextMessageOnMove::EnabledExplicit,
+        }
+    }
+}
+
+impl From<RealNextMessageOnMove> for NextMessageOnMove {
+    fn from(value: RealNextMessageOnMove) -> Self {
+        match value {
+            RealNextMessageOnMove::DisabledExplicit => NextMessageOnMove::DisabledExplicit,
+            RealNextMessageOnMove::DisabledImplicit => NextMessageOnMove::DisabledImplicit,
+            RealNextMessageOnMove::EnabledExplicit => NextMessageOnMove::EnabledExplicit,
+        }
+    }
+}
+
 /// A message parsed header value can either be a string or an array of strings.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 pub enum ParsedHeaderValue {
@@ -170,6 +369,24 @@ pub enum ParsedHeaderValue {
 
     /// TODO: Document this variant.
     String(String),
+}
+
+impl From<ParsedHeaderValue> for RealParsedHeaderValue {
+    fn from(value: ParsedHeaderValue) -> Self {
+        match value {
+            ParsedHeaderValue::Array(array) => RealParsedHeaderValue::Array(array),
+            ParsedHeaderValue::String(string) => RealParsedHeaderValue::String(string),
+        }
+    }
+}
+
+impl From<RealParsedHeaderValue> for ParsedHeaderValue {
+    fn from(value: RealParsedHeaderValue) -> Self {
+        match value {
+            RealParsedHeaderValue::Array(array) => ParsedHeaderValue::Array(array),
+            RealParsedHeaderValue::String(string) => ParsedHeaderValue::String(string),
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -182,6 +399,24 @@ pub enum PgpScheme {
     /// TODO: Document this variant.
     #[default]
     Mime = 16,
+}
+
+impl From<PgpScheme> for RealPgpScheme {
+    fn from(value: PgpScheme) -> Self {
+        match value {
+            PgpScheme::Inline => RealPgpScheme::Inline,
+            PgpScheme::Mime => RealPgpScheme::Mime,
+        }
+    }
+}
+
+impl From<RealPgpScheme> for PgpScheme {
+    fn from(value: RealPgpScheme) -> Self {
+        match value {
+            RealPgpScheme::Inline => PgpScheme::Inline,
+            RealPgpScheme::Mime => PgpScheme::Mime,
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -197,6 +432,26 @@ pub enum PmSignature {
 
     /// TODO: Document this variant.
     EnabledLocked = 2,
+}
+
+impl From<PmSignature> for RealPmSignature {
+    fn from(value: PmSignature) -> Self {
+        match value {
+            PmSignature::Disabled => RealPmSignature::Disabled,
+            PmSignature::Enabled => RealPmSignature::Enabled,
+            PmSignature::EnabledLocked => RealPmSignature::EnabledLocked,
+        }
+    }
+}
+
+impl From<RealPmSignature> for PmSignature {
+    fn from(value: RealPmSignature) -> Self {
+        match value {
+            RealPmSignature::Disabled => PmSignature::Disabled,
+            RealPmSignature::Enabled => PmSignature::Enabled,
+            RealPmSignature::EnabledLocked => PmSignature::EnabledLocked,
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -217,6 +472,28 @@ pub enum ShowImages {
     AutoLoadBoth = 3,
 }
 
+impl From<ShowImages> for RealShowImages {
+    fn from(value: ShowImages) -> Self {
+        match value {
+            ShowImages::DoNotAutoLoad => RealShowImages::DoNotAutoLoad,
+            ShowImages::AutoLoadRemote => RealShowImages::AutoLoadRemote,
+            ShowImages::AutoLoadEmbedded => RealShowImages::AutoLoadEmbedded,
+            ShowImages::AutoLoadBoth => RealShowImages::AutoLoadBoth,
+        }
+    }
+}
+
+impl From<RealShowImages> for ShowImages {
+    fn from(value: RealShowImages) -> Self {
+        match value {
+            RealShowImages::DoNotAutoLoad => ShowImages::DoNotAutoLoad,
+            RealShowImages::AutoLoadRemote => ShowImages::AutoLoadRemote,
+            RealShowImages::AutoLoadEmbedded => ShowImages::AutoLoadEmbedded,
+            RealShowImages::AutoLoadBoth => ShowImages::AutoLoadBoth,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -235,6 +512,28 @@ pub enum ShowMoved {
     KeepBoth = 3,
 }
 
+impl From<ShowMoved> for RealShowMoved {
+    fn from(value: ShowMoved) -> Self {
+        match value {
+            ShowMoved::DoNotKeep => RealShowMoved::DoNotKeep,
+            ShowMoved::KeepInDrafts => RealShowMoved::KeepInDrafts,
+            ShowMoved::KeepInSent => RealShowMoved::KeepInSent,
+            ShowMoved::KeepBoth => RealShowMoved::KeepBoth,
+        }
+    }
+}
+
+impl From<RealShowMoved> for ShowMoved {
+    fn from(value: RealShowMoved) -> Self {
+        match value {
+            RealShowMoved::DoNotKeep => ShowMoved::DoNotKeep,
+            RealShowMoved::KeepInDrafts => ShowMoved::KeepInDrafts,
+            RealShowMoved::KeepInSent => ShowMoved::KeepInSent,
+            RealShowMoved::KeepBoth => ShowMoved::KeepBoth,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -244,6 +543,24 @@ pub enum SpamAction {
 
     /// TODO: Document this variant.
     UnsubscribeWithOneClick = 1,
+}
+
+impl From<SpamAction> for RealSpamAction {
+    fn from(value: SpamAction) -> Self {
+        match value {
+            SpamAction::DoNothing => RealSpamAction::DoNothing,
+            SpamAction::UnsubscribeWithOneClick => RealSpamAction::UnsubscribeWithOneClick,
+        }
+    }
+}
+
+impl From<RealSpamAction> for SpamAction {
+    fn from(value: RealSpamAction) -> Self {
+        match value {
+            RealSpamAction::DoNothing => SpamAction::DoNothing,
+            RealSpamAction::UnsubscribeWithOneClick => SpamAction::UnsubscribeWithOneClick,
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -267,6 +584,30 @@ pub enum SwipeAction {
     MarkAsRead = 4,
 }
 
+impl From<SwipeAction> for RealSwipeAction {
+    fn from(value: SwipeAction) -> Self {
+        match value {
+            SwipeAction::Trash => RealSwipeAction::Trash,
+            SwipeAction::Spam => RealSwipeAction::Spam,
+            SwipeAction::Star => RealSwipeAction::Star,
+            SwipeAction::Archive => RealSwipeAction::Archive,
+            SwipeAction::MarkAsRead => RealSwipeAction::MarkAsRead,
+        }
+    }
+}
+
+impl From<RealSwipeAction> for SwipeAction {
+    fn from(value: RealSwipeAction) -> Self {
+        match value {
+            RealSwipeAction::Trash => SwipeAction::Trash,
+            RealSwipeAction::Spam => SwipeAction::Spam,
+            RealSwipeAction::Star => SwipeAction::Star,
+            RealSwipeAction::Archive => SwipeAction::Archive,
+            RealSwipeAction::MarkAsRead => SwipeAction::MarkAsRead,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -279,6 +620,24 @@ pub enum ViewLayout {
     Row = 1,
 }
 
+impl From<ViewLayout> for RealViewLayout {
+    fn from(value: ViewLayout) -> Self {
+        match value {
+            ViewLayout::Column => RealViewLayout::Column,
+            ViewLayout::Row => RealViewLayout::Row,
+        }
+    }
+}
+
+impl From<RealViewLayout> for ViewLayout {
+    fn from(value: RealViewLayout) -> Self {
+        match value {
+            RealViewLayout::Column => ViewLayout::Column,
+            RealViewLayout::Row => ViewLayout::Row,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -289,6 +648,24 @@ pub enum ViewMode {
 
     /// TODO: Document this variant.
     Messages = 1,
+}
+
+impl From<ViewMode> for RealViewMode {
+    fn from(value: ViewMode) -> Self {
+        match value {
+            ViewMode::Conversations => RealViewMode::Conversations,
+            ViewMode::Messages => RealViewMode::Messages,
+        }
+    }
+}
+
+impl From<RealViewMode> for ViewMode {
+    fn from(value: RealViewMode) -> Self {
+        match value {
+            RealViewMode::Conversations => ViewMode::Conversations,
+            RealViewMode::Messages => ViewMode::Messages,
+        }
+    }
 }
 
 //  STRUCTS
@@ -341,15 +718,6 @@ pub struct Attachment {
     pub name: String,
 
     /// TODO: Document this field.
-    pub real_enc_signature: Option<RealAttachmentEncryptedSignature>,
-
-    /// TODO: Document this field.
-    pub real_key_packets: Option<RealKeyPackets>,
-
-    /// TODO: Document this field.
-    pub real_signature: Option<RealAttachmentSignature>,
-
-    /// TODO: Document this field.
     pub sender: Option<MessageAddress>,
 
     /// TODO: Document this field.
@@ -357,6 +725,57 @@ pub struct Attachment {
 
     /// TODO: Document this field.
     pub size: u64,
+}
+
+impl From<Attachment> for RealAttachment {
+    fn from(value: Attachment) -> Self {
+        RealAttachment {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            remote_address_id: value.remote_address_id.into(),
+            local_conversation_id: value.local_conversation_id,
+            remote_conversation_id: value.remote_conversation_id.into(),
+            local_message_id: value.local_message_id,
+            remote_message_id: value.remote_message_id.into(),
+            disposition: value.disposition.into(),
+            enc_signature: value.enc_signature.map(Into::into),
+            is_auto_forwardee: value.is_auto_forwardee,
+            key_packets: value.key_packets.into(),
+            mime_type: value.mime_type.into(),
+            name: value.name,
+            real_enc_signature: None,
+            real_key_packets: None,
+            real_signature: None,
+            sender: value.sender.map(Into::into),
+            signature: value.signature.map(Into::into),
+            size: value.size,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<RealAttachment> for Attachment {
+    fn from(value: RealAttachment) -> Self {
+        Attachment {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            remote_address_id: value.remote_address_id.into(),
+            local_conversation_id: value.local_conversation_id,
+            remote_conversation_id: value.remote_conversation_id.into(),
+            local_message_id: value.local_message_id,
+            remote_message_id: value.remote_message_id.into(),
+            disposition: value.disposition.into(),
+            enc_signature: value.enc_signature.map(Into::into),
+            is_auto_forwardee: value.is_auto_forwardee,
+            key_packets: value.key_packets.into(),
+            mime_type: value.mime_type.into(),
+            name: value.name,
+            sender: value.sender.map(Into::into),
+            signature: value.signature.map(Into::into),
+            size: value.size,
+        }
+    }
 }
 
 /// TODO: Document this struct.
@@ -370,6 +789,18 @@ impl Deref for AttachmentEncryptedSignature {
 
     fn deref(&self) -> &Self::Target {
         &self.value
+    }
+}
+
+impl From<AttachmentEncryptedSignature> for RealAttachmentEncryptedSignature {
+    fn from(value: AttachmentEncryptedSignature) -> Self {
+        RealAttachmentEncryptedSignature { value: value.value }
+    }
+}
+
+impl From<RealAttachmentEncryptedSignature> for AttachmentEncryptedSignature {
+    fn from(value: RealAttachmentEncryptedSignature) -> Self {
+        AttachmentEncryptedSignature { value: value.value }
     }
 }
 
@@ -392,9 +823,49 @@ pub struct AttachmentMetadata {
     pub size: u64,
 }
 
+impl From<AttachmentMetadata> for RealAttachmentMetadata {
+    fn from(value: AttachmentMetadata) -> Self {
+        RealAttachmentMetadata {
+            remote_id: value.remote_id.map(Into::into),
+            disposition: value.disposition.into(),
+            mime_type: value.mime_type.into(),
+            name: value.name,
+            size: value.size,
+        }
+    }
+}
+
+impl From<RealAttachmentMetadata> for AttachmentMetadata {
+    fn from(value: RealAttachmentMetadata) -> Self {
+        AttachmentMetadata {
+            remote_id: value.remote_id.map(Into::into),
+            disposition: value.disposition.into(),
+            mime_type: value.mime_type.into(),
+            name: value.name,
+            size: value.size,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
 pub struct AttachmentMetadatas {
     pub value: Vec<AttachmentMetadata>,
+}
+
+impl From<AttachmentMetadatas> for RealAttachmentMetadatas {
+    fn from(value: AttachmentMetadatas) -> Self {
+        RealAttachmentMetadatas {
+            value: value.value.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<RealAttachmentMetadatas> for AttachmentMetadatas {
+    fn from(value: RealAttachmentMetadatas) -> Self {
+        AttachmentMetadatas {
+            value: value.value.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 /// TODO: Document this struct.
@@ -408,6 +879,18 @@ impl Deref for AttachmentSignature {
 
     fn deref(&self) -> &Self::Target {
         &self.value
+    }
+}
+
+impl From<AttachmentSignature> for RealAttachmentSignature {
+    fn from(value: AttachmentSignature) -> Self {
+        RealAttachmentSignature { value: value.value }
+    }
+}
+
+impl From<RealAttachmentSignature> for AttachmentSignature {
+    fn from(value: RealAttachmentSignature) -> Self {
+        AttachmentSignature { value: value.value }
     }
 }
 
@@ -466,6 +949,53 @@ pub struct Conversation {
     pub subject: String,
 }
 
+impl From<Conversation> for RealConversation {
+    fn from(value: Conversation) -> Self {
+        RealConversation {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            attachment_info: value.attachment_info.into(),
+            attachments_metadata: value.attachments_metadata.into(),
+            deleted: value.deleted,
+            display_snooze_reminder: value.display_snooze_reminder,
+            expiration_time: value.expiration_time,
+            labels: vec![],
+            num_attachments: value.num_attachments,
+            num_messages: value.num_messages,
+            num_unread: value.num_unread,
+            display_order: value.display_order,
+            recipients: value.recipients.into(),
+            senders: value.senders.into(),
+            size: value.size,
+            subject: value.subject,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<RealConversation> for Conversation {
+    fn from(value: RealConversation) -> Self {
+        Conversation {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            attachment_info: value.attachment_info.into(),
+            attachments_metadata: value.attachments_metadata.into(),
+            deleted: value.deleted,
+            display_snooze_reminder: value.display_snooze_reminder,
+            expiration_time: value.expiration_time,
+            num_attachments: value.num_attachments,
+            num_messages: value.num_messages,
+            num_unread: value.num_unread,
+            display_order: value.display_order,
+            recipients: value.recipients.into(),
+            senders: value.senders.into(),
+            size: value.size,
+            subject: value.subject,
+        }
+    }
+}
+
 /// TODO: Document this struct.
 // TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
@@ -479,6 +1009,26 @@ pub struct ConversationCount {
 
     /// TODO: Document this field.
     pub unread: u64,
+}
+
+impl From<ConversationCount> for RealConversationCount {
+    fn from(value: ConversationCount) -> Self {
+        RealConversationCount {
+            label_id: value.label_id.into(),
+            total: value.total,
+            unread: value.unread,
+        }
+    }
+}
+
+impl From<RealConversationCount> for ConversationCount {
+    fn from(value: RealConversationCount) -> Self {
+        ConversationCount {
+            label_id: value.label_id.into(),
+            total: value.total,
+            unread: value.unread,
+        }
+    }
 }
 
 /// TODO: Document this struct.
@@ -525,6 +1075,46 @@ pub struct ConversationLabel {
     pub context_time: u64,
 }
 
+impl From<ConversationLabel> for RealConversationLabel {
+    fn from(value: ConversationLabel) -> Self {
+        RealConversationLabel {
+            local_id: value.local_id,
+            local_conversation_id: value.local_conversation_id,
+            remote_conversation_id: value.remote_conversation_id.map(Into::into),
+            local_label_id: value.local_label_id,
+            remote_label_id: value.remote_label_id.map(Into::into),
+            context_expiration_time: value.context_expiration_time,
+            context_num_attachments: value.context_num_attachments,
+            context_num_messages: value.context_num_messages,
+            context_num_unread: value.context_num_unread,
+            context_size: value.context_size,
+            context_snooze_time: value.context_snooze_time,
+            context_time: value.context_time,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<RealConversationLabel> for ConversationLabel {
+    fn from(value: RealConversationLabel) -> Self {
+        ConversationLabel {
+            local_id: value.local_id,
+            local_conversation_id: value.local_conversation_id,
+            remote_conversation_id: value.remote_conversation_id.map(Into::into),
+            local_label_id: value.local_label_id,
+            remote_label_id: value.remote_label_id.map(Into::into),
+            context_expiration_time: value.context_expiration_time,
+            context_num_attachments: value.context_num_attachments,
+            context_num_messages: value.context_num_messages,
+            context_num_unread: value.context_num_unread,
+            context_size: value.context_size,
+            context_snooze_time: value.context_snooze_time,
+            context_time: value.context_time,
+        }
+    }
+}
+
 /// Consists of the message's body metadata and decrypted content.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct DecryptedMessageBody {
@@ -535,6 +1125,24 @@ pub struct DecryptedMessageBody {
     pub metadata: MessageBodyMetadata,
 }
 
+impl From<DecryptedMessageBody> for RealDecryptedMessageBody {
+    fn from(value: DecryptedMessageBody) -> Self {
+        RealDecryptedMessageBody {
+            body: value.body,
+            metadata: value.metadata.into(),
+        }
+    }
+}
+
+impl From<RealDecryptedMessageBody> for DecryptedMessageBody {
+    fn from(value: RealDecryptedMessageBody) -> Self {
+        DecryptedMessageBody {
+            body: value.body,
+            metadata: value.metadata.into(),
+        }
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct EncryptedMessageBody {
@@ -543,6 +1151,24 @@ pub struct EncryptedMessageBody {
 
     /// TODO: Document this field.
     pub metadata: MessageBodyMetadata,
+}
+
+impl From<EncryptedMessageBody> for RealEncryptedMessageBody {
+    fn from(value: EncryptedMessageBody) -> Self {
+        RealEncryptedMessageBody {
+            encrypted_body: value.encrypted_body,
+            metadata: value.metadata.into(),
+        }
+    }
+}
+
+impl From<RealEncryptedMessageBody> for EncryptedMessageBody {
+    fn from(value: RealEncryptedMessageBody) -> Self {
+        EncryptedMessageBody {
+            encrypted_body: value.encrypted_body,
+            metadata: value.metadata.into(),
+        }
+    }
 }
 
 /// TODO: Document this struct.
@@ -556,6 +1182,18 @@ impl Deref for KeyPackets {
 
     fn deref(&self) -> &Self::Target {
         &self.value
+    }
+}
+
+impl From<KeyPackets> for RealKeyPackets {
+    fn from(value: KeyPackets) -> Self {
+        RealKeyPackets { value: value.value }
+    }
+}
+
+impl From<RealKeyPackets> for KeyPackets {
+    fn from(value: RealKeyPackets) -> Self {
+        KeyPackets { value: value.value }
     }
 }
 
@@ -627,9 +1265,75 @@ pub struct Label {
     pub unread_msg: u64,
 }
 
+impl From<Label> for RealLabel {
+    fn from(value: Label) -> Self {
+        RealLabel {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            local_parent_id: value.local_parent_id,
+            remote_parent_id: value.remote_parent_id.map(Into::into),
+            color: value.color.into(),
+            display: value.display,
+            expanded: value.expanded,
+            initialized_conv: value.initialized_conv,
+            initialized_msg: value.initialized_msg,
+            label_type: value.label_type.into(),
+            name: value.name,
+            notify: value.notify,
+            display_order: value.display_order,
+            path: value.path,
+            sticky: value.sticky,
+            total_conv: value.total_conv,
+            total_msg: value.total_msg,
+            unread_conv: value.unread_conv,
+            unread_msg: value.unread_msg,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<RealLabel> for Label {
+    fn from(value: RealLabel) -> Self {
+        Label {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            local_parent_id: value.local_parent_id,
+            remote_parent_id: value.remote_parent_id.map(Into::into),
+            color: value.color.into(),
+            display: value.display,
+            expanded: value.expanded,
+            initialized_conv: value.initialized_conv,
+            initialized_msg: value.initialized_msg,
+            label_type: value.label_type.into(),
+            name: value.name,
+            notify: value.notify,
+            display_order: value.display_order,
+            path: value.path,
+            sticky: value.sticky,
+            total_conv: value.total_conv,
+            total_msg: value.total_msg,
+            unread_conv: value.unread_conv,
+            unread_msg: value.unread_msg,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
 pub struct LabelColor {
     value: String,
+}
+
+impl From<LabelColor> for RealLabelColor {
+    fn from(value: LabelColor) -> Self {
+        RealLabelColor::from(value.to_string())
+    }
+}
+
+impl From<RealLabelColor> for LabelColor {
+    fn from(value: RealLabelColor) -> Self {
+        LabelColor::from(value.to_string())
+    }
 }
 
 /// TODO: Document this struct.
@@ -770,6 +1474,104 @@ pub struct MailSettings {
     pub view_mode: ViewMode,
 }
 
+impl From<MailSettings> for RealMailSettings {
+    fn from(value: MailSettings) -> Self {
+        RealMailSettings {
+            local_id: value.local_id,
+            almost_all_mail: value.almost_all_mail.into(),
+            attach_public_key: value.attach_public_key,
+            auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
+            auto_save_contacts: value.auto_save_contacts,
+            block_sender_confirmation: value.block_sender_confirmation,
+            composer_mode: value.composer_mode.into(),
+            confirm_link: value.confirm_link,
+            delay_send_seconds: value.delay_send_seconds,
+            display_name: value.display_name,
+            draft_mime_type: value.draft_mime_type.into(),
+            enable_folder_color: value.enable_folder_color,
+            font_face: value.font_face,
+            hide_remote_images: value.hide_remote_images,
+            hide_sender_images: value.hide_sender_images,
+            image_proxy: value.image_proxy,
+            inherit_parent_folder_color: value.inherit_parent_folder_color,
+            message_buttons: value.message_buttons.into(),
+            mobile_settings: value.mobile_settings.map(Into::into),
+            next_message_on_move: value.next_message_on_move.map(Into::into),
+            num_message_per_page: value.num_message_per_page,
+            pgp_scheme: value.pgp_scheme.into(),
+            pm_signature: value.pm_signature.into(),
+            pm_signature_referral_link: value.pm_signature_referral_link,
+            prompt_pin: value.prompt_pin,
+            receive_mime_type: value.receive_mime_type.into(),
+            right_to_left: value.right_to_left.into(),
+            shortcuts: value.shortcuts,
+            show_images: value.show_images.into(),
+            show_mime_type: value.show_mime_type.into(),
+            show_moved: value.show_moved.into(),
+            sign: value.sign,
+            signature: value.signature,
+            spam_action: value.spam_action.map(Into::into),
+            sticky_labels: value.sticky_labels,
+            submission_access: value.submission_access,
+            swipe_left: value.swipe_left.into(),
+            swipe_right: value.swipe_right.into(),
+            theme: value.theme,
+            view_layout: value.view_layout.into(),
+            view_mode: value.view_mode.into(),
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<RealMailSettings> for MailSettings {
+    fn from(value: RealMailSettings) -> Self {
+        MailSettings {
+            local_id: value.local_id,
+            almost_all_mail: value.almost_all_mail.into(),
+            attach_public_key: value.attach_public_key,
+            auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
+            auto_save_contacts: value.auto_save_contacts,
+            block_sender_confirmation: value.block_sender_confirmation,
+            composer_mode: value.composer_mode.into(),
+            confirm_link: value.confirm_link,
+            delay_send_seconds: value.delay_send_seconds,
+            display_name: value.display_name,
+            draft_mime_type: value.draft_mime_type.into(),
+            enable_folder_color: value.enable_folder_color,
+            font_face: value.font_face,
+            hide_remote_images: value.hide_remote_images,
+            hide_sender_images: value.hide_sender_images,
+            image_proxy: value.image_proxy,
+            inherit_parent_folder_color: value.inherit_parent_folder_color,
+            message_buttons: value.message_buttons.into(),
+            mobile_settings: value.mobile_settings.map(Into::into),
+            next_message_on_move: value.next_message_on_move.map(Into::into),
+            num_message_per_page: value.num_message_per_page,
+            pgp_scheme: value.pgp_scheme.into(),
+            pm_signature: value.pm_signature.into(),
+            pm_signature_referral_link: value.pm_signature_referral_link,
+            prompt_pin: value.prompt_pin,
+            receive_mime_type: value.receive_mime_type.into(),
+            right_to_left: value.right_to_left.into(),
+            shortcuts: value.shortcuts,
+            show_images: value.show_images.into(),
+            show_mime_type: value.show_mime_type.into(),
+            show_moved: value.show_moved.into(),
+            sign: value.sign,
+            signature: value.signature,
+            spam_action: value.spam_action.map(Into::into),
+            sticky_labels: value.sticky_labels,
+            submission_access: value.submission_access,
+            swipe_left: value.swipe_left.into(),
+            swipe_right: value.swipe_right.into(),
+            theme: value.theme,
+            view_layout: value.view_layout.into(),
+            view_mode: value.view_mode.into(),
+        }
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
@@ -870,6 +1672,82 @@ pub struct Message {
     pub unread: bool,
 }
 
+impl From<Message> for RealMessage {
+    fn from(value: Message) -> Self {
+        RealMessage {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            local_conversation_id: value.local_conversation_id,
+            remote_conversation_id: value.remote_conversation_id.map(Into::into),
+            address_id: value.address_id.into(),
+            attachments: value.attachments.into(),
+            attachments_metadata: value.attachments_metadata.into(),
+            bcc_list: value.bcc_list.into(),
+            body: String::new(),
+            cc_list: value.cc_list.into(),
+            deleted: value.deleted,
+            expiration_time: value.expiration_time,
+            external_id: value.external_id.map(Into::into),
+            header: value.header,
+            flags: value.flags.into(),
+            is_forwarded: value.is_forwarded,
+            is_replied: value.is_replied,
+            is_replied_all: value.is_replied_all,
+            label_ids: vec![],
+            mime_type: value.mime_type.into(),
+            num_attachments: value.num_attachments,
+            display_order: value.display_order,
+            parsed_headers: value.parsed_headers.into(),
+            reply_tos: value.reply_tos.into(),
+            sender: value.sender.into(),
+            size: value.size,
+            snooze_time: value.snooze_time,
+            subject: value.subject,
+            time: value.time,
+            to_list: value.to_list.into(),
+            unread: value.unread,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<RealMessage> for Message {
+    fn from(value: RealMessage) -> Self {
+        Message {
+            local_id: value.local_id,
+            remote_id: value.remote_id.map(Into::into),
+            local_conversation_id: value.local_conversation_id,
+            remote_conversation_id: value.remote_conversation_id.map(Into::into),
+            address_id: value.address_id.into(),
+            attachments: value.attachments.into(),
+            attachments_metadata: value.attachments_metadata.into(),
+            bcc_list: value.bcc_list.into(),
+            cc_list: value.cc_list.into(),
+            deleted: value.deleted,
+            expiration_time: value.expiration_time,
+            external_id: value.external_id.map(Into::into),
+            header: value.header,
+            flags: value.flags.into(),
+            is_forwarded: value.is_forwarded,
+            is_replied: value.is_replied,
+            is_replied_all: value.is_replied_all,
+            mime_type: value.mime_type.into(),
+            num_attachments: value.num_attachments,
+            display_order: value.display_order,
+            parsed_headers: value.parsed_headers.into(),
+            reply_tos: value.reply_tos.into(),
+            sender: value.sender.into(),
+            size: value.size,
+            snooze_time: value.snooze_time,
+            subject: value.subject,
+            time: value.time,
+            to_list: value.to_list.into(),
+            unread: value.unread,
+        }
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageAddress {
@@ -893,9 +1771,51 @@ pub struct MessageAddress {
     pub name: String,
 }
 
+impl From<MessageAddress> for RealMessageAddress {
+    fn from(value: MessageAddress) -> Self {
+        RealMessageAddress {
+            address: value.address,
+            bimi_selector: value.bimi_selector,
+            display_sender_image: value.display_sender_image,
+            is_proton: value.is_proton,
+            is_simple_login: value.is_simple_login,
+            name: value.name,
+        }
+    }
+}
+
+impl From<RealMessageAddress> for MessageAddress {
+    fn from(value: RealMessageAddress) -> Self {
+        MessageAddress {
+            address: value.address,
+            bimi_selector: value.bimi_selector,
+            display_sender_image: value.display_sender_image,
+            is_proton: value.is_proton,
+            is_simple_login: value.is_simple_login,
+            name: value.name,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
 pub struct MessageAddresses {
     pub value: Vec<MessageAddress>,
+}
+
+impl From<MessageAddresses> for RealMessageAddresses {
+    fn from(value: MessageAddresses) -> Self {
+        RealMessageAddresses {
+            value: value.value.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<RealMessageAddresses> for MessageAddresses {
+    fn from(value: RealMessageAddresses) -> Self {
+        MessageAddresses {
+            value: value.value.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
@@ -928,6 +1848,38 @@ pub struct MessageAttachment {
     pub size: u64,
 }
 
+impl From<MessageAttachment> for RealMessageAttachment {
+    fn from(value: MessageAttachment) -> Self {
+        RealMessageAttachment {
+            id: value.id.into(),
+            disposition: value.disposition.into(),
+            enc_signature: value.enc_signature.map(Into::into),
+            headers: value.headers.into(),
+            key_packets: value.key_packets.into(),
+            mime_type: value.mime_type.into(),
+            signature: value.signature.map(Into::into),
+            name: value.name,
+            size: value.size,
+        }
+    }
+}
+
+impl From<RealMessageAttachment> for MessageAttachment {
+    fn from(value: RealMessageAttachment) -> Self {
+        MessageAttachment {
+            id: value.id.into(),
+            disposition: value.disposition.into(),
+            enc_signature: value.enc_signature.map(Into::into),
+            headers: value.headers.into(),
+            key_packets: value.key_packets.into(),
+            mime_type: value.mime_type.into(),
+            signature: value.signature.map(Into::into),
+            name: value.name,
+            size: value.size,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageAttachmentHeaders {
     /// TODO: Document this field.
@@ -946,6 +1898,30 @@ pub struct MessageAttachmentHeaders {
     pub image_width: Option<String>,
 }
 
+impl From<MessageAttachmentHeaders> for RealMessageAttachmentHeaders {
+    fn from(value: MessageAttachmentHeaders) -> Self {
+        RealMessageAttachmentHeaders {
+            content_disposition: value.content_disposition,
+            content_id: value.content_id,
+            content_transfer_encoding: value.content_transfer_encoding,
+            image_height: value.image_height,
+            image_width: value.image_width,
+        }
+    }
+}
+
+impl From<RealMessageAttachmentHeaders> for MessageAttachmentHeaders {
+    fn from(value: RealMessageAttachmentHeaders) -> Self {
+        MessageAttachmentHeaders {
+            content_disposition: value.content_disposition,
+            content_id: value.content_id,
+            content_transfer_encoding: value.content_transfer_encoding,
+            image_height: value.image_height,
+            image_width: value.image_width,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageAttachmentInfo {
     /// TODO: Document this field.
@@ -953,6 +1929,24 @@ pub struct MessageAttachmentInfo {
 
     /// TODO: Document this field.
     pub inline: u32,
+}
+
+impl From<MessageAttachmentInfo> for RealMessageAttachmentInfo {
+    fn from(value: MessageAttachmentInfo) -> Self {
+        RealMessageAttachmentInfo {
+            attachment: value.attachment,
+            inline: value.inline,
+        }
+    }
+}
+
+impl From<RealMessageAttachmentInfo> for MessageAttachmentInfo {
+    fn from(value: RealMessageAttachmentInfo) -> Self {
+        MessageAttachmentInfo {
+            attachment: value.attachment,
+            inline: value.inline,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
@@ -974,6 +1968,30 @@ impl DerefMut for MessageAttachmentInfos {
     }
 }
 
+impl From<MessageAttachmentInfos> for RealMessageAttachmentInfos {
+    fn from(value: MessageAttachmentInfos) -> Self {
+        RealMessageAttachmentInfos {
+            value: value
+                .value
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+        }
+    }
+}
+
+impl From<RealMessageAttachmentInfos> for MessageAttachmentInfos {
+    fn from(value: RealMessageAttachmentInfos) -> Self {
+        MessageAttachmentInfos {
+            value: value
+                .value
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
 pub struct MessageAttachments {
     pub value: Vec<MessageAttachment>,
@@ -990,6 +2008,22 @@ impl Deref for MessageAttachments {
 impl DerefMut for MessageAttachments {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
+    }
+}
+
+impl From<MessageAttachments> for RealMessageAttachments {
+    fn from(value: MessageAttachments) -> Self {
+        RealMessageAttachments {
+            value: value.value.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<RealMessageAttachments> for MessageAttachments {
+    fn from(value: RealMessageAttachments) -> Self {
+        MessageAttachments {
+            value: value.value.into_iter().map(Into::into).collect(),
+        }
     }
 }
 
@@ -1027,6 +2061,32 @@ pub struct MessageBodyMetadata {
     pub parsed_headers: ParsedHeaders,
 }
 
+impl From<MessageBodyMetadata> for RealMessageBodyMetadata {
+    fn from(value: MessageBodyMetadata) -> Self {
+        RealMessageBodyMetadata {
+            local_message_id: value.local_message_id,
+            remote_message_id: value.remote_message_id.map(Into::into),
+            header: value.header,
+            mime_type: value.mime_type.into(),
+            parsed_headers: value.parsed_headers.into(),
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
+impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
+    fn from(value: RealMessageBodyMetadata) -> Self {
+        MessageBodyMetadata {
+            local_message_id: value.local_message_id,
+            remote_message_id: value.remote_message_id.map(Into::into),
+            header: value.header,
+            mime_type: value.mime_type.into(),
+            parsed_headers: value.parsed_headers.into(),
+        }
+    }
+}
+
 /// TODO: Document this struct.
 // TODO: This does not get saved directly in the database, so perhaps could be
 // TODO: removed from here and the API type used directly.
@@ -1042,6 +2102,26 @@ pub struct MessageCount {
     pub unread: u64,
 }
 
+impl From<MessageCount> for RealMessageCount {
+    fn from(value: MessageCount) -> Self {
+        RealMessageCount {
+            label_id: value.label_id.into(),
+            total: value.total,
+            unread: value.unread,
+        }
+    }
+}
+
+impl From<RealMessageCount> for MessageCount {
+    fn from(value: RealMessageCount) -> Self {
+        MessageCount {
+            label_id: value.label_id.into(),
+            total: value.total,
+            unread: value.unread,
+        }
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageFlags {
@@ -1050,13 +2130,15 @@ pub struct MessageFlags {
 
 impl From<MessageFlags> for RealMessageFlags {
     fn from(value: MessageFlags) -> Self {
-        RealMessageFlags::from_bits_truncate(value.0)
+        RealMessageFlags::from_bits_truncate(value.value)
     }
 }
 
 impl From<RealMessageFlags> for MessageFlags {
     fn from(value: RealMessageFlags) -> Self {
-        MessageFlags(value.bits())
+        MessageFlags {
+            value: value.bits(),
+        }
     }
 }
 
@@ -1068,6 +2150,24 @@ pub struct MobileSetting {
 
     /// TODO: Document this field.
     pub is_custom: bool,
+}
+
+impl From<MobileSetting> for RealMobileSetting {
+    fn from(value: MobileSetting) -> Self {
+        RealMobileSetting {
+            actions: value.actions,
+            is_custom: value.is_custom,
+        }
+    }
+}
+
+impl From<RealMobileSetting> for MobileSetting {
+    fn from(value: RealMobileSetting) -> Self {
+        MobileSetting {
+            actions: value.actions,
+            is_custom: value.is_custom,
+        }
+    }
 }
 
 /// TODO: Document this struct.
@@ -1083,12 +2183,64 @@ pub struct MobileSettings {
     pub message_toolbar: MobileSetting,
 }
 
+impl From<MobileSettings> for RealMobileSettings {
+    fn from(value: MobileSettings) -> Self {
+        RealMobileSettings {
+            conversation_toolbar: value.conversation_toolbar.into(),
+            list_toolbar: value.list_toolbar.into(),
+            message_toolbar: value.message_toolbar.into(),
+        }
+    }
+}
+
+impl From<RealMobileSettings> for MobileSettings {
+    fn from(value: RealMobileSettings) -> Self {
+        MobileSettings {
+            conversation_toolbar: value.conversation_toolbar.into(),
+            list_toolbar: value.list_toolbar.into(),
+            message_toolbar: value.message_toolbar.into(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
 pub struct ParsedHeaders {
     pub headers: HashMap<String, String>,
 }
 
+impl From<ParsedHeaders> for RealParsedHeaders {
+    fn from(value: ParsedHeaders) -> Self {
+        RealParsedHeaders {
+            headers: value.headers,
+        }
+    }
+}
+
+impl From<RealParsedHeaders> for ParsedHeaders {
+    fn from(value: RealParsedHeaders) -> Self {
+        ParsedHeaders {
+            headers: value.headers,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
 pub struct RemoteIds {
     pub value: Vec<RemoteId>,
+}
+
+impl From<RemoteIds> for RealRemoteIds {
+    fn from(value: RemoteIds) -> Self {
+        RealRemoteIds {
+            value: value.value.iter().map(|id| id.clone().into()).collect(),
+        }
+    }
+}
+
+impl From<RealRemoteIds> for RemoteIds {
+    fn from(value: RealRemoteIds) -> Self {
+        RemoteIds {
+            value: value.value.iter().map(|id| id.clone().into()).collect(),
+        }
+    }
 }

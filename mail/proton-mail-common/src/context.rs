@@ -1,5 +1,4 @@
 use crate::actions::ActionError;
-use crate::db::DBMigrationError;
 use crate::{AppError, MailUserContext};
 use futures::executor::block_on;
 use proton_action_queue::action::Action;
@@ -13,6 +12,7 @@ use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
+use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,7 +28,7 @@ pub enum MailContextError {
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Database Migration Error: {0}")]
-    DBMigration(#[from] DBMigrationError),
+    DBMigration(#[from] MigratorError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
     #[error("Event Loop: {0}")]
@@ -41,7 +41,7 @@ pub enum MailContextError {
     QueuedAction(#[from] QueuedError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(KeyHandlingError),
-    #[error("Stash Error: {0}")]
+    #[error("App Error: {0}")]
     App(#[from] AppError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
@@ -187,7 +187,7 @@ impl MailContext {
 struct MailUserDatabaseInitializer {}
 
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
-    fn initialize(&self, stash: &Stash) -> Result<(), DBMigrationError> {
+    fn initialize(&self, stash: &Stash) -> Result<(), MigratorError> {
         block_on(async {
             crate::db::migrations::migrate_db(stash).await?;
             Ok(())

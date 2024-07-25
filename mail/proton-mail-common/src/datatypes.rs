@@ -473,7 +473,6 @@ impl ToSql for PgpScheme {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
 #[repr(u8)]
 pub enum PmSignature {
     /// TODO: Document this variant.
