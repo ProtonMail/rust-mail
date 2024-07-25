@@ -93,8 +93,9 @@ impl Transformer {
     /// # Errors
     ///
     /// Returns errors if the pass failed.
-    pub fn strip_utm(&mut self) -> Result<(), utm::Error> {
-        utm::strip(&self.document)
+    pub fn strip_utm(&mut self) -> Result<&mut Self, utm::Error> {
+        utm::strip(&self.document)?;
+        Ok(self)
     }
 
     /// Disables remote content.
@@ -108,8 +109,9 @@ impl Transformer {
     /// # Errors
     ///
     /// Returns errors if the pass failed.
-    pub fn disable_remote_content(&mut self) -> Result<(), remote_content::Error> {
-        remote_content::disable_remote_content(&self.document)
+    pub fn disable_remote_content(&mut self) -> Result<&mut Self, remote_content::Error> {
+        remote_content::disable_remote_content(&self.document)?;
+        Ok(self)
     }
 
     /// Enables remote content.
@@ -123,8 +125,9 @@ impl Transformer {
     /// # Errors
     ///
     /// Returns errors if the pass failed.
-    pub fn enable_remote_content(&mut self) -> Result<(), remote_content::Error> {
-        remote_content::undo_disable_remote_content(&self.document)
+    pub fn enable_remote_content(&mut self) -> Result<&mut Self, remote_content::Error> {
+        remote_content::undo_disable_remote_content(&self.document)?;
+        Ok(self)
     }
 
     /// If true, inject metadata for iOS web view.
@@ -134,8 +137,9 @@ impl Transformer {
     /// # Errors
     ///
     /// Returns errors if the pass failed.
-    pub fn inject_ios_content_size(&mut self) -> Result<(), Error> {
-        Ok(ios::inject_content_size(&self.document)?)
+    pub fn inject_ios_content_size(&mut self) -> Result<&mut Self, Error> {
+        ios::inject_content_size(&self.document)?;
+        Ok(self)
     }
 
     /// This function removes the tags and attributes defined in the [`sanitizer_consts`](crate::sanitizer_consts) file.
@@ -150,8 +154,9 @@ impl Transformer {
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
-    pub fn strip_whitelist(&self) {
+    pub fn strip_whitelist(&mut self) -> &mut Self {
         strip_whitelist(self.document.clone());
+        self
     }
 }
 
@@ -168,13 +173,9 @@ mod test {
     #[test]
     fn acceptable_html() {
         let html = include_str!("../tests/htmls/acceptable.html");
-        let t = Transformer::new(html);
-        t.strip_whitelist();
-        let unsanitized_html = t.to_string();
 
-        let t = Transformer::new(html);
-        t.strip_whitelist();
-        let html = t.to_string();
+        let unsanitized_html = Transformer::new(html).strip_whitelist().to_string();
+        let html = Transformer::new(html).strip_whitelist().to_string();
         assert_eq!(unsanitized_html, html);
     }
 
@@ -182,17 +183,15 @@ mod test {
     fn strip_bad_html() {
         let html = include_str!("../tests/htmls/strip_bad.html");
 
-        let t = Transformer::new(html);
-        t.strip_whitelist();
-        insta::assert_snapshot!(t);
+        let html = Transformer::new(html).strip_whitelist().to_string();
+        insta::assert_snapshot!(html);
     }
 
     #[test]
     fn email_privacy_tester() {
         let html = include_str!("../tests/htmls/email_privacy_tester.html");
 
-        let t = Transformer::new(html);
-        t.strip_whitelist();
-        insta::assert_snapshot!(t);
+        let html = Transformer::new(html).strip_whitelist().to_string();
+        insta::assert_snapshot!(html);
     }
 }
