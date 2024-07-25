@@ -61,7 +61,7 @@ async fn test_remote_label_update() {
     stash.execute("DELETE FROM labels", vec![]).await.unwrap();
     let mut labels = test_labels()
         .into_iter()
-        .map(|l| Label::from(l))
+        .map(Label::from)
         .collect::<Vec<_>>();
     for label in &mut labels {
         label.save_using(&tx).await.unwrap();
@@ -137,7 +137,6 @@ async fn test_delete_remote() {
         .iter()
         .skip(1)
         .cloned()
-        .map(|l| l.into())
         .collect::<Vec<_>>();
 
     let local_labels = Label::find(String::new(), vec![], &stash, None)
@@ -166,10 +165,10 @@ async fn label_with_counts() {
         order: 0,
     };
 
-    let total_conv = 20u64;
-    let unread_conv = 40u64;
-    let total_msg = 200u64;
-    let unread_msg = 600u64;
+    let total_conv = 20_u64;
+    let unread_conv = 40_u64;
+    let total_msg = 200_u64;
+    let unread_msg = 600_u64;
 
     let mut local_label = Label::from(label.clone());
     local_label.save_using(&tx).await.unwrap();
@@ -181,7 +180,7 @@ async fn label_with_counts() {
             total: total_conv,
             unread: unread_conv,
         }],
-        &tx.stash(),
+        tx.stash(),
     )
     .await
     .unwrap();
@@ -192,7 +191,7 @@ async fn label_with_counts() {
             total: total_msg,
             unread: unread_msg,
         }],
-        &tx.stash(),
+        tx.stash(),
     )
     .await
     .unwrap();
@@ -387,7 +386,7 @@ async fn update_local_label() {
         .expect("failed to create label");
 
     async fn compare_db_label(tx: &Tether, id: u64, f: impl FnOnce(&Label)) {
-        let db_label = Label::load_using(id, &tx)
+        let db_label = Label::load_using(id, tx)
             .await
             .expect("failed to get label")
             .expect("must have value");
@@ -475,7 +474,7 @@ async fn test_mark_labels_as_initialized() {
 }
 
 async fn compare_remote_labels_with_local(stash: &Stash, remote_labels: Vec<ApiLabel>) {
-    let local_labels = Label::find(String::new(), vec![], &stash, None)
+    let local_labels = Label::find(String::new(), vec![], stash, None)
         .await
         .expect("failed to get labels");
 
@@ -590,20 +589,20 @@ async fn compare_local_to_remote(stash: &Stash, local: &Label, remote: &ApiLabel
         "order does not match for {}",
         remote.id
     );
-    let sticky: bool = remote.sticky.into();
+    let sticky: bool = remote.sticky;
     assert_eq!(
         local.sticky, sticky,
         "sticky does not match for {}",
         remote.id
     );
 
-    let expanded: bool = remote.expanded.into();
+    let expanded: bool = remote.expanded;
     assert_eq!(
         local.expanded, expanded,
         "expanded does not match for {}",
         remote.id
     );
-    let notify: bool = remote.notify.into();
+    let notify: bool = remote.notify;
     assert_eq!(
         local.notify, notify,
         "notified does not match for {}",

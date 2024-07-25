@@ -218,28 +218,28 @@ fn remove_from_url() {
 
     let url = "panda"; // Invalid URL
     let new_url = strip_from_string(url);
-    assert_eq!(new_url.is_err(), true);
+    assert!(new_url.is_err());
 }
 
 #[test]
 fn remove_with_transformer() {
     use crate::Transformer;
     use kuchikiki::traits::*;
-    let input = r##"
+    let input = r#"
 <html>
     <body>
         <a href="https://ads.com?utm_source=tracker">bar</a>
     </body>
 </html>
-"##;
+"#;
 
-    let expected = r##"
+    let expected = r#"
 <html>
     <body>
         <a href="https://ads.com/">bar</a>
     </body>
 </html>
-"##;
+"#;
 
     // Parse and print so the results have the same formatting.
     let expected = kuchikiki::parse_html().one(expected).to_string();

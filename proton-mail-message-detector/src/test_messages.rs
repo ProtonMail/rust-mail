@@ -1,5 +1,5 @@
 //! Test Emails
-pub const DEFAULT: [&'static str; 16] = [
+pub const DEFAULT: [&str; 16] = [
     PROTON_1,
     PROTON_2,
     GMAIL_1,
@@ -19,7 +19,7 @@ pub const DEFAULT: [&'static str; 16] = [
 ];
 
 #[allow(dead_code)]
-pub const UNSUPPORTED: [&'static str; 15] = [
+pub const UNSUPPORTED: [&str; 15] = [
     COMCAST,      // HR
     HOTMAIL_1,    // ALMOST NOTHING
     HOTMAIL_2,    // HR
@@ -81,7 +81,7 @@ const ANDROID: &str = r#"
 </blockquote></div>
 "#;
 
-const AOL_1: &str = r##"
+const AOL_1: &str = r#"
  <font color='black' size='2' face='arial'>Hello<br>
  <span>toto</span>
  <span>------- Original Message -------</span>
@@ -113,9 +113,9 @@ const AOL_1: &str = r##"
 
  </div>
  </font>
- "##;
+ "#;
 
-const COMCAST: &str = r##"
+const COMCAST: &str = r#"
 <html>
 <head><style type='text/css'>p { margin: 0; }</style></head>
 <body>
@@ -124,25 +124,25 @@ Hello<br><br><hr id="zwchr"><b>From: </b>bob@xxx.mailgun.org<br><b>To: </b>xxx@g
 </div>
 </body>
 </html>
-"##;
+"#;
 
-const GMAIL_2: &str = r##"
+const GMAIL_2: &str = r#"
 Hello<br><br><div class="gmail_quote">On Mon, Apr 2, 2012 at 6:26 PM, Megan One <span dir="ltr">&lt;<a href="mailto:xxx@gmail.com">xxx@gmail.com</a>&gt;</span> wrote:<br><blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-inline-start:1px #ccc solid;padding-inline-start:1ex">
 Hi
 
 </blockquote></div><br>
-"##;
+"#;
 
-const GMAIL_3: &str = r##"
+const GMAIL_3: &str = r#"
 <div dir="ltr"><div class="gmail_default"><div class="gmail_default" style>Hi. I am fine.</div><div class="gmail_default" style><br></div><div class="gmail_default" style>Thanks,</div><div class="gmail_default" style>Alex</div>
 </div></div><div class="gmail_extra"><br><br><div class="gmail_quote">On Thu, Jun 26, 2014 at 2:14 PM, Alexander L <span dir="ltr">&lt;<a href="mailto:abc@example.com" target="_blank">a@example.com</a>&gt;</span> wrote:<br>
 <blockquote class="gmail_quote" style="margin:0 0 0 .8ex;border-inline-start:1px #ccc solid;padding-inline-start:1ex"><div dir="ltr"><div class="gmail_default" style="font-size:small"><div class="gmail_default" style="font-family:arial,sans-serif">
 Hello! How are you?</div><div class="gmail_default" style="font-family:arial,sans-serif"><br>
 </div><div class="gmail_default" style="font-family:arial,sans-serif">Thanks,</div><div class="gmail_default" style="font-family:arial,sans-serif">Sasha.</div></div></div>
 </blockquote></div><br></div>
-"##;
+"#;
 
-const HOTMAIL_1: &str = r##"
+const HOTMAIL_1: &str = r#"
 <html>
 <head>
 <style><!--
@@ -160,9 +160,9 @@ font-family:Tahoma
 <body class='hmmessage'><div dir='ltr'>
 Hello<br><br><div><div id="SkyDrivePlaceholder"></div>&gt; Subject: Test<br>&gt; From: bob@xxx.mailgun.org<br>&gt; To: xxx@gmail.com; xxx@hotmail.com; xxx@yahoo.com; xxx@aol.com; xxx@comcast.net; xxx@nyc.rr.com<br>&gt; Date: Mon, 2 Apr 2012 17:44:22 +0400<br>&gt; <br>&gt; Hi<br></div> 		 	   		  </div></body>
 </html>
-"##;
+"#;
 
-const HOTMAIL_2: &str = r##"
+const HOTMAIL_2: &str = r#"
 <?xml version="1.0" encoding="UTF-8"?>
 <html>
 <head>
@@ -181,7 +181,7 @@ font-family:Calibri
 <body class='hmmessage'><div dir='ltr'>Hi. I am fine.<div><br></div><div>Thanks,</div><div>Alex<br><br><div><hr id="stopSpelling">Date: Thu, 26 Jun 2014 13:53:45 +0400<br>Subject: Test message<br>From: abc@example.com<br>To: alex.l@example.com<br><br><div dir="ltr"><div class="ecxgmail_default" style="font-size:small;">Hello! How are you?</div><div class="ecxgmail_default" style="font-size:small;"><br></div><div class="ecxgmail_default" style="font-size:small;">Thanks,</div><div class="ecxgmail_default" style="font-size:small;">
 Sasha.</div></div></div></div> 		 	   		  </div></body>
 </html>
-"##;
+"#;
 
 const OUTLOOK_1: &str = r#"
 <html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml" xmlns="http://www.w3.org/TR/REC-html40"><head><META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=us-ascii"><meta name=Generator content="Microsoft Word 14 (filtered medium)"><style><!--
@@ -511,7 +511,7 @@ div.WordSection1
 </html>
 "#;
 
-const SPARROW: &str = r#"
+const SPARROW: &str = r"
 <div>
 <span style=3D=22font-size: 12px;=22>Hello</span>
 </div>
@@ -535,7 +535,7 @@ ckquote type=3D=22cite=22><div>Hi</div></blockquote></div></div></span>
 <div>
 <br>
 </div>
-"#;
+";
 
 const MAIL_RU: &str = r#"
 <HTML><BODY><p>Hi. I am fine.</p><p>Thanks,<br>Alex</p><br><br><br>Thu, 26 Jun 2014 14:00:51 +0400 от Alexander L &lt;abc@example.com&gt;:<br>
@@ -592,7 +592,7 @@ cite="mid:CA+jEWTKBU6qc4OnH5m=-0sfwkAzZhcy0rd+ean2W6bFUVXaO7A@mail.gmail.com"
 </html>
 "##;
 
-const WINDOWS_MAIL: &str = r##"
+const WINDOWS_MAIL: &str = r#"
 <html>
 <head>
 <meta name="generator" content="Windows Mail 17.5.9600.20498">
@@ -625,7 +625,7 @@ line-height:115%;
 </div></div>
 </body>
 </html>
-"##;
+"#;
 
 const YANDEX_1: &str = r#"
 <p>
@@ -691,7 +691,7 @@ style="margin-block:0; margin-inline: 0.8ex 0;border-inline-start-width:1px;bord
 </div>
 "#;
 
-const GMX: &str = r##"
+const GMX: &str = r#"
 &#22238;&#22797;&#20869;&#23481;<br />
 content1<br />
 content2<br>
@@ -713,7 +713,7 @@ style='margin-block: 10px 5px; margin-inline: 10px 5px; padding-block: 10px; pad
 </div>
 </div>
 <br />
-"##;
+"#;
 
 const HOTMAIL_3: &str = r##"
 <html>
@@ -753,7 +753,7 @@ style="color: rgb(50, 49, 48); font-family: &quot;Segoe UI&quot;, &quot;Segoe UI
 </html>
 "##;
 
-const ICLOUD: &str = r##"
+const ICLOUD: &str = r#"
 <html>
 <body>
 <div>回复内容</div>
@@ -784,16 +784,16 @@ data-mce-style="background-color: #ff0000;">content2</u></i></div>
 <audio controls="controls" style="display: none;"></audio>
 </body>
 </html>
-"##;
+"#;
 
-const NETEASE: &str = r##"
+const NETEASE: &str = r#"
 回复内容<br>content1<br>content2<br><br>At 2019-07-04 11:20:38, "冯伟" &lt;felixfw1111@gmail.com&gt; wrote:<br>
 <blockquote id="isReplyContent" style="padding-inline-start: 1ex; margin-block: 0; margin-inline: 0.8ex 0; border-inline-start: #ccc 1px solid">
 <div dir="ltr"><b>content1</b>
 <div><i><u style="background-color:rgb(255,0,0)">content2</u></i></div>
 </div>
 </blockquote><br><br><span title="neteasefooter"><p>&nbsp;</p></span>
-"##;
+"#;
 
 const OUTLOOK_2: &str = r##"
 <html>
@@ -833,7 +833,7 @@ style="color: rgb(50, 49, 48); font-family: &quot;Segoe UI&quot;, &quot;Segoe UI
 </html>
 "##;
 
-const PROTON_2: &str = r##"
+const PROTON_2: &str = r#"
 <div>回复内容<br></div>
 <blockquote type="cite" class="protonmail_quote">
 <div dir="ltr">
@@ -857,9 +857,9 @@ target="_blank">ProtonMail</a> Secure Email.<br></div>
 </div>
 </blockquote>
 <div><br></div>
-"##;
+"#;
 
-const SINA: &str = r##"
+const SINA: &str = r#"
 回复内容<br />content1<br />content2<br />
 <div id="origbody">
 <div style="background: #f2f2f2;">----- 原始邮件 -----<br />发件人：冯伟 &lt;felixfw1111@gmail.com&gt;<br />收件人：felixfw1111@sina.com<br />主题：gmail
@@ -870,7 +870,7 @@ to sina<br />日期：2019年07月04日 11点27分<br /></div>
 </div>
 
 </div>
-"##;
+"#;
 
 const TENCENT: &str = r##"
 <font color="#800000" face="幼圆">回复内容</font>
@@ -897,7 +897,7 @@ display: none !important;
 }</style>
 "##;
 
-const YAHOO: &str = r##"
+const YAHOO: &str = r#"
 <html>
 <head></head>
 <body>
@@ -950,9 +950,9 @@ style="inline-size: 903.406px;"></div>
 </div>
 </body>
 </html>
-"##;
+"#;
 
-const YANDEX_2: &str = r##"
+const YANDEX_2: &str = r#"
 <div>回复内容</div>
 <div>
 <b style="background-color:rgb( 255 , 255 , 255 );color:rgb( 0 , 0 , 0 );font-family:'arial' , sans-serif;font-size:15px;font-style:normal;text-decoration-style:initial;text-transform:none;white-space:normal;word-spacing:0px">content1</b>
@@ -967,9 +967,9 @@ const YANDEX_2: &str = r##"
 <div><i><u style="background-color:rgb( 255 , 0 , 0 )">content2</u></i></div>
 </div>
 </blockquote>
-"##;
+"#;
 
-const ZOHO: &str = r##"
+const ZOHO: &str = r#"
 <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
 <html>
 <head>
@@ -1008,4 +1008,4 @@ style="color:#598fde;">Zoho Mail</a>发送</span><br></p></div>
 </div>
 <br></body>
 </html>
-"##;
+"#;

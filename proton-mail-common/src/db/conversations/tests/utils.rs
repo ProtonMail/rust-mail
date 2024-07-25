@@ -112,11 +112,10 @@ pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
 
     fn extend_addresses(addresses: &mut MessageAddresses, new_addresses: &[MessageAddress]) {
         for addr in new_addresses {
-            if addresses
+            if !addresses
                 .value
                 .iter_mut()
-                .find(|a| a.address == *addr.address)
-                .is_none()
+                .any(|a| a.address == *addr.address)
             {
                 addresses.value.push(addr.clone());
             }
@@ -141,10 +140,10 @@ pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
         conv.num_attachments += message.num_attachments as u64;
         conv.size += message.size;
         conv.num_messages += 1;
-        if message.unread == true {
+        if message.unread {
             conv.num_unread += 1;
         }
-        extend_addresses(&mut conv.senders, &vec![message.sender.clone()]);
+        extend_addresses(&mut conv.senders, &[message.sender.clone()]);
         extend_addresses(&mut conv.recipients, &message.to_list.value);
         extend_addresses(&mut conv.recipients, &message.cc_list.value);
 
@@ -159,7 +158,7 @@ pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
                 .max(message.expiration_time);
             conv_label.context_snooze_time =
                 conv_label.context_snooze_time.max(message.snooze_time);
-            if message.unread == true {
+            if message.unread {
                 conv_label.context_num_unread += 1;
             }
         }
@@ -208,7 +207,7 @@ pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
 
             for label_id in &message.label_ids {
                 let counts = result.message_counts.get_mut(label_id).unwrap();
-                if message.unread == true {
+                if message.unread {
                     counts.unread += 1
                 }
                 counts.total += 1
@@ -218,22 +217,14 @@ pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
 
     // create conversation_counts
     Label::create_or_update_conversation_counts(
-        result
-            .conversation_counts
-            .values()
-            .map(|cc| cc.clone())
-            .collect(),
+        result.conversation_counts.values().cloned().collect(),
         &stash,
     )
     .await
     .expect("failed to create conversation counts");
     if !skip_messages {
         Label::create_or_update_message_counts(
-            result
-                .message_counts
-                .values()
-                .map(|cc| cc.clone())
-                .collect(),
+            result.message_counts.values().cloned().collect(),
             &stash,
         )
         .await
@@ -272,12 +263,12 @@ pub(in crate::db::conversations) fn message_counts_for_conversation(
         }
 
         total += 1;
-        if m.unread == true {
+        if m.unread {
             unread += 1;
         }
     }
 
-    return (unread, total);
+    (unread, total)
 }
 
 pub(in crate::db::conversations) async fn conv_counts_as_map(
@@ -290,7 +281,7 @@ pub(in crate::db::conversations) async fn conv_counts_as_map(
             .into_iter()
             .map(|c| {
                 (
-                    c.local_id.clone().unwrap(),
+                    c.local_id.unwrap(),
                     ConversationCount {
                         label_id: c.remote_id.clone().unwrap(),
                         total: c.total_conv,
@@ -311,7 +302,7 @@ pub(in crate::db::conversations) async fn msg_counts_as_map(
             .into_iter()
             .map(|c| {
                 (
-                    c.local_id.clone().unwrap(),
+                    c.local_id.unwrap(),
                     MessageCount {
                         label_id: c.remote_id.clone().unwrap(),
                         total: c.total_msg,

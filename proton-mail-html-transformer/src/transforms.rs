@@ -1,5 +1,3 @@
-use std::borrow::BorrowMut;
-
 use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 
