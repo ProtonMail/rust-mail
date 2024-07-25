@@ -7,7 +7,7 @@ use crate::Error;
 pub fn inject_style(document: NodeRef) -> Result<(), Error> {
     let element = document
         .select_first("head")
-        .map_err(|()| Error::HeadElementNotFound)?;
+        .map_err(|()| Error::HeadElementNotFoundInjectingStyle)?;
 
     let style = "
 <style>

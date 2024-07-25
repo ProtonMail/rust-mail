@@ -51,8 +51,9 @@ pub enum Error {
     /// Error occurred during Remote Content pass.
     #[error("Remote Content: {0}")]
     RemoteContent(#[from] remote_content::Error),
-    #[error("Could not find <head> element in document")]
-    HeadElementNotFound,
+    // Error occurred during style injection
+    #[error("Could not find <head> element in document while injecting style.")]
+    HeadElementNotFoundInjectingStyle,
 }
 
 /// HTML content transformer.
