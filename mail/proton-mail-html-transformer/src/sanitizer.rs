@@ -1,16 +1,23 @@
-//https://github.com/rust-lang/rust-clippy/issues/13155
-#![allow(clippy::needless_pass_by_value)]
 use std::collections::HashSet;
 
-use kuchikiki::{iter::NodeEdge, Node, NodeData, NodeRef};
+use kuchikiki::{iter::NodeEdge, NodeData, NodeRef};
 
 lazy_static::lazy_static! {
     static ref TAG_SET: HashSet<&'static str> = TAGS.into();
     static ref ATTR_SET: HashSet<&'static str> = ATTRS.into();
 }
 
+/// This function removes the tags and attributes defined in this file
+///
+/// Such a whitelist come from the JS library [DOMPurify](https://github.com/cure53/DOMPurify) with a few exceptions:
+/// - Extra allowed tags: `<proton-src />`, `<base />`
+/// - Extra allowed attributes: `proton-src`, `target`
+/// - Extra disallowed tags: `style`, `input`, `form`
+/// - Extra disallowed attributes `srcset`, `for`
+/// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
 pub fn strip_whitelist(doc: NodeRef) {
-    doc.traverse_inclusive()
+    let rem = doc
+        .traverse_inclusive()
         .filter_map(|node| match node {
             NodeEdge::Start(node_ref) => Some(node_ref),
             NodeEdge::End(_) => None,
@@ -29,7 +36,11 @@ pub fn strip_whitelist(doc: NodeRef) {
             }
             _ => None,
         })
-        .for_each(|node| node.detach());
+        .collect::<Vec<_>>();
+
+    for node in rem {
+        node.detach();
+    }
 }
 
 pub const ATTRS: [&str; 112] = [

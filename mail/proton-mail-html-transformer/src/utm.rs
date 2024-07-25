@@ -19,13 +19,14 @@ pub enum Error {
     Url(#[from] url::ParseError),
 }
 
+#[allow(clippy::missing_panics_doc)] // The select is well formed.
 /// Strip UTM trackers from all HTML links in the given `document`.
 ///
 /// # Errors
 ///
 /// Returns error if an HTML href attribute is not a valid url.
-pub fn strip(document: &NodeRef) -> Result<(), Error> {
-    let select = document.select("[href]").map_err(|()| Error::Selector)?;
+pub fn strip(document: NodeRef) -> Result<(), Error> {
+    let select = document.select("[href]").unwrap();
 
     for element in select {
         let mut attributes = element.attributes.borrow_mut();

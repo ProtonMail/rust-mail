@@ -20,7 +20,7 @@ use std::cell::RefCell;
 /// # Errors
 ///
 /// Returns error if we could not find the `head` element in the document.
-pub fn inject_content_size(document: &NodeRef) -> Result<(), Error> {
+pub fn inject_content_size(document: NodeRef) -> Result<(), Error> {
     let element = document
         .select_first("head")
         .map_err(|()| Error::HeadElementNotFound)?;

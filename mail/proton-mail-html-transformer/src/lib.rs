@@ -1,3 +1,7 @@
+// https://github.com/rust-lang/rust-clippy/issues/13155
+// This lint is complaining about passing an Rc by value!
+#![allow(clippy::needless_pass_by_value)]
+
 //! HTML content transformer for proton mail applications.
 //!
 //! The transformer contains passes which mainly focus on preserving the privacy of the reader
@@ -26,14 +30,13 @@
 
 use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
-use sanitizer::strip_whitelist;
 use std::fmt::{Display, Formatter};
 
 // NOTE: each new transformation pass should be its own module.
-mod ios;
-mod remote_content;
+pub mod ios;
+pub mod remote_content;
 pub mod sanitizer;
-mod transforms;
+pub mod transforms;
 pub mod utm;
 
 /// Errors that may occur during transformation.
@@ -94,7 +97,7 @@ impl Transformer {
     ///
     /// Returns errors if the pass failed.
     pub fn strip_utm(&mut self) -> Result<&mut Self, utm::Error> {
-        utm::strip(&self.document)?;
+        utm::strip(self.document.clone())?;
         Ok(self)
     }
 
@@ -138,28 +141,25 @@ impl Transformer {
     ///
     /// Returns errors if the pass failed.
     pub fn inject_ios_content_size(&mut self) -> Result<&mut Self, Error> {
-        ios::inject_content_size(&self.document)?;
+        ios::inject_content_size(self.document.clone())?;
         Ok(self)
     }
 
-    /// This function removes the tags and attributes defined in the [`sanitizer_consts`](crate::sanitizer_consts) file.
+    /// This function removes disallowed tags and attributes.
     ///
-    /// Such a whitelist come from the JS library [DOMPurify](https://github.com/cure53/DOMPurify) with a few exceptions:
-    /// - Extra allowed tags: `<proton-src />`, `<base />`
-    /// - Extra allowed attributes: `proton-src`, `target`
-    /// - Extra disallowed tags: `style`, `input`, `form`
-    /// - Extra disallowed attributes `srcset`, `for`
-    /// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
+    /// See [`sanitizer::strip_whitelist`] for more details.
     ///
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
     pub fn strip_whitelist(&mut self) -> &mut Self {
-        strip_whitelist(self.document.clone());
+        sanitizer::strip_whitelist(self.document.clone());
         self
     }
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
+    ///
+    /// See [`transforms::inject_style`] for more details.
     ///
     /// # Remarks
     ///
@@ -169,8 +169,8 @@ impl Transformer {
         Ok(self)
     }
 
-    /// This function overrides all `rel` attributes in `<a>` tags to be [noreferrer](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/noreferrer)
-    /// See [this article](https://mathiasbynens.github.io/rel-noopener/) to see how the lack of it could be abused
+    ///
+    /// See [`transforms::add_noreferrer`] for more details.
     ///
     /// # Remarks
     ///
