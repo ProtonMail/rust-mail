@@ -82,7 +82,7 @@ build-ios:
     - !reference [.script-config-git, script]
     - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework"
     - CRATE_VERSION=$(cargo pkgid --manifest-path=proton-mail-uniffi/Cargo.toml | cut -d "#" -f2)
-    - cd "./tmp/ios-framework/$CRATE_VERSION" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
+    - cd "./tmp/ios-framework/$CRATE_VERSION" && xcodebuild -scheme proton_app_uniffi -destination generic/platform=iOS -configuration="Release build"
 
   artifacts:
     name: proton-mail-ios
