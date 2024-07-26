@@ -38,11 +38,13 @@ clippy:
     - !reference [ .do_clippy_check, script ]
 
 build:
+  tags:
+    - shared-large
   stage: build
   script:
     - !reference [ .script-config-git, script ]
-    - cargo build
-    - cargo test
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo build
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo test
 
 build-android:
   stage: build
