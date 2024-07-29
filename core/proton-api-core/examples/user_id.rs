@@ -31,7 +31,7 @@ async fn main() {
         app_version,
         ..Default::default()
     };
-    let base_url = Url::parse(&api_env_config.base_url).expect("Invalid URL");
+    let _base_url = Url::parse(&api_env_config.base_url).expect("Invalid URL");
 
     let session = Session::new(api_env_config);
 

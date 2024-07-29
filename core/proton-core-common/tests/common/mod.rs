@@ -37,6 +37,7 @@ use wiremock::{matchers::any, Mock, MockServer, Request};
 
 pub mod account;
 pub mod contacts;
+mod images_logo;
 
 struct TestCoreDatabaseInitializer {}
 
@@ -189,8 +190,13 @@ impl TestContext {
 
     /// Get the test user context.
     pub async fn user_context(&self) -> UserContext {
+        let cache_path = self._tmp_dir.path().join("image_cache");
         self.context
-            .user_context_from_session(&self.encrypted_user_session)
+            .user_context_from_session(
+                &self.encrypted_user_session,
+                cache_path,
+                100_000, // ~100kB
+            )
             .await
             .expect("failed to create user context")
     }

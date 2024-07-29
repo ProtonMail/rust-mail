@@ -62,8 +62,8 @@ use crate::services::proton::common::{Fido2Auth, RemoteId};
 use crate::services::proton::request_data::HumanVerificationData;
 use crate::services::proton::requests::{
     GetCaptchaOptions, GetContactsEmailsOptions, GetContactsOptions, GetEventOptions,
-    GetKeysAllOptions, PostAuthInfoRequest, PostAuthRefreshRequest, PostAuthRequest,
-    PostAuthSessionsForksRequest, PostAuthTfaRequest,
+    GetImagesLogoOptions, GetKeysAllOptions, PostAuthInfoRequest, PostAuthRefreshRequest,
+    PostAuthRequest, PostAuthSessionsForksRequest, PostAuthTfaRequest,
 };
 use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChallenge};
 use crate::services::proton::responses::{
@@ -76,6 +76,7 @@ use crate::{
     DEFAULT_APP_VERSION, DEFAULT_HOST_URL, DEFAULT_REDIRECT_URL, X_PM_HUMAN_VERIFICATION_TOKEN,
     X_PM_HUMAN_VERIFICATION_TOKEN_TYPE, X_PM_UID_HEADER,
 };
+use bytes::Bytes;
 use parking_lot::RwLock;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Method, Url};
@@ -519,6 +520,22 @@ impl Proton {
         self.get::<_, Json<_>>(
             &format!("{}/events/latest", Self::BASE_PATH),
             NO_PARAMS,
+            None,
+        )
+        .await
+    }
+
+    /// Get logo corresponding to an address or a domain.
+    ///
+    /// # Errors
+    ///   * if the request failed.
+    pub async fn get_images_logo(
+        &self,
+        options: GetImagesLogoOptions,
+    ) -> Result<Bytes, ApiServiceError> {
+        self.get::<_, Bytes>(
+            &format!("{}/images/logo", Self::BASE_PATH),
+            Some(options),
             None,
         )
         .await

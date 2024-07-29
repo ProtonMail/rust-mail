@@ -1,10 +1,16 @@
 pub use self::keys::*;
+use crate::cache::ProtonCache;
 use crate::datatypes::RemoteId;
+use crate::user_context::images_logo::Key;
+use crate::CoreContextResult;
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::stash::Stash;
 use std::fmt::{Debug, Formatter};
+use std::path::PathBuf;
 use std::sync::Arc;
+
+pub mod images_logo;
 mod keys;
 
 /// Extra initializer for the user database.
@@ -23,6 +29,7 @@ pub struct UserContext {
     stash: Stash,
     user_id: RemoteId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
+    pub images_logo_cache: Arc<ProtonCache<Key>>,
 }
 
 impl Debug for UserContext {
@@ -32,13 +39,20 @@ impl Debug for UserContext {
 }
 
 impl UserContext {
-    pub(crate) fn new(session: Session, stash: Stash, id: RemoteId) -> Self {
-        Self {
+    pub(crate) fn new(
+        session: Session,
+        stash: Stash,
+        id: RemoteId,
+        cache_path: PathBuf,
+        cache_size: u32,
+    ) -> CoreContextResult<Self> {
+        Ok(Self {
             session,
             stash,
             user_id: id,
             key_manager: Arc::new(CryptoKeyManager::new()),
-        }
+            images_logo_cache: Arc::new(ProtonCache::new(cache_path, cache_size)?),
+        })
     }
 
     /// Get the network session.

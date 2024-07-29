@@ -193,3 +193,46 @@ pub struct PostAuthTfaRequest {
     /// TODO: Document this field.
     pub fido2: Fido2Auth,
 }
+
+/// Parameters for getting images logo.
+#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, SmartDefault)]
+#[serde(rename_all = "PascalCase")]
+pub struct GetImagesLogoOptions {
+    /// The percent encoded address. Either Domain or Address are required.
+    /// Ex: `Address=noreply%40amazon.com`
+    pub address: Option<String>,
+
+    /// The bimi-selector of the message
+    pub bimi_selector: Option<String>,
+
+    /// Domain to get the logo for. Either Domain or Address are required.
+    /// Ex: `Domain=amazon.com`
+    pub domain: Option<String>,
+
+    /// Expected format for the image
+    /// Ex: `Format=png`
+    pub format: Option<String>,
+
+    /// The maximum factor an image can be scaled up.
+    /// Enum: 1, 2, 3 or 4
+    /// Ex: `MaxScaleUpFactor=2`
+    pub max_scale_up_factor: Option<u8>,
+
+    /// The theme being used.
+    /// Enum: `light` or `dark`
+    pub mode: Option<LightOrDarkMode>,
+
+    /// The size of the logo to be returned.
+    pub size: Option<u32>,
+}
+
+/// The theme being used in Images Logo.
+#[derive(Clone, Copy, Debug, Serialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum LightOrDarkMode {
+    /// Light mode
+    Light,
+
+    /// Dark mode
+    Dark,
+}

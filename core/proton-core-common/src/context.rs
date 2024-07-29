@@ -1,4 +1,5 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
+use crate::cache::CacheError;
 use crate::datatypes::RemoteId;
 use crate::db::migrations::{migrate_core_db, migrate_session_db};
 use crate::db::session::{EncryptedUserSession, SessionEncryptionKey};
@@ -43,6 +44,8 @@ pub enum CoreContextError {
     PGPKeyAccess(#[from] KeyHandlingError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
+    #[error("Cache error: {0}")]
+    CacheError(#[from] CacheError),
     #[error("{0}")]
     Other(AnyhowError),
 }
@@ -146,10 +149,12 @@ impl Context {
 
     /// Create a user context from a login flow. This will fail if the flow is not in the
     /// logged in state.
-    #[tracing::instrument(level=Level::DEBUG, skip(self, login_flow))]
+    #[tracing::instrument(level=Level::DEBUG, skip(self, login_flow, cache_path, cache_size))]
     pub async fn user_context_from_login_flow(
         &self,
         login_flow: &Flow,
+        cache_path: impl Into<PathBuf>,
+        cache_size: u32,
     ) -> CoreContextResult<UserContext> {
         if !login_flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
@@ -162,9 +167,13 @@ impl Context {
         debug!("Creating new context for user {}({})", user.email, user.id);
         let stash = self.new_user_db_pool(&user.id.clone().into()).await?;
 
-        let ctx = UserContext::new(login_flow.session().clone(), stash, user.id.clone().into());
-
-        Ok(ctx)
+        UserContext::new(
+            login_flow.session().clone(),
+            stash,
+            user.id.clone().into(),
+            cache_path.into(),
+            cache_size,
+        )
     }
 
     /// Get a user context from an existing session.
@@ -176,6 +185,8 @@ impl Context {
     pub async fn user_context_from_session(
         &self,
         session: &EncryptedUserSession,
+        cache_path: impl Into<PathBuf>,
+        cache_size: u32,
     ) -> CoreContextResult<UserContext> {
         let stash = self.new_user_db_pool(&session.user_id).await?;
         debug!("decrypting session tokens");
@@ -194,8 +205,7 @@ impl Context {
             base_url: self.api.base_url().to_string(),
             ..Default::default()
         });
-        let ctx = UserContext::new(session, stash, user_id);
-        Ok(ctx)
+        UserContext::new(session, stash, user_id, cache_path.into(), cache_size)
     }
 
     pub fn set_network_connected(&self, value: bool) {
