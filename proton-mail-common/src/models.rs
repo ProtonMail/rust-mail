@@ -1669,6 +1669,7 @@ impl Label {
             || *remote_id == LabelId::sent()
             || *remote_id == LabelId::all_drafts()
             || *remote_id == LabelId::all_sent()
+            || *remote_id == LabelId::all_scheduled()
         {
             return Some(ViewMode::Messages);
         }
