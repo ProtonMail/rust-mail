@@ -1,4 +1,6 @@
 pub mod conversations;
+pub mod labels;
+
 use crate::AppError;
 use proton_action_queue::action::Factory;
 use proton_api_core::service::ApiServiceError;

@@ -370,3 +370,13 @@ pub struct PutMessagesUnreadRequest {
     #[serde(rename = "IDs")]
     pub ids: Vec<RemoteId>,
 }
+
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+#[serde_as]
+pub struct PatchLabelRequest {
+    #[serde_as(as = "Option<BoolFromInt>")]
+    pub expanded: bool,
+    #[serde_as(as = "Option<BoolFromInt>")]
+    pub notify: bool,
+}

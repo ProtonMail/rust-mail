@@ -264,3 +264,13 @@ pub struct PutMessagesUnreadResponse {
     #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult>,
 }
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PatchLabelResponse {
+    /// TODO: Document this field.
+    #[serde(rename = "Responses")]
+    pub responses: Vec<OperationResult>,
+}
