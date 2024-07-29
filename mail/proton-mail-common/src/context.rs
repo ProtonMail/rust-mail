@@ -176,7 +176,6 @@ impl UserDatabaseInitializer for MailUserDatabaseInitializer {
     fn initialize(&self, stash: &Stash) -> Result<(), DBMigrationError> {
         block_on(async {
             crate::db::migrations::migrate_db(stash).await?;
-            //proton_action_queue::ActionStore::init_tables(stash).await?;
             Ok(())
         })
     }

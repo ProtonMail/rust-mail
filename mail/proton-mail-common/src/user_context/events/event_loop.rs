@@ -74,10 +74,6 @@ impl Provider<MailEvent> for MailUserContext {
 }
 
 impl MailUserContext {
-    //pub async fn queue_event_loop_poll(&self) -> MailContextResult<()> {
-    // //self.queue_action(EventLoopAction {}).await
-    //}
-
     pub async fn poll_event_loop(&self) -> Result<(), EventLoopError> {
         let _core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
         let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
