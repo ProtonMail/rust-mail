@@ -120,11 +120,10 @@ impl proton_action_queue::action::Handler for Handler {
             let all_mail_local_id = all_mail_id[0];
 
             for &local_conversation_id in &action.ids {
-                let mut label_ids =
+                let label_ids =
                     ConversationLabel::labels_ids_for_conversation(local_conversation_id, tx)
                         .await?;
-                label_ids.retain(|id| *id != all_mail_local_id);
-                for label_id in label_ids {
+                for label_id in label_ids.into_iter().filter(|id| *id != all_mail_local_id) {
                     Conversation::remove_label_from_multiple(
                         label_id,
                         vec![local_conversation_id],
