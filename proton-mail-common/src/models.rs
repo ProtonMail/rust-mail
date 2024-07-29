@@ -42,7 +42,8 @@ use indoc::formatdoc;
 use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::requests::{
-    GetConversationsOptions, GetMessagesOptions, PostLabelsRequest, PutLabelRequest,
+    GetConversationsOptions, GetMessagesOptions, PatchLabelRequest, PostLabelsRequest,
+    PutLabelRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, Conversation as ApiConversation,
@@ -1883,6 +1884,36 @@ impl Label {
             .await?
             .label
             .into())
+    }
+
+    /// TODO: Document this function.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`         - The ID of the label to update.
+    /// * `name`       - TODO: Document this parameter.
+    /// * `color`      - TODO: Document this parameter.
+    /// * `label_type` - TODO: Document this parameter.
+    /// * `api`        - The API instance to use.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed.
+    ///
+    pub async fn patch_expanded<PM: ProtonMail>(
+        id: LabelId,
+        expanded: bool,
+        api: &PM,
+    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+        api.patch_label(
+            id.into(),
+            PatchLabelRequest {
+                expanded,
+                ..Default::default()
+            },
+        )
+        .await
+        .map(|r| r.responses)
     }
 
     /// Return the preferred view mode for this label.
