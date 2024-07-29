@@ -184,3 +184,25 @@ impl Display for Transformer {
         write!(f, "{}", self.document.to_string())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn pathologic_nested() {
+        // This test includes a very deeply nested html that we can use for stack overflow
+        // detection
+        let doc = include_str!("../tests/htmls/nested.html");
+        Transformer::new(doc)
+            .strip_utm()
+            .unwrap()
+            .strip_whitelist()
+            .inject_ios_content_size()
+            .disable_remote_content()
+            .unwrap()
+            .inject_style()
+            .add_noreferrer();
+        // .to_string(); // https://github.com/servo/html5ever/issues/290
+    }
+}
