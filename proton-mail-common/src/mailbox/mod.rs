@@ -1,6 +1,7 @@
 mod attachments;
 
 mod decrypted_message;
+
 #[cfg(test)]
 mod tests;
 
@@ -29,6 +30,8 @@ pub enum MailboxError {
     RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
     LabelDoesNotHaveRemoteId(u64),
+    #[error("No exclusive location found for message '{0}'")]
+    NoExclusiveLocationFound(u64),
     #[error("Attachment '{0}' not found")]
     AttachmentNotFound(u64),
     #[error("Attachment decryption failed: {0}")]

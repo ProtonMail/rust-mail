@@ -1,4 +1,4 @@
-use crate::datatypes::{AttachmentMetadatas, MessageAddresses, MessageAttachmentInfos};
+use crate::datatypes::AttachmentMetadatas;
 use crate::db::new_test_connection_file;
 use crate::models::{Attachment, Conversation, Message};
 use crate::AppError;
@@ -136,26 +136,11 @@ async fn create_attachment_dependencies(
 
     let local_conv_ids = Conversation::create_or_update_conversations(
         vec![Conversation {
-            local_id: None,
             remote_id: Some(conversation_id()),
-            display_order: 0,
-            subject: String::new(),
-            senders: MessageAddresses::default(),
-            recipients: MessageAddresses::default(),
-            num_messages: 0,
-            num_unread: 0,
-            num_attachments: 0,
-            expiration_time: 0,
-            size: 0,
-            labels: vec![],
-            display_snooze_reminder: false,
             attachments_metadata: AttachmentMetadatas {
                 value: metadata.clone().into_iter().map(|m| m.into()).collect(),
             },
-            attachment_info: MessageAttachmentInfos::default(),
-            row_id: None,
-            stash: None,
-            deleted: false,
+            ..Default::default()
         }],
         tx.stash(),
     )

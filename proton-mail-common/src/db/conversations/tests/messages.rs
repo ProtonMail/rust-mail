@@ -1,6 +1,8 @@
 use super::conversations::create_address;
 use super::utils::prepare_db_state_core;
-use crate::datatypes::{AttachmentMetadata, MessageCount, MessageFlags, SystemLabelId};
+use crate::datatypes::{
+    AttachmentMetadata, ExclusiveLocation, MessageCount, MessageFlags, SystemLabelId,
+};
 use crate::db::conversations::tests::conversations::{
     create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID, MY_CONVERSATION_ID,
     MY_LABEL_ID1, MY_LABEL_ID2,
@@ -34,7 +36,8 @@ async fn test_create_message() {
     let tx = stash.connection();
     test_create_message_dependencies_core(&tx).await;
     let _conv_id = test_create_message_dependencies(&tx).await;
-    let message = test_message_with_metadata(vec![MY_LABEL_ID1.clone()], vec![]);
+    let message =
+        test_message_with_metadata(vec![LabelId::inbox().into(), MY_LABEL_ID1.clone()], vec![]);
     let id = Message::create_or_update_messages_from_metadata(
         vec![message.metadata.clone()],
         tx.stash(),
@@ -52,9 +55,10 @@ async fn test_create_message() {
     expected.stash = Some(stash.clone());
     expected.local_id = Some(1);
     expected.row_id = Some(1);
+    expected.exclusive_location = Some(ExclusiveLocation::Inbox);
 
     assert_eq!(db_message, expected);
-    assert_eq!(db_message.label_ids.len(), 1);
+    assert_eq!(db_message.label_ids.len(), 2);
 }
 
 // #[test]
