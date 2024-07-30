@@ -24,17 +24,6 @@ use serde::Serialize;
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Serialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum LightOrDarkMode {
-    /// TODO: Document this variant.
-    Light,
-
-    /// TODO: Document this variant.
-    Dark,
-}
-
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Serialize, Eq, Hash, PartialEq)]
 pub enum MessageMetadataSortMode {
     /// TODO: Document this variant.
     Time,

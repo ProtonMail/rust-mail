@@ -21,7 +21,7 @@
 //!
 
 use crate::services::proton::common::LabelType;
-use crate::services::proton::request_data::{LightOrDarkMode, MessageMetadataSortMode};
+use crate::services::proton::request_data::MessageMetadataSortMode;
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_api_core::services::proton::common::RemoteId;
 use serde::Serialize;
@@ -109,32 +109,6 @@ pub struct GetLabelsOptions {
     /// TODO: Document this field.
     #[serde(rename = "Type")]
     pub label_type: LabelType,
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Default, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct GetImagesLogoOptions {
-    /// TODO: Document this field.
-    pub address: Option<String>,
-
-    /// TODO: Document this field.
-    pub bimi_selector: Option<String>,
-
-    /// TODO: Document this field.
-    pub domain: Option<String>,
-
-    /// TODO: Document this field.
-    pub format: Option<String>,
-
-    /// TODO: Document this field.
-    pub max_scale_up_factor: Option<u8>,
-
-    /// TODO: Document this field.
-    pub mode: Option<LightOrDarkMode>,
-
-    /// TODO: Document this field.
-    pub size: Option<u32>,
 }
 
 /// Parameters to filter/search messages with a given criteria.
