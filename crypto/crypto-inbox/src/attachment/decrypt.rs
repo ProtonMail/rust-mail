@@ -83,10 +83,10 @@ pub trait DecryptableAttachment {
     fn attachment_key_packets(&self) -> &KeyPackets;
 
     /// Borrows the signature of the attachment if any.
-    fn attachment_signature(&self) -> &Option<AttachmentSignature>;
+    fn attachment_signature(&self) -> Option<&AttachmentSignature>;
 
     /// Borrows the encrypted signature of the attachment if any.
-    fn attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature>;
+    fn attachment_encrypted_signature(&self) -> Option<&AttachmentEncryptedSignature>;
 
     /// Decrypts an attachment based on its metadata.
     ///

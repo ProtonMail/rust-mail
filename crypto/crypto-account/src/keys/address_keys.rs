@@ -76,7 +76,7 @@ impl AddressKeys {
                 signature,
                 user_keys.as_ref(),
                 user_keys.as_ref(),
-                &None,
+                None,
             );
             let (private_key, public_key) = match decryption_result {
                 Ok(key) => key,
@@ -326,7 +326,7 @@ impl LocalAddressKey {
             signature,
             &[user_key],
             &[user_key],
-            &None,
+            None,
         )?;
         Ok(DecryptedAddressKey {
             id: key_id,

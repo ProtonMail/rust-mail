@@ -380,12 +380,12 @@ impl DecryptableAttachment for EncryptedAttachmentMetadata {
         &self.key_packets
     }
 
-    fn attachment_signature(&self) -> &Option<AttachmentSignature> {
-        &self.signature
+    fn attachment_signature(&self) -> Option<&AttachmentSignature> {
+        self.signature.as_ref()
     }
 
-    fn attachment_encrypted_signature(&self) -> &Option<AttachmentEncryptedSignature> {
-        &self.encrypted_signature
+    fn attachment_encrypted_signature(&self) -> Option<&AttachmentEncryptedSignature> {
+        self.encrypted_signature.as_ref()
     }
 }
 

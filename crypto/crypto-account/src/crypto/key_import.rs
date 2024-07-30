@@ -23,7 +23,7 @@ pub fn decrypt_key_token<Prov: PGPProviderSync>(
     signature: &KeyTokenSignature,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
-    verification_context: &Option<Prov::VerificationContext>,
+    verification_context: Option<&Prov::VerificationContext>,
 ) -> Result<Zeroizing<Vec<u8>>, AccountCryptoError> {
     let mut decryptor = provider
         .new_decryptor()
@@ -55,7 +55,7 @@ pub fn import_key_with_token<Prov: PGPProviderSync>(
     signature: &KeyTokenSignature,
     decryption_keys: &[impl AsRef<Prov::PrivateKey>],
     verification_keys: &[impl AsPublicKeyRef<Prov::PublicKey>],
-    verification_context: &Option<Prov::VerificationContext>,
+    verification_context: Option<&Prov::VerificationContext>,
 ) -> Result<(Prov::PrivateKey, Prov::PublicKey), AccountCryptoError> {
     let decrypted_token = decrypt_key_token(
         provider,
