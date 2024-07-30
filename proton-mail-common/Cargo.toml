@@ -53,7 +53,7 @@ wiremock = { workspace = true }
 # workspace = true
 
 [features]
-uniffi = ["dep:uniffi", "proton-event-loop/uniffi"]
+uniffi = ["dep:uniffi"]
 
 # todo: remove when pedantic-ified and uncommend the [lints] section
 [lints.clippy]

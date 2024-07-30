@@ -1,10 +1,7 @@
 use crate::models::MailSettings;
 use crate::{MailContextResult, MailUserContext};
 use bytes::Bytes;
-use proton_api_core::session::CoreSession;
-use proton_api_mail::services::proton::request_data::LightOrDarkMode;
-use proton_api_mail::services::proton::requests::GetImagesLogoOptions;
-use proton_api_mail::services::proton::ProtonMail;
+use proton_api_core::services::proton::requests::LightOrDarkMode;
 
 impl MailUserContext {
     /// Get sender image for an address.
@@ -33,7 +30,7 @@ impl MailUserContext {
         &self,
         mail_settings: &MailSettings,
         address: String,
-        bimi_selector: Option<String>,
+        bimi_selector: Option<&str>,
         display_sender_image: bool,
         size: Option<u32>,
         mode: Option<LightOrDarkMode>,
@@ -48,18 +45,9 @@ impl MailUserContext {
             return Ok(None);
         }
 
-        Ok(Some(
-            self.session()
-                .api()
-                .get_images_logo(GetImagesLogoOptions {
-                    address: Some(address),
-                    bimi_selector,
-                    format,
-                    mode,
-                    size,
-                    ..Default::default()
-                })
-                .await?,
-        ))
+        Ok(self
+            .user_context
+            .image_for_sender(&address, bimi_selector, format, mode, size)
+            .await?)
     }
 }
