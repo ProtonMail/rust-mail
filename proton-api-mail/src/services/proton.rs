@@ -21,10 +21,10 @@ pub mod responses;
 
 use crate::services::proton::common::LabelType;
 use crate::services::proton::requests::{
-    GetConversationsOptions, GetImagesLogoOptions, GetLabelsOptions, GetMessagesOptions,
-    PostLabelsRequest, PutConversationsDeleteRequest, PutConversationsLabelRequest,
-    PutConversationsReadRequest, PutConversationsUnlabelRequest, PutConversationsUnreadRequest,
-    PutLabelRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
+    GetConversationsOptions, GetLabelsOptions, GetMessagesOptions, PostLabelsRequest,
+    PutConversationsDeleteRequest, PutConversationsLabelRequest, PutConversationsReadRequest,
+    PutConversationsUnlabelRequest, PutConversationsUnreadRequest, PutLabelRequest,
+    PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
     PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
 };
 use crate::services::proton::responses::{
@@ -180,28 +180,6 @@ pub trait ProtonMail: ApiService {
         self.get::<_, Json<_>>(
             &format!("{}/conversations/count", Self::BASE_PATH_MAIL),
             NO_PARAMS,
-            None,
-        )
-        .await
-    }
-
-    /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `options` - The options to use for the request.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
-    async fn get_images_logo(
-        &self,
-        options: GetImagesLogoOptions,
-    ) -> Result<Bytes, ApiServiceError> {
-        self.get::<_, Bytes>(
-            &format!("{}/images/logo", Self::BASE_PATH_CORE),
-            Some(options),
             None,
         )
         .await
