@@ -43,9 +43,10 @@ impl UserContext {
         session: Session,
         stash: Stash,
         id: RemoteId,
-        cache_path: PathBuf,
+        mut cache_path: PathBuf,
         cache_size: u32,
     ) -> CoreContextResult<Self> {
+        cache_path.push("images_logo_cache");
         Ok(Self {
             session,
             stash,
