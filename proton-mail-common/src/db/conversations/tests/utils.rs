@@ -95,7 +95,7 @@ pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
     }
 
     // update conversation labels with message data
-    fn find_conversation(list: &Vec<Conversation>, id: &RemoteId) -> Conversation {
+    fn find_conversation(list: &[Conversation], id: &RemoteId) -> Conversation {
         list.iter()
             .find(|c| c.remote_id == Some(id.clone()))
             .expect("Failed to find conversation")
