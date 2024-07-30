@@ -1,9 +1,8 @@
 use crate::actions::ActionError;
-use crate::models::{Conversation, Label as LabelModel};
+use crate::models::{Conversation, Label as LabelModel, ModelError};
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::orm::Model;
 use stash::stash::Tether;
 use tracing::error;
 
@@ -64,7 +63,7 @@ impl ActionData {
             return Err(ActionError::NoInput);
         }
 
-        self.remote_label_id = Some(resolve_remote_label_id(tx, self.label_id).await?);
+        self.remote_label_id = Some(find_remote_label_id(tx, self.label_id).await?);
 
         let conv_ids = Conversation::find_remote_ids(self.ids.clone(), tx)
             .await
@@ -91,13 +90,9 @@ impl ActionData {
 /// # Errors
 ///
 /// Returns error if the resolution failed.
-async fn resolve_remote_label_id(tether: &Tether, local_id: u64) -> Result<LabelId, ActionError> {
-    let Some(label) = LabelModel::load_using(local_id, tether).await? else {
-        return Err(ActionError::LabelNotFound(local_id));
-    };
-
-    let Some(label_id) = label.remote_id else {
-        return Err(ActionError::LabelHasNoRemoteId(local_id));
+async fn find_remote_label_id(tether: &Tether, local_id: u64) -> Result<LabelId, ActionError> {
+    let Some(label_id) = LabelModel::find_remote_id(local_id, tether).await? else {
+        return Err(ModelError::LabelNotFound(local_id).into());
     };
 
     Ok(label_id)
