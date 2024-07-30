@@ -60,7 +60,7 @@ mod test {
     }
 
     #[test]
-    fn inject_style_fail() {
+    fn inject_style_no_head() {
         let html = r"
         <div>
           ain't no `head` here boss
