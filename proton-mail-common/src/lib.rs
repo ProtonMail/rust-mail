@@ -24,14 +24,6 @@ pub use proton_api_mail;
 pub use proton_core_common;
 use stash::stash::StashError;
 
-pub mod exports {
-    pub use proton_action_queue;
-    pub use proton_api_mail;
-    pub use proton_core_common;
-    pub use proton_event_loop;
-    pub use proton_mail_html_transformer;
-}
-
 use thiserror::Error;
 
 pub const ALL_LABEL_TYPES: [LabelType; 4] = [
