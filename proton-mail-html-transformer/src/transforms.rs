@@ -48,8 +48,57 @@ pub fn add_noreferrer(document: NodeRef) {
     }
 }
 
+pub fn insert_links(document: NodeRef) {
+    let start_nodes = document.traverse_inclusive().filter_map(|node| match node {
+        NodeEdge::Start(node_ref) => Some(node_ref),
+        NodeEdge::End(_) => None,
+    });
+    // We only care about text nodes which we replace with <span> for simplicity
+    let mut detach_me = vec![];
+    for node_ref in start_nodes {
+        let NodeData::Element(_) = node_ref.data() else {
+            continue;
+        };
+        for child in node_ref.children() {
+            let NodeData::Text(text) = child.data() else {
+                continue;
+            };
+            let Some(span) = insert_link_str(&text.borrow()) else {
+                continue;
+            };
+            child.insert_before(span);
+            detach_me.push(child);
+        }
+    }
+
+    for d in detach_me {
+        d.detach();
+    }
+}
+
+fn insert_link_str(text: &str) -> Option<NodeRef> {
+    let mut found_link = false;
+    let mut rep = String::with_capacity(text.len() * 2); // TODO:(perf) reserve a bit less capacity
+    for word in text.split_whitespace() {
+        const ALLOWED_SCHEMES: &[&str] = &[
+            "http", "https", "mailto", "callto", "cid", "blob", "xmpp", "data",
+        ];
+        match url::Url::parse(word) {
+            Ok(url) if ALLOWED_SCHEMES.contains(&url.scheme()) && !url.path().is_empty() => {
+                let url: String = strip_from_url(&url).into();
+                rep.push_str(&format!(r#"<a href="{url}" rel="noreferrer">{url}</a>"#));
+                found_link = true;
+            }
+            _ => rep.push_str(word),
+        }
+        rep.push(' ');
+    }
+    found_link.then(|| node_ref_from_str(&rep, "div"))
+}
+
 #[cfg(test)]
 mod test {
+    #![allow(clippy::needless_raw_string_hashes)]
     use crate::Transformer;
 
     #[test]
@@ -79,6 +128,24 @@ mod test {
         </div>
         "#;
         let html = Transformer::new(html).add_noreferrer().to_string();
+        insta::assert_snapshot!(html);
+    }
+
+    #[test]
+    fn insert_links() {
+        let html = r#"
+        <div id="1"> this is some content without a link </div>
+        <div id="2">https://proton.me</div>
+        <div id="3"> this is some content with a link to https://proton.me :) </div>
+        <div id="4"> strippin' balls https://ads.com?utm_source=tracker </div>
+        <div id="5"> incompete url not handled: proton.me </div>
+        <div id="6"> empty url not matched: https: </div>
+        <div id="7"> empty url not matched: mailto: </div>
+        <div id="8"> localhost http://localhost </div>
+        <div id="9"> ip http://127.0.0.1 </div>
+        <div id="10"> mailto:foo@bar </div>
+        "#;
+        let html = Transformer::new(html).insert_links().to_string();
         insta::assert_snapshot!(html);
     }
 }
