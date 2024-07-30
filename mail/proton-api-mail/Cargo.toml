@@ -34,7 +34,6 @@ wiremock = { workspace = true }
 [features]
 default = []
 integration_tests = []
-sql = ["proton-api-core/sql"]
 
 [lints]
 workspace = true

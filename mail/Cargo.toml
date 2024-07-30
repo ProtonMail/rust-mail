@@ -21,8 +21,8 @@ indoc = "2"
 itertools = "0.13.0"
 lazy_static = "1"
 proton-action-queue = { version = "=0.7.0", registry = "proton" }
-proton-api-core = { version = "=0.6.1", registry = "proton", features = ["sql", "uniffi"] }
-proton-api-mail = { version = "=0.3.13", path = "proton-api-mail", features = ["sql"] }
+proton-api-core = { version = "=0.6.1", registry = "proton" }
+proton-api-mail = { version = "=0.3.13", path = "proton-api-mail" }
 proton-core-common = { version = "=0.6.2", registry = "proton" }
 proton-crypto-account = { version = "=0.4.2", registry = "proton" }
 proton-crypto-inbox = { version = "=0.5.1", registry = "proton" }
@@ -47,7 +47,7 @@ wiremock = "0.6.0"
 
 #[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
 #proton-action-queue = { path = "../proton-api-core/proton-action-queue" }
-#proton-api-core = { path = "../proton-api-core/proton-api-core", features = ["sql"] }
+#proton-api-core = { path = "../proton-api-core/proton-api-core" }
 #proton-core-common = { path = "../proton-api-core/proton-core-common" }
 #proton-event-loop = { path = "../proton-api-core/proton-event-loop" }
 #proton-sqlite3 = { path = "../proton-api-core/proton-sqlite3" }
