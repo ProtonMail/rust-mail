@@ -109,7 +109,7 @@ impl VersionConverter for V2VersionConverter {
         assert_eq!(old_version, V1Action::VERSION);
         assert_eq!(current_version, V2Action::VERSION);
 
-        let v1 = V1Action::deserialize_action(&data)?;
+        let v1 = rmp_serde::from_slice::<V1Action>(&data)?;
 
         Ok(V2Action {
             value: format!("foo={}", v1.value),

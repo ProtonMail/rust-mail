@@ -3,6 +3,7 @@ use crate::action::{
     Priority,
 };
 use crate::db::{self, StoredAction};
+use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
@@ -117,11 +118,11 @@ pub struct QueuedMetadata {
     /// Version of the stored action.
     pub version: u32,
     /// Datetime when the action was created.
-    pub created: chrono::DateTime<chrono::Utc>,
+    pub created: DateTime<chrono::Utc>,
     /// Datetime when the action was scheduled for execution.
     ///
     /// This value will be different from `created` if a delay was specified.
-    pub scheduled: chrono::DateTime<chrono::Utc>,
+    pub scheduled: DateTime<chrono::Utc>,
     /// Priority of the stored action.
     pub priority: Priority,
     /// Other actions that this action depends on.
@@ -216,10 +217,12 @@ impl From<StoredAction> for QueuedMetadata {
 /// extract the error from [`anyhow::Error`] directly using the [`AsActionError`] extension.
 ///
 /// # Remarks
+///
 /// There can only be on queue per database connection. Multiple queues in the same database
 /// are currently not supported.
 ///
 /// ## Concurrency
+///
 /// The queue supports queuing actions from multiple threads, but modifying the queue (e.g.:
 /// deleting or executing actions) is guarded so that only the operation can be executed in
 /// isolation. If more than one location attempts to call these functions currently we
@@ -245,6 +248,7 @@ impl Queue {
     /// Create a new queue with the given `stash`;
     ///
     /// # Errors
+    ///
     /// Returns error if the database migration failed.
     pub async fn new(stash: Stash) -> Result<Self> {
         Self::with_factory(stash, Factory::default()).await
@@ -253,6 +257,7 @@ impl Queue {
     /// Create a new queue with the given `stash` and `factory`;
     ///
     /// # Errors
+    ///
     /// Returns error if the database migration failed.
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
         db::create_tables(&stash).await?;
@@ -266,6 +271,7 @@ impl Queue {
     /// Register an [`Action`] with the factory.
     ///
     /// # Errors
+    ///
     /// Returns error if the action type was already registered before.
     pub fn register<T: Action + 'static>(&self) -> FactoryResult<()> {
         self.factory.write().register::<T>()
@@ -282,6 +288,7 @@ impl Queue {
     /// A default [`Metadata`] type is assigned to this `action`.
     ///
     /// # Errors
+    ///
     /// Returns error if action could not be executed locally.
     pub async fn queue_action<T: Action>(
         &self,
@@ -294,6 +301,7 @@ impl Queue {
     /// Queue an `action` for execution at a later time with a custom `metadata`.
     ///
     /// # Errors
+    ///
     /// Returns error if action could not be executed locally.
     #[tracing::instrument(level = Level::DEBUG, skip(self, metadata, action), name =
     "QueueAction")]
@@ -319,9 +327,11 @@ impl Queue {
     /// The action will only be queued if the remote fails with a network error.
     ///
     /// # Remarks
+    ///
     /// Note that the `metadata` type is only used if the action is queued.
     ///
     /// # Errors
+    ///
     /// Returns error if action could not be executed locally or remotely.
     pub async fn apply_action<T: Action>(
         &self,
@@ -339,9 +349,11 @@ impl Queue {
     /// The action will only be queued if the remote fails with a network error.
     ///
     /// # Remarks
+    ///
     /// Note that the `metadata` type is only used if the action is queued.
     ///
     /// # Errors
+    ///
     /// Returns error if action could not be executed locally or remotely.
     #[tracing::instrument(level = Level::DEBUG, skip(self, session, metadata, action), name =
     "ApplyAction")]
@@ -369,6 +381,7 @@ impl Queue {
     /// communication.
     ///
     /// # Errors
+    ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
     pub async fn execute_one(&self, session: &Session) -> QueuedResult<Option<Id>> {
@@ -380,6 +393,7 @@ impl Queue {
     /// remote communication.
     ///
     /// # Errors
+    ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
     pub async fn execute_all(&self, session: &Session) -> QueuedResult<()> {
@@ -394,6 +408,7 @@ impl Queue {
     /// remote communication.
     ///
     /// # Errors
+    ///
     /// Returns error if the queued action could not be executed locally or remotely, or
     /// if another thread is currently invoking this function.
     pub async fn execute_with_limit(&self, session: &Session, limit: usize) -> QueuedResult<()> {
@@ -414,6 +429,7 @@ impl Queue {
     /// To revert local state use [`Queue::cancel()`] or [`Queue::cancel_with_dependees()`].
     ///
     /// # Errors
+    ///
     /// Returns error if the db operation failed or if another thread is currently invoking
     /// this function.
     pub async fn delete_action(&self, action_id: Id) -> QueuedResult<()> {
@@ -429,6 +445,7 @@ impl Queue {
     /// Returns the number of actions queued.
     ///
     /// # Errors
+    ///
     /// Returns error if the db query failed.
     pub async fn queued_actions_count(&self) -> Result<usize> {
         let tether = self.stash.connection();
@@ -438,6 +455,7 @@ impl Queue {
     /// Check whether the action with `action_id` is present in the queue.
     ///
     /// # Errors
+    ///
     /// Returns error if the db query failed.
     pub async fn contains(&self, action_id: Id) -> Result<bool> {
         let tether = self.stash.connection();
@@ -447,8 +465,9 @@ impl Queue {
     /// Retrieve the metadata associated `action_id` in the queue.
     ///
     /// # Errors
+    ///
     /// Returns error if the db query failed.
-    pub async fn action_with_id(&self, action_id: Id) -> Result<Option<QueuedMetadata>> {
+    pub async fn action(&self, action_id: Id) -> Result<Option<QueuedMetadata>> {
         let tether = self.stash.connection();
         let stored_action = StoredAction::with_id(&tether, action_id).await?;
         Ok(stored_action.map(QueuedMetadata::from))
@@ -462,6 +481,7 @@ impl Queue {
     /// [`Queue::cancel_with_dependees()`].
     ///
     /// # Errors
+    ///
     /// Returns error if the db query failed, the action could not be found or another thread
     /// is currently invoking this function.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -489,6 +509,7 @@ impl Queue {
     /// To cancel this actions without the dependees see [`Queue::cancel()`].
     ///
     /// # Errors
+    ///
     /// Returns error if the db query failed or the action could not be found or another thread
     /// is currently invoking this function.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
@@ -549,7 +570,9 @@ impl Queue {
     }
 
     /// Retrieve the next action to execute.
-    async fn next_action(&self) -> std::result::Result<Option<StoredAction>, StashError> {
+    pub(crate) async fn next_action(
+        &self,
+    ) -> std::result::Result<Option<StoredAction>, StashError> {
         let tether = self.stash.connection();
         StoredAction::next(&tether).await
     }
@@ -780,280 +803,4 @@ async fn cancel_action_impl<T: Action>(
         e
     })?;
     Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use crate::action::{
-        Action, DefaultVersionConverter, Factory, MetadataBuilder, NoopActionHandler, NoopError,
-        Priority, Type,
-    };
-    use crate::queue::Queue;
-    use serde::{Deserialize, Serialize};
-    use stash::stash::Stash;
-    use std::time::Duration;
-
-    #[derive(Copy, Clone, Serialize, Deserialize)]
-    struct TestAction {
-        v: u32,
-    }
-    impl Action for TestAction {
-        const TYPE: Type = Type("test_action");
-        const VERSION: u32 = 1;
-        type VersionConverter = DefaultVersionConverter<Self>;
-        type Output = ();
-        type Error = NoopError;
-        type Handler = NoopActionHandler<Self>;
-    }
-
-    #[tokio::test]
-    async fn check_action_priority() {
-        // Check that an actions are popped from the queue ordered by priority and time.
-        let queue = new_queue().await;
-        let action = TestAction { v: 10 };
-
-        let id0 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_priority_override(Priority::Normal)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id1 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_priority_override(Priority::Low)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id2 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_priority_override(Priority::Highest)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id3 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_priority_override(Priority::High)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id4 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_priority_override(Priority::Highest)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        // Expected order:
-        // * 2 Highest, oldest
-        // * 4 Highest, more recent
-        // * 3 High,
-        // * 0 Normal,
-        // * 1 Low
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id2);
-        queue.delete_action(id2).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id4);
-        queue.delete_action(id4).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id3);
-        queue.delete_action(id3).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id0);
-        queue.delete_action(id0).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id1);
-        queue.delete_action(id1).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap();
-        assert!(next_action.is_none());
-    }
-
-    #[tokio::test]
-    async fn check_action_delay() {
-        // Check that an actions are popped from the queue ordered by priority and delay time.
-        let queue = new_queue().await;
-        let action = TestAction { v: 10 };
-
-        let date_time = chrono::Utc::now();
-
-        let id0 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_creation_time(date_time)
-                    .with_delay(Duration::from_secs(1))
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id1 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new().with_creation_time(date_time).build(),
-            )
-            .await
-            .unwrap();
-
-        let id2 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_creation_time(date_time)
-                    .with_delay(Duration::from_secs(1))
-                    .with_priority_override(Priority::Highest)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        // Expected order:
-        // * 1 No delay
-        // * 2 Highest (delay 1s)
-        // * 0 Normal (delay 1s)
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id1);
-        queue.delete_action(id1).await.unwrap();
-
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id2);
-        queue.delete_action(id2).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id0);
-        queue.delete_action(id0).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap();
-        assert!(next_action.is_none());
-    }
-
-    #[tokio::test]
-    async fn check_action_only_executed_without_dependencies() {
-        let queue = new_queue().await;
-        let action = TestAction { v: 10 };
-
-        let id0 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_priority_override(Priority::Low)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id1 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_dependency(id0)
-                    .with_priority_override(Priority::Normal)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id2 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_dependency(id0)
-                    .with_dependency(id1)
-                    .with_priority_override(Priority::Normal)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id3 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_dependency(id0)
-                    .with_dependency(id1)
-                    .with_priority_override(Priority::High)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        let id4 = queue
-            .queue_action_with_metadata(
-                action.clone(),
-                MetadataBuilder::new()
-                    .with_dependency(id0)
-                    .with_dependency(id2)
-                    .with_priority_override(Priority::Highest)
-                    .build(),
-            )
-            .await
-            .unwrap();
-
-        // Expected order
-        // * 0 - No Deps
-        // * 1 - Depends on 0
-        // * 3 - Depends on 0 & 1 (High)
-        // * 2 - Depends on 0 & 1 (Normal)
-        // * 4 - Depends on 2 & 0 (Highest)
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id0);
-        queue.delete_action(id0).await.unwrap();
-
-        tokio::time::sleep(Duration::from_secs(1)).await;
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id1);
-        queue.delete_action(id1).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id3);
-        queue.delete_action(id3).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id2);
-        queue.delete_action(id2).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap().unwrap();
-        assert_eq!(next_action.id, id4);
-        queue.delete_action(id4).await.unwrap();
-
-        let next_action = queue.next_action().await.unwrap();
-        assert!(next_action.is_none());
-    }
-
-    async fn new_queue() -> Queue {
-        let mut factory = Factory::new();
-        factory.register::<TestAction>().unwrap();
-        let pool = Stash::new(None).unwrap();
-        Queue::with_factory(pool, factory).await.unwrap()
-    }
 }

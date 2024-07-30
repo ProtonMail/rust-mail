@@ -160,7 +160,7 @@ impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
         if old_version == current_version {
-            Ok(T::deserialize_action(data)?)
+            Ok(rmp_serde::from_slice::<T>(data)?)
         } else {
             Err(FactoryError::InvalidVersion(current_version))
         }
@@ -223,22 +223,6 @@ pub trait Action: Serialize + DeserializeOwned + 'static {
     fn priority(&self) -> Priority {
         Self::PRIORITY
     }
-
-    /// Serialize the action data into a binary format.
-    ///
-    /// # Errors
-    /// Returns error if the serialization failed.
-    fn serialize_action(&self) -> Result<Vec<u8>, rmp_serde::encode::Error> {
-        rmp_serde::to_vec(self)
-    }
-
-    /// Deserialize the action from a binary format.
-    ///
-    /// # Errors
-    /// Returns error if the deserialization failed.
-    fn deserialize_action(data: &[u8]) -> Result<Self, rmp_serde::decode::Error> {
-        rmp_serde::from_slice::<Self>(data)
-    }
 }
 
 /// Defines how an action behaves.
@@ -252,10 +236,12 @@ pub trait Handler: Default + 'static {
     /// Apply the `action` to the local database using the given `tx` transaction.
     ///
     /// # Remarks
+    ///
     /// Changes made to the `action` data at this point will be persisted into the database once
     /// executing has finished successfully.
     ///
     /// # Errors
+    ///
     /// Returns error if the operation failed.
     async fn apply_local(
         &self,
@@ -270,6 +256,7 @@ pub trait Handler: Default + 'static {
     /// * The action is being cancelled.
     ///
     /// # Errors
+    ///
     /// Returns error if the operation failed.
     async fn revert_local(
         &self,
@@ -282,10 +269,12 @@ pub trait Handler: Default + 'static {
     /// This function is always called after [`Handler::apply_local()`].
     ///
     /// # Remarks
+    ///
     /// Changes made to the `action` data at this point are accessible to [`Handler::apply_local_post_remote()`]
     /// after this call. They are not serialized to the database.
     ///
     /// # Errors
+    ///
     /// Returns error if the network request failed.
     async fn apply_remote(
         &self,
@@ -298,6 +287,7 @@ pub trait Handler: Default + 'static {
     /// This function is called if [`Handler::apply_remote`] completes successfully.
     ///
     /// # Errors
+    ///
     /// Returns error if the operation failed.
     async fn apply_local_post_remote(
         &self,
@@ -387,6 +377,7 @@ impl MetadataBuilder {
     /// The `resource` will be serialized into a byte array.
     ///
     /// # Errors
+    ///
     /// Returns error if the serialization failed.
     pub fn with_resource(
         mut self,
@@ -444,8 +435,9 @@ impl MetadataBuilder {
     /// calls are delayed until the action has spent at least a period of `duration` in
     /// the queue.
     ///
-    /// Note that this requires the action to be queued ([`crate::queue::Queue::queue_action()`])
-    /// rather than applied ([`crate::queue::Queue::queue_action()`]).
+    /// Note that this requires the action to be queued
+    /// ([`queue_action()`](crate::queue::Queue::queue_action()))
+    /// rather than applied ([`apply_action()`](crate::queue::Queue::apply_action())).
     #[must_use]
     pub fn with_delay(mut self, duration: std::time::Duration) -> Self {
         self.metadata.delay = Some(duration);
@@ -478,18 +470,19 @@ pub enum FactoryError {
 
 pub type FactoryResult<T> = Result<T, FactoryError>;
 
-/// Internal trait to deserialize and an action from the db.
-trait FactoryInstance: Send + Sync {
+/// Internal trait used by the [`Factory`] to convert a [`StoredAction`] into a [`QueuedAction`].
+trait Decoder: Send + Sync {
+    /// Convert the stored `action` into a [`QueuedAction`] which can be executed by the queue.
     fn decode(
         &self,
         action: StoredAction,
     ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)>;
 }
 
-/// Factory Instance implementation that works for any [`Action`] type.
-struct TypeErasedFactoryInstance<T: Action>(PhantomData<T>);
+/// [`Decoder`] implementation that works for any [`Action`] type.
+struct TypeErasedDecoder<T: Action>(PhantomData<fn() -> T>);
 
-impl<T: Action> FactoryInstance for TypeErasedFactoryInstance<T> {
+impl<T: Action> Decoder for TypeErasedDecoder<T> {
     fn decode(
         &self,
         stored_action: StoredAction,
@@ -513,21 +506,15 @@ impl<T: Action> FactoryInstance for TypeErasedFactoryInstance<T> {
     }
 }
 
-/// # Safety
-/// This is safe to apply since we do not interact with the action itself, the type data
-/// is only stored in `PhantomData`.
-unsafe impl<T: Action> Send for TypeErasedFactoryInstance<T> {}
-
-/// # Safety
-/// This is safe to apply since we do not interact with the action itself, the type data
-/// is only stored in `PhantomData`.
-unsafe impl<T: Action> Sync for TypeErasedFactoryInstance<T> {}
-
-/// This type represents the [`Action`] factory which is used by [`crate::queue::Queue`] to
-/// reconstruct queued actions.
+/// A Factory pattern implementation for [`Action`]s which are stored on the
+/// [`Queue`](crate::queue::Queue).
+///
+/// When action are stored on the queue, their state is serialized into the database. In order to
+/// be able to decode an execute those actions they need to be registered with a factory instance.
+///
 #[derive(Default)]
 pub struct Factory {
-    factories: HashMap<String, Box<dyn FactoryInstance>>,
+    factories: HashMap<String, Box<dyn Decoder>>,
 }
 
 impl Factory {
@@ -542,12 +529,13 @@ impl Factory {
     /// Register an [`Action`] with the factory.
     ///
     /// # Errors
+    ///
     /// Returns error if the action type was already registered before.
     pub fn register<T: Action + 'static>(&mut self) -> FactoryResult<()> {
         match self.factories.entry(T::TYPE.to_string()) {
             Entry::Occupied(_) => Err(FactoryError::AlreadyRegistered(T::TYPE)),
             Entry::Vacant(v) => {
-                v.insert(Box::new(TypeErasedFactoryInstance::<T>(PhantomData)));
+                v.insert(Box::new(TypeErasedDecoder::<T>(PhantomData)));
                 Ok(())
             }
         }
@@ -556,6 +544,7 @@ impl Factory {
     /// Decode the stored action.
     ///
     /// # Errors
+    ///
     /// Returns error if the decoding failed.
     pub(crate) fn decode(
         &self,
@@ -572,16 +561,6 @@ impl Factory {
     }
 }
 
-#[cfg(test)]
-pub(crate) struct NoopActionHandler<T: Action>(PhantomData<T>);
-
-#[cfg(test)]
-impl<T: Action> Default for NoopActionHandler<T> {
-    fn default() -> Self {
-        Self(PhantomData)
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 pub struct NoopError {}
 
@@ -594,33 +573,5 @@ impl Display for NoopError {
 impl Error for NoopError {
     fn request_error(&self) -> Option<&ApiServiceError> {
         None
-    }
-}
-
-#[cfg(test)]
-impl<T: Action + 'static> Handler for NoopActionHandler<T>
-where
-    <T as Action>::Output: Default,
-{
-    type Action = T;
-
-    async fn apply_local(&self, _: &mut Self::Action, _: &Tether) -> Result<(), T::Error> {
-        Ok(())
-    }
-
-    async fn revert_local(&self, _: &mut Self::Action, _: &Tether) -> Result<(), T::Error> {
-        Ok(())
-    }
-
-    async fn apply_remote(&self, _: &mut Self::Action, _: &Session) -> Result<(), T::Error> {
-        Ok(())
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        _: &mut Self::Action,
-        _: &Tether,
-    ) -> Result<<Self::Action as Action>::Output, T::Error> {
-        Ok(T::Output::default())
     }
 }

@@ -125,3 +125,6 @@
 pub mod action;
 pub mod db;
 pub mod queue;
+
+#[cfg(test)]
+mod tests;
