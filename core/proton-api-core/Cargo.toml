@@ -34,7 +34,6 @@ velcro = { workspace = true }
 [features]
 default = []
 integration_tests = []
-sql = ["dep:proton-sqlite3"]
 
 [dev-dependencies]
 tokio = { workspace = true }

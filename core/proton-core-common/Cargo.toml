@@ -13,7 +13,7 @@ base64 = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
-proton-api-core = { workspace = true, features = ["sql"] }
+proton-api-core = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
@@ -32,7 +32,7 @@ zeroize = { workspace = true }
 [dev-dependencies]
 tempdir = { workspace = true }
 wiremock = { workspace = true }
-proton-api-core = { workspace = true, features = ["sql", "integration_tests"] }
+proton-api-core = { workspace = true, features = ["integration_tests"] }
 
 [lints]
 workspace = true
