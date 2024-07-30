@@ -31,7 +31,7 @@ pub fn inject_style(document: NodeRef) {
 ///
 /// See [this article](https://mathiasbynens.github.io/rel-noopener/) to see how the lack of it could be abused
 pub fn add_noreferrer(document: NodeRef) {
-    let exp_name = ExpandedName::new(html5ever::namespace_url!(""), "ref");
+    let exp_name = ExpandedName::new(html5ever::namespace_url!(""), "rel");
     let attr = Attribute {
         prefix: None,
         value: "noreferrer".to_string(),
@@ -56,9 +56,14 @@ pub fn insert_links(document: NodeRef) {
     // We only care about text nodes which we replace with <span> for simplicity
     let mut detach_me = vec![];
     for node_ref in start_nodes {
-        let NodeData::Element(_) = node_ref.data() else {
+        let NodeData::Element(data) = node_ref.data() else {
             continue;
         };
+
+        // This is already a link
+        if &*data.name.local == "a" {
+            continue;
+        }
         for child in node_ref.children() {
             let NodeData::Text(text) = child.data() else {
                 continue;
@@ -77,23 +82,24 @@ pub fn insert_links(document: NodeRef) {
 }
 
 fn insert_link_str(text: &str) -> Option<NodeRef> {
-    let mut found_link = false;
+    // First pass, no allocation
+    if !text.contains("http") {
+        return None;
+    }
     let mut rep = String::with_capacity(text.len() * 2); // TODO:(perf) reserve a bit less capacity
     for word in text.split_whitespace() {
-        const ALLOWED_SCHEMES: &[&str] = &[
-            "http", "https", "mailto", "callto", "cid", "blob", "xmpp", "data",
-        ];
-        match url::Url::parse(word) {
-            Ok(url) if ALLOWED_SCHEMES.contains(&url.scheme()) && !url.path().is_empty() => {
+        if word.starts_with("http") {
+            if let Ok(url) = url::Url::parse(word) {
                 let url: String = strip_from_url(&url).into();
                 rep.push_str(&format!(r#"<a href="{url}" rel="noreferrer">{url}</a>"#));
-                found_link = true;
+                rep.push(' ');
+                continue;
             }
-            _ => rep.push_str(word),
         }
+        rep.push_str(word);
         rep.push(' ');
     }
-    found_link.then(|| node_ref_from_str(&rep, "div"))
+    Some(node_ref_from_str(&rep, "div"))
 }
 
 #[cfg(test)]

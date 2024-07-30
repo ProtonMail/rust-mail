@@ -15,16 +15,11 @@
 //! ```
 //! use proton_mail_html_transformer::Transformer;
 //!
-//! let html = "..";
+//! let html = "<html>..</html>";
 //!
-//! let mut transformer = Transformer::new(html);
-//!
-//! // Strip utm codes.
-//! transformer.strip_utm().unwrap();
-//!
-//! // Convert back to textual representation
-//! let transformed_html = transformer.to_string();
-//!
+//! let transformed_html = Transformer::new(html)
+//!   .strip_utm() // Strip utm codes.
+//!   .to_string();// Convert back to textual representation
 //! ```
 //!
 
@@ -38,17 +33,6 @@ pub mod remote_content;
 pub mod sanitizer;
 pub mod transforms;
 pub mod utm;
-
-/// Errors that may occur during transformation.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    /// Error occurred during UTM pass.
-    #[error("Utm: {0}")]
-    Utm(#[from] utm::Error),
-    /// Error occurred during Remote Content pass.
-    #[error("Remote Content: {0}")]
-    RemoteContent(#[from] remote_content::Error),
-}
 
 /// HTML content transformer.
 ///
@@ -79,8 +63,8 @@ impl Transformer {
 
     /// Access the parsed document.
     #[must_use]
-    pub fn document(&self) -> &NodeRef {
-        &self.document
+    pub fn document(&self) -> NodeRef {
+        self.document.clone()
     }
 
     /// Strip HTML links of UTM tracking codes.
@@ -91,9 +75,7 @@ impl Transformer {
     ///
     /// This is a destructive operation and can not be undone.
     pub fn strip_utm(&mut self) -> &mut Self {
-        // We don't throw the error back because the transformer doesn't care if the HTML
-        // contains invalid links.
-        _ = utm::strip(self.document.clone());
+        utm::strip(self.document.clone());
         self
     }
 
@@ -117,10 +99,6 @@ impl Transformer {
     /// # Remarks
     ///
     /// This is a non-destructive operation and can be undone with [`disable_remote_content()`].
-    ///
-    /// # Errors
-    ///
-    /// Returns errors if the pass failed.
     pub fn enable_remote_content(&mut self) -> &mut Self {
         remote_content::undo_disable_remote_content(&self.document);
         self
@@ -129,10 +107,6 @@ impl Transformer {
     /// If true, inject metadata for iOS web view.
     ///
     /// See [`ios::inject_content_size()`] for more details.
-    ///
-    /// # Errors
-    ///
-    /// Returns errors if the pass failed.
     pub fn inject_ios_content_size(&mut self) -> &mut Self {
         ios::inject_content_size(self.document.clone());
         self
@@ -166,6 +140,8 @@ impl Transformer {
     /// See [`transforms::add_noreferrer`] for more details.
     ///
     /// # Remarks
+    ///
+    /// For performance reasons call this before [`Transformer::insert_links`]
     ///
     /// This is a destructive operation and can not be undone.
     pub fn add_noreferrer(&mut self) -> &mut Self {
