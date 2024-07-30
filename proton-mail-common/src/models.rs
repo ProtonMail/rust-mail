@@ -36,6 +36,7 @@ use crate::datatypes::{
     PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
     ViewMode,
 };
+use crate::models::ModelError::RemoteLabelDoesNotExist;
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
@@ -64,7 +65,7 @@ use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use smart_default::SmartDefault;
-use stash::datatypes::QueryResultU64;
+use stash::datatypes::{QueryResultString, QueryResultU64};
 use stash::exports::ToSql;
 use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
@@ -73,6 +74,19 @@ use stash::stash::{Stash, StashError, Tether};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error};
+
+/// Errors that can occurr when interatcing with the model.
+#[derive(Debug, thiserror::Error)]
+pub enum ModelError {
+    #[error("Label with local id {0} not found")]
+    LabelNotFound(u64),
+    #[error("Label with local id {0} does not have remote id")]
+    LabelDoesNotHaveRemoteId(u64),
+    #[error("Could not find remote label {0}")]
+    RemoteLabelDoesNotExist(LabelId),
+    #[error("Stash: {0}")]
+    Stash(#[from] StashError),
+}
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
 
@@ -1178,7 +1192,7 @@ impl Conversation {
     ///
     /// * `ids`      - The IDs of the conversations to undelete.
     /// * `label_id` - TODO: Document this parameter.
-    /// * `stash`    - The stash to use for the database connection.
+    /// * `tether`   - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1241,6 +1255,107 @@ impl Conversation {
         )
         .await
         .map(|r| r.responses)
+    }
+
+    /// Move conversations between two labels.
+    ///
+    /// # Parameters
+    /// * `source_id`      - Local label id where the conversations currently are.
+    /// * `destination_id` - Local label id where the conversations should be moved.
+    /// * `ids`            - The IDs of the conversations to move.
+    /// * `tx`             - The tether to use for the database connection.
+    ///
+    /// This function returns a tuple containing the source and destination remote label ids,
+    /// respectively.
+    ///
+    /// # Remarks
+    ///
+    /// This function can only be called with an active transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns errors if the operation failed.
+    pub async fn move_conversations(
+        source_id: u64,
+        destination_id: u64,
+        ids: Vec<u64>,
+        tx: &Tether,
+    ) -> Result<(LabelId, LabelId), ModelError> {
+        let Some(source_label) = Label::load_using(source_id, tx).await? else {
+            return Err(ModelError::LabelNotFound(source_id));
+        };
+
+        let is_movable_folder = source_label.is_movable_folder();
+
+        let Some(remote_source_id) = source_label.remote_id else {
+            return Err(ModelError::LabelDoesNotHaveRemoteId(source_id));
+        };
+
+        let Some(remote_destination_id) = Label::find_remote_id(destination_id, tx).await? else {
+            return Err(ModelError::LabelDoesNotHaveRemoteId(destination_id));
+        };
+
+        // If moving to trash, mark conversations as read.
+        if remote_destination_id == LabelId::trash() {
+            Conversation::mark_multiple_as_read(ids.clone(), tx)
+                .await
+                .map_err(|e| {
+                    error!("Failed to mark conversations as read when moving to trash: {e}");
+                    e
+                })?
+        }
+
+        // When moving in Trash or Spam, remove all labels (but AllMail)
+        if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
+            let all_mail_id = Label::find_local_ids(vec![LabelId::all_mail()], tx).await?;
+            if all_mail_id.is_empty() {
+                return Err(RemoteLabelDoesNotExist(LabelId::all_mail()));
+            }
+
+            let all_mail_local_id = all_mail_id[0];
+
+            for &local_conversation_id in &ids {
+                let label_ids =
+                    ConversationLabel::labels_ids_for_conversation(local_conversation_id, tx)
+                        .await?;
+                for label_id in label_ids.into_iter().filter(|id| *id != all_mail_local_id) {
+                    Conversation::remove_label_from_multiple(
+                        label_id,
+                        vec![local_conversation_id],
+                        tx,
+                    )
+                        .await.map_err(|e| {
+                        error!("Failed to remove label {label_id} from conv {local_conversation_id} when moving into spam/trash:{e}");
+                        e
+                    })?;
+                }
+            }
+            // When moving out of Trash or Spam, add AlmostAllMail label
+        } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
+            let almost_all_mail_id =
+                Label::find_local_ids(vec![LabelId::almost_all_mail()], tx).await?;
+            if almost_all_mail_id.is_empty() {
+                return Err(RemoteLabelDoesNotExist(LabelId::almost_all_mail()));
+            }
+
+            let almost_all_mail_local_id = almost_all_mail_id[0];
+            Conversation::apply_label_to_multiple(almost_all_mail_local_id, ids.clone(), tx)
+                .await
+                .map_err(|e| {
+                    error!(
+                        "Failed to apply almost all mail label when moving out of spam/trash:{e}"
+                    );
+                    e
+                })?;
+        }
+
+        if is_movable_folder {
+            Conversation::remove_label_from_multiple(source_id, ids.clone(), tx).await?
+        }
+
+        Conversation::apply_label_to_multiple(destination_id, ids.clone(), tx).await?;
+
+        Ok((remote_source_id, remote_destination_id))
     }
 }
 
@@ -1744,6 +1859,32 @@ impl Label {
             }
         }
         Ok(ids)
+    }
+
+    /// Find remote ID for the given local ID.
+    ///
+    /// # Parameters
+    ///
+    /// * `local_id` - The local ID to find remote ID.
+    /// * `tether`   - The tether to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be read from the database.
+    ///
+    pub async fn find_remote_id(
+        local_id: u64,
+        tether: &Tether,
+    ) -> Result<Option<LabelId>, StashError> {
+        let query = format!(
+            "SELECT remote_id FROM {} WHERE local_id = ? AND remote_id IS NOT NULL",
+            Self::table_name()
+        );
+        Ok(tether
+            .query_row::<_, QueryResultString>(&query, params![local_id])
+            .await
+            .optional()?
+            .map(|v| LabelId::from(v.value)))
     }
 }
 

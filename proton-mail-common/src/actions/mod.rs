@@ -1,7 +1,7 @@
 pub mod conversations;
+use crate::models::ModelError;
 use proton_action_queue::action::Factory;
 use proton_api_core::service::ApiServiceError;
-use proton_core_common::datatypes::LabelId;
 use stash::stash::StashError;
 
 #[derive(Debug, thiserror::Error)]
@@ -10,12 +10,8 @@ pub enum ActionError {
     Http(#[from] ApiServiceError),
     #[error("Stash: {0}")]
     Stash(#[from] StashError),
-    #[error("Label ({0}) not found")]
-    LabelNotFound(u64),
-    #[error("Remote Label ({0}) not found")]
-    RemoteLabelNotFound(LabelId),
-    #[error("Label ({0}) has no remote id")]
-    LabelHasNoRemoteId(u64),
+    #[error("Model: {0}")]
+    Model(#[from] ModelError),
     #[error("No input provided")]
     NoInput,
     #[error("Other: {0}")]
