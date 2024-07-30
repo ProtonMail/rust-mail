@@ -177,6 +177,16 @@ impl Transformer {
         transforms::add_noreferrer(self.document.clone());
         self
     }
+
+    /// Inserts `<a>` elements in plain text links
+    ///
+    /// # Remarks
+    ///
+    /// This is a destructive operation and can not be undone.
+    pub fn insert_links(&mut self) -> &mut Self {
+        transforms::insert_links(self.document.clone());
+        self
+    }
 }
 
 impl Display for Transformer {
