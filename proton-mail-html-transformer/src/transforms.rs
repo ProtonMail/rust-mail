@@ -1,5 +1,12 @@
-use html5ever::tendril::TendrilSink;
-use kuchikiki::{Attribute, ExpandedName, NodeRef};
+use html5ever::{namespace_url, tendril::TendrilSink, LocalName, QualName};
+use kuchikiki::{iter::NodeEdge, Attribute, ExpandedName, NodeData, NodeRef};
+
+use crate::utm::strip_from_url;
+
+fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
+    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from(tag));
+    kuchikiki::parse_fragment(qual_name, vec![]).one(html)
+}
 
 #[allow(clippy::missing_panics_doc)]
 pub fn inject_style(document: NodeRef) {
@@ -14,7 +21,7 @@ pub fn inject_style(document: NodeRef) {
   }
 </style>
 ";
-    let style = kuchikiki::parse_html().one(style);
+    let style = node_ref_from_str(style, "head");
 
     element.as_node().append(style);
 }
