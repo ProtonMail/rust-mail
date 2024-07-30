@@ -149,6 +149,16 @@ impl Transformer {
         self
     }
 
+    /// Proxies all images through proton's proxy.
+    ///
+    /// # Remarks
+    ///
+    /// This is a destructive operation and can not be undone.
+    pub fn proxy_images(&mut self, user_session_id: &str) -> &mut Self {
+        transforms::proxy_images(self.document(), user_session_id);
+        self
+    }
+
     /// Inserts `<a>` elements in plain text links
     ///
     /// # Remarks
@@ -184,6 +194,7 @@ mod test {
             .strip_whitelist()
             .inject_style()
             .add_noreferrer()
+            .proxy_images("THISISATOKEN")
             .insert_links();
         // .to_string(); // https://github.com/servo/html5ever/issues/290
     }
