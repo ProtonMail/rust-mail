@@ -27,18 +27,8 @@ pub trait Error: std::error::Error + Send + Sync {
         let Some(request_error) = self.request_error() else {
             return false;
         };
-        match request_error {
-            ApiServiceError::Redirect(_, _)
-            | ApiServiceError::Timeout(_)
-            | ApiServiceError::NetworkError(_)
-            | ApiServiceError::ConnectionError(_)
-            | ApiServiceError::InternalServerError(_, _) => true,
-            ApiServiceError::OtherHttpError(code, _, _) => {
-                let code = code.as_u16();
-                code == 429 || code >= 500
-            }
-            _ => false,
-        }
+
+        request_error.is_network_failure()
     }
 }
 

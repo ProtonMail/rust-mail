@@ -164,6 +164,28 @@ pub enum ApiServiceError {
     UnknownError(String),
 }
 
+impl ApiServiceError {
+    /// Check if the error is the result of a network failure.
+    ///
+    /// An error is considered a network failure the server replies with 429/5xx HTTP status codes
+    /// or there was an issue with the underlying network transport layer.
+    #[must_use]
+    pub fn is_network_failure(&self) -> bool {
+        match self {
+            ApiServiceError::Redirect(_, _)
+            | ApiServiceError::Timeout(_)
+            | ApiServiceError::NetworkError(_)
+            | ApiServiceError::ConnectionError(_)
+            | ApiServiceError::InternalServerError(_, _) => true,
+            ApiServiceError::OtherHttpError(code, _, _) => {
+                let code = code.as_u16();
+                code == 429 || code >= 500
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Formalised list of the possible body types that can be sent with a request.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub enum Body<J>
