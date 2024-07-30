@@ -88,6 +88,7 @@ impl TestContext {
             tmp_dir.path(),
             tmp_dir.path(),
             cache_path,
+            1024 * 1024 * 12,
             keychain,
             base_url,
             None,
