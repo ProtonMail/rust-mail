@@ -121,9 +121,27 @@ pub enum ApiServiceError {
     #[error("Unprocessable entity: {0}. {1}")]
     UnprocessableEntity(String, String),
 
+    /// 429: The client made too many requests to the server.
+    #[error("Too many requests: {0}. {1}")]
+    TooManyRequest(String, String),
+
     /// 500: Something is wrong with the external API service.
     #[error("Internal server error: {0}. {1}")]
     InternalServerError(String, String),
+
+    /// 501: The server either does not recognize the request method, or it lacks the ability to
+    /// fulfil the request.
+    #[error("Not Implemented: {0}. {1}")]
+    NotImplemented(String, String),
+
+    /// 502: The server was acting as a gateway or proxy and received an invalid response from the
+    /// upstream server.
+    #[error("Bad gateway: {0}. {1}")]
+    BadGateway(String, String),
+
+    /// 503: The server cannot handle the request (because it is overloaded or down for maintenance).
+    #[error("Service Unavailable: {0}. {1}")]
+    ServiceUnavailable(String, String),
 
     /// Any other HTTP error which is not currently handled.
     #[error("HTTP error {0}: {1}. {2}")]
@@ -176,11 +194,12 @@ impl ApiServiceError {
             | ApiServiceError::Timeout(_)
             | ApiServiceError::NetworkError(_)
             | ApiServiceError::ConnectionError(_)
+            | ApiServiceError::TooManyRequest(_, _)
+            | ApiServiceError::BadGateway(_, _)
+            | ApiServiceError::NotImplemented(_, _)
+            | ApiServiceError::ServiceUnavailable(_, _)
             | ApiServiceError::InternalServerError(_, _) => true,
-            ApiServiceError::OtherHttpError(code, _, _) => {
-                let code = code.as_u16();
-                code == 429 || code >= 500
-            }
+            ApiServiceError::OtherHttpError(code, _, _) => code.as_u16() >= 500,
             _ => false,
         }
     }
@@ -447,8 +466,18 @@ pub trait ApiService {
                 StatusCode::UNPROCESSABLE_ENTITY => {
                     ApiServiceError::UnprocessableEntity(error.to_string(), text)
                 }
+                StatusCode::TOO_MANY_REQUESTS => {
+                    ApiServiceError::TooManyRequest(error.to_string(), text)
+                }
                 StatusCode::INTERNAL_SERVER_ERROR => {
                     ApiServiceError::InternalServerError(error.to_string(), text)
+                }
+                StatusCode::NOT_IMPLEMENTED => {
+                    ApiServiceError::NotImplemented(error.to_string(), text)
+                }
+                StatusCode::BAD_GATEWAY => ApiServiceError::BadGateway(error.to_string(), text),
+                StatusCode::SERVICE_UNAVAILABLE => {
+                    ApiServiceError::ServiceUnavailable(error.to_string(), text)
                 }
                 _ => ApiServiceError::OtherHttpError(status, error.to_string(), text),
             }

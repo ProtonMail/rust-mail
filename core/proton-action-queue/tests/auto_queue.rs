@@ -91,19 +91,11 @@ impl Handler for ErrorActionHandler {
             ErrorType::Timeout => ApiServiceError::Timeout(String::new()),
             ErrorType::Redirect => ApiServiceError::Redirect(String::new(), String::new()),
             ErrorType::Connect => ApiServiceError::ConnectionError(String::new()),
-            ErrorType::Http429 => ApiServiceError::OtherHttpError(
-                reqwest::StatusCode::TOO_MANY_REQUESTS,
-                String::new(),
-                String::new(),
-            ),
+            ErrorType::Http429 => ApiServiceError::TooManyRequest(String::new(), String::new()),
             ErrorType::Http500 => {
                 ApiServiceError::InternalServerError(String::new(), String::new())
             }
-            ErrorType::Http503 => ApiServiceError::OtherHttpError(
-                reqwest::StatusCode::from_u16(503).unwrap(),
-                String::new(),
-                String::new(),
-            ),
+            ErrorType::Http503 => ApiServiceError::ServiceUnavailable(String::new(), String::new()),
         };
 
         Err(err.into())
