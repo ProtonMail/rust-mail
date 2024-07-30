@@ -6,6 +6,7 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::Flow;
 use proton_api_core::service::ApiServiceError;
+use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::session::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
@@ -46,6 +47,8 @@ pub enum MailContextError {
     Stash(#[from] StashError),
     #[error("API Error: {0}")]
     Api(#[from] ApiServiceError),
+    #[error("Cache Error: {0}")]
+    CacheError(#[from] CacheError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -62,6 +65,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::Other(err) => MailContextError::Other(err),
             CoreContextError::PGPKeyAccess(err) => MailContextError::PGPKeyAccess(err),
             CoreContextError::Stash(err) => MailContextError::Stash(err),
+            CoreContextError::CacheError(err) => MailContextError::CacheError(err),
         }
     }
 }
@@ -80,6 +84,7 @@ pub struct MailContext {
     core_context: Arc<Context>,
     // TODO: cleanup after Dan's refactor.
     mail_cache_path: PathBuf,
+    mail_cache_size: u32,
 }
 
 impl MailContext {
@@ -87,6 +92,7 @@ impl MailContext {
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         mail_cache_path: impl Into<PathBuf>,
+        mail_cache_size: u32,
         key_chain: Arc<dyn KeyChain>,
         api_url: Url,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
@@ -106,6 +112,7 @@ impl MailContext {
         Ok(Self {
             core_context,
             mail_cache_path: mail_cache_path.into(),
+            mail_cache_size,
         })
     }
 
@@ -125,7 +132,11 @@ impl MailContext {
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
-            .user_context_from_login_flow(login_flow)
+            .user_context_from_login_flow(
+                login_flow,
+                self.mail_cache_path.clone(),
+                self.mail_cache_size,
+            )
             .await?;
         Ok(MailUserContext::new(self.clone(), ctx).await)
     }
@@ -138,7 +149,10 @@ impl MailContext {
         &self,
         session: &EncryptedUserSession,
     ) -> MailContextResult<Arc<MailUserContext>> {
-        let ctx = self.core_context.user_context_from_session(session).await?;
+        let ctx = self
+            .core_context
+            .user_context_from_session(session, self.mail_cache_path.clone(), self.mail_cache_size)
+            .await?;
         Ok(MailUserContext::new(self.clone(), ctx).await)
     }
     /// Return the list of active session.
