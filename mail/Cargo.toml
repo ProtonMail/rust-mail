@@ -18,6 +18,7 @@ bytes = "1.4"
 flume = "0.11"
 futures = "0.3.30"
 indoc = "2"
+itertools = "0.13.0"
 lazy_static = "1"
 proton-action-queue = { version = "=0.7.0", registry = "proton" }
 proton-api-core = { version = "=0.6.1", registry = "proton", features = ["sql", "uniffi"] }

@@ -13,6 +13,8 @@ bytes = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
+itertools = { workspace = true }
+lazy_static = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }

@@ -1,6 +1,6 @@
 use crate::datatypes::{LabelColor, LabelType, MessageAddress, MessageFlags, SystemLabelId};
 use crate::models::{Conversation, Label, Message};
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::LabelId;
 
 use lazy_static::lazy_static;
 use test_case::test_case;
@@ -211,15 +211,7 @@ fn find_conversation_message_id(
 fn message_metadata_with_flags(id: u64, flags: MessageFlags, unread: bool) -> Message {
     Message {
         local_id: Some(id),
-        remote_id: None,
-        local_conversation_id: None,
-        remote_conversation_id: None,
-        address_id: RemoteId::from(""),
-        display_order: 0,
-        parsed_headers: Default::default(),
-        subject: String::new(),
         unread,
-        row_id: None,
         sender: MessageAddress {
             address: String::new(),
             bimi_selector: None,
@@ -228,28 +220,8 @@ fn message_metadata_with_flags(id: u64, flags: MessageFlags, unread: bool) -> Me
             is_simple_login: false,
             name: String::new(),
         },
-        time: 0,
-        size: 0,
-        expiration_time: 0,
-        snooze_time: 0,
-        is_replied: false,
-        is_replied_all: false,
-        label_ids: Default::default(),
-        is_forwarded: false,
-        external_id: None,
-        num_attachments: 0,
         flags,
-        attachments: Default::default(),
-        attachments_metadata: Default::default(),
-        bcc_list: Default::default(),
-        body: String::new(),
-        cc_list: Default::default(),
-        header: String::new(),
-        mime_type: Default::default(),
-        reply_tos: Default::default(),
-        to_list: Default::default(),
-        stash: None,
-        deleted: false,
+        ..Default::default()
     }
 }
 

@@ -30,10 +30,11 @@
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
     ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
-    EncryptedMessageBody, KeyPackets, LabelColor, LabelType, MessageAddress, MessageAddresses,
-    MessageAttachmentInfos, MessageAttachments, MessageButtons, MessageCount, MessageFlags,
-    MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme, PmSignature, ShowImages,
-    ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
+    EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType, MessageAddress,
+    MessageAddresses, MessageAttachmentInfos, MessageAttachments, MessageButtons, MessageCount,
+    MessageFlags, MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme,
+    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
+    ViewMode,
 };
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
@@ -311,9 +312,8 @@ impl From<ApiAttachment> for Attachment {
         }
     }
 }
-
 /// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("conversations")]
 #[ModelActions(on_load, on_save)]
 pub struct Conversation {
@@ -350,6 +350,13 @@ pub struct Conversation {
     /// TODO: Document this field.
     #[DbField]
     pub expiration_time: u64,
+
+    /// Exlusive location of the Conversation (eg. Inbox, Archive, Outbox etc.).
+    /// When model is read from database, this field should always be Some(_).
+    /// If it is None, it means either that the model is not fully initialized
+    /// or there is very nasty bug. Failed initialization is logged as error
+    /// but flow is not impacted due to the fact that this is not critical field.
+    pub exclusive_location: Option<ExclusiveLocation>,
 
     /// TODO: Document this field.
     pub labels: Vec<ConversationLabel>,
@@ -759,6 +766,16 @@ impl Conversation {
             None,
         )
         .await?;
+
+        let labels = Label::find(
+            r#"WHERE local_id IN (SELECT local_label_id FROM conversation_labels WHERE local_conversation_id = ?)"#,
+            params![self.local_id],
+            stash,
+            None,
+        )
+        .await?;
+
+        self.exclusive_location = ExclusiveLocation::from_labels(&labels);
 
         // Example... not good to do this here, though, as the total number comes
         // from the API.
@@ -1249,6 +1266,7 @@ impl From<ApiConversation> for Conversation {
             deleted: false,
             display_snooze_reminder: value.display_snooze_reminder,
             expiration_time: value.expiration_time,
+            exclusive_location: None,
             labels: value.labels.into_iter().map(|v| v.into()).collect(),
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
@@ -1757,6 +1775,39 @@ impl From<ApiLabel> for Label {
     }
 }
 
+#[cfg(test)]
+mod default_label {
+    use crate::{datatypes::LabelType, models::Label};
+
+    impl Default for Label {
+        fn default() -> Self {
+            Self {
+                label_type: LabelType::Label,
+                local_id: Default::default(),
+                remote_id: Default::default(),
+                local_parent_id: Default::default(),
+                remote_parent_id: Default::default(),
+                color: Default::default(),
+                display: Default::default(),
+                expanded: Default::default(),
+                initialized_conv: Default::default(),
+                initialized_msg: Default::default(),
+                name: Default::default(),
+                notify: Default::default(),
+                display_order: Default::default(),
+                path: Default::default(),
+                sticky: Default::default(),
+                total_conv: Default::default(),
+                total_msg: Default::default(),
+                unread_conv: Default::default(),
+                unread_msg: Default::default(),
+                row_id: Default::default(),
+                stash: Default::default(),
+            }
+        }
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[allow(clippy::struct_excessive_bools)]
@@ -2107,6 +2158,13 @@ pub struct Message {
     /// TODO: Document this field.
     pub label_ids: Vec<LabelId>,
 
+    /// Exlusive location of the message (eg. Inbox, Archive, Outbox etc.).
+    /// When model is read from database, this field should always be Some(_).
+    /// If it is None, it means either that the model is not fully initialized
+    /// or there is very nasty bug. Failed initialization is logged as error
+    /// but flow is not impacted due to the fact that this is not critical field.
+    pub exclusive_location: Option<ExclusiveLocation>,
+
     /// TODO: Document this field.
     pub mime_type: MimeType,
 
@@ -2216,6 +2274,7 @@ impl Message {
                 is_forwarded: metadata.is_forwarded,
                 is_replied: metadata.is_replied,
                 is_replied_all: metadata.is_replied_all,
+                exclusive_location: None,
                 label_ids: metadata.label_ids.into_iter().map(|v| v.into()).collect(),
                 local_conversation_id: None,
                 mime_type: MimeType::TextPlain,
@@ -2339,13 +2398,25 @@ impl Message {
         // )
         //     .await?;
 
-        self.label_ids = Label::find(
-            "WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?)",
+        // TODO: There is a bug in the current implementation where the default label IDs are of LabelType::Label type.
+        // let labels = Label::find(
+        //     r#"WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?) AND (label_type = ? OR label_type = ?)"#,
+        //     params![self.local_id, LabelType::Folder, LabelType::System],
+        //     stash,
+        //     None,
+        // )
+        // .await?;
+
+        let labels = Label::find(
+            r#"WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?)"#,
             params![self.local_id],
             stash,
             None,
         )
-            .await?.into_iter().map(|l| l.remote_id.unwrap()).collect();
+        .await?;
+
+        self.exclusive_location = ExclusiveLocation::from_labels(&labels);
+        self.label_ids = labels.into_iter().map(|l| l.remote_id.unwrap()).collect();
 
         if let Some(body) = MessageBodyMetadata::find_first(
             "WHERE local_message_id = ?",
@@ -2714,6 +2785,13 @@ impl Message {
 
 impl From<ApiMessage> for Message {
     fn from(value: ApiMessage) -> Self {
+        let label_ids: Vec<LabelId> = value
+            .metadata
+            .label_ids
+            .into_iter()
+            .map(|v| v.into())
+            .collect();
+
         Self {
             local_id: None,
             remote_id: Some(value.metadata.id.into()),
@@ -2757,12 +2835,8 @@ impl From<ApiMessage> for Message {
             is_forwarded: value.metadata.is_forwarded,
             is_replied: value.metadata.is_replied,
             is_replied_all: value.metadata.is_replied_all,
-            label_ids: value
-                .metadata
-                .label_ids
-                .into_iter()
-                .map(|v| v.into())
-                .collect(),
+            exclusive_location: None,
+            label_ids,
             mime_type: value.mime_type.into(),
             num_attachments: value.metadata.num_attachments,
             parsed_headers: ParsedHeaders {
@@ -2792,6 +2866,55 @@ impl From<ApiMessage> for Message {
             unread: value.metadata.unread,
             row_id: None,
             stash: None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod default_message {
+    use proton_core_common::datatypes::RemoteId;
+
+    use crate::models::Message;
+
+    impl Default for Message {
+        fn default() -> Self {
+            Self {
+                address_id: RemoteId::new(Default::default()),
+                // The rest are by default default.
+                flags: Default::default(),
+                local_id: Default::default(),
+                remote_id: Default::default(),
+                local_conversation_id: Default::default(),
+                remote_conversation_id: Default::default(),
+                attachments: Default::default(),
+                attachments_metadata: Default::default(),
+                bcc_list: Default::default(),
+                body: Default::default(),
+                cc_list: Default::default(),
+                deleted: Default::default(),
+                expiration_time: Default::default(),
+                external_id: Default::default(),
+                header: Default::default(),
+                is_forwarded: Default::default(),
+                is_replied: Default::default(),
+                is_replied_all: Default::default(),
+                label_ids: Default::default(),
+                exclusive_location: Default::default(),
+                mime_type: Default::default(),
+                num_attachments: Default::default(),
+                display_order: Default::default(),
+                parsed_headers: Default::default(),
+                reply_tos: Default::default(),
+                sender: Default::default(),
+                size: Default::default(),
+                snooze_time: Default::default(),
+                subject: Default::default(),
+                time: Default::default(),
+                to_list: Default::default(),
+                unread: Default::default(),
+                row_id: Default::default(),
+                stash: Default::default(),
+            }
         }
     }
 }

@@ -37,8 +37,13 @@
 //! Hence event data types are placed into the [`events`](crate::events) module.
 //!
 
+pub(crate) mod exclusive_location;
+#[cfg(test)]
+mod tests;
+
 use crate::models::MessageBodyMetadata;
 use core::fmt;
+pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
@@ -1130,7 +1135,7 @@ impl ToSql for LabelColor {
 }
 
 /// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MessageAddress {
     /// TODO: Document this field.
     // TODO: Proper email parsing
@@ -1340,7 +1345,7 @@ impl From<ApiMessageCount> for MessageCount {
 }
 
 /// TODO: Document this struct.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub struct MessageFlags(u64);
 
 bitflags::bitflags! {
@@ -1626,6 +1631,11 @@ pub trait SystemLabelId: for<'a> From<&'a str> {
     #[must_use]
     fn trash() -> Self {
         Self::from("3")
+    }
+
+    #[must_use]
+    fn snoozed() -> Self {
+        Self::from("16")
     }
 }
 
