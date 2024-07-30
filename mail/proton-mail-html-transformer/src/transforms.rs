@@ -87,7 +87,7 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
     let mut rep = String::with_capacity(text.len() * 2); // TODO:(perf) reserve a bit less capacity
     for word in text.split_whitespace() {
         if word.starts_with("http") {
-            if let Ok(url) = url::Url::parse(word) {
+            if let Ok(url) = Url::parse(word) {
                 let url: String = strip_from_url(&url).into();
                 rep.push_str(&format!(r#"<a href="{url}" rel="noreferrer">{url}</a>"#));
                 rep.push(' ');

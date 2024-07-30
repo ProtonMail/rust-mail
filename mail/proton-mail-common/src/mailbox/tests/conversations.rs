@@ -199,7 +199,7 @@ fn find_conversation_message_id(
 
     for label in labels {
         assert_eq!(
-            Conversation::first_unread_message(&label, &messages),
+            Conversation::first_unread_message(label, &messages),
             expected_id,
             "Test failed for label: {:?}, {:?}",
             label.label_type,

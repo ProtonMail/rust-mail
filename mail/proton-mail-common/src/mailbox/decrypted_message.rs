@@ -21,8 +21,6 @@ pub struct DecryptedMessage {
 pub enum DecryptedMessageError {
     #[error("Body type is not valid for this operation")]
     InvalidBodyType,
-    #[error("Html Tansformer: {0}")]
-    Transform(#[from] proton_mail_html_transformer::Error),
 }
 /// Type of the encrypted message.
 enum Type {
@@ -45,18 +43,14 @@ struct HtmlMessage {
 impl HtmlMessage {
     fn new(mail_settings: &MailSettings, body: String) -> Result<Self, DecryptedMessageError> {
         let mut transformer = Transformer::new(&body);
-        transformer
-            .strip_utm()
-            .map_err(proton_mail_html_transformer::Error::from)?;
+        transformer.strip_utm();
 
         // TODO: Disabled because it causes iOS build failures?!
         // #[cfg(target_os = "ios")]
         // transformer.inject_ios_content_size()?;
 
         if mail_settings.hide_remote_images {
-            transformer
-                .disable_remote_content()
-                .map_err(proton_mail_html_transformer::Error::from)?;
+            transformer.disable_remote_content();
         }
 
         let body = transformer.to_string();
@@ -79,8 +73,7 @@ impl HtmlMessage {
         }
 
         self.with_transformer(|t| {
-            t.enable_remote_content()
-                .map_err(proton_mail_html_transformer::Error::from)?;
+            t.enable_remote_content();
             Ok(())
         })?;
 
@@ -99,11 +92,10 @@ impl HtmlMessage {
             return Ok(());
         }
 
-        self.with_transformer(|t| {
-            t.enable_remote_content()
-                .map_err(proton_mail_html_transformer::Error::from)?;
+        _ = self.with_transformer(|t| {
+            t.enable_remote_content();
             Ok(())
-        })?;
+        });
 
         self.remote_content_enabled = false;
         Ok(())

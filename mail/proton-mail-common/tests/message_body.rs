@@ -214,7 +214,7 @@ fn message_body_test_addresses() -> Vec<ApiAddress> {
 }
 
 fn message_body_test_mail_settings() -> ApiMailSettings {
-    let mut settings = ApiMailSettings::default();
+    let mut settings: ApiMailSettings = ApiMailSettings::default();
     settings.view_mode = ApiViewMode::Messages;
     settings
 }
