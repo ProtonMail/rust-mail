@@ -24,7 +24,7 @@ pub enum Error {
 ///
 /// Returns error if an HTML href attribute is not a valid url.
 pub fn strip(document: NodeRef) -> Result<(), Error> {
-    let select = document.select("[href]").unwrap();
+    let select = document.select("[href]").expect("bad selector");
 
     for element in select {
         let mut attributes = element.attributes.borrow_mut();
@@ -209,22 +209,26 @@ lazy_static! {
     ]);
 }
 
-#[test]
-fn remove_from_url() {
-    let url = "https://example.com/?UTM_SOURCE=example&utm_medium=example&utm_campaign=example&UserID=123";
-    let new_url = strip_from_string(url).unwrap();
-    assert_eq!(new_url.as_str(), "https://example.com/?UserID=123");
-
-    let url = "panda"; // Invalid URL
-    let new_url = strip_from_string(url);
-    assert!(new_url.is_err());
-}
-
-#[test]
-fn remove_with_transformer() {
+#[cfg(test)]
+mod test {
+    use super::*;
     use crate::Transformer;
     use kuchikiki::traits::*;
-    let input = r#"
+
+    #[test]
+    fn remove_from_url() {
+        let url = "https://example.com/?UTM_SOURCE=example&utm_medium=example&utm_campaign=example&UserID=123";
+        let new_url = strip_from_string(url).unwrap();
+        assert_eq!(new_url.as_str(), "https://example.com/?UserID=123");
+
+        let url = "panda"; // Invalid URL
+        let new_url = strip_from_string(url);
+        assert!(new_url.is_err());
+    }
+
+    #[test]
+    fn remove_with_transformer() {
+        let input = r#"
 <html>
     <body>
         <a href="https://ads.com?utm_source=tracker">bar</a>
@@ -232,7 +236,7 @@ fn remove_with_transformer() {
 </html>
 "#;
 
-    let expected = r#"
+        let expected = r#"
 <html>
     <body>
         <a href="https://ads.com/">bar</a>
@@ -240,11 +244,23 @@ fn remove_with_transformer() {
 </html>
 "#;
 
-    // Parse and print so the results have the same formatting.
-    let expected = kuchikiki::parse_html().one(expected).to_string();
+        // Parse and print so the results have the same formatting.
+        let expected = kuchikiki::parse_html().one(expected).to_string();
 
-    let mut transformer = Transformer::new(input);
-    transformer.strip_utm().unwrap();
-    let output = transformer.to_string();
-    assert_eq!(expected, output);
+        let mut transformer = Transformer::new(input);
+        transformer.strip_utm();
+        let output = transformer.to_string();
+        assert_eq!(expected, output);
+    }
+
+    // Should we handle this?
+    #[test]
+    fn relative_url_unhandled() {
+        let input = r#"
+        <a href="ads.com?utm_source=tracker">bar</a>
+"#;
+
+        let html = Transformer::new(input).strip_utm().to_string();
+        insta::assert_snapshot!(html);
+    }
 }

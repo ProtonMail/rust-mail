@@ -1,0 +1,6 @@
+---
+source: proton-mail-html-transformer/src/utm.rs
+expression: html
+---
+<html><head></head><body><a href="ads.com?utm_source=tracker">bar</a>
+</body></html>

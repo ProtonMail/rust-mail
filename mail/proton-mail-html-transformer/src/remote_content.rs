@@ -6,7 +6,7 @@
 
 use html5ever::{namespace_url, ns, Namespace};
 use kuchikiki::iter::NodeEdge;
-use kuchikiki::{Attributes, ExpandedName, NodeRef};
+use kuchikiki::{ExpandedName, NodeRef};
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -38,13 +38,27 @@ const PROTON_PREFIX: &str = "proton-";
 /// # Errors
 ///
 /// Returns an error if the selector failed to build.
-pub fn disable_remote_content(document: &NodeRef) -> Result<(), Error> {
+pub fn disable_remote_content(document: &NodeRef) {
     // Unfortunately the selector library does not allow use to query attributes that are not part
     // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
     // we need to traverse the document manually and check each attribute ourselves.
     let attribute_list = AttributeInfo::default_list();
 
-    for_each_element(document, move |attributes| {
+    for node in document.traverse_inclusive() {
+        let NodeEdge::Start(node_ref) = node else {
+            continue;
+        };
+
+        let Some(element) = node_ref.as_element() else {
+            continue;
+        };
+
+        if WHITELISTED_ELEMENTS.contains(&element.name.local.as_ref()) {
+            continue;
+        }
+
+        let mut attributes = element.attributes.borrow_mut();
+
         for item in &attribute_list {
             let Some(attribute) = attributes.map.remove(&item.enabled) else {
                 continue;
@@ -52,8 +66,7 @@ pub fn disable_remote_content(document: &NodeRef) -> Result<(), Error> {
 
             attributes.map.insert(item.disabled.clone(), attribute);
         }
-        Ok(())
-    })
+    }
 }
 
 /// Re-enables all disabled content by stripping the `proton-` prefix.
@@ -72,33 +85,12 @@ pub fn disable_remote_content(document: &NodeRef) -> Result<(), Error> {
 /// ``` html
 /// <img src="...">
 /// ```
-///
-/// # Errors
-///
-/// Returns an error if the selector failed to build.
-pub fn undo_disable_remote_content(document: &NodeRef) -> Result<(), Error> {
+pub fn undo_disable_remote_content(document: &NodeRef) {
     // Unfortunately the selector library does not allow use to query attributes that are not part
     // of the html standard. Attributes such as 'xlink:href` need to handled manually, so
     // we need to traverse the document manually and check each attribute ourselves.
     let attribute_list = AttributeInfo::default_list();
 
-    for_each_element(document, move |attributes| {
-        for item in &attribute_list {
-            let Some(attribute) = attributes.map.remove(&item.disabled) else {
-                continue;
-            };
-
-            attributes.map.insert(item.enabled.clone(), attribute);
-        }
-        Ok(())
-    })
-}
-
-/// Iterate over the `document` and apply the `closure` to each element's attributes.
-fn for_each_element(
-    document: &NodeRef,
-    closure: impl Fn(&mut Attributes) -> Result<(), Error>,
-) -> Result<(), Error> {
     for node in document.traverse_inclusive() {
         let NodeEdge::Start(node_ref) = node else {
             continue;
@@ -114,9 +106,14 @@ fn for_each_element(
 
         let mut attributes = element.attributes.borrow_mut();
 
-        (closure)(&mut attributes)?;
+        for item in &attribute_list {
+            let Some(attribute) = attributes.map.remove(&item.disabled) else {
+                continue;
+            };
+
+            attributes.map.insert(item.enabled.clone(), attribute);
+        }
     }
-    Ok(())
 }
 
 /// Details on how the attributes should be represented when enabled or disabled.
@@ -240,7 +237,7 @@ mod tests {
     #[test]
     fn disable_remote_elements() {
         let mut transformer = Transformer::new(TEST_DOCUMENT);
-        transformer.disable_remote_content().unwrap();
+        transformer.disable_remote_content();
         let output = transformer.to_string();
 
         let expected = kuchikiki::parse_html().one(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED);
@@ -250,7 +247,7 @@ mod tests {
     #[test]
     fn enable_remote_elements() {
         let mut transformer = Transformer::new(TEST_DOCUMENT_REMOTE_CONTENT_DISABLED);
-        transformer.enable_remote_content().unwrap();
+        transformer.enable_remote_content();
         let output = transformer.to_string();
 
         let expected = kuchikiki::parse_html().one(TEST_DOCUMENT);
@@ -260,8 +257,8 @@ mod tests {
     #[test]
     fn disable_enable_remote_elements_cycle() {
         let mut transformer = Transformer::new(TEST_DOCUMENT);
-        transformer.disable_remote_content().unwrap();
-        transformer.enable_remote_content().unwrap();
+        transformer.disable_remote_content();
+        transformer.enable_remote_content();
         let output = transformer.to_string();
 
         let expected = kuchikiki::parse_html().one(TEST_DOCUMENT);
