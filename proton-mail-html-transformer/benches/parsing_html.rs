@@ -34,14 +34,14 @@ pub fn parse_inner(c: &mut Criterion, html: &str) {
     c.bench_function("disable remote content", |b| {
         b.iter(|| {
             let tr = tr.clone();
-            remote_content::disable_remote_content(&tr.document().clone()).unwrap();
+            remote_content::disable_remote_content(&tr.document().clone());
         })
     });
 
     c.bench_function("enable remote content", |b| {
         b.iter(|| {
             let tr = tr.clone();
-            remote_content::undo_disable_remote_content(&tr.document().clone()).unwrap();
+            remote_content::undo_disable_remote_content(&tr.document().clone());
         })
     });
 
@@ -66,17 +66,25 @@ pub fn parse_inner(c: &mut Criterion, html: &str) {
         })
     });
 
+    c.bench_function("insert_links", |b| {
+        b.iter(|| {
+            let tr = tr.clone();
+            transforms::insert_links(tr.document().clone())
+        })
+    });
+
     c.bench_function("All passes", |b| {
         b.iter(|| {
             let mut tr = tr.clone();
-            tr.strip_whitelist()
-                .strip_utm()
-                .unwrap()
-                .inject_ios_content_size()
+            tr.strip_utm()
+                .enable_remote_content()
                 .disable_remote_content()
-                .unwrap()
+                .inject_ios_content_size()
+                .strip_whitelist()
                 .inject_style()
-                .add_noreferrer();
+                .add_noreferrer()
+                .insert_links()
+                .to_string();
         })
     });
 }

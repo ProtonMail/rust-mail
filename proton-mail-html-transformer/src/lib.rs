@@ -90,13 +90,11 @@ impl Transformer {
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
-    ///
-    /// # Errors
-    ///
-    /// Returns errors if the pass failed.
-    pub fn strip_utm(&mut self) -> Result<&mut Self, utm::Error> {
-        utm::strip(self.document.clone())?;
-        Ok(self)
+    pub fn strip_utm(&mut self) -> &mut Self {
+        // We don't throw the error back because the transformer doesn't care if the HTML
+        // contains invalid links.
+        _ = utm::strip(self.document.clone());
+        self
     }
 
     /// Disables remote content.
@@ -107,12 +105,9 @@ impl Transformer {
     ///
     /// This is a non-destructive operation and can be undone with [`enable_remote_content()`].
     ///
-    /// # Errors
-    ///
-    /// Returns errors if the pass failed.
-    pub fn disable_remote_content(&mut self) -> Result<&mut Self, remote_content::Error> {
-        remote_content::disable_remote_content(&self.document)?;
-        Ok(self)
+    pub fn disable_remote_content(&mut self) -> &mut Self {
+        remote_content::disable_remote_content(&self.document);
+        self
     }
 
     /// Enables remote content.
@@ -126,9 +121,9 @@ impl Transformer {
     /// # Errors
     ///
     /// Returns errors if the pass failed.
-    pub fn enable_remote_content(&mut self) -> Result<&mut Self, remote_content::Error> {
-        remote_content::undo_disable_remote_content(&self.document)?;
-        Ok(self)
+    pub fn enable_remote_content(&mut self) -> &mut Self {
+        remote_content::undo_disable_remote_content(&self.document);
+        self
     }
 
     /// If true, inject metadata for iOS web view.
@@ -189,6 +184,7 @@ impl Transformer {
     }
 }
 
+// WARN: This is vulnerable to malicious HTMLs with very deeply nested tags.
 impl Display for Transformer {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.document.to_string())
@@ -206,13 +202,13 @@ mod test {
         let doc = include_str!("../tests/htmls/nested.html");
         Transformer::new(doc)
             .strip_utm()
-            .unwrap()
-            .strip_whitelist()
-            .inject_ios_content_size()
+            .enable_remote_content()
             .disable_remote_content()
-            .unwrap()
+            .inject_ios_content_size()
+            .strip_whitelist()
             .inject_style()
-            .add_noreferrer();
+            .add_noreferrer()
+            .insert_links();
         // .to_string(); // https://github.com/servo/html5ever/issues/290
     }
 }
