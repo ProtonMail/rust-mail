@@ -19,12 +19,8 @@ pub enum Error {
 
 #[allow(clippy::missing_panics_doc)] // The select is well formed.
 /// Strip UTM trackers from all HTML links in the given `document`.
-///
-/// # Errors
-///
-/// Returns error if an HTML href attribute is not a valid url.
-pub fn strip(document: NodeRef) -> Result<(), Error> {
-    let select = document.select("[href]").expect("bad selector");
+pub fn strip(document: NodeRef) {
+    let select = document.select("[href]").unwrap();
 
     for element in select {
         let mut attributes = element.attributes.borrow_mut();
@@ -32,11 +28,15 @@ pub fn strip(document: NodeRef) -> Result<(), Error> {
             continue;
         };
 
-        let new_value = strip_from_string(value)?;
-        *value = new_value.to_string();
+        // The only possible error that can happen is if any of the nodes contains an
+        // invalid (or a relative) url.
+        // We don't throw the error back because the transformer doesn't care if the HTML
+        // contains invalid links (how is it supposed to recover?)
+        // We also don't error because that would short circuit and leave some tags unstripped.
+        if let Ok(new_value) = strip_from_string(value) {
+            *value = new_value.to_string();
+        }
     }
-
-    Ok(())
 }
 
 /// Removes UTM parameters from a given `url`.
@@ -253,7 +253,18 @@ mod test {
         assert_eq!(expected, output);
     }
 
-    // Should we handle this?
+    #[test]
+    fn bad_url_attack() {
+        let input = r#"
+        <a href="bad link">bar</a>
+        <a href="https://ads.com?utm_source=tracker">bar</a>
+"#;
+
+        let html = Transformer::new(input).strip_utm().to_string();
+        insta::assert_snapshot!(html);
+    }
+
+    // Should we handle this? I think relative URLs should be fine.
     #[test]
     fn relative_url_unhandled() {
         let input = r#"
