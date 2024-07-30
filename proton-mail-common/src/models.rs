@@ -290,12 +290,12 @@ impl DecryptableAttachment for Attachment {
         self.real_key_packets.as_ref().unwrap()
     }
 
-    fn attachment_signature(&self) -> &Option<RealAttachmentSignature> {
-        &self.real_signature
+    fn attachment_signature(&self) -> Option<&RealAttachmentSignature> {
+        self.real_signature.as_ref()
     }
 
-    fn attachment_encrypted_signature(&self) -> &Option<RealAttachmentEncryptedSignature> {
-        &self.real_enc_signature
+    fn attachment_encrypted_signature(&self) -> Option<&RealAttachmentEncryptedSignature> {
+        self.real_enc_signature.as_ref()
     }
 }
 
