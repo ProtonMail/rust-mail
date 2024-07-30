@@ -68,7 +68,7 @@ async fn test_get_sender_image() {
         .image_for_sender(
             &mail_settings,
             sender.address.clone(),
-            sender.bimi_selector.clone(),
+            sender.bimi_selector.as_deref(),
             sender.display_sender_image,
             None,
             None,
