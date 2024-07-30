@@ -74,5 +74,9 @@ wrong_self_convention = "warn"
 
 #TODO: Cargo build override rather than profile config(https://users.rust-lang.org/t/how-to-modify-profile-release-only-for-a-target/48811/3)
 
+
+[profile.bench]
+debug = true
+
 [profile.release]
 panic = "abort"

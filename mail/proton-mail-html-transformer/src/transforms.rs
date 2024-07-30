@@ -1,5 +1,6 @@
 use html5ever::{namespace_url, tendril::TendrilSink, LocalName, QualName};
 use kuchikiki::{iter::NodeEdge, Attribute, ExpandedName, NodeData, NodeRef};
+use url::Url;
 
 use crate::utm::strip_from_url;
 
@@ -41,10 +42,7 @@ pub fn add_noreferrer(document: NodeRef) {
 
     for anchor in anchors {
         let mut attrs = anchor.attributes.borrow_mut();
-        attrs
-            .map
-            .entry(exp_name.clone())
-            .or_insert_with(|| attr.clone());
+        attrs.map.insert(exp_name.clone(), attr.clone());
     }
 }
 
@@ -102,11 +100,29 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
     Some(node_ref_from_str(&rep, "div"))
 }
 
+#[allow(clippy::missing_panics_doc)] // the select is well formed.
+pub fn proxy_images(document: NodeRef, user_session_id: &str) {
+    let elements = document.select("img").unwrap();
+    let mut base = Url::parse("https://mail.proton.me/api/core/v4/images").unwrap();
+    base.query_pairs_mut()
+        .append_pair("DryRun", "0")
+        .append_pair("UID", user_session_id);
+
+    for element in elements {
+        let mut attrs = element.attributes.borrow_mut();
+
+        attrs.entry("src").and_modify(|src| {
+            let mut new = base.clone();
+            new.query_pairs_mut().append_pair("Url", &src.value); // PERF: This is kinda slow
+            src.value = new.into();
+        });
+    }
+}
+
 #[cfg(test)]
 mod test {
     #![allow(clippy::needless_raw_string_hashes)]
     use crate::Transformer;
-
     #[test]
     fn inject_style() {
         let html = include_str!("../tests/htmls/empty.html");
@@ -152,6 +168,21 @@ mod test {
         <div id="10"> mailto:foo@bar </div>
         "#;
         let html = Transformer::new(html).insert_links().to_string();
+        insta::assert_snapshot!(html);
+    }
+
+    #[test]
+    fn proxy_images() {
+        let html = r#"
+        <body>
+        <img id="1" src="bad url">
+        <img id="2" src="https://ads.com">
+        <img id="2" src="https://ads.com?utm_source=tracker">
+        </body>
+        "#;
+        let html = Transformer::new(html)
+            .proxy_images("MYTOKEN123")
+            .to_string();
         insta::assert_snapshot!(html);
     }
 }

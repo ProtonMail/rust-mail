@@ -1,10 +1,15 @@
 #![allow(clippy::pedantic)]
+
+mod profiler;
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use proton_mail_html_transformer::{remote_content, sanitizer, transforms, utm, Transformer};
 
 static AMOS_HTTP: &str = include_str!("./amos_http.html");
 static AMOS_LANDING: &str = include_str!("./amos_landing.html");
+static IMGS: &str = include_str!("./100_imgs.html");
+static LINKS: &str = include_str!("./100_links.html");
 
 // This is for new features we're currently benchmarking so that we don't have to run every bench
 pub fn current_benchmark(c: &mut Criterion) {
@@ -18,8 +23,9 @@ pub fn current_benchmark(c: &mut Criterion) {
         });
     }
 
-    // parse_inner(c, AMOS_LANDING);
+    parse_inner(c, LINKS);
     // parse_inner(c, AMOS_HTTP);
+    // parse_inner(c, AMOS_LANDING);
 }
 
 pub fn parse(c: &mut Criterion) {
@@ -85,7 +91,32 @@ pub fn parse(c: &mut Criterion) {
                 transforms::insert_links(tr.document())
             })
         });
+
+        c.bench_function("proxy images", |b| {
+            b.iter(|| {
+                let tr = tr.clone();
+                transforms::proxy_images(tr.document(), "THISISATOKEN")
+            })
+        });
     }
+
+    // Benchmarks with ad-hoc inputs
+    let tr = Transformer::new(black_box(LINKS));
+    c.bench_function("insert 100 links", |b| {
+        b.iter(|| {
+            let tr = tr.clone();
+            transforms::insert_links(tr.document())
+        })
+    });
+
+    let tr = Transformer::new(black_box(IMGS));
+    c.bench_function("proxy 100 images", |b| {
+        b.iter(|| {
+            let tr = tr.clone();
+            transforms::proxy_images(tr.document(), "THISISATOKEN")
+        })
+    });
+
     parse_inner(c, AMOS_LANDING);
     parse_inner(c, AMOS_HTTP);
 }
@@ -103,6 +134,7 @@ pub fn all_transforms(c: &mut Criterion) {
                     .inject_style()
                     .add_noreferrer()
                     .insert_links()
+                    .proxy_images("THISISATOKEN")
                     .to_string()
             })
         });
@@ -112,5 +144,14 @@ pub fn all_transforms(c: &mut Criterion) {
     parse_inner(c, AMOS_HTTP);
 }
 
-criterion_group!(benches, current_benchmark, parse, all_transforms);
+fn profiled() -> Criterion {
+    Criterion::default().with_profiler(profiler::FlamegraphProfiler::new(100))
+}
+
+criterion_group!(
+    name = benches;
+    config = profiled();
+    // targets = current_benchmark
+    targets =  parse, all_transforms
+);
 criterion_main!(benches);

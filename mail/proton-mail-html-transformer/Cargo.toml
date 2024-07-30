@@ -12,13 +12,18 @@ lazy_static = { workspace = true }
 scraper = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+lazy_static.workspace = true
+cargo-insta = "1.39.0"
+rayon = "1.10.0"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+cpuprofiler = "0.0.4"
 criterion = "0.5.1"
 insta = { version = "1.39.0", features = ["toml"] }
+pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 
 [profile.dev.package]
 insta.opt-level = 3
