@@ -1,3 +1,4 @@
+use crate::action;
 use crate::action::{Action, Id, Metadata, Priority};
 use indoc::indoc;
 use proton_sqlite3::{Migration, MigratorError};
@@ -36,7 +37,7 @@ impl StoredAction {
         action: &T,
         metadata: Metadata,
     ) -> Result<Self, rmp_serde::encode::Error> {
-        let serialized_state = rmp_serde::to_vec(action)?;
+        let serialized_state = action::serialize(action)?;
         let delayed = metadata
             .delay
             .map_or(metadata.created, |delay| metadata.created.add(delay));

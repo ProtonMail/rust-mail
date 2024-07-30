@@ -150,7 +150,7 @@ impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
 
     fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
         if old_version == current_version {
-            Ok(rmp_serde::from_slice::<T>(data)?)
+            Ok(deserialize::<T>(data)?)
         } else {
             Err(FactoryError::InvalidVersion(current_version))
         }
@@ -564,4 +564,22 @@ impl Error for NoopError {
     fn request_error(&self) -> Option<&ApiServiceError> {
         None
     }
+}
+
+/// Serialize the `action` to a binary format.
+///
+/// # Errors
+///
+/// Returns error if the serialization failed.
+pub(crate) fn serialize<T: Action>(action: &T) -> Result<Vec<u8>, rmp_serde::encode::Error> {
+    rmp_serde::to_vec(action)
+}
+
+/// Deserialize and action from `data`.
+///
+/// # Errors
+///
+/// Returns error if the deserialization failed.
+pub fn deserialize<T: Action>(data: &[u8]) -> Result<T, rmp_serde::decode::Error> {
+    rmp_serde::from_slice(data)
 }

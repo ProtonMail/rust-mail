@@ -2,6 +2,7 @@ mod common;
 
 use crate::common::{new_factory, DefaultError};
 use common::{new_queue_with_stash, new_session, new_stash};
+use proton_action_queue::action;
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, FactoryResult, Handler, Type, VersionConverter,
 };
@@ -109,7 +110,7 @@ impl VersionConverter for V2VersionConverter {
         assert_eq!(old_version, V1Action::VERSION);
         assert_eq!(current_version, V2Action::VERSION);
 
-        let v1 = rmp_serde::from_slice::<V1Action>(&data)?;
+        let v1 = action::deserialize::<V1Action>(&data)?;
 
         Ok(V2Action {
             value: format!("foo={}", v1.value),
