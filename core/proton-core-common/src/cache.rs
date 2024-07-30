@@ -55,11 +55,14 @@ pub enum WeightingStrategy {
     Zero,
 }
 
-/// Trait defining a Key usable by the cache
+/// Trait to configure key and extra-metadata for a cache
 #[allow(clippy::module_name_repetitions)]
-pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq {
+pub trait CacheConfig: Clone {
+    type Key: Clone + Debug + Eq + Hash + PartialEq;
+    type ExtraMetadata: Clone + Debug + Default;
+
     /// Convert the Key into a filename
-    fn to_filename(&self) -> OsString;
+    fn key_to_filename(key: &Self::Key) -> OsString;
 
     /// Strategy used to determine weight of an item
     #[must_use]
@@ -70,11 +73,13 @@ pub trait CacheKey: Clone + Debug + Eq + Hash + PartialEq {
 
 /// Metadata about one value, stored in memory
 #[derive(Clone)]
-pub struct Metadata {
+pub struct Metadata<T> {
     /// Path to the data on disk
     file_path: PathBuf,
     /// Size of the data
     size: u64,
+    /// Additional data
+    additional: T,
 }
 
 /// Weighter for a data: the size of the data
@@ -84,16 +89,16 @@ pub struct Metadata {
 /// If the sum of the weight of the items go above that threshold, some items are evicted.
 /// In `ProtonCache` case, the weight is the size of the item stored in file system.
 #[derive(Clone)]
-pub struct DefaultWeighter<Key>
+pub struct DefaultWeighter<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
-    phantom_data: PhantomData<Key>,
+    phantom_data: PhantomData<Config>,
 }
 
-impl<Key> DefaultWeighter<Key>
+impl<Config> DefaultWeighter<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
     fn new() -> Self {
         Self {
@@ -102,13 +107,13 @@ where
     }
 }
 
-impl<Key> Weighter<Key, Metadata> for DefaultWeighter<Key>
+impl<Config> Weighter<Config::Key, Metadata<Config::ExtraMetadata>> for DefaultWeighter<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
     #[allow(clippy::cast_possible_truncation)]
-    fn weight(&self, _key: &Key, val: &Metadata) -> u32 {
-        match Key::weighting_strategy() {
+    fn weight(&self, _config: &Config::Key, val: &Metadata<Config::ExtraMetadata>) -> u32 {
+        match Config::weighting_strategy() {
             // Value more than u32::MAX bytes will be counted as u32::MAX (4GB)
             WeightingStrategy::Size => val.size.clamp(1, u64::from(u32::MAX)) as u32,
             // 0 is unweighted i.e. live forever
@@ -123,16 +128,16 @@ where
 /// I.e. on request (before/after insert/replace) and on eviction (before/on)
 /// In our case, we want to remove file from file system on eviction.
 #[derive(Clone, Default)]
-pub struct DefaultLifecycle<Key>
+pub struct DefaultLifecycle<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
-    phantom_data: PhantomData<Key>,
+    phantom_data: PhantomData<Config>,
 }
 
-impl<Key> DefaultLifecycle<Key>
+impl<Config> DefaultLifecycle<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
     fn new() -> Self {
         Self {
@@ -141,9 +146,9 @@ where
     }
 }
 
-impl<Key> Lifecycle<Key, Metadata> for DefaultLifecycle<Key>
+impl<Config> Lifecycle<Config::Key, Metadata<Config::ExtraMetadata>> for DefaultLifecycle<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
     type RequestState = Option<PathBuf>;
 
@@ -151,11 +156,21 @@ where
         None
     }
 
-    fn before_evict(&self, state: &mut Self::RequestState, _key: &Key, val: &mut Metadata) {
+    fn before_evict(
+        &self,
+        state: &mut Self::RequestState,
+        _config: &Config::Key,
+        val: &mut Metadata<Config::ExtraMetadata>,
+    ) {
         *state = Some(val.file_path.clone());
     }
 
-    fn on_evict(&self, state: &mut Self::RequestState, key: Key, _val: Metadata) {
+    fn on_evict(
+        &self,
+        state: &mut Self::RequestState,
+        key: Config::Key,
+        _val: Metadata<Config::ExtraMetadata>,
+    ) {
         if let Some(path) = state {
             // ToDo: ET-292 On eviction, move file (in case file is still in use)
             if let Err(error) = remove_file(path) {
@@ -167,19 +182,26 @@ where
 
 /// A cache structure to store and retrieve data
 #[allow(clippy::module_name_repetitions)]
-pub struct ProtonCache<Key>
+pub struct ProtonCache<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
     /// `QuickCache` structure
-    cache: Cache<Key, Metadata, DefaultWeighter<Key>, DefaultHashBuilder, DefaultLifecycle<Key>>,
+    #[allow(clippy::type_complexity)]
+    cache: Cache<
+        Config::Key,
+        Metadata<Config::ExtraMetadata>,
+        DefaultWeighter<Config>,
+        DefaultHashBuilder,
+        DefaultLifecycle<Config>,
+    >,
     /// Path to the root of the cache
     cache_buf: PathBuf,
 }
 
-impl<Key> ProtonCache<Key>
+impl<Config> ProtonCache<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
     /// Initialize a new cache
     ///
@@ -226,7 +248,26 @@ where
     /// # Errors
     /// * Can't create file on disk
     /// * Can't write value in file
-    pub fn add_item(&self, key: Key, value: &[u8]) -> Result<()> {
+    pub fn add_item(&self, key: Config::Key, value: &[u8]) -> Result<PathBuf> {
+        self.add_item_with_extra_metadata(key, value, Default::default())
+    }
+
+    /// Add an item to the cache with some additional information to keep in memory
+    ///
+    /// # Params:
+    /// * `key`: unique identifier for the item
+    /// * `value`: the item
+    /// * `additional`: extra information to store
+    ///
+    /// # Errors
+    /// * Can't create file on disk
+    /// * Can't write value in file
+    pub fn add_item_with_extra_metadata(
+        &self,
+        key: Config::Key,
+        value: &[u8],
+        additional: Config::ExtraMetadata,
+    ) -> Result<PathBuf> {
         let file_path = self.path_from_key(&key);
         // ToDo: ET-296 Do windows counterpart
         let mut file = if cfg!(unix) {
@@ -241,11 +282,12 @@ where
         };
         file.write_all(value)?;
         let metadata = Metadata {
-            file_path,
+            file_path: file_path.clone(),
             size: value.len() as u64,
+            additional,
         };
         self.cache.insert(key, metadata);
-        Ok(())
+        Ok(file_path)
     }
 
     /// Retrieve the value associated with key from cache
@@ -255,7 +297,7 @@ where
     ///
     /// # Errors
     /// * Can't open file containing value
-    pub fn get_item(&self, key: &Key) -> Result<Option<impl Read>> {
+    pub fn get_item(&self, key: &Config::Key) -> Result<Option<impl Read>> {
         self.cache
             .get(key)
             .map(|m| File::open(m.file_path).map_err(CacheError::IO))
@@ -268,8 +310,16 @@ where
     /// # params:
     /// * `key`: unique identifier for the item
     #[must_use]
-    pub fn get_item_path(&self, key: &Key) -> Option<PathBuf> {
+    pub fn get_item_path(&self, key: &Config::Key) -> Option<PathBuf> {
         self.cache.get(key).map(|v| v.file_path)
+    }
+
+    /// Retrieve additional metadata stored
+    ///
+    /// # params:
+    ///   *  `key`: unique identifier for the item
+    pub fn get_item_metadata(&self, key: &Config::Key) -> Option<Config::ExtraMetadata> {
+        self.cache.get(key).map(|v| v.additional)
     }
 
     /// Remove a value from cache
@@ -279,7 +329,7 @@ where
     ///
     /// # Errors
     /// * Can't remove file from file system
-    pub fn remove(&self, key: &Key) -> Result<()> {
+    pub fn remove(&self, key: &Config::Key) -> Result<()> {
         // Eviction is not called in this case
         if let Some(path) = self.get_item_path(key) {
             // ToDo: ET-292 On eviction, move file (in case file is still in use)
@@ -302,16 +352,17 @@ where
     }
 
     /// Get the path corresponding to a key
-    pub fn path_from_key(&self, key: &Key) -> PathBuf {
-        self.cache_buf.clone().join(key.to_filename())
+    pub fn path_from_key(&self, key: &Config::Key) -> PathBuf {
+        let filename = Config::key_to_filename(key);
+        self.cache_buf.clone().join(filename)
     }
 }
 
 // ToDo(Et-298): Cache Reload
 // As long as we have no way to reload cache ... purging it at exit
-impl<Key> Drop for ProtonCache<Key>
+impl<Config> Drop for ProtonCache<Config>
 where
-    Key: CacheKey,
+    Config: CacheConfig,
 {
     fn drop(&mut self) {
         if let Err(error) = remove_dir_all(self.cache_buf.clone()) {

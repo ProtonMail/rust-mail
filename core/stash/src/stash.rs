@@ -1764,7 +1764,7 @@ impl Tether {
     ///     connection from the pool.
     ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted)
     ///     - A new transaction cannot be started because one is already active
-    ///     on this connection.
+    ///       on this connection.
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///

@@ -1,4 +1,4 @@
-use crate::cache::CacheKey;
+use crate::cache::CacheConfig;
 use crate::{CoreContextResult, UserContext};
 use bytes::Bytes;
 use proton_api_core::services::proton::requests::{GetImagesLogoOptions, LightOrDarkMode};
@@ -44,15 +44,19 @@ impl UserContext {
             size,
             ..Default::default()
         };
-        let key = Key(options.clone());
 
-        if let Some(mut file) = self.images_logo_cache.get_item(&key)? {
+        if let Some(mut file) = self.images_logo_cache.get_item(&options)? {
             let mut user_image = Vec::new();
             file.read_to_end(&mut user_image)?;
             Ok(Some(user_image.into()))
         } else {
-            let user_image = self.session().api().get_images_logo(options).await?;
-            self.images_logo_cache.add_item(key, user_image.as_ref())?;
+            let user_image = self
+                .session()
+                .api()
+                .get_images_logo(options.clone())
+                .await?;
+            self.images_logo_cache
+                .add_item(options, user_image.as_ref())?;
             Ok(Some(user_image))
         }
     }
@@ -61,8 +65,11 @@ impl UserContext {
 /// Cache key for User Images
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct Key(pub GetImagesLogoOptions);
-impl CacheKey for Key {
-    fn to_filename(&self) -> OsString {
+impl CacheConfig for Key {
+    type Key = GetImagesLogoOptions;
+    type ExtraMetadata = ();
+
+    fn key_to_filename(_key: &Self::Key) -> OsString {
         // `AddressDomainLogoDetails` contains to many possible configuration to build a unique filename from it
         Uuid::new_v4().to_string().into()
     }

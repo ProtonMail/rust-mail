@@ -64,8 +64,8 @@ async fn get_sender_image_from_cache() {
     assert_eq!(std::str::from_utf8(&image.to_vec()).unwrap(), "abcdef");
 }
 
-fn create_test_key(address: &str) -> Key {
+fn create_test_key(address: &str) -> GetImagesLogoOptions {
     let mut options = GetImagesLogoOptions::default();
     options.address = Some(address.to_owned());
-    Key(options)
+    options
 }
