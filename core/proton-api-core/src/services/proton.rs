@@ -73,8 +73,8 @@ use crate::services::proton::responses::{
     PostAuthResponse, PostAuthSessionsForksResponse,
 };
 use crate::{
-    DEFAULT_APP_VERSION, DEFAULT_HOST_URL, DEFAULT_REDIRECT_URL, X_PM_HUMAN_VERIFICATION_TOKEN,
-    X_PM_HUMAN_VERIFICATION_TOKEN_TYPE, X_PM_UID_HEADER,
+    DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL, DEFAULT_REDIRECT_URL,
+    X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE, X_PM_UID_HEADER,
 };
 use bytes::Bytes;
 use parking_lot::RwLock;
@@ -134,7 +134,7 @@ pub struct Config {
     pub skip_srp_proof_validation: bool,
 
     /// TODO: Document this field.
-    #[default("NoClient/0.1.0".to_owned())]
+    #[default(DEFAULT_CLIENT.to_owned())]
     pub user_agent: String,
 }
 
