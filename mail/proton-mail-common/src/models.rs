@@ -352,16 +352,18 @@ pub struct Conversation {
     #[DbField]
     pub display_snooze_reminder: bool,
 
+    /// Exclusive location of the [`Conversation`] (e.g. Inbox, Archive, Outbox
+    /// etc.). This field is auto-calculated, and not stored in the database.
+    /// When the model is read from database, this field should be calculated,
+    /// and always be [`Some`]. If it is [`None`], it means either that the
+    /// model is not fully initialized or there is very nasty bug. Failed
+    /// initialization is logged as an error, but flow is not impacted due to
+    /// the fact that this is not a critical field.
+    pub exclusive_location: Option<ExclusiveLocation>,
+
     /// TODO: Document this field.
     #[DbField]
     pub expiration_time: u64,
-
-    /// Exlusive location of the Conversation (eg. Inbox, Archive, Outbox etc.).
-    /// When model is read from database, this field should always be Some(_).
-    /// If it is None, it means either that the model is not fully initialized
-    /// or there is very nasty bug. Failed initialization is logged as error
-    /// but flow is not impacted due to the fact that this is not critical field.
-    pub exclusive_location: Option<ExclusiveLocation>,
 
     /// TODO: Document this field.
     pub labels: Vec<ConversationLabel>,
@@ -2260,6 +2262,15 @@ pub struct Message {
     #[DbField]
     pub deleted: bool,
 
+    /// Exclusive location of the [`Message`] (e.g. Inbox, Archive, Outbox
+    /// etc.). This field is auto-calculated, and not stored in the database.
+    /// When the model is read from database, this field should be calculated,
+    /// and always be [`Some`]. If it is [`None`], it means either that the
+    /// model is not fully initialized or there is very nasty bug. Failed
+    /// initialization is logged as an error, but flow is not impacted due to
+    /// the fact that this is not a critical field.
+    pub exclusive_location: Option<ExclusiveLocation>,
+
     /// TODO: Document this field.
     #[DbField]
     pub expiration_time: u64,
@@ -2289,13 +2300,6 @@ pub struct Message {
 
     /// TODO: Document this field.
     pub label_ids: Vec<LabelId>,
-
-    /// Exlusive location of the message (eg. Inbox, Archive, Outbox etc.).
-    /// When model is read from database, this field should always be Some(_).
-    /// If it is None, it means either that the model is not fully initialized
-    /// or there is very nasty bug. Failed initialization is logged as error
-    /// but flow is not impacted due to the fact that this is not critical field.
-    pub exclusive_location: Option<ExclusiveLocation>,
 
     /// TODO: Document this field.
     pub mime_type: MimeType,
