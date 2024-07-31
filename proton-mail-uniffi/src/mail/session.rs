@@ -1,14 +1,22 @@
+use crate::core::datatypes::ApiConfig;
 use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged};
 use crate::core::{OSKeyChain, StoredSession};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use proton_core_common::db::SessionEncryptionKey;
-use proton_mail_common::db;
+use anyhow::anyhow;
+use proton_action_queue::queue::{Error as QueueError, QueuedError};
+use proton_api_core::service::ApiServiceError;
+use proton_core_common::cache::CacheError;
+use proton_core_common::db::session::SessionEncryptionKey;
+use proton_event_loop::EventLoopError;
+use proton_mail_common::actions::ActionError;
 use proton_mail_common::db::DBMigrationError;
-use proton_mail_common::MailContext;
 use proton_mail_common::MailContextError;
+use proton_mail_common::{AppError, MailContext};
+use stash::stash::StashError;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tracing::debug;
 
 /// Mail context is the entry point for the application. It contains important state such as
 /// database connection pools and the async runtime for rust.
@@ -18,7 +26,7 @@ use std::sync::Arc;
 ///
 #[derive(uniffi::Object)]
 pub struct MailSession {
-    ctx: proton_mail_common::MailContext,
+    ctx: MailContext,
 }
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -34,20 +42,26 @@ pub enum MailSessionError {
     DBMigration(#[from] DBMigrationError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
-    #[error("HTTP Error: {0}")]
-    Http(#[from] RequestError),
     #[error("Event Loop: {0}")]
     EventLoop(#[from] EventLoopError),
     #[error("Action Queue: {0}")]
-    ActionQueue(#[from] proton_action_queue::QueueError),
+    ActionQueue(#[from] QueueError),
+    #[error("Action: {0}")]
+    Action(ActionError),
+    #[error("QueuedAction: {0}")]
+    QueuedAction(#[from] QueuedError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(anyhow::Error),
     #[error("Invalid mode: '{0}'")]
     InvalidImageMode(String),
-    #[error("Creating AddressDomainLogoDetails failed with error: '{0}'")]
-    AddressDomainLogoError(#[from] AddressDomainLogoError),
+    #[error("App Error: {0}")]
+    App(#[from] AppError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
+    #[error("API Error: {0}")]
+    Api(#[from] ApiServiceError),
+    #[error("Cache Error: {0}")]
+    CacheError(#[from] CacheError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -62,12 +76,14 @@ pub struct MailSessionParams {
     pub user_dir: String,
     /// Directory where the mail cache should be stored.
     pub mail_cache_dir: String,
+    /// Size of the mail cache.
+    pub mail_cache_size: u32,
     /// Directory where the logs should be stored.
     pub log_dir: String,
     /// Whether to enable debug and trace logs.
     pub log_debug: bool,
     /// API Environment configuration.
-    pub api_env_config: Option<APIEnvConfig>,
+    pub api_env_config: Option<ApiConfig>,
 }
 
 #[uniffi::export]
@@ -76,13 +92,20 @@ impl MailSession {
     // constructor.
     /// Create a new mail session.
     ///
-    /// # Params
+    /// # Parameters
+    ///
     /// * `params`: See [`MailSessionParams`] for parameter details.
     /// * `key_chain`: Keychain implementation.
     /// * `network_callback`: Optional network status changes callback.
     ///
+    /// # Panics
+    ///
+    /// Panics if the API URL is invalid. In this situation we cannot proceed.
+    ///
+    /// TODO: An error type needs to be added for this later.
+    ///
     #[uniffi::constructor]
-    pub fn create(
+    pub async fn create(
         params: MailSessionParams,
         key_chain: Box<dyn OSKeyChain>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
@@ -119,32 +142,22 @@ impl MailSession {
         }
 
         // Creating client.
-        let api_env_config = match params.api_env_config {
-            Some(config) => config,
-            None => APIEnvConfig::default(),
-        };
-
-        let mut client = http::Builder::new().api_env_config(api_env_config);
-
-        if session_debug_enabled() {
-            client = client.debug();
-        }
-
-        let client = client.build().map_err(|e| {
-            MailSessionError::Http(RequestError::Other(anyhow!("Failed to create client: {e}")))
-        })?;
+        let api_env_config = params.api_env_config.unwrap_or_default();
+        let api_url = api_env_config.base_url.parse().expect("Invalid API URL");
 
         debug!("Creating Context");
         let mail_ctx = MailContext::new(
             session_path,
             user_path,
             mail_cache_path,
+            params.mail_cache_size,
             Arc::from(FFIKeyChain::from(key_chain)),
-            client,
+            api_url,
             network_callback.map(|v| -> Box<dyn proton_core_common::NetworkStatusChanged> {
                 Box::new(FFINetworkStatusChanged::from(v))
             }),
-        )?;
+        )
+        .await?;
         Ok(Self { ctx: mail_ctx })
     }
 
@@ -158,8 +171,8 @@ impl MailSession {
     ///
     /// # Errors
     /// Returns error if the db query failed.
-    pub fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
-        let sessions = self.ctx.sessions()?;
+    pub async fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
+        let sessions = self.ctx.sessions().await?;
         Ok(sessions
             .into_iter()
             .map(StoredSession::new)
@@ -167,13 +180,14 @@ impl MailSession {
     }
 
     /// Create an user context from a stored session.
-    pub fn user_context_from_session(
+    pub async fn user_context_from_session(
         &self,
         session: &StoredSession,
     ) -> MailSessionResult<Arc<MailUserSession>> {
         let ctx = self
             .ctx
-            .user_context_from_session(session.encrypted_session())?;
+            .user_context_from_session(session.encrypted_session())
+            .await?;
         Ok(MailUserSession::new(ctx))
     }
 
@@ -181,8 +195,8 @@ impl MailSession {
     ///
     /// # Errors
     /// Returns error if data can not be removed or the db operation failed.
-    pub fn delete_session(&self, session: &StoredSession) -> MailSessionResult<()> {
-        Ok(self.ctx.delete_session(session.encrypted_session())?)
+    pub async fn delete_session(&self, session: &StoredSession) -> MailSessionResult<()> {
+        Ok(self.ctx.delete_session(session.encrypted_session()).await?)
     }
 
     /// Check whether the network is connected/online.
@@ -198,24 +212,23 @@ impl MailSession {
 }
 
 impl From<MailContextError> for MailSessionError {
-    fn from(value: proton_mail_common::MailContextError) -> Self {
+    fn from(value: MailContextError) -> Self {
         match value {
-            MailContextError::DB(v) => MailSessionError::DB(v),
-            MailContextError::Crypto => MailSessionError::Crypto,
-            MailContextError::KeyChain(k) => MailSessionError::KeyChain(k.to_string()),
-            MailContextError::IO(io) => MailSessionError::IO(io),
-            MailContextError::DBMigration(err) => MailSessionError::DBMigration(err),
-            MailContextError::KeyChainHasNoKey => MailSessionError::KeyChainHasNoKey,
-            MailContextError::Http(err) => MailSessionError::Http(err),
-            MailContextError::EventLoop(err) => MailSessionError::EventLoop(err),
-            MailContextError::Other(err) => MailSessionError::Other(err),
+            MailContextError::Crypto => Self::Crypto,
+            MailContextError::KeyChain(k) => Self::KeyChain(k.to_string()),
+            MailContextError::IO(io) => Self::IO(io),
+            MailContextError::DBMigration(err) => Self::DBMigration(err),
+            MailContextError::KeyChainHasNoKey => Self::KeyChainHasNoKey,
+            MailContextError::EventLoop(err) => Self::EventLoop(err),
             MailContextError::ActionQueue(e) => Self::ActionQueue(e),
+            MailContextError::Action(e) => Self::Action(e),
+            MailContextError::QueuedAction(e) => Self::QueuedAction(e),
             MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
-            MailContextError::AddressDomainLogoError(e) => Self::AddressDomainLogoError(e),
+            MailContextError::App(e) => Self::App(e),
+            MailContextError::Stash(e) => Self::Stash(e),
+            MailContextError::Api(e) => Self::Api(e),
+            MailContextError::CacheError(e) => Self::CacheError(e),
+            MailContextError::Other(err) => Self::Other(err),
         }
     }
-}
-
-fn session_debug_enabled() -> bool {
-    std::env::var("PROTON_CORE_CTX_SESSION_DEBUG").is_ok()
 }

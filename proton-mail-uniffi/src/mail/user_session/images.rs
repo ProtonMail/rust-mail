@@ -1,7 +1,7 @@
-use crate::mail::settings::MailUserSettings;
+use crate::mail::datatypes::MailSettings;
 use crate::mail::MailUserSession;
 use crate::mail::{MailSessionError, MailSessionResult};
-use std::sync::Arc;
+use proton_core_common::datatypes::LightOrDarkMode;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -23,7 +23,7 @@ impl MailUserSession {
     #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,
-        mail_settings: Arc<MailUserSettings>,
+        mail_settings: MailSettings,
         address: String,
         bimi_selector: Option<String>,
         display_sender_image: bool,
@@ -37,9 +37,9 @@ impl MailUserSession {
         Ok(self
             .ctx
             .image_for_sender(
-                mail_settings.settings(),
+                &mail_settings.clone().into(),
                 address,
-                bimi_selector,
+                bimi_selector.as_deref(),
                 display_sender_image,
                 size,
                 mode,

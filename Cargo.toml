@@ -5,9 +5,9 @@ members = [
     "proton-mail-common",
     "proton-mail-html-transformer",
     "proton-mail-message-detector",
-    #    "proton-mail-uniffi",
+    "proton-mail-uniffi",
     "proton-mail-wasm",
-    #    "uniffi-bindgen",
+    "uniffi-bindgen",
 ]
 
 [workspace.dependencies]

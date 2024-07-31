@@ -5,7 +5,6 @@ mod login;
 mod mailbox;
 mod session;
 mod settings;
-mod type_forwarding;
 mod user_session;
 
 pub use login::*;

@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use proton_mail_common::db::proton_sqlite3::rusqlite::Error;
 
 #[macro_export]

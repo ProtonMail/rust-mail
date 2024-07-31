@@ -1,3 +1,5 @@
+#![allow(clippy::doc_markdown)]
+
 //! UniFFI bindings for Proton Mail.
 //!
 //! # Getting started

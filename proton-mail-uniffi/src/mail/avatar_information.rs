@@ -1,4 +1,6 @@
-use proton_mail_common::{avatar::AvatarInformation, proton_api_mail::domain::MessageAddress};
+use crate::mail::datatypes::{AvatarInformation, MessageAddress};
+use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
+use proton_mail_common::datatypes::MessageAddress as RealMessageAddress;
 
 /// Creates an [`AvatarInformation`] by taking then display name and email address
 /// and uses these to determine the text and color the avatar should be.
@@ -7,7 +9,7 @@ pub fn avatar_information_from_name_and_email(
     display_name: &str,
     email: &str,
 ) -> AvatarInformation {
-    AvatarInformation::build(display_name, email)
+    RealAvatarInformation::build(display_name, email).into()
 }
 
 /// Creates an [`AvatarInformation`] struct using the details of the first [`MessageAddress`] in the provided slice.
@@ -15,11 +17,15 @@ pub fn avatar_information_from_name_and_email(
 pub fn avatar_information_from_message_addresses(
     address_list: &[MessageAddress],
 ) -> AvatarInformation {
-    AvatarInformation::from_message_addresses(address_list)
+    let addresses: Vec<RealMessageAddress> = address_list
+        .iter()
+        .map(|addr| RealMessageAddress::from(addr.clone()))
+        .collect();
+    RealAvatarInformation::from_message_addresses(&addresses).into()
 }
 
 /// Creates an [`AvatarInformation`] struct using a [`MessageAddress`].
 #[uniffi::export]
 pub fn avatar_information_from_message_address(address: &MessageAddress) -> AvatarInformation {
-    AvatarInformation::from_message_address(address)
+    RealAvatarInformation::from_message_address(&address.clone().into()).into()
 }

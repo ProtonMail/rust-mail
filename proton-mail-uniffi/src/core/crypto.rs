@@ -1,3 +1,7 @@
+use proton_crypto_account::proton_crypto::crypto::{
+    VerificationError, VerificationInformation, VerificationResult,
+};
+
 #[derive(Debug, Clone, Eq, PartialEq, Copy, uniffi::Enum)]
 pub enum SignatureVerification {
     /// Successfully verified the signature
