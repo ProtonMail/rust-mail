@@ -20,7 +20,7 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::common::{Fido2Auth, RemoteId};
+use crate::services::proton::common::{Fido2Auth, LightOrDarkMode, RemoteId};
 use crate::MAX_PAGE_ELEMENT_COUNT;
 use serde::Serialize;
 use serde_with::serde_as;
@@ -224,15 +224,4 @@ pub struct GetImagesLogoOptions {
 
     /// The size of the logo to be returned.
     pub size: Option<u32>,
-}
-
-/// The theme being used in Images Logo.
-#[derive(Clone, Copy, Debug, Serialize, Eq, Hash, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum LightOrDarkMode {
-    /// Light mode
-    Light,
-
-    /// Dark mode
-    Dark,
 }

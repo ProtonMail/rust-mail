@@ -46,6 +46,17 @@ impl HumanVerificationType {
     }
 }
 
+/// The theme being used in Images Logo.
+#[derive(Clone, Copy, Debug, Serialize, Eq, Hash, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum LightOrDarkMode {
+    /// Light mode
+    Light,
+
+    /// Dark mode
+    Dark,
+}
+
 //  STRUCTS
 //==============================================================================
 

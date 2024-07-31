@@ -1,7 +1,8 @@
 use crate::cache::CacheConfig;
+use crate::datatypes::LightOrDarkMode;
 use crate::{CoreContextResult, UserContext};
 use bytes::Bytes;
-use proton_api_core::services::proton::requests::{GetImagesLogoOptions, LightOrDarkMode};
+use proton_api_core::services::proton::requests::GetImagesLogoOptions;
 use proton_api_core::session::CoreSession;
 use std::ffi::OsString;
 use std::io::Read;
@@ -40,7 +41,7 @@ impl UserContext {
             address: Some(address.to_owned()),
             bimi_selector: bimi_selector.map(ToOwned::to_owned),
             format,
-            mode,
+            mode: mode.map(Into::into),
             size,
             ..Default::default()
         };

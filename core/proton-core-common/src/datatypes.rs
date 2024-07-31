@@ -38,7 +38,9 @@
 //!
 
 use core::fmt;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_core::services::proton::common::{
+    LightOrDarkMode as ApiLightOrDarkMode, RemoteId as ApiRemoteId,
+};
 use proton_api_core::services::proton::response_data::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, CardType as ApiCardType,
@@ -351,6 +353,51 @@ impl FromSql for EarlyAccess {
 }
 
 impl ToSql for EarlyAccess {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[repr(u8)]
+pub enum LightOrDarkMode {
+    /// TODO: Document this variant.
+    Light = 0,
+
+    /// TODO: Document this variant.
+    Dark = 1,
+}
+
+impl From<ApiLightOrDarkMode> for LightOrDarkMode {
+    fn from(value: ApiLightOrDarkMode) -> Self {
+        match value {
+            ApiLightOrDarkMode::Light => Self::Light,
+            ApiLightOrDarkMode::Dark => Self::Dark,
+        }
+    }
+}
+
+impl From<LightOrDarkMode> for ApiLightOrDarkMode {
+    fn from(value: LightOrDarkMode) -> Self {
+        match value {
+            LightOrDarkMode::Light => Self::Light,
+            LightOrDarkMode::Dark => Self::Dark,
+        }
+    }
+}
+
+impl FromSql for LightOrDarkMode {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            0 => Ok(Self::Light),
+            1 => Ok(Self::Dark),
+            v => Err(FromSqlError::OutOfRange(i64::from(v))),
+        }
+    }
+}
+
+impl ToSql for LightOrDarkMode {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
