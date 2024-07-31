@@ -572,9 +572,9 @@ pub enum StashError {
     #[error("No Stash available to use")]
     NoStashAvailable,
 
-    /// No rows were updated upon saving a record. This can happen if the record  
-    /// data hasn't changed, in which case it's not an error — but in other  
-    /// situations, it would signify a problem.  
+    /// No rows were updated upon saving a record. This can happen if the record
+    /// data hasn't changed, in which case it's not an error — but in other
+    /// situations, it would signify a problem.
     #[error("No rows updated upon saving record")]
     NoRowsUpdated,
 
@@ -1065,6 +1065,12 @@ impl Stash {
     /// A [`StashError::TetherError`] is returned if there is a problem creating
     /// the database or connection pool.
     ///
+    /// ! Warning - please be wary in multithreaded environment of the probable
+    /// ! panics while dealing with transactions with in memory storage.
+    /// ! This caused by r2d2_sqlite's connection pool, which in the past
+    /// ! also dealed with similar issues. Though it seems to be patched
+    /// ! for multithreading it still can cause issues for async + threads.
+    /// ! Old issue: https://github.com/ivanceras/r2d2-sqlite/issues/39
     pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
         let (sender, receiver) = flume::unbounded();
         let stash = Self {
