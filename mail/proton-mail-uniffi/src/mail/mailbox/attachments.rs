@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use proton_mail_common::db::AttachmentMetadata;
-
+use crate::mail::datatypes::AttachmentMetadata;
 use crate::{
     core::SignatureVerificationResult,
     mail::{Mailbox, MailboxError},
@@ -21,7 +20,7 @@ pub struct DecryptedAttachment {
 impl From<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
     fn from(value: proton_mail_common::DecryptedAttachment) -> Self {
         Self {
-            attachment_metadata: value.attachment_metadata,
+            attachment_metadata: value.attachment_metadata.into(),
             content: value.content,
             verification_result: Arc::new(value.verification_result.into()),
         }
@@ -48,7 +47,7 @@ impl Mailbox {
         local_attachment_id: u64,
     ) -> Result<DecryptedAttachment, MailboxError> {
         self.mbox
-            .load_attachment_to_buffer(local_attachment_id.into())
+            .load_attachment_to_buffer(local_attachment_id)
             .await
             .map(Into::into)
             .map_err(MailboxError::from)

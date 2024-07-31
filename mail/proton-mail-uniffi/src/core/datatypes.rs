@@ -43,6 +43,7 @@
 //!   - [`User::keys`](proton_core_common::datatypes::User::keys)
 //!
 
+use core::fmt;
 use proton_api_core::services::proton::Config as RealApiConfig;
 use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};
 use proton_core_common::datatypes::{
@@ -63,6 +64,7 @@ use proton_core_common::models::{
     ContactEmail as RealContactEmail, User as RealUser, UserSettings as RealUserSettings,
 };
 use smart_default::SmartDefault;
+use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
@@ -1148,6 +1150,12 @@ impl Deref for LabelId {
     }
 }
 
+impl Display for LabelId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl From<LabelId> for RealLabelId {
     fn from(label_id: LabelId) -> Self {
         RealLabelId::from(RealRemoteId::from(label_id.into_inner()))
@@ -1414,6 +1422,12 @@ impl Deref for RemoteId {
 
     fn deref(&self) -> &Self::Target {
         &self.value
+    }
+}
+
+impl Display for RemoteId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
     }
 }
 

@@ -1,4 +1,8 @@
 use crate::mail::MailUserSession;
+use anyhow::anyhow;
+use proton_api_core::service::ApiServiceError;
+use proton_event_loop::subscriber::SubscriberError;
+use proton_event_loop::EventLoopError as RealEventLoopError;
 use tokio::spawn;
 
 #[uniffi::export]
@@ -26,21 +30,21 @@ pub enum EventLoopError {
     #[error("Failed to write store: {0}")]
     StoreWrite(anyhow::Error),
     #[error("Failed to retrieve event: {0}")]
-    Provider(RequestError),
+    Provider(ApiServiceError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
     #[error("Other: {0}")]
     Other(anyhow::Error),
 }
 
-impl From<ELError> for EventLoopError {
-    fn from(value: ELError) -> Self {
+impl From<RealEventLoopError> for EventLoopError {
+    fn from(value: RealEventLoopError) -> Self {
         match value {
-            ELError::StoreRead(e) => EventLoopError::StoreRead(e),
-            ELError::StoreWrite(e) => EventLoopError::StoreWrite(e),
-            ELError::Provider(e) => EventLoopError::Provider(e),
-            ELError::Subscriber(s, e) => EventLoopError::Subscriber(s, e),
-            ELError::Other(s) => EventLoopError::Other(anyhow!(s)),
+            RealEventLoopError::StoreRead(e) => EventLoopError::StoreRead(e),
+            RealEventLoopError::StoreWrite(e) => EventLoopError::StoreWrite(e),
+            RealEventLoopError::Provider(e) => EventLoopError::Provider(e),
+            RealEventLoopError::Subscriber(s, e) => EventLoopError::Subscriber(s, e),
+            RealEventLoopError::Other(s) => EventLoopError::Other(anyhow!(s)),
         }
     }
 }

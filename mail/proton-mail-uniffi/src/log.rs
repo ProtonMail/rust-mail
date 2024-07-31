@@ -1,33 +1,33 @@
 //! Collection of functions to allow mobile to log with the rust log system.
 
-use proton_mail_common::exports::tracing;
+use tracing::{debug, error, info, trace, warn};
 
 /// Log `line` with info level.
 #[uniffi::export]
 pub fn rust_log_info(line: &str) {
-    tracing::info!("{line}");
+    info!("{line}");
 }
 
 /// Log `line` with debug level.
 #[uniffi::export]
 pub fn rust_log_debug(line: &str) {
-    tracing::debug!("{line}");
+    debug!("{line}");
 }
 
 /// Log `line` with trace level.
 #[uniffi::export]
 pub fn rust_log_trace(line: &str) {
-    tracing::trace!("{line}");
+    trace!("{line}");
 }
 
 /// Log `line` with warning level.
 #[uniffi::export]
 pub fn rust_log_warn(line: &str) {
-    tracing::warn!("{line}");
+    warn!("{line}");
 }
 
 /// Log `line` with error level.
 #[uniffi::export]
 pub fn rust_log_error(line: &str) {
-    tracing::error!("{line}");
+    error!("{line}");
 }

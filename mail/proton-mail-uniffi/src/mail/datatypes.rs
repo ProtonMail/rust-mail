@@ -47,6 +47,7 @@
 //!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
 //!
 use crate::core::datatypes::{LabelId, RemoteId};
+use core::fmt;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::ExclusiveLocation as RealExclusiveLocation;
 use proton_mail_common::datatypes::{
@@ -79,6 +80,7 @@ use proton_mail_common::models::{
 };
 use smart_default::SmartDefault;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
@@ -1422,6 +1424,12 @@ pub struct LabelColor {
     value: String,
 }
 
+impl Display for LabelColor {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 impl From<LabelColor> for RealLabelColor {
     fn from(value: LabelColor) -> Self {
         RealLabelColor::from(value.to_string())
@@ -1431,6 +1439,20 @@ impl From<LabelColor> for RealLabelColor {
 impl From<RealLabelColor> for LabelColor {
     fn from(value: RealLabelColor) -> Self {
         LabelColor::from(value.to_string())
+    }
+}
+
+impl From<String> for LabelColor {
+    fn from(value: String) -> Self {
+        Self { value }
+    }
+}
+
+impl From<&str> for LabelColor {
+    fn from(value: &str) -> Self {
+        Self {
+            value: value.to_string(),
+        }
     }
 }
 

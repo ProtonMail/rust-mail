@@ -1,6 +1,10 @@
 use crate::mail::{MailSessionResult, MailUserSession};
 use futures::executor::block_on;
+use proton_api_core::auth::{ExposeSecret, SecretString};
 use proton_api_core::login::Flow as CoreLoginFlow;
+use proton_api_core::login::LoginError as RealLoginFlowError;
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::response_data::HumanVerificationChallenge;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
@@ -32,21 +36,21 @@ pub struct LoginFlow {
 #[uniffi(flat_error)]
 pub enum LoginFlowError {
     #[error("{0}")]
-    Request(#[source] RequestError),
+    Request(#[source] ApiServiceError),
     #[error("Server SRP proof verification failed: {0}")]
     ServerProof(String),
-    #[error("Account 2FA method ({0})is not supported")]
-    Unsupported2FA(TwoFactorAuth),
+    #[error("Account 2FA method is not supported")]
+    UnsupportedTfa,
     #[error("Human Verification Required'")]
-    HumanVerificationRequired(HumanVerification),
+    HumanVerificationRequired(HumanVerificationChallenge),
     #[error("Failed to calculate SRP Proof: {0}")]
-    SRPProof(String),
-    #[error("Operation is nto valid in the current state")]
+    SrpProof(String),
+    #[error("Operation is not valid in the current state")]
     InvalidState,
     #[error("Failed to derive the key secret from the password: {0}")]
     KeySecretDerivation(anyhow::Error),
     #[error("Failed to fetch salt to derive the key secret: {0}")]
-    KeySecretSaltFetch(#[from] RequestError),
+    KeySecretSaltFetch(#[from] ApiServiceError),
     #[error("Failed to store the key secret in the authentication state: {0}")]
     KeySecretAuthUpdate(String),
     #[error("Failed to decrypt a user key with the derived client secret")]
@@ -73,13 +77,15 @@ impl LoginFlow {
     /// Login with user and password.
     pub async fn login(&self, email: String, password: String) -> LoginFlowResult<()> {
         let flow = self.flow.clone();
-        let password = SecretString::new(password);
+        let password = SecretString::from(password);
         let handle = spawn(async move {
             let mut guard = flow.lock().await;
-            guard.login(&email, password.expose_secret(), None).await
+            guard
+                .login(email, password.expose_secret().clone(), None)
+                .await
         });
         handle.await.map_err(|e| {
-            LoginFlowError::Request(RequestError::Other(anyhow!(
+            LoginFlowError::Request(ApiServiceError::UnknownError(format!(
                 "failed to join task handle {e}"
             )))
         })??;
@@ -91,10 +97,10 @@ impl LoginFlow {
         let flow = self.flow.clone();
         let handle = spawn(async move {
             let mut guard = flow.lock().await;
-            guard.submit_totp(&code).await
+            guard.submit_totp(code).await
         });
         handle.await.map_err(|e| {
-            LoginFlowError::Request(RequestError::Other(anyhow!(
+            LoginFlowError::Request(ApiServiceError::UnknownError(format!(
                 "failed to join task handle {e}"
             )))
         })??;
@@ -117,26 +123,30 @@ impl LoginFlow {
     pub fn to_user_context(&self) -> MailSessionResult<Arc<MailUserSession>> {
         block_on(async {
             let guard = self.flow.lock().await;
-            let user_ctx = self.ctx.user_context_from_login_flow(&guard)?;
+            let user_ctx = self.ctx.user_context_from_login_flow(&guard).await?;
             Ok(MailUserSession::new(user_ctx))
         })
     }
 }
 
-impl From<proton_api_core::login::Error> for LoginFlowError {
-    fn from(value: proton_api_core::login::Error) -> Self {
-        use proton_api_core::login::Error as LFE;
+impl From<RealLoginFlowError> for LoginFlowError {
+    fn from(value: RealLoginFlowError) -> Self {
         match value {
-            LFE::Request(e) => LoginFlowError::Request(e),
-            LFE::Unsupported2FA(e) => LoginFlowError::Unsupported2FA(e),
-            LFE::HumanVerificationRequired(e) => LoginFlowError::HumanVerificationRequired(e),
-            LFE::ServerProof(e) | LFE::SRPProof(e) => LoginFlowError::ServerProof(e),
-            LFE::InvalidState => LoginFlowError::InvalidState,
-            LFE::KeySecretDerivation(e) => LoginFlowError::KeySecretDerivation(anyhow!("{e}")),
-            LFE::KeySecretSaltFetch(e) => LoginFlowError::KeySecretSaltFetch(e),
-            LFE::KeySecretAuthUpdate(e) => LoginFlowError::KeySecretAuthUpdate(e),
-            LFE::KeySecretDecryption => LoginFlowError::KeySecretDecryption,
-            LFE::WrongMailboxPassword => LoginFlowError::WrongMailboxPassword,
+            RealLoginFlowError::UnsupportedTfa => LoginFlowError::UnsupportedTfa,
+            RealLoginFlowError::HumanVerificationRequired(e) => {
+                LoginFlowError::HumanVerificationRequired(e)
+            }
+            RealLoginFlowError::ServerProof(e) | RealLoginFlowError::SrpProof(e) => {
+                LoginFlowError::ServerProof(e)
+            }
+            RealLoginFlowError::InvalidState => LoginFlowError::InvalidState,
+            RealLoginFlowError::KeySecretDerivation(e) => {
+                LoginFlowError::KeySecretDerivation(anyhow!("{e}"))
+            }
+            RealLoginFlowError::KeySecretSaltFetch(e) => LoginFlowError::KeySecretSaltFetch(e),
+            RealLoginFlowError::KeySecretAuthUpdate(e) => LoginFlowError::KeySecretAuthUpdate(e),
+            RealLoginFlowError::KeySecretDecryption => LoginFlowError::KeySecretDecryption,
+            RealLoginFlowError::WrongMailboxPassword => LoginFlowError::WrongMailboxPassword,
         }
     }
 }

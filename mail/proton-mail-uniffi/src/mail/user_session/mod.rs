@@ -29,7 +29,7 @@ impl MailUserSession {
         Arc::new(Self { ctx })
     }
     pub(crate) fn ctx(&self) -> Arc<MailUserContext> {
-        Arc::clone(self.ctx)
+        Arc::clone(&self.ctx)
     }
 }
 
