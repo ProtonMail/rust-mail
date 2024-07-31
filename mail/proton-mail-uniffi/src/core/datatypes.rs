@@ -43,6 +43,8 @@
 //!   - [`User::keys`](proton_core_common::datatypes::User::keys)
 //!
 
+use proton_api_core::services::proton::Config as RealApiConfig;
+use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};
 use proton_core_common::datatypes::{
     AddressKeys as RealAddressKeys, AddressSignedKeyList as RealAddressSignedKeyList,
     AddressStatus as RealAddressStatus, AddressType as RealAddressType, CardType as RealCardType,
@@ -676,6 +678,52 @@ impl From<RealAddressSignedKeyList> for AddressSignedKeyList {
             obsolescence_token: signed_key_list.obsolescence_token,
             revision: signed_key_list.revision,
             signature: signed_key_list.signature,
+        }
+    }
+}
+
+/// The configuration for the Proton API service.
+#[derive(Clone, Debug, Eq, PartialEq, SmartDefault, UniffiRecord)]
+pub struct ApiConfig {
+    /// TODO: Document this field.
+    pub allow_http: bool,
+
+    /// TODO: Document this field.
+    #[default(DEFAULT_APP_VERSION.to_owned())]
+    pub app_version: String,
+
+    /// The base URL for the external service.
+    #[default(DEFAULT_HOST_URL.to_owned())]
+    pub base_url: String,
+
+    /// TODO: Document this field.
+    pub skip_srp_proof_validation: bool,
+
+    /// TODO: Document this field.
+    #[default(DEFAULT_CLIENT.to_owned())]
+    pub user_agent: String,
+}
+
+impl From<ApiConfig> for RealApiConfig {
+    fn from(config: ApiConfig) -> Self {
+        Self {
+            allow_http: config.allow_http,
+            app_version: config.app_version,
+            base_url: config.base_url,
+            skip_srp_proof_validation: config.skip_srp_proof_validation,
+            user_agent: config.user_agent,
+        }
+    }
+}
+
+impl From<RealApiConfig> for ApiConfig {
+    fn from(config: RealApiConfig) -> Self {
+        Self {
+            allow_http: config.allow_http,
+            app_version: config.app_version,
+            base_url: config.base_url,
+            skip_srp_proof_validation: config.skip_srp_proof_validation,
+            user_agent: config.user_agent,
         }
     }
 }
