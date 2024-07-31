@@ -678,6 +678,12 @@ impl ToSql for WeekStart {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AddressKeys(pub RealAddressKeys);
 
+impl Default for AddressKeys {
+    fn default() -> Self {
+        Self(RealAddressKeys::new(vec![]))
+    }
+}
+
 impl Deref for AddressKeys {
     type Target = RealAddressKeys;
 
@@ -1273,6 +1279,12 @@ sql_using_serde!(TwoFa);
 /// Wrapper type around [`RealUserKeys`] to implement [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UserKeys(pub RealUserKeys);
+
+impl Default for UserKeys {
+    fn default() -> Self {
+        Self(RealUserKeys::new(vec![]))
+    }
+}
 
 impl Deref for UserKeys {
     type Target = RealUserKeys;
