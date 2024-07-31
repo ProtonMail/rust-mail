@@ -58,6 +58,12 @@ impl From<RealSecretString> for SecretString {
     }
 }
 
+impl From<String> for SecretString {
+    fn from(value: String) -> Self {
+        Self(RealSecretString::new(value))
+    }
+}
+
 impl PartialEq for SecretString {
     fn eq(&self, other: &Self) -> bool {
         self.0.expose_secret() == other.0.expose_secret()
