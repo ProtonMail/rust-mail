@@ -48,6 +48,7 @@
 //!
 use crate::core::datatypes::{LabelId, RemoteId};
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
+use proton_mail_common::datatypes::ExclusiveLocation as RealExclusiveLocation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail,
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -199,6 +200,68 @@ impl From<RealDisposition> for Disposition {
         match value {
             RealDisposition::Attachment => Disposition::Attachment,
             RealDisposition::Inline => Disposition::Inline,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
+pub enum ExclusiveLocation {
+    Inbox,
+    Trash,
+    Archive,
+    Spam,
+    Snoozed,
+    Scheduled,
+    Outbox,
+    Custom {
+        name: String,
+        local_id: u64,
+        color: LabelColor,
+    },
+}
+
+impl From<ExclusiveLocation> for RealExclusiveLocation {
+    fn from(value: ExclusiveLocation) -> Self {
+        match value {
+            ExclusiveLocation::Inbox => RealExclusiveLocation::Inbox,
+            ExclusiveLocation::Trash => RealExclusiveLocation::Trash,
+            ExclusiveLocation::Archive => RealExclusiveLocation::Archive,
+            ExclusiveLocation::Spam => RealExclusiveLocation::Spam,
+            ExclusiveLocation::Snoozed => RealExclusiveLocation::Snoozed,
+            ExclusiveLocation::Scheduled => RealExclusiveLocation::Scheduled,
+            ExclusiveLocation::Outbox => RealExclusiveLocation::Outbox,
+            ExclusiveLocation::Custom {
+                name,
+                local_id,
+                color,
+            } => RealExclusiveLocation::Custom {
+                name,
+                local_id,
+                color: color.into(),
+            },
+        }
+    }
+}
+
+impl From<RealExclusiveLocation> for ExclusiveLocation {
+    fn from(value: RealExclusiveLocation) -> Self {
+        match value {
+            RealExclusiveLocation::Inbox => ExclusiveLocation::Inbox,
+            RealExclusiveLocation::Trash => ExclusiveLocation::Trash,
+            RealExclusiveLocation::Archive => ExclusiveLocation::Archive,
+            RealExclusiveLocation::Spam => ExclusiveLocation::Spam,
+            RealExclusiveLocation::Snoozed => ExclusiveLocation::Snoozed,
+            RealExclusiveLocation::Scheduled => ExclusiveLocation::Scheduled,
+            RealExclusiveLocation::Outbox => ExclusiveLocation::Outbox,
+            RealExclusiveLocation::Custom {
+                name,
+                local_id,
+                color,
+            } => ExclusiveLocation::Custom {
+                name,
+                local_id,
+                color: color.into(),
+            },
         }
     }
 }
@@ -950,6 +1013,10 @@ pub struct Conversation {
     /// TODO: Document this field.
     pub display_snooze_reminder: bool,
 
+    /// Exclusive location of the [`Conversation`] (e.g. Inbox, Archive, Outbox
+    /// etc.).
+    pub exclusive_location: Option<ExclusiveLocation>,
+
     /// TODO: Document this field.
     pub expiration_time: u64,
 
@@ -987,6 +1054,7 @@ impl From<Conversation> for RealConversation {
             attachments_metadata: value.attachments_metadata.into(),
             deleted: value.deleted,
             display_snooze_reminder: value.display_snooze_reminder,
+            exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
             labels: vec![],
             num_attachments: value.num_attachments,
@@ -1012,6 +1080,7 @@ impl From<RealConversation> for Conversation {
             attachments_metadata: value.attachments_metadata.into(),
             deleted: value.deleted,
             display_snooze_reminder: value.display_snooze_reminder,
+            exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
@@ -1641,6 +1710,10 @@ pub struct Message {
     /// TODO: Document this field.
     pub deleted: bool,
 
+    /// Exclusive location of the [`Message`] (e.g. Inbox, Archive, Outbox
+    /// etc.).
+    pub exclusive_location: Option<ExclusiveLocation>,
+
     /// TODO: Document this field.
     pub expiration_time: u64,
 
@@ -1715,6 +1788,7 @@ impl From<Message> for RealMessage {
             body: String::new(),
             cc_list: value.cc_list.into(),
             deleted: value.deleted,
+            exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
             external_id: value.external_id.map(Into::into),
             header: value.header,
@@ -1754,6 +1828,7 @@ impl From<RealMessage> for Message {
             bcc_list: value.bcc_list.into(),
             cc_list: value.cc_list.into(),
             deleted: value.deleted,
+            exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
             external_id: value.external_id.map(Into::into),
             header: value.header,
