@@ -47,6 +47,7 @@
 //!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
 //!
 use crate::core::datatypes::{LabelId, RemoteId};
+use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail,
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -891,6 +892,34 @@ impl From<AttachmentSignature> for RealAttachmentSignature {
 impl From<RealAttachmentSignature> for AttachmentSignature {
     fn from(value: RealAttachmentSignature) -> Self {
         AttachmentSignature { value: value.value }
+    }
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct AvatarInformation {
+    /// TODO: Document this field.
+    pub text: String,
+
+    /// TODO: Document this field.
+    pub color: String,
+}
+
+impl From<AvatarInformation> for RealAvatarInformation {
+    fn from(value: AvatarInformation) -> Self {
+        RealAvatarInformation {
+            text: value.text,
+            color: value.color,
+        }
+    }
+}
+
+impl From<RealAvatarInformation> for AvatarInformation {
+    fn from(value: RealAvatarInformation) -> Self {
+        AvatarInformation {
+            text: value.text,
+            color: value.color,
+        }
     }
 }
 
