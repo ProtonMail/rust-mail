@@ -1,6 +1,6 @@
 use common::TestContext;
 use proton_api_core::services::proton::requests::GetImagesLogoOptions;
-use proton_core_common::images_logo::Key;
+use std::fs;
 
 mod common;
 
@@ -18,14 +18,13 @@ async fn get_sender_image() {
     // No user image in cache
     assert!(user_ctx.images_logo_cache.is_empty());
 
-    let image = user_ctx
+    let image_path = user_ctx
         .image_for_sender(TEST_ADDRESS, None, None, None, None)
         .await
-        .expect("failed to get image")
-        .expect("should have value");
+        .expect("failed to get image");
 
     assert_eq!(
-        image.to_vec(),
+        fs::read(image_path).unwrap(),
         vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
     );
     assert_eq!(user_ctx.images_logo_cache.len(), 1);
@@ -33,8 +32,7 @@ async fn get_sender_image() {
     user_ctx
         .image_for_sender(TEST_ADDRESS, None, None, None, None)
         .await
-        .expect("failed to get image")
-        .expect("should have value");
+        .expect("failed to get image");
 
     assert_eq!(user_ctx.images_logo_cache.len(), 1);
 }
@@ -54,14 +52,13 @@ async fn get_sender_image_from_cache() {
     user_ctx.images_logo_cache.add_item(key, b"abcdef").unwrap();
 
     // Get image
-    let image = user_ctx
+    let image_path = user_ctx
         .image_for_sender(TEST_ADDRESS, None, None, None, None)
         .await
-        .expect("failed to get image")
-        .expect("should have value");
+        .expect("failed to get image");
 
     // Image is the one from cache
-    assert_eq!(std::str::from_utf8(&image.to_vec()).unwrap(), "abcdef");
+    assert_eq!(fs::read(image_path).unwrap(), b"abcdef");
 }
 
 fn create_test_key(address: &str) -> GetImagesLogoOptions {

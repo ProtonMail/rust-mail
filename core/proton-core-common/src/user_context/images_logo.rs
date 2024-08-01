@@ -1,11 +1,10 @@
 use crate::cache::CacheConfig;
 use crate::datatypes::LightOrDarkMode;
 use crate::{CoreContextResult, UserContext};
-use bytes::Bytes;
 use proton_api_core::services::proton::requests::GetImagesLogoOptions;
 use proton_api_core::session::CoreSession;
 use std::ffi::OsString;
-use std::io::Read;
+use std::path::PathBuf;
 use uuid::Uuid;
 
 impl UserContext {
@@ -36,7 +35,7 @@ impl UserContext {
         format: Option<String>,
         mode: Option<LightOrDarkMode>,
         size: Option<u32>,
-    ) -> CoreContextResult<Option<Bytes>> {
+    ) -> CoreContextResult<PathBuf> {
         let options = GetImagesLogoOptions {
             address: Some(address.to_owned()),
             bimi_selector: bimi_selector.map(ToOwned::to_owned),
@@ -46,19 +45,17 @@ impl UserContext {
             ..Default::default()
         };
 
-        if let Some(mut file) = self.images_logo_cache.get_item(&options)? {
-            let mut user_image = Vec::new();
-            file.read_to_end(&mut user_image)?;
-            Ok(Some(user_image.into()))
+        if let Some(file) = self.images_logo_cache.get_item_path(&options) {
+            Ok(file)
         } else {
             let user_image = self
                 .session()
                 .api()
                 .get_images_logo(options.clone())
                 .await?;
-            self.images_logo_cache
-                .add_item(options, user_image.as_ref())?;
-            Ok(Some(user_image))
+            Ok(self
+                .images_logo_cache
+                .add_item(options, user_image.as_ref())?)
         }
     }
 }
