@@ -1886,14 +1886,12 @@ impl Label {
             .into())
     }
 
-    /// TODO: Document this function.
+    /// Function to update the label's expanded state in remote.
     ///
     /// # Parameters
     ///
-    /// * `id`         - The ID of the label to update.
-    /// * `name`       - TODO: Document this parameter.
-    /// * `color`      - TODO: Document this parameter.
-    /// * `label_type` - TODO: Document this parameter.
+    /// * `id`         - The Remote ID of the label to update.
+    /// * `expanded`   - The new expanded state.
     /// * `api`        - The API instance to use.
     ///
     /// # Errors
