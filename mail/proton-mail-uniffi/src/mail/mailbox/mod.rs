@@ -11,6 +11,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::DecryptedMessageError;
 use proton_mail_common::{AppError, MailboxError as RealMailboxError};
 use stash::stash::StashError;
+use std::sync::Arc;
 use tracing::error;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -73,6 +74,7 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 /// A [`Mailbox`] provides a gateway to manipulating messages and conversations for a given label.
 #[derive(uniffi::Object)]
 pub struct Mailbox {
+    /// The inner mailbox, which is the real internal type.
     mbox: proton_mail_common::Mailbox,
 }
 
@@ -88,17 +90,20 @@ const DEFAULT_CONVERSATION_COUNT: usize = 50;
 impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
+    pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
         let mbox = proton_mail_common::Mailbox::new(ctx.ctx().clone(), label_id).await?;
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }
-        Ok(Self { mbox })
+        Ok(Arc::new(Self { mbox }))
     }
 
     /// Create a new mailbox for a given remote id.
     #[uniffi::constructor]
-    pub async fn with_remote_id(ctx: &MailUserSession, label_id: &LabelId) -> MailboxResult<Self> {
+    pub async fn with_remote_id(
+        ctx: &MailUserSession,
+        label_id: &LabelId,
+    ) -> MailboxResult<Arc<Self>> {
         let mbox =
             proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), label_id.clone().into())
                 .await?;
@@ -107,13 +112,13 @@ impl Mailbox {
 
     /// Create a new mailbox for Inbox.
     #[uniffi::constructor]
-    pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Self> {
+    pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Arc<Self>> {
         Self::with_remote_id(ctx, &RealLabelId::inbox().into()).await
     }
 
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub async fn with_local_id(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Self> {
+    pub async fn with_local_id(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
         // Note: This is a workaround for the default constructor not being able to be
         // generated on Kotlin.
         Self::new(ctx, label_id).await
@@ -133,11 +138,11 @@ impl Mailbox {
 }
 
 impl Mailbox {
-    async fn sync(mbox: proton_mail_common::Mailbox) -> MailboxResult<Self> {
+    async fn sync(mbox: proton_mail_common::Mailbox) -> MailboxResult<Arc<Self>> {
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }
-        Ok(Self { mbox })
+        Ok(Arc::new(Self { mbox }))
     }
 }
 
