@@ -109,7 +109,7 @@ impl MailSession {
         params: MailSessionParams,
         key_chain: Box<dyn OSKeyChain>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
-    ) -> MailSessionResult<Self> {
+    ) -> MailSessionResult<Arc<Self>> {
         let mut log_path = PathBuf::from(params.log_dir);
         std::fs::create_dir_all(&log_path)?;
         log_path.push("proton-mail-uniffi.log");
@@ -158,7 +158,7 @@ impl MailSession {
             }),
         )
         .await?;
-        Ok(Self { ctx: mail_ctx })
+        Ok(Arc::new(Self { ctx: mail_ctx }))
     }
 
     /// Start new login flow.
