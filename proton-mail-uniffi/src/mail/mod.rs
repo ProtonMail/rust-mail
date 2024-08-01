@@ -1,8 +1,10 @@
 mod avatar_information;
+pub mod conversations;
 pub mod datatypes;
 mod logging;
 mod login;
 mod mailbox;
+pub mod messages;
 mod session;
 mod settings;
 mod user_session;
