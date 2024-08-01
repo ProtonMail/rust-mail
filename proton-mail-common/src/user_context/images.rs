@@ -1,7 +1,7 @@
 use crate::models::MailSettings;
 use crate::{MailContextResult, MailUserContext};
-use bytes::Bytes;
 use proton_core_common::datatypes::LightOrDarkMode;
+use std::path::PathBuf;
 
 impl MailUserContext {
     /// Get sender image for an address.
@@ -35,7 +35,7 @@ impl MailUserContext {
         size: Option<u32>,
         mode: Option<LightOrDarkMode>,
         format: Option<String>,
-    ) -> MailContextResult<Option<Bytes>> {
+    ) -> MailContextResult<Option<PathBuf>> {
         if mail_settings.hide_sender_images {
             // sender images are to be hidden, return nothing
             return Ok(None);
@@ -45,9 +45,10 @@ impl MailUserContext {
             return Ok(None);
         }
 
-        Ok(self
-            .user_context
-            .image_for_sender(&address, bimi_selector, format, mode, size)
-            .await?)
+        Ok(Some(
+            self.user_context
+                .image_for_sender(&address, bimi_selector, format, mode, size)
+                .await?,
+        ))
     }
 }
