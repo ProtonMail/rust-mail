@@ -217,8 +217,8 @@ impl From<ApiDisposition> for Disposition {
 impl FromSql for Disposition {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match u8::column_result(value)? {
-            1 => Ok(Self::Inline),
-            2 => Ok(Self::Attachment),
+            1 => Ok(Self::Attachment),
+            2 => Ok(Self::Inline),
             v => Err(FromSqlError::OutOfRange(i64::from(v))),
         }
     }
@@ -794,11 +794,11 @@ impl ToSql for ViewMode {
 /// [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentEncryptedSignature {
-    pub value: String,
+    pub value: RealAttachmentEncryptedSignature,
 }
 
 impl Deref for AttachmentEncryptedSignature {
-    type Target = String;
+    type Target = RealAttachmentEncryptedSignature;
 
     fn deref(&self) -> &Self::Target {
         &self.value
@@ -811,22 +811,20 @@ impl<'de> Deserialize<'de> for AttachmentEncryptedSignature {
         D: Deserializer<'de>,
     {
         Ok(AttachmentEncryptedSignature {
-            value: RealAttachmentEncryptedSignature::deserialize(deserializer)?.to_string(),
+            value: RealAttachmentEncryptedSignature::deserialize(deserializer)?,
         })
     }
 }
 
 impl From<AttachmentEncryptedSignature> for RealAttachmentEncryptedSignature {
     fn from(value: AttachmentEncryptedSignature) -> Self {
-        value.value.into()
+        value.value
     }
 }
 
 impl From<RealAttachmentEncryptedSignature> for AttachmentEncryptedSignature {
     fn from(value: RealAttachmentEncryptedSignature) -> Self {
-        Self {
-            value: value.to_string(),
-        }
+        Self { value }
     }
 }
 
@@ -886,11 +884,11 @@ sql_using_serde!(AttachmentMetadatas);
 /// [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentSignature {
-    pub value: String,
+    pub value: RealAttachmentSignature,
 }
 
 impl Deref for AttachmentSignature {
-    type Target = String;
+    type Target = RealAttachmentSignature;
 
     fn deref(&self) -> &Self::Target {
         &self.value
@@ -903,22 +901,20 @@ impl<'de> Deserialize<'de> for AttachmentSignature {
         D: Deserializer<'de>,
     {
         Ok(AttachmentSignature {
-            value: RealAttachmentSignature::deserialize(deserializer)?.to_string(),
+            value: RealAttachmentSignature::deserialize(deserializer)?,
         })
     }
 }
 
 impl From<AttachmentSignature> for RealAttachmentSignature {
     fn from(value: AttachmentSignature) -> Self {
-        value.value.into()
+        value.value
     }
 }
 
 impl From<RealAttachmentSignature> for AttachmentSignature {
     fn from(value: RealAttachmentSignature) -> Self {
-        Self {
-            value: value.to_string(),
-        }
+        Self { value }
     }
 }
 
@@ -1044,11 +1040,11 @@ impl DecryptableMessage for EncryptedMessageBody {
 /// [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KeyPackets {
-    pub value: String,
+    pub value: RealKeyPackets,
 }
 
 impl Deref for KeyPackets {
-    type Target = String;
+    type Target = RealKeyPackets;
 
     fn deref(&self) -> &Self::Target {
         &self.value
@@ -1061,22 +1057,20 @@ impl<'de> Deserialize<'de> for KeyPackets {
         D: Deserializer<'de>,
     {
         Ok(KeyPackets {
-            value: RealKeyPackets::deserialize(deserializer)?.to_string(),
+            value: RealKeyPackets::deserialize(deserializer)?,
         })
     }
 }
 
 impl From<KeyPackets> for RealKeyPackets {
     fn from(value: KeyPackets) -> Self {
-        value.value.into()
+        value.value
     }
 }
 
 impl From<RealKeyPackets> for KeyPackets {
     fn from(value: RealKeyPackets) -> Self {
-        Self {
-            value: value.to_string(),
-        }
+        Self { value }
     }
 }
 
