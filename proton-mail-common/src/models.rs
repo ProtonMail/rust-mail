@@ -140,7 +140,7 @@ pub struct Attachment {
 
     /// TODO: Document this field.
     #[DbField]
-    pub key_packets: KeyPackets,
+    pub key_packets: Option<KeyPackets>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -149,15 +149,6 @@ pub struct Attachment {
     /// TODO: Document this field.
     #[DbField]
     pub name: String,
-
-    /// TODO: Document this field.
-    pub real_enc_signature: Option<RealAttachmentEncryptedSignature>,
-
-    /// TODO: Document this field.
-    pub real_key_packets: Option<RealKeyPackets>,
-
-    /// TODO: Document this field.
-    pub real_signature: Option<RealAttachmentSignature>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -241,7 +232,7 @@ impl Attachment {
     /// To complete the data, one needs to provide the full metadata.
     ///
     pub fn has_complete_metadata(&self) -> bool {
-        !self.key_packets.to_string().is_empty()
+        self.key_packets.is_some()
     }
 
     /// Synchronize the full attachment metadata for the attachment.
@@ -287,15 +278,18 @@ impl Attachment {
 // TODO: traits directly on the source types, and remove these wrappers.
 impl DecryptableAttachment for Attachment {
     fn attachment_key_packets(&self) -> &RealKeyPackets {
-        self.real_key_packets.as_ref().unwrap()
+        //TODO: Cleanup after tests.
+        self.key_packets
+            .as_ref()
+            .expect("Should exist at this point")
     }
 
     fn attachment_signature(&self) -> Option<&RealAttachmentSignature> {
-        self.real_signature.as_ref()
+        self.signature.as_deref()
     }
 
     fn attachment_encrypted_signature(&self) -> Option<&RealAttachmentEncryptedSignature> {
-        self.real_enc_signature.as_ref()
+        self.enc_signature.as_deref()
     }
 }
 
@@ -312,12 +306,9 @@ impl From<ApiAttachment> for Attachment {
             disposition: value.disposition.into(),
             enc_signature: value.enc_signature.clone().map(|v| v.into()),
             is_auto_forwardee: value.is_auto_forwardee,
-            key_packets: value.key_packets.clone().into(),
+            key_packets: Some(value.key_packets.clone().into()),
             mime_type: value.mime_type.into(),
             name: value.name,
-            real_enc_signature: value.enc_signature,
-            real_key_packets: Some(value.key_packets),
-            real_signature: value.signature.clone(),
             sender: value.sender.map(|v| v.into()),
             signature: value.signature.map(|v| v.into()),
             size: value.size,
