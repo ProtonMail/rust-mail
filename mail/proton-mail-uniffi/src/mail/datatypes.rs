@@ -44,9 +44,6 @@
 //! The following fields are excluded from represented types (in addition to
 //! internal database fields):
 //!
-//!   - [`Attachment::real_enc_signature`](proton_mail_common::models::Attachment::real_enc_signature)
-//!   - [`Attachment::real_key_packets`](proton_mail_common::models::Attachment::real_key_packets)
-//!   - [`Attachment::real_signature`](proton_mail_common::models::Attachment::real_signature)
 //!   - [`Conversation::labels`](proton_mail_common::models::Message::label_ids)
 //!   - [`Message::body`](proton_mail_common::models::Message::body)
 //!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
@@ -59,14 +56,12 @@ use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::ExclusiveLocation as RealExclusiveLocation;
 use proton_mail_common::datatypes::{
-    AlmostAllMail as RealAlmostAllMail,
-    AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
-    AttachmentMetadata as RealAttachmentMetadata, AttachmentMetadatas as RealAttachmentMetadatas,
-    AttachmentSignature as RealAttachmentSignature, ComposerDirection as RealComposerDirection,
+    AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
+    AttachmentMetadatas as RealAttachmentMetadatas, ComposerDirection as RealComposerDirection,
     ComposerMode as RealComposerMode, ConversationCount as RealConversationCount,
     DecryptedMessageBody as RealDecryptedMessageBody, Disposition as RealDisposition,
-    EncryptedMessageBody as RealEncryptedMessageBody, KeyPackets as RealKeyPackets,
-    LabelColor as RealLabelColor, LabelType as RealLabelType, MessageAddress as RealMessageAddress,
+    EncryptedMessageBody as RealEncryptedMessageBody, LabelColor as RealLabelColor,
+    LabelType as RealLabelType, MessageAddress as RealMessageAddress,
     MessageAddresses as RealMessageAddresses, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo,
@@ -85,6 +80,7 @@ use proton_mail_common::models::{
     MailSettings as RealMailSettings, Message as RealMessage,
     MessageBodyMetadata as RealMessageBodyMetadata,
 };
+use serde_json::{from_str as from_json_string, to_string as to_json_string};
 use smart_default::SmartDefault;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -809,13 +805,13 @@ pub struct Attachment {
     pub disposition: Disposition,
 
     /// TODO: Document this field.
-    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    pub enc_signature: Option<String>,
 
     /// TODO: Document this field.
     pub is_auto_forwardee: bool,
 
     /// TODO: Document this field.
-    pub key_packets: KeyPackets,
+    pub key_packets: String,
 
     /// TODO: Document this field.
     pub mime_type: MimeType,
@@ -827,7 +823,7 @@ pub struct Attachment {
     pub sender: Option<MessageAddress>,
 
     /// TODO: Document this field.
-    pub signature: Option<AttachmentSignature>,
+    pub signature: Option<String>,
 
     /// TODO: Document this field.
     pub size: u64,
@@ -844,16 +840,19 @@ impl From<Attachment> for RealAttachment {
             local_message_id: value.local_message_id,
             remote_message_id: value.remote_message_id.into(),
             disposition: value.disposition.into(),
-            enc_signature: value.enc_signature.map(Into::into),
+            enc_signature: value
+                .enc_signature
+                .as_deref()
+                .map(|v| from_json_string(v).unwrap()),
             is_auto_forwardee: value.is_auto_forwardee,
-            key_packets: value.key_packets.into(),
+            key_packets: from_json_string(&value.key_packets).unwrap(),
             mime_type: value.mime_type.into(),
             name: value.name,
-            real_enc_signature: None,
-            real_key_packets: None,
-            real_signature: None,
             sender: value.sender.map(Into::into),
-            signature: value.signature.map(Into::into),
+            signature: value
+                .signature
+                .as_deref()
+                .map(|v| from_json_string(v).unwrap()),
             size: value.size,
             row_id: None,
             stash: None,
@@ -872,41 +871,21 @@ impl From<RealAttachment> for Attachment {
             local_message_id: value.local_message_id,
             remote_message_id: value.remote_message_id.into(),
             disposition: value.disposition.into(),
-            enc_signature: value.enc_signature.map(Into::into),
+            enc_signature: value
+                .enc_signature
+                .as_deref()
+                .map(|v| to_json_string(&v).unwrap()),
             is_auto_forwardee: value.is_auto_forwardee,
-            key_packets: value.key_packets.into(),
+            key_packets: to_json_string(&value.key_packets).unwrap(),
             mime_type: value.mime_type.into(),
             name: value.name,
             sender: value.sender.map(Into::into),
-            signature: value.signature.map(Into::into),
+            signature: value
+                .signature
+                .as_deref()
+                .map(|v| to_json_string(&v).unwrap()),
             size: value.size,
         }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct AttachmentEncryptedSignature {
-    pub value: String,
-}
-
-impl Deref for AttachmentEncryptedSignature {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl From<AttachmentEncryptedSignature> for RealAttachmentEncryptedSignature {
-    fn from(value: AttachmentEncryptedSignature) -> Self {
-        RealAttachmentEncryptedSignature { value: value.value }
-    }
-}
-
-impl From<RealAttachmentEncryptedSignature> for AttachmentEncryptedSignature {
-    fn from(value: RealAttachmentEncryptedSignature) -> Self {
-        AttachmentEncryptedSignature { value: value.value }
     }
 }
 
@@ -971,32 +950,6 @@ impl From<RealAttachmentMetadatas> for AttachmentMetadatas {
         AttachmentMetadatas {
             value: value.value.into_iter().map(Into::into).collect(),
         }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct AttachmentSignature {
-    pub value: String,
-}
-
-impl Deref for AttachmentSignature {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl From<AttachmentSignature> for RealAttachmentSignature {
-    fn from(value: AttachmentSignature) -> Self {
-        RealAttachmentSignature { value: value.value }
-    }
-}
-
-impl From<RealAttachmentSignature> for AttachmentSignature {
-    fn from(value: RealAttachmentSignature) -> Self {
-        AttachmentSignature { value: value.value }
     }
 }
 
@@ -1354,32 +1307,6 @@ impl From<RealEncryptedMessageBody> for EncryptedMessageBody {
             encrypted_body: value.encrypted_body,
             metadata: value.metadata.into(),
         }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct KeyPackets {
-    pub value: String,
-}
-
-impl Deref for KeyPackets {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl From<KeyPackets> for RealKeyPackets {
-    fn from(value: KeyPackets) -> Self {
-        RealKeyPackets { value: value.value }
-    }
-}
-
-impl From<RealKeyPackets> for KeyPackets {
-    fn from(value: RealKeyPackets) -> Self {
-        KeyPackets { value: value.value }
     }
 }
 
@@ -2039,19 +1966,19 @@ pub struct MessageAttachment {
     pub disposition: Disposition,
 
     /// TODO: Document this field.
-    pub enc_signature: Option<AttachmentEncryptedSignature>,
+    pub enc_signature: Option<String>,
 
     /// TODO: Document this field.
     pub headers: MessageAttachmentHeaders,
 
     /// TODO: Document this field.
-    pub key_packets: KeyPackets,
+    pub key_packets: String,
 
     /// TODO: Document this field.
     pub mime_type: MimeType,
 
     /// TODO: Document this field.
-    pub signature: Option<AttachmentSignature>,
+    pub signature: Option<String>,
 
     /// TODO: Document this field.
     pub name: String,
@@ -2065,11 +1992,17 @@ impl From<MessageAttachment> for RealMessageAttachment {
         RealMessageAttachment {
             id: value.id.into(),
             disposition: value.disposition.into(),
-            enc_signature: value.enc_signature.map(Into::into),
+            enc_signature: value
+                .enc_signature
+                .as_deref()
+                .map(|v| from_json_string(v).unwrap()),
             headers: value.headers.into(),
-            key_packets: value.key_packets.into(),
+            key_packets: from_json_string(&value.key_packets).unwrap(),
             mime_type: value.mime_type.into(),
-            signature: value.signature.map(Into::into),
+            signature: value
+                .signature
+                .as_deref()
+                .map(|v| from_json_string(v).unwrap()),
             name: value.name,
             size: value.size,
         }
@@ -2081,11 +2014,17 @@ impl From<RealMessageAttachment> for MessageAttachment {
         MessageAttachment {
             id: value.id.into(),
             disposition: value.disposition.into(),
-            enc_signature: value.enc_signature.map(Into::into),
+            enc_signature: value
+                .enc_signature
+                .as_deref()
+                .map(|v| to_json_string(v).unwrap()),
             headers: value.headers.into(),
-            key_packets: value.key_packets.into(),
+            key_packets: to_json_string(&value.key_packets).unwrap(),
             mime_type: value.mime_type.into(),
-            signature: value.signature.map(Into::into),
+            signature: value
+                .signature
+                .as_deref()
+                .map(|v| to_json_string(&v).unwrap()),
             name: value.name,
             size: value.size,
         }

@@ -23,7 +23,7 @@
 use crate::services::proton::common::LabelType;
 use crate::services::proton::request_data::MessageMetadataSortMode;
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_api_core::services::proton::common::{LightOrDarkMode, RemoteId};
+use proton_api_core::services::proton::common::RemoteId;
 use serde::Serialize;
 use serde_with::serde_as;
 use smart_default::SmartDefault;
