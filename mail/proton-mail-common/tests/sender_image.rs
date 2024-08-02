@@ -14,7 +14,6 @@ use stash::orm::Model;
 use std::fs;
 
 #[tokio::test]
-#[ignore] // cache is dropped before last test, need to investigate
 async fn test_get_sender_image() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::new().await;
@@ -59,7 +58,7 @@ async fn test_get_sender_image() {
         .unwrap()
         .unwrap();
     let sender = &local_conversation.senders.value.first().unwrap();
-    let mail_settings = MailSettings::load(MAIL_SETTINGS_ID, ctx.user_context().await.stash())
+    let mail_settings = MailSettings::load(MAIL_SETTINGS_ID, user_context.stash())
         .await
         .expect("failed to load mail settings")
         .unwrap();
