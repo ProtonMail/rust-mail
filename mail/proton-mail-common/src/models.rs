@@ -1093,6 +1093,58 @@ impl Conversation {
         .map(|r| r.responses)
     }
 
+    /// Star multiple conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`   - The IDs of the conversations to mark as starred.
+    /// * `stash` - The stash to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    pub async fn star_multiple(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
+        let label_id =
+            match Label::find_first("WHERE remote_id = ?", params![LabelId::starred()], stash)
+                .await?
+            {
+                Some(label) => label.local_id.unwrap(),
+                None => {
+                    error!("Starred label not found");
+                    return Ok(());
+                }
+            };
+
+        Self::apply_label_to_multiple(label_id, ids, &stash.connection()).await
+    }
+
+    /// Unstar multiple conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`   - The IDs of the conversations to mark as starred.
+    /// * `stash` - The stash to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    pub async fn unstar_multiple(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
+        let label_id =
+            match Label::find_first("WHERE remote_id = ?", params![LabelId::starred()], stash)
+                .await?
+            {
+                Some(label) => label.local_id.unwrap(),
+                None => {
+                    error!("Starred label not found");
+                    return Ok(());
+                }
+            };
+
+        Self::remove_label_from_multiple(label_id, ids, &stash.connection()).await
+    }
+
     /// Synchronize the conversations and message counts for each label.
     ///
     /// # Parameters
