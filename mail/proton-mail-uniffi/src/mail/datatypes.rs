@@ -53,6 +53,9 @@
 //!
 use crate::core::datatypes::{LabelId, RemoteId};
 use core::fmt;
+use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
+use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
+use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::ExclusiveLocation as RealExclusiveLocation;
 use proton_mail_common::datatypes::{
@@ -337,6 +340,39 @@ impl From<RealMessageButtons> for MessageButtons {
         match value {
             RealMessageButtons::ReadFirst => MessageButtons::ReadFirst,
             RealMessageButtons::UnreadFirst => MessageButtons::UnreadFirst,
+        }
+    }
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
+pub enum MessageMetadataSortMode {
+    /// TODO: Document this variant.
+    Time,
+
+    /// TODO: Document this variant.
+    Size,
+
+    /// TODO: Document this variant.
+    ID,
+}
+
+impl From<MessageMetadataSortMode> for RealMessageMetadataSortMode {
+    fn from(value: MessageMetadataSortMode) -> Self {
+        match value {
+            MessageMetadataSortMode::Time => RealMessageMetadataSortMode::Time,
+            MessageMetadataSortMode::Size => RealMessageMetadataSortMode::Size,
+            MessageMetadataSortMode::ID => RealMessageMetadataSortMode::ID,
+        }
+    }
+}
+
+impl From<RealMessageMetadataSortMode> for MessageMetadataSortMode {
+    fn from(value: RealMessageMetadataSortMode) -> Self {
+        match value {
+            RealMessageMetadataSortMode::Time => MessageMetadataSortMode::Time,
+            RealMessageMetadataSortMode::Size => MessageMetadataSortMode::Size,
+            RealMessageMetadataSortMode::ID => MessageMetadataSortMode::ID,
         }
     }
 }
@@ -1130,6 +1166,136 @@ impl From<RealConversationCount> for ConversationCount {
         ConversationCount {
             label_id: value.label_id.into(),
             total: value.total,
+            unread: value.unread,
+        }
+    }
+}
+
+/// Parameters to filter/search conversations with a given criteria.
+#[derive(Clone, Debug, SmartDefault, UniffiRecord)]
+pub struct ConversationSearchOptions {
+    /// Address ID to filter on.
+    pub address_id: Option<RemoteId>,
+
+    /// If `true`, only return conversations which have attachments. If `false`,
+    /// only return conversations which have no attachments.
+    pub attachments: Option<bool>,
+
+    /// If `true`, automatically convert simple queries to wildcarded versions,
+    /// such as `test` to `*test*`.
+    pub auto_wildcard: Option<bool>,
+
+    /// UNIX timestamp to filter conversations earlier than timestamp.
+    pub begin: Option<u64>,
+
+    /// Return only conversations newer, in creation time (NOT timestamp), than
+    /// the specified conversation ID if timestamp = `begin`.
+    // TODO: Improve the documentation above, as it doesn't make total sense.
+    pub begin_id: Option<RemoteId>,
+
+    /// If `true`, return results in descending order rather than ascending.
+    pub desc: Option<bool>,
+
+    /// UNIX timestamp to filter conversations later than timestamp.
+    pub end: Option<u64>,
+
+    /// Return only conversations older, in creation time (NOT timestamp), than
+    /// the specified conversation ID if timestamp = `end`.
+    // TODO: Improve the documentation above, as it doesn't make total sense.
+    pub end_id: Option<RemoteId>,
+
+    /// External ID to filter on.
+    pub external_id: Option<RemoteId>,
+
+    /// Keyword search of `From` field.
+    pub from: Option<String>,
+
+    /// Conversation IDs to filter on.
+    pub ids: Option<Vec<RemoteId>>,
+
+    /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
+    pub keyword: Option<String>,
+
+    /// Label ID to filter on.
+    pub label_id: Option<RemoteId>,
+
+    /// The number of conversations to return.
+    pub limit: Option<u64>,
+
+    /// Page index.
+    pub page: u64,
+
+    /// Number of elements per page.
+    #[default(MAX_PAGE_ELEMENT_COUNT_U64)]
+    pub page_size: u64,
+
+    /// Keyword search of `To`, `CC`, and `BCC` fields.
+    pub recipients: Option<Vec<String>>,
+
+    /// Sort the results by one of the sorting modes.
+    pub sort: Option<MessageMetadataSortMode>,
+
+    /// Keyword search of `Subject` field.
+    pub subject: Option<String>,
+
+    /// If `true`, only return conversations which have unread messages. If
+    /// `false`, only return conversations which have all messages read.
+    pub unread: Option<bool>,
+}
+
+impl From<ConversationSearchOptions> for GetConversationsOptions {
+    fn from(value: ConversationSearchOptions) -> Self {
+        GetConversationsOptions {
+            address_id: value.address_id.map(Into::into),
+            attachments: value.attachments,
+            auto_wildcard: value.auto_wildcard,
+            begin: value.begin,
+            begin_id: value.begin_id.map(Into::into),
+            desc: value.desc,
+            end: value.end,
+            end_id: value.end_id.map(Into::into),
+            external_id: value.external_id.map(Into::into),
+            from: value.from,
+            ids: value
+                .ids
+                .map(|ids| ids.into_iter().map(Into::into).collect()),
+            keyword: value.keyword,
+            label_id: value.label_id.map(Into::into),
+            limit: value.limit,
+            page: value.page,
+            page_size: value.page_size,
+            recipients: value.recipients,
+            sort: value.sort.map(Into::into),
+            subject: value.subject,
+            unread: value.unread,
+        }
+    }
+}
+
+impl From<GetConversationsOptions> for ConversationSearchOptions {
+    fn from(value: GetConversationsOptions) -> Self {
+        ConversationSearchOptions {
+            address_id: value.address_id.map(Into::into),
+            attachments: value.attachments,
+            auto_wildcard: value.auto_wildcard,
+            begin: value.begin,
+            begin_id: value.begin_id.map(Into::into),
+            desc: value.desc,
+            end: value.end,
+            end_id: value.end_id.map(Into::into),
+            external_id: value.external_id.map(Into::into),
+            from: value.from,
+            ids: value
+                .ids
+                .map(|ids| ids.into_iter().map(Into::into).collect()),
+            keyword: value.keyword,
+            label_id: value.label_id.map(Into::into),
+            limit: value.limit,
+            page: value.page,
+            page_size: value.page_size,
+            recipients: value.recipients,
+            sort: value.sort.map(Into::into),
+            subject: value.subject,
             unread: value.unread,
         }
     }
@@ -2184,6 +2350,158 @@ impl From<RealMessageFlags> for MessageFlags {
     fn from(value: RealMessageFlags) -> Self {
         MessageFlags {
             value: value.bits(),
+        }
+    }
+}
+
+/// Parameters to filter/search messages with a given criteria.
+#[derive(Clone, Debug, SmartDefault, UniffiRecord)]
+pub struct MessageSearchOptions {
+    /// Filter on address ID.
+    pub address_id: Option<RemoteId>,
+
+    /// If `true`, return only messages which have attachments. If `false`,
+    /// return only messages which have no attachments.
+    pub attachments: Option<bool>,
+
+    /// If `true`, automatically convert simple queries to wildcarded versions,
+    /// such as `test` to `*test*`.
+    pub auto_wildcard: Option<bool>,
+
+    /// Keyword search of `BCC` field.
+    pub bcc: Option<String>,
+
+    /// UNIX timestamp to filter messages at or later than timestamp.
+    pub begin: Option<u64>,
+
+    /// Return only messages newer, in creation time (NOT timestamp), than
+    /// the specified message ID.
+    pub begin_id: Option<RemoteId>,
+
+    /// Keyword search of CC field.
+    pub cc: Option<String>,
+
+    /// Filter messages by conversation ID.
+    pub conversation_id: Option<RemoteId>,
+
+    /// If `true`, sort results descending. If `false`, sort ascending.
+    pub desc: Option<bool>,
+
+    /// UNIX timestamp to filter messages at or earlier than timestamp.
+    pub end: Option<u64>,
+
+    /// Return only messages older, in creation time (NOT timestamp), than the
+    /// specified message ID.
+    pub end_id: Option<RemoteId>,
+
+    /// Filter on external ID.
+    pub external_id: Option<RemoteId>,
+
+    /// Keyword search `From` field.
+    pub from: Option<String>,
+
+    /// Filter on the given message IDs.
+    pub ids: Option<Vec<RemoteId>>,
+
+    /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
+    pub keyword: Option<String>,
+
+    /// Label IDs to filter on.
+    pub label_id: Option<Vec<RemoteId>>,
+
+    /// The number of messages to return.
+    pub limit: Option<u64>,
+
+    /// Page index.
+    pub page: u64,
+
+    /// Number of elements per page.
+    #[default(MAX_PAGE_ELEMENT_COUNT_U64)]
+    pub page_size: u64,
+
+    /// Keyword search of `To`, `CC`, and `BCC` fields.
+    pub recipients: Option<Vec<String>>,
+
+    /// Result sort mode.
+    pub sort: Option<MessageMetadataSortMode>,
+
+    /// Keyword search `Subject` field.
+    pub subject: Option<String>,
+
+    /// Keyword search of `To` field.
+    pub to: Option<String>,
+
+    /// If `true`, return only messages which are unread. If `false`, return
+    /// only messages which are read.
+    pub unread: Option<bool>,
+}
+
+impl From<MessageSearchOptions> for GetMessagesOptions {
+    fn from(value: MessageSearchOptions) -> Self {
+        GetMessagesOptions {
+            address_id: value.address_id.map(Into::into),
+            attachments: value.attachments,
+            auto_wildcard: value.auto_wildcard,
+            bcc: value.bcc,
+            begin: value.begin,
+            begin_id: value.begin_id.map(Into::into),
+            cc: value.cc,
+            conversation_id: value.conversation_id.map(Into::into),
+            desc: value.desc,
+            end: value.end,
+            end_id: value.end_id.map(Into::into),
+            external_id: value.external_id.map(Into::into),
+            from: value.from,
+            ids: value
+                .ids
+                .map(|ids| ids.into_iter().map(Into::into).collect()),
+            keyword: value.keyword,
+            label_id: value
+                .label_id
+                .map(|ids| ids.into_iter().map(Into::into).collect()),
+            limit: value.limit,
+            page: value.page,
+            page_size: value.page_size,
+            recipients: value.recipients,
+            sort: value.sort.map(Into::into),
+            subject: value.subject,
+            to: value.to,
+            unread: value.unread,
+        }
+    }
+}
+
+impl From<GetMessagesOptions> for MessageSearchOptions {
+    fn from(value: GetMessagesOptions) -> Self {
+        MessageSearchOptions {
+            address_id: value.address_id.map(Into::into),
+            attachments: value.attachments,
+            auto_wildcard: value.auto_wildcard,
+            bcc: value.bcc,
+            begin: value.begin,
+            begin_id: value.begin_id.map(Into::into),
+            cc: value.cc,
+            conversation_id: value.conversation_id.map(Into::into),
+            desc: value.desc,
+            end: value.end,
+            end_id: value.end_id.map(Into::into),
+            external_id: value.external_id.map(Into::into),
+            from: value.from,
+            ids: value
+                .ids
+                .map(|ids| ids.into_iter().map(Into::into).collect()),
+            keyword: value.keyword,
+            label_id: value
+                .label_id
+                .map(|ids| ids.into_iter().map(Into::into).collect()),
+            limit: value.limit,
+            page: value.page,
+            page_size: value.page_size,
+            recipients: value.recipients,
+            sort: value.sort.map(Into::into),
+            subject: value.subject,
+            to: value.to,
+            unread: value.unread,
         }
     }
 }

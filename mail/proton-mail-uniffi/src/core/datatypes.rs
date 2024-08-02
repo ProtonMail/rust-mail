@@ -44,6 +44,7 @@
 //!
 
 use core::fmt;
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Config as RealApiConfig;
 use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};
 use proton_core_common::datatypes::{
@@ -1428,6 +1429,20 @@ impl Deref for RemoteId {
 impl Display for RemoteId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
+    }
+}
+
+impl From<ApiRemoteId> for RemoteId {
+    fn from(value: ApiRemoteId) -> Self {
+        Self {
+            value: value.into_inner(),
+        }
+    }
+}
+
+impl From<RemoteId> for ApiRemoteId {
+    fn from(value: RemoteId) -> Self {
+        Self::new(value.into_inner())
     }
 }
 
