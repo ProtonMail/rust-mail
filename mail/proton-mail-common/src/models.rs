@@ -1093,6 +1093,52 @@ impl Conversation {
         .map(|r| r.responses)
     }
 
+    /// Search for conversations.
+    ///
+    /// This function accepts search options and calls the API to find any
+    /// conversations that fit the criteria. It operates globally and is not
+    /// based on a particular mailbox; this restriction can be applied via the
+    /// options.
+    ///
+    /// # Parameters
+    ///
+    /// * `options` - The search options to use.
+    /// * `api`     - The API instance to use.
+    /// * `stash`   - The stash to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database. Can also return an error if a found
+    /// conversation cannot be loaded, although this would indicate a
+    /// significant problem.
+    ///
+    pub async fn search<PM: ProtonMail>(
+        options: GetConversationsOptions,
+        api: &PM,
+        stash: &Stash,
+    ) -> Result<Vec<Conversation>, AppError> {
+        let ids = Self::create_or_update_conversations(
+            api.get_conversations(options)
+                .await?
+                .conversations
+                .into_iter()
+                .map(|c| c.into())
+                .collect(),
+            stash,
+        )
+        .await?;
+        let mut conversations = vec![];
+        for id in ids {
+            conversations.push(
+                Self::load(id, stash)
+                    .await?
+                    .ok_or(AppError::Other("Conversation not found".to_owned()))?,
+            );
+        }
+        Ok(conversations)
+    }
+
     /// Star multiple conversations.
     ///
     /// # Parameters
@@ -2837,6 +2883,45 @@ impl Message {
             "message_body_{}",
             self.local_id.expect("Message does not have a local id")
         ))
+    }
+
+    /// Search for messages.
+    ///
+    /// This function accepts search options and calls the API to find any
+    /// messages that fit the criteria. It operates globally and is not based on
+    /// a particular mailbox; this restriction can be applied via the options.
+    ///
+    /// # Parameters
+    ///
+    /// * `options` - The search options to use.
+    /// * `api`     - The API instance to use.
+    /// * `stash`   - The stash to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database. Can also return an error if the found message
+    /// cannot be loaded, although this would indicate a significant problem.
+    ///
+    pub async fn search<PM: ProtonMail>(
+        options: GetMessagesOptions,
+        api: &PM,
+        stash: &Stash,
+    ) -> Result<Vec<Message>, AppError> {
+        let ids = Self::create_or_update_messages_from_metadata(
+            Self::fetch_metadata(options, api).await?.messages,
+            stash,
+        )
+        .await?;
+        let mut messages = vec![];
+        for id in ids {
+            messages.push(
+                Self::load(id, stash)
+                    .await?
+                    .ok_or(AppError::Other("Message not found".to_owned()))?,
+            );
+        }
+        Ok(messages)
     }
 
     /// Synchronize the first `count` messages of the label with `label_id`.
