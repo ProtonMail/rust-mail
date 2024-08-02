@@ -6,20 +6,20 @@ mod initialization;
 pub use initialization::*;
 use std::path::PathBuf;
 
+use crate::user_context::action_queue::new_action_queue;
+use crate::{MailContext, MailContextResult};
 use futures::executor::block_on;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
-use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
-use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
-use std::sync::{Arc, Weak};
-
-use crate::user_context::action_queue::new_action_queue;
-use crate::{MailContext, MailContextResult};
+use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::{LoadKeySecret, UserContext};
+use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::foreground_loop::EventLoop;
 use stash::stash::Stash;
+use std::sync::{Arc, Weak};
 
 pub struct MailUserContext {
     this: Weak<Self>,
@@ -49,6 +49,11 @@ impl MailUserContext {
 
     pub fn session(&self) -> &Session {
         self.user_context.session()
+    }
+
+    /// Get the API service.
+    pub fn api(&self) -> &Proton {
+        self.user_context.session().api()
     }
 
     /// Get the database connection.

@@ -11,12 +11,13 @@ use crate::models::{Conversation, Label, MailSettings, Message, MAIL_SETTINGS_ID
 use crate::{AppError, MailContextError, MailUserContext, MailUserContextInitializationCallback};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LabelId;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::StashError;
+use stash::stash::{Stash, StashError};
 use std::sync::Arc;
 use tracing::{debug, error};
 
@@ -155,9 +156,21 @@ impl Mailbox {
         })
     }
 
+    /// Get the user context.
     pub fn user_context(&self) -> Arc<MailUserContext> {
         Arc::clone(&self.user_ctx)
     }
+
+    /// Get the API service.
+    pub fn api(&self) -> &Proton {
+        self.user_ctx.api()
+    }
+
+    /// Get the database connection.
+    pub fn stash(&self) -> &Stash {
+        self.user_ctx.stash()
+    }
+
     pub fn label_id(&self) -> u64 {
         self.label_id
     }

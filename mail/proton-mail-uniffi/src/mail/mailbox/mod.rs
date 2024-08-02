@@ -6,11 +6,12 @@ use crate::mail::{MailSessionError, MailUserSession};
 use anyhow::anyhow;
 use proton_action_queue::queue::Error as QueueError;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::Proton;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::DecryptedMessageError;
 use proton_mail_common::{AppError, MailboxError as RealMailboxError};
-use stash::stash::StashError;
+use stash::stash::{Stash, StashError};
 use std::sync::Arc;
 use tracing::error;
 
@@ -138,6 +139,24 @@ impl Mailbox {
 }
 
 impl Mailbox {
+    /// Get the inner mailbox.
+    #[must_use]
+    pub fn mbox(&self) -> &proton_mail_common::Mailbox {
+        &self.mbox
+    }
+
+    /// Get the API service.
+    #[must_use]
+    pub fn api(&self) -> &Proton {
+        self.mbox.api()
+    }
+
+    /// Get the database connection.
+    #[must_use]
+    pub fn stash(&self) -> &Stash {
+        self.mbox.stash()
+    }
+
     async fn sync(mbox: proton_mail_common::Mailbox) -> MailboxResult<Arc<Self>> {
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
