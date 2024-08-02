@@ -1,9 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
-use crate::auth::{Auth, UserKeySecret};
+use crate::auth::{CachedStore, Store, StoreError, UserKeySecret};
 use crate::service::ApiServiceError;
 use crate::services::proton::{Config as ApiConfig, Proton};
-use std::sync::Arc;
 use tokio::sync::RwLock as AsyncRwLock;
 
 pub trait CoreSession {
@@ -15,18 +14,22 @@ pub trait CoreSession {
 /// users.
 #[derive(Clone)]
 pub struct Session {
-    pub(crate) auth: Arc<AsyncRwLock<Option<Auth>>>,
     api: Proton,
 }
 
 impl Session {
-    #[must_use]
-    pub fn new(api_config: ApiConfig) -> Self {
-        let auth = Arc::new(AsyncRwLock::new(None));
-        Self {
-            api: Proton::new(api_config, None, Arc::clone(&auth)),
-            auth,
-        }
+    /// Create a new Session
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the API service failed to initialize.
+    pub async fn new(
+        api_config: ApiConfig,
+        store: Option<Box<dyn Store>>,
+    ) -> Result<Self, StoreError> {
+        Ok(Self {
+            api: Proton::new(api_config, None, store).await?,
+        })
     }
 
     /// Fork the current session.
@@ -56,10 +59,10 @@ impl Session {
     /// stored.
     ///
     pub async fn expose_key_secret(&self) -> Option<UserKeySecret> {
-        self.auth
+        self.auth_store()
             .read()
             .await
-            .as_ref()
+            .get()
             .and_then(|auth| auth.key_secret.clone())
     }
 
@@ -71,8 +74,12 @@ impl Session {
     ///
     pub async fn logout(&self) -> Result<(), ApiServiceError> {
         self.api.delete_auth().await?;
-        *self.auth.write().await = None;
+        self.auth_store().write().await.clear().await?;
         Ok(())
+    }
+
+    pub(crate) fn auth_store(&self) -> &AsyncRwLock<CachedStore> {
+        self.api.auth_store()
     }
 }
 

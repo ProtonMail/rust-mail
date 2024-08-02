@@ -54,7 +54,7 @@ pub mod requests;
 pub mod response_data;
 pub mod responses;
 
-use crate::auth::Auth;
+use crate::auth::{CachedStore, Store, StoreError};
 use crate::service::{
     ApiResponse, ApiService, ApiServiceError, Body, Json, Request, ServiceError, NO_PARAMS,
 };
@@ -149,7 +149,7 @@ pub struct Config {
 #[derive(Clone)]
 pub struct Proton {
     /// The current authentication context.
-    auth: Arc<AsyncRwLock<Option<Auth>>>,
+    auth: Arc<AsyncRwLock<CachedStore>>,
 
     /// The base URL for the external service.
     base_url: Url,
@@ -215,7 +215,7 @@ impl ApiService for Proton {
                 // released, and then we can retry the request.
                 let mut refresh_already_in_progress = false;
                 #[allow(clippy::single_match_else)]
-                let mut auth_lock = match self.auth.try_write() {
+                let mut auth_store = match self.auth.try_write() {
                     Ok(lock) => lock,
                     Err(_) => {
                         refresh_already_in_progress = true;
@@ -226,7 +226,7 @@ impl ApiService for Proton {
                 // We take the auth details, and put them back later. Meanwhile, if the
                 // refresh attempt fails, we're not logged in anyway, and so clearing the
                 // auth value at this stage is the right thing to do.
-                let Some(mut auth) = auth_lock.take() else {
+                let Some(mut auth) = auth_store.clear().await? else {
                     error!("Token refresh was requested, but there is no auth token");
                     // Return the original error, i.e. a 401 Unauthorized, if there is no token.
                     return Err(error);
@@ -277,8 +277,10 @@ impl ApiService for Proton {
                         &format!("Bearer {}", auth.access_token.expose_secret()),
                     );
                 }
-                *auth_lock = Some(auth);
-                drop(auth_lock);
+                if let Err(e) = auth_store.set(auth).await {
+                    error!("Failed to update authentication in store: {e}");
+                }
+                drop(auth_store);
                 // Retry the request. Note that there is a potential for an infinite loop
                 // here if the token refresh fails, and although there should not be a
                 // situation where the refresh succeeds and then the retry gets another 401
@@ -346,22 +348,26 @@ impl Proton {
     ///
     /// * `config`  - The API configuration options.
     /// * `headers` - The headers to send with every request.
-    /// * `auth`    - The current authentication context.
+    /// * `store`   - The authentication storage implementation.
     ///
+    /// # Errors
+    ///
+    /// Returns error if we fail to read existing authentication from the store.
     #[allow(clippy::missing_panics_doc)]
-    pub fn new(
+    pub async fn new(
         config: Config,
         headers: Option<HeaderMap>,
-        auth: Arc<AsyncRwLock<Option<Auth>>>,
-    ) -> Self {
+        store: Option<Box<dyn Store>>,
+    ) -> Result<Self, StoreError> {
         let base_url = Url::parse(&config.base_url).unwrap();
-        Self {
+        let auth = Arc::new(AsyncRwLock::new(CachedStore::new(store).await?));
+        Ok(Self {
             auth,
             base_url,
             client: Client::new(),
             config,
             headers: Arc::new(RwLock::new(headers.unwrap_or_default())),
-        }
+        })
     }
 
     /// Gets the API configuration options.
@@ -762,5 +768,10 @@ impl Proton {
             None,
         )
         .await
+    }
+
+    /// Retrieve the API authentication store
+    pub(crate) fn auth_store(&self) -> &AsyncRwLock<CachedStore> {
+        self.auth.as_ref()
     }
 }

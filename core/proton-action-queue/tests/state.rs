@@ -13,7 +13,7 @@ async fn state_preserved_after_local_change() {
     // Check if the action state is persisted after local changes and correctly transmitted
     // to subsequent follow ups.
 
-    let session = new_session();
+    let session = new_session().await;
     let queue = new_queue(new_factory::<TestAction>()).await;
 
     // Check direct execution.

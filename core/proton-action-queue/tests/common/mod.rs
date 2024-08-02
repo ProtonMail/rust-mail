@@ -33,7 +33,7 @@ pub async fn new_queue_typed<T: Action>() -> Queue {
 }
 
 /// Create a new test session with bogus values.
-pub fn new_session() -> Session {
+pub async fn new_session() -> Session {
     let config = proton_api_core::services::proton::Config {
         app_version: "TEST".to_owned(),
         base_url: "https://test.com".to_owned(),
@@ -41,7 +41,7 @@ pub fn new_session() -> Session {
         allow_http: true,
         skip_srp_proof_validation: true,
     };
-    Session::new(config)
+    Session::new(config, None).await.unwrap()
 }
 
 /// Create a new factory with an action.

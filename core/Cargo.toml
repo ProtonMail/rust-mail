@@ -12,7 +12,7 @@ members = [
 ]
 
 [workspace.dependencies]
-aes-gcm = { version = "0.10", features = ["zeroize"] }
+aes-gcm = { version = "0.10", features = ["zeroize", "std"] }
 anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.22"

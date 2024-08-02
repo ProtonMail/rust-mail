@@ -31,7 +31,7 @@ async fn queued_version_migration() {
 
     let queue = new_queue_with_stash(pool.clone(), factory_v2).await;
     assert!(queue.contains(queued_id).await.unwrap());
-    let session = new_session();
+    let session = new_session().await;
     queue.execute_all(&session).await.unwrap()
 }
 

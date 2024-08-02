@@ -11,7 +11,7 @@ use stash::stash::{Stash, Tether};
 #[tokio::test]
 async fn auto_queued_on_network_failure() {
     // check if the remote action returns a network error it is queued for execution later.
-    let session = new_session();
+    let session = new_session().await;
     let queue = new_queue_typed::<ErrorAction>().await;
 
     for error in [

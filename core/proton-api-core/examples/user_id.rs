@@ -33,7 +33,7 @@ async fn main() {
     };
     let _base_url = Url::parse(&api_env_config.base_url).expect("Invalid URL");
 
-    let session = Session::new(api_env_config);
+    let session = Session::new(api_env_config, None).await.unwrap();
 
     let mut login_flow = Flow::new(session.clone());
     login_flow

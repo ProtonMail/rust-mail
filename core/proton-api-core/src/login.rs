@@ -1,6 +1,6 @@
 #![allow(clippy::module_name_repetitions)]
 
-use crate::auth::{Auth, UserKeySecret};
+use crate::auth::{Auth, StoreError, UserKeySecret};
 use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::request_data::HumanVerificationData;
 use crate::services::proton::requests::PostAuthRequest;
@@ -59,6 +59,10 @@ pub enum LoginError {
     /// TODO: Document this variant.
     #[error("Wrong mailbox password provided")]
     WrongMailboxPassword,
+
+    /// Authentication Store operation failed.
+    #[error("Authentication Store error: {0}")]
+    AuthStore(#[from] StoreError),
 }
 
 impl ServiceError for LoginError {}
@@ -153,7 +157,7 @@ impl Flow {
                 key_secret: None,
             };
 
-            *self.session.auth.write().await = Some(auth);
+            self.session.auth_store().write().await.set(auth).await?;
         }
         self.tfa_status = Some(auth_response.tfa.enabled);
         self.password_mode = Some(auth_response.password_mode);
@@ -335,8 +339,10 @@ impl Flow {
         }
 
         // Update the auth state with the derived user secret.
-        if let Some(ref mut auth) = *self.session.auth.write().await {
+        let mut guard = self.session.auth_store().write().await;
+        if let Some(mut auth) = guard.get().cloned() {
             auth.key_secret = Some(key_secret);
+            guard.set(auth).await?;
         }
 
         // The password is no longer needed, erase it.

@@ -8,7 +8,7 @@ use aes_gcm::{
 };
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use proton_api_core::auth::UserKeySecret;
+use proton_api_core::auth::{Auth, UserKeySecret};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
@@ -32,6 +32,35 @@ pub struct DecryptedUserSession {
     pub access_token: SecretString,
     pub key_secret: Option<UserKeySecret>,
     pub scopes: String,
+}
+
+impl From<Auth> for DecryptedUserSession {
+    fn from(value: Auth) -> Self {
+        Self {
+            session_id: value.uid.into(),
+            user_id: value.user_id.into(),
+            name: None,
+            email: value.email,
+            refresh_token: value.refresh_token.into(),
+            access_token: value.access_token.into(),
+            key_secret: value.key_secret,
+            scopes: value.scope,
+        }
+    }
+}
+
+impl From<DecryptedUserSession> for Auth {
+    fn from(value: DecryptedUserSession) -> Self {
+        Auth {
+            access_token: value.access_token.into(),
+            email: value.email,
+            key_secret: value.key_secret,
+            refresh_token: value.refresh_token.into(),
+            scope: value.scopes,
+            uid: value.session_id.into(),
+            user_id: value.user_id.into(),
+        }
+    }
 }
 
 impl DecryptedUserSession {

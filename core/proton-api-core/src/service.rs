@@ -1,6 +1,7 @@
 #![allow(async_fn_in_trait)]
 #![allow(clippy::module_name_repetitions)]
 
+use crate::auth::StoreError;
 use bytes::Bytes;
 use colored::Colorize;
 use regex::Regex;
@@ -175,6 +176,10 @@ pub enum ApiServiceError {
     /// An unsupported HTTP method was specified.
     #[error("Unsupported HTTP method: {0}")]
     UnsupportedHttpMethod(Method),
+
+    /// Authentication store operation failed.
+    #[error("Authentication Store error: {0}")]
+    AuthStore(#[from] StoreError),
 
     /// An unknown error has occurred. These should be monitored and specific
     /// handling added in.

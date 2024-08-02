@@ -1,4 +1,5 @@
 //! Core context contains all the necessary information to retrieve or create new sessions.
+use crate::auth_store::AuthStore;
 use crate::cache::CacheError;
 use crate::datatypes::RemoteId;
 use crate::db::migrations::{migrate_core_db, migrate_session_db};
@@ -22,7 +23,6 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
-use tokio::sync::RwLock as AsyncRwLock;
 use tracing::{debug, error, Level};
 use url::Url;
 
@@ -105,6 +105,17 @@ impl Context {
         let stash = Stash::new(Some(&session_db_path))?;
         migrate_session_db(&stash).await?;
 
+        let api = Proton::new(
+            ApiConfig {
+                base_url: api_url.to_string(),
+                ..Default::default()
+            },
+            None,
+            None,
+        )
+        .await
+        .map_err(ApiServiceError::from)?;
+
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             network_connected: AtomicBool::new(true),
@@ -112,15 +123,8 @@ impl Context {
             key_chain,
             session_stash: stash,
             user_db_initializers: initializers,
-            api: Proton::new(
-                ApiConfig {
-                    base_url: api_url.to_string(),
-                    ..Default::default()
-                },
-                None,
-                Arc::new(AsyncRwLock::new(None)),
-            ),
             network_callback,
+            api,
         }))
     }
 
@@ -133,17 +137,30 @@ impl Context {
     }
 
     /// Create a new login flow for a new user.
+    ///
     /// # Errors
+    ///
     /// Returns error if there is no encryption key in the keychain.
-    pub fn new_login_flow(&self) -> CoreContextResult<Flow> {
+    pub async fn new_login_flow(&self) -> CoreContextResult<Flow> {
         // Check if we have an encryption key
         let _ = self.get_encryption_key()?;
         let _core_session = Session::new(None, self.session_stash.clone(), self.key_chain.clone());
 
-        let session = ApiCoreSession::new(ApiConfig {
-            base_url: self.api.base_url().to_string(),
-            ..Default::default()
-        });
+        let auth_store = AuthStore::new(
+            self.session_stash.clone(),
+            Arc::clone(&self.key_chain),
+            None,
+        );
+
+        let session = ApiCoreSession::new(
+            ApiConfig {
+                base_url: self.api.base_url().to_string(),
+                ..Default::default()
+            },
+            Some(Box::new(auth_store)),
+        )
+        .await
+        .map_err(ApiServiceError::from)?;
         Ok(Flow::new(session))
     }
 
@@ -200,11 +217,23 @@ impl Context {
             self.session_stash.clone(),
             self.key_chain.clone(),
         );
+
+        let auth_store = AuthStore::new(
+            self.session_stash.clone(),
+            Arc::clone(&self.key_chain),
+            Some(user_id.clone()),
+        );
+
         debug!("Creating session");
-        let session = ApiCoreSession::new(ApiConfig {
-            base_url: self.api.base_url().to_string(),
-            ..Default::default()
-        });
+        let session = ApiCoreSession::new(
+            ApiConfig {
+                base_url: self.api.base_url().to_string(),
+                ..Default::default()
+            },
+            Some(Box::new(auth_store)),
+        )
+        .await
+        .map_err(ApiServiceError::from)?;
         UserContext::new(session, stash, user_id, cache_path.into(), cache_size)
     }
 

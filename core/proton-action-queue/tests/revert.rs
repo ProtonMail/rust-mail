@@ -11,7 +11,7 @@ use stash::stash::{Stash, Tether};
 #[tokio::test]
 async fn network_failure_causes_revert_on_apply() {
     // Check that if remote fails to execute when action is applied, local state is reverted.
-    let session = new_session();
+    let session = new_session().await;
     let queue = new_queue_typed::<RevertAction>().await;
 
     let key = "foo";
@@ -43,7 +43,7 @@ async fn network_failure_causes_revert_on_apply() {
 #[tokio::test]
 async fn network_failure_causes_revert_on_queue() {
     // Check that if remote fails to execute when action is queued, local state is reverted.
-    let session = new_session();
+    let session = new_session().await;
     let queue = new_queue_typed::<RevertAction>().await;
 
     let key = "foo";
