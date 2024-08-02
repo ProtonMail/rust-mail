@@ -73,38 +73,38 @@ build-wasm:
     when: always
     expire_in: 4 hrs
 
-#build-ios:
-#  tags:
-#    - inbox-tart
-#  image: "inbox-rust:1.78.0"
-#  stage: build
-#  script:
-#    - !reference [.script-config-git, script]
-#    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework"
-#    - CRATE_VERSION=$(cargo pkgid --manifest-path=proton-mail-uniffi/Cargo.toml | cut -d "#" -f2)
-#    - cd "./tmp/ios-framework/$CRATE_VERSION" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
-#
-#  artifacts:
-#    name: proton-mail-ios
-#    paths:
-#      - tmp/ios-framework
-#    when: always
-#    expire_in: 4 hrs
-#
-#build-android:
-#  stage: build
-#  script:
-#    - !reference [.script-config-git, script]
-#    - rust-build/build_android.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./proton-mail-uniffi/android/lib/src/main/
-#    - ./proton-mail-uniffi/android/build-android-archive.sh
-#
-#  artifacts:
-#    name: proton-mail-android
-#    paths:
-#      - ./proton-mail-uniffi/android/lib/src/main
-#      - ./proton-mail-uniffi/android/lib/build/
-#    when: always
-#    expire_in: 4 hrs
+build-ios:
+  tags:
+    - inbox-tart
+  image: "inbox-rust:1.78.0"
+  stage: build
+  script:
+    - !reference [.script-config-git, script]
+    - rust-build/build_ios_framework_uniffi.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml "./tmp/ios-framework"
+    - CRATE_VERSION=$(cargo pkgid --manifest-path=proton-mail-uniffi/Cargo.toml | cut -d "#" -f2)
+    - cd "./tmp/ios-framework/$CRATE_VERSION" && xcodebuild -scheme proton_mail_uniffi -destination generic/platform=iOS -configuration="Release build"
+
+  artifacts:
+    name: proton-mail-ios
+    paths:
+      - tmp/ios-framework
+    when: always
+    expire_in: 4 hrs
+
+build-android:
+  stage: build
+  script:
+    - !reference [.script-config-git, script]
+    - rust-build/build_android.sh proton-mail-uniffi proton-mail-uniffi/uniffi.toml ./proton-mail-uniffi/android/lib/src/main/
+    - ./proton-mail-uniffi/android/build-android-archive.sh
+
+  artifacts:
+    name: proton-mail-android
+    paths:
+      - ./proton-mail-uniffi/android/lib/src/main
+      - ./proton-mail-uniffi/android/lib/build/
+    when: always
+    expire_in: 4 hrs
 
 pages:
   stage: doc
@@ -130,41 +130,41 @@ pages:
       when: manual
       allow_failure: true
 
-#publish-android:
-#  stage: deploy
-#  tags:
-#    - xlarge-k8s
-#  rules:
-#    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
-#      when: always
-#      allow_failure: true
-#  script:
-#    - ./proton-mail-uniffi/android/publish.sh
-#  dependencies:
-#    - build-android
-#  needs:
-#    - build-android
-#  artifacts:
-#    name: proton-mail-android-lib
-#    paths:
-#      - ./proton-mail-uniffi/android/lib/build/outputs/
-#    when: always
-#    expire_in: 4 hrs
-#
-#publish-ios:
-#  stage: deploy
-#  tags:
-#    - xlarge-k8s
-#  rules:
-#    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
-#      when: always
-#      allow_failure: true
-#  script:
-#    - ./proton-mail-uniffi/ios/publish.sh
-#  dependencies:
-#    - build-ios
-#  needs:
-#    - build-ios
+publish-android:
+  stage: deploy
+  tags:
+    - xlarge-k8s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: always
+      allow_failure: true
+  script:
+    - ./proton-mail-uniffi/android/publish.sh
+  dependencies:
+    - build-android
+  needs:
+    - build-android
+  artifacts:
+    name: proton-mail-android-lib
+    paths:
+      - ./proton-mail-uniffi/android/lib/build/outputs/
+    when: always
+    expire_in: 4 hrs
+
+publish-ios:
+  stage: deploy
+  tags:
+    - xlarge-k8s
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/'
+      when: always
+      allow_failure: true
+  script:
+    - ./proton-mail-uniffi/ios/publish.sh
+  dependencies:
+    - build-ios
+  needs:
+    - build-ios
 
 # ------------ Crate Publishing -----------------------------------------------------------------------------------
 # Crates are listed in the order they should be published
