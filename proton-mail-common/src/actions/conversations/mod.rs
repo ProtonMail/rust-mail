@@ -34,9 +34,6 @@ struct ActionData {
     ids: Vec<u64>,
     /// Resolved remote conversation ids.
     remote_ids: Vec<RemoteId>,
-    #[serde(skip)]
-    /// Contains the list of conversations which did not successfully apply on the server.
-    failed_ids: Vec<RemoteId>,
 }
 
 impl ActionData {
@@ -47,7 +44,6 @@ impl ActionData {
             label_id,
             remote_label_id: None,
             remote_ids: vec![],
-            failed_ids: vec![],
         }
     }
 
@@ -75,13 +71,6 @@ impl ActionData {
         self.remote_ids = conv_ids;
 
         Ok(())
-    }
-
-    /// Filter server `responses` for conversations on which the operation failed.
-    ///
-    /// Results are stored on [`self.failed_ids`].
-    pub fn filter_responses(&mut self, responses: Vec<OperationResult>) {
-        self.failed_ids = filter_conversation_responses(responses)
     }
 }
 
