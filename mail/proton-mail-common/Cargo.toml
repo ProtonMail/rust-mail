@@ -54,6 +54,7 @@ wiremock = { workspace = true }
 
 [features]
 uniffi = ["dep:uniffi"]
+integration_tests = []
 
 # todo: remove when pedantic-ified and uncommend the [lints] section
 [lints.clippy]
