@@ -25,7 +25,7 @@
 //! use proton_action_queue::queue::{ActionStatus, Queue};
 //! use proton_api_core::service::ApiServiceError;
 //! use proton_api_core::session::Session;
-//! use stash::stash::Tether;
+//! use stash::stash::{Stash, Tether};
 //!
 //! #[derive(Serialize, Deserialize)]
 //! struct MyAction {
@@ -74,11 +74,7 @@
 //!         todo!()
 //!     }
 //!
-//!     async fn apply_remote(&self, action: &mut Self::Action, session: &Session) -> Result<(),<Self::Action as Action>::Error> {
-//!         todo!()
-//!     }
-//!
-//!     async fn apply_local_post_remote(&self, action: &mut Self::Action, tx: &Tether) -> Result<<Self::Action as Action>::Output,<Self::Action as Action>::Error> {
+//!     async fn apply_remote(&self, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::Output,<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //! }

@@ -2,11 +2,11 @@ mod common;
 
 use crate::common::DefaultError;
 use common::{new_queue_typed, new_session};
-use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
+use proton_action_queue::action::{self, Action, DefaultVersionConverter, Handler, Type};
 use proton_action_queue::queue::ActionStatus;
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 
 #[tokio::test]
 async fn auto_queued_on_network_failure() {
@@ -85,7 +85,8 @@ impl Handler for ErrorActionHandler {
         &self,
         action: &mut Self::Action,
         _: &Session,
-    ) -> Result<(), DefaultError> {
+        _: &Stash,
+    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         use proton_api_core::service::ApiServiceError;
         let err = match action.error_type {
             ErrorType::Timeout => ApiServiceError::Timeout(String::new()),
@@ -99,13 +100,5 @@ impl Handler for ErrorActionHandler {
         };
 
         Err(err.into())
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        _: &mut Self::Action,
-        _: &Tether,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
-        panic!("should not be called");
     }
 }

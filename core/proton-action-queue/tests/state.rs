@@ -6,7 +6,7 @@ use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type
 use proton_action_queue::queue::ActionStatus;
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 
 #[tokio::test]
 async fn state_preserved_after_local_change() {
@@ -62,7 +62,6 @@ struct TestActionHandler {}
 
 const ACTION_VALUE: u32 = 10;
 const ACTION_VALUE_AFTER_LOCAL_APPLY: u32 = 30;
-const ACTION_VALUE_AFTER_REMOTE_APPLY: u32 = 1048;
 const ACTION_VALUE_FINAL: u32 = 512;
 
 const ACTION_KEY: &str = "bar";
@@ -94,19 +93,15 @@ impl Handler for TestActionHandler {
         &self,
         action: &mut Self::Action,
         _: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
-        action.v = ACTION_VALUE_AFTER_REMOTE_APPLY;
-        Ok(())
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        action: &mut Self::Action,
-        tx: &Tether,
+        stash: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
-        assert_eq!(action.v, ACTION_VALUE_AFTER_REMOTE_APPLY);
-        tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL).await?;
+        assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
+
+        stash
+            .connection()
+            .ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL)
+            .await?;
+
         Ok(ACTION_VALUE_FINAL)
     }
 }

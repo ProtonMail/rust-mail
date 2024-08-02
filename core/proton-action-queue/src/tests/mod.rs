@@ -1,6 +1,6 @@
 use crate::action::{Action, Handler};
 use proton_api_core::session::Session;
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 use std::marker::PhantomData;
 
 mod db;
@@ -28,14 +28,11 @@ where
         Ok(())
     }
 
-    async fn apply_remote(&self, _: &mut Self::Action, _: &Session) -> Result<(), T::Error> {
-        Ok(())
-    }
-
-    async fn apply_local_post_remote(
+    async fn apply_remote(
         &self,
         _: &mut Self::Action,
-        _: &Tether,
+        _: &Session,
+        _: &Stash,
     ) -> Result<<T as Action>::Output, T::Error> {
         Ok(T::Output::default())
     }

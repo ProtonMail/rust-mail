@@ -6,7 +6,7 @@ use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 
 #[tokio::test]
 async fn network_failure_causes_revert_on_apply() {
@@ -130,16 +130,9 @@ impl Handler for RevertActionHandler {
         &self,
         _: &mut Self::Action,
         _: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        _: &Stash,
+    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         use proton_api_core::service::ApiServiceError;
         Err(ApiServiceError::UnknownError("it failed".to_owned()).into())
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        _: &mut Self::Action,
-        _: &Tether,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
-        panic!("should not be called");
     }
 }

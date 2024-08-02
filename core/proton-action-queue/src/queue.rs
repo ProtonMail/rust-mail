@@ -621,54 +621,48 @@ impl Queue {
 
         //1) Attempt to execute on remote
         debug!("Applying action on remote");
-        if let Err(e) = handler.apply_remote(action, session).await {
-            error!("Failed to apply on server: {e}");
-            if e.is_network_failure() {
-                // if this failed due to network error we should leave it in the queue.
-                return Ok(ActionStatus::Queued(id));
-            }
 
-            // Revert local changes and remove action from queue.
-            if let Err(e) = async {
+        // let post_remote: Result< = post_remote(handler, action, session).await;
+        let result = handler.apply_remote(action, session, &self.stash).await;
+
+        match result {
+            Ok(result) => {
+                // Note: While we do our bets to check whether this action is still around at the time we
+                // are executing this (e.g: concurrent cancel) it is not guaranteed that we will actually
+                // be able to observe this reflected in the database at the time of the query.
+                self.check_cancelled(&tether, id).await?;
+
                 tether.transaction().await?;
-                handler
-                    .revert_local(action, &tether)
-                    .await
-                    .map_err(ActionError::<T>::Action)?;
+                StoredAction::delete(&tether, id).await?;
                 tether.commit().await?;
-                Ok::<(), ActionError<T>>(())
-            }
-            .await
-            {
-                error!("Failed to revert local changes: {e}");
-            }
-            return Err(ActionError::Action(e));
-        }
 
-        // Note: While we do our bets to check whether this action is still around at the time we
-        // are executing this (e.g: concurrent cancel) it is not guaranteed that we will actually
-        // be able to observe this reflected in the database at the time of the query.
-        self.check_cancelled(&tether, id).await?;
+                Ok(ActionStatus::Executed(result))
+            }
+            Err(e) => {
+                error!("Failed to apply on server: {e}");
+                if e.is_network_failure() {
+                    // if this failed due to network error we should leave it in the queue.
+                    return Ok(ActionStatus::Queued(id));
+                }
 
-        debug!("Applying local changes after remote update");
-        //2) apply local changes after remote operation and delete action.
-        let result = async {
-            tether.transaction().await?;
-            let r = handler
-                .apply_local_post_remote(action, &tether)
+                // Revert local changes and remove action from queue.
+                if let Err(e) = async {
+                    tether.transaction().await?;
+                    handler
+                        .revert_local(action, &tether)
+                        .await
+                        .map_err(ActionError::<T>::Action)?;
+                    tether.commit().await?;
+                    Ok::<(), ActionError<T>>(())
+                }
                 .await
-                .map_err(ActionError::Action)?;
-            StoredAction::delete(&tether, id).await?;
-            tether.commit().await?;
-            Ok(r)
-        }
-        .await
-        .map_err(|e: ActionError<T>| {
-            error!("Failed to apply post remote: {e}");
-            e
-        })?;
+                {
+                    error!("Failed to revert local changes: {e}");
+                }
 
-        Ok(ActionStatus::Executed(result))
+                Err(ActionError::Action(e))
+            }
+        }
     }
 
     /// Check if this action was cancelled/removed.

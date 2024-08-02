@@ -8,7 +8,7 @@ use proton_action_queue::action::{
 use proton_action_queue::queue::QueuedError;
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 
 #[tokio::test]
 async fn cancel_causes_revert() {
@@ -182,14 +182,7 @@ impl Handler for CancelActionHandler {
         &self,
         _: &mut Self::Action,
         _: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        panic!("should not be called");
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        _: &mut Self::Action,
-        _: &Tether,
+        _: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -238,14 +231,7 @@ impl Handler for ChainCancelActionHandler {
         &self,
         _: &mut Self::Action,
         _: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        panic!("should not be called");
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        _: &mut Self::Action,
-        _: &Tether,
+        _: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }

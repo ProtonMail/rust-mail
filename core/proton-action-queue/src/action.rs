@@ -6,7 +6,7 @@ use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, 
 use rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -255,6 +255,7 @@ pub trait Handler: Default + 'static {
     ) -> Result<(), <Self::Action as Action>::Error>;
 
     /// Apply the `action` on the server with the given `session`.
+    /// Adjust local data if necessary.
     ///
     /// This function is always called after [`Handler::apply_local()`].
     ///
@@ -270,19 +271,7 @@ pub trait Handler: Default + 'static {
         &self,
         action: &mut Self::Action,
         session: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error>;
-
-    /// Apply any remaining changes from `action` to the local database with the given `tx` transaction.
-    ///
-    /// This function is called if [`Handler::apply_remote`] completes successfully.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the operation failed.
-    async fn apply_local_post_remote(
-        &self,
-        action: &mut Self::Action,
-        tx: &Tether,
+        stash: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error>;
 }
 

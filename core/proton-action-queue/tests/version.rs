@@ -8,7 +8,7 @@ use proton_action_queue::action::{
 };
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 
 const STARTING_VALUE: u32 = 30;
 const END_VALUE: &str = "foo=30";
@@ -76,14 +76,7 @@ impl Handler for V1ActionHandler {
         &self,
         _: &mut Self::Action,
         _: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        panic!("should not be called");
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        _: &mut Self::Action,
-        _: &Tether,
+        _: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
@@ -143,16 +136,9 @@ impl Handler for V2ActionHandler {
         &self,
         action: &mut Self::Action,
         _: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        assert_eq!(action.value, END_VALUE);
-        Ok(())
-    }
-
-    async fn apply_local_post_remote(
-        &self,
-        _: &mut Self::Action,
-        _: &Tether,
+        _: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+        assert_eq!(action.value, END_VALUE);
         Ok(())
     }
 }
