@@ -11,6 +11,7 @@ pub mod datatypes;
 mod events;
 pub mod models;
 mod proton_color;
+pub mod sidebar;
 mod user_context;
 
 #[cfg(test)]
@@ -18,6 +19,7 @@ mod tests;
 
 pub use context::*;
 pub use mailbox::*;
+pub use sidebar::*;
 pub use user_context::*;
 
 // re-exports

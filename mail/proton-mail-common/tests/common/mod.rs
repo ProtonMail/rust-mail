@@ -7,6 +7,7 @@ pub mod init;
 mod messages;
 
 use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
+use crate::common::account::{TEST_USER_KEY_ID, TEST_USER_PASSWORD};
 use proton_api_core::auth::{SecretString, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Config;
@@ -15,10 +16,14 @@ use proton_core_common::db::session::{
     DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey,
 };
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
+use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey};
+use proton_crypto_account::proton_crypto::new_srp_provider;
+use proton_crypto_account::salts::{KeySalt, Salt, Salts};
 use proton_mail_common::{MailContext, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use stash::orm::Model;
 use stash::stash::Stash;
+use std::iter;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::thread::Scope;
@@ -174,5 +179,35 @@ impl TestContext {
             .user_context_from_session(&self.encrypted_user_session)
             .await
             .expect("failed to create user context")
+    }
+}
+
+pub fn test_user_secret() -> UserKeySecret {
+    let salts = Salts::new(iter::once(Salt {
+        id: KeyId::from(TEST_USER_KEY_ID),
+        key_salt: Some(KeySalt::from("6bIzN4A8bOwmsiEuCPj74g==".to_owned())),
+    }));
+    let locked_key = test_user_key();
+    let srp_provider = new_srp_provider();
+    salts
+        .salt_for_key(&srp_provider, &locked_key.id, TEST_USER_PASSWORD.as_bytes())
+        .map(UserKeySecret)
+        .unwrap()
+}
+
+fn test_user_key() -> LockedKey {
+    LockedKey  {
+        id: KeyId::from("aTdvCsWuv2V_YQQ5nLKsWPkHWMrlHfUxL9aTWakz6blhwI0q_j4MKnxO29xMQ4slCRvo3lFLE8ljb3kvMP2PQQ=="),
+        version: 3,
+        private_key: ArmoredPrivateKey::from("-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: ProtonMail\n\nxYYEZie3jRYJKwYBBAHaRw8BAQdAAp+4PE1Sf5V95XrIY/P2dUNk1TOojoEG\nLuuOzULTa1v+CQMINYn0u3DCV01gjT+Noe2HzLxwP2hieZC1aoGCxSrLn0fs\nLeShqv2pCPZ+SdrjXB5s5Rq7OP5Kr/2gN+0KS0yLGdyirFZWe6m5T8j20UQ5\n0M07bm90X2Zvcl9lbWFpbF91c2VAZG9tYWluLnRsZCA8bm90X2Zvcl9lbWFp\nbF91c2VAZG9tYWluLnRsZD7CjAQQFgoAPgWCZie3jQQLCQcICZA4nKgbRZBl\nGQMVCAoEFgACAQIZAQKbAwIeARYhBOZJEArPLqrMMxX8fzicqBtFkGUZAADk\n/AD+LA6NW1K+Z3IT66/DEtjH0cmw6HNqxkBdT7kaL2o5pAMA/j9b4JCurWk/\n62MBM4I9RwXzSo8lmgPiYwPp4d/xgEsMx4sEZie3jRIKKwYBBAGXVQEFAQEH\nQHvLC7RWIDsorX5ZmYwjZbUhbXnEcO2sYt8OFaIh5KtHAwEIB/4JAwhKivkG\nshycUGA6wZtPR2HqO6+jvvSlRau/g2eZnWqhnvB4iIYTcD+CPpcPnWrrNgTz\nAU+kQ5sVrP6OiKKHIkUvHT5+MwelTbcpievGx2zGwngEGBYKACoFgmYnt40J\nkDicqBtFkGUZApsMFiEE5kkQCs8uqswzFfx/OJyoG0WQZRkAAJ6BAQDv4nBl\nNnj0W7XiAjiwRmVrY/sdybelB6j01p7UrcVAxQEAtEmT2cSIScVdWH1j3H9l\n0gGE7amH+cm6CjXOA7+Uwwc=\n=RGJ0\n-----END PGP PRIVATE KEY BLOCK-----\n".to_owned()),
+        token: None,
+        signature: None,
+        activation: None,
+        primary: true,
+        active: true,
+        flags: None,
+        recovery_secret: None,
+        recovery_secret_signature: None,
+        address_forwarding_id: None,
     }
 }
