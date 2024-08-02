@@ -5,6 +5,7 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::Flow;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::session::EncryptedUserSession;
@@ -181,6 +182,21 @@ impl MailContext {
     /// Path where mail content should be cached for user with `user_id`.
     pub fn mail_cache_path(&self, user_id: &RemoteId) -> PathBuf {
         self.mail_cache_path.join(user_id.to_string())
+    }
+
+    /// Get the core context.
+    pub fn core_context(&self) -> &Arc<Context> {
+        &self.core_context
+    }
+
+    /// Get the API service.
+    pub fn api(&self) -> &Proton {
+        self.core_context.api()
+    }
+
+    /// Get the database connection.
+    pub fn stash(&self) -> &Stash {
+        self.core_context.stash()
     }
 }
 

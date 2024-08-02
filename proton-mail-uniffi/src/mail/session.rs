@@ -6,6 +6,7 @@ use crate::mail::{LoginFlow, MailUserSession};
 use anyhow::anyhow;
 use proton_action_queue::queue::{Error as QueueError, QueuedError};
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
 use proton_core_common::db::session::SessionEncryptionKey;
 use proton_event_loop::EventLoopError;
@@ -13,7 +14,7 @@ use proton_mail_common::actions::ActionError;
 use proton_mail_common::db::DBMigrationError;
 use proton_mail_common::MailContextError;
 use proton_mail_common::{AppError, MailContext};
-use stash::stash::StashError;
+use stash::stash::{Stash, StashError};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;
@@ -208,6 +209,26 @@ impl MailSession {
     /// Externally notify the context that the network connection has changed.
     pub fn set_network_connected(&self, online: bool) {
         self.ctx.set_network_connected(online);
+    }
+}
+
+impl MailSession {
+    /// Get the mail context.
+    #[must_use]
+    pub fn ctx(&self) -> &MailContext {
+        &self.ctx
+    }
+
+    /// Get the API service.
+    #[must_use]
+    pub fn api(&self) -> &Proton {
+        self.ctx.api()
+    }
+
+    /// Get the database connection.
+    #[must_use]
+    pub fn stash(&self) -> &Stash {
+        self.ctx.stash()
     }
 }
 
