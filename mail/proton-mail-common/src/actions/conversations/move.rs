@@ -6,7 +6,7 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 use tracing::error;
 
 /// Action which moves conversations between two labels.
@@ -24,9 +24,6 @@ pub struct Move {
     ids: Vec<u64>,
     /// Resolved remote conversation ids.
     remote_ids: Vec<RemoteId>,
-    #[serde(skip)]
-    /// Remote conversations id which failed to apply.
-    failed_ids: Vec<RemoteId>,
 }
 
 impl Move {
@@ -42,7 +39,6 @@ impl Move {
             destination_label_id,
             ids: Vec::from_iter(ids),
             remote_ids: vec![],
-            failed_ids: vec![],
             remote_source_label_id: None,
             remote_destination_id: None,
         }
@@ -114,7 +110,8 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         action: &mut Self::Action,
         session: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        stash: &Stash,
+    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         let responses = Conversation::apply_label_to_multiple_remote::<Proton>(
             action.remote_destination_id.clone().expect("should be set"),
             action.remote_ids.clone(),
@@ -123,28 +120,27 @@ impl proton_action_queue::action::Handler for Handler {
         )
         .await?;
 
-        action.failed_ids = filter_conversation_responses(responses);
-        Ok(())
-    }
+        let failed_ids = filter_conversation_responses(responses);
 
-    async fn apply_local_post_remote(
-        &self,
-        action: &mut Self::Action,
-        tx: &Tether,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
-        if action.failed_ids.is_empty() {
+        if failed_ids.is_empty() {
             return Ok(());
         }
 
-        error!("Move operation failed for: {:?}", action.failed_ids);
-        let local_ids = Conversation::find_local_ids(action.failed_ids.clone(), tx).await?;
+        error!("Move operation failed for: {:?}", failed_ids);
+
+        let tx = stash.transaction().await?;
+        let local_ids = Conversation::find_local_ids(failed_ids.clone(), &tx).await?;
+
         Conversation::move_conversations(
             action.destination_label_id,
             action.source_label_id,
             local_ids,
-            tx,
+            &tx,
         )
         .await?;
+
+        tx.commit().await?;
+
         Ok(())
     }
 }

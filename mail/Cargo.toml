@@ -45,13 +45,13 @@ url = "2.5.0"
 velcro = "0.5.4"
 wiremock = "0.6.0"
 
-#[patch."https://gitlab.protontech.ch/rust/proton-api-core.git"]
-#proton-action-queue = { path = "../proton-api-core/proton-action-queue" }
-#proton-api-core = { path = "../proton-api-core/proton-api-core" }
-#proton-core-common = { path = "../proton-api-core/proton-core-common" }
-#proton-event-loop = { path = "../proton-api-core/proton-event-loop" }
-#proton-sqlite3 = { path = "../proton-api-core/proton-sqlite3" }
-#stash = { path = "../proton-api-core/stash" }
+# [patch."proton"]
+# proton-action-queue = { path = "../proton-api-core/proton-action-queue" }
+# proton-api-core = { path = "../proton-api-core/proton-api-core" }
+# proton-core-common = { path = "../proton-api-core/proton-core-common" }
+# proton-event-loop = { path = "../proton-api-core/proton-event-loop" }
+# proton-sqlite3 = { path = "../proton-api-core/proton-sqlite3" }
+# stash = { path = "../proton-api-core/stash" }
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
@@ -77,4 +77,4 @@ wrong_self_convention = "warn"
 lto = true
 codegen-units = 1
 panic = "abort"
-opt-level = "z"  # Optimize for size.
+opt-level = "z"   # Optimize for size.

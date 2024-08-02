@@ -5,8 +5,10 @@ use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use serde::{Deserialize, Serialize};
-use stash::stash::Tether;
+use stash::stash::{Stash, Tether};
 use tracing::error;
+
+use super::filter_conversation_responses;
 
 /// Action to mark conversations as unread.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -59,35 +61,30 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         action: &mut Self::Action,
         session: &Session,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+        stash: &Stash,
+    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         let response = Conversation::mark_multiple_as_unread_remote::<Proton>(
             action.0.remote_ids.clone(),
             session.api(),
         )
         .await?;
 
-        action.0.filter_responses(response);
+        let failed_ids = filter_conversation_responses(response);
 
-        Ok(())
-    }
+        if !failed_ids.is_empty() {
+            error!("Mark unread operation failed for: {:?}", failed_ids);
 
-    async fn apply_local_post_remote(
-        &self,
-        action: &mut Self::Action,
-        tx: &Tether,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
-        if !action.0.failed_ids.is_empty() {
-            error!(
-                "Mark unread operation failed for: {:?}",
-                action.0.failed_ids
-            );
-            let local_ids = Conversation::find_local_ids(action.0.failed_ids.clone(), tx).await?;
-            Conversation::mark_multiple_as_read(local_ids, tx)
+            let tx = stash.transaction().await?;
+            let local_ids = Conversation::find_local_ids(failed_ids.clone(), &tx).await?;
+
+            Conversation::mark_multiple_as_read(local_ids, &tx)
                 .await
                 .map_err(|e| {
                     error!("Failed to rollback failed conversations: {e}");
                     e
                 })?;
+
+            tx.commit().await?;
         }
         Ok(())
     }
