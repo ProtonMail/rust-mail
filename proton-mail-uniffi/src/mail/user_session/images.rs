@@ -2,6 +2,7 @@ use crate::mail::datatypes::MailSettings;
 use crate::mail::MailUserSession;
 use crate::mail::{MailSessionError, MailSessionResult};
 use proton_core_common::datatypes::LightOrDarkMode;
+use std::os::unix::ffi::OsStrExt;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -46,7 +47,7 @@ impl MailUserSession {
                 format,
             )
             .await
-            .map(|v| v.map(|v| v.to_vec()))?)
+            .map(|v| v.map(|v| v.as_os_str().as_bytes().to_vec()))?)
     }
 }
 

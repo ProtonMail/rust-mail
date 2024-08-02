@@ -20,6 +20,7 @@ proton-core-common = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-mail-common = { workspace = true }
 proton-mail-message-detector = { workspace = true }
+serde_json = { workspace = true }
 smart-default = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }
