@@ -36,6 +36,11 @@
 //!
 //! # Notable exclusions
 //!
+//! The following types are excluded from export via UniFFI, as they do not need
+//! to be used outside of the Rust internals:
+//!
+//!   - [`ConversationLabel`](proton_core_common::models::ConversationLabel)
+//!
 //! The following fields are excluded from represented types (in addition to
 //! internal database fields):
 //!
@@ -73,8 +78,7 @@ use proton_mail_common::datatypes::{
     ViewMode as RealViewMode,
 };
 use proton_mail_common::models::{
-    Attachment as RealAttachment, Conversation as RealConversation,
-    ConversationLabel as RealConversationLabel, Label as RealLabel,
+    Attachment as RealAttachment, Conversation as RealConversation, Label as RealLabel,
     MailSettings as RealMailSettings, Message as RealMessage,
     MessageBodyMetadata as RealMessageBodyMetadata,
 };
@@ -1127,90 +1131,6 @@ impl From<RealConversationCount> for ConversationCount {
             label_id: value.label_id.into(),
             total: value.total,
             unread: value.unread,
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct ConversationLabel {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
-    pub local_id: Option<u64>,
-
-    /// TODO: Document this field.
-    pub local_conversation_id: Option<u64>,
-
-    /// TODO: Document this field.
-    pub remote_conversation_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
-    pub local_label_id: Option<u64>,
-
-    /// TODO: Document this field.
-    pub remote_label_id: Option<LabelId>,
-
-    /// TODO: Document this field.
-    pub context_expiration_time: u64,
-
-    /// TODO: Document this field.
-    pub context_num_attachments: u64,
-
-    /// TODO: Document this field.
-    pub context_num_messages: u64,
-
-    /// TODO: Document this field.
-    pub context_num_unread: u64,
-
-    /// TODO: Document this field.
-    pub context_size: u64,
-
-    /// TODO: Document this field.
-    pub context_snooze_time: u64,
-
-    /// TODO: Document this field.
-    pub context_time: u64,
-}
-
-impl From<ConversationLabel> for RealConversationLabel {
-    fn from(value: ConversationLabel) -> Self {
-        RealConversationLabel {
-            local_id: value.local_id,
-            local_conversation_id: value.local_conversation_id,
-            remote_conversation_id: value.remote_conversation_id.map(Into::into),
-            local_label_id: value.local_label_id,
-            remote_label_id: value.remote_label_id.map(Into::into),
-            context_expiration_time: value.context_expiration_time,
-            context_num_attachments: value.context_num_attachments,
-            context_num_messages: value.context_num_messages,
-            context_num_unread: value.context_num_unread,
-            context_size: value.context_size,
-            context_snooze_time: value.context_snooze_time,
-            context_time: value.context_time,
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
-impl From<RealConversationLabel> for ConversationLabel {
-    fn from(value: RealConversationLabel) -> Self {
-        ConversationLabel {
-            local_id: value.local_id,
-            local_conversation_id: value.local_conversation_id,
-            remote_conversation_id: value.remote_conversation_id.map(Into::into),
-            local_label_id: value.local_label_id,
-            remote_label_id: value.remote_label_id.map(Into::into),
-            context_expiration_time: value.context_expiration_time,
-            context_num_attachments: value.context_num_attachments,
-            context_num_messages: value.context_num_messages,
-            context_num_unread: value.context_num_unread,
-            context_size: value.context_size,
-            context_snooze_time: value.context_snooze_time,
-            context_time: value.context_time,
         }
     }
 }
