@@ -255,6 +255,7 @@ pub trait Handler: Default + 'static {
     ) -> Result<(), <Self::Action as Action>::Error>;
 
     /// Apply the `action` on the server with the given `session`.
+    ///
     /// Adjust local data if necessary.
     ///
     /// This function is always called after [`Handler::apply_local()`].

@@ -652,6 +652,7 @@ impl Queue {
                         .revert_local(action, &tether)
                         .await
                         .map_err(ActionError::<T>::Action)?;
+                    StoredAction::delete(&tether, id).await?;
                     tether.commit().await?;
                     Ok::<(), ActionError<T>>(())
                 }
