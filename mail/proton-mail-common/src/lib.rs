@@ -22,6 +22,7 @@ use crate::datatypes::LabelType;
 use proton_api_core::service::ApiServiceError;
 pub use proton_api_mail;
 pub use proton_core_common;
+use proton_core_common::datatypes::LabelId;
 use stash::stash::StashError;
 
 use thiserror::Error;
@@ -38,6 +39,12 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
 pub enum AppError {
     #[error("API error: {0}")]
     API(#[from] ApiServiceError),
+    #[error("Label with local id {0} does not have remote id")]
+    LabelDoesNotHaveRemoteId(u64),
+    #[error("Label with local id {0} not found")]
+    LabelNotFound(u64),
+    #[error("Could not find remote label {0}")]
+    RemoteLabelDoesNotExist(LabelId),
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
     #[error("Other error: {0}")]

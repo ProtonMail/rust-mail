@@ -1,5 +1,5 @@
 pub mod conversations;
-use crate::models::ModelError;
+use crate::AppError;
 use proton_action_queue::action::Factory;
 use proton_api_core::service::ApiServiceError;
 use stash::stash::StashError;
@@ -10,8 +10,8 @@ pub enum ActionError {
     Http(#[from] ApiServiceError),
     #[error("Stash: {0}")]
     Stash(#[from] StashError),
-    #[error("Model: {0}")]
-    Model(#[from] ModelError),
+    #[error("App: {0}")]
+    App(#[from] AppError),
     #[error("No input provided")]
     NoInput,
     #[error("Other: {0}")]
