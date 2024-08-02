@@ -274,6 +274,16 @@ impl Context {
 
         Ok(stash)
     }
+
+    /// Get the API service
+    pub fn api(&self) -> &Proton {
+        &self.api
+    }
+
+    /// Get the stash in use
+    pub fn stash(&self) -> &Stash {
+        &self.session_stash
+    }
 }
 
 fn get_session_db_path(path: impl AsRef<Path>) -> PathBuf {
