@@ -20,7 +20,7 @@ futures = "0.3.30"
 indoc = "2"
 itertools = "0.13.0"
 lazy_static = "1"
-proton-action-queue = { version = "=0.7.3", registry = "proton" }
+proton-action-queue = { version = "=0.7.4", registry = "proton" }
 proton-api-core = { version = "=0.6.4", registry = "proton" }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail" }
 proton-core-common = { version = "=0.6.6", registry = "proton" }
