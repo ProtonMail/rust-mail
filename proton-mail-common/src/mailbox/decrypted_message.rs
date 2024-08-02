@@ -49,8 +49,9 @@ impl HtmlMessage {
             .strip_utm()
             .map_err(proton_mail_html_transformer::Error::from)?;
 
-        #[cfg(target_os = "ios")]
-        transformer.inject_ios_content_size()?;
+        // TODO: Disabled because it causes iOS build failures?!
+        // #[cfg(target_os = "ios")]
+        // transformer.inject_ios_content_size()?;
 
         if mail_settings.hide_remote_images {
             transformer
