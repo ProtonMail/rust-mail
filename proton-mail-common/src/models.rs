@@ -36,7 +36,6 @@ use crate::datatypes::{
     PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
     ViewMode,
 };
-use crate::models::ModelError::RemoteLabelDoesNotExist;
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
@@ -74,19 +73,6 @@ use stash::stash::{Stash, StashError, Tether};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error};
-
-/// Errors that can occurr when interatcing with the model.
-#[derive(Debug, thiserror::Error)]
-pub enum ModelError {
-    #[error("Label with local id {0} not found")]
-    LabelNotFound(u64),
-    #[error("Label with local id {0} does not have remote id")]
-    LabelDoesNotHaveRemoteId(u64),
-    #[error("Could not find remote label {0}")]
-    RemoteLabelDoesNotExist(LabelId),
-    #[error("Stash: {0}")]
-    Stash(#[from] StashError),
-}
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
 
@@ -1273,19 +1259,19 @@ impl Conversation {
         destination_id: u64,
         ids: Vec<u64>,
         tx: &Tether,
-    ) -> Result<(LabelId, LabelId), ModelError> {
+    ) -> Result<(LabelId, LabelId), AppError> {
         let Some(source_label) = Label::load_using(source_id, tx).await? else {
-            return Err(ModelError::LabelNotFound(source_id));
+            return Err(AppError::LabelNotFound(source_id));
         };
 
         let is_movable_folder = source_label.is_movable_folder();
 
         let Some(remote_source_id) = source_label.remote_id else {
-            return Err(ModelError::LabelDoesNotHaveRemoteId(source_id));
+            return Err(AppError::LabelDoesNotHaveRemoteId(source_id));
         };
 
         let Some(remote_destination_id) = Label::find_remote_id(destination_id, tx).await? else {
-            return Err(ModelError::LabelDoesNotHaveRemoteId(destination_id));
+            return Err(AppError::LabelDoesNotHaveRemoteId(destination_id));
         };
 
         // If moving to trash, mark conversations as read.
@@ -1302,7 +1288,7 @@ impl Conversation {
         if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
             let all_mail_id = Label::find_local_ids(vec![LabelId::all_mail()], tx).await?;
             if all_mail_id.is_empty() {
-                return Err(RemoteLabelDoesNotExist(LabelId::all_mail()));
+                return Err(AppError::RemoteLabelDoesNotExist(LabelId::all_mail()));
             }
 
             let all_mail_local_id = all_mail_id[0];
@@ -1328,7 +1314,7 @@ impl Conversation {
             let almost_all_mail_id =
                 Label::find_local_ids(vec![LabelId::almost_all_mail()], tx).await?;
             if almost_all_mail_id.is_empty() {
-                return Err(RemoteLabelDoesNotExist(LabelId::almost_all_mail()));
+                return Err(AppError::RemoteLabelDoesNotExist(LabelId::almost_all_mail()));
             }
 
             let almost_all_mail_local_id = almost_all_mail_id[0];

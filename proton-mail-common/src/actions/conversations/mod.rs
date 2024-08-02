@@ -1,5 +1,5 @@
 use crate::actions::ActionError;
-use crate::models::{Conversation, Label as LabelModel, ModelError};
+use crate::models::{Conversation, Label as LabelModel};
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,7 @@ mod mark_unread;
 mod r#move;
 mod unlabel;
 
+use crate::AppError;
 pub use delete::Delete;
 pub use label::Label;
 pub use mark_read::MarkRead;
@@ -81,7 +82,7 @@ impl ActionData {
 /// Returns error if the resolution failed.
 async fn find_remote_label_id(tether: &Tether, local_id: u64) -> Result<LabelId, ActionError> {
     let Some(label_id) = LabelModel::find_remote_id(local_id, tether).await? else {
-        return Err(ModelError::LabelNotFound(local_id).into());
+        return Err(AppError::LabelNotFound(local_id).into());
     };
 
     Ok(label_id)
