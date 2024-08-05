@@ -45,6 +45,7 @@ pub mod utm;
 pub struct Transformer {
     ///Parsed document.
     document: NodeRef,
+    insert_links_called: bool,
 }
 
 impl Transformer {
@@ -52,13 +53,19 @@ impl Transformer {
     #[must_use]
     pub fn new(document: &str) -> Self {
         let document = kuchikiki::parse_html().one(document);
-        Self { document }
+        Self {
+            document,
+            insert_links_called: false,
+        }
     }
 
     /// Create a new [`Transformer`] with a previously parsed `document`.
     #[must_use]
     pub fn with_parsed(document: NodeRef) -> Self {
-        Self { document }
+        Self {
+            document,
+            insert_links_called: false,
+        }
     }
 
     /// Access the parsed document.
@@ -139,10 +146,16 @@ impl Transformer {
     ///
     /// # Remarks
     ///
-    /// For performance reasons call this before [`Transformer::insert_links`]
-    ///
     /// This is a destructive operation and can not be undone.
+    ///
+    /// # Panics
+    ///
+    /// For performance reasons call this before [`Transformer::insert_links`]
     pub fn add_noreferrer(&mut self) -> &mut Self {
+        assert!(
+            !self.insert_links_called,
+            "For performance reasons call this before `Transformer::insert_links`"
+        );
         transforms::add_noreferrer(self.document.clone());
         self
     }
@@ -163,6 +176,7 @@ impl Transformer {
     ///
     /// This is a destructive operation and can not be undone.
     pub fn insert_links(&mut self) -> &mut Self {
+        self.insert_links_called = true;
         transforms::insert_links(self.document.clone());
         self
     }
