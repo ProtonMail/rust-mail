@@ -126,8 +126,6 @@ impl Transformer {
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     ///
-    /// See [`transforms::inject_style`] for more details.
-    ///
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
