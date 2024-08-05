@@ -1906,7 +1906,7 @@ impl Label {
         api.patch_label(
             id.into(),
             PatchLabelRequest {
-                expanded,
+                expanded: Some(expanded),
                 ..Default::default()
             },
         )

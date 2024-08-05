@@ -1,13 +1,12 @@
 use crate::models::Label;
-use crate::{actions::ActionError, models::ModelError};
-use anyhow::anyhow;
+use crate::{actions::ActionError, AppError};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::datatypes::LabelId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::Tether;
-use tracing::{debug, warn};
+use stash::stash::{Stash, Tether};
+use tracing::debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Expand {
@@ -15,7 +14,6 @@ pub struct Expand {
     remote_id: Option<LabelId>,
     expand: bool,
     original_state: Option<bool>,
-    remote_failed: bool,
 }
 
 impl Expand {
@@ -33,26 +31,8 @@ impl Expand {
             local_id,
             expand,
             remote_id: None,
-            remote_failed: false,
             original_state: None,
         }
-    }
-
-    fn is_applicable(&self) -> bool {
-        self.original_state.is_some() && self.original_state.unwrap() != self.expand
-    }
-
-    fn is_applicable_with_label(&self, label: &Label) -> bool {
-        self.original_state.is_some()
-            && (self.original_state.unwrap() != label.expanded
-                || self.original_state.unwrap() != self.expand)
-    }
-
-    async fn read_label(&self, tx: &Tether) -> Result<Label, ActionError> {
-        Label::load_using(self.local_id, tx)
-            .await?
-            .ok_or_else(|| ModelError::LabelNotFound(self.local_id))
-            .map_err(Into::into)
     }
 }
 
@@ -66,7 +46,7 @@ impl Action for Expand {
 }
 
 #[derive(Default)]
-pub struct Handler {}
+pub struct Handler;
 
 impl proton_action_queue::action::Handler for Handler {
     type Action = Expand;
@@ -76,11 +56,19 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let mut label = action.read_label(tx).await?;
+        let mut label = Label::load_using(action.local_id, tx)
+            .await?
+            .ok_or_else(|| AppError::LabelNotFound(action.local_id))?;
 
         action.original_state = action.original_state.or(Some(label.expanded));
 
-        if !action.is_applicable_with_label(&label) {
+        let label_is_equal_action = action
+            .original_state
+            .filter(|original_state| *original_state == action.expand)
+            .filter(|_| label.expanded == action.expand)
+            .is_some();
+
+        if label_is_equal_action {
             debug!(
                 "No need to apply expand action for label: {:?}",
                 action.local_id
@@ -103,12 +91,14 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        if !action.is_applicable() {
+        let Some(original_state) = action
+            .original_state
+            .filter(|original_state| *original_state != action.expand)
+        else {
             return Ok(());
-        }
+        };
 
-        // This will never panic due to the check above
-        action.expand = action.original_state.unwrap();
+        action.expand = original_state;
 
         self.apply_local(action, tx).await
     }
@@ -117,30 +107,45 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         action: &mut Self::Action,
         session: &Session,
+        stash: &Stash,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        if !action.is_applicable() {
+        let action_equal_original_state = action
+            .original_state
+            .filter(|original_state| *original_state == action.expand)
+            .is_some();
+
+        if action_equal_original_state {
             return Ok(());
         }
 
-        let remote_id = action.remote_id.clone().ok_or_else(|| {
-            ActionError::Other(anyhow!(
-                "RemoteID is missing - `apply_local` step should set it up!"
-            ))
-        })?;
+        let remote_id = match action.remote_id.clone() {
+            Some(remote_id) => remote_id,
+            None => {
+                let tx = stash.connection();
+                let label = Label::load_using(action.local_id, &tx)
+                    .await?
+                    .ok_or_else(|| AppError::LabelNotFound(action.local_id))?;
 
-        let responses = Label::patch_expanded(remote_id, action.expand, session.api()).await?;
+                action.original_state = Some(label.expanded);
 
-        action.remote_failed = responses.into_iter().any(|r| r.response.code != 1000);
+                let label_is_equal_action = action
+                    .original_state
+                    .filter(|_| label.expanded == action.expand)
+                    .is_some();
 
-        Ok(())
-    }
+                if label_is_equal_action {
+                    return Ok(()); // Nothing to do
+                }
 
-    async fn apply_local_post_remote(
-        &self,
-        _action: &mut Self::Action,
-        _tx: &Tether,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
-        warn!("No partial revert needed after remote apply, this should not be called");
+                label
+                    .remote_id
+                    .clone()
+                    .ok_or_else(|| AppError::LabelDoesNotHaveRemoteId(action.local_id))?
+            }
+        };
+
+        Label::patch_expanded(remote_id, action.expand, session.api()).await?;
+
         Ok(())
     }
 }
@@ -154,17 +159,20 @@ mod tests {
     const REMOTE_ID: &str = "RemoteID";
 
     pub struct TestCase {
-        tx: Tether,
         action: Expand,
         local_id: u64,
+        stash: Stash,
+    }
+
+    impl TestCase {
+        fn con(&self) -> Tether {
+            self.stash.connection()
+        }
     }
 
     async fn test(expand: bool, expanded: bool) -> TestCase {
         let stash = new_test_connection().await;
-        let tx = stash
-            .transaction()
-            .await
-            .expect("failed to create transaction");
+        let tx = stash.connection();
         let mut label = create_label(expanded);
 
         label.save_using(&tx).await.expect("failed to save label");
@@ -177,21 +185,20 @@ mod tests {
         };
 
         TestCase {
-            tx,
             action,
             local_id,
+            stash,
         }
     }
 
     async fn assert_test(test: TestCase, expected: bool, failed: usize) {
-        let label = Label::load_using(test.local_id, &test.tx)
+        let tx = test.con();
+        let label = Label::load_using(test.local_id, &tx)
             .await
             .expect("failed to load label")
             .expect("Label not found");
 
         assert_eq!(label.expanded, expected, "EXPECTED {failed}");
-
-        test.tx.rollback().await.expect("failed to rollback");
     }
 
     fn create_label(expanded: bool) -> Label {
@@ -226,10 +233,11 @@ mod tests {
         async fn test_apply(apply: usize) {
             for (idx, (expand, expanded, expected)) in EXPECTED.iter().enumerate() {
                 let mut test = test(*expand, *expanded).await;
+                let tx = test.con();
 
                 for _ in 0..apply {
                     Handler::default()
-                        .apply_local(&mut test.action, &test.tx)
+                        .apply_local(&mut test.action, &tx)
                         .await
                         .expect("failed to apply local");
                 }
@@ -259,17 +267,18 @@ mod tests {
         async fn test_revert(apply: usize, revert: usize) {
             for (idx, (expand, expanded, expected)) in EXPECTED.iter().enumerate() {
                 let mut test = test(*expand, *expanded).await;
+                let tx = test.con();
 
                 for _ in 0..apply {
                     Handler::default()
-                        .apply_local(&mut test.action, &test.tx)
+                        .apply_local(&mut test.action, &tx)
                         .await
                         .expect("failed to apply local");
                 }
 
                 for _ in 0..revert {
                     Handler::default()
-                        .revert_local(&mut test.action, &test.tx)
+                        .revert_local(&mut test.action, &tx)
                         .await
                         .expect("failed to apply local");
                 }
@@ -304,8 +313,8 @@ mod tests {
             Mock::given(method("PATCH"))
                 .and(path(format!("/api/core/v4/labels/{remote_id}")))
                 .and(body_json(PatchLabelRequest {
-                    expanded,
-                    notify: false,
+                    expanded: Some(expanded),
+                    ..Default::default()
                 }))
                 .respond_with(
                     ResponseTemplate::new(status).set_body_json(PatchLabelResponse {
@@ -323,22 +332,23 @@ mod tests {
                 .await;
         }
 
-        #[test_case(true, true, 1, 0, 200, 1000; "TEST1 apply remote when not modified locally")]
-        #[test_case(true, false, 1, 1, 200, 1000; "TEST2 apply remote when modified locally")]
-        // TODO: dunno what api returns when unmodified
-        #[test_case(true, false, 1, 1, 304, 1000; "TEST3A apply remote not modified but locally modified")]
-        #[test_case(true, false, 1, 1, 200, 500; "TEST3B apply remote not modified but locally modified")]
-        #[test_case(true, false, 1, 1, 503, 0 => panics "HTTP status server error (503 Service Unavailable)"; "TEST4 apply remote service unavailable")]
+        #[test_case(true, true, 1, 1, 0, 200, 1000; "TEST1 apply remote when not modified locally")]
+        #[test_case(true, false, 1, 1, 1, 200, 1000; "TEST2 apply remote when modified locally")]
+        #[test_case(true, false, 1, 1, 1, 200, 500; "TEST3 apply remote when response body is not 1000 success")]
+        #[test_case(true, false, 1, 1, 1, 503, 0 => panics "HTTP status server error (503 Service Unavailable)"; "TEST4 apply remote service unavailable")]
+        #[test_case(true, false, 0, 1, 1, 200, 1000; "TEST5 apply remote when not modified locally")]
         #[tokio::test]
         async fn test_remote(
             expand: bool,
             expanded: bool,
+            apply_local: usize,
             apply_remote: usize,
             remote_calls: u64,
             http_status: u16,
             response_code: u32,
         ) {
             let mut test = test(expand, expanded).await;
+            let tx = test.con();
             let mock_server = MockServer::start().await;
             let api_config = Config {
                 base_url: format!("{}/api/", mock_server.uri()),
@@ -357,14 +367,16 @@ mod tests {
             )
             .await;
 
-            Handler::default()
-                .apply_local(&mut test.action, &test.tx)
-                .await
-                .expect("failed to apply local");
+            for _ in 0..apply_local {
+                Handler::default()
+                    .apply_local(&mut test.action, &tx)
+                    .await
+                    .expect("failed to apply local");
+            }
 
             for _ in 0..apply_remote {
                 Handler::default()
-                    .apply_remote(&mut test.action, &session)
+                    .apply_remote(&mut test.action, &session, &test.stash)
                     .await
                     .unwrap();
             }
