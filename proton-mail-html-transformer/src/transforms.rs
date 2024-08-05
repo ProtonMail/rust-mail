@@ -9,6 +9,7 @@ fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
     kuchikiki::parse_fragment(qual_name, vec![]).one(html)
 }
 
+/// This function adds dark mode support. This fails if the html doesn't have a head tag.
 #[allow(clippy::missing_panics_doc)]
 pub fn inject_style(document: NodeRef) {
     let element = document.select_first("head").unwrap(); // kuckikiki always adds it
@@ -46,6 +47,7 @@ pub fn add_noreferrer(document: NodeRef) {
     }
 }
 
+/// Inserts `<a>` elements in plain text links to make them clickable
 pub fn insert_links(document: NodeRef) {
     let start_nodes = document.traverse_inclusive().filter_map(|node| match node {
         NodeEdge::Start(node_ref) => Some(node_ref),
@@ -100,6 +102,7 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
     Some(node_ref_from_str(&rep, "div"))
 }
 
+/// Proxies all images through proton's proxy.
 #[allow(clippy::missing_panics_doc)] // the select is well formed.
 pub fn proxy_images(document: NodeRef, user_session_id: &str) {
     let elements = document.select("img").unwrap();

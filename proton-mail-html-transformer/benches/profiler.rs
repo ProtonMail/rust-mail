@@ -4,6 +4,8 @@ use std::{fs::File, os::raw::c_int, path::Path};
 use criterion::profiler::Profiler;
 use pprof::ProfilerGuard;
 
+// We need this for pprof, we need a type that impls Profiler.
+// pprof is what we use for profiling the benchmarks
 pub struct FlamegraphProfiler<'a> {
     frequency: c_int,
     active_profiler: Option<ProfilerGuard<'a>>,
