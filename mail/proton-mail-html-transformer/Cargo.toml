@@ -4,7 +4,6 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-cargo-insta = "1.39.0"
 # kuchikiki requires this verion of html5ever at this time.
 html5ever = "=0.26"
 kuchikiki = "=0.8.2"
@@ -12,8 +11,6 @@ lazy_static = { workspace = true }
 scraper = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
-lazy_static.workspace = true
-cargo-insta = "1.39.0"
 rayon = "1.10.0"
 
 [lints]
@@ -23,6 +20,7 @@ workspace = true
 cpuprofiler = "0.0.4"
 criterion = "0.5.1"
 insta = { version = "1.39.0", features = ["toml"] }
+cargo-insta = "1.39.0"
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 
 [profile.dev.package]
