@@ -21,12 +21,11 @@ pub mod responses;
 
 use crate::services::proton::common::LabelType;
 use crate::services::proton::requests::{
-    GetConversationsOptions, GetImagesLogoOptions, GetLabelsOptions, GetMessagesOptions,
-    PatchLabelRequest, PostLabelsRequest, PutConversationsDeleteRequest,
-    PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
-    PutConversationsUnreadRequest, PutLabelRequest, PutMessagesDeleteRequest,
-    PutMessagesLabelRequest, PutMessagesReadRequest, PutMessagesUnlabelRequest,
-    PutMessagesUnreadRequest,
+    GetConversationsOptions, GetLabelsOptions, GetMessagesOptions, PatchLabelRequest,
+    PostLabelsRequest, PutConversationsDeleteRequest, PutConversationsLabelRequest,
+    PutConversationsReadRequest, PutConversationsUnlabelRequest, PutConversationsUnreadRequest,
+    PutLabelRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
+    PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
 };
 use crate::services::proton::responses::{
     GetAttachmentMetadataResponse, GetConversationResponse, GetConversationsCountResponse,

@@ -266,9 +266,8 @@ pub struct PutMessagesUnreadResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PatchLabelResponse {
-    #[serde(rename = "Responses")]
     pub responses: Vec<OperationResult>,
 }
