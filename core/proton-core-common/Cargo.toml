@@ -32,7 +32,6 @@ zeroize = { workspace = true }
 [dev-dependencies]
 tempdir = { workspace = true }
 wiremock = { workspace = true }
-proton-api-core = { workspace = true, features = ["integration_tests"] }
 
 [lints]
 workspace = true

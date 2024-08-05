@@ -33,7 +33,6 @@ velcro = { workspace = true }
 
 [features]
 default = []
-integration_tests = []
 
 [dev-dependencies]
 tokio = { workspace = true }
