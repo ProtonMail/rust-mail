@@ -3,11 +3,14 @@ mod events;
 mod images;
 mod initialization;
 
+use anyhow::anyhow;
 pub use initialization::*;
+use proton_core_common::models::User;
+use stash::orm::Model;
 use std::path::PathBuf;
 
 use crate::user_context::action_queue::new_action_queue;
-use crate::{MailContext, MailContextResult};
+use crate::{MailContext, MailContextError, MailContextResult};
 use futures::executor::block_on;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
@@ -68,6 +71,21 @@ impl MailUserContext {
 
     pub fn user_id(&self) -> &RemoteId {
         self.user_context.user_id()
+    }
+
+    /// Provides a way to get the core::models::User instance.
+    ///
+    /// # Errors
+    ///
+    /// Either when MailSessionError::Stash occurs or somehow the user is missing.
+    pub async fn user(&self) -> MailContextResult<User> {
+        let stash = self.stash();
+        let user_id = self.user_id();
+        let real_user = User::load(user_id.clone(), stash)
+            .await?
+            .ok_or_else(|| MailContextError::Other(anyhow!("Missing User, this is a bug.")))?;
+
+        Ok(real_user)
     }
 
     /// Returns the unlocked user keys of this user.

@@ -4,7 +4,7 @@ mod images;
 mod initialization;
 mod labels;
 
-use crate::mail::MailSessionError;
+use crate::{core::datatypes::User, mail::MailSessionError};
 use proton_mail_common::MailUserContext;
 use std::sync::Arc;
 
@@ -61,5 +61,16 @@ impl MailUserSession {
             .fork()
             .await
             .map_err(MailSessionError::from)
+    }
+
+    /// Provides a way to get the datatypes::User FFI instance.
+    ///
+    /// # Errors
+    ///
+    /// Either when MailSessionError::Stash occurs or somehow the user is missing.
+    pub async fn user(&self) -> Result<User, MailSessionError> {
+        let user = self.ctx().user().await?;
+
+        Ok(user.into())
     }
 }
