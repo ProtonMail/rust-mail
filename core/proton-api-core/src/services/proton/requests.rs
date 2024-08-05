@@ -23,13 +23,13 @@
 use crate::services::proton::common::{Fido2Auth, LightOrDarkMode, RemoteId};
 use crate::MAX_PAGE_ELEMENT_COUNT;
 use serde::Serialize;
-use serde_with::serde_as;
+use serde_with::{serde_as, BoolFromInt};
 use smart_default::SmartDefault;
 
 /// Parameters for getting Captcha details.
+#[serde_as]
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct GetCaptchaOptions {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
@@ -78,9 +78,9 @@ pub struct GetContactsOptions {
 }
 
 /// Parameters for getting an event.
+#[serde_as]
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct GetEventOptions {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]

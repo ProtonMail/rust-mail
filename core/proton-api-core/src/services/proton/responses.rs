@@ -39,7 +39,7 @@ use proton_crypto_account::keys::{
 use serde::Deserialize;
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
-use serde_with::serde_as;
+use serde_with::{serde_as, BoolFromInt};
 
 /// The response containing addresses.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -94,10 +94,10 @@ pub struct GetEventsLatestResponse {
 }
 
 /// Available public keys.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct GetKeysAllResponse {
     /// Information about the internal address itself, if it exists. Since the
     /// SKL is mandatory, this will never be nullable.

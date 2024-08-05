@@ -34,7 +34,7 @@ use serde_json::Value as JsonValue;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::serde_as;
+use serde_with::{serde_as, BoolFromInt};
 
 //  ENUMS
 //==============================================================================
@@ -283,10 +283,10 @@ pub enum WeekStart {
 //==============================================================================
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
     /// TODO: Document this field.
@@ -443,10 +443,10 @@ pub struct ContactCard {
 }
 
 /// Models the contact email addresses for a contact returned by the API.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct ContactEmail {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -488,10 +488,10 @@ pub struct ContactEmail {
 }
 
 /// Data for an event related to a [`ContactEmail`] record.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct ContactEmailEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -516,10 +516,10 @@ pub struct ContactEmailEvent {
 impl GetEventResponse for ContactEmailEvent {}
 
 /// Data for an event related to a [`ContactBasic`] record.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct ContactEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -668,10 +668,10 @@ pub struct Flags {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct HighSecurity {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
@@ -772,10 +772,10 @@ pub struct Salt {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct SettingsFlags {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
@@ -833,10 +833,10 @@ pub struct TwoFa {
 
 /// TODO: Document this struct.
 /// Represents an API user
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct User {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -906,10 +906,10 @@ pub struct User {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 #[allow(clippy::struct_excessive_bools)]
 pub struct UserSettings {
     /// TODO: Document this field.
