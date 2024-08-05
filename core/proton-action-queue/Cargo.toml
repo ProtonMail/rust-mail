@@ -9,27 +9,27 @@ edition = "2021"
 anyhow = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+indoc = { workspace = true }
 log = "0.4.20"
+parking_lot = { workspace = true }
 proton-api-core = { workspace = true }
 proton-sqlite3 = { workspace = true }
 rmp = "0.8"
 rmp-serde = "1.1"
+rusqlite = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+topological-sort = "0.2.2"
 tracing = { workspace = true }
 uuid = { workspace = true }
-rusqlite = { workspace = true }
-indoc = { workspace = true }
-topological-sort = "0.2.2"
-parking_lot = { workspace = true }
 
 [dev-dependencies]
-tracing-subscriber = "0.3"
-tempfile = "3"
-tracing-test = { version = "0.2", features = ["no-env-filter"] }
 reqwest = { workspace = true }
+tempfile = "3"
+tracing-subscriber = "0.3"
+tracing-test = { version = "0.2", features = ["no-env-filter"] }
 
 [lints]
 workspace = true
