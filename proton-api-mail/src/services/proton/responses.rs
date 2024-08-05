@@ -31,13 +31,13 @@ use crate::services::proton::response_data::{
     MessageMetadata, OperationResult, UndoToken,
 };
 use serde::Deserialize;
-#[cfg(any(test, feature = "integration_tests"))]
+#[cfg(any(test, debug_assertions))]
 use serde::Serialize;
 use serde_with::serde_as;
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetAttachmentMetadataResponse {
     /// TODO: Document this field.
@@ -46,7 +46,7 @@ pub struct GetAttachmentMetadataResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationResponse {
     /// TODO: Document this field.
@@ -58,7 +58,7 @@ pub struct GetConversationResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 pub struct GetConversationsResponse {
@@ -75,7 +75,7 @@ pub struct GetConversationsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationsCountResponse {
     /// TODO: Document this field.
@@ -84,7 +84,7 @@ pub struct GetConversationsCountResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessageResponse {
     /// TODO: Document this field.
@@ -93,7 +93,7 @@ pub struct GetMessageResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[serde_as]
 pub struct GetMessagesResponse {
@@ -110,7 +110,7 @@ pub struct GetMessagesResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessagesCountResponse {
     /// TODO: Document this field.
@@ -119,7 +119,7 @@ pub struct GetMessagesCountResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetSettingsResponse {
     /// TODO: Document this field.
@@ -128,7 +128,7 @@ pub struct GetSettingsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetLabelsResponse {
     /// TODO: Document this field.
@@ -137,7 +137,7 @@ pub struct GetLabelsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostLabelsResponse {
     /// TODO: Document this field.
@@ -146,7 +146,7 @@ pub struct PostLabelsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsDeleteResponse {
     /// TODO: Document this field.
@@ -156,7 +156,7 @@ pub struct PutConversationsDeleteResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsLabelResponse {
     /// TODO: Document this field.
@@ -169,7 +169,7 @@ pub struct PutConversationsLabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsReadResponse {
     /// TODO: Document this field.
@@ -179,7 +179,7 @@ pub struct PutConversationsReadResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnlabelResponse {
     /// TODO: Document this field.
@@ -192,7 +192,7 @@ pub struct PutConversationsUnlabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnreadResponse {
     /// TODO: Document this field.
@@ -202,7 +202,7 @@ pub struct PutConversationsUnreadResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutLabelResponse {
     /// TODO: Document this field.
@@ -211,7 +211,7 @@ pub struct PutLabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesDeleteResponse {
     /// TODO: Document this field.
@@ -221,7 +221,7 @@ pub struct PutMessagesDeleteResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesLabelResponse {
     /// TODO: Document this field.
@@ -234,7 +234,7 @@ pub struct PutMessagesLabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesReadResponse {
     /// TODO: Document this field.
@@ -244,7 +244,7 @@ pub struct PutMessagesReadResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesUnlabelResponse {
     /// TODO: Document this field.
@@ -257,7 +257,7 @@ pub struct PutMessagesUnlabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, feature = "integration_tests"), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesUnreadResponse {
     /// TODO: Document this field.
