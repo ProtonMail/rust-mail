@@ -36,8 +36,8 @@ uuid = { version = "1.8.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 lazy_static = { workspace = true }
-proton-api-core = { workspace = true, features = ["integration_tests"] }
-proton-api-mail = { workspace = true, features = ["integration_tests"] }
+proton-api-core = { workspace = true }
+proton-api-mail = { workspace = true }
 secrecy = { version = "0.8", features = ["serde"] }
 tempdir = "0.3.1"
 tempfile = "3.10.1"
@@ -50,9 +50,6 @@ wiremock = { workspace = true }
 # not compatible with global clippy configuration yet
 # [lints]
 # workspace = true
-
-[features]
-integration_tests = []
 
 # todo: remove when pedantic-ified and uncommend the [lints] section
 [lints.clippy]
