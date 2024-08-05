@@ -25,13 +25,13 @@ use crate::services::proton::request_data::MessageMetadataSortMode;
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_api_core::services::proton::common::RemoteId;
 use serde::Serialize;
-use serde_with::serde_as;
+use serde_with::{serde_as, BoolFromInt};
 use smart_default::SmartDefault;
 
 /// Parameters to filter/search conversations with a given criteria.
+#[serde_as]
 #[derive(Clone, Debug, Serialize, SmartDefault)]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct GetConversationsOptions {
     /// Address ID to filter on.
     pub address_id: Option<RemoteId>,
@@ -112,9 +112,9 @@ pub struct GetLabelsOptions {
 }
 
 /// Parameters to filter/search messages with a given criteria.
+#[serde_as]
 #[derive(Clone, Debug, Serialize, SmartDefault)]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct GetMessagesOptions {
     /// Filter on address ID.
     #[serde(rename = "AddressID")]
@@ -122,7 +122,7 @@ pub struct GetMessagesOptions {
 
     /// If `true`, return only messages which have attachments. If `false`,
     /// return only messages which have no attachments.
-    #[serde_as(as = "BoolFromInt")]
+    #[serde_as(as = "Option<BoolFromInt>")]
     pub attachments: Option<bool>,
 
     /// If `true`, automatically convert simple queries to wildcarded versions,
@@ -240,9 +240,9 @@ pub struct PutConversationsDeleteRequest {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct PutConversationsLabelRequest {
     /// TODO: Document this field.
     pub action: u32,
@@ -320,9 +320,9 @@ pub struct PutMessagesDeleteRequest {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct PutMessagesLabelRequest {
     /// TODO: Document this field.
     pub action: u32,

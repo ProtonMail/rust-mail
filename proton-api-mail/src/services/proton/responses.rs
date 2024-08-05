@@ -33,7 +33,7 @@ use crate::services::proton::response_data::{
 use serde::Deserialize;
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
-use serde_with::serde_as;
+use serde_with::{serde_as, BoolFromInt, DefaultOnNull};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -57,10 +57,10 @@ pub struct GetConversationResponse {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct GetConversationsResponse {
     /// TODO: Document this field.
     pub conversations: Vec<Conversation>,
@@ -92,10 +92,10 @@ pub struct GetMessageResponse {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct GetMessagesResponse {
     /// TODO: Document this field.
     pub messages: Vec<MessageMetadata>,
