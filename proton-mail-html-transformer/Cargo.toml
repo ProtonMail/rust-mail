@@ -4,14 +4,14 @@ version = "0.2.0"
 edition = "2021"
 
 [dependencies]
-scraper.workspace = true
-url.workspace = true
-thiserror.workspace = true
-kuchikiki = "=0.8.2"
+cargo-insta = "1.39.0"
 # kuchikiki requires this verion of html5ever at this time.
 html5ever = "=0.26"
-lazy_static.workspace = true
-cargo-insta = "1.39.0"
+kuchikiki = "=0.8.2"
+lazy_static = { workspace = true }
+scraper = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
 
 [lints]
 workspace = true
