@@ -385,6 +385,7 @@
 use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
 use core::ops::Deref;
 use core::ptr::null;
+use core::sync::atomic::{AtomicBool, Ordering};
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -1117,6 +1118,7 @@ impl Stash {
     pub fn connection(&self) -> Tether {
         Tether {
             handle: Arc::new(()),
+            has_active_transaction: Arc::new(AtomicBool::new(false)),
             queue: self.queue.clone(),
             stash: self.clone(),
         }
@@ -1556,6 +1558,10 @@ pub struct Tether {
     /// does not matter, only the unique instance.
     handle: Arc<()>,
 
+    /// If a transaction has been started, this will be set to `true`. When the
+    /// transaction is committed or rolled back, it will be returned to `false`.
+    has_active_transaction: Arc<AtomicBool>,
+
     /// The queue for the [`Worker`] and [`Stash`] to which the [`Tether`] is
     /// associated. This is used to send queries to the worker for execution.
     queue: QueueSender<Operation>,
@@ -1596,7 +1602,9 @@ impl Tether {
             .map_err(|err| StashError::QueueError(err.to_string()))?;
         this_end
             .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))?
+            .map_err(|err| StashError::OneShotError(err.to_string()))??;
+        self.has_active_transaction.store(false, Ordering::Relaxed);
+        Ok(())
     }
 
     /// Runs a query against an open connection, and returns the affected row
@@ -1662,6 +1670,21 @@ impl Tether {
         I: ToSql + Send + 'static,
     {
         perform_load(id, &self.stash, Some(self)).await
+    }
+
+    /// Indicates whether the [`Tether`] has an active transaction.
+    ///
+    /// If a transaction has been started, this will be `true`. Before a
+    /// transaction is started, or after a transaction is committed or rolled
+    /// back, it will be `false`.
+    ///
+    /// Note that transactions are specific to connections, i.e. to [`Tether`]s,
+    /// and this will only indicate the transaction status on this connection,
+    /// not globally.
+    ///
+    #[must_use]
+    pub fn has_active_transaction(&self) -> bool {
+        self.has_active_transaction.load(Ordering::Relaxed)
     }
 
     /// Runs a query against an open connection, and returns any rows of data
@@ -1738,7 +1761,9 @@ impl Tether {
             .map_err(|err| StashError::QueueError(err.to_string()))?;
         this_end
             .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))?
+            .map_err(|err| StashError::OneShotError(err.to_string()))??;
+        self.has_active_transaction.store(false, Ordering::Relaxed);
+        Ok(())
     }
 
     /// Get the associated [`Stash`] for the [`Tether`].
@@ -1791,7 +1816,9 @@ impl Tether {
             .map_err(|err| StashError::QueueError(err.to_string()))?;
         this_end
             .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))?
+            .map_err(|err| StashError::OneShotError(err.to_string()))??;
+        self.has_active_transaction.store(true, Ordering::Relaxed);
+        Ok(())
     }
 }
 
