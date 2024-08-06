@@ -123,4 +123,7 @@ pub mod db;
 pub mod queue;
 
 #[cfg(test)]
-mod tests;
+pub mod tests {
+    #[path = "../tests/common.rs"]
+    pub mod common;
+}

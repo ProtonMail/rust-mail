@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "tests/db.rs"]
+mod tests;
+
 use crate::action;
 use crate::action::{Action, Id, Metadata, Priority};
 use indoc::indoc;

@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "tests/queue.rs"]
+mod tests;
+
 use crate::action::{
     Action, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult, Handler, Id, Metadata,
     Priority,

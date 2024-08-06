@@ -1,5 +1,7 @@
-use crate::db::{create_tables, StoredAction};
-use crate::tests::NoopActionHandler;
+#![allow(non_snake_case)]
+
+use super::*;
+use crate::tests::common::NoopActionHandler;
 use proton_api_core::service::ApiServiceError;
 
 #[tokio::test]

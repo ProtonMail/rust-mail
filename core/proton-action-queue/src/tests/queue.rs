@@ -1,8 +1,10 @@
+#![allow(non_snake_case)]
+
+use super::*;
 use crate::action::{
     Action, DefaultVersionConverter, Factory, MetadataBuilder, NoopError, Priority, Type,
 };
-use crate::queue::Queue;
-use crate::tests::NoopActionHandler;
+use crate::tests::common::NoopActionHandler;
 use serde::{Deserialize, Serialize};
 use stash::stash::Stash;
 use std::time::Duration;
