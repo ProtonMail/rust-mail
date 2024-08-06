@@ -1,10 +1,14 @@
 use crate::services::proton::common::RemoteId;
+use crate::X_PM_UID_HEADER;
 use futures::future::BoxFuture;
+use parking_lot::RwLock;
 use proton_crypto_account::salts::KeySecret;
+use reqwest::header::{HeaderMap, HeaderValue};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::error::Error;
 use std::ops::Deref;
+use std::sync::Arc;
 
 /// Authentication session data.
 #[derive(Clone)]
@@ -139,6 +143,7 @@ pub trait Store: Send + Sync {
 
 /// In memory cache of the auth data which can optionally be backed by an authentication [`Store`].
 pub(crate) struct CachedStore {
+    headers: Arc<RwLock<HeaderMap>>,
     cached: Option<Auth>,
     store: Option<Box<dyn Store>>,
 }
@@ -152,15 +157,24 @@ impl CachedStore {
     /// # Errors
     ///
     /// Returns error if we can't read from the store.
-    pub(crate) async fn new(store: Option<Box<dyn Store>>) -> Result<Self, StoreError> {
+    pub(crate) async fn new(
+        store: Option<Box<dyn Store>>,
+        headers: Arc<RwLock<HeaderMap>>,
+    ) -> Result<Self, StoreError> {
         let auth = if let Some(store) = &store {
             store.get().await?
         } else {
             None
         };
+
+        if let Some(auth) = &auth {
+            update_auth_headers(&headers, auth)?;
+        }
+
         Ok(Self {
             cached: auth,
             store,
+            headers,
         })
     }
 
@@ -175,6 +189,8 @@ impl CachedStore {
     ///
     /// Returns error if the data could not be stored.
     pub(crate) async fn set(&mut self, auth: Auth) -> Result<(), StoreError> {
+        // Update auth headers.
+        update_auth_headers(&self.headers, &auth)?;
         if let Some(store) = &mut self.store {
             store.set(auth.clone()).await?;
         }
@@ -188,9 +204,32 @@ impl CachedStore {
     ///
     /// Returns error if the data could not cleared.
     pub(crate) async fn clear(&mut self) -> Result<Option<Auth>, StoreError> {
+        // Remove auth headers.
+        remove_auth_headers(&self.headers);
         if let Some(store) = &mut self.store {
             store.clear().await?;
         }
         Ok(self.cached.take())
     }
+}
+
+fn update_auth_headers(header_map: &Arc<RwLock<HeaderMap>>, auth: &Auth) -> Result<(), StoreError> {
+    let mut guard = header_map.write();
+    guard.insert(
+        X_PM_UID_HEADER,
+        HeaderValue::from_str(auth.uid.as_ref()).map_err(Box::new)?,
+    );
+    guard.insert(
+        "Authorization",
+        HeaderValue::from_str(&format!("Bearer {}", auth.access_token.expose_secret()))
+            .map_err(Box::new)?,
+    );
+
+    Ok(())
+}
+
+fn remove_auth_headers(header_map: &Arc<RwLock<HeaderMap>>) {
+    let mut guard = header_map.write();
+    guard.remove(X_PM_UID_HEADER);
+    guard.remove("Authorization");
 }

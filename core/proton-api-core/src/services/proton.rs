@@ -74,7 +74,7 @@ use crate::services::proton::responses::{
 };
 use crate::{
     DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL, DEFAULT_REDIRECT_URL,
-    X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE, X_PM_UID_HEADER,
+    X_PM_APP_VERSION_HEADER, X_PM_HUMAN_VERIFICATION_TOKEN, X_PM_HUMAN_VERIFICATION_TOKEN_TYPE,
 };
 use bytes::Bytes;
 use parking_lot::RwLock;
@@ -269,13 +269,6 @@ impl ApiService for Proton {
                     auth.refresh_token = response.refresh_token;
                     auth.scope = response.scope;
                     tracing::debug!("Session has been refreshed");
-                    // Update the persistent headers with the new token. When the request gets
-                    // retried, it will pick up the updated persistent headers.
-                    self.set_header(X_PM_UID_HEADER, auth.uid.as_ref());
-                    self.set_header(
-                        "Authorization",
-                        &format!("Bearer {}", auth.access_token.expose_secret()),
-                    );
                 }
                 if let Err(e) = auth_store.set(auth).await {
                     error!("Failed to update authentication in store: {e}");
@@ -360,13 +353,23 @@ impl Proton {
         store: Option<Box<dyn Store>>,
     ) -> Result<Self, StoreError> {
         let base_url = Url::parse(&config.base_url).unwrap();
-        let auth = Arc::new(AsyncRwLock::new(CachedStore::new(store).await?));
+        let headers = Arc::new(RwLock::new(headers.unwrap_or_default()));
+        // Insert app version header.
+        {
+            headers.write().insert(
+                X_PM_APP_VERSION_HEADER,
+                HeaderValue::from_str(&config.app_version).map_err(Box::new)?,
+            );
+        }
+        let auth = Arc::new(AsyncRwLock::new(
+            CachedStore::new(store, Arc::clone(&headers)).await?,
+        ));
         Ok(Self {
             auth,
             base_url,
             client: Client::new(),
             config,
-            headers: Arc::new(RwLock::new(headers.unwrap_or_default())),
+            headers,
         })
     }
 

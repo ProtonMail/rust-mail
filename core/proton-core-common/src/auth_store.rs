@@ -8,7 +8,7 @@ use futures::FutureExt;
 use proton_api_core::auth::{Auth, Store, StoreError};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Stash;
+use stash::stash::{Interface, Stash};
 use std::sync::Arc;
 use tracing::error;
 
