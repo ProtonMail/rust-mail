@@ -6,7 +6,7 @@ use crate::action;
 use crate::action::{Action, Id, Metadata, Priority};
 use indoc::indoc;
 use proton_sqlite3::{Migration, MigratorError};
-use rusqlite::ToSql;
+use stash::exports::{SqliteError, ToSql};
 use stash::macros::DbRecord;
 use stash::orm::{DbRecord, DbRecords};
 use stash::params;
@@ -259,9 +259,7 @@ impl ActionQueueExtension for Tether {
     {
         let mut v = self.query::<Q, T>(query, params).await?;
         if v.is_empty() {
-            return Err(StashError::ExecutionError(
-                rusqlite::Error::QueryReturnedNoRows,
-            ));
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         };
 
         Ok(v.swap_remove(0))
@@ -282,7 +280,7 @@ impl<T> OptionalExtension<T> for Result<T, StashError> {
     fn optional(self) -> Result<Option<T>, StashError> {
         match self {
             Ok(t) => Ok(Some(t)),
-            Err(StashError::ExecutionError(rusqlite::Error::QueryReturnedNoRows)) => Ok(None),
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
             Err(e) => Err(e),
         }
     }

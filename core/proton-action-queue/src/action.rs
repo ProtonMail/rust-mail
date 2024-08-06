@@ -2,10 +2,11 @@ use crate::db::StoredAction;
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::Session;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef};
-use rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use stash::exports::{
+    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
+};
 use stash::stash::{Stash, Tether};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -88,7 +89,7 @@ impl FromSql for Id {
 }
 
 impl ToSql for Id {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.0.to_sql()
     }
 }
@@ -104,7 +105,7 @@ pub enum Priority {
 }
 
 impl ToSql for Priority {
-    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }
