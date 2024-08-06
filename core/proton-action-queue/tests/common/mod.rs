@@ -6,7 +6,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::Session;
 use stash::macros::DbRecord;
 use stash::params;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Interface, Stash, StashError, Tether};
 
 /// Create a new queue.
 pub async fn new_queue(factory: Factory) -> Queue {

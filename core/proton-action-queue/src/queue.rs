@@ -11,7 +11,7 @@ use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Interface, Stash, StashError, Tether};
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::pin::Pin;

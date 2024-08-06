@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
-use stash::stash::Stash;
+use stash::stash::{Interface, Stash};
 use tokio::spawn as spawn_async;
 
 #[derive(Clone, Debug, Deserialize, Model, PartialEq, Serialize)]

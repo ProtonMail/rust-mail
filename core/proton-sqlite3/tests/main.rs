@@ -4,7 +4,7 @@ use rand::{Rng, SeedableRng};
 use stash::datatypes::QueryResultI64;
 use stash::macros::DbRecord;
 use stash::params;
-use stash::stash::{Stash, StashError};
+use stash::stash::{Interface, Stash, StashError};
 use tokio::spawn as spawn_async;
 
 #[derive(Debug)]

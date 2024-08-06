@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use rusqlite::hooks::Action;
-use stash::stash::Stash;
+use stash::stash::{Interface, Stash};
 
 #[tokio::test]
 async fn test_service() {

@@ -10,7 +10,7 @@ use stash::exports::{SqliteError, ToSql};
 use stash::macros::DbRecord;
 use stash::orm::{DbRecord, DbRecords};
 use stash::params;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Interface, Stash, StashError, Tether};
 use std::ops::Add;
 use tracing::debug;
 

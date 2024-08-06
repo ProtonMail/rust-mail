@@ -8,7 +8,7 @@ mod tests;
 use futures::executor::block_on;
 use stash::datatypes::QueryResultU64;
 use stash::params;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Interface, Stash, StashError, Tether};
 use thiserror::Error;
 use tracing::debug;
 

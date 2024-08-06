@@ -9,7 +9,7 @@ use crate::db::tests::new_core_test_connection;
 use crate::models::{User, UserSettings};
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
-use stash::stash::Stash;
+use stash::stash::{Interface, Stash};
 
 #[tokio::test]
 async fn test_core_store_and_load_user() {

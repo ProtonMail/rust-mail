@@ -1,5 +1,5 @@
 use futures::executor::block_on;
-use stash::stash::{StashError, Tether};
+use stash::stash::{Interface, StashError, Tether};
 
 pub struct V0 {}
 

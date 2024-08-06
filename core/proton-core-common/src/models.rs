@@ -45,7 +45,7 @@ use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashError};
+use stash::stash::{Interface, Stash, StashError};
 use tracing::{debug, error};
 
 /// TODO: Document this struct.

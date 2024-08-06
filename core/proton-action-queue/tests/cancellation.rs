@@ -8,7 +8,7 @@ use proton_action_queue::action::{
 use proton_action_queue::queue::QueuedError;
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Interface, Stash, Tether};
 
 #[tokio::test]
 async fn cancel_causes_revert() {

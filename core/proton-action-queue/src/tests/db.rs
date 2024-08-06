@@ -3,6 +3,7 @@
 use super::*;
 use crate::tests::common::NoopActionHandler;
 use proton_api_core::service::ApiServiceError;
+use stash::stash::Interface;
 
 #[tokio::test]
 async fn db_migration() {
@@ -43,8 +44,8 @@ async fn action_store_and_retrieve() {
         bar: 2048,
     };
 
-    let conn = new_test_connection().await;
-    let conn = conn.connection();
+    let stash = new_test_connection().await;
+    let conn = stash.connection();
 
     conn.transaction().await.unwrap();
     let stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();

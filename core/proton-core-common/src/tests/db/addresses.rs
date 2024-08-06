@@ -9,7 +9,7 @@ use proton_crypto_account::keys::{
 };
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Stash;
+use stash::stash::{Interface, Stash};
 
 #[tokio::test]
 async fn test_address_create() {

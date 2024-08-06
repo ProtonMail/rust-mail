@@ -17,7 +17,7 @@ use proton_sqlite3::MigratorError;
 use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashError};
+use stash::stash::{Interface, Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};

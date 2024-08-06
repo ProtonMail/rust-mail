@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use stash::stash::Stash;
+use stash::stash::{Interface, Stash};
 
 #[tokio::test]
 async fn test_nested_transactions_trigger_error() {

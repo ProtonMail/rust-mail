@@ -7,7 +7,7 @@ use proton_api_core::auth::UserKeySecret;
 use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Stash;
+use stash::stash::{Interface, Stash};
 use std::io::stdout;
 use tracing::subscriber::set_global_default;
 use tracing::Level;

@@ -9,7 +9,7 @@ use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_event_loop::Event;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{Interface, Stash, StashError, Tether};
 use std::sync::Weak;
 use tracing::{debug, error, Level};
 
