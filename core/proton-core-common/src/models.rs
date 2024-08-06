@@ -45,7 +45,7 @@ use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Interface, Stash, StashError};
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use tracing::{debug, error};
 
 /// TODO: Document this struct.
@@ -281,20 +281,14 @@ impl Contact {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self) -> Result<(), StashError> {
+    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         for card in &mut self.cards {
             card.remote_contact_id.clone_from(&self.remote_id);
         }
         for email in &mut self.contact_emails {
             email.remote_contact_id.clone_from(&self.remote_id);
         }
-        let stash = {
-            let Some(stash) = self.stash() else {
-                return Err(StashError::NoStashAvailable);
-            };
-            stash.clone()
-        };
-        stash
+        interface
             .execute(
                 "DELETE FROM contact_cards WHERE remote_contact_id = ?",
                 params![self.remote_id.clone()],
@@ -303,7 +297,7 @@ impl Contact {
         for card in &mut self.cards {
             card.local_id = None;
             card.row_id = None;
-            card.set_stash(&stash);
+            card.set_stash(interface.stash());
             card.save().await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e

@@ -42,7 +42,7 @@ async fn test_sync_and_load_contacts() {
 
     // Check database
     let conn = user_ctx.stash();
-    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+    let mut contacts = Contact::find("LIMIT 100", vec![], conn, None)
         .await
         .expect("Failed to get contacts");
     for contact in &mut contacts {
@@ -76,7 +76,7 @@ async fn test_sync_and_load_full_contact() {
 
     // Check database
     let conn = user_ctx.stash();
-    let mut contact = Contact::load(remote_id.clone().into(), &conn)
+    let mut contact = Contact::load(remote_id.clone().into(), conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
@@ -107,7 +107,7 @@ async fn test_sync_and_load_contacts_mixed() {
     let conn = user_ctx.stash();
 
     let remote_id = test_contacts.first().unwrap().id.clone();
-    let mut contact = Contact::load(remote_id.into(), &conn)
+    let mut contact = Contact::load(remote_id.into(), conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
@@ -116,7 +116,7 @@ async fn test_sync_and_load_contacts_mixed() {
     let expected_contact = create_test_local_full_contact(Some(user_ctx.stash().clone()));
     assert_eq!(contact, expected_contact);
 
-    let mut contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+    let mut contacts = Contact::find("LIMIT 100", vec![], conn, None)
         .await
         .expect("Failed to load contacts");
     for contact in &mut contacts {
@@ -129,7 +129,7 @@ async fn test_sync_and_load_contacts_mixed() {
     let queried_contact_emails = ContactEmail::find(
         "WHERE canonical_email = ?",
         params![email_to_query],
-        &conn,
+        conn,
         None,
     )
     .await
@@ -193,14 +193,14 @@ async fn test_sync_and_delete_event_contact() {
     let queried_contact_emails = ContactEmail::find(
         "WHERE canonical_email = ?",
         params![email_to_remove.canonical_email],
-        &conn,
+        conn,
         None,
     )
     .await
     .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let contacts = Contact::find("LIMIT 100", vec![], &conn, None)
+    let contacts = Contact::find("LIMIT 100", vec![], conn, None)
         .await
         .expect("Failed to get contacts");
     assert_eq!(contacts.len(), test_contacts.len() - 1);
@@ -264,14 +264,14 @@ async fn test_sync_and_modify_event_contact() {
     let queried_contact_emails = ContactEmail::find(
         "WHERE canonical_email = ?",
         params![removed_email.canonical_email],
-        &conn,
+        conn,
         None,
     )
     .await
     .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let mut contact = Contact::load(remote_id, &conn)
+    let mut contact = Contact::load(remote_id, conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");

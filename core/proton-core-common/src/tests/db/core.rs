@@ -21,7 +21,7 @@ async fn test_core_store_and_load_user() {
             .await
             .expect("failed to start transaction");
         user.save_using(&tx).await.expect("failed to store user");
-        let db_user = User::load_using(user.remote_id.clone().unwrap(), &tx)
+        let db_user = User::load(user.remote_id.clone().unwrap(), &tx)
             .await
             .expect("failed to load user")
             .expect("should have value");
@@ -59,7 +59,7 @@ async fn test_core_user_space_updates() {
             .await
             .expect("failed to update used space");
 
-        let db_user = User::load_using(user.remote_id.clone().unwrap(), &tx)
+        let db_user = User::load(user.remote_id.clone().unwrap(), &tx)
             .await
             .expect("failed to load user")
             .expect("should have value");
@@ -135,7 +135,7 @@ async fn test_core_store_and_load_user_settings() {
             .save_using(&tx)
             .await
             .expect("failed to store settings");
-        let db_settings = UserSettings::load_using(user_id.clone(), &tx)
+        let db_settings = UserSettings::load(user_id.clone(), &tx)
             .await
             .expect("failed to load user")
             .expect("should have value");
