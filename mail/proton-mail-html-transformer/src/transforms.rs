@@ -175,6 +175,25 @@ mod test {
     }
 
     #[test]
+    fn insert_links_text() {
+        let html = r#"
+            Intro,
+
+            Blah blabh blah, find reports at https://proton.me etc..
+
+            See also:
+            * https://127.0.0.1
+            * https://ads.com?utm_source=tracker
+            * mailto:foo@bar
+
+            Outro
+
+        "#;
+
+        let html = Transformer::new(html).insert_links().to_string();
+        insta::assert_snapshot!(html);
+    }
+    #[test]
     fn proxy_images() {
         let html = r#"
         <body>
