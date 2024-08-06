@@ -1,6 +1,8 @@
+#![allow(non_snake_case)]
+
+use super::super::*;
 use crate::datatypes::AttachmentMetadatas;
 use crate::db::new_test_connection_file;
-use crate::models::{Attachment, Conversation, Message};
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,

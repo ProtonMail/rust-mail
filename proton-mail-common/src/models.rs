@@ -27,6 +27,10 @@
 //! a specific need.
 //!
 
+#[cfg(test)]
+#[path = "tests/models.rs"]
+mod tests;
+
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
     ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,

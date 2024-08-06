@@ -1,18 +1,19 @@
-use super::conversations::create_address;
-use super::utils::prepare_db_state_core;
+#![allow(non_snake_case)]
+
+use super::super::*;
 use crate::datatypes::{
     AttachmentMetadata, ExclusiveLocation, MessageCount, MessageFlags, SystemLabelId,
 };
-use crate::db::conversations::tests::conversations::{
-    create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID, MY_CONVERSATION_ID,
-    MY_LABEL_ID1, MY_LABEL_ID2,
-};
-use crate::db::conversations::tests::db_states::new_test_delete_db_state;
-use crate::db::conversations::tests::utils::{
-    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
-};
 use crate::db::new_test_connection_file;
-use crate::models::{Conversation, Label, Message, MessageBodyMetadata};
+use crate::tests::common::{
+    create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
+    MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
+};
+use crate::tests::db_states::new_test_delete_db_state;
+use crate::tests::utils::{
+    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
+    prepare_db_state_core,
+};
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
@@ -24,7 +25,6 @@ use proton_api_mail::services::proton::response_data::{
     MimeType as ApiMimeType,
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
-
 use proton_crypto_inbox::attachment::KeyPackets;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};

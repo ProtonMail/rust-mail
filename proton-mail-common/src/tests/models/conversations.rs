@@ -1,30 +1,278 @@
-use super::utils::prepare_db_state_core;
-use crate::datatypes::{ConversationCount, LabelColor, LabelType, SystemLabelId};
-use crate::db::conversations::tests::db_states::{
+#![allow(non_snake_case)]
+
+use super::super::*;
+use crate::datatypes::{
+    ConversationCount, LabelColor, LabelType, MessageAddress, MessageFlags, SystemLabelId,
+};
+use crate::db::new_test_connection_file;
+use crate::tests::common::{
+    create_address, create_labels, test_conversation, test_starred_label, MY_ATTACHMENT_ID,
+    MY_LABEL_ID1, MY_LABEL_ID2,
+};
+use crate::tests::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
     new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
 };
-use crate::db::conversations::tests::utils::{
+use crate::tests::utils::{
     conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
-    prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip,
+    prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip, prepare_db_state_core,
 };
-use crate::db::new_test_connection_file;
-use crate::models::{Conversation, ConversationLabel, Label, Message};
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::{
-    AttachmentMetadata as ApiAttachmentMetadata, Conversation as ApiConversation,
-    ConversationLabel as ApiConversationLabel, Disposition as ApiDisposition,
-    MessageAddress as ApiMessageAddress, MimeType as ApiMimeType,
+    AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
+    Disposition as ApiDisposition, MimeType as ApiMimeType,
 };
-use proton_core_common::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LabelId,
-};
-use proton_core_common::models::Address;
-use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
+use proton_core_common::datatypes::LabelId;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Tether;
+use test_case::test_case;
+
+lazy_static! {
+    static ref STARRED: Label = new_label(LabelType::System, Some(LabelId::starred().clone()));
+    static ref LABEL: Label = new_label(LabelType::Label, None);
+    static ref FOLDER: Label = new_label(LabelType::Folder, None);
+    static ref INBOX: Label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
+    static ref DRAFTS: Label = new_label(LabelType::System, Some(LabelId::drafts().clone())); // There is no conversations in drafts - this is theoretical case
+    static ref ALL_LABELS: Vec<&'static Label> =
+        vec![&STARRED, &LABEL, &FOLDER, &INBOX, &DRAFTS];
+    static ref MOVED_CONV_LABELS: Vec<&'static Label> =
+        vec![&STARRED, &LABEL, &FOLDER];
+    static ref INBOX_AND_DRAFTS_LABELS: Vec<&'static Label> = vec![&INBOX, &DRAFTS];
+}
+
+#[test_case(
+    &ALL_LABELS, &[], None; "TEST1 - empty messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, false),], Some(0); "TEST2 - read - recieved message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::empty(), false),], None; "TEST3 - read - draft message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::OPENED, false),], None; "TEST4 - read - draft & opened message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::OPENED, true),], None; "TEST5 - unread - draft & opened message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true),], Some(0); "TEST6 - unread - recieved & opened message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, true),], Some(0); "TEST7 - unread - recieved message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),], Some(0); "TEST8 - unread - recieved & internal message"
+)]
+#[test_case(
+    &ALL_LABELS, &[(MessageFlags::SENT | MessageFlags::INTERNAL, true),], Some(0); "TEST9 - unread - opened & internal message"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED | MessageFlags::INTERNAL | MessageFlags::OPENED, true),
+        (MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),
+
+    ], Some(2); "TEST10 - all unread - recieved | internal | opened messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+
+    ], Some(0); "TEST11 - all unread - recieved | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), false),
+
+    ], Some(0); "TEST12 - some unread - recieved | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::SENT, true),
+        (MessageFlags::SENT, true),
+        (MessageFlags::empty(), false),
+
+    ], Some(0); "TEST13 - some unread - sent | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::SENT | MessageFlags::RECEIVED, true),
+        (MessageFlags::SENT | MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), false),
+
+    ], Some(0); "TEST14 - some unread - sent & received | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+
+    ], Some(3); "TEST15 - all unread - received | draft messages"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+    ], Some(2); "TEST16 - first_unread_conversation_message_in_starred_or_custom_label_or_folder"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true),
+    ], Some(3); "TEST17 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+    ], Some(2); "TEST18 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::empty(), true),
+    ], Some(0); "TEST19 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+    ], Some(2); "TEST20 - first_unread_conversation_message_default_last_consecutive_unread"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::empty(), true),
+    ], Some(2); "TEST21 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::SENT | MessageFlags::AUTO, true),
+    ], Some(2); "TEST22 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
+)]
+#[test_case(
+    &MOVED_CONV_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::SENT | MessageFlags::AUTO, true),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, false),
+    ], Some(2); "TEST23A - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
+)]
+#[test_case(
+    &INBOX_AND_DRAFTS_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::SENT | MessageFlags::AUTO, true),
+        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, false),
+    ], Some(0); "TEST23B - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true),
+    ], Some(0); "TEST24 - oldest_unread_message_selected_in_unread_chain"
+)]
+#[test_case(
+    &ALL_LABELS, &[
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, false),
+    ], Some(2); "TEST25 - all read"
+)]
+fn find_conversation_message_id(
+    labels: &[&Label],
+    messages: &[(MessageFlags, bool)],
+    expected_id: Option<u64>,
+) {
+    let messages = messages
+        .iter()
+        .enumerate()
+        .map(|(id, (flags, unread))| message_metadata_with_flags(id as u64, *flags, *unread))
+        .collect::<Vec<_>>();
+
+    for label in labels {
+        assert_eq!(
+            Conversation::first_unread_message(&label, &messages),
+            expected_id,
+            "Test failed for label: {:?}, {:?}",
+            label.label_type,
+            label.remote_id
+        );
+    }
+}
+
+fn message_metadata_with_flags(id: u64, flags: MessageFlags, unread: bool) -> Message {
+    Message {
+        local_id: Some(id),
+        unread,
+        sender: MessageAddress {
+            address: String::new(),
+            bimi_selector: None,
+            display_sender_image: false,
+            is_proton: false,
+            is_simple_login: false,
+            name: String::new(),
+        },
+        flags,
+        ..Default::default()
+    }
+}
+
+fn new_label(label_type: LabelType, rid: Option<LabelId>) -> Label {
+    Label {
+        local_id: None,
+        remote_id: rid,
+        local_parent_id: None,
+        remote_parent_id: None,
+        color: LabelColor::black(),
+        display: false,
+        display_order: 0,
+        expanded: false,
+        initialized_conv: false,
+        initialized_msg: false,
+        label_type,
+        name: String::new(),
+        notify: false,
+        path: None,
+        sticky: false,
+        total_conv: 0,
+        total_msg: 0,
+        unread_conv: 0,
+        unread_msg: 0,
+        row_id: None,
+        stash: None,
+    }
+}
 
 #[tokio::test]
 async fn test_conversation_create_no_labels() {
@@ -1670,182 +1918,5 @@ async fn test_conversation_unlabel_without_message_metadata() {
         let label_counts = conv_counts.get(&local_label_id1).unwrap();
         assert_eq!(label_counts.unread, 0);
         assert_eq!(label_counts.total, 0);
-    }
-}
-
-lazy_static! {
-    pub(super) static ref MY_ADDRESS_ID: ApiRemoteId = ApiRemoteId::from("MyRemoteId");
-    pub(super) static ref MY_LABEL_ID1: ApiRemoteId = ApiRemoteId::from("MyLabelID1");
-    pub(super) static ref MY_LABEL_ID2: ApiRemoteId = ApiRemoteId::from("MyLabelID2");
-    pub(super) static ref MY_ATTACHMENT_ID: ApiRemoteId = ApiRemoteId::from("MyAttachmentID1");
-    pub(super) static ref MY_CONVERSATION_ID: ApiRemoteId = ApiRemoteId::from("MyConversationID");
-}
-pub(in crate::db::conversations) async fn create_labels(tx: &Tether) -> Vec<u64> {
-    let mut labels = [test_label1(), test_label2()];
-    for label in &mut labels {
-        label.save_using(tx).await.expect("failed to create labels");
-        assert!(Label::find_first(
-            "WHERE remote_id = ?",
-            params![label.remote_id.clone().unwrap()],
-            tx.stash()
-        )
-        .await
-        .expect("failed to resolve label ids")
-        .unwrap()
-        .local_id
-        .is_some());
-    }
-    labels.into_iter().map(|l| l.local_id.unwrap()).collect()
-}
-
-pub(in crate::db::conversations) async fn create_address(core_tx: &Tether) {
-    let mut address = test_address();
-    address
-        .save_using(core_tx)
-        .await
-        .expect("failed to create address");
-}
-
-pub(in crate::db::conversations) fn test_address() -> Address {
-    Address {
-        remote_id: Some(MY_ADDRESS_ID.clone().into()),
-        email: "hello@world".to_owned(),
-        send: Default::default(),
-        receive: Default::default(),
-        status: AddressStatus::Enabled,
-        domain_id: None,
-        address_type: AddressType::Original,
-        display_order: 0,
-        display_name: "HelloWorld".to_owned(),
-        signature: "SIGNATURE".to_owned(),
-        keys: AddressKeys(RealAddressKeys(vec![])),
-        catch_all: false,
-        proton_mx: false,
-        signed_key_list: AddressSignedKeyList {
-            min_epoch_id: None,
-            max_epoch_id: None,
-            expected_min_epoch_id: None,
-            data: None,
-            obsolescence_token: None,
-            signature: None,
-            revision: 0,
-        },
-        row_id: None,
-        stash: None,
-    }
-}
-
-pub(in crate::db::conversations) fn test_label1() -> Label {
-    Label {
-        local_id: None,
-        remote_id: Some(MY_LABEL_ID1.clone().into()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        name: "MyLabel".to_owned(),
-        path: None,
-        color: LabelColor::black(),
-        label_type: LabelType::Label,
-        notify: Default::default(),
-        display: Default::default(),
-        sticky: Default::default(),
-        total_conv: 0,
-        total_msg: 0,
-        unread_conv: 0,
-        unread_msg: 0,
-        expanded: Default::default(),
-        initialized_conv: false,
-        display_order: 0,
-        initialized_msg: false,
-        row_id: None,
-        stash: None,
-    }
-}
-
-pub(in crate::db::conversations) fn test_label2() -> Label {
-    Label {
-        local_id: None,
-        remote_id: Some(MY_LABEL_ID2.clone().into()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        name: "MyFolder".to_owned(),
-        path: None,
-        color: LabelColor::black(),
-        label_type: LabelType::Folder,
-        notify: true,
-        display: Default::default(),
-        sticky: Default::default(),
-        total_conv: 0,
-        total_msg: 0,
-        unread_conv: 0,
-        unread_msg: 0,
-        expanded: true,
-        initialized_conv: false,
-        display_order: 1,
-        initialized_msg: false,
-        row_id: None,
-        stash: None,
-    }
-}
-
-pub(in crate::db::conversations) fn test_starred_label() -> Label {
-    Label {
-        local_id: None,
-        remote_id: Some(LabelId::starred().clone()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        name: "Starred".to_owned(),
-        path: Some("Starred".to_owned()),
-        color: LabelColor::black(),
-        label_type: LabelType::System,
-        notify: false,
-        display: Default::default(),
-        sticky: Default::default(),
-        total_conv: 0,
-        total_msg: 0,
-        unread_conv: 0,
-        unread_msg: 0,
-        expanded: false,
-        initialized_conv: false,
-        display_order: 2,
-        initialized_msg: false,
-        row_id: None,
-        stash: None,
-    }
-}
-
-pub(in crate::db::conversations) fn test_conversation(
-    labels: Vec<ApiConversationLabel>,
-    attachments: Vec<ApiAttachmentMetadata>,
-) -> ApiConversation {
-    ApiConversation {
-        id: MY_CONVERSATION_ID.clone(),
-        order: 50,
-        subject: "Hello World".to_owned(),
-        senders: vec![ApiMessageAddress {
-            address: "hello@world.com".to_owned(),
-            name: "HelloWorld".to_owned(),
-            ..Default::default()
-        }],
-        recipients: vec![
-            ApiMessageAddress {
-                address: "foo@bar.com".to_owned(),
-                name: "Foo".to_owned(),
-                ..Default::default()
-            },
-            ApiMessageAddress {
-                address: "Bar@bar.com".to_owned(),
-                name: "bar".to_owned(),
-                ..Default::default()
-            },
-        ],
-        num_messages: 10,
-        num_unread: 4,
-        num_attachments: 7,
-        expiration_time: 1024,
-        size: 4909,
-        labels,
-        display_snooze_reminder: false,
-        attachments_metadata: attachments,
-        attachment_info: Default::default(),
     }
 }

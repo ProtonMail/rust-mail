@@ -1,6 +1,8 @@
+#![allow(non_snake_case)]
+
+use super::super::*;
 use crate::datatypes::{ConversationCount, LabelColor, LabelType, MessageCount};
 use crate::db::new_test_connection;
-use crate::models::Label;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
