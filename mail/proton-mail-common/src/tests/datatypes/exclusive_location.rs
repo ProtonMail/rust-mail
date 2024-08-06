@@ -1,9 +1,8 @@
+#![allow(non_snake_case)]
+
+use super::*;
 use crate::{
-    datatypes::{
-        exclusive_location::{ExclusiveLocation, INBOX_LABEL_ID, OUTBOX_LABEL_ID, TRASH_LABEL_ID},
-        LabelType::{self, *},
-        SystemLabelId,
-    },
+    datatypes::LabelType::{self, *},
     models::Label,
 };
 use proton_core_common::datatypes::LabelId;

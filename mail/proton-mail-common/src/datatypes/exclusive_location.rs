@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "../tests/datatypes/exclusive_location.rs"]
+mod tests;
+
 use crate::{
     datatypes::{LabelColor, LabelType, SystemLabelId},
     models::Label,

@@ -2,11 +2,11 @@ use crate::datatypes::{
     AttachmentMetadata, AttachmentMetadatas, Disposition, LabelType, MessageAddress,
     MessageAddresses, MimeType, SystemLabelId,
 };
-use crate::db::conversations::tests::conversations::{
+use crate::models::{Conversation, ConversationLabel, Label, Message};
+use crate::tests::common::{
     test_address, test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
-use crate::db::conversations::tests::utils::TestDBState;
-use crate::models::{Conversation, ConversationLabel, Label, Message};
+use crate::tests::utils::TestDBState;
 use lazy_static::lazy_static;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 
@@ -15,10 +15,10 @@ lazy_static! {
     pub(super) static ref DELETE_DB_CONV2: RemoteId = RemoteId::from("MyConvId2");
 }
 
-pub(in crate::db::conversations) fn new_message_id(num: usize) -> RemoteId {
+pub fn new_message_id(num: usize) -> RemoteId {
     RemoteId::from(format!("RemoteId{num}"))
 }
-pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
+pub fn new_test_delete_db_state() -> TestDBState {
     // Conversation 1 has 3 messages, split between 2 labels, 1 is unread  + 1 Attachment(s)
     // Conversation 2 has 2 message in one label, 1 is unread + 0 Attachment(s)
     let conv_id1 = DELETE_DB_CONV1.clone();
@@ -322,7 +322,7 @@ pub(in crate::db::conversations) fn new_test_delete_db_state() -> TestDBState {
     }
 }
 
-pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
+pub fn new_test_unread_db_state() -> TestDBState {
     // Conversation 1 has 4 messages, split between 2 labels, All unread.
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
@@ -505,7 +505,7 @@ pub(in crate::db::conversations) fn new_test_unread_db_state() -> TestDBState {
     }
 }
 
-pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
+pub fn new_test_label_db_state() -> TestDBState {
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
         addresses: vec![test_address()],
@@ -629,7 +629,7 @@ pub(in crate::db::conversations) fn new_test_label_db_state() -> TestDBState {
 /// Database state where there is one conversation which has one label applied and we
 /// need to tes that if we apply another label it does populate the table with 0
 /// values.
-pub(super) fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
+pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
         addresses: vec![test_address()],

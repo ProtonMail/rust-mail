@@ -2,9 +2,6 @@ mod attachments;
 
 pub mod decrypted_message;
 
-#[cfg(test)]
-mod tests;
-
 use crate::datatypes::ViewMode;
 use crate::mailbox::decrypted_message::DecryptedMessageError;
 use crate::models::{Conversation, Label, MailSettings, Message, MAIL_SETTINGS_ID};

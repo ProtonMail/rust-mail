@@ -1,3 +1,5 @@
+#![allow(non_snake_case)]
+
 use crate::db::new_test_connection;
 use proton_core_common::datatypes::RemoteId;
 

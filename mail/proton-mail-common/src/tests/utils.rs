@@ -8,7 +8,7 @@ use stash::stash::Tether;
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default, Clone)]
-pub(in crate::db::conversations) struct TestDBState {
+pub struct TestDBState {
     pub addresses: Vec<Address>,
     pub labels: Vec<Label>,
     pub conversations: Vec<Conversation>,
@@ -16,7 +16,7 @@ pub(in crate::db::conversations) struct TestDBState {
 }
 
 #[derive(Default)]
-pub(in crate::db::conversations) struct TestDBStateMap {
+pub struct TestDBStateMap {
     pub labels: HashMap<LabelId, u64>,
     pub conversations: HashMap<RemoteId, u64>,
     pub messages: HashMap<RemoteId, u64>,
@@ -24,7 +24,7 @@ pub(in crate::db::conversations) struct TestDBStateMap {
     pub message_counts: HashMap<LabelId, MessageCount>,
 }
 
-pub(in crate::db::conversations) async fn prepare_db_state_core(tx: &Tether, env: &mut [Address]) {
+pub async fn prepare_db_state_core(tx: &Tether, env: &mut [Address]) {
     // create addresses
     for address in env.iter_mut() {
         address
@@ -34,14 +34,14 @@ pub(in crate::db::conversations) async fn prepare_db_state_core(tx: &Tether, env
     }
 }
 
-pub(in crate::db::conversations) async fn prepare_and_patch_db_state(
+pub async fn prepare_and_patch_db_state(
     tx: &Tether,
     env: TestDBState,
 ) -> (TestDBState, TestDBStateMap) {
     prepare_and_patch_db_state_and_skip(tx, env, false).await
 }
 
-pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
+pub async fn prepare_and_patch_db_state_and_skip(
     tx: &Tether,
     mut env: TestDBState,
     skip_messages: bool,
@@ -234,10 +234,7 @@ pub(in crate::db::conversations) async fn prepare_and_patch_db_state_and_skip(
     (env, result)
 }
 
-pub(in crate::db::conversations) fn find_conversation_label(
-    conv: &Conversation,
-    id: &LabelId,
-) -> ConversationLabel {
+pub fn find_conversation_label(conv: &Conversation, id: &LabelId) -> ConversationLabel {
     conv.labels
         .iter()
         .find(|cl| cl.remote_label_id == Some(id.clone()))
@@ -245,7 +242,7 @@ pub(in crate::db::conversations) fn find_conversation_label(
         .clone()
 }
 
-pub(in crate::db::conversations) fn message_counts_for_conversation(
+pub fn message_counts_for_conversation(
     messages: &[Message],
     conversation_id: &RemoteId,
     label_id: &LabelId,
@@ -271,9 +268,7 @@ pub(in crate::db::conversations) fn message_counts_for_conversation(
     (unread, total)
 }
 
-pub(in crate::db::conversations) async fn conv_counts_as_map(
-    tx: &Tether,
-) -> BTreeMap<u64, ConversationCount> {
+pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<u64, ConversationCount> {
     BTreeMap::from_iter(
         Label::find(String::new(), vec![], tx.stash(), None)
             .await
@@ -292,9 +287,7 @@ pub(in crate::db::conversations) async fn conv_counts_as_map(
     )
 }
 
-pub(in crate::db::conversations) async fn msg_counts_as_map(
-    tx: &Tether,
-) -> BTreeMap<u64, MessageCount> {
+pub async fn msg_counts_as_map(tx: &Tether) -> BTreeMap<u64, MessageCount> {
     BTreeMap::from_iter(
         Label::find(String::new(), vec![], tx.stash(), None)
             .await

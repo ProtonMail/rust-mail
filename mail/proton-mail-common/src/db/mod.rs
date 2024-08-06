@@ -1,12 +1,8 @@
 //! Mapping of Mail domain into a Sqlite Database.
 
-mod attachments;
-mod conversations;
-mod events;
 pub mod json;
-mod labels;
 pub mod migrations;
-mod settings;
+
 pub type DBMigrationError = MigratorError;
 
 pub use proton_sqlite3;

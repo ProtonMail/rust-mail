@@ -1,5 +1,7 @@
+#![allow(non_snake_case)]
+
+use super::super::*;
 use crate::db::new_test_connection;
-use crate::models::{MailSettings, MAIL_SETTINGS_ID};
 use stash::orm::Model;
 
 #[tokio::test]
