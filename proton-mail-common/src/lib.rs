@@ -13,6 +13,9 @@ pub mod models;
 mod proton_color;
 mod user_context;
 
+#[cfg(test)]
+mod tests;
+
 pub use context::*;
 pub use mailbox::*;
 pub use user_context::*;

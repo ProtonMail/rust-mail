@@ -21,20 +21,20 @@ pub mod responses;
 
 use crate::services::proton::common::LabelType;
 use crate::services::proton::requests::{
-    GetConversationsOptions, GetLabelsOptions, GetMessagesOptions, PostLabelsRequest,
-    PutConversationsDeleteRequest, PutConversationsLabelRequest, PutConversationsReadRequest,
-    PutConversationsUnlabelRequest, PutConversationsUnreadRequest, PutLabelRequest,
-    PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
+    GetConversationsOptions, GetLabelsOptions, GetMessagesOptions, PatchLabelRequest,
+    PostLabelsRequest, PutConversationsDeleteRequest, PutConversationsLabelRequest,
+    PutConversationsReadRequest, PutConversationsUnlabelRequest, PutConversationsUnreadRequest,
+    PutLabelRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
     PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
 };
 use crate::services::proton::responses::{
     GetAttachmentMetadataResponse, GetConversationResponse, GetConversationsCountResponse,
     GetConversationsResponse, GetLabelsResponse, GetMessageResponse, GetMessagesCountResponse,
-    GetMessagesResponse, GetSettingsResponse, PostLabelsResponse, PutConversationsDeleteResponse,
-    PutConversationsLabelResponse, PutConversationsReadResponse, PutConversationsUnlabelResponse,
-    PutConversationsUnreadResponse, PutLabelResponse, PutMessagesDeleteResponse,
-    PutMessagesLabelResponse, PutMessagesReadResponse, PutMessagesUnlabelResponse,
-    PutMessagesUnreadResponse,
+    GetMessagesResponse, GetSettingsResponse, PatchLabelResponse, PostLabelsResponse,
+    PutConversationsDeleteResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
+    PutConversationsUnlabelResponse, PutConversationsUnreadResponse, PutLabelResponse,
+    PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
+    PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 use bytes::Bytes;
@@ -585,6 +585,36 @@ pub trait ProtonMail: ApiService {
         self.put::<_, Json<_>>(
             &format!("{}/messages/unread", Self::BASE_PATH_MAIL),
             PutMessagesUnreadRequest { ids: message_ids },
+            None,
+        )
+        .await
+    }
+
+    /// This method is used to patch an existing label.
+    /// The `label_id` is used to identify the label to patch.
+    /// Body contains expanded and notify fields.
+    /// Expanded is a boolean that indicates if the label is expanded.
+    /// For example if the folder is expanded in the UI.
+    /// Notify is a boolean that indicates if the user should be notified
+    /// about new messages in the label. By default both of them are disabled.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id` - The ID of the label to patch.
+    /// * `body` - Json body to use in the patch request.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn patch_label(
+        &self,
+        label_id: RemoteId,
+        body: PatchLabelRequest,
+    ) -> Result<PatchLabelResponse, ApiServiceError> {
+        self.patch::<_, Json<_>>(
+            &format!("{}/labels/{label_id}", Self::BASE_PATH_CORE),
+            body,
             None,
         )
         .await

@@ -1,0 +1,5 @@
+---
+source: proton-mail-html-transformer/src/tests/transforms.rs
+expression: html
+---
+<html><head></head><body><html>Intro, Blah blabh blah, find reports at <a href="https://proton.me/" rel="noreferrer">https://proton.me/</a> etc.. See also: * <a href="https://127.0.0.1/" rel="noreferrer">https://127.0.0.1/</a> * <a href="https://ads.com/" rel="noreferrer">https://ads.com/</a> * mailto:foo@bar Outro </html></body></html>
