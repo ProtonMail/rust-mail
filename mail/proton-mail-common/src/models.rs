@@ -27,6 +27,10 @@
 //! a specific need.
 //!
 
+#[cfg(test)]
+#[path = "tests/models.rs"]
+mod tests;
+
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
     ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
@@ -42,7 +46,8 @@ use indoc::formatdoc;
 use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::requests::{
-    GetConversationsOptions, GetMessagesOptions, PostLabelsRequest, PutLabelRequest,
+    GetConversationsOptions, GetMessagesOptions, PatchLabelRequest, PostLabelsRequest,
+    PutLabelRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, Conversation as ApiConversation,
@@ -1883,6 +1888,34 @@ impl Label {
             .await?
             .label
             .into())
+    }
+
+    /// Function to update the label's expanded state in remote.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`         - The Remote ID of the label to update.
+    /// * `expanded`   - The new expanded state.
+    /// * `api`        - The API instance to use.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed.
+    ///
+    pub async fn patch_expanded<PM: ProtonMail>(
+        id: LabelId,
+        expanded: bool,
+        api: &PM,
+    ) -> Result<Vec<OperationResult>, ApiServiceError> {
+        api.patch_label(
+            id.into(),
+            PatchLabelRequest {
+                expanded: Some(expanded),
+                ..Default::default()
+            },
+        )
+        .await
+        .map(|r| r.responses)
     }
 
     /// Return the preferred view mode for this label.

@@ -38,7 +38,7 @@ use serde::Serialize;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::serde_as;
+use serde_with::{serde_as, BoolFromInt, DefaultOnNull};
 use smart_default::SmartDefault;
 use std::collections::HashMap;
 
@@ -466,10 +466,10 @@ pub struct ConversationCount {
 }
 
 /// Data for an event related to a [`ConversationEvent`] record.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct ConversationEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -525,10 +525,10 @@ pub struct ConversationLabel {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Label {
     /// TODO: Document this field.
@@ -574,10 +574,10 @@ pub struct Label {
 }
 
 /// Data for an event related to a [`LabelEvent`] record.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct LabelEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -602,10 +602,10 @@ pub struct LabelEvent {
 impl GetEventResponse for LabelEvent {}
 
 /// Data for an event related to a [`MailEvent`] record.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct MailEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -660,10 +660,10 @@ pub struct MailEvent {
 impl GetEventResponse for MailEvent {}
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, SmartDefault)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MailSettings {
     /// TODO: Document this field.
@@ -683,7 +683,7 @@ pub struct MailSettings {
     pub auto_save_contacts: bool,
 
     /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    #[serde_as(as = "Option<DefaultOnNull<BoolFromInt>>")]
     pub block_sender_confirmation: Option<bool>,
 
     /// TODO: Document this field.
@@ -825,10 +825,10 @@ pub struct MailSettings {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct Message {
     /// TODO: Document this field.
     #[serde(default)]
@@ -941,10 +941,10 @@ pub struct MessageCount {
 }
 
 /// Data for an event related to a [`MessageEvent`] record.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct MessageEvent {
     /// TODO: Document this field.
     #[serde(rename = "ID")]
@@ -1089,10 +1089,10 @@ bitflags::bitflags! {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MessageMetadata {
     /// TODO: Document this field.
@@ -1182,10 +1182,10 @@ pub struct MessageMetadata {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
-#[serde_as]
 pub struct MessageAddress {
     /// TODO: Document this field.
     // TODO: Proper email parsing
@@ -1206,7 +1206,6 @@ pub struct MessageAddress {
     pub is_simple_login: bool,
 
     /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub name: String,
 }
 

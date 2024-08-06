@@ -1,7 +1,0 @@
----
-source: proton-mail-html-transformer/src/utm.rs
-expression: html
----
-<html><head></head><body><a href="bad link">bar</a>
-        <a href="https://ads.com/">bar</a>
-</body></html>

@@ -1,0 +1,10 @@
+---
+source: proton-mail-html-transformer/src/tests/transforms.rs
+expression: html
+---
+<html><head></head><body>
+        <img id="1" src="https://mail.proton.me/api/core/v4/images?DryRun=0&amp;UID=MYTOKEN123&amp;Url=bad+url">
+        <img id="2" src="https://mail.proton.me/api/core/v4/images?DryRun=0&amp;UID=MYTOKEN123&amp;Url=https%3A%2F%2Fads.com">
+        <img id="2" src="https://mail.proton.me/api/core/v4/images?DryRun=0&amp;UID=MYTOKEN123&amp;Url=https%3A%2F%2Fads.com%3Futm_source%3Dtracker">
+        
+        </body></html>
