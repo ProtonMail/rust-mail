@@ -3,7 +3,7 @@
 use futures::executor::block_on;
 use stash::datatypes::QueryResultString;
 use stash::params;
-use stash::stash::{Stash, Tether};
+use stash::stash::{Interface, Stash, Tether};
 use std::thread::spawn;
 use std::time::Duration;
 use tokio::spawn as async_spawn;

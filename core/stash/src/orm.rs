@@ -13,7 +13,7 @@
 //!
 
 use crate::datatypes::QueryResultIdPair;
-use crate::stash::{Notification, Stash, StashError, Tether};
+use crate::stash::{Interface, Notification, Stash, StashError, Tether};
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
