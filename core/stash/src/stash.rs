@@ -1311,7 +1311,7 @@ impl Interface for Stash {
         T: Model,
         I: ToSql + Send + 'static,
     {
-        perform_load(id, self, None).await
+        perform_load(id, &self.into()).await
     }
 
     async fn query<Q, T>(
@@ -1611,7 +1611,7 @@ impl Interface for Tether {
         T: Model,
         I: ToSql + Send + 'static,
     {
-        perform_load(id, &self.stash, Some(self)).await
+        perform_load(id, &self.into()).await
     }
 
     async fn query<Q, T>(
@@ -2478,7 +2478,7 @@ impl Worker {
 /// unified fashion.
 ///
 #[allow(async_fn_in_trait)]
-pub trait Interface {
+pub trait Interface: Clone + Send + Sync {
     /// Runs a query and returns the affected row count.
     ///
     /// This function prepares a query and executes it on the database, and then
@@ -2588,7 +2588,6 @@ pub trait Interface {
     /// # See also
     ///
     /// * [`Model::load()`]
-    /// * [`Model::load_using()`]
     ///
     async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
     where

@@ -13,7 +13,7 @@
 //!
 
 use crate::datatypes::QueryResultIdPair;
-use crate::stash::{Interface, Notification, Stash, StashError, Tether};
+use crate::stash::{AgnosticInterface, Interface, Notification, Stash, StashError};
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
@@ -434,13 +434,17 @@ where
     /// * [`Stash::query()`]
     /// * [`params!`](crate::utils::params)
     ///
-    async fn find<Q: Into<String> + Send>(
+    async fn find<Q, A>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        stash: &Stash,
+        interface: &A,
         queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
-    ) -> Result<Vec<Self>, StashError> {
-        perform_find(query_logic, params, stash, queue).await
+    ) -> Result<Vec<Self>, StashError>
+    where
+        Q: Into<String> + Send,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        perform_find(query_logic, params, &interface.clone().into(), queue).await
     }
 
     /// Finds the first record in a result set using specific query logic.
@@ -478,15 +482,21 @@ where
     /// * [`Stash::query()`]
     /// * [`params!`](crate::utils::params)
     ///
-    async fn find_first<Q: Into<String> + Send>(
+    async fn find_first<Q, A>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        stash: &Stash,
-    ) -> Result<Option<Self>, StashError> {
-        Ok(perform_find(query_logic, params, stash, None)
-            .await?
-            .into_iter()
-            .next())
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        Q: Into<String> + Send,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(
+            perform_find(query_logic, params, &interface.clone().into(), None)
+                .await?
+                .into_iter()
+                .next(),
+        )
     }
 
     /// Handles a change notification for a result set.
@@ -679,46 +689,15 @@ where
     ///
     /// # See also
     ///
-    /// * [`Model::load_using()`]
     /// * [`Stash::load()`]
     /// * [`Tether::load()`]
     ///
     #[must_use]
-    async fn load(id: Self::IdType, stash: &Stash) -> Result<Option<Self>, StashError> {
-        perform_load(id, stash, None).await
-    }
-
-    /// Loads a record from the database by ID, using a specific connection.
-    ///
-    /// This function retrieves a single record from the database by its unique
-    /// ID, using a specific [`Tether`], i.e. connection. It is functionally
-    /// equivalent to [`load()`](Model::load()), but allows the query to be run
-    /// against an existing connection rather than using a new one.
-    ///
-    /// For full usage details, see [`load()`](Model::load()).
-    ///
-    /// Note that the [`Tether`] used will not be stored.
-    ///
-    /// # Parameters
-    ///
-    /// * `id`     - The ID of the record to load.
-    /// * `tether` - The database connection, i.e. [`Tether`], to use for
-    ///              loading the record. This allows an existing connection to
-    ///              be used, rather than creating a new one.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::load()`]
-    /// * [`Stash::load()`]
-    /// * [`Tether::load()`]
-    ///
-    #[must_use]
-    async fn load_using(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
-        perform_load(id, tether.stash(), Some(tether)).await
+    async fn load<A>(id: Self::IdType, interface: &A) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        perform_load(id, &interface.clone().into()).await
     }
 
     /// Gets the record's unique row ID.
@@ -828,8 +807,11 @@ where
     ///
     /// * [`Model::save()`]
     ///
-    async fn save_using(&mut self, tether: &Tether) -> Result<(), StashError> {
-        perform_save(self, Some(tether)).await
+    async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        perform_save(self, Some(&interface.clone().into())).await
     }
 
     /// Gets a reference to the database-handling [`Stash`] for the record.
@@ -1004,7 +986,7 @@ pub fn from_rows<T: DbRecord>(
 pub async fn perform_find<Q, T>(
     query_logic: Q,
     params: Vec<Box<dyn ToSql + Send>>,
-    stash: &Stash,
+    interface: &AgnosticInterface,
     queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
 ) -> Result<Vec<T>, StashError>
 where
@@ -1022,7 +1004,7 @@ where
         T::table_name(),
         query_logic.into(),
     );
-    let records = stash.query(query, params).await?;
+    let records = interface.query(query, params).await?;
 
     // Set up listener for changes to the result set, if requested.
     #[allow(clippy::shadow_reuse)]
@@ -1035,8 +1017,8 @@ where
                 Ok((row_id, id))
             })
             .collect::<Result<HashMap<u64, T::IdType>, StashError>>()?;
-        let receiver = stash.subscribe().await?;
-        let stash_clone = stash.clone();
+        let receiver = interface.stash().subscribe().await?;
+        let stash = interface.stash().clone();
 
         // Spawn a thread to listen for notifications
         drop(spawn_async(async move {
@@ -1056,13 +1038,9 @@ where
             loop {
                 match receiver.recv_async().await {
                     Ok(notification) => {
-                        if let Some(change) = T::handle_notification(
-                            notification,
-                            &mut ids,
-                            &stash_clone,
-                            &changed_query,
-                        )
-                        .await
+                        if let Some(change) =
+                            T::handle_notification(notification, &mut ids, &stash, &changed_query)
+                                .await
                         {
                             if queue.send_async(change).await.is_err() {
                                 // In theory this should never happen, but we also can't do anything with it
@@ -1091,9 +1069,9 @@ where
 /// as an instance of the specified type `T`, where `T` is any concrete type
 /// implementing the [`Model`] trait. It is the internal function that actually
 /// does the loading for the public interface methods [`Model::load()`],
-/// [`Model::load_using()`], [`Stash::load()`] and [`Tether::load()`].
+/// [`Stash::load()`] and [`Tether::load()`].
 ///
-/// For full usage details, see [`Model::load()`] and [`Model::load_using()`].
+/// For full usage details, see [`Model::load()`].
 ///
 /// # Parameters
 ///
@@ -1113,14 +1091,12 @@ where
 /// # See also
 ///
 /// * [`Model::load()`]
-/// * [`Model::load_using()`]
 /// * [`Stash::load()`]
 /// * [`Tether::load()`]
 ///
 pub async fn perform_load<T, I>(
     id: I,
-    stash: &Stash,
-    tether: Option<&Tether>,
+    interface: &AgnosticInterface,
 ) -> Result<Option<T>, StashError>
 where
     T: Model,
@@ -1141,21 +1117,11 @@ where
         T::id_field_name(),
     );
     #[allow(trivial_casts)]
-    #[allow(clippy::shadow_reuse)]
-    Ok(match tether {
-        Some(tether) => {
-            tether
-                .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
-                .await?
-        }
-        None => {
-            stash
-                .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
-                .await?
-        }
-    }
-    .into_iter()
-    .next())
+    Ok(interface
+        .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+        .await?
+        .into_iter()
+        .next())
 }
 
 /// Saves a record to the database.
@@ -1188,7 +1154,7 @@ where
 #[allow(clippy::too_many_lines)]
 pub async fn perform_save<M: Model>(
     model: &mut M,
-    tether: Option<&Tether>,
+    interface: Option<&AgnosticInterface>,
 ) -> Result<(), StashError> {
     // If the ID field is auto-incrementing then it is fully managed by the
     // database, and we exclude it from the list here.
@@ -1232,8 +1198,8 @@ pub async fn perform_save<M: Model>(
                 .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
                 .collect();
             #[allow(clippy::shadow_reuse)]
-            let affected: usize = match tether {
-                Some(tether) => tether.execute(&query, field_values).await?,
+            let affected: usize = match interface {
+                Some(interface) => interface.execute(&query, field_values).await?,
                 None => {
                     model
                         .stash()
@@ -1280,9 +1246,9 @@ pub async fn perform_save<M: Model>(
             );
             let field_values: Vec<Box<dyn ToSql + Send>> = values.into_iter().collect();
             #[allow(clippy::shadow_reuse)]
-            let rows = match tether {
-                Some(tether) => {
-                    tether
+            let rows = match interface {
+                Some(interface) => {
+                    interface
                         .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
                         .await?
                 }
