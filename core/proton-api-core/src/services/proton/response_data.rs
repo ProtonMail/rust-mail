@@ -633,7 +633,6 @@ pub struct FidoKey {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Flags {
     /// TODO: Document this field.
