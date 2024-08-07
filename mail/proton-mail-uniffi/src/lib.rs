@@ -126,3 +126,19 @@ pub mod mail;
 pub mod message_detector;
 
 uniffi::setup_scaffolding!();
+
+/// A callback interface for live queries.
+///
+/// This interface is used to notify the client when observed data has been
+/// updated.
+///
+#[uniffi::export(callback_interface)]
+pub trait LiveQueryCallback: Send + Sync {
+    /// Notify the client that the observed data has been updated.
+    ///
+    /// This method is called when the observed data has been updated. It does
+    /// not provide any information about the update, but the client can use
+    /// this as a signal to refresh its view of the data.
+    ///
+    fn on_update(&self);
+}
