@@ -1,4 +1,4 @@
-use stash::stash::{StashError, Tether};
+use stash::stash::{Interface, StashError, Tether};
 
 pub async fn create_event_tables(tx: &Tether) -> Result<(), StashError> {
     tx.execute(

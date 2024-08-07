@@ -60,7 +60,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let mut label = Label::load_using(action.local_id, tx)
+        let mut label = Label::load(action.local_id, tx)
             .await?
             .ok_or_else(|| AppError::LabelNotFound(action.local_id))?;
 
@@ -126,7 +126,7 @@ impl proton_action_queue::action::Handler for Handler {
             Some(remote_id) => remote_id,
             None => {
                 let tx = stash.connection();
-                let label = Label::load_using(action.local_id, &tx)
+                let label = Label::load(action.local_id, &tx)
                     .await?
                     .ok_or_else(|| AppError::LabelNotFound(action.local_id))?;
 

@@ -3,7 +3,7 @@ use crate::models::Message;
 use crate::AppError;
 use proton_core_common::events::Action;
 use stash::params;
-use stash::stash::Tether;
+use stash::stash::{Interface, Tether};
 use tracing::warn;
 
 pub async fn handle_message_events(

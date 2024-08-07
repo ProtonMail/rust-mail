@@ -2,7 +2,7 @@ use crate::events::LabelEvent;
 use proton_core_common::events::Action;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{StashError, Tether};
+use stash::stash::{Interface, StashError, Tether};
 use tracing::warn;
 
 pub async fn handle_label_events(

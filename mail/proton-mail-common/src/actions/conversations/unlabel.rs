@@ -5,7 +5,7 @@ use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
 
 use super::filter_conversation_responses;

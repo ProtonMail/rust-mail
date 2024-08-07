@@ -810,7 +810,7 @@ async fn test_conversation_delete_all_mail() {
         .await
         .expect("failed to mark as deleted");
 
-    let mut db_conversation = Conversation::load_using(local_conv_id, &tx)
+    let mut db_conversation = Conversation::load(local_conv_id, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1027,7 +1027,7 @@ async fn test_conversation_delete() {
         .expect("failed to mark conv as deleted");
 
     {
-        let db_conv = Conversation::load_using(local_conv_id, &tx)
+        let db_conv = Conversation::load(local_conv_id, &tx)
             .await
             .expect("failed to get conversation");
         assert!(db_conv.is_none());
@@ -1110,7 +1110,7 @@ async fn test_conversation_undelete() {
         .await
         .expect("Failed to mark as undeleted");
 
-    let db_conversation = Conversation::load_using(local_conv_id, &tx)
+    let db_conversation = Conversation::load(local_conv_id, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");

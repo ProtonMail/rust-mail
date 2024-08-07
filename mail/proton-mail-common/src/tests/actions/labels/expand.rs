@@ -41,7 +41,7 @@ async fn test(expand: bool, expanded: bool) -> TestCase {
 
 async fn assert_test(test: TestCase, expected: bool, failed: usize) {
     let tx = test.con();
-    let label = Label::load_using(test.local_id, &tx)
+    let label = Label::load(test.local_id, &tx)
         .await
         .expect("failed to load label")
         .expect("Label not found");

@@ -1,7 +1,7 @@
 use crate::datatypes::SystemLabelId;
 use proton_core_common::datatypes::LabelId;
 use stash::params;
-use stash::stash::{StashError, Tether};
+use stash::stash::{Interface, StashError, Tether};
 
 pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
     // Local version for manipulation.

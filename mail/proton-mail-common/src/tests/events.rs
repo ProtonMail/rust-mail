@@ -2,6 +2,7 @@
 
 use crate::db::new_test_connection;
 use proton_core_common::datatypes::RemoteId;
+use stash::stash::Interface;
 
 #[tokio::test]
 async fn test_event_id_store_get_set() {
