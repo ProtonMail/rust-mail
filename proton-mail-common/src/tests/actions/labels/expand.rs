@@ -13,17 +13,19 @@ pub struct TestCase {
 }
 
 impl TestCase {
-    fn con(&self) -> Tether {
-        self.stash.connection()
+    fn con(&self) -> &Stash {
+        &self.stash
     }
 }
 
 async fn test(expand: bool, expanded: bool) -> TestCase {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
     let mut label = create_label(expanded);
 
-    label.save_using(&tx).await.expect("failed to save label");
+    label
+        .save_using(&stash)
+        .await
+        .expect("failed to save label");
 
     let local_id = label.local_id.expect("local_id should be set");
     let action = if expand {
@@ -40,8 +42,8 @@ async fn test(expand: bool, expanded: bool) -> TestCase {
 }
 
 async fn assert_test(test: TestCase, expected: bool, failed: usize) {
-    let tx = test.con();
-    let label = Label::load(test.local_id, &tx)
+    let stash = test.con();
+    let label = Label::load(test.local_id, stash)
         .await
         .expect("failed to load label")
         .expect("Label not found");
@@ -65,6 +67,7 @@ fn create_label(expanded: bool) -> Label {
 mod apply_local {
     use super::*;
     use proton_action_queue::action::Handler as _;
+    use stash::stash::Interface;
     use test_case::test_case;
 
     const EXPECTED: &[(bool, bool, bool)] = &[
@@ -81,14 +84,15 @@ mod apply_local {
     async fn test_apply(apply: usize) {
         for (idx, (expand, expanded, expected)) in EXPECTED.iter().enumerate() {
             let mut test = test(*expand, *expanded).await;
-            let tx = test.con();
 
+            let tx = test.con().transaction().await.unwrap();
             for _ in 0..apply {
                 Handler::default()
                     .apply_local(&mut test.action, &tx)
                     .await
                     .expect("failed to apply local");
             }
+            tx.commit().await.unwrap();
 
             assert_test(test, *expected, idx).await;
         }
@@ -98,6 +102,7 @@ mod apply_local {
 mod revert_local {
     use super::*;
     use proton_action_queue::action::Handler as _;
+    use stash::stash::Interface;
     use test_case::test_case;
 
     const EXPECTED: &[(bool, bool, bool)] = &[
@@ -115,8 +120,8 @@ mod revert_local {
     async fn test_revert(apply: usize, revert: usize) {
         for (idx, (expand, expanded, expected)) in EXPECTED.iter().enumerate() {
             let mut test = test(*expand, *expanded).await;
-            let tx = test.con();
 
+            let tx = test.con().transaction().await.unwrap();
             for _ in 0..apply {
                 Handler::default()
                     .apply_local(&mut test.action, &tx)
@@ -130,6 +135,7 @@ mod revert_local {
                     .await
                     .expect("failed to apply local");
             }
+            tx.commit().await.unwrap();
 
             assert_test(test, *expected, idx).await;
         }
@@ -143,6 +149,7 @@ mod apply_remote {
     use proton_api_mail::services::proton::{
         requests::PatchLabelRequest, response_data::OperationResult, responses::PatchLabelResponse,
     };
+    use stash::stash::Interface;
     use test_case::test_case;
     use wiremock::{
         matchers::{body_json, method, path},
@@ -195,7 +202,6 @@ mod apply_remote {
         response_code: u32,
     ) {
         let mut test = test(expand, expanded).await;
-        let tx = test.con();
         let mock_server = MockServer::start().await;
         let api_config = Config {
             base_url: format!("{}/api/", mock_server.uri()),
@@ -203,7 +209,7 @@ mod apply_remote {
             skip_srp_proof_validation: true,
             ..Default::default()
         };
-        let session = Session::new(api_config, None);
+        let session = Session::new(api_config, None).await.unwrap();
         mock_patch_label(
             &mock_server,
             REMOTE_ID,
@@ -214,16 +220,19 @@ mod apply_remote {
         )
         .await;
 
+        let tx = test.con().transaction().await.unwrap();
         for _ in 0..apply_local {
             Handler::default()
                 .apply_local(&mut test.action, &tx)
                 .await
                 .expect("failed to apply local");
         }
+        tx.commit().await.unwrap();
 
         for _ in 0..apply_remote {
+            let stash = test.con().clone();
             Handler::default()
-                .apply_remote(&mut test.action, &session, &test.stash)
+                .apply_remote(&mut test.action, &session, &stash)
                 .await
                 .unwrap();
         }
