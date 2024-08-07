@@ -5,6 +5,7 @@ use crate::datatypes::{
     ConversationCount, LabelColor, LabelType, MessageAddress, MessageFlags, SystemLabelId,
 };
 use crate::db::new_test_connection_file;
+use crate::label;
 use crate::tests::common::{
     create_address, create_labels, test_conversation, test_starred_label, MY_ATTACHMENT_ID,
     MY_LABEL_ID1, MY_LABEL_ID2,
@@ -18,6 +19,7 @@ use crate::tests::utils::{
     prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip, prepare_db_state_core,
 };
 use lazy_static::lazy_static;
+use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
@@ -26,49 +28,53 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::datatypes::LabelId;
 use stash::orm::Model;
 use stash::params;
-use test_case::test_case;
 
-lazy_static! {
-    static ref STARRED: Label = new_label(LabelType::System, Some(LabelId::starred().clone()));
-    static ref LABEL: Label = new_label(LabelType::Label, None);
-    static ref FOLDER: Label = new_label(LabelType::Folder, None);
-    static ref INBOX: Label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
-    static ref DRAFTS: Label = new_label(LabelType::System, Some(LabelId::drafts().clone())); // There is no conversations in drafts - this is theoretical case
-    static ref ALL_LABELS: Vec<&'static Label> =
-        vec![&STARRED, &LABEL, &FOLDER, &INBOX, &DRAFTS];
-    static ref MOVED_CONV_LABELS: Vec<&'static Label> =
-        vec![&STARRED, &LABEL, &FOLDER];
-    static ref INBOX_AND_DRAFTS_LABELS: Vec<&'static Label> = vec![&INBOX, &DRAFTS];
-}
+mod first_unread_message {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use test_case::test_case;
 
-#[test_case(
+    lazy_static! {
+        static ref STARRED: Label = new_label(LabelType::System, Some(LabelId::starred().clone()));
+        static ref LABEL: Label = new_label(LabelType::Label, None);
+        static ref FOLDER: Label = new_label(LabelType::Folder, None);
+        static ref INBOX: Label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
+        static ref DRAFTS: Label = new_label(LabelType::System, Some(LabelId::drafts().clone())); // There is no conversations in drafts - this is theoretical case
+        static ref ALL_LABELS: Vec<&'static Label> =
+            vec![&STARRED, &LABEL, &FOLDER, &INBOX, &DRAFTS];
+        static ref MOVED_CONV_LABELS: Vec<&'static Label> =
+            vec![&STARRED, &LABEL, &FOLDER];
+        static ref INBOX_AND_DRAFTS_LABELS: Vec<&'static Label> = vec![&INBOX, &DRAFTS];
+    }
+
+    #[test_case(
     &ALL_LABELS, &[], None; "TEST1 - empty messages"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::RECEIVED, false),], Some(0); "TEST2 - read - recieved message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::empty(), false),], None; "TEST3 - read - draft message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::OPENED, false),], None; "TEST4 - read - draft & opened message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::OPENED, true),], None; "TEST5 - unread - draft & opened message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true),], Some(0); "TEST6 - unread - recieved & opened message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::RECEIVED, true),], Some(0); "TEST7 - unread - recieved message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),], Some(0); "TEST8 - unread - recieved & internal message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[(MessageFlags::SENT | MessageFlags::INTERNAL, true),], Some(0); "TEST9 - unread - opened & internal message"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -77,7 +83,7 @@ lazy_static! {
 
     ], Some(2); "TEST10 - all unread - recieved | internal | opened messages"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, true),
@@ -85,7 +91,7 @@ lazy_static! {
 
     ], Some(0); "TEST11 - all unread - recieved | draft messages"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, true),
@@ -93,7 +99,7 @@ lazy_static! {
 
     ], Some(0); "TEST12 - some unread - recieved | draft messages"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::SENT, true),
         (MessageFlags::SENT, true),
@@ -101,7 +107,7 @@ lazy_static! {
 
     ], Some(0); "TEST13 - some unread - sent | draft messages"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::SENT | MessageFlags::RECEIVED, true),
         (MessageFlags::SENT | MessageFlags::RECEIVED, true),
@@ -109,7 +115,7 @@ lazy_static! {
 
     ], Some(0); "TEST14 - some unread - sent & received | draft messages"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, true),
@@ -119,7 +125,7 @@ lazy_static! {
 
     ], Some(3); "TEST15 - all unread - received | draft messages"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -127,7 +133,7 @@ lazy_static! {
         (MessageFlags::RECEIVED, true),
     ], Some(2); "TEST16 - first_unread_conversation_message_in_starred_or_custom_label_or_folder"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -135,7 +141,7 @@ lazy_static! {
         (MessageFlags::RECEIVED, true),
     ], Some(3); "TEST17 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -143,14 +149,14 @@ lazy_static! {
         (MessageFlags::empty(), true),
     ], Some(2); "TEST18 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
         (MessageFlags::empty(), true),
     ], Some(0); "TEST19 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -159,7 +165,7 @@ lazy_static! {
         (MessageFlags::RECEIVED, false),
     ], Some(2); "TEST20 - first_unread_conversation_message_default_last_consecutive_unread"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -168,7 +174,7 @@ lazy_static! {
         (MessageFlags::empty(), true),
     ], Some(2); "TEST21 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -177,7 +183,7 @@ lazy_static! {
         (MessageFlags::SENT | MessageFlags::AUTO, true),
     ], Some(2); "TEST22 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
 )]
-#[test_case(
+    #[test_case(
     &MOVED_CONV_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -186,7 +192,7 @@ lazy_static! {
         (MessageFlags::RECEIVED, false),
     ], Some(2); "TEST23A - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
 )]
-#[test_case(
+    #[test_case(
     &INBOX_AND_DRAFTS_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, false),
@@ -195,82 +201,283 @@ lazy_static! {
         (MessageFlags::RECEIVED, false),
     ], Some(0); "TEST23B - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, true),
         (MessageFlags::RECEIVED, true),
     ], Some(0); "TEST24 - oldest_unread_message_selected_in_unread_chain"
 )]
-#[test_case(
+    #[test_case(
     &ALL_LABELS, &[
         (MessageFlags::RECEIVED, false),
         (MessageFlags::RECEIVED, false),
         (MessageFlags::RECEIVED, false),
     ], Some(2); "TEST25 - all read"
 )]
-fn find_conversation_message_id(
-    labels: &[&Label],
-    messages: &[(MessageFlags, bool)],
-    expected_id: Option<u64>,
-) {
-    let messages = messages
-        .iter()
-        .enumerate()
-        .map(|(id, (flags, unread))| message_metadata_with_flags(id as u64, *flags, *unread))
-        .collect::<Vec<_>>();
+    fn find_conversation_message_id(
+        labels: &[&Label],
+        messages: &[(MessageFlags, bool)],
+        expected_id: Option<u64>,
+    ) {
+        let messages = messages
+            .iter()
+            .enumerate()
+            .map(|(id, (flags, unread))| message_metadata_with_flags(id as u64, *flags, *unread))
+            .collect::<Vec<_>>();
 
-    for label in labels {
-        assert_eq!(
-            Conversation::first_unread_message(&label, &messages),
-            expected_id,
-            "Test failed for label: {:?}, {:?}",
-            label.label_type,
-            label.remote_id
-        );
+        for label in labels {
+            assert_eq!(
+                Conversation::first_unread_message(&label, &messages),
+                expected_id,
+                "Test failed for label: {:?}, {:?}",
+                label.label_type,
+                label.remote_id
+            );
+        }
+    }
+
+    fn message_metadata_with_flags(id: u64, flags: MessageFlags, unread: bool) -> Message {
+        Message {
+            local_id: Some(id),
+            unread,
+            sender: MessageAddress {
+                address: String::new(),
+                bimi_selector: None,
+                display_sender_image: false,
+                is_proton: false,
+                is_simple_login: false,
+                name: String::new(),
+            },
+            flags,
+            ..Default::default()
+        }
+    }
+
+    fn new_label(label_type: LabelType, rid: Option<LabelId>) -> Label {
+        label!(label_type: label_type, remote_id: rid)
     }
 }
 
-fn message_metadata_with_flags(id: u64, flags: MessageFlags, unread: bool) -> Message {
-    Message {
-        local_id: Some(id),
-        unread,
-        sender: MessageAddress {
-            address: String::new(),
-            bimi_selector: None,
-            display_sender_image: false,
-            is_proton: false,
-            is_simple_login: false,
-            name: String::new(),
-        },
-        flags,
-        ..Default::default()
-    }
-}
+mod available_actions {
+    use super::*;
+    use crate::{
+        actions::ConversationActionKind, actions::LabelAction, conversation,
+        db::new_test_connection,
+    };
+    use itertools::Itertools;
+    use pretty_assertions::assert_eq;
+    use test_case::test_case;
 
-fn new_label(label_type: LabelType, rid: Option<LabelId>) -> Label {
-    Label {
-        local_id: None,
-        remote_id: rid,
-        local_parent_id: None,
-        remote_parent_id: None,
-        color: LabelColor::black(),
-        display: false,
-        display_order: 0,
-        expanded: false,
-        initialized_conv: false,
-        initialized_msg: false,
-        label_type,
-        name: String::new(),
-        notify: false,
-        path: None,
-        sticky: false,
-        total_conv: 0,
-        total_msg: 0,
-        unread_conv: 0,
-        unread_msg: 0,
-        row_id: None,
-        stash: None,
+    lazy_static! {
+        static ref STARRED: Label =
+            label!(label_type: LabelType::System, remote_id: Some(LabelId::starred()));
+        static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
+        static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
+        static ref SPAM: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black());
+        static ref ARCHIVE: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::archive()), name: "Archive".to_owned(), color: LabelColor::black());
+        static ref TRASH: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::trash()), name: "Trash".to_owned(), color: LabelColor::black());
+        static ref ALL_MAIL: Label =
+            label!(label_type: LabelType::System, remote_id: Some(LabelId::all_mail()));
+        static ref APPLICABLE_LABEL_1: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_1".into()), name: "Applicable Label 1".to_owned(), color: LabelColor::purple());
+        static ref APPLICABLE_LABEL_2: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_2".into()), name: "Applicable Label 2".to_owned(), color: LabelColor::purple());
+        static ref APPLICABLE_LABEL_3: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_3".into()), name: "Applicable Label 3".to_owned(), color: LabelColor::purple());
+    }
+
+    struct TestCase {
+        conversation: Conversation,
+        converstaion_labels: Vec<&'static Label>,
+        other_labels: Vec<&'static Label>,
+        expected: Vec<ConversationAvailableAction>,
+    }
+
+    fn move_action(name: impl AsRef<str>) -> ConversationAvailableAction {
+        ConversationAvailableAction::new(
+            ConversationActionKind::Move {
+                label: LabelAction {
+                    label_id: 0,
+                    name: name.as_ref().to_owned(),
+                    color: LabelColor::black(),
+                },
+            },
+            0,
+        )
+    }
+
+    fn label_action(name: impl AsRef<str>) -> ConversationAvailableAction {
+        ConversationAvailableAction::new(
+            ConversationActionKind::Label {
+                label: LabelAction {
+                    label_id: 0,
+                    name: name.as_ref().to_owned(),
+                    color: LabelColor::purple(),
+                },
+            },
+            0,
+        )
+    }
+
+    fn unlabel_action(name: impl AsRef<str>) -> ConversationAvailableAction {
+        ConversationAvailableAction::new(
+            ConversationActionKind::Unlabel {
+                label: LabelAction {
+                    label_id: 0,
+                    name: name.as_ref().to_owned(),
+                    color: LabelColor::purple(),
+                },
+            },
+            0,
+        )
+    }
+
+    lazy_static! {
+        static ref TEST1: TestCase = TestCase {
+            conversation: conversation!(deleted: false, num_unread: 1, remote_id: Some("test1".into())),
+            converstaion_labels: vec![&STARRED, &FOLDER],
+            other_labels: vec![],
+            expected: vec![
+                move_action("Inbox"),
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0),
+                ConversationAvailableAction::new(ConversationActionKind::MarkRead, 0),
+            ],
+        };
+        static ref TEST2: TestCase = TestCase {
+            conversation: conversation!(deleted: false, remote_id: Some("test2".into())),
+            converstaion_labels: vec![&INBOX, &ALL_MAIL, &APPLICABLE_LABEL_1],
+            other_labels: vec![&APPLICABLE_LABEL_2, &FOLDER],
+            expected: vec![
+                move_action("MyFavouritesFolder"),
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                unlabel_action("Applicable Label 1"),
+                label_action("Applicable Label 2"),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Star, 0),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+            ],
+        };
+        static ref TEST3: TestCase = TestCase {
+            conversation: conversation!(deleted: false, remote_id: Some("test3".into())),
+            converstaion_labels: vec![&INBOX, &SPAM, &ARCHIVE, &TRASH, &FOLDER],
+            other_labels: vec![&APPLICABLE_LABEL_2],
+            expected: vec![
+                label_action("Applicable Label 2"),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Star, 0),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+            ],
+        };
+        static ref TEST4: TestCase = TestCase {
+            conversation: conversation!(deleted: false, remote_id: Some("test4".into())),
+            converstaion_labels: vec![&INBOX, &APPLICABLE_LABEL_1, &STARRED],
+            other_labels: vec![&APPLICABLE_LABEL_2],
+            expected: vec![
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                unlabel_action("Applicable Label 1"),
+                label_action("Applicable Label 2"),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+            ],
+        };
+        static ref TEST5: TestCase = TestCase {
+            conversation: conversation!(deleted: true, remote_id: Some("test5".into())),
+            converstaion_labels: vec![&INBOX, &APPLICABLE_LABEL_2, &STARRED],
+            other_labels: vec![&APPLICABLE_LABEL_1],
+            expected: vec![
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                unlabel_action("Applicable Label 2"),
+                label_action("Applicable Label 1"),
+                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+            ],
+        };
+    }
+
+    #[test_case(&TEST1; "TEST1: Unread, starred and in custom folder")]
+    #[test_case(&TEST2; "TEST2: Custom label, all mail and in inbox")]
+    #[test_case(&TEST3; "TEST3: All possible move locations")]
+    #[test_case(&TEST4; "TEST4: Custom label, starred and in inbox")]
+    #[test_case(&TEST5; "TEST5: Different custom label, starred and in inbox")]
+    #[tokio::test]
+    async fn test_available_actions(test_case: &TestCase) {
+        let stash = new_test_connection().await;
+        let mut label_ids = vec![];
+        let mut conversation: Conversation = test_case.conversation.clone();
+        conversation.stash = Some(stash.clone());
+
+        let other_labels = test_case
+            .other_labels
+            .iter()
+            .filter(|label| label.label_type != LabelType::System);
+
+        for label in other_labels {
+            let tx = stash.connection();
+            let mut label: Label = (*label).clone();
+            label.stash = Some(stash.clone());
+            label.save_using(&tx).await.unwrap();
+        }
+
+        for label in test_case.converstaion_labels.iter() {
+            let mut label: Label = (*label).clone();
+            if label.label_type == LabelType::System {
+                label = Label::find_first("WHERE remote_id=?", params![label.remote_id], &stash)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            } else {
+                let tx = stash.connection();
+                label.stash = Some(stash.clone());
+                label.save_using(&tx).await.unwrap();
+            }
+
+            label_ids.push(label.local_id.unwrap());
+        }
+
+        {
+            let tx = stash.connection();
+            conversation.save_using(&tx).await.unwrap();
+            let ids = vec![conversation.local_id.unwrap()];
+
+            for label_id in label_ids {
+                Conversation::apply_label_to_multiple(label_id, ids.clone(), &tx)
+                    .await
+                    .unwrap();
+            }
+        }
+
+        conversation = Conversation::load(conversation.local_id.unwrap(), &stash)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let mut actual = conversation.available_actions(&stash).await.unwrap();
+        actual.iter_mut().for_each(|action| match action.action {
+            ConversationActionKind::Move { ref mut label }
+            | ConversationActionKind::Label { ref mut label }
+            | ConversationActionKind::Unlabel { ref mut label } => label.label_id = 0,
+            _ => {}
+        });
+        let expected = test_case
+            .expected
+            .iter()
+            .map(|action| {
+                let mut action = action.clone();
+                action.local_id = conversation.local_id.unwrap();
+                action
+            })
+            .collect_vec();
+
+        assert_eq!(actual, expected);
     }
 }
 

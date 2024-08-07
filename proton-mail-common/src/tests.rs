@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+#[macro_use]
 #[cfg(test)]
 pub mod common;
 

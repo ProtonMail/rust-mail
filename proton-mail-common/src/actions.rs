@@ -1,6 +1,8 @@
+mod available_action;
 pub mod conversations;
 pub mod labels;
 
+pub use self::available_action::*;
 use crate::AppError;
 use proton_action_queue::action::Factory;
 use proton_api_core::service::ApiServiceError;

@@ -31,6 +31,7 @@
 #[path = "tests/models.rs"]
 mod tests;
 
+use crate::actions::{ConversationAvailableAction, MessageAvailableAction};
 use crate::cache::CacheMessageConfig;
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature,
@@ -636,6 +637,7 @@ impl Conversation {
         ids: Vec<u64>,
         tether: &Tether,
     ) -> Result<(), StashError> {
+        let label = Label::load(label_id, tether).await?.unwrap();
         // TODO: This used to do more, but the additional behaviour will be
         // TODO: covered when these operations are refactored.
         for id in ids {
@@ -662,6 +664,20 @@ impl Conversation {
                     params![label_id, id],
                 )
                 .await?;
+
+            // TODO: Fix temporary solution
+            // [Sorry] This was introduced during ET-871 feature.
+            // I needs to test functionality of the feature.
+            // This is temporary code, remove it during refactor.
+            let conv = Self::load(id, tether).await?.unwrap();
+            let mut conv_label = ConversationLabel {
+                local_conversation_id: conv.local_id,
+                local_label_id: label.local_id,
+                remote_label_id: label.remote_id.clone(),
+                ..Default::default()
+            };
+
+            conv_label.save_using(tether).await?;
         }
         Ok(())
     }
@@ -948,6 +964,27 @@ impl Conversation {
             .any(|l| l.remote_label_id == Some(LabelId::starred()))
     }
 
+    /// Load all models::Label for `self` models::ConversationLabel list.
+    ///
+    /// # Errors
+    ///
+    /// Database error.
+    ///
+    pub async fn load_labels<A>(&self, interface: &A) -> Result<Vec<Label>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut labels = Vec::new();
+
+        for id in self.labels.iter().filter_map(|label| label.local_label_id) {
+            if let Some(label) = Label::load(id, interface).await? {
+                labels.push(label);
+            }
+        }
+
+        Ok(labels)
+    }
+
     /// Extends [`Model::load()`] to pre-load child records.
     ///
     /// # Errors
@@ -962,21 +999,11 @@ impl Conversation {
             None,
         )
         .await?;
-
-        let labels = Label::find(
-            r#"WHERE local_id IN (SELECT local_label_id FROM conversation_labels WHERE local_conversation_id = ?)"#,
-            params![self.local_id],
-            interface,
-            None,
-        )
-        .await?;
-
+        let labels = self.load_labels(interface).await?;
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
-
         self.attachments_metadata =
             Attachment::load_conversation_attachment_metadata(self.local_id.unwrap(), interface)
                 .await?;
-
         self.custom_labels = labels
             .into_iter()
             .filter(|l| l.label_type == LabelType::Label)
@@ -1619,6 +1646,111 @@ impl Conversation {
 
         Ok((remote_source_id, remote_destination_id))
     }
+
+    /// Get the available actions for the conversation excluding labels which are applied to
+    /// the conversation already.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    pub async fn available_actions<A>(
+        &self,
+        interface: &A,
+    ) -> Result<Vec<ConversationAvailableAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        use crate::actions::{ConversationActionKind, LabelAction};
+        let mut actions = vec![];
+        // This should never panic due to conversation will never be loaded without a local_id.
+        let local_id = self.local_id.unwrap();
+        let conversation_labels = self.load_labels(interface).await?;
+        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
+        let all_system_move_locations = all_system.iter().filter(|label| label.is_movable_folder());
+        let all_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
+        let all_move_actions = all_folders
+            .iter()
+            .chain(all_system_move_locations)
+            .filter(|label| !conversation_labels.contains(label))
+            .filter_map(|label| {
+                let action = ConversationAvailableAction::new(
+                    ConversationActionKind::Move {
+                        label: LabelAction::from_label(label)?,
+                    },
+                    local_id,
+                );
+
+                Some(action)
+            });
+
+        actions.extend(all_move_actions);
+
+        let to_unlabel = conversation_labels
+            .iter()
+            .filter(|label| label.is_applicable_label())
+            .filter(|label| !label.is_starred())
+            .filter_map(|label| {
+                let action = ConversationAvailableAction::new(
+                    ConversationActionKind::Unlabel {
+                        label: LabelAction::from_label(label)?,
+                    },
+                    local_id,
+                );
+
+                Some(action)
+            });
+
+        actions.extend(to_unlabel);
+
+        let all_label_label = Label::find_by_kind(LabelType::Label, interface).await?;
+
+        let to_label = all_label_label
+            .iter()
+            .filter(|label| !conversation_labels.contains(label))
+            // This check may be redundant but i leave it here just in case
+            .filter(|label| label.is_applicable_label())
+            .filter_map(|label| {
+                let action = ConversationAvailableAction::new(
+                    ConversationActionKind::Label {
+                        label: LabelAction::from_label(label)?,
+                    },
+                    local_id,
+                );
+
+                Some(action)
+            });
+
+        actions.extend(to_label);
+
+        if !self.deleted {
+            actions.push(ConversationAvailableAction::new(
+                ConversationActionKind::Delete,
+                local_id,
+            ));
+        }
+
+        actions.push(ConversationAvailableAction::new(
+            if self.is_starred() {
+                ConversationActionKind::Unstar
+            } else {
+                ConversationActionKind::Star
+            },
+            local_id,
+        ));
+
+        let unread = self.num_unread > 0;
+
+        actions.push(ConversationAvailableAction::new(
+            if unread {
+                ConversationActionKind::MarkRead
+            } else {
+                ConversationActionKind::MarkUnread
+            },
+            local_id,
+        ));
+
+        Ok(actions)
+    }
 }
 
 impl From<ApiConversation> for Conversation {
@@ -1668,7 +1800,7 @@ impl From<ApiConversation> for Conversation {
 /// [`ConversationLabel`] information is superimposed over the [`Conversation`]
 /// for that context.
 ///
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Default, Model, PartialEq)]
 #[TableName("conversation_labels")]
 pub struct ConversationLabel {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -2041,11 +2173,14 @@ impl Label {
 
     /// TODO: Document this function.
     pub fn is_applicable_label(&self) -> bool {
-        self.label_type == LabelType::Label
-            || self
-                .remote_id
-                .as_ref()
-                .map_or(false, |rid| *rid == LabelId::starred())
+        self.label_type == LabelType::Label || self.is_starred()
+    }
+
+    /// Checks if label is a System label - starred.
+    pub fn is_starred(&self) -> bool {
+        self.remote_id
+            .as_ref()
+            .map_or(false, |rid| *rid == LabelId::starred())
     }
 
     /// TODO: Document this function.
@@ -2288,6 +2423,28 @@ impl Label {
             .await
             .optional()?
             .map(|v| LabelId::from(v.value)))
+    }
+
+    /// Get all labels with given kind
+    ///
+    /// # Parameters
+    ///
+    /// * `kind` - The kind of the label, eg. System, Folder etc.
+    /// * `tx`   - The tether to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be read from the database.
+    ///
+    pub async fn find_by_kind<A>(kind: LabelType, interface: &A) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let folders = Label::find("WHERE label_type = ?", params![kind], interface, None)
+            .await
+            .optional()?;
+
+        Ok(folders.unwrap_or(vec![]))
     }
 }
 
@@ -2915,6 +3072,32 @@ impl Message {
         api.get_messages(filter).await
     }
 
+    /// Get all labels for the message.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed, or the data could not be
+    /// written to the database.
+    ///
+    pub async fn all_message_labels<A>(&self, interface: &A) -> Result<Vec<Label>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let labels = Label::find(
+            r#"
+            WHERE local_id IN (
+                SELECT local_label_id FROM message_labels WHERE local_message_id = ?
+            )
+            "#,
+            params![self.local_id],
+            interface,
+            None,
+        )
+        .await?;
+
+        Ok(labels)
+    }
+
     /// Extends [`Model::load()`] to pre-load child records.
     ///
     /// # Errors
@@ -2925,13 +3108,7 @@ impl Message {
         self.attachments_metadata =
             Attachment::load_message_attachment_metadata(self.local_id.unwrap(), interface).await?;
 
-        let labels = Label::find(
-            r#"WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?)"#,
-            params![self.local_id],
-            interface,
-            None,
-        )
-        .await?;
+        let labels = self.all_message_labels(interface).await?;
 
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
         self.label_ids = labels
@@ -3377,6 +3554,109 @@ impl Message {
                     ApiServiceError::UnknownError("MailContextError::from(e)".to_owned())
                 })?,
         ))
+    }
+
+    /// Get the available actions for the message excluding labels which are applied to
+    /// the message already.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    pub async fn available_actions<A>(
+        &self,
+        interface: &A,
+    ) -> Result<Vec<MessageAvailableAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        use crate::actions::{LabelAction, MessageActionKind};
+        let mut actions = vec![];
+        // This should never panic due to message will never be loaded without a local_id.
+        let local_id = self.local_id.unwrap();
+        let message_labels = self.all_message_labels(interface).await?;
+        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
+        let all_system_move_locations = all_system.iter().filter(|label| label.is_movable_folder());
+        let all_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
+        let all_move_actions = all_folders
+            .iter()
+            .chain(all_system_move_locations)
+            .filter(|label| !message_labels.contains(label))
+            .filter_map(|label| {
+                let action = MessageAvailableAction::new(
+                    MessageActionKind::Move {
+                        label: LabelAction::from_label(label)?,
+                    },
+                    local_id,
+                );
+
+                Some(action)
+            });
+
+        actions.extend(all_move_actions);
+
+        let to_unlabel = message_labels
+            .iter()
+            .filter(|label| label.is_applicable_label())
+            .filter(|label| !label.is_starred())
+            .filter_map(|label| {
+                let action = MessageAvailableAction::new(
+                    MessageActionKind::Unlabel {
+                        label: LabelAction::from_label(label)?,
+                    },
+                    local_id,
+                );
+
+                Some(action)
+            });
+
+        actions.extend(to_unlabel);
+
+        let all_label_label = Label::find_by_kind(LabelType::Label, interface).await?;
+
+        let to_label = all_label_label
+            .iter()
+            .filter(|label| !message_labels.contains(label))
+            // This check may be redundant but i leave it here just in case
+            .filter(|label| label.is_applicable_label())
+            .filter_map(|label| {
+                let action = MessageAvailableAction::new(
+                    MessageActionKind::Label {
+                        label: LabelAction::from_label(label)?,
+                    },
+                    local_id,
+                );
+
+                Some(action)
+            });
+
+        actions.extend(to_label);
+
+        if !self.deleted {
+            actions.push(MessageAvailableAction::new(
+                MessageActionKind::Delete,
+                local_id,
+            ));
+        }
+
+        actions.push(MessageAvailableAction::new(
+            if self.is_starred() {
+                MessageActionKind::Unstar
+            } else {
+                MessageActionKind::Star
+            },
+            local_id,
+        ));
+
+        actions.push(MessageAvailableAction::new(
+            if self.unread {
+                MessageActionKind::MarkRead
+            } else {
+                MessageActionKind::MarkUnread
+            },
+            local_id,
+        ));
+
+        Ok(actions)
     }
 }
 
