@@ -25,9 +25,14 @@ async fn main() {
     let user_email = std::env::var("USER_EMAIL").unwrap();
     let user_password = std::env::var("USER_PASSWORD").unwrap();
 
-    let session = Session::new(Config {
-        ..Default::default()
-    });
+    let session = Session::new(
+        Config {
+            ..Default::default()
+        },
+        None,
+    )
+    .await
+    .unwrap();
 
     let mut login_flow = Flow::new(session.clone());
     login_flow

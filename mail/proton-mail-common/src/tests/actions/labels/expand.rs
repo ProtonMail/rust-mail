@@ -203,7 +203,7 @@ mod apply_remote {
             skip_srp_proof_validation: true,
             ..Default::default()
         };
-        let session = Session::new(api_config);
+        let session = Session::new(api_config, None);
         mock_patch_label(
             &mock_server,
             REMOTE_ID,
