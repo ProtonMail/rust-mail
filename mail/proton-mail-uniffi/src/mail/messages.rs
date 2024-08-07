@@ -10,9 +10,12 @@
 
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
+use itertools::Itertools;
 use proton_mail_common::models::Message as RealMessage;
 use stash::orm::Model;
 use std::sync::Arc;
+
+use super::datatypes::MessageAvailableAction;
 
 /// Return the decrypted body of the specified message.
 ///
@@ -65,4 +68,37 @@ pub async fn search_for_messages(
             .map(Into::into)
             .collect(),
     )
+}
+
+/// Returns available actions for message
+/// Any action returned here should impact current state of the message
+/// and also should be available for the user to perform.
+/// There is no need for any additional calculations before executing them.
+///
+/// # Parameters
+///
+/// * `session` - The session to use for the request.
+/// * `id`      - The local ID of the message to retrieve.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn available_actions_for_message(
+    session: Arc<MailSession>,
+    id: u64,
+) -> Result<Vec<MessageAvailableAction>, MailboxError> {
+    if let Some(message) = RealMessage::load(id, session.stash()).await? {
+        let actions = message
+            .available_actions(session.stash())
+            .await?
+            .into_iter()
+            .map_into()
+            .collect();
+
+        Ok(actions)
+    } else {
+        Ok(vec![])
+    }
 }

@@ -48,7 +48,9 @@
 //!   - [`Message::body`](proton_mail_common::models::Message::body)
 //!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
 //!
+mod available_action;
 use crate::core::datatypes::{LabelId, RemoteId};
+pub use available_action::*;
 use core::fmt;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};

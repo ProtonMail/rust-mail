@@ -28,12 +28,229 @@ use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use velcro::hash_map;
 
+mod available_actions {
+    use super::*;
+    use crate::{
+        actions::LabelAction, actions::MessageActionKind, db::new_test_connection, label, message,
+        tests::common::create_address,
+    };
+    use itertools::Itertools;
+    use test_case::test_case;
+
+    lazy_static! {
+        static ref STARRED: Label =
+            label!(label_type: LabelType::System, remote_id: Some(LabelId::starred()));
+        static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
+        static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
+        static ref SPAM: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black());
+        static ref ARCHIVE: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::archive()), name: "Archive".to_owned(), color: LabelColor::black());
+        static ref TRASH: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::trash()), name: "Trash".to_owned(), color: LabelColor::black());
+        static ref ALL_MAIL: Label =
+            label!(label_type: LabelType::System, remote_id: Some(LabelId::all_mail()));
+        static ref APPLICABLE_LABEL_1: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_1".into()), name: "Applicable Label 1".to_owned(), color: LabelColor::purple());
+        static ref APPLICABLE_LABEL_2: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_2".into()), name: "Applicable Label 2".to_owned(), color: LabelColor::purple());
+        static ref APPLICABLE_LABEL_3: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_3".into()), name: "Applicable Label 3".to_owned(), color: LabelColor::purple());
+    }
+
+    struct TestCase {
+        message: Message,
+        message_labels: Vec<&'static Label>,
+        other_labels: Vec<&'static Label>,
+        expected: Vec<MessageAvailableAction>,
+    }
+
+    fn move_action(name: impl AsRef<str>) -> MessageAvailableAction {
+        MessageAvailableAction::new(
+            MessageActionKind::Move {
+                label: LabelAction {
+                    label_id: 0,
+                    name: name.as_ref().to_owned(),
+                    color: LabelColor::black(),
+                },
+            },
+            0,
+        )
+    }
+
+    fn label_action(name: impl AsRef<str>) -> MessageAvailableAction {
+        MessageAvailableAction::new(
+            MessageActionKind::Label {
+                label: LabelAction {
+                    label_id: 0,
+                    name: name.as_ref().to_owned(),
+                    color: LabelColor::purple(),
+                },
+            },
+            0,
+        )
+    }
+
+    fn unlabel_action(name: impl AsRef<str>) -> MessageAvailableAction {
+        MessageAvailableAction::new(
+            MessageActionKind::Unlabel {
+                label: LabelAction {
+                    label_id: 0,
+                    name: name.as_ref().to_owned(),
+                    color: LabelColor::purple(),
+                },
+            },
+            0,
+        )
+    }
+
+    lazy_static! {
+        static ref TEST1: TestCase = TestCase {
+            message: message!(deleted: false, unread: true, remote_id: Some("test1".into())),
+            message_labels: vec![&STARRED, &FOLDER],
+            other_labels: vec![],
+            expected: vec![
+                move_action("Inbox"),
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0),
+                MessageAvailableAction::new(MessageActionKind::Unstar, 0),
+                MessageAvailableAction::new(MessageActionKind::MarkRead, 0),
+            ],
+        };
+        static ref TEST2: TestCase = TestCase {
+            message: message!(deleted: false, remote_id: Some("test2".into())),
+            message_labels: vec![&INBOX, &ALL_MAIL, &APPLICABLE_LABEL_1],
+            other_labels: vec![&APPLICABLE_LABEL_2, &FOLDER],
+            expected: vec![
+                move_action("MyFavouritesFolder"),
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                unlabel_action("Applicable Label 1"),
+                label_action("Applicable Label 2"),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0),
+                MessageAvailableAction::new(MessageActionKind::Star, 0),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+            ],
+        };
+        static ref TEST3: TestCase = TestCase {
+            message: message!(deleted: false, remote_id: Some("test3".into())),
+            message_labels: vec![&INBOX, &SPAM, &ARCHIVE, &TRASH, &FOLDER],
+            other_labels: vec![&APPLICABLE_LABEL_2],
+            expected: vec![
+                label_action("Applicable Label 2"),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0),
+                MessageAvailableAction::new(MessageActionKind::Star, 0),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+            ],
+        };
+        static ref TEST4: TestCase = TestCase {
+            message: message!(deleted: false, remote_id: Some("test4".into())),
+            message_labels: vec![&INBOX, &APPLICABLE_LABEL_1, &STARRED],
+            other_labels: vec![&APPLICABLE_LABEL_2],
+            expected: vec![
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                unlabel_action("Applicable Label 1"),
+                label_action("Applicable Label 2"),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0),
+                MessageAvailableAction::new(MessageActionKind::Unstar, 0),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+            ],
+        };
+        static ref TEST5: TestCase = TestCase {
+            message: message!(deleted: true, remote_id: Some("test5".into())),
+            message_labels: vec![&INBOX, &APPLICABLE_LABEL_2, &STARRED],
+            other_labels: vec![&APPLICABLE_LABEL_1],
+            expected: vec![
+                move_action("Archive"),
+                move_action("Spam"),
+                move_action("Trash"),
+                unlabel_action("Applicable Label 2"),
+                label_action("Applicable Label 1"),
+                MessageAvailableAction::new(MessageActionKind::Unstar, 0),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+            ],
+        };
+    }
+
+    #[test_case(&TEST1; "TEST1: Unread, starred and in custom folder")]
+    #[test_case(&TEST2; "TEST2: Custom label, all mail and in inbox")]
+    #[test_case(&TEST3; "TEST3: All possible move locations")]
+    #[test_case(&TEST4; "TEST4: Custom label, starred and in inbox")]
+    #[test_case(&TEST5; "TEST5: Different custom label, starred and in inbox")]
+    #[tokio::test]
+    async fn test_available_actions(test_case: &TestCase) {
+        let stash = new_test_connection().await;
+        let tx = stash.connection();
+        let mut message: Message = test_case.message.clone();
+        let address = create_address(&tx).await;
+        message.address_id = address.remote_id.unwrap();
+        message.stash = Some(stash.clone());
+        message.save_using(&tx).await.unwrap();
+
+        let other_labels = test_case
+            .other_labels
+            .iter()
+            .filter(|label| label.label_type != LabelType::System);
+
+        for label in other_labels {
+            let mut label: Label = (*label).clone();
+            label.stash = Some(stash.clone());
+            label.save_using(&tx).await.unwrap();
+        }
+
+        for label in test_case.message_labels.iter() {
+            let mut label: Label = (*label).clone();
+            if label.label_type == LabelType::System {
+                label = Label::find_first("WHERE remote_id=?", params![label.remote_id], &stash)
+                    .await
+                    .unwrap()
+                    .unwrap();
+            } else {
+                label.stash = Some(stash.clone());
+                label.save_using(&tx).await.unwrap();
+            }
+
+            // TODO: Adjust when action and methods for adding labels are implemented
+            tx.execute(
+                "INSERT INTO message_labels VALUES (?,?)",
+                params![message.local_id, label.local_id],
+            )
+            .await
+            .unwrap();
+            message.label_ids.push(label.remote_id.unwrap());
+        }
+
+        message = Message::load(message.local_id.unwrap(), &stash)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let mut actual = message.available_actions(&stash).await.unwrap();
+        actual.iter_mut().for_each(|action| match action.action {
+            MessageActionKind::Move { ref mut label }
+            | MessageActionKind::Label { ref mut label }
+            | MessageActionKind::Unlabel { ref mut label } => label.label_id = 0,
+            _ => {}
+        });
+        let expected = test_case
+            .expected
+            .iter()
+            .map(|action| {
+                let mut action = action.clone();
+                action.local_id = message.local_id.unwrap();
+                action
+            })
+            .collect_vec();
+
+        assert_eq!(actual, expected);
+    }
+}
+
 #[tokio::test]
 async fn test_create_message() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let tx = stash.connection();
     test_create_message_dependencies_core(&tx).await;
-    let _conv_id = test_create_message_dependencies(&tx).await;
+    let _conversation_id = test_create_message_dependencies(&tx).await;
     let message =
         test_message_with_metadata(vec![LabelId::inbox().into(), MY_LABEL_ID1.clone()], vec![]);
     let id = Message::create_or_update_messages_from_metadata(

@@ -10,9 +10,12 @@
 //!
 
 use crate::core::datatypes::RemoteId;
-use crate::mail::datatypes::{Conversation, ConversationSearchOptions, Message};
+use crate::mail::datatypes::{
+    Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
+};
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
 use crate::{LiveQueryCallback, WatchHandle};
+use itertools::Itertools;
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::ContextualConversation;
@@ -64,6 +67,39 @@ pub async fn delete(mailbox: Arc<Mailbox>, ids: Vec<u64>) -> Result<(), MailboxE
     RealConversation::delete_multiple(ids, mailbox.label_id(), &mailbox.stash().connection())
         .await?;
     Ok(())
+}
+
+/// Returns available actions for conversation.
+/// Any action returned here should impact current state of the conversation
+/// and also should be available for the user to perform.
+/// There is no need for any additional calculations before executing them.
+///
+/// # Parameters
+///
+/// * `session` - The session to use for the request.
+/// * `id`      - The local ID of the conversation to retrieve.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn available_actions_for_conversation(
+    session: Arc<MailSession>,
+    id: u64,
+) -> Result<Vec<ConversationAvailableAction>, MailboxError> {
+    if let Some(conversation) = RealConversation::load(id, session.stash()).await? {
+        let actions = conversation
+            .available_actions(session.stash())
+            .await?
+            .into_iter()
+            .map_into()
+            .collect();
+
+        Ok(actions)
+    } else {
+        Ok(vec![])
+    }
 }
 
 /// Retrieve a conversation by local ID.

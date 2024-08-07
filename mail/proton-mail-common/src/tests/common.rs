@@ -24,6 +24,36 @@ lazy_static! {
     pub static ref MY_CONVERSATION_ID: ApiRemoteId = ApiRemoteId::from("MyConversationID");
 }
 
+#[macro_export]
+macro_rules! label {
+    ($($field:tt)*) => {
+        Label {
+            $($field)*,
+            ..Default::default()
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! message {
+    ($($field:tt)*) => {{
+        Message {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! conversation {
+    ($($field:tt)*) => {{
+        Conversation {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
 pub async fn create_labels(tx: &Tether) -> Vec<u64> {
     let mut labels = [test_label1(), test_label2()];
     for label in &mut labels {
@@ -40,12 +70,14 @@ pub async fn create_labels(tx: &Tether) -> Vec<u64> {
     labels.into_iter().map(|l| l.local_id.unwrap()).collect()
 }
 
-pub async fn create_address(core_tx: &Tether) {
+pub async fn create_address(core_tx: &Tether) -> Address {
     let mut address = test_address();
     address
         .save_using(core_tx)
         .await
         .expect("failed to create address");
+
+    address
 }
 
 pub fn test_address() -> Address {
@@ -78,81 +110,35 @@ pub fn test_address() -> Address {
 }
 
 pub fn test_label1() -> Label {
-    Label {
-        local_id: None,
+    label!(
         remote_id: Some(MY_LABEL_ID1.clone().into()),
-        local_parent_id: None,
-        remote_parent_id: None,
         name: "MyLabel".to_owned(),
-        path: None,
         color: LabelColor::black(),
-        label_type: LabelType::Label,
-        notify: Default::default(),
-        display: Default::default(),
-        sticky: Default::default(),
-        total_conv: 0,
-        total_msg: 0,
-        unread_conv: 0,
-        unread_msg: 0,
-        expanded: Default::default(),
-        initialized_conv: false,
-        display_order: 0,
-        initialized_msg: false,
-        row_id: None,
-        stash: None,
-    }
+        label_type: LabelType::Label
+    )
 }
 
 pub fn test_label2() -> Label {
-    Label {
-        local_id: None,
-        remote_id: Some(MY_LABEL_ID2.clone().into()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        name: "MyFolder".to_owned(),
-        path: None,
-        color: LabelColor::black(),
-        label_type: LabelType::Folder,
-        notify: true,
-        display: Default::default(),
-        sticky: Default::default(),
-        total_conv: 0,
-        total_msg: 0,
-        unread_conv: 0,
-        unread_msg: 0,
-        expanded: true,
-        initialized_conv: false,
-        display_order: 1,
-        initialized_msg: false,
-        row_id: None,
-        stash: None,
-    }
+    label!(
+       remote_id: Some(MY_LABEL_ID2.clone().into()),
+       name: "MyFolder".to_owned(),
+       color: LabelColor::black(),
+       label_type: LabelType::Folder,
+       notify: true,
+       expanded: true,
+       display_order: 1
+    )
 }
 
 pub fn test_starred_label() -> Label {
-    Label {
-        local_id: None,
-        remote_id: Some(LabelId::starred().clone()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        name: "Starred".to_owned(),
-        path: Some("Starred".to_owned()),
-        color: LabelColor::black(),
-        label_type: LabelType::System,
-        notify: false,
-        display: Default::default(),
-        sticky: Default::default(),
-        total_conv: 0,
-        total_msg: 0,
-        unread_conv: 0,
-        unread_msg: 0,
-        expanded: false,
-        initialized_conv: false,
-        display_order: 2,
-        initialized_msg: false,
-        row_id: None,
-        stash: None,
-    }
+    label!(
+       remote_id: Some(LabelId::starred().clone()),
+       name: "Starred".to_owned(),
+       path: Some("Starred".to_owned()),
+       color: LabelColor::black(),
+       label_type: LabelType::System,
+       display_order: 2
+    )
 }
 
 pub fn test_conversation(
