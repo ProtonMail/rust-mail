@@ -1,15 +1,13 @@
 mod common;
 
-use crate::common::account::TEST_USER_ID;
 use crate::common::init::{NullCallback, Params as TestParams};
-use crate::common::test_user_secret;
 use common::TestContext;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Label as ApiLabel, MailSettings as ApiMailSettings,
     MessageCount as ApiMessageCount, ShowMoved,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::Sidebar;
 use std::default::Default;
@@ -54,11 +52,7 @@ fn sidebar_system_labels(
         //     + Create all system mailbox
         //     + Add message where needed
         //   * Create Sidebar
-        let ctx = TestContext::with_user_secret_and_user_id(
-            test_user_secret(),
-            RemoteId::from(TEST_USER_ID),
-        )
-        .await;
+        let ctx = TestContext::new().await;
         ctx.setup_user(sidebar_test_params(
             almost_all_mail,
             show_moved,

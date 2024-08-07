@@ -62,4 +62,28 @@ impl Sidebar {
             .map(Into::into)
             .collect())
     }
+
+    /// Get the list of Custom Folders to display in the sidebar.
+    pub async fn custom_folders(&self) -> SidebarResult<Vec<Label>> {
+        // TODO: how to expose a callback ?
+        Ok(self
+            .sidebar
+            .custom_folders(None)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
+
+    /// Get the list of Custom Labels to display in the sidebar.
+    pub async fn custom_labels(&self) -> SidebarResult<Vec<Label>> {
+        // TODO: how to expose a callback ?
+        Ok(self
+            .sidebar
+            .custom_labels(None)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect())
+    }
 }
