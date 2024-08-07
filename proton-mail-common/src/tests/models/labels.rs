@@ -45,10 +45,7 @@ async fn test_remote_label_add_duplicate() {
     let local_id = local_label.local_id;
     let mut local_label2 = Label::from(label.clone());
     assert!(local_label2.save_using(&tx).await.is_err());
-    let db_label = Label::load_using(local_id.unwrap(), &tx)
-        .await
-        .unwrap()
-        .unwrap();
+    let db_label = Label::load(local_id.unwrap(), &tx).await.unwrap().unwrap();
     let mut test_label = Label::from(label);
     test_label.stash = Some(stash.clone());
     test_label.local_id = db_label.local_id;
@@ -194,7 +191,7 @@ async fn label_with_counts() {
     .await
     .unwrap();
 
-    let label = Label::load_using(local_id, &tx)
+    let label = Label::load(local_id, &tx)
         .await
         .expect("failed to load label")
         .expect("should have a value");
@@ -242,7 +239,7 @@ async fn create_local_label() {
             .save_using(&tx)
             .await
             .expect("failed to create label");
-        let db_label = Label::load_using(new_label.local_id.unwrap(), &tx)
+        let db_label = Label::load(new_label.local_id.unwrap(), &tx)
             .await
             .expect("failed to load label")
             .expect("should have a value");
@@ -384,7 +381,7 @@ async fn update_local_label() {
         .expect("failed to create label");
 
     async fn compare_db_label(tx: &Tether, id: u64, f: impl FnOnce(&Label)) {
-        let db_label = Label::load_using(id, tx)
+        let db_label = Label::load(id, tx)
             .await
             .expect("failed to get label")
             .expect("must have value");

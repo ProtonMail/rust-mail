@@ -6,7 +6,7 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use serde::{Deserialize, Serialize};
-use stash::stash::{Stash, Tether};
+use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
 
 /// Action which moves conversations between two labels.

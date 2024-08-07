@@ -15,7 +15,7 @@ use proton_core_common::models::Address;
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Tether;
+use stash::stash::{Interface, Tether};
 
 lazy_static! {
     pub static ref MY_ADDRESS_ID: ApiRemoteId = ApiRemoteId::from("MyRemoteId");

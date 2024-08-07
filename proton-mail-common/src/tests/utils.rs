@@ -4,7 +4,7 @@ use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::models::Address;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Tether;
+use stash::stash::{Interface, Tether};
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default, Clone)]

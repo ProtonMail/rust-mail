@@ -16,6 +16,7 @@ use proton_event_loop::subscriber::Subscriber;
 use proton_event_loop::EventLoopError;
 use stash::datatypes::QueryResultString;
 use stash::params;
+use stash::stash::Interface;
 use std::sync::Weak;
 use tracing::error;
 

@@ -1,5 +1,5 @@
 use indoc::indoc;
-use stash::stash::{StashError, Tether};
+use stash::stash::{Interface, StashError, Tether};
 
 pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
     // Attachments

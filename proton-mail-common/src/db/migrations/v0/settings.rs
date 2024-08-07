@@ -1,4 +1,4 @@
-use stash::stash::{StashError, Tether};
+use stash::stash::{Interface, StashError, Tether};
 
 pub async fn create_settings_table(tx: &Tether) -> Result<(), StashError> {
     tx.execute(

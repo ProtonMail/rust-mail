@@ -74,7 +74,7 @@ use stash::exports::ToSql;
 use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tracing::{debug, error};
@@ -756,11 +756,11 @@ impl Conversation {
     ///
     /// See [`Model::load()`].
     ///
-    async fn on_load(&mut self, stash: &Stash) -> Result<(), StashError> {
+    async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         self.labels = ConversationLabel::find(
             "WHERE local_conversation_id = ?",
             params![self.local_id],
-            stash,
+            interface,
             None,
         )
         .await?;
@@ -768,7 +768,7 @@ impl Conversation {
         let labels = Label::find(
             r#"WHERE local_id IN (SELECT local_label_id FROM conversation_labels WHERE local_conversation_id = ?)"#,
             params![self.local_id],
-            stash,
+            interface,
             None,
         )
         .await?;
@@ -791,16 +791,11 @@ impl Conversation {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash().cloned() else {
-            debug!("No stash available");
-            return Err(StashError::NoStashAvailable);
-        };
-
+    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         // Remove any labels that are no longer associated with this conversation.
         if !self.labels.is_empty() {
             #[allow(trivial_casts)]
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -821,7 +816,7 @@ impl Conversation {
                 )
                 .await?;
         } else {
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -839,7 +834,7 @@ impl Conversation {
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.value.is_empty() {
             #[allow(trivial_casts)]
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -860,7 +855,7 @@ impl Conversation {
                 )
                 .await?;
         } else {
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -883,7 +878,7 @@ impl Conversation {
                         label.remote_conversation_id.clone(),
                         label.remote_label_id.clone()
                     ],
-                    &stash,
+                    interface,
                 )
                 .await?
                 {
@@ -894,7 +889,7 @@ impl Conversation {
                 } else if let Some(db_label) = Label::find_first(
                     "WHERE remote_id = ?",
                     params![label.remote_label_id.clone()],
-                    &stash,
+                    interface,
                 )
                 .await?
                 {
@@ -918,7 +913,7 @@ impl Conversation {
                         unread_msg: 0,
                         name: "".to_owned(),
                         label_type: LabelType::Label,
-                        stash: Some(stash.clone()),
+                        stash: Some(interface.stash().clone()),
                         initialized_msg: false,
                         notify: false,
                         row_id: None,
@@ -929,7 +924,7 @@ impl Conversation {
             }
             label.local_conversation_id = self.local_id;
             label.remote_conversation_id.clone_from(&self.remote_id);
-            label.stash = Some(stash.clone());
+            label.stash = Some(interface.stash().clone());
             label.save().await.or_else(|err| match err {
                 StashError::NoRowsUpdated => Ok(()),
                 _ => {
@@ -954,7 +949,7 @@ impl Conversation {
     ///
     pub async fn mark_multiple_as_read(ids: Vec<u64>, stash: &Tether) -> Result<(), StashError> {
         for id in ids {
-            if let Some(mut conv) = Conversation::load_using(id, stash).await? {
+            if let Some(mut conv) = Conversation::load(id, stash).await? {
                 conv.num_unread = 0;
                 conv.save().await?;
             }
@@ -997,7 +992,7 @@ impl Conversation {
         // TODO: This is simplified, and will be updated when these operations are
         // TODO: refactored
         for id in ids {
-            if let Some(mut conv) = Conversation::load_using(id, tether).await? {
+            if let Some(mut conv) = Conversation::load(id, tether).await? {
                 conv.num_unread = 1;
                 conv.save().await?;
             }
@@ -1363,7 +1358,7 @@ impl Conversation {
         ids: Vec<u64>,
         tx: &Tether,
     ) -> Result<(LabelId, LabelId), AppError> {
-        let Some(source_label) = Label::load_using(source_id, tx).await? else {
+        let Some(source_label) = Label::load(source_id, tx).await? else {
             return Err(AppError::LabelNotFound(source_id));
         };
 
@@ -2639,7 +2634,7 @@ impl Message {
     ///
     /// See [`Model::load()`].
     ///
-    async fn on_load(&mut self, stash: &Stash) -> Result<(), StashError> {
+    async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         // TODO: This should come later... the relationship between attachments and
         // TODO: their metadata is really weird and needs sorting out, but is beyond
         // TODO: current scope.
@@ -2663,7 +2658,7 @@ impl Message {
         let labels = Label::find(
             r#"WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?)"#,
             params![self.local_id],
-            stash,
+            interface,
             None,
         )
         .await?;
@@ -2674,7 +2669,7 @@ impl Message {
         if let Some(body) = MessageBodyMetadata::find_first(
             "WHERE local_message_id = ?",
             params![self.local_id],
-            stash,
+            interface,
         )
         .await?
         {
@@ -2697,16 +2692,11 @@ impl Message {
     ///
     /// See [`Model::save()`].
     ///
-    pub async fn on_save(&mut self) -> Result<(), StashError> {
-        let Some(stash) = self.stash().cloned() else {
-            debug!("No stash available");
-            return Err(StashError::NoStashAvailable);
-        };
-
+    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         // Remove any labels that are no longer associated with this message.
         if !self.label_ids.is_empty() {
             #[allow(trivial_casts)]
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -2731,7 +2721,7 @@ impl Message {
                 )
                 .await?;
         } else {
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -2749,7 +2739,7 @@ impl Message {
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.value.is_empty() {
             #[allow(trivial_casts)]
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -2770,7 +2760,7 @@ impl Message {
                 )
                 .await?;
         } else {
-            stash
+            interface
                 .execute(
                     formatdoc!(
                         "
@@ -2787,7 +2777,8 @@ impl Message {
 
         for label_id in &mut self.label_ids {
             let local_label_id = if let Some(db_label) =
-                Label::find_first("WHERE remote_id = ?", params![label_id.clone()], &stash).await?
+                Label::find_first("WHERE remote_id = ?", params![label_id.clone()], interface)
+                    .await?
             {
                 db_label.local_id
             } else {
@@ -2809,7 +2800,7 @@ impl Message {
                     unread_msg: 0,
                     name: "".to_owned(),
                     label_type: LabelType::Label,
-                    stash: Some(stash.clone()),
+                    stash: Some(interface.stash().clone()),
                     initialized_msg: false,
                     notify: false,
                     row_id: None,
@@ -2817,7 +2808,7 @@ impl Message {
                 db_label.save().await?;
                 db_label.local_id
             };
-            stash
+            interface
                 .execute(
                     r#"
                 INSERT OR IGNORE INTO
