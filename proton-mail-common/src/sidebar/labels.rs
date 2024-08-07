@@ -1,10 +1,11 @@
+use flume::Sender;
 use proton_core_common::datatypes::LabelId;
-use stash::orm::Model;
+use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use tracing::error;
 
-use crate::datatypes::SystemLabelId;
 use crate::datatypes::{AlmostAllMail, ShowMoved};
+use crate::datatypes::{LabelType, SystemLabelId};
 use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
 
@@ -14,6 +15,7 @@ impl Sidebar {
     /// That list is filtered in function of [`MailSettings::almost_all_mail`],
     /// [`MailSettings::show_moved`] and some are hidden when empty (`Scheduled`, `Outbox` and
     /// `Snoozed`)
+    // TODO: Add a callback hooked on used DB (Settings, Scheduled, outbox and snoozed)
     pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
         let Some(settings) = MailSettings::load(MAIL_SETTINGS_ID, self.user_ctx.stash()).await?
         else {
@@ -57,6 +59,36 @@ impl Sidebar {
             result.push(self.get_label(LabelId::almost_all_mail()).await?);
         }
         Ok(result)
+    }
+
+    /// Get the list of Custom Folders to display in the sidebar.
+    // TODO: See how flume::Sender work with UniFFI
+    pub async fn custom_folders(
+        &self,
+        queue: Option<Sender<ResultsetChange<Label, <Label as Model>::IdType>>>,
+    ) -> SidebarResult<Vec<Label>> {
+        Ok(Label::find(
+            "WHERE label_type = ? ORDER BY display_order",
+            params![LabelType::Folder],
+            self.user_ctx.stash(),
+            queue,
+        )
+        .await?)
+    }
+
+    /// Get the list of Custom Labels to display in the sidebar.
+    // TODO: See how flume::Sender work with UniFFI
+    pub async fn custom_labels(
+        &self,
+        queue: Option<Sender<ResultsetChange<Label, <Label as Model>::IdType>>>,
+    ) -> SidebarResult<Vec<Label>> {
+        Ok(Label::find(
+            "WHERE label_type = ? ORDER BY display_order",
+            params![LabelType::Label],
+            self.user_ctx.stash(),
+            queue,
+        )
+        .await?)
     }
 
     async fn get_label(&self, label_id: LabelId) -> SidebarResult<Label> {
