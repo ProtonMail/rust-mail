@@ -376,14 +376,16 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         quote! {
             async fn save(&mut self) -> Result<(), stash::stash::StashError> {
                 stash::orm::perform_save(self, None).await?;
-                self.on_save().await
+                // Unwrapping is safe here because we just did a save with the stash
+                self.on_save(&self.stash().unwrap().into()).await
             }
             async fn save_using<A>(&mut self, interface: &A) -> Result<(), stash::stash::StashError>
             where
                 A: Into<stash::stash::AgnosticInterface> + stash::stash::Interface,
             {
-                stash::orm::perform_save(self, Some(&interface.clone().into())).await?;
-                self.on_save().await
+                let interface = interface.clone().into();
+                stash::orm::perform_save(self, Some(&interface)).await?;
+                self.on_save(&interface).await
             }
         }
     } else {
