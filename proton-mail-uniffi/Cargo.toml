@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-uniffi"
-version = "0.11.3"
+version = "0.11.4"
 edition = "2021"
 publish = false
 
@@ -11,6 +11,7 @@ crate-type = ["staticlib", "cdylib"]
 [dependencies]
 anyhow = { workspace = true }
 bytes = { workspace = true }
+flume = { workspace = true }
 futures = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }

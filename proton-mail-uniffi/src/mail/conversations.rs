@@ -10,13 +10,16 @@
 //!
 
 use crate::core::datatypes::RemoteId;
-use crate::mail::datatypes::{Conversation, ConversationSearchOptions};
+use crate::mail::datatypes::{Conversation, ConversationSearchOptions, Message};
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
+use crate::LiveQueryCallback;
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
-use proton_mail_common::models::Conversation as RealConversation;
-use stash::orm::Model;
+use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
+use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use std::sync::Arc;
+use tokio::spawn as spawn_async;
+use tracing::{debug, warn};
 
 /// Label the given conversations with the given label id.
 ///
@@ -261,4 +264,84 @@ pub async fn star(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), Mailbo
 #[uniffi::export]
 pub async fn unstar(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
     Ok(RealConversation::unstar_multiple(ids, session.stash()).await?)
+}
+
+/// Watch the given conversation.
+///
+/// Watches the specified conversation for changes. When the conversation's
+/// messages change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `id`       - The local ID of the conversation to watch.
+/// * `callback` - The callback to use for updates. When the specified
+///                conversation's messages change, the callback will be
+///                invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn watch(
+    session: Arc<MailSession>,
+    id: u64,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<Vec<Message>, MailboxError> {
+    let (sender, receiver) = flume::unbounded::<ResultsetChange<RealMessage, u64>>();
+    let results = RealMessage::find(
+        "WHERE local_conversation_id = ?",
+        params![id],
+        session.stash(),
+        Some(sender),
+    )
+    .await?;
+    // Unwrapping is safe here, as we will always have the local ID
+    let mut ids = results
+        .iter()
+        .map(|m| m.local_id.unwrap())
+        .collect::<Vec<_>>();
+
+    spawn_async(async move {
+        while let Ok(change) = receiver.recv_async().await {
+            match change {
+                ResultsetChange::Inserted(message) => {
+                    if message.local_conversation_id == Some(id) {
+                        debug!("Received new message for watched conversation ({id})");
+                        // Unwrapping is safe here, as we will always have the local ID
+                        ids.push(message.local_id.unwrap());
+                        callback.on_update();
+                    } else {
+                        debug!(
+                            "Received new message for different conversation ({} instead of {id})",
+                            message.local_conversation_id.unwrap()
+                        );
+                    }
+                }
+                ResultsetChange::Updated(message) => {
+                    if message.local_conversation_id == Some(id) {
+                        debug!("Received updated message for watched conversation ({id})");
+                        callback.on_update();
+                    } else {
+                        debug!("Received updated message for different conversation ({} instead of {id})", message.local_conversation_id.unwrap());
+                    }
+                }
+                ResultsetChange::Deleted(local_message_id) => {
+                    if ids.contains(&local_message_id) {
+                        debug!("Received deleted message for watched conversation ({id})");
+                        callback.on_update();
+                    } else {
+                        debug!("Received deleted message for different conversation (unknown instead of {id})");
+                    }
+                }
+                _ => {
+                    warn!("Received unknown change type");
+                }
+            };
+        }
+    });
+
+    Ok(results.into_iter().map(Into::into).collect())
 }
