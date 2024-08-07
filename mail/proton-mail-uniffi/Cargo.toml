@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-uniffi"
-version = "0.11.1"
+version = "0.11.2"
 edition = "2021"
 publish = false
 
@@ -9,8 +9,8 @@ crate-type = ["staticlib", "cdylib"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { workspace = true}
-bytes = { workspace = true}
+anyhow = { workspace = true }
+bytes = { workspace = true }
 futures = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }
