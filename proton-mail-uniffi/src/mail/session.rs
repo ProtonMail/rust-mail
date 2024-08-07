@@ -163,8 +163,8 @@ impl MailSession {
     }
 
     /// Start new login flow.
-    pub fn new_login_flow(&self) -> MailSessionResult<Arc<LoginFlow>> {
-        let flow = self.ctx.new_login_flow()?;
+    pub async fn new_login_flow(&self) -> MailSessionResult<Arc<LoginFlow>> {
+        let flow = self.ctx.new_login_flow().await?;
         Ok(LoginFlow::new(flow, self.ctx.clone()))
     }
 

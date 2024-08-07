@@ -1,6 +1,6 @@
 use crate::mail::{MailSessionResult, MailUserSession};
 use futures::executor::block_on;
-use proton_api_core::auth::{ExposeSecret, SecretString};
+use proton_api_core::auth::{ExposeSecret, SecretString, StoreError};
 use proton_api_core::login::Flow as CoreLoginFlow;
 use proton_api_core::login::LoginError as RealLoginFlowError;
 use proton_api_core::service::ApiServiceError;
@@ -57,6 +57,8 @@ pub enum LoginFlowError {
     KeySecretDecryption,
     #[error("Wrong mailbox password provided")]
     WrongMailboxPassword,
+    #[error("Authentication Store error: {0}")]
+    AuthStore(#[from] StoreError),
 }
 
 pub type LoginFlowResult<T> = Result<T, LoginFlowError>;
@@ -147,6 +149,7 @@ impl From<RealLoginFlowError> for LoginFlowError {
             RealLoginFlowError::KeySecretAuthUpdate(e) => LoginFlowError::KeySecretAuthUpdate(e),
             RealLoginFlowError::KeySecretDecryption => LoginFlowError::KeySecretDecryption,
             RealLoginFlowError::WrongMailboxPassword => LoginFlowError::WrongMailboxPassword,
+            RealLoginFlowError::AuthStore(e) => LoginFlowError::AuthStore(e),
         }
     }
 }

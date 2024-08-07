@@ -117,8 +117,8 @@ impl MailContext {
         })
     }
 
-    pub fn new_login_flow(&self) -> MailContextResult<Flow> {
-        let f = self.core_context.new_login_flow()?;
+    pub async fn new_login_flow(&self) -> MailContextResult<Flow> {
+        let f = self.core_context.new_login_flow().await?;
         Ok(f)
     }
 
