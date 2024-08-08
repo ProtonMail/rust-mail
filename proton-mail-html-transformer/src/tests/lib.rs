@@ -14,6 +14,7 @@ fn pathologic_nested() {
         .inject_style()
         .add_noreferrer()
         .proxy_images("THISISATOKEN")
+        .strip_blockquote()
         .insert_links();
     // .to_string(); // https://github.com/servo/html5ever/issues/290
 }

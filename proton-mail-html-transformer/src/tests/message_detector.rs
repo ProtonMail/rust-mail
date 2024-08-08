@@ -1,6 +1,24 @@
 #![allow(non_snake_case)]
-
 use super::*;
+
+mod message_detector_test_messages;
+
+use html5ever::tendril::TendrilSink;
+
+fn locate_blockquote_strings(input: &str) -> (String, String) {
+    let document = kuchikiki::parse_html().one(input);
+    let SplitDoc {
+        message,
+        blockquote,
+    } = locate_blockquote(document);
+
+    let blockquote = match blockquote {
+        Some(e) => e.to_string(),
+        None => String::new(),
+    };
+
+    (message.to_string(), blockquote)
+}
 
 #[test]
 fn detect_blockquote_or_signature() {
@@ -25,7 +43,7 @@ fn detect_blockquote_or_signature() {
     </div>
 </div>"#;
 
-    let (before, after) = locate_blockquote(input);
+    let (before, after) = locate_blockquote_strings(input);
 
     assert!(!before.contains("On Tuesday"));
     assert!(after.contains("On Tuesday"));
@@ -41,7 +59,7 @@ fn should_take_the_last_element_containing_text_in_case_of_sibling_blockquotes()
     blockquote2
 </div>"#;
 
-    let (before, after) = locate_blockquote(input);
+    let (before, after) = locate_blockquote_strings(input);
 
     assert!(before.contains("Email content"));
     assert!(before.contains("blockquote1"));
@@ -60,7 +78,7 @@ fn should_take_the_last_element_containing_an_image_in_cas_of_sibling_blockquote
     <span class="proton-image-anchor" />
 </div>"#;
 
-    let (before, after) = locate_blockquote(input);
+    let (before, after) = locate_blockquote_strings(input);
 
     assert!(before.contains("Email content"));
     assert!(before.contains("blockquote1"));
@@ -77,7 +95,7 @@ fn should_display_nothing_in_blockquote_when_there_is_text_after_blockquotes() {
 </div>
 text after blockquote"#;
 
-    let (before, after) = locate_blockquote(input);
+    let (before, after) = locate_blockquote_strings(input);
 
     assert!(before.contains("Email content"));
     assert!(before.contains("blockquote1"));
@@ -93,7 +111,7 @@ fn should_display_nothing_in_blockquote_when_there_is_an_image_after_blockquotes
 </div>
 <span class="proton-image-anchor" />"#;
 
-    let (before, after) = locate_blockquote(input);
+    let (before, after) = locate_blockquote_strings(input);
 
     assert!(before.contains("Email content"));
     assert!(before.contains("blockquote1"));
@@ -103,8 +121,8 @@ fn should_display_nothing_in_blockquote_when_there_is_an_image_after_blockquotes
 
 #[test]
 fn should_find_blockquote_in_mail() {
-    for (idx, &mail) in test_messages::DEFAULT.iter().enumerate() {
-        let (_, after) = locate_blockquote(mail);
+    for (idx, &mail) in message_detector_test_messages::DEFAULT.iter().enumerate() {
+        let (_, after) = locate_blockquote_strings(mail);
         assert!(
             !after.is_empty(),
             "blockquote failed for message {idx}\n{mail}"

@@ -4,7 +4,9 @@ mod profiler;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use proton_mail_html_transformer::{remote_content, sanitizer, transforms, utm, Transformer};
+use proton_mail_html_transformer::{
+    message_detector, remote_content, sanitizer, transforms, utm, Transformer,
+};
 
 static AMOS_HTTP: &str = include_str!("./amos_http.html");
 static AMOS_LANDING: &str = include_str!("./amos_landing.html");
@@ -18,14 +20,14 @@ pub fn current_benchmark(c: &mut Criterion) {
         c.bench_function("current benchmark", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                transforms::insert_links(tr.document())
+                message_detector::locate_blockquote(tr.document())
             })
         });
     }
 
-    parse_inner(c, LINKS);
-    // parse_inner(c, AMOS_HTTP);
-    // parse_inner(c, AMOS_LANDING);
+    // parse_inner(c, LINKS);
+    parse_inner(c, AMOS_HTTP);
+    parse_inner(c, AMOS_LANDING);
 }
 
 pub fn parse(c: &mut Criterion) {
@@ -98,6 +100,13 @@ pub fn parse(c: &mut Criterion) {
                 transforms::proxy_images(tr.document(), "THISISATOKEN")
             })
         });
+
+        c.bench_function("locate blockquote", |b| {
+            b.iter(|| {
+                let tr = tr.clone();
+                transforms::insert_links(tr.document())
+            })
+        });
     }
 
     // Benchmarks with ad-hoc inputs
@@ -105,7 +114,7 @@ pub fn parse(c: &mut Criterion) {
     c.bench_function("insert 100 links", |b| {
         b.iter(|| {
             let tr = tr.clone();
-            transforms::insert_links(tr.document())
+            message_detector::locate_blockquote(tr.document())
         })
     });
 
@@ -135,6 +144,7 @@ pub fn all_transforms(c: &mut Criterion) {
                     .add_noreferrer()
                     .insert_links()
                     .proxy_images("THISISATOKEN")
+                    .strip_blockquote()
                     .to_string()
             })
         });
@@ -151,7 +161,7 @@ fn profiled() -> Criterion {
 criterion_group!(
     name = benches;
     config = profiled();
-    // targets = current_benchmark
-    targets =  parse, all_transforms
+    targets = current_benchmark
+    // targets =  parse, all_transforms
 );
 criterion_main!(benches);
