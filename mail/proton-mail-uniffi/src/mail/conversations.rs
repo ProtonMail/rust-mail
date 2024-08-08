@@ -12,11 +12,12 @@
 use crate::core::datatypes::RemoteId;
 use crate::mail::datatypes::{Conversation, ConversationSearchOptions, Message};
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
-use crate::LiveQueryCallback;
+use crate::{LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
 use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::spawn as spawn_async;
 use tracing::{debug, warn};
@@ -266,6 +267,16 @@ pub async fn unstar(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), Mail
     Ok(RealConversation::unstar_multiple(ids, session.stash()).await?)
 }
 
+/// Messages and watch handle for watched messages.
+#[derive(uniffi::Record)]
+pub struct WatchedConversation {
+    /// The messages in the conversation.
+    messages: Vec<Message>,
+
+    /// The handle to stop watching the conversation.
+    handle: Arc<WatchHandle>,
+}
+
 /// Watch the given conversation.
 ///
 /// Watches the specified conversation for changes. When the conversation's
@@ -289,7 +300,7 @@ pub async fn watch(
     session: Arc<MailSession>,
     id: u64,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Vec<Message>, MailboxError> {
+) -> Result<WatchedConversation, MailboxError> {
     let (sender, receiver) = flume::unbounded::<ResultsetChange<RealMessage, u64>>();
     let results = RealMessage::find(
         "WHERE local_conversation_id = ?",
@@ -303,9 +314,15 @@ pub async fn watch(
         .iter()
         .map(|m| m.local_id.unwrap())
         .collect::<Vec<_>>();
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_clone = Arc::clone(&stop_flag);
 
     spawn_async(async move {
         while let Ok(change) = receiver.recv_async().await {
+            if stop_flag_clone.load(Ordering::SeqCst) {
+                debug!("Stop flag set, stopping watch");
+                break;
+            }
             match change {
                 ResultsetChange::Inserted(message) => {
                     if message.local_conversation_id == Some(id) {
@@ -343,5 +360,8 @@ pub async fn watch(
         }
     });
 
-    Ok(results.into_iter().map(Into::into).collect())
+    Ok(WatchedConversation {
+        messages: results.into_iter().map(Into::into).collect(),
+        handle: Arc::new(WatchHandle { stop_flag }),
+    })
 }

@@ -10,14 +10,25 @@
 
 use crate::mail::datatypes::Label;
 use crate::mail::{MailSession, MailboxError};
-use crate::LiveQueryCallback;
+use crate::{LiveQueryCallback, WatchHandle};
 use proton_mail_common::datatypes::LabelType as RealLabelType;
 use proton_mail_common::models::Label as RealLabel;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::spawn as spawn_async;
 use tracing::{debug, warn};
+
+/// Messages and watch handle for watched labels.
+#[derive(uniffi::Record)]
+pub struct WatchedLabels {
+    /// The labels being watched.
+    labels: Vec<Label>,
+
+    /// The handle to stop watching the labels.
+    handle: Arc<WatchHandle>,
+}
 
 /// Watch labels of a given type.
 ///
@@ -38,7 +49,7 @@ async fn watch_labels(
     session: Arc<MailSession>,
     label_type: RealLabelType,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Vec<Label>, MailboxError> {
+) -> Result<WatchedLabels, MailboxError> {
     let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, u64>>();
     let results = RealLabel::find(
         "WHERE label_type = ?",
@@ -52,9 +63,15 @@ async fn watch_labels(
         .iter()
         .map(|m| m.local_id.unwrap())
         .collect::<Vec<_>>();
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    let stop_flag_clone = Arc::clone(&stop_flag);
 
     spawn_async(async move {
         while let Ok(change) = receiver.recv_async().await {
+            if stop_flag_clone.load(Ordering::SeqCst) {
+                debug!("Stop flag set, stopping watch");
+                break;
+            }
             match change {
                 ResultsetChange::Inserted(label) => {
                     if label.label_type == label_type {
@@ -89,7 +106,10 @@ async fn watch_labels(
         }
     });
 
-    Ok(results.into_iter().map(Into::into).collect())
+    Ok(WatchedLabels {
+        labels: results.into_iter().map(Into::into).collect(),
+        handle: Arc::new(WatchHandle { stop_flag }),
+    })
 }
 
 /// Watch folder labels.
@@ -111,7 +131,7 @@ async fn watch_labels(
 pub async fn watch_folder_labels(
     session: Arc<MailSession>,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Vec<Label>, MailboxError> {
+) -> Result<WatchedLabels, MailboxError> {
     watch_labels(session, RealLabelType::Folder, callback).await
 }
 
@@ -134,7 +154,7 @@ pub async fn watch_folder_labels(
 pub async fn watch_standard_labels(
     session: Arc<MailSession>,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Vec<Label>, MailboxError> {
+) -> Result<WatchedLabels, MailboxError> {
     watch_labels(session, RealLabelType::Label, callback).await
 }
 
@@ -157,6 +177,6 @@ pub async fn watch_standard_labels(
 pub async fn watch_system_labels(
     session: Arc<MailSession>,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<Vec<Label>, MailboxError> {
+) -> Result<WatchedLabels, MailboxError> {
     watch_labels(session, RealLabelType::System, callback).await
 }
