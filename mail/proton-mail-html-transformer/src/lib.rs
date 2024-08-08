@@ -25,10 +25,12 @@
 
 use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
+use message_detector::SplitDoc;
 use std::fmt::{Display, Formatter};
 
 // NOTE: each new transformation pass should be its own module.
 pub mod ios;
+pub mod message_detector;
 pub mod remote_content;
 pub mod sanitizer;
 pub mod transforms;
@@ -183,6 +185,25 @@ impl Transformer {
         self.insert_links_called = true;
         transforms::insert_links(self.document.clone());
         self
+    }
+
+    /// Removes the blockquote from the html
+    ///
+    /// # Remarks
+    ///
+    /// This is a destructive operation and can not be undone.
+    pub fn strip_blockquote(&mut self) -> &mut Self {
+        _ = message_detector::locate_blockquote(self.document().clone());
+        self
+    }
+
+    /// Try to locate and extract the eventual blockquote present in the document no matter the expeditor of the mail
+    ///
+    /// # Remarks
+    ///
+    /// This is a destructive operation and can not be undone.
+    pub fn extract_blockquote(&mut self) -> SplitDoc {
+        message_detector::locate_blockquote(self.document().clone())
     }
 }
 

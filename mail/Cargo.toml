@@ -4,7 +4,6 @@ members = [
     "proton-api-mail",
     "proton-mail-common",
     "proton-mail-html-transformer",
-    "proton-mail-message-detector",
     "proton-mail-uniffi",
     "proton-mail-wasm",
     "uniffi-bindgen",
@@ -29,7 +28,6 @@ proton-crypto-account = { version = "=0.5.0", registry = "proton" }
 proton-crypto-inbox = { version = "=0.6.0", registry = "proton" }
 proton-event-loop = { version = "=0.7.6", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common" }
-proton-mail-message-detector = { path = "proton-mail-message-detector" }
 proton-sqlite3 = { version = "=0.7.1", registry = "proton" }
 scraper = "0.19.0"
 serde = { version = "1", features = ["derive"] }

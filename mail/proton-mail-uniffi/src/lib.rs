@@ -147,7 +147,6 @@ use std::sync::Arc;
 pub mod core;
 mod log;
 pub mod mail;
-pub mod message_detector;
 
 uniffi::setup_scaffolding!();
 
