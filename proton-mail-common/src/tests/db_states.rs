@@ -59,7 +59,6 @@ pub fn new_test_delete_db_state() -> TestDBState {
                     ConversationLabel {
                         local_id: None,
                         local_conversation_id: None,
-                        remote_conversation_id: None,
                         local_label_id: None,
                         remote_label_id: Some(MY_LABEL_ID1.clone().into()),
                         context_num_unread: 0,
@@ -75,7 +74,6 @@ pub fn new_test_delete_db_state() -> TestDBState {
                     ConversationLabel {
                         local_id: None,
                         local_conversation_id: None,
-                        remote_conversation_id: None,
                         local_label_id: None,
                         remote_label_id: Some(MY_LABEL_ID2.clone().into()),
                         context_num_unread: 0,
@@ -96,7 +94,6 @@ pub fn new_test_delete_db_state() -> TestDBState {
                 labels: vec![ConversationLabel {
                     local_id: None,
                     local_conversation_id: None,
-                    remote_conversation_id: None,
                     local_label_id: None,
                     remote_label_id: Some(MY_LABEL_ID2.clone().into()),
                     context_num_unread: 0,
@@ -334,7 +331,6 @@ pub fn new_test_unread_db_state() -> TestDBState {
                 ConversationLabel {
                     local_id: None,
                     local_conversation_id: None,
-                    remote_conversation_id: None,
                     local_label_id: None,
                     remote_label_id: Some(MY_LABEL_ID1.clone().into()),
                     context_num_unread: 0,
@@ -350,7 +346,6 @@ pub fn new_test_unread_db_state() -> TestDBState {
                 ConversationLabel {
                     local_id: None,
                     local_conversation_id: None,
-                    remote_conversation_id: None,
                     local_label_id: None,
                     remote_label_id: Some(MY_LABEL_ID2.clone().into()),
                     context_num_unread: 0,
@@ -639,7 +634,6 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
             labels: vec![ConversationLabel {
                 local_id: None,
                 local_conversation_id: None,
-                remote_conversation_id: None,
                 local_label_id: None,
                 remote_label_id: Some(MY_LABEL_ID2.clone().into()),
                 context_num_unread: 0,

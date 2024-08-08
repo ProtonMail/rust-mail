@@ -62,6 +62,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
@@ -517,9 +518,6 @@ impl Conversation {
             }
             conv.save().await?;
 
-            for mut label in conv.labels {
-                label.save().await?;
-            }
             for mut _attachment in conv.attachments_metadata.value {
                 // TODO
                 // attachment.save().await?;
@@ -873,67 +871,8 @@ impl Conversation {
         }
 
         for label in &mut self.labels {
-            if label.local_id.is_none() {
-                if let Some(db_conv_label) = ConversationLabel::find_first(
-                    "WHERE remote_conversation_id = ? AND remote_label_id = ?",
-                    params![
-                        label.remote_conversation_id.clone(),
-                        label.remote_label_id.clone()
-                    ],
-                    interface,
-                )
-                .await?
-                {
-                    label.local_id = db_conv_label.local_id;
-                    label.row_id = db_conv_label.row_id;
-                    label.local_label_id = db_conv_label.local_label_id;
-                    label.remote_label_id = db_conv_label.remote_label_id;
-                } else if let Some(db_label) = Label::find_first(
-                    "WHERE remote_id = ?",
-                    params![label.remote_label_id.clone()],
-                    interface,
-                )
-                .await?
-                {
-                    label.local_label_id = db_label.local_id;
-                } else {
-                    let mut db_label = Label {
-                        local_id: None,
-                        remote_id: label.remote_label_id.clone(),
-                        local_parent_id: None,
-                        remote_parent_id: None,
-                        color: LabelColor::default(),
-                        display: false,
-                        expanded: false,
-                        initialized_conv: false,
-                        display_order: 0,
-                        path: None,
-                        sticky: false,
-                        total_conv: 0,
-                        total_msg: 0,
-                        unread_conv: 0,
-                        unread_msg: 0,
-                        name: "".to_owned(),
-                        label_type: LabelType::Label,
-                        stash: Some(interface.stash().clone()),
-                        initialized_msg: false,
-                        notify: false,
-                        row_id: None,
-                    };
-                    db_label.save().await?;
-                    label.local_label_id = db_label.local_id;
-                }
-            }
             label.local_conversation_id = self.local_id;
-            label.remote_conversation_id.clone_from(&self.remote_id);
-            label.stash = Some(interface.stash().clone());
-            label.save().await.or_else(|err| match err {
-                StashError::NoRowsUpdated => Ok(()),
-                _ => {
-                    error!("Failed to save conversation label: {err}");
-                    Err(err)
-                }
-            })?;
+            label.save_using(interface).await?
         }
         Ok(())
     }
@@ -1487,7 +1426,12 @@ impl From<ApiConversation> for Conversation {
     }
 }
 
-/// TODO: Document this struct.
+/// Contextual label metadata associated with a Conversation.
+///
+/// When a conversation is opened in the context of label, the
+/// [`ConversationLabel`] information is superimposed over the [`Conversation`]
+/// for that context.
+///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversation_labels")]
 pub struct ConversationLabel {
@@ -1502,10 +1446,6 @@ pub struct ConversationLabel {
     /// TODO: Document this field.
     #[DbField]
     pub local_conversation_id: Option<u64>,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub remote_conversation_id: Option<RemoteId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1578,6 +1518,83 @@ impl ConversationLabel {
             .map(|v| v.value)
             .collect())
     }
+
+    /// Save or update a Conversation Label.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that the information is update correctly in the database.
+    ///
+    /// The current stash database does not allow us to resolve conflicts on
+    /// other unique keys so we have to do this ourselves.
+    /// If [`Model::save()`] is used directly it will bypass this check.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the local conversation id is not set, the remote
+    /// label_id is not set, the local label can not be found or the query
+    /// failed.
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save or update a Conversation Label.
+    ///
+    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// ensure that the information is update correctly in the database.
+    ///
+    /// The current stash database does not allow us to resolve conflicts on
+    /// other unique keys so we have to do this ourselves.
+    /// If [`Model::save_using()`] is used directly it will bypass this check.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the local conversation id is not set, the remote
+    /// label_id is not set, the local label can not be found or the query
+    /// failed.
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(local_conversation_id) = self.local_conversation_id else {
+            return Err(StashError::Custom(
+                "Missing local conversation id".to_owned(),
+            ));
+        };
+
+        let Some(remote_label_id) = self.remote_label_id.clone() else {
+            return Err(StashError::Custom("Missing remote label id".to_owned()));
+        };
+
+        let Some(local_label) =
+            Label::find_by_remote_id(remote_label_id.clone().into(), interface).await?
+        else {
+            return Err(StashError::Custom(
+                "Missing remote local label id".to_owned(),
+            ));
+        };
+
+        self.local_label_id = local_label.local_id;
+
+        if let Some(label) = ConversationLabel::find_first(
+            "WHERE local_label_id=? AND local_conversation_id=?",
+            params![
+                local_label.local_id.expect("Should be set"),
+                local_conversation_id
+            ],
+            interface,
+        )
+        .await?
+        {
+            self.local_id = label.local_id;
+            self.row_id = label.row_id;
+        }
+
+        <Self as Model>::save_using(self, interface).await
+    }
 }
 
 impl From<ApiConversationLabel> for ConversationLabel {
@@ -1585,7 +1602,6 @@ impl From<ApiConversationLabel> for ConversationLabel {
         Self {
             local_id: None,
             local_conversation_id: None,
-            remote_conversation_id: None,
             local_label_id: None,
             remote_label_id: Some(value.id.into()),
             context_expiration_time: value.context_expiration_time,
