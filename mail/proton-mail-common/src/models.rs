@@ -79,7 +79,6 @@ use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::{Path, PathBuf};
 use tracing::{debug, error};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
@@ -2857,10 +2856,35 @@ impl Message {
         pgp_provider: P,
         api: &PM,
     ) -> Result<DecryptedMessageBody, AppError> {
-        // Fetch metadata first to sync contents and cache.
-        let encrypted_msg = self.sync_message_body(cache, api).await?;
+        let key = self.local_id.expect("Message does not have a local id");
+        if let Some(mut content) = cache.get_item(&key)? {
+            let mut body = String::new();
+            content.read_to_string(&mut body)?;
+            let metadata = self
+                .get_message_body_metadata()
+                .await?
+                .ok_or(AppError::MessageBodyMetadataMissing(key))?;
+            Ok(DecryptedMessageBody { body, metadata })
+        } else {
+            let decrypted_message_body = self
+                .decrypt_from_remote(address_keys, pgp_provider, api)
+                .await?;
+            cache.add_item(key, decrypted_message_body.body.clone().as_bytes())?;
+            Ok(decrypted_message_body)
+        }
+    }
 
-        //TODO: Verify signature.
+    /// Get message from remote and decrypt it
+    pub async fn decrypt_from_remote<P: PgpProviderSync, PM: ProtonMail>(
+        &self,
+        address_keys: UnlockedAddressKeys<P>,
+        pgp_provider: P,
+        api: &PM,
+    ) -> Result<DecryptedMessageBody, AppError> {
+        // Fetch metadata first to sync contents and cache.
+        let encrypted_msg = self.sync_message_body(api).await?;
+
+        // TODO: Verify signature.
         let (decrypted_body, _) = encrypted_msg
             .decrypt(&pgp_provider, &address_keys)
             .map_err(|e| {
@@ -2874,26 +2898,13 @@ impl Message {
                 body,
             }),
             DecryptedBody::Mime(multipart) => {
-                //TODO(ET-263): Handle multipart messages.
+                // TODO(ET-263): Handle multipart messages.
                 Ok(DecryptedMessageBody {
                     metadata: encrypted_msg.metadata,
                     body: multipart.body,
                 })
             }
         }
-    }
-
-    /// Get the cache path for a message body with `id`.
-    ///
-    /// # Parameters
-    ///
-    /// * `cache_path` - TODO: Document this parameter.
-    ///
-    pub fn message_cache_path(&self, cache_path: &Path) -> PathBuf {
-        cache_path.join(format!(
-            "message_body_{}",
-            self.local_id.expect("Message does not have a local id")
-        ))
     }
 
     /// Search for messages.
@@ -2989,18 +3000,13 @@ impl Message {
     ///
     pub async fn sync_message_body<PM: ProtonMail>(
         &self,
-        cache: &ProtonCache<CacheMessageConfig>,
         api: &PM,
     ) -> Result<EncryptedMessageBody, AppError> {
-        let (metadata, body) = self.sync_message_metadata(cache, api).await?;
+        let (metadata, body) = self.sync_message_metadata(api).await?;
         let encrypted_body = if let Some(body) = body {
             body
-        } else if let Some(body) = self.get_message_body_from_cache(cache)? {
-            body
         } else {
-            let message = self.get_message_from_remote(api).await?;
-            self.write_message_body_in_cache(cache, &message.body)?;
-            message.body
+            self.get_message_from_remote(api).await?.body
         };
         Ok(EncryptedMessageBody {
             encrypted_body,
@@ -3008,68 +3014,26 @@ impl Message {
         })
     }
 
-    /// Try to get message body from cache
-    ///
-    /// # Errors
-    ///   * Cache error when getting item
-    ///   * Can't read file
-    fn get_message_body_from_cache(
-        &self,
-        cache: &ProtonCache<CacheMessageConfig>,
-    ) -> Result<Option<String>, AppError> {
-        if let Some(local_id) = self.local_id {
-            if let Some(mut reader) = cache.get_item(&local_id)? {
-                let mut message = String::new();
-                reader.read_to_string(&mut message)?;
-                Ok(Some(message))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Get message body from cache
-    ///
-    /// # Errors
-    ///   * Cache error when adding item
-    ///
-    fn write_message_body_in_cache(
-        &self,
-        cache: &ProtonCache<CacheMessageConfig>,
-        body: &str,
-    ) -> Result<(), AppError> {
-        if let Some(local_id) = self.local_id {
-            cache.add_item(local_id, body.as_bytes())?;
-        }
-        Ok(())
-    }
-
     /// Sync message metadata
+    ///
+    /// # Parameters
+    ///
+    /// * `api` - The API instance to use.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the API request failed or the data could not be written
+    /// to the database.
+    ///
     async fn sync_message_metadata<PM: ProtonMail>(
         &self,
-        cache: &ProtonCache<CacheMessageConfig>,
         api: &PM,
     ) -> Result<(MessageBodyMetadata, Option<String>), AppError> {
         let Some(conn) = self.stash() else {
             return Err(StashError::NoStashAvailable.into());
         };
 
-        if let Some(metadata) = MessageBodyMetadata::find(
-            "WHERE local_message_id = ?",
-            params![self.local_id],
-            conn,
-            None,
-        )
-        .await
-        .map_err(|e| {
-            error!("Failed to retrieve message body metadata from db: {e}");
-            e
-        })?
-        .into_iter()
-        .next()
-        {
+        if let Some(metadata) = self.get_message_body_metadata().await? {
             Ok((metadata, None))
         } else {
             let message = self.get_message_from_remote(api).await?;
@@ -3084,13 +3048,35 @@ impl Message {
                 row_id: None,
                 stash: Some(conn.clone()),
             };
-            metadata.save().await.map_err(|e| {
-                error!("Failed to store message body metadata in db: {e}");
-                e
-            })?;
-            self.write_message_body_in_cache(cache, &message.body)?;
+            metadata
+                .save()
+                .await
+                .inspect_err(|e| error!("Failed to store message body metadata in db: {e}"))?;
             Ok((metadata, Some(message.body)))
         }
+    }
+
+    /// Get message body metadata from DB.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
+    async fn get_message_body_metadata(&self) -> Result<Option<MessageBodyMetadata>, AppError> {
+        let Some(conn) = self.stash() else {
+            return Err(StashError::NoStashAvailable.into());
+        };
+
+        Ok(MessageBodyMetadata::find(
+            "WHERE local_message_id = ?",
+            params![self.local_id],
+            conn,
+            None,
+        )
+        .await
+        .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?
+        .first()
+        .cloned())
     }
 
     /// Get message from remote
@@ -3258,7 +3244,7 @@ mod default_message {
 ///
 /// For metadata associated with a message see [`MessageMetadata`].
 ///
-#[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("message_bodies")]
 pub struct MessageBodyMetadata {
     /// The local ID of the record, i.e. the ID assigned by the client
