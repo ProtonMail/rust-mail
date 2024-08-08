@@ -88,6 +88,27 @@
 //!
 //! # TODO: Check the above after the facade is complete, in case it changes
 //!
+//! ## Live queries
+//!
+//! Live queries are a way to observe data and be notified when it changes. This
+//! is useful for keeping the client's view of the data up-to-date without
+//! needing to poll for changes.
+//!
+//! Where live query functionality is provided (through various `watch`
+//! functions), they accept a callback. This callback will be invoked whenever
+//! the data being watched changes. The data being watched is the result of an
+//! initial query, the rows from which are returned when the live query is first
+//! instigated. This is why this mechanism is referred to as "live queries" —
+//! because there is an initial query, and then any changes to the generated
+//! result set will trigger a notification.
+//!
+//! The live query functions return a data structure which contains the results
+//! plus a handle to the live query observer. These are separate in nature, so
+//! that the results can be used and dropped, and the handle retained. The
+//! handle is a [`WatchHandle`], which has a [`disconnect()`](WatchHandle::disconnect())
+//! method that can be called to stop observing changes to the live query result
+//! set.
+//!
 //! # Rust internals
 //!
 //! The actual internal structure and operations of the wider Rust libraries are
@@ -120,6 +141,9 @@
 //! crates that are the subject of the translations.*
 //!
 
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
 pub mod core;
 mod log;
 pub mod mail;
@@ -141,4 +165,22 @@ pub trait LiveQueryCallback: Send + Sync {
     /// this as a signal to refresh its view of the data.
     ///
     fn on_update(&self);
+}
+
+/// A handle to a live query.
+///
+/// This handle can be used to disconnect from the live query.
+///
+#[derive(uniffi::Object)]
+pub struct WatchHandle {
+    /// A flag to indicate if the live query should be stopped.
+    stop_flag: Arc<AtomicBool>,
+}
+
+#[uniffi::export]
+impl WatchHandle {
+    /// Disconnect from the live query.
+    pub fn disconnect(&self) {
+        self.stop_flag.store(true, Ordering::SeqCst);
+    }
 }
