@@ -47,14 +47,16 @@ pub enum AppError {
     LabelDoesNotHaveRemoteId(u64),
     #[error("Label with local id {0} not found")]
     LabelNotFound(u64),
+    #[error("MessageBodyMetadata missing in database for message {0}")]
+    MessageBodyMetadataMissing(u64),
     #[error("Could not find remote label {0}")]
     RemoteLabelDoesNotExist(LabelId),
-    #[error("Stash error: {0}")]
-    Stash(#[from] StashError),
     #[error("Cache error: {0}")]
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
+    #[error("Stash error: {0}")]
+    Stash(#[from] StashError),
     #[error("Other error: {0}")]
     Other(String),
 }

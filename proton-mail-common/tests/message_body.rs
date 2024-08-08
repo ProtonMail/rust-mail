@@ -93,7 +93,7 @@ async fn mailbox_message_body_simple() {
         .get_item(&local_id)
         .unwrap()
         .map(|f| read_to_string(f).unwrap());
-    assert_eq!(item, Some(message.body));
+    assert_eq!(item, Some(TEST_MESSAGE_BODY_DECRYPTED.to_owned()));
 
     let pgp_provider = new_pgp_provider();
     // Only one call to API is done
