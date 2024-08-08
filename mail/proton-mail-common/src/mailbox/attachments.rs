@@ -1,6 +1,6 @@
 use crate::datatypes::AttachmentMetadata;
 use crate::models::Attachment;
-use crate::{MailContextError, Mailbox, MailboxError, MailboxResult};
+use crate::{AppError, MailContextError, Mailbox, MailboxError, MailboxResult};
 use proton_api_core::session::CoreSession;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
@@ -53,6 +53,7 @@ impl Mailbox {
             .await?;
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
+                local_id: Some(attachment_id),
                 remote_id: attachment.remote_id,
                 disposition: attachment.disposition,
                 mime_type: attachment.mime_type,
@@ -113,7 +114,7 @@ impl Mailbox {
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
-                .sync_complete_metadata(user_context.session().api())
+                .sync_complete_metadata(user_context.session().api(), &self.stash().clone().into())
                 .await
                 .inspect_err(|e| {
                     error!("Failed to sync attachment({attachment_id}) metadata: {e})")
@@ -134,13 +135,19 @@ impl Mailbox {
         attachment_info: &Attachment,
         data: impl Read,
     ) -> MailboxResult<(Vec<u8>, VerificationResult)> {
+        let Some(remote_address_id) = &attachment_info.remote_address_id else {
+            return Err(MailboxError::AppError(AppError::Other(
+                "Attachment has no address id".to_owned(),
+            )));
+        };
+
         let user_context = self.user_context();
 
         let mut result_buffer: Vec<u8> =
             Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
 
         let address_keys = user_context
-            .unlocked_address_keys_async(pgp_provider, &attachment_info.remote_address_id)
+            .unlocked_address_keys_async(pgp_provider, remote_address_id)
             .await?;
 
         // TODO: Load the sender verification keys for correct signature verification.

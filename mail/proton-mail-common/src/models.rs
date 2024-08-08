@@ -33,17 +33,17 @@ mod tests;
 
 use crate::cache::CacheMessageConfig;
 use crate::datatypes::{
-    AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadatas, AttachmentSignature,
+    AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature,
     ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
     EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType, MessageAddress,
-    MessageAddresses, MessageAttachmentInfos, MessageAttachments, MessageButtons, MessageCount,
-    MessageFlags, MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme,
-    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
-    ViewMode,
+    MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount, MessageFlags, MimeType,
+    MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme, PmSignature, ShowImages,
+    ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
 };
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
+use itertools::Itertools;
 use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::requests::{
@@ -75,7 +75,7 @@ use smart_default::SmartDefault;
 use stash::datatypes::{QueryResultString, QueryResultU64};
 use stash::exports::ToSql;
 use stash::macros::{DbRecord, Model};
-use stash::orm::Model;
+use stash::orm::{DbRecord, Model};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::HashMap;
@@ -84,7 +84,31 @@ use tracing::{debug, error};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
 
-/// TODO: Document this struct.
+/// Represents a mail attachment.
+///
+/// The important thing to keep in mind for this type is that the metadata is spread out through
+/// various locations. Partial metadata is available on the [`Conversation`] and [`Message`] types,
+/// full information is available on the [`Attachment`] type and the final piece of the
+/// information is stored in the [`MessageBodyMetadata`].
+///
+/// To decrypt the attachment we need to sync the full [`Attachment`] type to have access to the
+/// required crypto metadata. When [`Conversation`] or [`Message`] is synced from the API we
+/// partially create the attachment type so we can assign it a local id. This contains enough
+/// information to construct the [`AttachmentMetadata`] type which is used to display contextual
+/// information about the attachment.
+///
+/// Once we need to access an attachment we should first check if the
+/// [`full metadata is present`](Attachment::has_complete_metadata) and if not call
+/// [`sync`](Attachment::sync_complete_metadata). Once that has completed one can use and decrypt
+/// the attachment.
+///
+/// Note: Extracting the last bit of information from [`MessageBodyMetadata`] will come in a follow
+/// up patch.
+///
+/// # Remarks
+///
+/// Do not use [`Attachment::save`] but always use [`Attachment::save_or_update`].
+///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("attachments")]
 pub struct Attachment {
@@ -96,31 +120,33 @@ pub struct Attachment {
     #[IdField(autoincrement)]
     pub local_id: Option<u64>,
 
-    /// TODO: Document this field.
+    /// API Attachment id.
     #[DbField]
     pub remote_id: Option<RemoteId>,
 
-    /// TODO: Document this field.
+    /// Address with which this attachment was encrypted.
+    ///
+    /// The address id can only be retrieved from a [`Message`] or the full [`Attachment`] type.
     #[DbField]
-    pub remote_address_id: RemoteId,
+    pub remote_address_id: Option<RemoteId>,
 
-    /// TODO: Document this field.
+    /// Local conversation id where this attachment is present.
     #[DbField]
     pub local_conversation_id: Option<u64>,
 
-    /// TODO: Document this field.
+    /// Remote conversation id where this attachment is present.
     #[DbField]
-    pub remote_conversation_id: RemoteId,
+    pub remote_conversation_id: Option<RemoteId>,
 
-    /// TODO: Document this field.
+    /// Local message id where this attachment is present.
     #[DbField]
     pub local_message_id: Option<u64>,
 
-    /// TODO: Document this field.
+    /// Remote message id where this attachment is present.
     #[DbField]
-    pub remote_message_id: RemoteId,
+    pub remote_message_id: Option<RemoteId>,
 
-    /// TODO: Document this field.
+    /// Attachment disposition.
     #[DbField]
     pub disposition: Disposition,
 
@@ -136,15 +162,15 @@ pub struct Attachment {
     #[DbField]
     pub key_packets: Option<KeyPackets>,
 
-    /// TODO: Document this field.
+    /// Mime type of the attachment
     #[DbField]
     pub mime_type: MimeType,
 
-    /// TODO: Document this field.
+    /// Name of the attachment.
     #[DbField]
     pub name: String,
 
-    /// TODO: Document this field.
+    /// Sender of the attachment if received from an external address.
     #[DbField]
     pub sender: Option<MessageAddress>,
 
@@ -152,7 +178,7 @@ pub struct Attachment {
     #[DbField]
     pub signature: Option<AttachmentSignature>,
 
-    /// TODO: Document this field.
+    /// Size of the attachment in bytes.
     #[DbField]
     pub size: u64,
 
@@ -170,6 +196,231 @@ pub struct Attachment {
 }
 
 impl Attachment {
+    /// Create attachment from partial metadata present in a `message`.
+    ///
+    /// If attachment record already exists, the message ids are updated. If no record exists,
+    /// we create a new one.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the data could not be written to the database
+    pub async fn save_from_message_metadata(
+        message: &Message,
+        tether: &AgnosticInterface,
+    ) -> Result<Vec<u64>, StashError> {
+        let mut result = Vec::new();
+        for metadata in &message.attachments_metadata {
+            let id: Vec<u64> = tether
+                .query::<_, QueryResultU64>(
+                    indoc! {"
+                        INSERT INTO attachments (
+                            remote_id,
+                            name,
+                            size,
+                            mime_type,
+                            disposition,
+                            remote_address_id,
+                            local_message_id,
+                            remote_message_id
+                        ) VALUES (?,?,?,?,?,?,?,?)
+                        ON CONFLICT (remote_id) DO UPDATE SET
+                            local_id=local_id,
+                            remote_address_id=excluded.remote_address_id,
+                            local_message_id=excluded.local_message_id,
+                            remote_message_id=excluded.remote_message_id
+                        RETURNING local_id as value",
+                    },
+                    params![
+                        metadata.remote_id.clone(),
+                        metadata.name.clone(),
+                        metadata.size,
+                        metadata.mime_type,
+                        metadata.disposition,
+                        message.address_id.clone(),
+                        message.local_id,
+                        message.remote_id.clone()
+                    ],
+                )
+                .await?
+                .into_iter()
+                .map(|v| v.value)
+                .collect();
+
+            for id in &id {
+                tether
+                    .execute(
+                        "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
+                        params![message.local_id.unwrap(), *id],
+                    )
+                    .await?;
+            }
+
+            result.extend(id)
+        }
+
+        Ok(result)
+    }
+
+    /// Create attachment from partial metadata present in a `conversation`.
+    ///
+    /// If attachment record already exists, the conversation ids are updated. If no record exists,
+    /// we create a new one.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the data could not be written to the database
+    pub async fn save_from_conversation_metadata(
+        conversation: &Conversation,
+        tether: &AgnosticInterface,
+    ) -> Result<Vec<u64>, StashError> {
+        let mut result = Vec::new();
+        for metadata in &conversation.attachments_metadata {
+            let id: Vec<u64> = tether
+                .query::<_, QueryResultU64>(
+                    indoc! {"
+                        INSERT INTO attachments (
+                            remote_id,
+                            name,
+                            size,
+                            mime_type,
+                            disposition,
+                            local_conversation_id,
+                            remote_conversation_id
+                        ) VALUES (?,?,?,?,?,?,?)
+                        ON CONFLICT (remote_id) DO UPDATE SET
+                            local_id=local_id,
+                            local_conversation_id=excluded.local_conversation_id,
+                            remote_conversation_id=excluded.remote_conversation_id
+                        RETURNING local_id as value",
+                    },
+                    params![
+                        metadata.remote_id.clone(),
+                        metadata.name.clone(),
+                        metadata.size,
+                        metadata.mime_type,
+                        metadata.disposition,
+                        conversation.local_id,
+                        conversation.remote_id.clone()
+                    ],
+                )
+                .await?
+                .into_iter()
+                .map(|v| v.value)
+                .collect();
+
+            for id in &id {
+                tether
+                    .execute(
+                        "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
+                        params![conversation.local_id.unwrap(), *id],
+                    )
+                    .await?;
+            }
+
+            result.extend(id)
+        }
+
+        Ok(result)
+    }
+
+    /// Load attachment metadata for a given `conversation_id`.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    pub async fn load_conversation_attachment_metadata(
+        conversation_id: u64,
+        interface: &AgnosticInterface,
+    ) -> Result<Vec<AttachmentMetadata>, StashError> {
+        interface
+            .query::<_, AttachmentMetadata>(
+                format!(
+                    "SELECT {} FROM {} WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",
+                    AttachmentMetadata::field_names().iter().join(","),
+                    Attachment::table_name()
+                ),
+                params![conversation_id],
+            )
+            .await
+    }
+
+    /// Load attachment metadata for a given `message_id`.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    pub async fn load_message_attachment_metadata(
+        message_id: u64,
+        interface: &AgnosticInterface,
+    ) -> Result<Vec<AttachmentMetadata>, StashError> {
+        interface
+            .query::<_, AttachmentMetadata>(
+                format!(
+                    "SELECT {} FROM {} WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
+                    AttachmentMetadata::field_names().iter().join(","),
+                    Attachment::table_name()
+                ),
+                params![message_id],
+            )
+            .await
+    }
+
+    /// Save or update the attachment in the database.
+    ///
+    /// It's imperative to call this function rather than [`Attachment::save`] to make sure
+    /// that we override the existing partial metadata rather than create a new entry that will
+    /// cause a conflict.
+    ///
+    /// There is currently no way to handle this in stash directly, so we have to manually perform
+    /// this check.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn save_or_update(
+        &mut self,
+        interface: &AgnosticInterface,
+    ) -> Result<(), StashError> {
+        if self.local_id.is_none() {
+            if let Some(remote_id) = self.remote_id.clone() {
+                if let Some(existing) =
+                    Self::find_first("WHERE remote_id=?", params![remote_id], interface).await?
+                {
+                    self.local_id = existing.local_id;
+                    self.row_id = existing.row_id;
+                }
+            }
+        }
+
+        Self::save_using(self, interface).await
+    }
+
+    /// Retrieve the local id of an attachment based on their `remote_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn find_local_id_for_remote_id(
+        remote_id: RemoteId,
+        interface: &AgnosticInterface,
+    ) -> Result<Option<u64>, StashError> {
+        let Some(local_id) = interface
+            .query::<_, QueryResultU64>(
+                format!(
+                    "SELECT local_id as value FROM {} WHERE remote_id=? LIMIT 1",
+                    Self::table_name()
+                ),
+                params![remote_id],
+            )
+            .await
+            .optional()?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Some(local_id[0].value))
+    }
+
     /// Fetch attachment content from the API.
     ///
     /// Calls the API to load encrypted attachment content for the given
@@ -226,7 +477,7 @@ impl Attachment {
     /// To complete the data, one needs to provide the full metadata.
     ///
     pub fn has_complete_metadata(&self) -> bool {
-        self.key_packets.is_some()
+        self.key_packets.is_some() && self.remote_address_id.is_some()
     }
 
     /// Synchronize the full attachment metadata for the attachment.
@@ -247,6 +498,7 @@ impl Attachment {
     pub async fn sync_complete_metadata<PM: ProtonMail>(
         &mut self,
         api: &PM,
+        interface: &AgnosticInterface,
     ) -> Result<Option<()>, AppError> {
         let remote_attachment_id = if let Some(remote_id) = self.remote_id.clone() {
             remote_id
@@ -260,8 +512,7 @@ impl Attachment {
         );
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
-        attachment.stash.clone_from(&self.stash);
-        attachment.save().await?;
+        attachment.save_or_update(interface).await?;
         *self = attachment;
         Ok(Some(()))
     }
@@ -272,7 +523,6 @@ impl Attachment {
 // TODO: traits directly on the source types, and remove these wrappers.
 impl DecryptableAttachment for Attachment {
     fn attachment_key_packets(&self) -> &RealKeyPackets {
-        //TODO: Cleanup after tests.
         self.key_packets
             .as_ref()
             .expect("Should exist at this point")
@@ -292,11 +542,11 @@ impl From<ApiAttachment> for Attachment {
         Self {
             local_id: None,
             remote_id: Some(value.id.into()),
-            remote_address_id: value.address_id.into(),
+            remote_address_id: Some(value.address_id.into()),
             local_conversation_id: None,
-            remote_conversation_id: value.conversation_id.into(),
+            remote_conversation_id: Some(value.conversation_id.into()),
             local_message_id: None,
-            remote_message_id: value.message_id.into(),
+            remote_message_id: Some(value.message_id.into()),
             disposition: value.disposition.into(),
             enc_signature: value.enc_signature.clone().map(|v| v.into()),
             is_auto_forwardee: value.is_auto_forwardee,
@@ -311,6 +561,7 @@ impl From<ApiAttachment> for Attachment {
         }
     }
 }
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("conversations")]
@@ -334,9 +585,8 @@ pub struct Conversation {
     #[DbField]
     pub attachment_info: MessageAttachmentInfos,
 
-    /// TODO: Document this field.
-    #[DbField]
-    pub attachments_metadata: AttachmentMetadatas,
+    /// Attachment metadata associated with this conversation.
+    pub attachments_metadata: Vec<AttachmentMetadata>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -510,12 +760,6 @@ impl Conversation {
                 conv.stash = existing.stash;
             }
             conv.save().await?;
-
-            for mut _attachment in conv.attachments_metadata.value {
-                // TODO
-                // attachment.save().await?;
-                continue;
-            }
 
             ids.push(conv.local_id.unwrap());
         }
@@ -768,6 +1012,10 @@ impl Conversation {
 
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
 
+        self.attachments_metadata =
+            Attachment::load_conversation_attachment_metadata(self.local_id.unwrap(), interface)
+                .await?;
+
         // Example... not good to do this here, though, as the total number comes
         // from the API.
         // self.num_messages = stash.query::<_, QueryResultU64>(
@@ -825,7 +1073,9 @@ impl Conversation {
         }
 
         // Remove any attachments that are no longer associated with this conversation.
-        if !self.attachments_metadata.value.is_empty() {
+        if !self.attachments_metadata.is_empty() {
+            let local_ids = Attachment::save_from_conversation_metadata(self, interface).await?;
+
             #[allow(trivial_casts)]
             interface
                 .execute(
@@ -837,13 +1087,15 @@ impl Conversation {
                     local_conversation_id = ?
                     AND local_attachment_id NOT IN ({})
                 ",
-                        vec!["?"; self.attachments_metadata.value.len()].join(",")
+                        vec!["?"; local_ids.len()].join(",")
                     ),
                     vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                         .into_iter()
-                        .chain(self.attachments_metadata.value.iter().map(|attachment| {
-                            Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
-                        }))
+                        .chain(
+                            local_ids
+                                .into_iter()
+                                .map(|attachment| Box::new(attachment) as Box<dyn ToSql + Send>),
+                        )
                         .collect(),
                 )
                 .await?;
@@ -1383,13 +1635,11 @@ impl From<ApiConversation> for Conversation {
                     .map(|(k, v)| (k, v.into()))
                     .collect(),
             },
-            attachments_metadata: AttachmentMetadatas {
-                value: value
-                    .attachments_metadata
-                    .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
-            },
+            attachments_metadata: value
+                .attachments_metadata
+                .into_iter()
+                .map(|v| v.into())
+                .collect(),
             deleted: false,
             display_snooze_reminder: value.display_snooze_reminder,
             expiration_time: value.expiration_time,
@@ -2401,12 +2651,7 @@ pub struct Message {
     pub address_id: RemoteId,
 
     /// TODO: Document this field.
-    #[DbField]
-    pub attachments: MessageAttachments,
-
-    /// TODO: Document this field.
-    #[DbField]
-    pub attachments_metadata: AttachmentMetadatas,
+    pub attachments_metadata: Vec<AttachmentMetadata>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -2547,14 +2792,11 @@ impl Message {
                 local_id: None,
                 remote_id: Some(metadata.id.into()),
                 address_id: metadata.address_id.into(),
-                attachments: MessageAttachments { value: Vec::new() },
-                attachments_metadata: AttachmentMetadatas {
-                    value: metadata
-                        .attachments_metadata
-                        .into_iter()
-                        .map(|v| v.into())
-                        .collect(),
-                },
+                attachments_metadata: metadata
+                    .attachments_metadata
+                    .into_iter()
+                    .map(|v| v.into())
+                    .collect(),
                 bcc_list: MessageAddresses {
                     value: metadata.bcc_list.into_iter().map(|v| v.into()).collect(),
                 },
@@ -2677,16 +2919,8 @@ impl Message {
     /// See [`Model::load()`].
     ///
     async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
-        // TODO: This should come later... the relationship between attachments and
-        // TODO: their metadata is really weird and needs sorting out, but is beyond
-        // TODO: current scope.
-        // message.attachments = Attachment::find(
-        //     "WHERE local_message_id = ?",
-        //     params![message.local_id],
-        //     stash,
-        //     None,
-        // )
-        //     .await?;
+        self.attachments_metadata =
+            Attachment::load_message_attachment_metadata(self.local_id.unwrap(), interface).await?;
 
         let labels = Label::find(
             r#"WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?)"#,
@@ -2787,7 +3021,8 @@ impl Message {
         }
 
         // Remove any attachments that are no longer associated with this conversation.
-        if !self.attachments_metadata.value.is_empty() {
+        if !self.attachments_metadata.is_empty() {
+            let local_ids = Attachment::save_from_message_metadata(self, interface).await?;
             #[allow(trivial_casts)]
             interface
                 .execute(
@@ -2799,13 +3034,15 @@ impl Message {
                     local_message_id = ?
                     AND local_attachment_id NOT IN ({})
                 ",
-                        vec!["?"; self.attachments_metadata.value.len()].join(",")
+                        vec!["?"; local_ids.len()].join(",")
                     ),
                     vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                         .into_iter()
-                        .chain(self.attachments_metadata.value.iter().map(|attachment| {
-                            Box::new(attachment.remote_id.clone()) as Box<dyn ToSql + Send>
-                        }))
+                        .chain(
+                            local_ids
+                                .iter()
+                                .map(|attachment| Box::new(*attachment) as Box<dyn ToSql + Send>),
+                        )
                         .collect(),
                 )
                 .await?;
@@ -3113,17 +3350,12 @@ impl From<ApiMessage> for Message {
             local_conversation_id: None,
             remote_conversation_id: Some(value.metadata.conversation_id.into()),
             address_id: value.metadata.address_id.into(),
-            attachments: MessageAttachments {
-                value: value.attachments.into_iter().map(|v| v.into()).collect(),
-            },
-            attachments_metadata: AttachmentMetadatas {
-                value: value
-                    .metadata
-                    .attachments_metadata
-                    .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
-            },
+            attachments_metadata: value
+                .metadata
+                .attachments_metadata
+                .into_iter()
+                .map(|v| v.into())
+                .collect(),
             bcc_list: MessageAddresses {
                 value: value
                     .metadata
@@ -3201,7 +3433,6 @@ mod default_message {
                 remote_id: Default::default(),
                 local_conversation_id: Default::default(),
                 remote_conversation_id: Default::default(),
-                attachments: Default::default(),
                 attachments_metadata: Default::default(),
                 bcc_list: Default::default(),
                 body: Default::default(),

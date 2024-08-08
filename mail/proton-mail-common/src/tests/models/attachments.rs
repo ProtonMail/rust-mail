@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use super::super::*;
-use crate::datatypes::AttachmentMetadatas;
 use crate::db::new_test_connection_file;
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::{
@@ -44,7 +43,6 @@ async fn test_attachment_create_without_metadata() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_attachment_create_with_metadata() {
     // Simulates an attachment's full info being stored with an existing
     // message or conversation metadata.
@@ -61,13 +59,18 @@ async fn test_attachment_create_with_metadata() {
     let (_, _, _) = create_attachment_dependencies(&tx, Some(metadata))
         .await
         .unwrap();
+
+    let db_attachment = Attachment::load(1, &stash).await.unwrap().unwrap();
+    assert!(!db_attachment.has_complete_metadata());
+
     let mut attachment = Attachment::from(api_attachment.clone());
-    attachment.save_using(&tx).await.unwrap();
+    attachment.save_or_update(&tx.into()).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
     let mut expected = attachment.clone();
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
+    expected.stash = Some(stash.clone());
     let db_attachment = Attachment::load(local_id.unwrap(), &stash)
         .await
         .unwrap()
@@ -139,9 +142,7 @@ async fn create_attachment_dependencies(
     let local_conv_ids = Conversation::create_or_update_conversations(
         vec![Conversation {
             remote_id: Some(conversation_id()),
-            attachments_metadata: AttachmentMetadatas {
-                value: metadata.clone().into_iter().map(|m| m.into()).collect(),
-            },
+            attachments_metadata: metadata.clone().into_iter().map(|m| m.into()).collect(),
             ..Default::default()
         }],
         tx.stash(),

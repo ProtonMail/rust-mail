@@ -521,16 +521,25 @@ async fn test_conversation_create_with_attachment() {
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
 
-    assert_eq!(local_conversation.attachments_metadata.value.len(), 1);
+    assert_eq!(local_conversation.attachments_metadata.len(), 1);
 
     let db_conversation = Conversation::load(id, &stash)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
-    assert_eq!(db_conversation.attachments_metadata.value.len(), 1);
+    assert_eq!(db_conversation.attachments_metadata.len(), 1);
+
+    // Patch local id.
+    local_conversation.attachments_metadata[0].local_id = Attachment::find_local_id_for_remote_id(
+        conv.attachments_metadata[0].id.clone().into(),
+        &stash.into(),
+    )
+    .await
+    .unwrap();
+
     assert_eq!(
-        db_conversation.attachments_metadata.value[0],
-        local_conversation.attachments_metadata.value[0],
+        db_conversation.attachments_metadata[0],
+        local_conversation.attachments_metadata[0],
     );
 }
 
@@ -567,17 +576,25 @@ async fn test_conversation_create_with_attachment_and_label() {
         .expect("failed to create conversation");
     let id = local_conversation.local_id.unwrap();
 
-    assert_eq!(local_conversation.attachments_metadata.value.len(), 1);
+    assert_eq!(local_conversation.attachments_metadata.len(), 1);
 
     let db_conversation = Conversation::load(id, &stash)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
 
-    assert_eq!(db_conversation.attachments_metadata.value.len(), 1);
+    // Patch local id.
+    local_conversation.attachments_metadata[0].local_id = Attachment::find_local_id_for_remote_id(
+        conv.attachments_metadata[0].id.clone().into(),
+        &stash.into(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(db_conversation.attachments_metadata.len(), 1);
     assert_eq!(
-        db_conversation.attachments_metadata.value[0],
-        local_conversation.attachments_metadata.value[0],
+        db_conversation.attachments_metadata[0],
+        local_conversation.attachments_metadata[0],
     );
 }
 
@@ -673,7 +690,14 @@ async fn test_conversation_update() {
         .expect("failed to update conversation");
     let id = local_conversation2.local_id.unwrap();
 
-    assert_eq!(local_conversation2.attachments_metadata.value.len(), 1);
+    assert_eq!(local_conversation2.attachments_metadata.len(), 1);
+    // Patch local id.
+    local_conversation2.attachments_metadata[0].local_id = Attachment::find_local_id_for_remote_id(
+        conv_update.attachments_metadata[0].id.clone().into(),
+        &stash.clone().into(),
+    )
+    .await
+    .unwrap();
     local_conversation2.labels.remove(1);
 
     let db_conversation = Conversation::load(id, &stash)

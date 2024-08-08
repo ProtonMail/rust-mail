@@ -68,6 +68,7 @@ use serde_json::Value as JsonValue;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
+use stash::macros::DbRecord;
 use stash::sql_using_serde;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -830,39 +831,6 @@ impl Serialize for AttachmentEncryptedSignature {
 
 sql_using_serde!(AttachmentEncryptedSignature);
 
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AttachmentMetadata {
-    /// TODO: Document this field.
-    pub remote_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
-    pub disposition: Disposition,
-
-    /// TODO: Document this field.
-    pub mime_type: MimeType,
-
-    /// TODO: Document this field.
-    pub name: String,
-
-    /// TODO: Document this field.
-    pub size: u64,
-}
-
-impl From<ApiAttachmentMetadata> for AttachmentMetadata {
-    fn from(value: ApiAttachmentMetadata) -> Self {
-        Self {
-            remote_id: Some(value.id.into()),
-            disposition: value.disposition.into(),
-            mime_type: value.mime_type.into(),
-            name: value.name,
-            size: value.size,
-        }
-    }
-}
-
-sql_using_serde!(AttachmentMetadata);
-
 /// Metadata for attachments.
 ///
 /// The attachment metadata can come from 3 different places:
@@ -881,13 +849,45 @@ sql_using_serde!(AttachmentMetadata);
 /// The attachment data is all stored in one table and initialized partially
 /// with data from all these sources.
 ///
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct AttachmentMetadatas {
-    pub value: Vec<AttachmentMetadata>,
+#[derive(Clone, Debug, Eq, PartialEq, DbRecord)]
+pub struct AttachmentMetadata {
+    /// Local attachment id.
+    #[DbField]
+    pub local_id: Option<u64>,
+
+    /// Attachment Id on the server.
+    #[DbField]
+    pub remote_id: Option<RemoteId>,
+
+    /// Whether attachment is inlined or not.
+    #[DbField]
+    pub disposition: Disposition,
+
+    /// Attachment mime type.
+    #[DbField]
+    pub mime_type: MimeType,
+
+    /// Attachment name.
+    #[DbField]
+    pub name: String,
+
+    /// Attachment size in bytes.
+    #[DbField]
+    pub size: u64,
 }
 
-sql_using_serde!(AttachmentMetadatas);
+impl From<ApiAttachmentMetadata> for AttachmentMetadata {
+    fn from(value: ApiAttachmentMetadata) -> Self {
+        Self {
+            local_id: None,
+            remote_id: Some(value.id.into()),
+            disposition: value.disposition.into(),
+            mime_type: value.mime_type.into(),
+            name: value.name,
+            size: value.size,
+        }
+    }
+}
 
 /// Wrapper type around [`RealAttachmentSignature`] to implement [`FromSql`] and
 /// [`ToSql`].

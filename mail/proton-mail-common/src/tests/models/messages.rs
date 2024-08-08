@@ -138,16 +138,12 @@ async fn test_create_message_with_attachments() {
         .next()
         .unwrap();
 
-    let _converted_attachment = AttachmentMetadata::from(attachment_metadata.clone());
-
     let db_message = Message::load(id, tx.stash())
         .await
         .expect("failed to get message")
         .expect("must have a value");
     assert_eq!(db_message.label_ids.len(), 1);
-    assert_eq!(db_message.attachments_metadata.value.len(), 1);
-    // TODO: Update this
-    //assert_eq!(db_message.attachments[0], converted_attachment);
+    assert_eq!(db_message.attachments_metadata.len(), 1);
 }
 
 // #[test]

@@ -1,6 +1,6 @@
 use crate::datatypes::{
-    AttachmentMetadata, AttachmentMetadatas, Disposition, LabelType, MessageAddress,
-    MessageAddresses, MimeType, SystemLabelId,
+    AttachmentMetadata, Disposition, LabelType, MessageAddress, MessageAddresses, MimeType,
+    SystemLabelId,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::tests::common::{
@@ -139,15 +139,14 @@ pub fn new_test_delete_db_state() -> TestDBState {
                 time: 100,
                 size: 512,
                 num_attachments: 1,
-                attachments_metadata: AttachmentMetadatas {
-                    value: vec![AttachmentMetadata {
-                        remote_id: Some(RemoteId::from("MyAttachId")),
-                        size: 1024,
-                        name: "text.text".to_owned(),
-                        mime_type: MimeType::TextPlain,
-                        disposition: Disposition::Inline,
-                    }],
-                },
+                attachments_metadata: vec![AttachmentMetadata {
+                    local_id: None,
+                    remote_id: Some(RemoteId::from("MyAttachId")),
+                    size: 1024,
+                    name: "text.text".to_owned(),
+                    mime_type: MimeType::TextPlain,
+                    disposition: Disposition::Inline,
+                }],
                 ..Default::default()
             },
             // Conv1 Message 2
@@ -392,15 +391,14 @@ pub fn new_test_unread_db_state() -> TestDBState {
                 unread: true,
                 expiration_time: 0,
                 num_attachments: 1,
-                attachments_metadata: AttachmentMetadatas {
-                    value: vec![AttachmentMetadata {
-                        remote_id: Some(RemoteId::from("MyAttachId")),
-                        size: 1024,
-                        name: "text.text".to_owned(),
-                        mime_type: MimeType::TextPlain,
-                        disposition: Disposition::Inline,
-                    }],
-                },
+                attachments_metadata: vec![AttachmentMetadata {
+                    local_id: None,
+                    remote_id: Some(RemoteId::from("MyAttachId")),
+                    size: 1024,
+                    name: "text.text".to_owned(),
+                    mime_type: MimeType::TextPlain,
+                    disposition: Disposition::Inline,
+                }],
                 ..Default::default()
             },
             // Conv1 Message 2
@@ -538,15 +536,14 @@ pub fn new_test_label_db_state() -> TestDBState {
                 size: 512,
                 expiration_time: 100,
                 num_attachments: 1,
-                attachments_metadata: AttachmentMetadatas {
-                    value: vec![AttachmentMetadata {
-                        remote_id: Some(RemoteId::from("MyAttachId")),
-                        size: 1024,
-                        name: "text.text".to_owned(),
-                        mime_type: MimeType::TextPlain,
-                        disposition: Disposition::Inline,
-                    }],
-                },
+                attachments_metadata: vec![AttachmentMetadata {
+                    local_id: None,
+                    remote_id: Some(RemoteId::from("MyAttachId")),
+                    size: 1024,
+                    name: "text.text".to_owned(),
+                    mime_type: MimeType::TextPlain,
+                    disposition: Disposition::Inline,
+                }],
                 snooze_time: 1000,
                 ..Default::default()
             },
@@ -677,15 +674,14 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
             size: 512,
             expiration_time: 100,
             num_attachments: 1,
-            attachments_metadata: AttachmentMetadatas {
-                value: vec![AttachmentMetadata {
-                    remote_id: Some(RemoteId::from("MyAttachId")),
-                    size: 1024,
-                    name: "text.text".to_owned(),
-                    mime_type: MimeType::TextPlain,
-                    disposition: Disposition::Inline,
-                }],
-            },
+            attachments_metadata: vec![AttachmentMetadata {
+                local_id: None,
+                remote_id: Some(RemoteId::from("MyAttachId")),
+                size: 1024,
+                name: "text.text".to_owned(),
+                mime_type: MimeType::TextPlain,
+                disposition: Disposition::Inline,
+            }],
             snooze_time: 1000,
             ..Default::default()
         }],

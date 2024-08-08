@@ -25,8 +25,6 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
                 is_replied_all INTEGER NOT NULL,
                 is_forwarded INTEGER NOT NULL,
                 external_id TEXT,
-                attachments INTEGER NOT NULL,
-                attachments_metadata INTEGER NOT NULL,
                 num_attachments INTEGER NOT NULL,
                 flags INTEGER NOT NULL,
                 snooze_time INTEGER NOT NULL DEFAULT 0,
