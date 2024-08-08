@@ -57,11 +57,10 @@ use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::ExclusiveLocation as RealExclusiveLocation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
-    AttachmentMetadatas as RealAttachmentMetadatas, ComposerDirection as RealComposerDirection,
-    ComposerMode as RealComposerMode, ConversationCount as RealConversationCount,
-    DecryptedMessageBody as RealDecryptedMessageBody, Disposition as RealDisposition,
-    EncryptedMessageBody as RealEncryptedMessageBody, LabelColor as RealLabelColor,
-    LabelType as RealLabelType, MessageAddress as RealMessageAddress,
+    ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
+    ConversationCount as RealConversationCount, DecryptedMessageBody as RealDecryptedMessageBody,
+    Disposition as RealDisposition, EncryptedMessageBody as RealEncryptedMessageBody,
+    LabelColor as RealLabelColor, LabelType as RealLabelType, MessageAddress as RealMessageAddress,
     MessageAddresses as RealMessageAddresses, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo,
@@ -76,9 +75,8 @@ use proton_mail_common::datatypes::{
     ViewMode as RealViewMode,
 };
 use proton_mail_common::models::{
-    Attachment as RealAttachment, Conversation as RealConversation, Label as RealLabel,
-    MailSettings as RealMailSettings, Message as RealMessage,
-    MessageBodyMetadata as RealMessageBodyMetadata,
+    Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
+    Message as RealMessage, MessageBodyMetadata as RealMessageBodyMetadata,
 };
 use serde_json::{from_str as from_json_string, to_string as to_json_string};
 use smart_default::SmartDefault;
@@ -786,123 +784,10 @@ impl From<RealViewMode> for ViewMode {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct Attachment {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
+pub struct AttachmentMetadata {
+    /// Local attachment id
     pub local_id: Option<u64>,
 
-    /// TODO: Document this field.
-    pub remote_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
-    pub remote_address_id: RemoteId,
-
-    /// TODO: Document this field.
-    pub local_conversation_id: Option<u64>,
-
-    /// TODO: Document this field.
-    pub remote_conversation_id: RemoteId,
-
-    /// TODO: Document this field.
-    pub local_message_id: Option<u64>,
-
-    /// TODO: Document this field.
-    pub remote_message_id: RemoteId,
-
-    /// TODO: Document this field.
-    pub disposition: Disposition,
-
-    /// TODO: Document this field.
-    pub enc_signature: Option<String>,
-
-    /// TODO: Document this field.
-    pub is_auto_forwardee: bool,
-
-    /// TODO: Document this field.
-    pub key_packets: String,
-
-    /// TODO: Document this field.
-    pub mime_type: MimeType,
-
-    /// TODO: Document this field.
-    pub name: String,
-
-    /// TODO: Document this field.
-    pub sender: Option<MessageAddress>,
-
-    /// TODO: Document this field.
-    pub signature: Option<String>,
-
-    /// TODO: Document this field.
-    pub size: u64,
-}
-
-impl From<Attachment> for RealAttachment {
-    fn from(value: Attachment) -> Self {
-        RealAttachment {
-            local_id: value.local_id,
-            remote_id: value.remote_id.map(Into::into),
-            remote_address_id: value.remote_address_id.into(),
-            local_conversation_id: value.local_conversation_id,
-            remote_conversation_id: value.remote_conversation_id.into(),
-            local_message_id: value.local_message_id,
-            remote_message_id: value.remote_message_id.into(),
-            disposition: value.disposition.into(),
-            enc_signature: value
-                .enc_signature
-                .as_deref()
-                .map(|v| from_json_string(v).unwrap()),
-            is_auto_forwardee: value.is_auto_forwardee,
-            key_packets: from_json_string(&value.key_packets).unwrap(),
-            mime_type: value.mime_type.into(),
-            name: value.name,
-            sender: value.sender.map(Into::into),
-            signature: value
-                .signature
-                .as_deref()
-                .map(|v| from_json_string(v).unwrap()),
-            size: value.size,
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
-impl From<RealAttachment> for Attachment {
-    fn from(value: RealAttachment) -> Self {
-        Attachment {
-            local_id: value.local_id,
-            remote_id: value.remote_id.map(Into::into),
-            remote_address_id: value.remote_address_id.into(),
-            local_conversation_id: value.local_conversation_id,
-            remote_conversation_id: value.remote_conversation_id.into(),
-            local_message_id: value.local_message_id,
-            remote_message_id: value.remote_message_id.into(),
-            disposition: value.disposition.into(),
-            enc_signature: value
-                .enc_signature
-                .as_deref()
-                .map(|v| to_json_string(&v).unwrap()),
-            is_auto_forwardee: value.is_auto_forwardee,
-            key_packets: to_json_string(&value.key_packets).unwrap(),
-            mime_type: value.mime_type.into(),
-            name: value.name,
-            sender: value.sender.map(Into::into),
-            signature: value
-                .signature
-                .as_deref()
-                .map(|v| to_json_string(&v).unwrap()),
-            size: value.size,
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct AttachmentMetadata {
     /// TODO: Document this field.
     pub remote_id: Option<RemoteId>,
 
@@ -922,6 +807,7 @@ pub struct AttachmentMetadata {
 impl From<AttachmentMetadata> for RealAttachmentMetadata {
     fn from(value: AttachmentMetadata) -> Self {
         RealAttachmentMetadata {
+            local_id: value.local_id,
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
@@ -934,32 +820,12 @@ impl From<AttachmentMetadata> for RealAttachmentMetadata {
 impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
         AttachmentMetadata {
+            local_id: value.local_id,
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
             name: value.name,
             size: value.size,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
-pub struct AttachmentMetadatas {
-    pub value: Vec<AttachmentMetadata>,
-}
-
-impl From<AttachmentMetadatas> for RealAttachmentMetadatas {
-    fn from(value: AttachmentMetadatas) -> Self {
-        RealAttachmentMetadatas {
-            value: value.value.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-impl From<RealAttachmentMetadatas> for AttachmentMetadatas {
-    fn from(value: RealAttachmentMetadatas) -> Self {
-        AttachmentMetadatas {
-            value: value.value.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -1011,7 +877,7 @@ pub struct Conversation {
     pub attachment_info: MessageAttachmentInfos,
 
     /// TODO: Document this field.
-    pub attachments_metadata: AttachmentMetadatas,
+    pub attachments_metadata: Vec<AttachmentMetadata>,
 
     /// TODO: Document this field.
     pub deleted: bool,
@@ -1057,7 +923,11 @@ impl From<Conversation> for RealConversation {
             local_id: value.local_id,
             remote_id: value.remote_id.map(Into::into),
             attachment_info: value.attachment_info.into(),
-            attachments_metadata: value.attachments_metadata.into(),
+            attachments_metadata: value
+                .attachments_metadata
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             deleted: value.deleted,
             display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
@@ -1083,7 +953,11 @@ impl From<RealConversation> for Conversation {
             local_id: value.local_id,
             remote_id: value.remote_id.map(Into::into),
             attachment_info: value.attachment_info.into(),
-            attachments_metadata: value.attachments_metadata.into(),
+            attachments_metadata: value
+                .attachments_metadata
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             deleted: value.deleted,
             display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
@@ -1741,11 +1615,8 @@ pub struct Message {
     /// TODO: Document this field.
     pub address_id: RemoteId,
 
-    /// TODO: Document this field.
-    pub attachments: MessageAttachments,
-
-    /// TODO: Document this field.
-    pub attachments_metadata: AttachmentMetadatas,
+    /// Attachment metadata associated with this message.
+    pub attachments_metadata: Vec<AttachmentMetadata>,
 
     /// TODO: Document this field.
     pub bcc_list: MessageAddresses,
@@ -1828,8 +1699,11 @@ impl From<Message> for RealMessage {
             local_conversation_id: value.local_conversation_id,
             remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
-            attachments: value.attachments.into(),
-            attachments_metadata: value.attachments_metadata.into(),
+            attachments_metadata: value
+                .attachments_metadata
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             bcc_list: value.bcc_list.into(),
             body: String::new(),
             cc_list: value.cc_list.into(),
@@ -1869,8 +1743,11 @@ impl From<RealMessage> for Message {
             local_conversation_id: value.local_conversation_id,
             remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
-            attachments: value.attachments.into(),
-            attachments_metadata: value.attachments_metadata.into(),
+            attachments_metadata: value
+                .attachments_metadata
+                .into_iter()
+                .map(Into::into)
+                .collect(),
             bcc_list: value.bcc_list.into(),
             cc_list: value.cc_list.into(),
             deleted: value.deleted,
