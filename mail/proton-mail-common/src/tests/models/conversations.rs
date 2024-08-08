@@ -367,7 +367,6 @@ async fn test_conversation_create_starred() {
         local_conversation.local_id = Some(1);
         local_conversation.labels[0].local_id = Some(1);
         local_conversation.labels[0].local_conversation_id = Some(1);
-        local_conversation.labels[0].remote_conversation_id = local_conversation.remote_id.clone();
         local_conversation.labels[0].stash = Some(stash.clone());
         local_conversation.labels[0].row_id = Some(1);
         local_conversation.labels[0].local_label_id = Some(12);
@@ -387,7 +386,6 @@ async fn test_conversation_create_starred() {
         local_conversation.labels = vec![ConversationLabel {
             local_id: None,
             local_conversation_id: local_conversation.local_id,
-            remote_conversation_id: local_conversation.remote_id.clone(),
             local_label_id: Some(12),
             remote_label_id: LabelId::starred().into(),
             context_num_unread: 0,
@@ -398,7 +396,7 @@ async fn test_conversation_create_starred() {
             context_expiration_time: 0,
             context_snooze_time: 0,
             row_id: None,
-            stash: None,
+            stash: Some(stash.clone()),
         }];
         local_conversation
             .save_using(&tx)
@@ -471,7 +469,6 @@ async fn test_conversation_create_with_labels() {
     local_conversation.labels = vec![ConversationLabel {
         local_id: None,
         local_conversation_id: None,
-        remote_conversation_id: Some(MY_LABEL_ID1.clone().into()),
         local_label_id: Some(1),
         remote_label_id: LabelId::starred().into(),
         context_num_unread: 0,
@@ -482,7 +479,7 @@ async fn test_conversation_create_with_labels() {
         context_expiration_time: 0,
         context_snooze_time: 0,
         row_id: None,
-        stash: None,
+        stash: Some(stash.clone()),
     }];
     local_conversation.stash = Some(stash.clone());
     local_conversation
@@ -540,6 +537,7 @@ async fn test_conversation_create_with_attachment_and_label() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let tx = stash.connection();
     create_address(&tx).await;
+    create_labels(&tx).await;
     let conv = test_conversation(
         vec![ApiConversationLabel {
             id: MY_LABEL_ID1.clone(),
@@ -636,7 +634,6 @@ async fn test_conversation_update() {
         ConversationLabel {
             local_id: None,
             local_conversation_id: local_conversation2.local_id,
-            remote_conversation_id: local_conversation2.remote_id.clone(),
             local_label_id: None,
             remote_label_id: LabelId::starred().into(),
             context_num_unread: 0,
@@ -647,12 +644,11 @@ async fn test_conversation_update() {
             context_expiration_time: 0,
             context_snooze_time: 0,
             row_id: None,
-            stash: None,
+            stash: Some(stash.clone()),
         },
         ConversationLabel {
             local_id: None,
             local_conversation_id: local_conversation2.local_id,
-            remote_conversation_id: local_conversation2.remote_id.clone(),
             local_label_id: None,
             remote_label_id: LabelId::starred().into(),
             context_num_unread: 0,
@@ -663,7 +659,7 @@ async fn test_conversation_update() {
             context_expiration_time: 0,
             context_snooze_time: 0,
             row_id: None,
-            stash: None,
+            stash: Some(stash.clone()),
         },
     ];
     local_conversation2.stash = Some(stash.clone());
@@ -1643,7 +1639,6 @@ async fn test_conversation_label_partially() {
     state.conversations[0].labels.push(ConversationLabel {
         local_id: None,
         local_conversation_id: None,
-        remote_conversation_id: None,
         local_label_id: None,
         remote_label_id: Some(MY_LABEL_ID1.clone().into()),
         context_num_unread: 0,

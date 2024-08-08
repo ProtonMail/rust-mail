@@ -38,7 +38,6 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
             CREATE TABLE conversation_labels (
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 local_conversation_id INTEGER NOT NULL,
-                remote_conversation_id TEXT DEFAULT NULL,
                 local_label_id INTEGER NOT NULL,
                 remote_label_id TEXT DEFAULT NULL,
                 context_time INTEGER NOT NULL,
