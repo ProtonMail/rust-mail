@@ -2696,15 +2696,6 @@ impl Message {
         // )
         //     .await?;
 
-        // TODO: There is a bug in the current implementation where the default label IDs are of LabelType::Label type.
-        // let labels = Label::find(
-        //     r#"WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?) AND (label_type = ? OR label_type = ?)"#,
-        //     params![self.local_id, LabelType::Folder, LabelType::System],
-        //     stash,
-        //     None,
-        // )
-        // .await?;
-
         let labels = Label::find(
             r#"WHERE local_id IN (SELECT local_label_id FROM message_labels WHERE local_message_id = ?)"#,
             params![self.local_id],
@@ -2786,6 +2777,23 @@ impl Message {
                 .await?;
         }
 
+        for label_id in &mut self.label_ids {
+            interface
+                .execute(
+                    format!(
+                        r#"
+                INSERT OR IGNORE INTO
+                    message_labels (local_message_id, local_label_id)
+                VALUES
+                    (?, (SELECT local_id FROM {} WHERE remote_id=? LIMIT 1))
+                "#,
+                        Label::table_name()
+                    ),
+                    params![self.local_id, label_id.clone()],
+                )
+                .await?;
+        }
+
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.value.is_empty() {
             #[allow(trivial_casts)]
@@ -2825,51 +2833,6 @@ impl Message {
                 .await?;
         }
 
-        for label_id in &mut self.label_ids {
-            let local_label_id = if let Some(db_label) =
-                Label::find_first("WHERE remote_id = ?", params![label_id.clone()], interface)
-                    .await?
-            {
-                db_label.local_id
-            } else {
-                let mut db_label = Label {
-                    local_id: None,
-                    remote_id: Some(label_id.clone()),
-                    local_parent_id: None,
-                    remote_parent_id: None,
-                    color: LabelColor::default(),
-                    display: false,
-                    expanded: false,
-                    initialized_conv: false,
-                    display_order: 0,
-                    path: None,
-                    sticky: false,
-                    total_conv: 0,
-                    total_msg: 0,
-                    unread_conv: 0,
-                    unread_msg: 0,
-                    name: "".to_owned(),
-                    label_type: LabelType::Label,
-                    stash: Some(interface.stash().clone()),
-                    initialized_msg: false,
-                    notify: false,
-                    row_id: None,
-                };
-                db_label.save().await?;
-                db_label.local_id
-            };
-            interface
-                .execute(
-                    r#"
-                INSERT OR IGNORE INTO
-                    message_labels (local_message_id, local_label_id)
-                VALUES
-                    (?, ?)
-                "#,
-                    params![self.local_id, local_label_id],
-                )
-                .await?;
-        }
         Ok(())
     }
 
