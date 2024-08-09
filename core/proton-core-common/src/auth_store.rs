@@ -76,7 +76,7 @@ impl Store for AuthStore {
             let key = self.encryption_key()?;
 
             let Some(encrypted) = EncryptedUserSession::find_first(
-                "WHERE user_id =? LIMIT 1",
+                "WHERE user_id = ?",
                 params![user_id.clone()],
                 &self.stash,
             )

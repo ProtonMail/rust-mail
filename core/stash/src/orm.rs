@@ -450,12 +450,18 @@ where
     /// Finds the first record in a result set using specific query logic.
     ///
     /// This function is syntactic sugar for calling [`find()`](Model::find())
-    /// and then taking the first result. It is useful when only one result is
-    /// expected.
+    /// with a limit set to 1, and then taking the first result. It is useful
+    /// when only one result is expected.
     ///
     /// It behaves in the same way as [`find()`](Model::find()) otherwise
     /// (except that it does not support listening for changes). For more
     /// information, see the documentation for that function.
+    ///
+    /// # WARNING
+    ///
+    /// Note that this function adds a `LIMIT 1` to the query logic, so do not
+    /// use this function if you have anything in your query that would conflict
+    /// with this.
     ///
     /// # Parameters
     ///
@@ -491,12 +497,15 @@ where
         Q: Into<String> + Send,
         A: Into<AgnosticInterface> + Interface,
     {
-        Ok(
-            perform_find(query_logic, params, &interface.clone().into(), None)
-                .await?
-                .into_iter()
-                .next(),
+        Ok(perform_find(
+            format!("{} LIMIT 1", query_logic.into()),
+            params,
+            &interface.clone().into(),
+            None,
         )
+        .await?
+        .into_iter()
+        .next())
     }
 
     /// Handles a change notification for a result set.
