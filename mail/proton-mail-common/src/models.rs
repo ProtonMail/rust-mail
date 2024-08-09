@@ -170,7 +170,7 @@ pub struct Attachment {
 
     /// File name of the attachment.
     #[DbField]
-    pub name: String,
+    pub filename: String,
 
     /// Sender of the attachment if received from an external address.
     #[DbField]
@@ -212,7 +212,7 @@ impl From<AttachmentMetadata> for Attachment {
             is_auto_forwardee: false,
             key_packets: None,
             mime_type: value.mime_type,
-            name: value.name,
+            filename: value.filename,
             sender: None,
             signature: None,
             size: value.size,
@@ -229,7 +229,7 @@ impl From<Attachment> for AttachmentMetadata {
             remote_id: value.remote_id,
             disposition: value.disposition,
             mime_type: value.mime_type,
-            name: value.name,
+            filename: value.filename,
             size: value.size,
         }
     }
@@ -540,7 +540,7 @@ impl From<ApiAttachment> for Attachment {
             is_auto_forwardee: value.is_auto_forwardee,
             key_packets: Some(value.key_packets.clone().into()),
             mime_type: value.mime_type.into(),
-            name: value.name,
+            filename: value.name,
             sender: value.sender.map(|v| v.into()),
             signature: value.signature.map(|v| v.into()),
             size: value.size,

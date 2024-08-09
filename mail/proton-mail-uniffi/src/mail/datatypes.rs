@@ -811,7 +811,7 @@ impl From<AttachmentMetadata> for RealAttachmentMetadata {
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
-            name: value.name,
+            filename: value.name,
             size: value.size,
         }
     }
@@ -824,7 +824,7 @@ impl From<RealAttachmentMetadata> for AttachmentMetadata {
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
-            name: value.name,
+            name: value.filename,
             size: value.size,
         }
     }

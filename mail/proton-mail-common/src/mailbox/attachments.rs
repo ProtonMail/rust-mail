@@ -57,7 +57,7 @@ impl Mailbox {
                 remote_id: attachment.remote_id,
                 disposition: attachment.disposition,
                 mime_type: attachment.mime_type,
-                name: attachment.name,
+                filename: attachment.filename,
                 size: attachment.size,
             },
             data_path,
