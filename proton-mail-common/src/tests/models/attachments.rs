@@ -35,7 +35,7 @@ async fn test_attachment_create_without_metadata() {
     let mut expected = Attachment::from(api_attachment);
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
-    expected.stash = Some(stash.clone());
+    expected.set_stash(&stash);
     let db_attachment = Attachment::load(local_id.unwrap(), &stash)
         .await
         .unwrap()

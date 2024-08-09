@@ -47,7 +47,7 @@ async fn test_remote_label_add_duplicate() {
     assert!(local_label2.save_using(&tx).await.is_err());
     let db_label = Label::load(local_id.unwrap(), &tx).await.unwrap().unwrap();
     let mut test_label = Label::from(label);
-    test_label.stash = Some(stash.clone());
+    test_label.set_stash(&stash);
     test_label.local_id = db_label.local_id;
     test_label.row_id = db_label.row_id;
     assert_eq!(test_label, db_label);
