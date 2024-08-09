@@ -14,7 +14,10 @@ impl Sidebar {
     /// That list is filtered in function of [`MailSettings::almost_all_mail`],
     /// [`MailSettings::show_moved`] and some are hidden when empty (`Scheduled`, `Outbox` and
     /// `Snoozed`)
-    // TODO: ET-999 Add callback on events
+    ///
+    /// # Errors
+    ///   * Database request fail
+    ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
         let Some(settings) = MailSettings::load(MAIL_SETTINGS_ID, self.user_ctx.stash()).await?
         else {
@@ -64,6 +67,10 @@ impl Sidebar {
     ///
     /// Use `None` to get the root `Folders`
     /// Use the id of a `Folders` to get its children
+    ///
+    /// # Errors
+    ///   * Database request fail
+    ///
     pub async fn custom_folders(&self, parent_id: Option<u64>) -> SidebarResult<Vec<Label>> {
         if let Some(parent_id) = parent_id {
             Ok(Label::find(
@@ -85,6 +92,10 @@ impl Sidebar {
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
+    ///
+    /// # Errors
+    ///   * Database request fail
+    ///
     pub async fn custom_labels(&self) -> SidebarResult<Vec<Label>> {
         Ok(Label::find(
             "WHERE label_type = ? ORDER BY display_order",
@@ -96,17 +107,24 @@ impl Sidebar {
     }
 
     /// Set folder `expanded` field to it's collapsed state
+    ///
+    /// # Errors
+    ///   * Database request fail
+    ///
     pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
         self.set_folder_expanded(local_id, false).await
     }
 
     /// Set folder `expanded` field to it's expanded state
+    ///
+    /// # Errors
+    ///   * Database request fail
+    ///
     pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
         self.set_folder_expanded(local_id, true).await
     }
 
     /// Set folder `expanded` field
-    // TODO: ET-999 Add callback on events
     async fn set_folder_expanded(&self, local_id: u64, state: bool) -> SidebarResult<()> {
         if let Some(mut folder) = Label::find_first(
             "WHERE local_id = ? AND label_type = ?",

@@ -288,6 +288,17 @@ pub enum LabelType {
     System = 4,
 }
 
+impl Display for LabelType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Label => write!(f, "Label"),
+            Self::ContactGroup => write!(f, "Contact Group"),
+            Self::Folder => write!(f, "Folder"),
+            Self::System => write!(f, "System"),
+        }
+    }
+}
+
 impl From<LabelType> for RealLabelType {
     fn from(value: LabelType) -> Self {
         match value {
