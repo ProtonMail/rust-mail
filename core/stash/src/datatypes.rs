@@ -7,6 +7,15 @@ use rusqlite::types::FromSql;
 use rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
 
+/// A query result that returns a boolean value.
+#[derive(Copy, Clone, DbRecord, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct QueryResultBool {
+    /// The value of the query result.
+    #[DbField]
+    pub value: bool,
+}
+
 /// A query result that returns a signed integer value.
 #[derive(Copy, Clone, DbRecord, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[non_exhaustive]
