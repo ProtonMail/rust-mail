@@ -65,15 +65,15 @@ async fn test_session_store_load() {
             .expect("failed to store session");
         encrypted_session.set_stash(&stash);
 
-        let results = tx
-            .query::<_, EncryptedUserSession>(
-                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
-                params![session.user_id.clone()],
-            )
-            .await
-            .unwrap();
-        let db_encrypted_session = results.first().unwrap();
-        assert_eq!(encrypted_session, *db_encrypted_session);
+        let db_encrypted_session = EncryptedUserSession::find_first(
+            "WHERE user_id = ?",
+            params![session.user_id.clone()],
+            &tx,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(encrypted_session, db_encrypted_session);
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, session.session_id);
         assert_eq!(db_session.user_id, session.user_id);
@@ -153,14 +153,14 @@ async fn test_session_update() {
             .await
             .expect("failed to update");
         encrypted_session.set_stash(&stash);
-        let results = tx
-            .query::<_, EncryptedUserSession>(
-                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
-                params![session.user_id.clone()],
-            )
-            .await
-            .unwrap();
-        let db_encrypted_session = results.first().unwrap();
+        let db_encrypted_session = EncryptedUserSession::find_first(
+            "WHERE user_id = ?",
+            params![session.user_id.clone()],
+            &tx,
+        )
+        .await
+        .unwrap()
+        .unwrap();
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, updated_session.session_id);
         assert_eq!(db_session.user_id, updated_session.user_id);
