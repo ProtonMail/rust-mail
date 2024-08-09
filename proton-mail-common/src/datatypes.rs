@@ -867,7 +867,7 @@ pub struct AttachmentMetadata {
     #[DbField]
     pub mime_type: MimeType,
 
-    /// Attachment name.
+    /// Attachment file name.
     #[DbField]
     pub name: String,
 
