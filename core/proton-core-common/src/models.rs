@@ -34,6 +34,7 @@ use crate::datatypes::{
     RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::CoreContextResult;
+use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
@@ -46,13 +47,46 @@ use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
 use stash::datatypes::QueryResultU64;
 use stash::exports::ToSql;
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use tracing::{debug, error};
 
 #[allow(async_fn_in_trait)]
 pub trait ModelExtension: Model {
+    /// Finds all records in the database.
+    ///
+    /// This is a convenience method for when all records need to be loaded
+    /// without any criteria. This happens remarkably often, and centralises the
+    /// functionality, plus makes the intent clear.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
+    /// * `queue`       - An optional queue to send changes to. If this is
+    ///                   provided, the function will listen for changes to the
+    ///                   result set and send them to the queue. This is useful
+    ///                   for live updates.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find()`](Model::find())
+    ///
+    async fn all<A>(
+        interface: &A,
+        queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::find(String::new(), vec![], &interface.clone().into(), queue).await
+    }
+
     /// Finds a record by its remote ID.
     ///
     /// The [`load()`](Model::load()) method is so-called to be the counterpart

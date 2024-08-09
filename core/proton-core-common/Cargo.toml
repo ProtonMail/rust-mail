@@ -12,6 +12,7 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 bytes = { workspace = true }
 indoc = { workspace = true }
+flume = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
 proton-api-core = { workspace = true }
