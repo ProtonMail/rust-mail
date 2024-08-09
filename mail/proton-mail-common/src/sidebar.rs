@@ -23,7 +23,7 @@ pub type SidebarResult<T> = Result<T, SidebarError>;
 
 /// Represents the sidebar where user can navigate between mailbox, folders, labels, settings, ...
 pub struct Sidebar {
-    user_ctx: Arc<MailUserContext>,
+    pub user_ctx: Arc<MailUserContext>,
 }
 
 impl Sidebar {

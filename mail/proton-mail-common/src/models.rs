@@ -1386,7 +1386,11 @@ impl Conversation {
 
         // When moving in Trash or Spam, remove all labels (but AllMail)
         if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
-            let all_mail_id = Label::find_local_ids(vec![LabelId::all_mail()], tx).await?;
+            let all_mail_id = Label::find_local_ids(
+                vec![LabelId::all_mail()],
+                &AgnosticInterface::Tether(tx.to_owned()),
+            )
+            .await?;
             if all_mail_id.is_empty() {
                 return Err(AppError::RemoteLabelDoesNotExist(LabelId::all_mail()));
             }
@@ -1411,8 +1415,11 @@ impl Conversation {
             }
             // When moving out of Trash or Spam, add AlmostAllMail label
         } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
-            let almost_all_mail_id =
-                Label::find_local_ids(vec![LabelId::almost_all_mail()], tx).await?;
+            let almost_all_mail_id = Label::find_local_ids(
+                vec![LabelId::almost_all_mail()],
+                &AgnosticInterface::Tether(tx.to_owned()),
+            )
+            .await?;
             if almost_all_mail_id.is_empty() {
                 return Err(AppError::RemoteLabelDoesNotExist(LabelId::almost_all_mail()));
             }
@@ -1596,6 +1603,7 @@ impl From<ApiConversationLabel> for ConversationLabel {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
+#[ModelActions(on_save)]
 #[TableName("labels")]
 pub struct Label {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -1822,6 +1830,16 @@ impl Label {
         }
         debug!("Storing labels into database");
         for label in all_labels.iter_mut() {
+            let parent_id_option = label.remote_parent_id.clone();
+            label.local_parent_id = match parent_id_option {
+                Some(parent_id) => Self::find_local_ids(
+                    vec![parent_id],
+                    &AgnosticInterface::Stash(stash.to_owned()),
+                )
+                .await?
+                .pop(),
+                None => None,
+            };
             let db_label = Label::find_first(
                 "WHERE remote_id = ?",
                 params![label.remote_id.clone()],
@@ -1849,6 +1867,36 @@ impl Label {
                 label.save().await?;
             }
         }
+        Ok(())
+    }
+
+    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+        let parent_id_option = self.remote_parent_id.clone();
+        self.local_parent_id = match parent_id_option {
+            Some(parent_id) => {
+                let res = Self::find_local_ids(vec![parent_id], interface)
+                    .await?
+                    .pop();
+                if res.is_none() {
+                    // TODO: handle this error
+                    error!(
+                        "A Label({:?}) remote_parent don't have corresponding local_id",
+                        self.remote_id
+                    );
+                }
+                res
+            }
+            None => None,
+        };
+        interface
+            .execute(
+                format!(
+                    "UPDATE {} SET local_parent_id=? WHERE local_id=?",
+                    Label::table_name()
+                ),
+                params![self.local_parent_id, self.local_id],
+            )
+            .await?;
         Ok(())
     }
 
@@ -1949,20 +1997,20 @@ impl Label {
     ///
     pub async fn find_local_ids(
         remote_ids: Vec<LabelId>,
-        tether: &Tether,
+        interface: &AgnosticInterface,
     ) -> Result<Vec<u64>, StashError> {
         let mut ids = Vec::with_capacity(remote_ids.len());
         let query = format!(
-            "SELECT local_id FROM {} WHERE remote_id = ?",
+            "SELECT local_id as value FROM {} WHERE remote_id = ?",
             Self::table_name()
         );
         for remote_id in remote_ids {
-            if let Some(id) = tether
-                .query_row::<_, QueryResultU64>(&query, params![remote_id])
+            if let Some(id) = interface
+                .query::<_, QueryResultU64>(&query, params![remote_id])
                 .await
                 .optional()?
             {
-                ids.push(id.value)
+                ids.extend(id.iter().map(|v| v.value).collect::<Vec<_>>())
             }
         }
         Ok(ids)

@@ -1,8 +1,7 @@
-use flume::Sender;
 use proton_core_common::datatypes::LabelId;
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
-use tracing::error;
+use tracing::{error, warn};
 
 use crate::datatypes::{AlmostAllMail, ShowMoved};
 use crate::datatypes::{LabelType, SystemLabelId};
@@ -15,7 +14,7 @@ impl Sidebar {
     /// That list is filtered in function of [`MailSettings::almost_all_mail`],
     /// [`MailSettings::show_moved`] and some are hidden when empty (`Scheduled`, `Outbox` and
     /// `Snoozed`)
-    // TODO: Add a callback hooked on used DB (Settings, Scheduled, outbox and snoozed)
+    // TODO: ET-999 Add callback on events
     pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
         let Some(settings) = MailSettings::load(MAIL_SETTINGS_ID, self.user_ctx.stash()).await?
         else {
@@ -62,35 +61,69 @@ impl Sidebar {
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
-    // TODO: See how flume::Sender work with UniFFI
-    pub async fn custom_folders(
-        &self,
-        queue: Option<Sender<ResultsetChange<Label, <Label as Model>::IdType>>>,
-    ) -> SidebarResult<Vec<Label>> {
-        Ok(Label::find(
-            "WHERE label_type = ? ORDER BY display_order",
-            params![LabelType::Folder],
-            self.user_ctx.stash(),
-            queue,
-        )
-        .await?)
+    ///
+    /// Use `None` to get the root `Folders`
+    /// Use the id of a `Folders` to get its children
+    pub async fn custom_folders(&self, parent_id: Option<u64>) -> SidebarResult<Vec<Label>> {
+        if let Some(parent_id) = parent_id {
+            Ok(Label::find(
+                "WHERE label_type = ? AND local_parent_id = ? ORDER BY display_order",
+                params![LabelType::Folder, parent_id],
+                self.user_ctx.stash(),
+                None,
+            )
+            .await?)
+        } else {
+            Ok(Label::find(
+                "WHERE label_type = ? AND local_parent_id is NULL ORDER BY display_order",
+                params![LabelType::Folder],
+                self.user_ctx.stash(),
+                None,
+            )
+            .await?)
+        }
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
-    // TODO: See how flume::Sender work with UniFFI
-    pub async fn custom_labels(
-        &self,
-        queue: Option<Sender<ResultsetChange<Label, <Label as Model>::IdType>>>,
-    ) -> SidebarResult<Vec<Label>> {
+    pub async fn custom_labels(&self) -> SidebarResult<Vec<Label>> {
         Ok(Label::find(
             "WHERE label_type = ? ORDER BY display_order",
             params![LabelType::Label],
             self.user_ctx.stash(),
-            queue,
+            None,
         )
         .await?)
     }
 
+    /// Set folder `expanded` field to it's collapsed state
+    pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
+        self.set_folder_expanded(local_id, false).await
+    }
+
+    /// Set folder `expanded` field to it's expanded state
+    pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
+        self.set_folder_expanded(local_id, true).await
+    }
+
+    /// Set folder `expanded` field
+    // TODO: ET-999 Add callback on events
+    async fn set_folder_expanded(&self, local_id: u64, state: bool) -> SidebarResult<()> {
+        if let Some(mut folder) = Label::find_first(
+            "WHERE local_id = ? AND label_type = ?",
+            params![local_id, LabelType::Folder],
+            self.user_ctx.stash(),
+        )
+        .await?
+        {
+            folder.expanded = state;
+            folder.save().await?;
+        } else {
+            warn!("Can't modify folder expansion state: unknown local_id({local_id})");
+        };
+        Ok(())
+    }
+
+    /// Get a [`Label`] given a [`LabelId`]
     async fn get_label(&self, label_id: LabelId) -> SidebarResult<Label> {
         Label::find_first(
             "WHERE remote_id = ?",

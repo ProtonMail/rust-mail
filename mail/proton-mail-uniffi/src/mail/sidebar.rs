@@ -64,11 +64,14 @@ impl Sidebar {
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
-    pub async fn custom_folders(&self) -> SidebarResult<Vec<Label>> {
+    ///
+    /// Use `None` to get the root `Folders`
+    /// Use the id of a `Folders` to get its children
+    pub async fn custom_folders(&self, parent_id: Option<u64>) -> SidebarResult<Vec<Label>> {
         // TODO: how to expose a callback ?
         Ok(self
             .sidebar
-            .custom_folders(None)
+            .custom_folders(parent_id)
             .await?
             .into_iter()
             .map(Into::into)
@@ -80,10 +83,20 @@ impl Sidebar {
         // TODO: how to expose a callback ?
         Ok(self
             .sidebar
-            .custom_labels(None)
+            .custom_labels()
             .await?
             .into_iter()
             .map(Into::into)
             .collect())
+    }
+
+    /// Set folder `expanded` field to it's collapsed state
+    pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
+        Ok(self.sidebar.collapse_folder(local_id).await?)
+    }
+
+    /// Set folder `expanded` field to it's expanded state
+    pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
+        Ok(self.sidebar.expand_folder(local_id).await?)
     }
 }
