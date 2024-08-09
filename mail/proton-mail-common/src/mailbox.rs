@@ -12,9 +12,9 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LabelId;
+use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Stash, StashError};
 use std::sync::Arc;
 use tracing::{debug, error};
@@ -137,7 +137,7 @@ impl Mailbox {
         user_ctx: Arc<MailUserContext>,
         label_id: LabelId,
     ) -> MailboxResult<Self> {
-        let label = Label::find_first("WHERE remote_id = ?", params![label_id], user_ctx.stash())
+        let label = Label::find_by_remote_id(label_id.into(), user_ctx.stash())
             .await?
             .unwrap();
         let view_mode = label.view_mode().unwrap_or(

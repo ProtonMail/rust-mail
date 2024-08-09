@@ -306,7 +306,7 @@ async fn test_message_counts() {
     Label::create_or_update_message_counts(counts.clone(), tx.stash())
         .await
         .expect("failed to creat counters");
-    let db_labels = Label::find(String::new(), vec![], tx.stash(), None)
+    let db_labels = Label::all(tx.stash(), None)
         .await
         .expect("failed to get counters");
     let db_counters = db_labels
@@ -490,7 +490,7 @@ pub async fn test_message_metadata_list() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&tx, &mut state.addresses).await;
     let (_, _state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
-    let messages = Message::find(String::new(), vec![], tx.stash(), None)
+    let messages = Message::all(tx.stash(), None)
         .await
         .expect("failed to get messages");
     assert_eq!(messages.len(), 3);

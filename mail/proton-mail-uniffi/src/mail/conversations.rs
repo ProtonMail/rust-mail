@@ -14,6 +14,7 @@ use crate::mail::datatypes::{Conversation, ConversationSearchOptions, Message};
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
 use crate::{LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
+use proton_core_common::models::ModelExtension;
 use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
@@ -107,13 +108,11 @@ pub async fn load_remote(
     session: Arc<MailSession>,
     id: RemoteId,
 ) -> Result<Option<Conversation>, MailboxError> {
-    Ok(RealConversation::find_first(
-        "WHERE remote_id = ?",
-        params![RealRemoteId::from(id)],
-        session.stash(),
+    Ok(
+        RealConversation::find_by_remote_id(RealRemoteId::from(id), session.stash())
+            .await?
+            .map(Into::into),
     )
-    .await?
-    .map(Into::into))
 }
 
 /// Mark the given conversations as read.

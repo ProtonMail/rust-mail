@@ -115,12 +115,11 @@ async fn test_delete_remote() {
     for label in labels.clone() {
         let mut label = Label::from(label);
         if let Some(parent_id) = label.remote_parent_id.clone() {
-            label.local_parent_id =
-                Label::find_first("WHERE remote_id = ?", params![parent_id], &stash)
-                    .await
-                    .expect("failed to get parent label")
-                    .expect("parent label should exist")
-                    .local_id;
+            label.local_parent_id = Label::find_by_remote_id(parent_id.into(), &stash)
+                .await
+                .expect("failed to get parent label")
+                .expect("parent label should exist")
+                .local_id;
         }
         label.save_using(&tx).await.unwrap();
     }
@@ -134,7 +133,7 @@ async fn test_delete_remote() {
 
     let remote_labels = labels.iter().skip(1).cloned().collect::<Vec<_>>();
 
-    let local_labels = Label::find(String::new(), vec![], &stash, None)
+    let local_labels = Label::all(&stash, None)
         .await
         .expect("failed to get labels");
     assert_eq!(local_labels.len(), 12);
@@ -469,9 +468,7 @@ async fn test_mark_labels_as_initialized() {
 }
 
 async fn compare_remote_labels_with_local(stash: &Stash, remote_labels: Vec<ApiLabel>) {
-    let local_labels = Label::find(String::new(), vec![], stash, None)
-        .await
-        .expect("failed to get labels");
+    let local_labels = Label::all(stash, None).await.expect("failed to get labels");
 
     let find_label = |id: &LabelId| -> &Label {
         local_labels
@@ -605,11 +602,10 @@ async fn compare_local_to_remote(stash: &Stash, local: &Label, remote: &ApiLabel
     );
 
     if let Some(remote_parent_id) = local.remote_parent_id.clone() {
-        let parent_label =
-            Label::find_first("WHERE remote_id = ?", params![remote_parent_id], stash)
-                .await
-                .expect("failed to find parent label")
-                .expect("Parent label should exist");
+        let parent_label = Label::find_by_remote_id(remote_parent_id.into(), stash)
+            .await
+            .expect("failed to find parent label")
+            .expect("Parent label should exist");
         assert_eq!(
             parent_label.remote_id.unwrap(),
             remote.parent_id.clone().unwrap().into(),
