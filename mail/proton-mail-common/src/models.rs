@@ -501,7 +501,7 @@ impl Conversation {
         let mut ids = Vec::with_capacity(conversations.len());
 
         for mut conv in conversations {
-            conv.stash = Some(stash.clone());
+            conv.set_stash(stash);
             if let Some(existing) =
                 Self::find_by_remote_id(conv.remote_id.clone().unwrap(), stash).await?
             {

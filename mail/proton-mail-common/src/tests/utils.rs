@@ -59,7 +59,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         let the_label = match db_label {
             Some(ref l) => l,
             None => {
-                label.stash = Some(stash.clone());
+                label.set_stash(&stash);
                 label.save().await.expect("failed to create label");
                 label
             }
@@ -192,7 +192,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
     if !skip_messages {
         let mut local_message_ids = vec![];
         for message in env.messages.iter_mut() {
-            message.stash = Some(stash.clone());
+            message.set_stash(&stash);
             message.save().await.expect("failed to create message");
             local_message_ids.push(message.local_id);
             result.messages.insert(

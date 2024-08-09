@@ -52,7 +52,7 @@ async fn test_create_message() {
         .expect("failed to get message")
         .expect("must have a value");
     let mut expected = Message::from(message);
-    expected.stash = Some(stash.clone());
+    expected.set_stash(&stash);
     expected.local_id = Some(1);
     expected.row_id = Some(1);
     expected.exclusive_location = Some(ExclusiveLocation::Inbox);
@@ -269,7 +269,7 @@ async fn test_update_message() {
     db_message.flags = MessageFlags::from(metadata_updated.metadata.flags);
     db_message.save().await.expect("failed to update message");
     let mut expected = Message::from(metadata_updated);
-    expected.stash = Some(stash.clone());
+    expected.set_stash(&stash);
     expected.local_id = Some(1);
     expected.row_id = Some(1);
     assert_eq!(db_message, expected);
@@ -1397,7 +1397,7 @@ async fn test_create_message_dependencies(tx: &Tether) -> u64 {
         vec![],
     )
     .into();
-    conversation.stash = Some(tx.stash().clone());
+    conversation.set_stash(tx.stash());
     conversation
         .save()
         .await

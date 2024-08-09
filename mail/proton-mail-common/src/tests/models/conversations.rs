@@ -282,7 +282,7 @@ async fn test_conversation_create_no_labels() {
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.stash = Some(stash.clone());
+    local_conversation.set_stash(&stash);
     local_conversation
         .save()
         .await
@@ -304,7 +304,7 @@ async fn test_conversation_has_messages_flag() {
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.stash = Some(stash.clone());
+    local_conversation.set_stash(&stash);
     local_conversation
         .save()
         .await
@@ -353,7 +353,7 @@ async fn test_conversation_create_starred() {
     // Add starred label, should gain starred attribute.
     let conv = test_conversation(vec![conv_label.clone()], vec![]);
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.stash = Some(stash.clone());
+    local_conversation.set_stash(&stash);
     local_conversation
         .save()
         .await
@@ -362,12 +362,12 @@ async fn test_conversation_create_starred() {
 
     {
         let mut local_conversation = Conversation::from(conv.clone());
-        local_conversation.stash = Some(stash.clone());
+        local_conversation.set_stash(&stash);
         local_conversation.row_id = Some(1);
         local_conversation.local_id = Some(1);
         local_conversation.labels[0].local_id = Some(1);
         local_conversation.labels[0].local_conversation_id = Some(1);
-        local_conversation.labels[0].stash = Some(stash.clone());
+        local_conversation.labels[0].set_stash(&stash);
         local_conversation.labels[0].row_id = Some(1);
         local_conversation.labels[0].local_label_id = Some(12);
         let db_conversation = Conversation::load(id, &stash)
@@ -417,7 +417,7 @@ async fn test_conversation_create_starred() {
         .expect("failed to get conversation")
         .expect("should have value");
     local_conversation.labels = vec![];
-    local_conversation.stash = Some(stash.clone());
+    local_conversation.set_stash(&stash);
     local_conversation
         .save()
         .await
@@ -481,7 +481,7 @@ async fn test_conversation_create_with_labels() {
         row_id: None,
         stash: Some(stash.clone()),
     }];
-    local_conversation.stash = Some(stash.clone());
+    local_conversation.set_stash(&stash);
     local_conversation
         .save()
         .await
@@ -512,7 +512,7 @@ async fn test_conversation_create_with_attachment() {
         }],
     );
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.stash = Some(stash.clone());
+    local_conversation.set_stash(&stash);
     local_conversation
         .save()
         .await
@@ -558,7 +558,7 @@ async fn test_conversation_create_with_attachment_and_label() {
         }],
     );
     let mut local_conversation = Conversation::from(conv.clone());
-    local_conversation.stash = Some(stash.clone());
+    local_conversation.set_stash(&stash);
     local_conversation
         .save()
         .await
@@ -605,7 +605,7 @@ async fn test_conversation_update() {
         }],
     );
     let mut local_conversation1 = Conversation::from(conv.clone());
-    local_conversation1.stash = Some(stash.clone());
+    local_conversation1.set_stash(&stash);
     local_conversation1
         .save()
         .await
@@ -662,7 +662,7 @@ async fn test_conversation_update() {
             stash: Some(stash.clone()),
         },
     ];
-    local_conversation2.stash = Some(stash.clone());
+    local_conversation2.set_stash(&stash);
     local_conversation2.local_id = local_conversation1.local_id;
     local_conversation2.row_id = local_conversation1.row_id;
     local_conversation2
