@@ -86,28 +86,31 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 
 /// Represents a mail attachment.
 ///
-/// The important thing to keep in mind for this type is that the metadata is spread out through
-/// various locations. Partial metadata is available on the [`Conversation`] and [`Message`] types,
-/// full information is available on the [`Attachment`] type and the final piece of the
-/// information is stored in the [`MessageBodyMetadata`].
+/// The important thing to keep in mind for this type is that the metadata is
+/// spread out through various locations. Partial metadata is available on the
+/// [`Conversation`] and [`Message`] types, full information is available on the
+/// [`Attachment`] type and the final piece of the information is stored in the
+/// [`MessageBodyMetadata`].
 ///
-/// To decrypt the attachment we need to sync the full [`Attachment`] type to have access to the
-/// required crypto metadata. When [`Conversation`] or [`Message`] is synced from the API we
-/// partially create the attachment type so we can assign it a local id. This contains enough
-/// information to construct the [`AttachmentMetadata`] type which is used to display contextual
+/// To decrypt the attachment we need to sync the full [`Attachment`] type to
+/// have access to the required crypto metadata. When [`Conversation`] or
+/// [`Message`] is synced from the API we partially create the attachment type
+/// so we can assign it a local id. This contains enough information to
+/// construct the [`AttachmentMetadata`] type which is used to display contextual
 /// information about the attachment.
 ///
 /// Once we need to access an attachment we should first check if the
-/// [`full metadata is present`](Attachment::has_complete_metadata) and if not call
-/// [`sync`](Attachment::sync_complete_metadata). Once that has completed one can use and decrypt
-/// the attachment.
+/// [`full metadata is present`](Attachment::has_complete_metadata) and if not
+/// call [`sync`](Attachment::sync_complete_metadata). Once that has completed
+/// one can use and decrypt the attachment.
 ///
-/// Note: Extracting the last bit of information from [`MessageBodyMetadata`] will come in a follow
-/// up patch.
+/// Note: Extracting the last bit of information from [`MessageBodyMetadata`]
+/// will come in a followup patch.
 ///
 /// # Remarks
 ///
-/// Do not use [`Attachment::save`] but always use [`Attachment::save_or_update`].
+/// Do not use [`Attachment::save`] but always use
+/// [`Attachment::save_or_update`].
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("attachments")]
