@@ -3070,16 +3070,13 @@ impl Message {
             return Err(StashError::NoStashAvailable.into());
         };
 
-        Ok(MessageBodyMetadata::find(
+        Ok(MessageBodyMetadata::find_first(
             "WHERE local_message_id = ?",
             params![self.local_id],
             conn,
-            None,
         )
         .await
-        .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?
-        .first()
-        .cloned())
+        .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?)
     }
 
     /// Get message from remote
