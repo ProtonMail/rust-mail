@@ -23,7 +23,7 @@ async fn action_store_and_retrieve() {
     #[derive(Debug, thiserror::Error)]
     enum Error {}
 
-    impl crate::action::Error for Error {
+    impl action::Error for Error {
         fn request_error(&self) -> Option<&ApiServiceError> {
             None
         }
@@ -77,8 +77,8 @@ async fn action_store_and_retrieve() {
     assert_eq!(remaining, 1);
 }
 
-async fn new_test_connection() -> stash::stash::Stash {
-    let stash = stash::stash::Stash::new(None).unwrap();
+async fn new_test_connection() -> Stash {
+    let stash = Stash::new(None).unwrap();
     create_tables(&stash).await.unwrap();
     stash
 }

@@ -1,6 +1,5 @@
 #![allow(non_snake_case)]
 
-use super::*;
 use crate::action::{Action, Handler};
 use proton_api_core::session::Session;
 use stash::stash::{Stash, Tether};
