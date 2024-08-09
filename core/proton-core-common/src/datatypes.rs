@@ -58,8 +58,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
+use stash::macros::DbRecord;
 use stash::utils::sql_using_serde;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use zeroize::Zeroize;
 
@@ -1113,6 +1114,15 @@ impl From<ApiProductUsedSpace> for ProductUsedSpace {
 }
 
 sql_using_serde!(ProductUsedSpace);
+
+/// A query result that returns a remote ID field.
+#[derive(Clone, DbRecord, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[non_exhaustive]
+pub struct QueryResultRemoteId {
+    /// The remote ID field value.
+    #[DbField]
+    pub id: RemoteId,
+}
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
