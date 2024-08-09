@@ -218,13 +218,14 @@ async fn test_session_delete_user_id() {
         .await
         .expect("expect failed to delete user");
 
-        let results = tx
-            .query::<_, EncryptedUserSession>(
-                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
-                params![session.user_id.clone()],
-            )
-            .await
-            .unwrap();
+        let results = EncryptedUserSession::find(
+            "WHERE user_id = ?",
+            params![session.user_id.clone()],
+            &tx,
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(results.len(), 0);
         tx.commit().await
     }
@@ -266,13 +267,14 @@ async fn test_session_delete_session_id() {
         .await
         .expect("expect failed to delete user");
 
-        let results = tx
-            .query::<_, EncryptedUserSession>(
-                "SELECT rowid AS rowid, * FROM core_sessions WHERE user_id=?".to_owned(),
-                params![session.user_id.clone()],
-            )
-            .await
-            .unwrap();
+        let results = EncryptedUserSession::find(
+            "WHERE user_id = ?",
+            params![session.user_id.clone()],
+            &tx,
+            None,
+        )
+        .await
+        .unwrap();
         assert_eq!(results.len(), 0);
         tx.commit().await
     }
