@@ -109,6 +109,21 @@ impl LoginFlow {
         Ok(())
     }
 
+    /// Submit mailbox password.
+    pub async fn submit_mailbox_password(&self, mailbox_password: String) -> LoginFlowResult<()> {
+        let flow = self.flow.clone();
+        let handle = spawn(async move {
+            let mut guard = flow.lock().await;
+            guard.submit_mailbox_password(&mailbox_password).await
+        });
+        handle.await.map_err(|e| {
+            LoginFlowError::Request(ApiServiceError::UnknownError(format!(
+                "failed to join task handle {e}"
+            )))
+        })??;
+        Ok(())
+    }
+
     /// Check whether the login flow has completed.
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
@@ -119,6 +134,12 @@ impl LoginFlow {
     #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
         block_on(async { self.flow.lock().await.is_awaiting_2fa() })
+    }
+
+    /// Check whether the login flow is awaiting mailbox password input.
+    #[must_use]
+    pub fn is_awaiting_mailbox_password(&self) -> bool {
+        block_on(async { self.flow.lock().await.is_awaiting_mailbox_password() })
     }
 
     /// When the flow is considered logged in, transform it into a `MailUserContext`.
