@@ -863,7 +863,7 @@ pub struct AttachmentMetadata {
     pub mime_type: MimeType,
 
     /// Attachment file name.
-    pub name: String,
+    pub filename: String,
 
     /// Attachment size in bytes.
     pub size: u64,
@@ -876,7 +876,7 @@ impl From<ApiAttachmentMetadata> for AttachmentMetadata {
             remote_id: Some(value.id.into()),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
-            name: value.name,
+            filename: value.name,
             size: value.size,
         }
     }

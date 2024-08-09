@@ -231,7 +231,7 @@ fn get_attachment(id: u64, attachment: &ApiAttachment) -> Attachment {
         is_auto_forwardee: false,
         key_packets: Some(attachment.key_packets.clone().into()),
         mime_type: attachment.mime_type.into(),
-        name: attachment.name.clone(),
+        filename: attachment.name.clone(),
         sender: None,
         signature: None,
         size: attachment.size,

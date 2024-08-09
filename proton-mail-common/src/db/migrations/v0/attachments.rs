@@ -12,7 +12,7 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
                 remote_conversation_id TEXT DEFAULT NULL,
                 local_message_id INTEGER DEFAULT NULL,
                 remote_message_id TEXT DEFAULT NULL,
-                name TEXT NOT NULL,
+                filename TEXT NOT NULL,
                 size INTEGER NOT NULL,
                 mime_type INTEGER NOT NULL,
                 remote_address_id TEXT DEFAULT NULL,
