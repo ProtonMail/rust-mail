@@ -1,9 +1,7 @@
 #![allow(non_snake_case)]
 
 use super::super::*;
-use crate::datatypes::{
-    AttachmentMetadata, ExclusiveLocation, MessageCount, MessageFlags, SystemLabelId,
-};
+use crate::datatypes::{ExclusiveLocation, MessageCount, MessageFlags, SystemLabelId};
 use crate::db::new_test_connection_file;
 use crate::tests::common::{
     create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,

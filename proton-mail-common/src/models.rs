@@ -43,7 +43,6 @@ use crate::datatypes::{
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
-use itertools::Itertools;
 use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::requests::{
@@ -75,7 +74,7 @@ use smart_default::SmartDefault;
 use stash::datatypes::{QueryResultString, QueryResultU64};
 use stash::exports::ToSql;
 use stash::macros::{DbRecord, Model};
-use stash::orm::{DbRecord, Model};
+use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::HashMap;
@@ -223,6 +222,19 @@ impl From<AttachmentMetadata> for Attachment {
     }
 }
 
+impl From<Attachment> for AttachmentMetadata {
+    fn from(value: Attachment) -> Self {
+        Self {
+            local_id: value.local_id,
+            remote_id: value.remote_id,
+            disposition: value.disposition,
+            mime_type: value.mime_type,
+            name: value.name,
+            size: value.size,
+        }
+    }
+}
+
 impl Attachment {
     /// Create attachment from partial metadata present in a `message`.
     ///
@@ -316,16 +328,12 @@ impl Attachment {
         conversation_id: u64,
         interface: &AgnosticInterface,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
-        interface
-            .query::<_, AttachmentMetadata>(
-                format!(
-                    "SELECT {} FROM {} WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",
-                    AttachmentMetadata::field_names().iter().join(","),
-                    Attachment::table_name()
-                ),
+        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",
                 params![conversation_id],
-            )
-            .await
+                   interface,
+                   None
+        )
+        .await.map(|v| v.into_iter().map(Into::into).collect())
     }
 
     /// Load attachment metadata for a given `message_id`.
@@ -337,16 +345,12 @@ impl Attachment {
         message_id: u64,
         interface: &AgnosticInterface,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
-        interface
-            .query::<_, AttachmentMetadata>(
-                format!(
-                    "SELECT {} FROM {} WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
-                    AttachmentMetadata::field_names().iter().join(","),
-                    Attachment::table_name()
-                ),
-                params![message_id],
-            )
-            .await
+        Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
+                   params![message_id],
+                   interface,
+                   None
+        )
+        .await.map(|v| v.into_iter().map(Into::into).collect())
     }
 
     /// Save or update the attachment in the database.
