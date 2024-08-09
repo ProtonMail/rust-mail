@@ -690,16 +690,12 @@ async fn test_conversation_undelete_all_mail() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&tx, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
-    let all_mail_label = Label::find_first(
-        "WHERE remote_id = ?",
-        params![LabelId::all_mail()],
-        tx.stash(),
-    )
-    .await
-    .unwrap()
-    .unwrap()
-    .local_id
-    .unwrap();
+    let all_mail_label = Label::find_by_remote_id(LabelId::all_mail().into(), tx.stash())
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
 
     let local_conv_id1 = *state_map
         .conversations
@@ -781,16 +777,12 @@ async fn test_conversation_delete_all_mail() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&tx, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
-    let all_mail_label = Label::find_first(
-        "WHERE remote_id = ?",
-        params![LabelId::all_mail()],
-        tx.stash(),
-    )
-    .await
-    .unwrap()
-    .unwrap()
-    .local_id
-    .unwrap();
+    let all_mail_label = Label::find_by_remote_id(LabelId::all_mail().into(), tx.stash())
+        .await
+        .unwrap()
+        .unwrap()
+        .local_id
+        .unwrap();
 
     // Deleting a conversation must
     // * Update conversation counters
@@ -895,10 +887,7 @@ async fn test_conversation_delete_all_mail() {
         .await
         .expect("failed to mark conv as deleted");
 
-    for count in Label::find(String::new(), vec![], tx.stash(), None)
-        .await
-        .unwrap()
-    {
+    for count in Label::all(tx.stash(), None).await.unwrap() {
         assert_eq!(
             count.total_msg, 0,
             "Label {:?} does not have 0 total count",
@@ -1195,7 +1184,7 @@ async fn test_conversation_counts() {
     Label::create_or_update_conversation_counts(counts.clone(), tx.stash())
         .await
         .expect("failed to creat counters");
-    let db_labels = Label::find(String::new(), vec![], tx.stash(), None)
+    let db_labels = Label::all(tx.stash(), None)
         .await
         .expect("failed to get counters");
     let db_counters = db_labels

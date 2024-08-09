@@ -11,10 +11,9 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LabelId,
 };
-use proton_core_common::models::Address;
+use proton_core_common::models::{Address, ModelExtension};
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Interface, Tether};
 
 lazy_static! {
@@ -29,16 +28,14 @@ pub async fn create_labels(tx: &Tether) -> Vec<u64> {
     let mut labels = [test_label1(), test_label2()];
     for label in &mut labels {
         label.save_using(tx).await.expect("failed to create labels");
-        assert!(Label::find_first(
-            "WHERE remote_id = ?",
-            params![label.remote_id.clone().unwrap()],
-            tx.stash()
-        )
-        .await
-        .expect("failed to resolve label ids")
-        .unwrap()
-        .local_id
-        .is_some());
+        assert!(
+            Label::find_by_remote_id(label.remote_id.clone().unwrap().into(), tx.stash())
+                .await
+                .expect("failed to resolve label ids")
+                .unwrap()
+                .local_id
+                .is_some()
+        );
     }
     labels.into_iter().map(|l| l.local_id.unwrap()).collect()
 }

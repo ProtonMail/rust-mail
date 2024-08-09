@@ -502,15 +502,8 @@ impl Conversation {
 
         for mut conv in conversations {
             conv.stash = Some(stash.clone());
-            if let Some(existing) = Self::find(
-                "WHERE remote_id = ?",
-                params![conv.remote_id.clone()],
-                stash,
-                None,
-            )
-            .await?
-            .into_iter()
-            .next()
+            if let Some(existing) =
+                Self::find_by_remote_id(conv.remote_id.clone().unwrap(), stash).await?
             {
                 conv.local_id = existing.local_id;
                 conv.row_id = existing.row_id;
@@ -1092,16 +1085,13 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn star_multiple(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
-        let label_id =
-            match Label::find_first("WHERE remote_id = ?", params![LabelId::starred()], stash)
-                .await?
-            {
-                Some(label) => label.local_id.unwrap(),
-                None => {
-                    error!("Starred label not found");
-                    return Ok(());
-                }
-            };
+        let label_id = match Label::find_by_remote_id(LabelId::starred().into(), stash).await? {
+            Some(label) => label.local_id.unwrap(),
+            None => {
+                error!("Starred label not found");
+                return Ok(());
+            }
+        };
 
         Self::apply_label_to_multiple(label_id, ids, &stash.connection()).await
     }
@@ -1118,16 +1108,13 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn unstar_multiple(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
-        let label_id =
-            match Label::find_first("WHERE remote_id = ?", params![LabelId::starred()], stash)
-                .await?
-            {
-                Some(label) => label.local_id.unwrap(),
-                None => {
-                    error!("Starred label not found");
-                    return Ok(());
-                }
-            };
+        let label_id = match Label::find_by_remote_id(LabelId::starred().into(), stash).await? {
+            Some(label) => label.local_id.unwrap(),
+            None => {
+                error!("Starred label not found");
+                return Ok(());
+            }
+        };
 
         Self::remove_label_from_multiple(label_id, ids, &stash.connection()).await
     }
@@ -1856,12 +1843,8 @@ impl Label {
                 .pop(),
                 None => None,
             };
-            let db_label = Label::find_first(
-                "WHERE remote_id = ?",
-                params![label.remote_id.clone()],
-                stash,
-            )
-            .await?;
+            let db_label =
+                Label::find_by_remote_id(label.remote_id.clone().unwrap().into(), stash).await?;
             if let Some(mut db_label) = db_label {
                 db_label.color = label.color.clone();
                 db_label.display = label.display;
@@ -2612,15 +2595,8 @@ impl Message {
                 row_id: None,
                 stash: Some(stash.clone()),
             };
-            if let Some(existing) = Self::find(
-                "WHERE remote_id = ?",
-                params![message.remote_id.clone()],
-                stash,
-                None,
-            )
-            .await?
-            .into_iter()
-            .next()
+            if let Some(existing) =
+                Self::find_by_remote_id(message.remote_id.clone().unwrap(), stash).await?
             {
                 message.local_id = existing.local_id;
                 message.row_id = existing.row_id;

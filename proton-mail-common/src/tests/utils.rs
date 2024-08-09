@@ -1,9 +1,8 @@
 use crate::datatypes::{ConversationCount, MessageAddress, MessageAddresses, MessageCount};
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use proton_core_common::datatypes::{LabelId, RemoteId};
-use proton_core_common::models::Address;
+use proton_core_common::models::{Address, ModelExtension};
 use stash::orm::Model;
-use stash::params;
 use stash::stash::{Interface, Tether};
 use std::collections::{BTreeMap, HashMap};
 
@@ -54,13 +53,9 @@ pub async fn prepare_and_patch_db_state_and_skip(
     // create labels
     let mut local_label_ids = vec![];
     for label in env.labels.iter_mut() {
-        let db_label = Label::find_first(
-            "WHERE remote_id = ?",
-            params![label.remote_id.clone()],
-            &stash,
-        )
-        .await
-        .expect("failed to find label");
+        let db_label = Label::find_by_remote_id(label.remote_id.clone().unwrap().into(), &stash)
+            .await
+            .expect("failed to find label");
         let the_label = match db_label {
             Some(ref l) => l,
             None => {
@@ -270,7 +265,7 @@ pub fn message_counts_for_conversation(
 
 pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<u64, ConversationCount> {
     BTreeMap::from_iter(
-        Label::find(String::new(), vec![], tx.stash(), None)
+        Label::all(tx.stash(), None)
             .await
             .unwrap()
             .into_iter()
@@ -289,7 +284,7 @@ pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<u64, ConversationCount>
 
 pub async fn msg_counts_as_map(tx: &Tether) -> BTreeMap<u64, MessageCount> {
     BTreeMap::from_iter(
-        Label::find(String::new(), vec![], tx.stash(), None)
+        Label::all(tx.stash(), None)
             .await
             .unwrap()
             .into_iter()
