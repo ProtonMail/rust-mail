@@ -26,34 +26,36 @@ mod common;
     (RemoteId::from("toto").into(), "toto".to_owned()),
     (RemoteId::from("titi").into(), "titi".to_owned())
 ]; "many")]
-fn sidebar_custom_labels(labels: &[(ApiRemoteId, String, u32)], expected: &[(LabelId, String)]) {
-    tokio_test::block_on(async {
-        // Setup:
-        //   * Setup User:
-        //     + Create Custom Folders
-        //   * Create Sidebar
-        let ctx = TestContext::new().await;
-        ctx.setup_user(sidebar_test_params(labels)).await;
+#[tokio::test]
+async fn sidebar_custom_labels(
+    labels: &[(ApiRemoteId, String, u32)],
+    expected: &[(LabelId, String)],
+) {
+    // Setup:
+    //   * Setup User:
+    //     + Create Custom Folders
+    //   * Create Sidebar
+    let ctx = TestContext::new().await;
+    ctx.setup_user(sidebar_test_params(labels)).await;
 
-        ctx.catch_all().await;
+    ctx.catch_all().await;
 
-        let user_ctx = ctx.user_context().await;
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .unwrap();
-        let sidebar = Sidebar::new(user_ctx);
+    let user_ctx = ctx.user_context().await;
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .unwrap();
+    let sidebar = Sidebar::new(user_ctx);
 
-        // Action
-        let result = sidebar.custom_labels(None).await.unwrap();
+    // Action
+    let result = sidebar.custom_labels().await.unwrap();
 
-        // Tests
-        let result: Vec<_> = result
-            .into_iter()
-            .map(|l| (l.remote_id.unwrap(), l.name))
-            .collect();
-        assert_eq!(result, expected);
-    })
+    // Tests
+    let result: Vec<_> = result
+        .into_iter()
+        .map(|l| (l.remote_id.unwrap(), l.name))
+        .collect();
+    assert_eq!(result, expected);
 }
 
 fn sidebar_test_params(labels: &[(ApiRemoteId, String, u32)]) -> TestParams {

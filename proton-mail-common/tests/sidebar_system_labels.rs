@@ -37,7 +37,8 @@ use velcro::hash_map;
     LabelId::trash(),
     LabelId::all_mail(),
 ] ; "all_keep_unscheduled_no_outbox_not_snoozed")]
-fn sidebar_system_labels(
+#[tokio::test]
+async fn sidebar_system_labels(
     almost_all_mail: AlmostAllMail,
     show_moved: ShowMoved,
     scheduled: bool,
@@ -45,42 +46,40 @@ fn sidebar_system_labels(
     snoozed: bool,
     expected: &[LabelId],
 ) {
-    tokio_test::block_on(async {
-        // Setup:
-        //   * Setup User:
-        //     + Create MailSettings
-        //     + Create all system mailbox
-        //     + Add message where needed
-        //   * Create Sidebar
-        let ctx = TestContext::new().await;
-        ctx.setup_user(sidebar_test_params(
-            almost_all_mail,
-            show_moved,
-            scheduled,
-            outbox,
-            snoozed,
-        ))
-        .await;
+    // Setup:
+    //   * Setup User:
+    //     + Create MailSettings
+    //     + Create all system mailbox
+    //     + Add message where needed
+    //   * Create Sidebar
+    let ctx = TestContext::new().await;
+    ctx.setup_user(sidebar_test_params(
+        almost_all_mail,
+        show_moved,
+        scheduled,
+        outbox,
+        snoozed,
+    ))
+    .await;
 
-        ctx.catch_all().await;
+    ctx.catch_all().await;
 
-        let user_ctx = ctx.user_context().await;
-        user_ctx
-            .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-            .await
-            .unwrap();
-        let sidebar = Sidebar::new(user_ctx);
+    let user_ctx = ctx.user_context().await;
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .unwrap();
+    let sidebar = Sidebar::new(user_ctx);
 
-        // Action
-        let result = sidebar.system_labels().await.unwrap();
+    // Action
+    let result = sidebar.system_labels().await.unwrap();
 
-        // Tests
-        let result: Vec<_> = result
-            .iter()
-            .map(|l| l.remote_id.clone().unwrap())
-            .collect();
-        assert_eq!(result, expected);
-    })
+    // Tests
+    let result: Vec<_> = result
+        .iter()
+        .map(|l| l.remote_id.clone().unwrap())
+        .collect();
+    assert_eq!(result, expected);
 }
 
 fn sidebar_test_params(

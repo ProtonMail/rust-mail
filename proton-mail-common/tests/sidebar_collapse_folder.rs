@@ -1,0 +1,114 @@
+use crate::common::init::Params;
+use crate::common::init::{NullCallback, Params as TestParams};
+use crate::common::TestContext;
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
+use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
+use proton_api_mail::services::proton::response_data::Label as ApiLabel;
+use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::models::Label;
+use proton_mail_common::Sidebar;
+use stash::orm::Model;
+use stash::params;
+use stash::stash::Stash;
+use velcro::hash_map;
+
+mod common;
+
+#[tokio::test]
+async fn folder_expansion() {
+    // Setup:
+    //   * Setup User:
+    //     + Create a Custom Folders not expanded
+    //   * Create Sidebar
+    let name = "foo";
+    let ctx = TestContext::new().await;
+    ctx.setup_user(sidebar_test_params(name, false)).await;
+
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.user_context().await;
+    let stash = user_ctx.stash();
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .unwrap();
+    let sidebar = Sidebar::new(user_ctx.clone());
+
+    let folder = get_folder("foo", stash).await;
+    assert_eq!(!folder.expanded, true);
+
+    // Action
+    sidebar
+        .expand_folder(folder.local_id.unwrap())
+        .await
+        .unwrap();
+
+    // Tests
+    let folder = get_folder(name, sidebar.user_ctx.stash()).await;
+    assert!(folder.expanded);
+}
+
+#[tokio::test]
+async fn folder_collapse() {
+    // Setup:
+    //   * Setup User:
+    //     + Create a Custom Folders expanded
+    //   * Create Sidebar
+    let name = "foo";
+    let ctx = TestContext::new().await;
+    ctx.setup_user(sidebar_test_params(name, true)).await;
+
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.user_context().await;
+    let stash = user_ctx.stash();
+    user_ctx
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .unwrap();
+    let sidebar = Sidebar::new(user_ctx.clone());
+
+    let folder = get_folder("foo", stash).await;
+    assert_eq!(folder.expanded, true);
+
+    // Action
+    sidebar
+        .collapse_folder(folder.local_id.unwrap())
+        .await
+        .unwrap();
+
+    // Tests
+    let folder = get_folder(name, sidebar.user_ctx.stash()).await;
+    assert!(!folder.expanded);
+}
+
+async fn get_folder(name: &str, stash: &Stash) -> Label {
+    Label::find_first("WHERE remote_id = ?", params![RemoteId::from(name)], stash)
+        .await
+        .unwrap()
+        .unwrap()
+}
+
+fn sidebar_test_params(name: &str, state: bool) -> Params {
+    TestParams {
+        labels: hash_map! { ApiLabelType::Folder: vec![ create_label(name, state) ]},
+        ..Default::default()
+    }
+}
+
+fn create_label(name: &str, expanded: bool) -> ApiLabel {
+    ApiLabel {
+        id: ApiRemoteId::from(name),
+        parent_id: None,
+        color: "".to_string(),
+        display: false,
+        expanded,
+        label_type: LabelType::Folder,
+        name: "".to_string(),
+        notify: false,
+        order: 0,
+        path: None,
+        sticky: false,
+    }
+}
