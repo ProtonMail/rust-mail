@@ -70,30 +70,6 @@ impl Display for Type {
     }
 }
 
-/// Identifier for an action that has been queued.
-///
-/// This can be used to interact with certain API's available on the [`crate::queue::Queue`].
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
-pub struct Id(pub u64);
-
-impl Display for Id {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl FromSql for Id {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        u64::column_result(value).map(Id)
-    }
-}
-
-impl ToSql for Id {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        self.0.to_sql()
-    }
-}
-
 /// Defines the priority of a queued action.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(u8)]
@@ -292,7 +268,7 @@ pub trait Handler: Default + 'static {
 pub struct Metadata {
     /// List of queued actions the action depends upon. The action will only execute if all
     /// the dependencies have been executed.
-    pub(crate) dependencies: Vec<Id>,
+    pub(crate) dependencies: Vec<u64>,
     /// Optional debug string which can be assigned to diagnose issues or provide more context.
     pub(crate) debug_string: Option<String>,
     /// A list of resources to associate with this action. Can be any of any type as long as it is
@@ -376,7 +352,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependency(mut self, action_id: Id) -> Self {
+    pub fn with_dependency(mut self, action_id: u64) -> Self {
         self.metadata.dependencies.push(action_id);
         self
     }
@@ -389,7 +365,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = Id>) -> Self {
+    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = u64>) -> Self {
         self.metadata.dependencies.extend(action_ids);
         self
     }
@@ -436,7 +412,7 @@ impl MetadataBuilder {
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryError {
     #[error("Stored action {0} has unknown action type: {1}")]
-    UnknownType(Id, String),
+    UnknownType(u64, String),
     #[error("Action has invalid version {0}")]
     InvalidVersion(u32),
     #[error("Failed to deserialize: {0}")]
@@ -472,7 +448,7 @@ impl<T: Action> Decoder for TypeErasedDecoder<T> {
         let deserialized: T =
             T::VersionConverter::convert(stored_action.version, T::VERSION, &stored_action.state)?;
 
-        let id = stored_action.id;
+        let id = stored_action.id.unwrap();
         let queued_metadata = QueuedMetadata::from(stored_action);
 
         // Return type.
@@ -533,7 +509,7 @@ impl Factory {
     ) -> FactoryResult<(Box<dyn QueuedAction>, QueuedMetadata)> {
         let Some(factory) = self.factories.get(&action.action_type) else {
             return Err(FactoryError::UnknownType(
-                action.id,
+                action.id.unwrap(),
                 action.action_type.clone(),
             ));
         };

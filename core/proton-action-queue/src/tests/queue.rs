@@ -86,23 +86,23 @@ async fn check_action_priority() {
     // * 1 Low
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id2);
+    assert_eq!(next_action.id, Some(id2));
     queue.delete_action(id2).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id4);
+    assert_eq!(next_action.id, Some(id4));
     queue.delete_action(id4).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id3);
+    assert_eq!(next_action.id, Some(id3));
     queue.delete_action(id3).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id0);
+    assert_eq!(next_action.id, Some(id0));
     queue.delete_action(id0).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id1);
+    assert_eq!(next_action.id, Some(id1));
     queue.delete_action(id1).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap();
@@ -154,17 +154,17 @@ async fn check_action_delay() {
     // * 0 Normal (delay 1s)
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id1);
+    assert_eq!(next_action.id, Some(id1));
     queue.delete_action(id1).await.unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id2);
+    assert_eq!(next_action.id, Some(id2));
     queue.delete_action(id2).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id0);
+    assert_eq!(next_action.id, Some(id0));
     queue.delete_action(id0).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap();
@@ -241,25 +241,25 @@ async fn check_action_only_executed_without_dependencies() {
     // * 4 - Depends on 2 & 0 (Highest)
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id0);
+    assert_eq!(next_action.id, Some(id0));
     queue.delete_action(id0).await.unwrap();
 
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id1);
+    assert_eq!(next_action.id, Some(id1));
     queue.delete_action(id1).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id3);
+    assert_eq!(next_action.id, Some(id3));
     queue.delete_action(id3).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id2);
+    assert_eq!(next_action.id, Some(id2));
     queue.delete_action(id2).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap().unwrap();
-    assert_eq!(next_action.id, id4);
+    assert_eq!(next_action.id, Some(id4));
     queue.delete_action(id4).await.unwrap();
 
     let next_action = queue.next_action().await.unwrap();

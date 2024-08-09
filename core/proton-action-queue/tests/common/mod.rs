@@ -1,10 +1,9 @@
 #![allow(dead_code)]
 use proton_action_queue::action::{Action, Error, Factory};
-use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_action_queue::queue::Queue;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::Session;
-use stash::macros::DbRecord;
+use stash::datatypes::QueryResultU64;
 use stash::params;
 use stash::stash::{Interface, Stash, StashError, Tether};
 
@@ -87,17 +86,12 @@ impl TestExtension for Tether {
     }
 
     async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
-        #[derive(Debug, Copy, Clone, Eq, PartialEq, DbRecord)]
-        struct Record {
-            #[DbField]
-            value: u32,
-        }
         let v = self
-            .query_row::<_, Record>("SELECT value FROM ext WHERE key=?", params![key.to_owned()])
-            .await
-            .optional()?;
+            .query::<_, QueryResultU64>("SELECT value FROM ext WHERE key = ?", params![key.to_owned()])
+            .await?
+            .into_iter().next();
 
-        Ok(v.map(|v| v.value))
+        Ok(v.map(|v| v.value as u32))
     }
 }
 

@@ -3,6 +3,7 @@
 use super::*;
 use crate::tests::common::NoopActionHandler;
 use proton_api_core::service::ApiServiceError;
+use stash::orm::Model;
 use stash::stash::Interface;
 
 #[tokio::test]
@@ -48,8 +49,9 @@ async fn action_store_and_retrieve() {
     let conn = stash.connection();
 
     conn.transaction().await.unwrap();
-    let stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
-    let first_action_id = StoredAction::store(&conn, stored).await.unwrap();
+    let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
+    stored.save_using(&conn).await.unwrap();
+    let first_action_id = stored.id.unwrap();
     conn.commit().await.unwrap();
 
     let metadata = MetadataBuilder::new()
@@ -62,11 +64,13 @@ async fn action_store_and_retrieve() {
     let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
 
     conn.transaction().await.unwrap();
-    let id = StoredAction::store(&conn, stored.clone()).await.unwrap();
+    let mut stored_clone = stored.clone();
+    stored_clone.save_using(&conn).await.unwrap();
+    let id = stored_clone.id.unwrap();
     conn.commit().await.unwrap();
-    let db_action = StoredAction::with_id(&conn, id).await.unwrap().unwrap();
+    let db_action = StoredAction::load(id, &conn).await.unwrap().unwrap();
 
-    stored.id = id;
+    stored.id = Some(id);
     assert_eq!(stored, db_action);
 
     // delete action should delete both actions
