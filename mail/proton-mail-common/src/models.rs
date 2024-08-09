@@ -85,23 +85,43 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 
 /// Represents a mail attachment.
 ///
-/// The important thing to keep in mind for this type is that the metadata is
-/// spread out through various locations. Partial metadata is available on the
-/// [`Conversation`] and [`Message`] types, full information is available on the
-/// [`Attachment`] type and the final piece of the information is stored in the
-/// [`MessageBodyMetadata`].
+/// The attachments are immutable after creation and encrypted with the
+/// address key of the message's address. While the type itself has all the
+/// information we need to decrypt it, delivery to the application comes
+/// in several steps that may or may not contain the full data.
 ///
-/// To decrypt the attachment we need to sync the full [`Attachment`] type to
-/// have access to the required crypto metadata. When [`Conversation`] or
-/// [`Message`] is synced from the API we partially create the attachment type
-/// so we can assign it a local id. This contains enough information to
-/// construct the [`AttachmentMetadata`] type which is used to display contextual
-/// information about the attachment.
+/// If the user has conversation view mode enabled, the first pieces
+/// of metadata ([`AttachmentMetadata`]) arrive through the
+/// [`Conversation`] type. This is recorded via the
+/// [`save_from_conversation_metadata()`] method which ensures that, if the
+/// full attachment is already present does not completely override
+/// existing the information with incomplete data and only updates the
+/// conversation's id.
 ///
-/// Once we need to access an attachment we should first check if the
-/// [`full metadata is present`](Attachment::has_complete_metadata) and if not
-/// call [`sync`](Attachment::sync_complete_metadata). Once that has completed
-/// one can use and decrypt the attachment.
+/// The next expected piece of information arrives when the user views the
+/// [`Message`]s of a [`Conversation`] or if we are in message view mode. Here
+/// we again have [`AttachmentMetadata`] piece as well as the actual address
+/// id of the attachments is now known to us. This is then stored via
+/// [`save_from_message_metadata()`], which also only perform a partial update
+/// if the full data already exists.
+///
+/// From either the [`Conversation`] or the [`Message`], the user can
+/// choose to download/preview one of the attachments. At this stage it is
+/// possible that we only have partial information collected from
+/// [`AttachmentMetadata`]. We may still not have the cryptographic primitives
+/// necessary to decrypt the attachment at this point. We should first check if
+/// the [`full metadata is present`](Attachment::has_complete_metadata) and if
+/// not call [`sync`](Attachment::sync_complete_metadata). This will fetch
+/// the full attachment metadata from the server and update it locally or
+/// create it no such attachment exists.
+///
+/// To ensure that we do not overwrite the [`Attachment`] data in the database
+/// *NEVER* use [`Attachment::save`] but instead *ALWAYS* use
+/// [`Attachment::save_or_update`].
+///
+/// Finally, when fetching the [`MessageBodyMetadata`] we receive the final
+/// bits of data regarding some headers and other metadata used to display
+/// the attachment in web views.
 ///
 /// Note: Extracting the last bit of information from [`MessageBodyMetadata`]
 /// will come in a followup patch.
@@ -238,8 +258,10 @@ impl From<Attachment> for AttachmentMetadata {
 impl Attachment {
     /// Create attachment from partial metadata present in a `message`.
     ///
-    /// If attachment record already exists, the message ids are updated. If no record exists,
-    /// we create a new one.
+    /// If attachment record already exists, only the message ids and the
+    /// address id are updated.
+    ///
+    /// If no record exists we create a new one.
     ///
     /// # Errors
     ///
@@ -280,8 +302,9 @@ impl Attachment {
 
     /// Create attachment from partial metadata present in a `conversation`.
     ///
-    /// If attachment record already exists, the conversation ids are updated. If no record exists,
-    /// we create a new one.
+    /// If attachment record already exists, the conversation ids are updated.
+    ///
+    /// If no record exists we create a new one.
     ///
     /// # Errors
     ///
