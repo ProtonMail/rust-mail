@@ -416,8 +416,8 @@ where
     /// * `params`      - The parameters to use in the query. These should be in
     ///                   the order they are expected in the query logic, and
     ///                   match with any expectations set in the query logic.
-    /// * `stash`       - The database, i.e. [`Stash`], to use for finding the
-    ///                   records.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
     /// * `queue`       - An optional queue to send changes to. If this is
     ///                   provided, the function will listen for changes to the
     ///                   result set and send them to the queue. This is useful
@@ -468,8 +468,8 @@ where
     /// * `params`      - The parameters to use in the query. These should be in
     ///                   the order they are expected in the query logic, and
     ///                   match with any expectations set in the query logic.
-    /// * `stash`       - The database, i.e. [`Stash`], to use for finding the
-    ///                   records.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -677,10 +677,10 @@ where
     ///
     /// # Parameters
     ///
-    /// * `id`    - The ID of the record to load.
-    /// * `stash` - The database, i.e. [`Stash`], to use for loading the record.
-    ///             It is necessary to provide this in order to know where to
-    ///             load the record from.
+    /// * `id`        - The ID of the record to load.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for loading the record. It is necessary to provide
+    ///                 this in order to know where to load the record from.
     ///
     /// # Errors
     ///
@@ -795,9 +795,8 @@ where
     ///
     /// # Parameters
     ///
-    /// * `tether` - The database connection, i.e. [`Tether`], to use for
-    ///              loading the record. This allows an existing connection to
-    ///              be used, rather than creating a new one.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for saving the record.
     ///
     /// # Errors
     ///
@@ -965,8 +964,8 @@ pub fn from_rows<T: DbRecord>(
 /// * `params`      - The parameters to use in the query. These should be in the
 ///                   order they are expected in the query logic, and match with
 ///                   any expectations set in the query logic.
-/// * `stash`       - The database, i.e. [`Stash`], to use for finding the
-///                   records.
+/// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+///                   to use for finding the records.
 /// * `queue`       - An optional queue to send changes to. If this is provided,
 ///                   the function will listen for changes to the result set and
 ///                   send them to the queue. This is useful for live updates.
@@ -1075,14 +1074,9 @@ where
 ///
 /// # Parameters
 ///
-/// * `id`     - The ID of the record to load.
-/// * `stash`  - The [`Stash`] instance. This will only be used if there is no
-///              [`Tether`] supplied.
-/// * `tether` - The database connection, i.e. [`Tether`], to use for
-///              loading the record. This allows an existing connection to
-///              be used, rather than creating a new one. If [`None`], an ad-hoc
-///              connection will be used, i.e. a persistent [`Tether`] will not
-///              be created.
+/// * `id`        - The ID of the record to load.
+/// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+///                 use for loading the record.
 ///
 /// # Errors
 ///
@@ -1135,12 +1129,9 @@ where
 ///
 /// # Parameters
 ///
-/// * `model`  - The [`Model`] instance.
-/// * `tether` - The database connection, i.e. [`Tether`], to use for
-///              loading the record. This allows an existing connection to
-///              be used, rather than creating a new one. If [`None`], an ad-hoc
-///              connection will be used, i.e. a persistent [`Tether`] will not
-///              be created.
+/// * `model`     - The [`Model`] instance.
+/// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to use
+///                 for saving the record.
 ///
 /// # Errors
 ///
