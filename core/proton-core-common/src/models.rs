@@ -30,10 +30,11 @@
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, CardType,
     ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, HighSecurity,
-    LabelId, Labels, LogAuth, Password, Phone, ProductUsedSpace, Referral, RemoteId, SettingsFlags,
-    TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
+    LabelId, Labels, LogAuth, Password, Phone, ProductUsedSpace, QueryResultRemoteId, Referral,
+    RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::CoreContextResult;
+use indoc::formatdoc;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
@@ -42,11 +43,191 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::Proton;
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
+use stash::datatypes::QueryResultU64;
+use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use tracing::{debug, error};
+
+#[allow(async_fn_in_trait)]
+pub trait ModelExtension: Model {
+    /// Finds a record by its remote ID.
+    ///
+    /// The [`load()`](Model::load()) method is so-called to be the counterpart
+    /// to [`save()`](Model::save()), but could equally be called `find_by_id()`
+    /// under familiar naming conventions. The reason that was not used is that
+    /// we have multiple ID types, and so "load" is a more generic term that is
+    /// closely associated with local representations.
+    ///
+    /// However, there is a need to find records by their remote IDs, which is
+    /// why this method is provided. It is a convenience method that wraps
+    /// [`find()`](Model::find_first()) and returns the first record found, if
+    /// any.
+    ///
+    /// It does very little, and exists to formalise the interface for carrying
+    /// out this process, for uniformity and centralisation of this common
+    /// operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `remote_id` - The remote ID of the record to find.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the record.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find_first()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find_first()`](Model::find_first())
+    /// * [`load()`](Model::load())
+    ///
+    async fn find_by_remote_id<A>(
+        remote_id: RemoteId,
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::find_first("WHERE remote_id = ?", params![remote_id], interface).await
+    }
+
+    /// Finds local record IDs matching given criteria.
+    ///
+    /// This method is the counterpart to [`find()`](Model::find()), but where
+    /// only the local IDs are needed. This saves having to load the entire
+    /// model data in order to get the IDs. It operates in the same way as
+    /// [`find()`](Model::find()). except it does not support live queries.
+    ///
+    /// # WARNING
+    ///
+    /// This method will **ONLY** work with models that have a `local_id` field.
+    /// If the model does not follow this convention, use a manual approach.
+    ///
+    /// # Parameters
+    ///
+    /// * `query_logic` - The query logic to use for finding the records. This
+    ///                   should be a string that represents the conditions,
+    ///                   ordering, offset, and limit for the query, as may be
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
+    /// * `params`      - The parameters to use in the query. These should be in
+    ///                   the order they are expected in the query logic, and
+    ///                   match with any expectations set in the query logic.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find_first()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find()`](Model::find())
+    /// * [`find_remote_ids()`](ModelExtension::find_remote_ids())
+    ///
+    async fn find_local_ids<Q, A>(
+        query_logic: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+        interface: &A,
+    ) -> Result<Vec<u64>, StashError>
+    where
+        Q: Into<String> + Send,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query::<_, QueryResultU64>(
+                formatdoc!(
+                    "
+                    SELECT
+                        local_id AS id
+                    FROM
+                        {}
+                    {}
+                    ",
+                    Self::table_name(),
+                    query_logic.into(),
+                ),
+                params,
+            )
+            .await?
+            .into_iter()
+            .map(|r| r.value)
+            .collect())
+    }
+
+    /// Finds remote record IDs matching given criteria.
+    ///
+    /// This method is the counterpart to [`find()`](Model::find()), but where
+    /// only the remote IDs are needed. This saves having to load the entire
+    /// model data in order to get the IDs. It operates in the same way as
+    /// [`find()`](Model::find()). except it does not support live queries.
+    ///
+    /// # WARNING
+    ///
+    /// This method will **ONLY** work with models that have a `remote_id`
+    /// field. If the model does not follow this convention, use a manual
+    /// approach.
+    ///
+    /// # Parameters
+    ///
+    /// * `query_logic` - The query logic to use for finding the records. This
+    ///                   should be a string that represents the conditions,
+    ///                   ordering, offset, and limit for the query, as may be
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
+    /// * `params`      - The parameters to use in the query. These should be in
+    ///                   the order they are expected in the query logic, and
+    ///                   match with any expectations set in the query logic.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find_first()`].
+    ///
+    /// # See also
+    ///
+    /// * [`find()`](Model::find())
+    /// * [`find_local_ids()`](ModelExtension::find_local_ids())
+    ///
+    async fn find_remote_ids<Q, A>(
+        query_logic: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+        interface: &A,
+    ) -> Result<Vec<RemoteId>, StashError>
+    where
+        Q: Into<String> + Send,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query::<_, QueryResultRemoteId>(
+                formatdoc!(
+                    "
+                    SELECT
+                        remote_id AS id
+                    FROM
+                        {}
+                    {}
+                    ",
+                    Self::table_name(),
+                    query_logic.into(),
+                ),
+                params,
+            )
+            .await?
+            .into_iter()
+            .map(|r| r.id)
+            .collect())
+    }
+}
+
+impl<T: Model> ModelExtension for T {}
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
