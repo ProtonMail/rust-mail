@@ -68,7 +68,6 @@ use serde_json::Value as JsonValue;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
-use stash::macros::DbRecord;
 use stash::sql_using_serde;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -849,30 +848,24 @@ sql_using_serde!(AttachmentEncryptedSignature);
 /// The attachment data is all stored in one table and initialized partially
 /// with data from all these sources.
 ///
-#[derive(Clone, Debug, Eq, PartialEq, DbRecord)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentMetadata {
     /// Local attachment id.
-    #[DbField]
     pub local_id: Option<u64>,
 
     /// Attachment Id on the server.
-    #[DbField]
     pub remote_id: Option<RemoteId>,
 
     /// Whether attachment is inlined or not.
-    #[DbField]
     pub disposition: Disposition,
 
     /// Attachment mime type.
-    #[DbField]
     pub mime_type: MimeType,
 
     /// Attachment file name.
-    #[DbField]
     pub name: String,
 
     /// Attachment size in bytes.
-    #[DbField]
     pub size: u64,
 }
 
