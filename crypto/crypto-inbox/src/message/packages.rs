@@ -1,6 +1,6 @@
 //! Implements the cryptography package logic to send emails via the API.
 use proton_crypto_account::{
-    keys::UnlockedAddressKey,
+    keys::{EmailMimeType, UnlockedAddressKey},
     proton_crypto::{
         crypto::{DataEncoding, Encryptor, EncryptorSync, PGPProviderSync, SessionKeyAlgorithm},
         utils::remove_trailing_spaces,
@@ -20,6 +20,15 @@ pub enum PackageMimeType {
     Html,
     Text,
     Multipart,
+}
+
+impl From<EmailMimeType> for PackageMimeType {
+    fn from(value: EmailMimeType) -> Self {
+        match value {
+            EmailMimeType::Html => Self::Html,
+            EmailMimeType::Text => Self::Text,
+        }
+    }
 }
 
 /// Represents an encrypted `package` body for sending emails.
