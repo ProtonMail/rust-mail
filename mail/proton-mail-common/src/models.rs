@@ -42,7 +42,7 @@ use crate::datatypes::{
 };
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
-use indoc::{formatdoc, indoc};
+use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_api_core::service::ApiServiceError;
@@ -166,7 +166,7 @@ pub struct Attachment {
     #[DbField]
     pub mime_type: MimeType,
 
-    /// Name of the attachment.
+    /// File name of the attachment.
     #[DbField]
     pub name: String,
 
@@ -195,6 +195,31 @@ pub struct Attachment {
     pub stash: Option<Stash>,
 }
 
+impl From<AttachmentMetadata> for Attachment {
+    fn from(value: AttachmentMetadata) -> Self {
+        Self {
+            local_id: value.local_id,
+            remote_id: value.remote_id,
+            remote_address_id: None,
+            local_conversation_id: None,
+            remote_conversation_id: None,
+            local_message_id: None,
+            remote_message_id: None,
+            disposition: value.disposition,
+            enc_signature: None,
+            is_auto_forwardee: false,
+            key_packets: None,
+            mime_type: value.mime_type,
+            name: value.name,
+            sender: None,
+            signature: None,
+            size: value.size,
+            row_id: None,
+            stash: None,
+        }
+    }
+}
+
 impl Attachment {
     /// Create attachment from partial metadata present in a `message`.
     ///
@@ -206,56 +231,33 @@ impl Attachment {
     /// Returns error if the data could not be written to the database
     pub async fn save_from_message_metadata(
         message: &Message,
-        tether: &AgnosticInterface,
+        interface: &AgnosticInterface,
     ) -> Result<Vec<u64>, StashError> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(message.attachments_metadata.len());
         for metadata in &message.attachments_metadata {
-            let id: Vec<u64> = tether
-                .query::<_, QueryResultU64>(
-                    indoc! {"
-                        INSERT INTO attachments (
-                            remote_id,
-                            name,
-                            size,
-                            mime_type,
-                            disposition,
-                            remote_address_id,
-                            local_message_id,
-                            remote_message_id
-                        ) VALUES (?,?,?,?,?,?,?,?)
-                        ON CONFLICT (remote_id) DO UPDATE SET
-                            local_id=local_id,
-                            remote_address_id=excluded.remote_address_id,
-                            local_message_id=excluded.local_message_id,
-                            remote_message_id=excluded.remote_message_id
-                        RETURNING local_id as value",
-                    },
-                    params![
-                        metadata.remote_id.clone(),
-                        metadata.name.clone(),
-                        metadata.size,
-                        metadata.mime_type,
-                        metadata.disposition,
-                        message.address_id.clone(),
-                        message.local_id,
-                        message.remote_id.clone()
-                    ],
+            let mut attachment = Attachment::find_first(
+                "WHERE remote_id = ?",
+                params![metadata.remote_id.clone()],
+                interface,
+            )
+            .await?
+            .unwrap_or(Attachment::from(metadata.clone()));
+
+            attachment.remote_address_id = Some(message.address_id.clone());
+            attachment.local_message_id = message.local_id;
+            attachment.remote_message_id = message.remote_id.clone();
+            attachment.save_using(interface).await?;
+
+            let local_id = attachment.local_id.expect("Should be set");
+
+            interface
+                .execute(
+                    "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
+                    params![message.local_id.unwrap(), local_id],
                 )
-                .await?
-                .into_iter()
-                .map(|v| v.value)
-                .collect();
+                .await?;
 
-            for id in &id {
-                tether
-                    .execute(
-                        "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
-                        params![message.local_id.unwrap(), *id],
-                    )
-                    .await?;
-            }
-
-            result.extend(id)
+            result.push(local_id);
         }
 
         Ok(result)
@@ -271,53 +273,32 @@ impl Attachment {
     /// Returns error if the data could not be written to the database
     pub async fn save_from_conversation_metadata(
         conversation: &Conversation,
-        tether: &AgnosticInterface,
+        interface: &AgnosticInterface,
     ) -> Result<Vec<u64>, StashError> {
-        let mut result = Vec::new();
+        let mut result = Vec::with_capacity(conversation.attachments_metadata.len());
         for metadata in &conversation.attachments_metadata {
-            let id: Vec<u64> = tether
-                .query::<_, QueryResultU64>(
-                    indoc! {"
-                        INSERT INTO attachments (
-                            remote_id,
-                            name,
-                            size,
-                            mime_type,
-                            disposition,
-                            local_conversation_id,
-                            remote_conversation_id
-                        ) VALUES (?,?,?,?,?,?,?)
-                        ON CONFLICT (remote_id) DO UPDATE SET
-                            local_id=local_id,
-                            local_conversation_id=excluded.local_conversation_id,
-                            remote_conversation_id=excluded.remote_conversation_id
-                        RETURNING local_id as value",
-                    },
-                    params![
-                        metadata.remote_id.clone(),
-                        metadata.name.clone(),
-                        metadata.size,
-                        metadata.mime_type,
-                        metadata.disposition,
-                        conversation.local_id,
-                        conversation.remote_id.clone()
-                    ],
+            let mut attachment = Attachment::find_first(
+                "WHERE remote_id = ?",
+                params![metadata.remote_id.clone()],
+                interface,
+            )
+            .await?
+            .unwrap_or(Attachment::from(metadata.clone()));
+
+            attachment.local_conversation_id = conversation.local_id;
+            attachment.remote_conversation_id = conversation.remote_id.clone();
+            attachment.save_using(interface).await?;
+
+            let local_id = attachment.local_id.expect("Should be set");
+
+            interface
+                .execute(
+                    "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
+                    params![conversation.local_id.unwrap(), local_id],
                 )
-                .await?
-                .into_iter()
-                .map(|v| v.value)
-                .collect();
+                .await?;
 
-            for id in &id {
-                tether
-                    .execute(
-                        "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
-                        params![conversation.local_id.unwrap(), *id],
-                    )
-                    .await?;
-            }
-
-            result.extend(id)
+            result.push(local_id);
         }
 
         Ok(result)
@@ -408,7 +389,7 @@ impl Attachment {
             .query::<_, QueryResultU64>(
                 format!(
                     "SELECT local_id as value FROM {} WHERE remote_id=? LIMIT 1",
-                    Self::table_name()
+                    Attachment::table_name()
                 ),
                 params![remote_id],
             )
