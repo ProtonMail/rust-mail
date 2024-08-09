@@ -13,7 +13,7 @@ use stash::stash::Stash;
 async fn test_full_contact() {
     let stash = new_core_test_connection().await;
     let mut full_contact = create_test_full_contact(&stash);
-    full_contact.stash = Some(stash.clone());
+    full_contact.set_stash(&stash);
     full_contact.row_id = None;
     full_contact.save().await.expect("failed to create contact");
     let id = full_contact
@@ -53,7 +53,7 @@ async fn test_partial_contact() {
     let mut contact_emails = create_test_contact_emails(&stash);
     // Insert all partial contacts
     for contact in &mut partial_contacts {
-        contact.stash = Some(stash.clone());
+        contact.set_stash(&stash);
         contact.row_id = None;
         contact.save().await.expect("failed to create contact");
     }

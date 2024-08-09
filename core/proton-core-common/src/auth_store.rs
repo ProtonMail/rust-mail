@@ -54,7 +54,7 @@ impl Store for AuthStore {
                 Box::new(e)
             })?;
 
-            encrypted.stash = Some(self.stash.clone());
+            encrypted.set_stash(&self.stash);
             encrypted.save().await.map_err(|e| -> StoreError {
                 error!("Failed to save data to the database: {e}");
                 e.into()

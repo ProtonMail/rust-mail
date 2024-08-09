@@ -569,7 +569,7 @@ impl Contact {
                 .collect();
             if !contacts.is_empty() {
                 for contact in &mut contacts {
-                    contact.stash = Some(stash.clone());
+                    contact.set_stash(stash);
                     contact.save().await.map_err(|err: StashError| {
                         error!("Failed to sync contacts for page {page_index} to db: {err}");
                         err
@@ -609,7 +609,7 @@ impl Contact {
                 .collect();
             if !contact_emails.is_empty() {
                 for contact_email in &mut contact_emails {
-                    contact_email.stash = Some(stash.clone());
+                    contact_email.set_stash(stash);
                     contact_email.save().await.map_err(|err: StashError| {
                         error!("Failed to sync contact emails for page {page_index} to db: {err}");
                         err
