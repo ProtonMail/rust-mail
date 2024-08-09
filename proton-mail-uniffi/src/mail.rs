@@ -1,7 +1,6 @@
 mod avatar_information;
 pub mod conversations;
 pub mod datatypes;
-pub mod labels;
 mod logging;
 mod login;
 mod mailbox;

@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+
+- Added callbacks `watch_standard_labels`, `watch_folder_labels` and `watch_system_labels` to `Sidebar`.
+
 ## [0.11.5] - 2024-08-09
 
 ### Added
 
-- Added `Sidbar` type to represent the side bar.
+- Added `Sidebar` type to represent the sidebar.
 
 ### Changed
 
