@@ -3,6 +3,7 @@
 use super::super::*;
 use crate::datatypes::{ConversationCount, LabelColor, LabelType, MessageCount};
 use crate::db::new_test_connection;
+use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
@@ -111,7 +112,8 @@ async fn test_remote_label_update() {
 async fn test_delete_remote() {
     let stash = new_test_connection().await;
     let tx = stash.connection();
-    let labels = test_labels();
+    let mut labels = test_labels();
+
     for label in labels.clone() {
         let mut label = Label::from(label);
         if let Some(parent_id) = label.remote_parent_id.clone() {
@@ -131,12 +133,9 @@ async fn test_delete_remote() {
     .await
     .expect("failed to delete local label");
 
-    let remote_labels = labels.iter().skip(1).cloned().collect::<Vec<_>>();
+    labels.remove(0);
 
-    let local_labels = Label::all(&stash, None)
-        .await
-        .expect("failed to get labels");
-    assert_eq!(local_labels.len(), 12);
+    let remote_labels = labels;
 
     compare_remote_labels_with_local(&stash, remote_labels).await;
 }
