@@ -1,7 +1,9 @@
+use crate::actions::labels::Expand;
+use crate::{AppError, MailContextError};
 use proton_core_common::datatypes::LabelId;
 use stash::orm::Model;
 use stash::params;
-use tracing::{error, warn};
+use tracing::error;
 
 use crate::datatypes::{AlmostAllMail, ShowMoved};
 use crate::datatypes::{LabelType, SystemLabelId};
@@ -112,7 +114,10 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
-        self.set_folder_expanded(local_id, false).await
+        self.user_ctx
+            .execute_action(Expand::collapse(local_id))
+            .await?;
+        Ok(())
     }
 
     /// Set folder `expanded` field to it's expanded state
@@ -121,23 +126,9 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
-        self.set_folder_expanded(local_id, true).await
-    }
-
-    /// Set folder `expanded` field
-    async fn set_folder_expanded(&self, local_id: u64, state: bool) -> SidebarResult<()> {
-        if let Some(mut folder) = Label::find_first(
-            "WHERE local_id = ? AND label_type = ?",
-            params![local_id, LabelType::Folder],
-            self.user_ctx.stash(),
-        )
-        .await?
-        {
-            folder.expanded = state;
-            folder.save().await?;
-        } else {
-            warn!("Can't modify folder expansion state: unknown local_id({local_id})");
-        };
+        self.user_ctx
+            .execute_action(Expand::expand(local_id))
+            .await?;
         Ok(())
     }
 
@@ -151,7 +142,9 @@ impl Sidebar {
         .await?
         .ok_or_else(|| {
             error!("System Label don't exist: {}", label_id);
-            SidebarError::RemoteLabelNotFound(label_id)
+            SidebarError::MailContext(MailContextError::App(AppError::RemoteLabelDoesNotExist(
+                label_id,
+            )))
         })
     }
 }

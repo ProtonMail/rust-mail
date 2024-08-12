@@ -4,11 +4,9 @@
 //! items could be added as needed in the future.
 //!
 
-use crate::core::datatypes::LabelId;
 use crate::mail::datatypes::Label;
 use crate::mail::datatypes::LabelType;
-use crate::mail::MailUserSession;
-use crate::mail::MailboxError;
+use crate::mail::{MailSessionError, MailUserSession};
 use crate::{LiveQueryCallback, WatchHandle};
 use proton_mail_common::datatypes::LabelType as RealLabelType;
 use proton_mail_common::models::Label as RealLabel;
@@ -24,12 +22,10 @@ use tracing::warn;
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum SidebarError {
-    #[error("Could not find label with remote id '{0}'")]
-    RemoteLabelNotFound(LabelId),
     #[error("Couldn't load Settings from database")]
     SettingsNotFound,
     #[error("Mailbox Error: {0}")]
-    Mailbox(#[from] MailboxError),
+    MailSessionError(#[from] MailSessionError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
 }
@@ -39,11 +35,8 @@ type SidebarResult<T> = Result<T, SidebarError>;
 impl From<proton_mail_common::SidebarError> for SidebarError {
     fn from(error: proton_mail_common::SidebarError) -> Self {
         match error {
-            proton_mail_common::SidebarError::RemoteLabelNotFound(label_id) => {
-                Self::RemoteLabelNotFound(label_id.into())
-            }
             proton_mail_common::SidebarError::SettingsNotFound => Self::SettingsNotFound,
-            proton_mail_common::SidebarError::Mailbox(e) => Self::Mailbox(e.into()),
+            proton_mail_common::SidebarError::MailContext(e) => Self::MailSessionError(e.into()),
             proton_mail_common::SidebarError::Stash(e) => Self::Stash(e),
         }
     }
