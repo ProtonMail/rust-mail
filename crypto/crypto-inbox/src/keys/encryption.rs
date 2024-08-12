@@ -1,9 +1,9 @@
 //! [Confluence Sending Preferences](https://confluence.protontech.ch/display/MAILFE/Send+preferences+for+outgoing+email)
 //! [Advanced encryption setting](https://confluence.protontech.ch/display/MAILFE/Advanced+PGP+settings)
 use proton_crypto_account::{
-    keys::{InboxPublicKeys, PGPScheme, PinnedPublicKeys, RecipientType},
+    keys::{DecryptedAddressKey, InboxPublicKeys, PGPScheme, PinnedPublicKeys, RecipientType},
     proton_crypto::{
-        crypto::{PublicKey, UnixTimestamp},
+        crypto::{PrivateKey, PublicKey, UnixTimestamp},
         keytransparency::KTVerificationResult,
     },
 };
@@ -14,6 +14,7 @@ use super::{CryptoPackageTypeError, EncryptionPreferencesError};
 
 /// A helper type that contains the default PGP preferences
 /// extracted from the user's mailsettings.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct CryptoMailSettings {
     /// The default PGP scheme to use.
     pub pgp_scheme: CryptoPackageType,
@@ -46,6 +47,7 @@ pub enum CryptoPackageType {
     /// Cleartext message with MIME formatting.
     ClearMime,
 }
+
 impl CryptoPackageType {
     pub fn type_value(&self) -> i32 {
         match self {
@@ -130,6 +132,48 @@ pub struct InboxSendPreferences<Pub: PublicKey> {
 }
 
 impl<Pub: PublicKey> InboxSendPreferences<Pub> {
+    /// Creates an [`InboxSendPreferences`] instance using unlocked address keys.
+    ///
+    /// This function determines the appropriate PGP encryption preferences for sending to and address of the same user account.
+    /// The first key in the address key list is selected as the primary key for sending,
+    /// which is then validated to ensure it is neither obsolete nor compromised.
+    ///
+    /// # Parameters
+    ///
+    /// - `address_keys`   - A reference to a slice of `DecryptedAddressKey` containing the recipient's decrypted address keys.
+    ///                      The first key is used as the primary key for setting the preferences.
+    /// - `mail_settings`  - A reference to the `CryptoMailSettings` which defines the default encryption, signing, and MIME type settings.
+    ///
+    /// # Errors
+    ///
+    /// - `EncryptionPreferencesError::InvalidPrimaryKey` - If the primary key is obsolete or compromised.
+    /// - `EncryptionPreferencesError::NoKeyFound` - If no address keys are provided.
+    pub fn create_from_unlocked_address_keys<Priv: PrivateKey>(
+        address_keys: &[DecryptedAddressKey<Priv, Pub>],
+        mail_settings: &CryptoMailSettings,
+    ) -> Result<Self, EncryptionPreferencesError> {
+        let Some(primary_address_key) = address_keys.first() else {
+            return Err(EncryptionPreferencesError::NoKeyFound);
+        };
+
+        if primary_address_key.flags.is_obsolete() || primary_address_key.flags.is_compromised() {
+            return Err(EncryptionPreferencesError::InvalidPrimaryKey(
+                primary_address_key.flags.is_obsolete(),
+                primary_address_key.flags.is_compromised(),
+            ));
+        }
+        Ok(InboxSendPreferences {
+            encrypt: true,
+            sign: true,
+            pgp_scheme: CryptoPackageType::ProtonMail,
+            mime_type: mail_settings.mime_type,
+            is_selected_key_pinned: false,
+            has_api_keys: true,
+            selected_key: Some(primary_address_key.public_key.to_owned()),
+            key_transparency_verification: KTVerificationResult::Ok(()),
+        })
+    }
+
     /// Selects PGP emails sending preferences and the encryption key by creating a [`InboxSendPreferences`] instance.
     ///
     /// This function determines the appropriate encryption and signing preferences for the recipient
@@ -212,12 +256,14 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
                     // No valid key can be found for an external recipient with enabled encryption.
                     return Err(EncryptionPreferencesError::NoKeyFound);
                 }
+
                 if api_keys.is_internal_with_disabled_e2ee {
                     send_settings_encrypt = false;
                     send_settings_sign = false;
                     send_settings_pgp_type = CryptoPackageType::Cleartext;
                     send_settings_mime_type = mail_settings.mime_type;
                 };
+
                 match (selected_api_key, selected_pinned_key) {
                     (None, None) => {
                         if vcard_keys.is_none() {
@@ -228,12 +274,12 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
                         }
                         None
                     }
-                    (None | Some(_), Some(selected_key)) | (Some(selected_key), None) => {
-                        Some(selected_key)
-                    }
+                    (Some(api_key), None) => Some(api_key),
+                    (_, Some(pinned_key)) => Some(pinned_key),
                 }
             }
         };
+
         Ok(InboxSendPreferences {
             encrypt: send_settings_encrypt,
             sign: send_settings_encrypt || send_settings_sign,

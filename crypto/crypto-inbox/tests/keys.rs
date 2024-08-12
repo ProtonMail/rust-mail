@@ -60,7 +60,7 @@ fn test_verification_preferences() {
     let pinned_keys = create_test_pinned_key(&pgp_provider);
     let api_keys = create_test_public_key(&pgp_provider);
     let verification_preferences =
-        InboxVerificationPreferences::from_public_address_keys(api_keys, Some(pinned_keys));
+        InboxVerificationPreferences::create_from_public_address_keys(api_keys, Some(pinned_keys));
     assert!(verification_preferences.compromised_fingerprints.is_empty());
     assert!(verification_preferences.uses_pinned_keys());
     assert_eq!(verification_preferences.pinned_keys.len(), 1);
@@ -80,7 +80,7 @@ fn test_verification_preferences_compromised() {
         .flags
         .set_compromised();
     let verification_preferences =
-        InboxVerificationPreferences::from_public_address_keys(api_keys, Some(pinned_keys));
+        InboxVerificationPreferences::create_from_public_address_keys(api_keys, Some(pinned_keys));
     assert!(verification_preferences.pinned_keys.is_empty());
     assert!(verification_preferences.api_keys.is_empty());
     assert_eq!(verification_preferences.compromised_fingerprints.len(), 1);
@@ -91,7 +91,7 @@ fn test_verification_preferences_own() {
     let pgp_provider = new_pgp_provider();
     let address_keys = create_test_decrypted_address_key(&pgp_provider);
     let verification_preferences =
-        InboxVerificationPreferences::from_unlocked_address_keys(&address_keys);
+        InboxVerificationPreferences::create_from_unlocked_address_keys(&address_keys);
     assert!(verification_preferences.pinned_keys.is_empty());
     assert!(verification_preferences.compromised_fingerprints.is_empty());
     assert_eq!(verification_preferences.api_keys.len(), 1);
@@ -104,7 +104,7 @@ fn test_verification_preferences_own_compromised() {
     let mut address_keys = create_test_decrypted_address_key(&pgp_provider);
     address_keys.first_mut().unwrap().flags.set_compromised();
     let verification_preferences =
-        InboxVerificationPreferences::from_unlocked_address_keys(&address_keys);
+        InboxVerificationPreferences::create_from_unlocked_address_keys(&address_keys);
     assert!(verification_preferences.pinned_keys.is_empty());
     assert!(verification_preferences.api_keys.is_empty());
     assert_eq!(verification_preferences.compromised_fingerprints.len(), 1);
@@ -234,6 +234,37 @@ fn test_sending_preferences_external() {
             && !sending_preferences.has_api_keys
     );
     assert_eq!(sending_preferences.pgp_scheme, CryptoPackageType::Cleartext);
+    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type);
+}
+
+#[test]
+fn test_sending_preferences_own() {
+    let pgp_provider = new_pgp_provider();
+    let address_keys = create_test_decrypted_address_key(&pgp_provider);
+    let expected_key = &address_keys.first().unwrap().public_key;
+
+    let mail_setting = CryptoMailSettings {
+        pgp_scheme: CryptoPackageType::PgpMime,
+        mime_type: PackageMimeType::Html,
+        sign: true,
+    };
+
+    let sending_preferences =
+        InboxSendPreferences::create_from_unlocked_address_keys(&address_keys, &mail_setting)
+            .expect("should be able to extract sending preferences");
+    assert!(
+        sending_preferences.encrypt
+            && sending_preferences.sign
+            && !sending_preferences.is_selected_key_pinned
+    );
+    assert_eq!(
+        sending_preferences.selected_key.unwrap().key_fingerprint(),
+        expected_key.key_fingerprint()
+    );
+    assert_eq!(
+        sending_preferences.pgp_scheme,
+        CryptoPackageType::ProtonMail
+    );
     assert_eq!(sending_preferences.mime_type, mail_setting.mime_type);
 }
 
