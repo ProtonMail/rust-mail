@@ -1,6 +1,6 @@
 use crate::datatypes::{
-    AttachmentMetadata, Disposition, LabelType, MessageAddress, MessageAddresses, MimeType,
-    SystemLabelId,
+    attachment, AttachmentMetadata, Disposition, LabelType, MessageAddress, MessageAddresses,
+    MimeType, SystemLabelId,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::tests::common::{
@@ -144,7 +144,7 @@ pub fn new_test_delete_db_state() -> TestDBState {
                     remote_id: Some(RemoteId::from("MyAttachId")),
                     size: 1024,
                     filename: "text.text".to_owned(),
-                    mime_type: MimeType::TextPlain,
+                    mime_type: attachment::MimeType::text_plain(),
                     disposition: Disposition::Inline,
                 }],
                 ..Default::default()
@@ -396,7 +396,7 @@ pub fn new_test_unread_db_state() -> TestDBState {
                     remote_id: Some(RemoteId::from("MyAttachId")),
                     size: 1024,
                     filename: "text.text".to_owned(),
-                    mime_type: MimeType::TextPlain,
+                    mime_type: attachment::MimeType::text_plain(),
                     disposition: Disposition::Inline,
                 }],
                 ..Default::default()
@@ -541,7 +541,7 @@ pub fn new_test_label_db_state() -> TestDBState {
                     remote_id: Some(RemoteId::from("MyAttachId")),
                     size: 1024,
                     filename: "text.text".to_owned(),
-                    mime_type: MimeType::TextPlain,
+                    mime_type: attachment::MimeType::text_plain(),
                     disposition: Disposition::Inline,
                 }],
                 snooze_time: 1000,
@@ -679,7 +679,7 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
                 remote_id: Some(RemoteId::from("MyAttachId")),
                 size: 1024,
                 filename: "text.text".to_owned(),
-                mime_type: MimeType::TextPlain,
+                mime_type: attachment::MimeType::text_plain(),
                 disposition: Disposition::Inline,
             }],
             snooze_time: 1000,

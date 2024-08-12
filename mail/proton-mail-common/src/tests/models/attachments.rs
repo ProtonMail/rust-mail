@@ -27,11 +27,11 @@ async fn test_attachment_create_without_metadata() {
     let tx = stash.connection();
     let (_, _, _) = create_attachment_dependencies(&tx, None).await.unwrap();
     let api_attachment = test_attachment();
-    let mut attachment = Attachment::from(api_attachment.clone());
+    let mut attachment = Attachment::try_from(api_attachment.clone()).unwrap();
     attachment.save_using(&tx).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
-    let mut expected = Attachment::from(api_attachment);
+    let mut expected = Attachment::try_from(api_attachment).unwrap();
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
     expected.set_stash(&stash);
@@ -53,7 +53,7 @@ async fn test_attachment_create_with_metadata() {
         id: api_attachment.id.clone(),
         size: api_attachment.size,
         name: api_attachment.name.clone(),
-        mime_type: api_attachment.mime_type,
+        mime_type: api_attachment.mime_type.clone(),
         disposition: api_attachment.disposition,
     };
     let (_, _, _) = create_attachment_dependencies(&tx, Some(metadata))
@@ -63,7 +63,7 @@ async fn test_attachment_create_with_metadata() {
     let db_attachment = Attachment::load(1.into(), &stash).await.unwrap().unwrap();
     assert!(!db_attachment.has_complete_metadata());
 
-    let mut attachment = Attachment::from(api_attachment.clone());
+    let mut attachment = Attachment::try_from(api_attachment.clone()).unwrap();
     attachment.save_using(&tx).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
@@ -82,7 +82,7 @@ fn test_attachment() -> ApiAttachment {
         id: RemoteId::from("attachment").into(),
         name: "attachment_foo".to_owned(),
         size: 1024,
-        mime_type: ApiMimeType::TextPlain,
+        mime_type: attachment::MimeType::text_plain().to_string(),
         disposition: ApiDisposition::Inline,
         key_packets: RealKeyPackets::from("key_packets"),
         signature: Some(RealAttachmentSignature::from("signature")),
@@ -142,7 +142,11 @@ async fn create_attachment_dependencies(
     let local_conv_ids = Conversation::create_or_update_conversations(
         vec![Conversation {
             remote_id: Some(conversation_id()),
-            attachments_metadata: metadata.clone().into_iter().map(|m| m.into()).collect(),
+            attachments_metadata: metadata
+                .clone()
+                .into_iter()
+                .map(AttachmentMetadata::try_from)
+                .collect::<Result<_, _>>()?,
             ..Default::default()
         }],
         tx.stash(),

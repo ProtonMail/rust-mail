@@ -490,7 +490,7 @@ async fn test_conversation_create_no_labels() {
     create_address(&tx).await;
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
-    let mut local_conversation = Conversation::from(conv.clone());
+    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -512,7 +512,7 @@ async fn test_conversation_has_messages_flag() {
     create_address(&tx).await;
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
-    let mut local_conversation = Conversation::from(conv.clone());
+    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -561,7 +561,7 @@ async fn test_conversation_create_starred() {
 
     // Add starred label, should gain starred attribute.
     let conv = test_conversation(vec![conv_label.clone()], vec![]);
-    let mut local_conversation = Conversation::from(conv.clone());
+    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -574,7 +574,7 @@ async fn test_conversation_create_starred() {
             .await
             .expect("failed to get conversation")
             .expect("should have value");
-        let mut local_conversation = Conversation::from(conv.clone());
+        let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
         local_conversation.set_stash(&stash);
         local_conversation.row_id = Some(1);
         local_conversation.local_id = Some(1.into());
@@ -676,7 +676,7 @@ async fn test_conversation_create_with_labels() {
         ],
         vec![],
     );
-    let mut local_conversation = Conversation::from(conv.clone());
+    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
     local_conversation.labels = vec![ConversationLabel {
         local_id: None,
         local_conversation_id: None,
@@ -718,11 +718,11 @@ async fn test_conversation_create_with_attachment() {
             id: MY_ATTACHMENT_ID.clone(),
             size: 4098,
             name: "My Attachment.pdf".to_owned(),
-            mime_type: ApiMimeType::ApplicationPdf,
+            mime_type: attachment::MimeType::application_pdf().to_string(),
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation = Conversation::from(conv.clone());
+    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -772,11 +772,11 @@ async fn test_conversation_create_with_attachment_and_label() {
             id: MY_ATTACHMENT_ID.clone(),
             size: 4098,
             name: "My Attachment.pdf".to_owned(),
-            mime_type: ApiMimeType::ApplicationPdf,
+            mime_type: attachment::MimeType::application_pdf().to_string(),
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation = Conversation::from(conv.clone());
+    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -826,11 +826,11 @@ async fn test_conversation_update() {
             id: ApiRemoteId::from("ATTACHMENT2"),
             size: 224515,
             name: "Attachment.json".to_owned(),
-            mime_type: ApiMimeType::ApplicationJson,
+            mime_type: attachment::MimeType::application_json().to_string(),
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation1 = Conversation::from(conv.clone());
+    let mut local_conversation1 = Conversation::try_from(conv.clone()).unwrap();
     local_conversation1.set_stash(&stash);
     local_conversation1
         .save()
@@ -851,11 +851,11 @@ async fn test_conversation_update() {
             id: MY_ATTACHMENT_ID.clone(),
             size: 4098,
             name: "My Attachment.pdf".to_owned(),
-            mime_type: ApiMimeType::ApplicationPdf,
+            mime_type: attachment::MimeType::application_pdf().to_string(),
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation2 = Conversation::from(conv_update.clone());
+    let mut local_conversation2 = Conversation::try_from(conv_update.clone()).unwrap();
     local_conversation2.labels = vec![
         ConversationLabel {
             local_id: None,

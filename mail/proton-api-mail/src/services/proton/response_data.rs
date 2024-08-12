@@ -322,9 +322,11 @@ pub struct Attachment {
     #[serde(rename = "MessageID")]
     pub message_id: RemoteId,
 
-    /// TODO: Document this field.
+    /// Attachment's MIME type may differ from the MIME type of the message.
+    /// There is a lot of possible MIME types, so it is not possible to list
+    /// all here. The safest bet is to deserialize it to string at that point.
     #[serde(rename = "MIMEType")]
-    pub mime_type: MimeType,
+    pub mime_type: String,
 
     /// TODO: Document this field.
     pub name: String,
@@ -351,9 +353,11 @@ pub struct AttachmentMetadata {
     /// TODO: Document this field.
     pub disposition: Disposition,
 
-    /// TODO: Document this field.
+    /// Attachment's MIME type may differ from the MIME type of the message.
+    /// There is a lot of possible MIME types, so it is not possible to list
+    /// all here. The safest bet is to deserialize it to string at that point.
     #[serde(rename = "MIMEType")]
-    pub mime_type: MimeType,
+    pub mime_type: String,
 
     /// TODO: Document this field.
     #[serde(default)]
@@ -875,9 +879,11 @@ pub struct MessageAttachment {
     /// TODO: Document this field.
     pub key_packets: KeyPackets,
 
-    /// TODO: Document this field.
+    /// Attachment's MIME type may differ from the MIME type of the message.
+    /// There is a lot of possible MIME types, so it is not possible to list
+    /// all here. The safest bet is to deserialize it to string at that point.
     #[serde(rename = "MIMEType")]
-    pub mime_type: MimeType,
+    pub mime_type: String,
 
     /// TODO: Document this field.
     pub name: String,
