@@ -5,7 +5,7 @@ use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
 use proton_core_common::datatypes::{LabelId, LocalId};
-use proton_mail_common::datatypes::{Disposition, SystemLabelId};
+use proton_mail_common::datatypes::{attachment, Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::Mailbox;
 use stash::orm::Model;
@@ -131,7 +131,7 @@ async fn load_attachment_content_first_time() {
     let params = TestParams::default_basic();
     let user_context = ctx.user_context().await;
     let test_attachment = params.attachments.first().unwrap();
-    let mut attachment: Attachment = test_attachment.clone().into();
+    let mut attachment: Attachment = test_attachment.clone().try_into().unwrap();
     let attachment_local_id = 42;
     attachment.local_id = Some(attachment_local_id.into());
 
@@ -230,7 +230,7 @@ fn get_attachment(id: LocalId, attachment: &ApiAttachment) -> Attachment {
         enc_signature: None,
         is_auto_forwardee: false,
         key_packets: Some(attachment.key_packets.clone().into()),
-        mime_type: attachment.mime_type.into(),
+        mime_type: attachment::MimeType::new(&attachment.mime_type).unwrap(),
         filename: attachment.name.clone(),
         sender: None,
         signature: None,

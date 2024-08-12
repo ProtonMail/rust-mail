@@ -34,12 +34,13 @@ mod tests;
 use crate::actions::{ConversationAvailableAction, MessageAvailableAction};
 use crate::cache::CacheMessageConfig;
 use crate::datatypes::{
-    AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature,
-    ComposerDirection, ComposerMode, ConversationCount, CustomLabel, Disposition,
-    EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType, MessageAddress,
-    MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount, MessageFlags, MimeType,
-    MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme, PmSignature, ShowImages,
-    ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
+    attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
+    AttachmentSignature, ComposerDirection, ComposerMode, ConversationCount, CustomLabel,
+    Disposition, EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType,
+    MessageAddress, MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount,
+    MessageFlags, MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme,
+    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
+    ViewMode,
 };
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
@@ -191,7 +192,7 @@ pub struct Attachment {
 
     /// Mime type of the attachment
     #[DbField]
-    pub mime_type: MimeType,
+    pub mime_type: attachment::MimeType,
 
     /// File name of the attachment.
     #[DbField]
@@ -440,11 +441,11 @@ impl Attachment {
         } else {
             return Err(StashError::IdNotSet.into());
         };
-        let mut attachment = Self::from(
+        let mut attachment = Self::try_from(
             Self::fetch_metadata(remote_attachment_id, api)
                 .await?
                 .attachment,
-        );
+        )?;
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
         attachment.save_using(interface).await?;
@@ -472,9 +473,11 @@ impl DecryptableAttachment for Attachment {
     }
 }
 
-impl From<ApiAttachment> for Attachment {
-    fn from(value: ApiAttachment) -> Self {
-        Self {
+impl TryFrom<ApiAttachment> for Attachment {
+    type Error = AppError;
+
+    fn try_from(value: ApiAttachment) -> Result<Self, Self::Error> {
+        Ok(Self {
             local_id: None,
             remote_id: Some(value.id.into()),
             remote_address_id: Some(value.address_id.into()),
@@ -486,14 +489,14 @@ impl From<ApiAttachment> for Attachment {
             enc_signature: value.enc_signature.clone().map(|v| v.into()),
             is_auto_forwardee: value.is_auto_forwardee,
             key_packets: Some(value.key_packets.clone().into()),
-            mime_type: value.mime_type.into(),
+            mime_type: attachment::MimeType::new(value.mime_type)?,
             filename: value.name,
             sender: value.sender.map(|v| v.into()),
             signature: value.signature.map(|v| v.into()),
             size: value.size,
             row_id: None,
             stash: None,
-        }
+        })
     }
 }
 
@@ -1244,8 +1247,8 @@ impl Conversation {
                 .await?
                 .conversations
                 .into_iter()
-                .map(|c| c.into())
-                .collect(),
+                .map(Conversation::try_from)
+                .collect::<Result<_, _>>()?,
             stash,
         )
         .await?;
@@ -1370,8 +1373,8 @@ impl Conversation {
             response
                 .conversations
                 .into_iter()
-                .map(|c| c.into())
-                .collect(),
+                .map(Conversation::try_from)
+                .collect::<Result<_, _>>()?,
             stash,
         )
         .await?;
@@ -1658,9 +1661,11 @@ impl Conversation {
     }
 }
 
-impl From<ApiConversation> for Conversation {
-    fn from(value: ApiConversation) -> Self {
-        Self {
+impl TryFrom<ApiConversation> for Conversation {
+    type Error = AppError;
+
+    fn try_from(value: ApiConversation) -> Result<Self, Self::Error> {
+        Ok(Self {
             local_id: None,
             remote_id: Some(value.id.into()),
             attachment_info: MessageAttachmentInfos {
@@ -1673,8 +1678,8 @@ impl From<ApiConversation> for Conversation {
             attachments_metadata: value
                 .attachments_metadata
                 .into_iter()
-                .map(|v| v.into())
-                .collect(),
+                .map(AttachmentMetadata::try_from)
+                .collect::<Result<_, _>>()?,
             deleted: false,
             display_snooze_reminder: value.display_snooze_reminder,
             expiration_time: value.expiration_time,
@@ -1695,7 +1700,7 @@ impl From<ApiConversation> for Conversation {
             subject: value.subject,
             row_id: None,
             stash: None,
-        }
+        })
     }
 }
 
@@ -2802,8 +2807,8 @@ impl Message {
                 attachments_metadata: metadata
                     .attachments_metadata
                     .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
+                    .map(AttachmentMetadata::try_from)
+                    .collect::<Result<_, _>>()?,
                 bcc_list: MessageAddresses {
                     value: metadata.bcc_list.into_iter().map(|v| v.into()).collect(),
                 },
@@ -3351,7 +3356,7 @@ impl Message {
             "MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned(),
         ))?;
         // sync the message body
-        Ok(Message::from(
+        Message::try_from(
             api.get_message(remote_id.into())
                 .await
                 .map(|v| v.message)
@@ -3359,7 +3364,7 @@ impl Message {
                     error!("Failed to retrieve message: {e}");
                     ApiServiceError::UnknownError("MailContextError::from(e)".to_owned())
                 })?,
-        ))
+        )
     }
 
     /// Get the available actions for the message excluding labels which are applied to
@@ -3540,8 +3545,10 @@ impl Message {
     }
 }
 
-impl From<ApiMessage> for Message {
-    fn from(value: ApiMessage) -> Self {
+impl TryFrom<ApiMessage> for Message {
+    type Error = AppError;
+
+    fn try_from(value: ApiMessage) -> Result<Self, Self::Error> {
         let label_ids: Vec<LabelId> = value
             .metadata
             .label_ids
@@ -3549,7 +3556,7 @@ impl From<ApiMessage> for Message {
             .map(|v| v.into())
             .collect();
 
-        Self {
+        Ok(Self {
             local_id: None,
             remote_id: Some(value.metadata.id.into()),
             local_conversation_id: None,
@@ -3559,8 +3566,8 @@ impl From<ApiMessage> for Message {
                 .metadata
                 .attachments_metadata
                 .into_iter()
-                .map(|v| v.into())
-                .collect(),
+                .map(AttachmentMetadata::try_from)
+                .collect::<Result<_, _>>()?,
             bcc_list: MessageAddresses {
                 value: value
                     .metadata
@@ -3619,7 +3626,7 @@ impl From<ApiMessage> for Message {
             row_id: None,
             stash: None,
             custom_labels: vec![],
-        }
+        })
     }
 }
 

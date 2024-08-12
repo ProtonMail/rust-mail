@@ -19,6 +19,7 @@ futures = "0.3.30"
 indoc = "2"
 itertools = "0.13.0"
 lazy_static = "1"
+mime = "0.3.17"
 parking_lot = "0.12.3"
 pretty_assertions = "1.4.0"
 proton-action-queue = { version = "=0.7.7", registry = "proton" }

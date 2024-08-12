@@ -37,9 +37,11 @@
 //! Hence event data types are placed into the [`events`](crate::events) module.
 //!
 
+pub mod attachment;
 pub(crate) mod exclusive_location;
 
 use crate::models::{Conversation, Label, MessageBodyMetadata};
+use crate::AppError;
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -69,6 +71,7 @@ use stash::exports::{
 };
 use stash::sql_using_serde;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
@@ -858,7 +861,7 @@ pub struct AttachmentMetadata {
     pub disposition: Disposition,
 
     /// Attachment mime type.
-    pub mime_type: MimeType,
+    pub mime_type: attachment::MimeType,
 
     /// Attachment file name.
     pub filename: String,
@@ -867,16 +870,18 @@ pub struct AttachmentMetadata {
     pub size: u64,
 }
 
-impl From<ApiAttachmentMetadata> for AttachmentMetadata {
-    fn from(value: ApiAttachmentMetadata) -> Self {
-        Self {
+impl TryFrom<ApiAttachmentMetadata> for AttachmentMetadata {
+    type Error = AppError;
+
+    fn try_from(value: ApiAttachmentMetadata) -> Result<Self, Self::Error> {
+        Ok(Self {
             local_id: None,
             remote_id: Some(value.id.into()),
             disposition: value.disposition.into(),
-            mime_type: value.mime_type.into(),
+            mime_type: attachment::MimeType::new(value.mime_type)?,
             filename: value.name,
             size: value.size,
-        }
+        })
     }
 }
 
@@ -1140,7 +1145,8 @@ pub struct MessageAttachment {
     pub key_packets: KeyPackets,
 
     /// TODO: Document this field.
-    pub mime_type: MimeType,
+    // pub mime_type: String,
+    pub mime_type: attachment::MimeType,
 
     /// TODO: Document this field.
     pub signature: Option<AttachmentSignature>,
@@ -1152,19 +1158,19 @@ pub struct MessageAttachment {
     pub size: u64,
 }
 
-impl From<ApiMessageAttachment> for MessageAttachment {
-    fn from(value: ApiMessageAttachment) -> Self {
-        Self {
+impl MessageAttachment {
+    pub fn new(value: ApiMessageAttachment) -> Result<Self, AppError> {
+        Ok(Self {
             id: value.id.into(),
             disposition: value.disposition.into(),
             enc_signature: value.enc_signature.map(|v| v.into()),
             headers: value.headers.into(),
             key_packets: value.key_packets.into(),
-            mime_type: value.mime_type.into(),
+            mime_type: attachment::MimeType::new(value.mime_type)?,
             name: value.name,
             signature: value.signature.map(|v| v.into()),
             size: value.size,
-        }
+        })
     }
 }
 

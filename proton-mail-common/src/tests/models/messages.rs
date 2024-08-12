@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use super::super::*;
-use crate::datatypes::{ExclusiveLocation, MessageCount, MessageFlags, SystemLabelId};
+use crate::datatypes::{attachment, ExclusiveLocation, MessageCount, MessageFlags, SystemLabelId};
 use crate::db::new_test_connection_file;
 use crate::tests::common::{
     create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
@@ -266,7 +266,7 @@ async fn test_create_message() {
         .await
         .expect("failed to get message")
         .expect("must have a value");
-    let mut expected = Message::from(message);
+    let mut expected = Message::try_from(message).unwrap();
     let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &stash)
         .await
         .unwrap()
@@ -347,7 +347,7 @@ async fn test_create_message_with_attachments() {
         id: ApiRemoteId::from("myattachment"),
         size: 80,
         name: "foo.pdf".to_owned(),
-        mime_type: ApiMimeType::ApplicationPdf,
+        mime_type: attachment::MimeType::application_pdf().to_string(),
         disposition: ApiDisposition::Inline,
     };
     let _ = test_create_message_dependencies(&tx).await;
@@ -493,7 +493,7 @@ async fn test_update_message() {
         .await
         .unwrap()
         .unwrap();
-    let mut expected = Message::from(metadata_updated);
+    let mut expected = Message::try_from(metadata_updated).unwrap();
     expected.set_stash(&stash);
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
@@ -1050,7 +1050,7 @@ async fn test_create_message_and_body_with_attachments() {
                 id: attachment_id.clone().into(),
                 size: 1024,
                 name: "fooo".to_owned(),
-                mime_type: ApiMimeType::TextHtml,
+                mime_type: attachment::MimeType::text_html().to_string(),
                 disposition: ApiDisposition::Inline,
             }],
         ),
@@ -1065,7 +1065,7 @@ async fn test_create_message_and_body_with_attachments() {
             id: attachment_id.clone().into(),
             name: "fooo".to_owned(),
             size: 1024,
-            mime_type: ApiMimeType::TextHtml,
+            mime_type: attachment::MimeType::text_html().to_string(),
             disposition: ApiDisposition::Inline,
             key_packets: KeyPackets::from("packets"),
             signature: None,
@@ -1626,7 +1626,8 @@ async fn test_create_message_dependencies(tx: &Tether) -> u64 {
         }],
         vec![],
     )
-    .into();
+    .try_into()
+    .unwrap();
     conversation.set_stash(tx.stash());
     conversation
         .save()

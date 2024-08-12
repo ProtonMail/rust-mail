@@ -48,7 +48,9 @@
 //!   - [`Message::body`](proton_mail_common::models::Message::body)
 //!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
 //!
+pub mod attachment;
 mod available_action;
+
 use crate::core::datatypes::{LabelId, RemoteId};
 pub use available_action::*;
 use core::fmt;
@@ -89,6 +91,9 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
+
+use super::MailboxError;
+use std::convert::TryFrom;
 
 //  ENUMS
 //==============================================================================
@@ -797,7 +802,7 @@ pub struct AttachmentMetadata {
     pub disposition: Disposition,
 
     /// TODO: Document this field.
-    pub mime_type: MimeType,
+    pub mime_type: attachment::MimeType,
 
     /// TODO: Document this field.
     pub name: String,
@@ -1691,7 +1696,7 @@ pub struct MessageAttachment {
     pub key_packets: String,
 
     /// TODO: Document this field.
-    pub mime_type: MimeType,
+    pub mime_type: attachment::MimeType,
 
     /// TODO: Document this field.
     pub signature: Option<String>,

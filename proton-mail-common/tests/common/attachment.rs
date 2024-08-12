@@ -7,6 +7,7 @@ use proton_api_mail::services::proton::response_data::{
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_core_common::datatypes::RemoteId;
 use proton_crypto_inbox::attachment::KeyPackets;
+use proton_mail_common::datatypes::attachment;
 use std::{fmt::format, io};
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
@@ -20,7 +21,7 @@ pub fn testdata_attachment_metadata() -> ApiAttachmentMetadata {
         id: ApiRemoteId::from(TEST_ATTACHMENT_ID),
         size: 61,
         name: "attachment.txt".to_owned(),
-        mime_type: ApiMimeType::TextPlain,
+        mime_type: attachment::MimeType::text_plain().to_string(),
         disposition: ApiDisposition::Attachment,
     }
 }
