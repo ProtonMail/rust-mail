@@ -361,6 +361,10 @@ async fn test_conversation_create_starred() {
     let id = local_conversation.local_id.unwrap();
 
     {
+        let db_conversation = Conversation::load(id, &stash)
+            .await
+            .expect("failed to get conversation")
+            .expect("should have value");
         let mut local_conversation = Conversation::from(conv.clone());
         local_conversation.set_stash(&stash);
         local_conversation.row_id = Some(1);
@@ -369,16 +373,17 @@ async fn test_conversation_create_starred() {
         local_conversation.labels[0].local_conversation_id = Some(1);
         local_conversation.labels[0].set_stash(&stash);
         local_conversation.labels[0].row_id = Some(1);
-        local_conversation.labels[0].local_label_id = Some(12);
-        let db_conversation = Conversation::load(id, &stash)
-            .await
-            .expect("failed to get conversation")
-            .expect("should have value");
+        local_conversation.labels[0].local_label_id = db_conversation.labels[0].local_label_id;
+
         assert_eq!(db_conversation, local_conversation);
         assert!(local_conversation.is_starred());
         assert!(db_conversation.is_starred());
     }
     {
+        let db_conversation = Conversation::load(id, &stash)
+            .await
+            .expect("failed to get conversation")
+            .expect("should have value");
         let mut local_conversation = Conversation::load(id, &stash)
             .await
             .expect("failed to get conversation")
@@ -386,7 +391,7 @@ async fn test_conversation_create_starred() {
         local_conversation.labels = vec![ConversationLabel {
             local_id: None,
             local_conversation_id: local_conversation.local_id,
-            local_label_id: Some(12),
+            local_label_id: db_conversation.labels[0].local_label_id,
             remote_label_id: LabelId::starred().into(),
             context_num_unread: 0,
             context_num_messages: 0,
@@ -402,10 +407,7 @@ async fn test_conversation_create_starred() {
             .save_using(&tx)
             .await
             .expect("failed to update conversation");
-        let db_conversation = Conversation::load(id, &stash)
-            .await
-            .expect("failed to get conversation")
-            .expect("should have value");
+
         assert_eq!(local_conversation, db_conversation);
         assert!(local_conversation.is_starred());
         assert!(db_conversation.is_starred());

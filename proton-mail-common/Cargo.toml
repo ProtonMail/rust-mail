@@ -42,11 +42,12 @@ proton-api-mail = { workspace = true }
 secrecy = { version = "0.8", features = ["serde"] }
 tempdir = "0.3.1"
 tempfile = "3.10.1"
-test-case = "3.3.1"
+test-case = { workspace = true }
 tracing-subscriber = { workspace = true }
 tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 velcro = "0.5.4"
 wiremock = { workspace = true }
+pretty_assertions = { workspace = true }
 
 # not compatible with global clippy configuration yet
 # [lints]
