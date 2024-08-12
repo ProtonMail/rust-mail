@@ -85,9 +85,9 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 
 /// Represents a mail attachment.
 ///
-/// The attachments are immutable after creation and encrypted with the
-/// address key of the message's address. While the type itself has all the
-/// information we need to decrypt it, delivery to the application comes
+/// The attachments are immutable on the server after creation and encrypted
+/// with the address key of the message's address. While the type itself has
+/// all the information we need to decrypt it, delivery to the application comes
 /// in several steps that may or may not contain the full data.
 ///
 /// If the user has conversation view mode enabled, the first pieces
@@ -116,8 +116,8 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 /// create it no such attachment exists.
 ///
 /// To ensure that we do not overwrite the [`Attachment`] data in the database
-/// *NEVER* use [`Attachment::save`] but instead *ALWAYS* use
-/// [`Attachment::save_or_update`].
+/// *NEVER* use [`Model::save()`] or [`Model::save_using()`] but instead
+/// *ALWAYS* use [`Attachment::save()`] or [`Attachment::save_using()`].
 ///
 /// Finally, when fetching the [`MessageBodyMetadata`] we receive the final
 /// bits of data regarding some headers and other metadata used to display
@@ -125,11 +125,6 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 ///
 /// Note: Extracting the last bit of information from [`MessageBodyMetadata`]
 /// will come in a followup patch.
-///
-/// # Remarks
-///
-/// Do not use [`Attachment::save`] but always use
-/// [`Attachment::save_or_update`].
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("attachments")]
@@ -378,20 +373,20 @@ impl Attachment {
 
     /// Save or update the attachment in the database.
     ///
-    /// It's imperative to call this function rather than [`Attachment::save`] to make sure
-    /// that we override the existing partial metadata rather than create a new entry that will
-    /// cause a conflict.
+    /// It's imperative to call this function rather than [`Model::save_using`]
+    /// to make sure that we override the existing partial metadata rather than
+    /// create a new entry that will cause a conflict.
     ///
-    /// There is currently no way to handle this in stash directly, so we have to manually perform
-    /// this check.
+    /// There is currently no way to handle this in stash directly, so we have
+    /// to manually perform this check.
     ///
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn save_or_update(
-        &mut self,
-        interface: &AgnosticInterface,
-    ) -> Result<(), StashError> {
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         if self.local_id.is_none() {
             if let Some(remote_id) = self.remote_id.clone() {
                 if let Some(existing) =
@@ -403,7 +398,38 @@ impl Attachment {
             }
         }
 
-        Self::save_using(self, interface).await
+        <Self as Model>::save_using(self, interface).await
+    }
+
+    /// Save or update the attachment in the database.
+    ///
+    /// It's imperative to call this function rather than [`Model::save`] to
+    /// make sure that we override the existing partial metadata rather than
+    /// create a new entry that will cause a conflict.
+    ///
+    /// There is currently no way to handle this in stash directly, so we have
+    /// to manually perform this check.
+    ///
+    /// # Errors
+    ///
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        {
+            let Some(stash) = self.stash() else {
+                return Err(StashError::NoStashAvailable);
+            };
+            if self.local_id.is_none() {
+                if let Some(remote_id) = self.remote_id.clone() {
+                    if let Some(existing) =
+                        Self::find_first("WHERE remote_id=?", params![remote_id], stash).await?
+                    {
+                        self.local_id = existing.local_id;
+                        self.row_id = existing.row_id;
+                    }
+                }
+            }
+        }
+
+        <Self as Model>::save(self).await
     }
 
     /// Retrieve the local id of an attachment based on their `remote_id`.
@@ -523,7 +549,7 @@ impl Attachment {
         );
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
-        attachment.save_or_update(interface).await?;
+        attachment.save_using(interface).await?;
         *self = attachment;
         Ok(Some(()))
     }

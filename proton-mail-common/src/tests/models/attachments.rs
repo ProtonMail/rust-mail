@@ -64,7 +64,7 @@ async fn test_attachment_create_with_metadata() {
     assert!(!db_attachment.has_complete_metadata());
 
     let mut attachment = Attachment::from(api_attachment.clone());
-    attachment.save_or_update(&tx.into()).await.unwrap();
+    attachment.save_using(&tx).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
     let mut expected = attachment.clone();
