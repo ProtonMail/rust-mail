@@ -1,20 +1,17 @@
-use proton_core_common::datatypes::LabelId;
 use std::sync::Arc;
 
 use stash::stash::StashError;
 
-use crate::{MailUserContext, MailboxError};
+use crate::{MailContextError, MailUserContext};
 
 pub mod labels;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SidebarError {
-    #[error("Could not find label with remote id '{0}'")]
-    RemoteLabelNotFound(LabelId),
     #[error("Couldn't load Settings from database")]
     SettingsNotFound,
-    #[error("Mailbox Error: {0}")]
-    Mailbox(#[from] MailboxError),
+    #[error("Mail Context Error: {0}")]
+    MailContext(#[from] MailContextError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
 }

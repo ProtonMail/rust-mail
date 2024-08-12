@@ -25,8 +25,6 @@ async fn folder_expansion() {
     let ctx = TestContext::new().await;
     ctx.setup_user(sidebar_test_params(name, false)).await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.user_context().await;
     let stash = user_ctx.stash();
     user_ctx
@@ -37,6 +35,9 @@ async fn folder_expansion() {
 
     let folder = get_folder("foo", stash).await;
     assert_eq!(!folder.expanded, true);
+
+    ctx.mock_patch_label(folder.remote_id.unwrap(), true).await;
+    ctx.catch_all().await;
 
     // Action
     sidebar
@@ -59,8 +60,6 @@ async fn folder_collapse() {
     let ctx = TestContext::new().await;
     ctx.setup_user(sidebar_test_params(name, true)).await;
 
-    ctx.catch_all().await;
-
     let user_ctx = ctx.user_context().await;
     let stash = user_ctx.stash();
     user_ctx
@@ -71,6 +70,9 @@ async fn folder_collapse() {
 
     let folder = get_folder("foo", stash).await;
     assert_eq!(folder.expanded, true);
+
+    ctx.mock_patch_label(folder.remote_id.unwrap(), false).await;
+    ctx.catch_all().await;
 
     // Action
     sidebar
