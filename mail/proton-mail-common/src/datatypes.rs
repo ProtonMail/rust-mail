@@ -1637,6 +1637,26 @@ pub trait SystemLabelId: for<'a> From<&'a str> {
     fn snoozed() -> Self {
         Self::from("16")
     }
+
+    fn category_social() -> Self {
+        Self::from("20")
+    }
+
+    fn category_promotions() -> Self {
+        Self::from("21")
+    }
+
+    fn category_updates() -> Self {
+        Self::from("22")
+    }
+
+    fn category_forums() -> Self {
+        Self::from("23")
+    }
+
+    fn category_default() -> Self {
+        Self::from("24")
+    }
 }
 
 impl SystemLabelId for LabelId {}

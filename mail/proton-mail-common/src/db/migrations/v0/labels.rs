@@ -62,6 +62,11 @@ pub async fn create_labels_tables(tx: &Tether) -> Result<(), StashError> {
         (LabelId::trash(), "Trash"),
         (LabelId::all_mail(), "All Mail"),
         (LabelId::almost_all_mail(), "Almost All Mail"),
+        (LabelId::category_social(), "Category Social"),
+        (LabelId::category_promotions(), "Category Promotions"),
+        (LabelId::category_updates(), "Category Updates"),
+        (LabelId::category_forums(), "Category Forums"),
+        (LabelId::category_default(), "Category Default"),
     ];
     for (index, (id, name)) in labels.into_iter().enumerate() {
         tx.execute(sql, params![id, name, index]).await?;
