@@ -6,6 +6,8 @@ use proton_crypto::crypto::{
     VerifiedData, Verifier, VerifierSync,
 };
 
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+
 use serde::{Deserialize, Serialize};
 
 use crate::{errors::CardCryptoError, keys::UnlockedUserKey};
@@ -20,12 +22,33 @@ crate::string_id! {
     EncryptedCard
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy, Deserialize, Serialize)]
+#[repr(u8)]
 pub enum ContactCardType {
     ClearText = 0,
     Encrypted = 1,
     Signed = 2,
     EncryptedAndSigned = 3,
+}
+
+impl ToSql for ContactCardType {
+    fn to_sql(&self) -> Result<ToSqlOutput, rusqlite::Error> {
+        Ok(ToSqlOutput::from(*self as isize))
+    }
+}
+
+impl FromSql for ContactCardType {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let val = value.as_i64()?;
+
+        match val {
+            0 => Ok(ContactCardType::ClearText),
+            1 => Ok(ContactCardType::Encrypted),
+            2 => Ok(ContactCardType::Signed),
+            3 => Ok(ContactCardType::EncryptedAndSigned),
+            _ => Err(FromSqlError::OutOfRange(val)),
+        }
+    }
 }
 
 /// `DecryptableVerifiableCard` provides the ability to access the data from within contact cards, decrypting encrypted data
