@@ -716,6 +716,11 @@ pub enum StashError {
     /// There was a problem with a transaction.
     #[error("Transaction error: {0}")]
     TransactionError(SqliteError),
+
+    /// Custom error that can be returned when an error occurs during
+    /// implementations of `on_save()` or `on_load()` for [`Model`].
+    #[error("Custom: {0}")]
+    Custom(String),
 }
 
 /// A command operation to be executed by the worker.
