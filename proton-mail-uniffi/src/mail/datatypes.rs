@@ -791,7 +791,7 @@ impl From<RealViewMode> for ViewMode {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct AttachmentMetadata {
     /// Local attachment id
-    pub local_id: Option<u64>,
+    pub local_id: u64,
 
     /// TODO: Document this field.
     pub remote_id: Option<RemoteId>,
@@ -812,7 +812,7 @@ pub struct AttachmentMetadata {
 impl From<AttachmentMetadata> for RealAttachmentMetadata {
     fn from(value: AttachmentMetadata) -> Self {
         RealAttachmentMetadata {
-            local_id: value.local_id.map(Into::into),
+            local_id: Some(value.local_id.into()),
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
@@ -825,7 +825,7 @@ impl From<AttachmentMetadata> for RealAttachmentMetadata {
 impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
         AttachmentMetadata {
-            local_id: value.local_id.map(Into::into),
+            local_id: value.local_id.unwrap().into(),
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
@@ -1149,7 +1149,7 @@ pub struct Label {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Option<u64>,
+    pub local_id: u64,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -1211,7 +1211,7 @@ pub struct Label {
 impl From<Label> for RealLabel {
     fn from(value: Label) -> Self {
         RealLabel {
-            local_id: value.local_id.map(Into::into),
+            local_id: Some(value.local_id.into()),
             remote_id: value.remote_id.map(Into::into),
             local_parent_id: value.local_parent_id.map(Into::into),
             remote_parent_id: value.remote_parent_id.map(Into::into),
@@ -1239,7 +1239,7 @@ impl From<Label> for RealLabel {
 impl From<RealLabel> for Label {
     fn from(value: RealLabel) -> Self {
         Label {
-            local_id: value.local_id.map(Into::into),
+            local_id: value.local_id.unwrap().into(),
             remote_id: value.remote_id.map(Into::into),
             local_parent_id: value.local_parent_id.map(Into::into),
             remote_parent_id: value.remote_parent_id.map(Into::into),
@@ -1308,7 +1308,7 @@ pub struct MailSettings {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Option<u64>,
+    pub local_id: u64,
 
     /// TODO: Document this field.
     pub almost_all_mail: AlmostAllMail,
@@ -1440,7 +1440,7 @@ pub struct MailSettings {
 impl From<MailSettings> for RealMailSettings {
     fn from(value: MailSettings) -> Self {
         RealMailSettings {
-            local_id: value.local_id.map(Into::into),
+            local_id: Some(value.local_id.into()),
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
@@ -1490,7 +1490,7 @@ impl From<MailSettings> for RealMailSettings {
 impl From<RealMailSettings> for MailSettings {
     fn from(value: RealMailSettings) -> Self {
         MailSettings {
-            local_id: value.local_id.map(Into::into),
+            local_id: value.local_id.unwrap().into(),
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
@@ -1544,7 +1544,7 @@ pub struct Message {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Option<u64>,
+    pub local_id: u64,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -1552,7 +1552,7 @@ pub struct Message {
     pub remote_id: Option<RemoteId>,
 
     /// TODO: Document this field.
-    pub local_conversation_id: Option<u64>,
+    pub local_conversation_id: u64,
 
     /// TODO: Document this field.
     pub remote_conversation_id: Option<RemoteId>,
@@ -1645,9 +1645,9 @@ pub struct Message {
 impl From<Message> for RealMessage {
     fn from(value: Message) -> Self {
         RealMessage {
-            local_id: value.local_id.map(Into::into),
+            local_id: Some(value.local_id.into()),
             remote_id: value.remote_id.map(Into::into),
-            local_conversation_id: value.local_conversation_id.map(Into::into),
+            local_conversation_id: Some(value.local_conversation_id.into()),
             remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
             attachments_metadata: value
@@ -1692,9 +1692,9 @@ impl From<RealMessage> for Message {
         let starred = value.is_starred();
 
         Message {
-            local_id: value.local_id.map(Into::into),
+            local_id: value.local_id.unwrap().into(),
             remote_id: value.remote_id.map(Into::into),
-            local_conversation_id: value.local_conversation_id.map(Into::into),
+            local_conversation_id: value.local_conversation_id.unwrap().into(),
             remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
             attachments_metadata: value
@@ -2039,7 +2039,7 @@ pub struct MessageBodyMetadata {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_message_id: Option<u64>,
+    pub local_message_id: u64,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -2059,7 +2059,7 @@ pub struct MessageBodyMetadata {
 impl From<MessageBodyMetadata> for RealMessageBodyMetadata {
     fn from(value: MessageBodyMetadata) -> Self {
         RealMessageBodyMetadata {
-            local_message_id: value.local_message_id.map(Into::into),
+            local_message_id: Some(value.local_message_id.into()),
             remote_message_id: value.remote_message_id.map(Into::into),
             header: value.header,
             mime_type: value.mime_type.into(),
@@ -2073,7 +2073,7 @@ impl From<MessageBodyMetadata> for RealMessageBodyMetadata {
 impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
     fn from(value: RealMessageBodyMetadata) -> Self {
         MessageBodyMetadata {
-            local_message_id: value.local_message_id.map(Into::into),
+            local_message_id: value.local_message_id.unwrap().into(),
             remote_message_id: value.remote_message_id.map(Into::into),
             header: value.header,
             mime_type: value.mime_type.into(),

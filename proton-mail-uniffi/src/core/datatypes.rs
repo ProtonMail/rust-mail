@@ -821,7 +821,7 @@ pub struct ContactCard {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Option<u64>,
+    pub local_id: u64,
 
     /// TODO: Document this field.
     pub remote_contact_id: Option<RemoteId>,
@@ -839,7 +839,7 @@ pub struct ContactCard {
 impl From<ContactCard> for RealContactCard {
     fn from(card: ContactCard) -> Self {
         Self {
-            local_id: card.local_id.map(Into::into),
+            local_id: Some(card.local_id.into()),
             remote_contact_id: card.remote_contact_id.map(Into::into),
             card_type: card.card_type.into(),
             data: card.data,
@@ -853,7 +853,7 @@ impl From<ContactCard> for RealContactCard {
 impl From<RealContactCard> for ContactCard {
     fn from(card: RealContactCard) -> Self {
         Self {
-            local_id: card.local_id.map(Into::into),
+            local_id: card.local_id.unwrap().into(),
             remote_contact_id: card.remote_contact_id.map(Into::into),
             card_type: card.card_type.into(),
             data: card.data,
