@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.11.6] - 2024-08-13
+
 ### Changed
 
+- Added `custom_labels`  and  `starred` properties to `Conversation`
+  and `Message`.
+- Added `time` property to `Conversation`.
+- Methods that load conversation now require the local label id for the
+  location they are meant to be displayed in.
+- Added more know system labels to database initialization.
 - Added callbacks `watch_standard_labels`, `watch_folder_labels` and `watch_system_labels` to `Sidebar`.
 
 ## [0.11.5] - 2024-08-09
