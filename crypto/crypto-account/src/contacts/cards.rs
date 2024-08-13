@@ -33,7 +33,7 @@ pub enum ContactCardType {
 
 impl ToSql for ContactCardType {
     fn to_sql(&self) -> Result<ToSqlOutput, rusqlite::Error> {
-        Ok(ToSqlOutput::from(*self as isize))
+        Ok(ToSqlOutput::from(*self as u8))
     }
 }
 
