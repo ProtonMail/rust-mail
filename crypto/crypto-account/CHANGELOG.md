@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.6.0] - 2024-08-13
+
+### Changed
+
+- Add ToSql and FromSql traits to ContactCardType.  Introduce new, "sql" feature flag for crate and move all ToSql/FromSql implementations to be behind the flag (#101)
+
+### Dependencies
+
+- update proton-crypto to 0.4.5
+
 ## [0.5.1] - 2024-07-31
 
 ### Dependencies

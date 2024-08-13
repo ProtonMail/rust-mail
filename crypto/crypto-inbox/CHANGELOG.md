@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.6.2] - 2024-08-13
+
+### Dependencies
+
+- update proton-crypto-account to 0.6.0 and proton-crypto-inbox-mime to 0.2.4
+
 ## [0.6.1] - 2024-07-31
 
 ### Dependencies
