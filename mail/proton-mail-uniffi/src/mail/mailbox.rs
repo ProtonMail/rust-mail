@@ -10,7 +10,6 @@ use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::decrypted_message::DecryptedMessageError;
 use proton_mail_common::{AppError, MailboxError as RealMailboxError};
 use stash::stash::{Stash, StashError};
 use std::sync::Arc;
@@ -65,8 +64,6 @@ pub enum MailboxError {
     MessageDecryption(anyhow::Error),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
-    #[error("Decrypted Message: {0}")]
-    DecryptedMessage(#[from] DecryptedMessageError),
     #[error("Cache error: {0}")]
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]
@@ -201,7 +198,6 @@ impl From<RealMailboxError> for MailboxError {
             RealMailboxError::ConversationHasNoMessages(e) => {
                 Self::ConversationHasNoMessages(e.into())
             }
-            RealMailboxError::DecryptedMessage(e) => Self::DecryptedMessage(e),
             RealMailboxError::AttachmentDoesNotHaveRemoteId(e) => {
                 Self::AttachmentDoesNotHaveRemoteId(e.into())
             }

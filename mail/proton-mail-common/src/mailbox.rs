@@ -3,10 +3,10 @@ mod attachments;
 pub mod decrypted_message;
 
 use crate::datatypes::ViewMode;
-use crate::mailbox::decrypted_message::DecryptedMessageError;
 use crate::models::{Conversation, Label, MailSettings, Message, MAIL_SETTINGS_ID};
 use crate::{AppError, MailContextError, MailUserContext, MailUserContextInitializationCallback};
 pub use attachments::DecryptedAttachment;
+use decrypted_message::DecryptedMessageBody;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
@@ -14,6 +14,7 @@ use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
+use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError};
 use std::sync::Arc;
@@ -71,8 +72,6 @@ pub enum MailboxError {
     Stash(#[from] StashError),
     #[error("Message decryption error: {0}")]
     MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
-    #[error("Decrypted Message: {0}")]
-    DecryptedMessage(#[from] DecryptedMessageError),
     #[error("Cache error: {0}")]
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]
@@ -179,7 +178,7 @@ impl Mailbox {
 
     pub async fn refresh(
         &self,
-        cb: Box<dyn MailUserContextInitializationCallback>,
+        init_cb: Box<dyn MailUserContextInitializationCallback>,
     ) -> MailboxResult<()> {
         let Some(label) = Label::load(self.label_id, self.user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
@@ -188,7 +187,7 @@ impl Mailbox {
             return Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id));
         };
 
-        self.user_ctx.initialize(rid, cb).await;
+        self.user_ctx.initialize(rid, init_cb).await;
         Ok(())
     }
 
@@ -269,5 +268,25 @@ impl Mailbox {
     /// The mailbox's current view mode.
     pub fn view_mode(&self) -> ViewMode {
         self.view_mode
+    }
+
+    /// Gets the body of a message from a message id.
+    pub async fn message_body(&self, id: LocalId) -> MailboxResult<DecryptedMessageBody> {
+        let user_context = self.user_context();
+        let cache = self.user_ctx.messages_cache();
+        let saved_message = Message::load(id, user_context.stash())
+            .await?
+            .ok_or(MailboxError::MessageNotFound(id))?;
+
+        let pgp_provider = proton_crypto::new_pgp_provider();
+        let address_id = saved_message.address_id.clone();
+        let address_keys = user_context
+            .unlocked_address_keys(&pgp_provider, &address_id)
+            .await?;
+        let api = user_context.session().api();
+
+        Ok(saved_message
+            .message_body(cache, address_keys, pgp_provider, api)
+            .await?)
     }
 }

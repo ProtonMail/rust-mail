@@ -64,7 +64,6 @@ use proton_crypto_inbox::attachment::{
 };
 use proton_crypto_inbox::message::{DecryptableMessage, GettablePGPMessage};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::Value as JsonValue;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
@@ -72,7 +71,6 @@ use stash::sql_using_serde;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
-use tracing::warn;
 
 //  ENUMS
 //==============================================================================
@@ -952,58 +950,6 @@ impl From<ApiConversationCount> for ConversationCount {
             label_id: value.label_id.into(),
             total: value.total,
             unread: value.unread,
-        }
-    }
-}
-
-/// Consists of the message's body metadata and decrypted content.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DecryptedMessageBody {
-    /// The decrypted message contents.
-    pub body: String,
-
-    /// Metadata associated with the message body
-    pub metadata: MessageBodyMetadata,
-}
-
-impl DecryptedMessageBody {
-    /// Retrieve a parsed header value for a given `key`.
-    /// TODO: Properly document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `key` - The key to retrieve the header value for.
-    ///
-    pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
-        let value = self
-            .metadata
-            .parsed_headers
-            .headers
-            .get(key)
-            .and_then(|json_str| serde_json::from_str(json_str).ok());
-        match value {
-            Some(JsonValue::String(s)) => Some(ParsedHeaderValue::String(s.clone())),
-            Some(JsonValue::Array(array)) => {
-                let mut result = Vec::with_capacity(array.len());
-                for (idx, item) in array.iter().enumerate() {
-                    if let JsonValue::String(str) = item {
-                        result.push(str.clone());
-                    } else {
-                        warn!(
-                            "Header array value {key}[{idx}] of message {:?} has invalid value type",
-                            self.metadata.local_message_id
-                        );
-                    }
-                }
-                Some(ParsedHeaderValue::Array(result))
-            }
-            _ => {
-                warn!(
-                    "Header value {key} of message {:?} has invalid value type",
-                    self.metadata.local_message_id
-                );
-                None
-            }
         }
     }
 }

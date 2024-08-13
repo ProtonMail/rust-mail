@@ -2,114 +2,25 @@
 
 //! Everything related to processing a decrypted message.
 
-use crate::datatypes::MimeType;
 use crate::models::{MailSettings, MessageBodyMetadata};
-use proton_crypto_inbox::message::DecryptedBody;
 use proton_mail_html_transformer::Transformer;
 use serde_json::from_str as from_json_str;
 use serde_json::Value;
 
-/// Consists of the message's body metadata and decrypted content.
-pub struct DecryptedMessage {
-    /// Metadata associated with the message body
-    metadata: MessageBodyMetadata,
-    /// The decrypted message contents.
-    body: Type,
+#[derive(Debug, Clone, Copy, Default)]
+pub enum RemoteContent {
+    #[default]
+    Default, // Use whatever is in the user's [`MailSettings`]
+    Enabled,  // Override the settings and show images
+    Disabled, // Override the settings and don't show images
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum DecryptedMessageError {
-    #[error("Body type is not valid for this operation")]
-    InvalidBodyType,
-}
-/// Type of the encrypted message.
-enum Type {
-    /// Plain text.
-    Text(String),
-    /// Html
-    Html(HtmlMessage),
-}
-
-/// Html body contains the [`Transformer`] and the cached results.
-struct HtmlMessage {
-    /// Html Transformer which contains the parsed document.
-    transformer: Transformer,
-    /// Cached HTML output.
-    body: String,
-    /// Whether remote content is enabled or not.
-    remote_content_enabled: bool,
-}
-
-impl HtmlMessage {
-    fn new(mail_settings: &MailSettings, body: String) -> Result<Self, DecryptedMessageError> {
-        let mut transformer = Transformer::new(&body);
-        transformer.strip_utm();
-
-        // TODO: Disabled because it causes iOS build failures?!
-        // #[cfg(target_os = "ios")]
-        // transformer.inject_ios_content_size()?;
-
-        if mail_settings.hide_remote_images {
-            transformer.disable_remote_content();
-        }
-
-        let body = transformer.to_string();
-
-        Ok(Self {
-            transformer,
-            body,
-            remote_content_enabled: !mail_settings.hide_remote_images,
-        })
-    }
-
-    /// Re-enable HTML remote content embedded in the message.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the process fails.
-    fn enable_remote_content(&mut self) -> Result<(), DecryptedMessageError> {
-        if !self.remote_content_enabled {
-            return Ok(());
-        }
-
-        self.with_transformer(|t| {
-            t.enable_remote_content();
-            Ok(())
-        })?;
-
-        self.remote_content_enabled = true;
-
-        Ok(())
-    }
-
-    /// Disable HTML remote content embedded in the message.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the process fails.
-    fn disable_remote_content(&mut self) -> Result<(), DecryptedMessageError> {
-        if self.remote_content_enabled {
-            return Ok(());
-        }
-
-        _ = self.with_transformer(|t| {
-            t.enable_remote_content();
-            Ok(())
-        });
-
-        self.remote_content_enabled = false;
-        Ok(())
-    }
-
-    /// Utility function that regenerates the HTML body after interacting with the transformer.
-    fn with_transformer(
-        &mut self,
-        closure: impl FnOnce(&mut Transformer) -> Result<(), DecryptedMessageError>,
-    ) -> Result<(), DecryptedMessageError> {
-        closure(&mut self.transformer)?;
-        self.body = self.transformer.to_string();
-        Ok(())
-    }
+/// What to do with the blockquote (previous conversation threads)
+#[derive(Debug, Clone, Copy, Default)]
+pub enum BlockQuote {
+    #[default]
+    Strip,
+    Untouched,
 }
 
 /// A message parsed header value can either be a string or an array of strings.
@@ -118,37 +29,17 @@ pub enum ParsedHeaderValue {
     Array(Vec<String>),
 }
 
-impl DecryptedMessage {
-    /// Process a `decrypted_body` into a displayable HTML message.
-    ///
-    /// The `mail_settings` are required to identify the default transformation passes that should
-    /// be applied to the message.
-    pub fn new(
-        mail_settings: &MailSettings,
-        metadata: MessageBodyMetadata,
-        decrypted_body: DecryptedBody,
-    ) -> Result<Self, DecryptedMessageError> {
-        let body = match decrypted_body {
-            DecryptedBody::Plain(body) => body,
-            DecryptedBody::Mime(multipart) => {
-                //TODO(ET-263): Handle multipart messages.
-                multipart.body
-            }
-        };
+/// Consists of the message's body metadata and decrypted content.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DecryptedMessageBody {
+    /// The decrypted message contents.
+    pub body: String,
 
-        if !matches!(metadata.mime_type, MimeType::TextHtml) {
-            return Ok(Self {
-                metadata,
-                body: Type::Text(body),
-            });
-        }
+    /// Metadata associated with the message body
+    pub metadata: MessageBodyMetadata,
+}
 
-        Ok(Self {
-            metadata,
-            body: Type::Html(HtmlMessage::new(mail_settings, body)?),
-        })
-    }
-
+impl DecryptedMessageBody {
     /// Retrieve a parsed header value for a given `key`.
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
         let value = from_json_str(self.metadata.parsed_headers.headers.get(key)?).ok()?;
@@ -177,47 +68,40 @@ impl DecryptedMessage {
             }
         }
     }
+}
 
-    /// Access the message's body.
-    #[inline]
-    pub fn body(&self) -> &str {
-        match &self.body {
-            Type::Text(body) => body.as_str(),
-            Type::Html(body) => body.body.as_str(),
+pub fn transform_html(
+    html: &str,
+    remote_content: RemoteContent,
+    blockquote: BlockQuote,
+    mail_settings: &MailSettings,
+    user_session_id: &str,
+) -> String {
+    let mut t = Transformer::new(html);
+    t.strip_whitelist()
+        .strip_utm()
+        .add_noreferrer()
+        .insert_links()
+        .inject_style();
+
+    if mail_settings.image_proxy | 2 == 2 {
+        t.proxy_images(user_session_id);
+    }
+
+    if cfg!(target_os = "ios") {
+        t.inject_ios_content_size();
+    }
+
+    match remote_content {
+        RemoteContent::Disabled | // Explicit disable
+        RemoteContent::Default if mail_settings.hide_remote_images  => {
+            t.disable_remote_content();
         }
+        _ => (),
     }
 
-    /// Access the message's body metadata.
-    #[inline]
-    pub fn metadata(&self) -> &MessageBodyMetadata {
-        &self.metadata
+    if let BlockQuote::Strip = blockquote {
+        t.strip_blockquote();
     }
-
-    /// Enable remote images.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the process failed.
-    pub fn enable_remote_images(&mut self) -> Result<(), DecryptedMessageError> {
-        let Type::Html(html) = &mut self.body else {
-            // can not be applied to plain text messages.
-            return Err(DecryptedMessageError::InvalidBodyType);
-        };
-
-        html.enable_remote_content()
-    }
-
-    /// Disable remote images.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the process failed.
-    pub fn disable_remote_images(&mut self) -> Result<(), DecryptedMessageError> {
-        let Type::Html(html) = &mut self.body else {
-            // can not be applied to plain text messages.
-            return Err(DecryptedMessageError::InvalidBodyType);
-        };
-
-        html.disable_remote_content()
-    }
+    t.to_string()
 }

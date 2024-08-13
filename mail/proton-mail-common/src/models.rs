@@ -35,13 +35,13 @@ use crate::actions::{ConversationAvailableAction, MessageAvailableAction};
 use crate::cache::CacheMessageConfig;
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature,
-    ComposerDirection, ComposerMode, ConversationCount, CustomLabel, DecryptedMessageBody,
-    Disposition, EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType,
-    MessageAddress, MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount,
-    MessageFlags, MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme,
-    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
-    ViewMode,
+    ComposerDirection, ComposerMode, ConversationCount, CustomLabel, Disposition,
+    EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType, MessageAddress,
+    MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount, MessageFlags, MimeType,
+    MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme, PmSignature, ShowImages,
+    ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
 };
+use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
@@ -2564,6 +2564,10 @@ impl MailSettings {
         settings.set_stash(stash);
         settings.save().await?;
         Ok(())
+    }
+
+    pub async fn get(db: &AgnosticInterface) -> Result<Option<Self>, StashError> {
+        Self::load(MAIL_SETTINGS_ID.into(), db).await
     }
 }
 
