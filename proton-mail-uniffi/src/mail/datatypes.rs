@@ -913,6 +913,9 @@ pub struct Conversation {
 
     /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
+
+    /// Whether the conversation is starred.
+    pub starred: bool,
 }
 
 impl From<ContextualConversation> for Conversation {
@@ -937,6 +940,7 @@ impl From<ContextualConversation> for Conversation {
             subject: value.subject,
             time: value.time,
             custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
+            starred: value.starred,
         }
     }
 }
@@ -1659,6 +1663,9 @@ pub struct Message {
 
     /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
+
+    /// Whether the message is starred.
+    pub starred: bool,
 }
 
 impl From<Message> for RealMessage {
@@ -1708,6 +1715,8 @@ impl From<Message> for RealMessage {
 
 impl From<RealMessage> for Message {
     fn from(value: RealMessage) -> Self {
+        let starred = value.is_starred();
+
         Message {
             local_id: value.local_id,
             remote_id: value.remote_id.map(Into::into),
@@ -1743,6 +1752,7 @@ impl From<RealMessage> for Message {
             to_list: value.to_list.into(),
             unread: value.unread,
             custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
+            starred,
         }
     }
 }

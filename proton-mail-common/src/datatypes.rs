@@ -1714,6 +1714,9 @@ pub struct ContextualConversation {
 
     /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
+
+    /// Whether this conversation is starred.
+    pub starred: bool,
 }
 
 impl ContextualConversation {
@@ -1727,6 +1730,8 @@ impl ContextualConversation {
             .labels
             .iter()
             .find(|&label| label.local_label_id == Some(local_label_id))?;
+
+        let starred = conversation.is_starred();
 
         Some(Self {
             local_id: conversation.local_id.expect("Should be set"),
@@ -1745,6 +1750,7 @@ impl ContextualConversation {
             subject: conversation.subject,
             time: label.context_time,
             custom_labels: conversation.custom_labels,
+            starred,
         })
     }
 }
