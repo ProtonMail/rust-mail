@@ -60,9 +60,8 @@ use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
-    DecryptedMessageBody as RealDecryptedMessageBody, Disposition as RealDisposition,
-    EncryptedMessageBody as RealEncryptedMessageBody, LabelColor as RealLabelColor,
-    LabelType as RealLabelType, MessageAddress as RealMessageAddress,
+    Disposition as RealDisposition, EncryptedMessageBody as RealEncryptedMessageBody,
+    LabelColor as RealLabelColor, LabelType as RealLabelType, MessageAddress as RealMessageAddress,
     MessageAddresses as RealMessageAddresses, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo,
@@ -79,6 +78,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
 };
+use proton_mail_common::decrypted_message;
 use proton_mail_common::models::{
     Label as RealLabel, MailSettings as RealMailSettings, Message as RealMessage,
     MessageBodyMetadata as RealMessageBodyMetadata,
@@ -1108,34 +1108,6 @@ impl From<GetConversationsOptions> for ConversationSearchOptions {
             sort: value.sort.map(Into::into),
             subject: value.subject,
             unread: value.unread,
-        }
-    }
-}
-
-/// Consists of the message's body metadata and decrypted content.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct DecryptedMessageBody {
-    /// The decrypted message contents.
-    pub body: String,
-
-    /// Metadata associated with the message body
-    pub metadata: MessageBodyMetadata,
-}
-
-impl From<DecryptedMessageBody> for RealDecryptedMessageBody {
-    fn from(value: DecryptedMessageBody) -> Self {
-        RealDecryptedMessageBody {
-            body: value.body,
-            metadata: value.metadata.into(),
-        }
-    }
-}
-
-impl From<RealDecryptedMessageBody> for DecryptedMessageBody {
-    fn from(value: RealDecryptedMessageBody) -> Self {
-        DecryptedMessageBody {
-            body: value.body,
-            metadata: value.metadata.into(),
         }
     }
 }
@@ -2448,6 +2420,70 @@ impl From<CustomLabel> for RealCustomLabel {
             local_id: value.local_id.into(),
             name: value.name,
             color: value.color.into(),
+        }
+    }
+}
+
+/// Enable or disable remote content (images).
+#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
+pub enum RemoteContent {
+    /// Use whatever is in the user's [`MailSettings`]
+    #[default]
+    Default,
+    /// Override the settings and show images
+    Enabled,
+    /// Override the settings and don't show images
+    Disabled,
+}
+
+/// What to do with the blockquote (previous conversation threads)
+#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
+pub enum BlockQuote {
+    /// Remove the previous conversation.
+    #[default]
+    Strip,
+    /// Don't remove the previous conversation
+    Untouched,
+}
+
+impl From<decrypted_message::RemoteContent> for RemoteContent {
+    fn from(value: decrypted_message::RemoteContent) -> Self {
+        use decrypted_message::RemoteContent::{Default, Disabled, Enabled};
+        match value {
+            Default => Self::Default,
+            Enabled => Self::Enabled,
+            Disabled => Self::Disabled,
+        }
+    }
+}
+
+impl From<decrypted_message::BlockQuote> for BlockQuote {
+    fn from(value: decrypted_message::BlockQuote) -> Self {
+        use decrypted_message::BlockQuote::{Strip, Untouched};
+        match value {
+            Strip => Self::Strip,
+            Untouched => Self::Untouched,
+        }
+    }
+}
+
+impl From<RemoteContent> for decrypted_message::RemoteContent {
+    fn from(value: RemoteContent) -> Self {
+        use decrypted_message::RemoteContent as Rc;
+        match value {
+            RemoteContent::Default => Rc::Default,
+            RemoteContent::Enabled => Rc::Enabled,
+            RemoteContent::Disabled => Rc::Disabled,
+        }
+    }
+}
+
+impl From<BlockQuote> for decrypted_message::BlockQuote {
+    fn from(value: BlockQuote) -> Self {
+        use decrypted_message::BlockQuote as Bq;
+        match value {
+            BlockQuote::Strip => Bq::Strip,
+            BlockQuote::Untouched => Bq::Untouched,
         }
     }
 }
