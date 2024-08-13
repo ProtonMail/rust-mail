@@ -15,6 +15,7 @@ use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
 use crate::{LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
 use proton_core_common::models::ModelExtension;
+use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
@@ -72,8 +73,10 @@ pub async fn delete(mailbox: Arc<Mailbox>, ids: Vec<u64>) -> Result<(), MailboxE
 ///
 /// # Parameters
 ///
-/// * `session` - The session to use for the request.
-/// * `id`      - The local ID of the conversation to retrieve.
+/// * `session`         - The session to use for the request.
+/// * `id`              - The local ID of the conversation to retrieve.
+/// * `local_label_id`  - Local label id of the label context in which to
+///                       display the conversation.
 ///
 /// # Errors
 ///
@@ -83,10 +86,13 @@ pub async fn delete(mailbox: Arc<Mailbox>, ids: Vec<u64>) -> Result<(), MailboxE
 pub async fn load(
     session: Arc<MailSession>,
     id: u64,
+    label_id: u64,
 ) -> Result<Option<Conversation>, MailboxError> {
-    Ok(RealConversation::load(id, session.stash())
-        .await?
-        .map(Into::into))
+    let Some(conversation) = RealConversation::load(id, session.stash()).await? else {
+        return Ok(None);
+    };
+
+    Ok(ContextualConversation::new(conversation, label_id).map(Into::into))
 }
 
 /// Retrieve a conversation by remote ID.
@@ -96,8 +102,10 @@ pub async fn load(
 ///
 /// # Parameters
 ///
-/// * `session` - The session to use for the request.
-/// * `id`      - The remote ID of the conversation to retrieve.
+/// * `session`         - The session to use for the request.
+/// * `id`              - The remote ID of the conversation to retrieve.
+/// * `local_label_id`  - Local label id of the label context in which to
+///                       display the conversation.
 ///
 /// # Errors
 ///
@@ -107,12 +115,15 @@ pub async fn load(
 pub async fn load_remote(
     session: Arc<MailSession>,
     id: RemoteId,
+    local_label_id: u64,
 ) -> Result<Option<Conversation>, MailboxError> {
-    Ok(
-        RealConversation::find_by_remote_id(RealRemoteId::from(id), session.stash())
-            .await?
-            .map(Into::into),
-    )
+    let Some(conversation) =
+        RealConversation::find_by_remote_id(RealRemoteId::from(id), session.stash()).await?
+    else {
+        return Ok(None);
+    };
+
+    Ok(ContextualConversation::new(conversation, local_label_id).map(Into::into))
 }
 
 /// Mark the given conversations as read.
@@ -209,8 +220,10 @@ pub async fn remove_label(
 ///
 /// # Parameters
 ///
-/// * `session` - The session to use for the request.
-/// * `options` - The search options to use.
+/// * `session`         - The session to use for the request.
+/// * `local_label_id`  - Local label id of the label context in which to
+///                       display the results.
+/// * `options`         - The search options to use.
 ///
 /// # Errors
 ///
@@ -219,16 +232,14 @@ pub async fn remove_label(
 #[uniffi::export]
 pub async fn search_for_conversations(
     session: Arc<MailSession>,
+    local_label_id: u64,
     options: ConversationSearchOptions,
 ) -> Result<Vec<Conversation>, MailSessionError> {
     Ok(
-        // TODO: It is not clear why the previous method required a label ID, seeing
-        // TODO: as the counterpart for messages does not — especially as the search
-        // TODO: options have a label ID option, surely making an additional
-        // TODO: parameter superfluous.
         RealConversation::search(options.into(), session.api(), session.stash())
             .await?
             .into_iter()
+            .filter_map(|c| ContextualConversation::new(c, local_label_id))
             .map(Into::into)
             .collect(),
     )
