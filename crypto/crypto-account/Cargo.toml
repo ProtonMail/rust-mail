@@ -10,12 +10,17 @@ base64 = { workspace = true }
 futures = { version="0.3.30", features = ["async-await"]}
 hex = { workspace = true }
 proton-crypto = { workspace = true }
-rusqlite = {workspace = true}
 serde = { version="1", features = ["derive"]}
 serde_repr = "0.1"
 serde_json = "1"
 thiserror = { workspace = true }
 zeroize = { workspace = true }
 
+proton-sqlite3 = {version = "0.6.0", registry = "proton", optional = true}
+
 [lints]
 workspace = true
+
+[features]
+default = []
+sql = ["dep:proton-sqlite3"]

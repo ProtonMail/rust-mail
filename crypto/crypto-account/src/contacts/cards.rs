@@ -6,7 +6,11 @@ use proton_crypto::crypto::{
     VerifiedData, Verifier, VerifierSync,
 };
 
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
+#[cfg(feature = "sql")]
+use proton_sqlite3::rusqlite::{
+    types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef},
+    Error,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -31,12 +35,14 @@ pub enum ContactCardType {
     EncryptedAndSigned = 3,
 }
 
+#[cfg(feature = "sql")]
 impl ToSql for ContactCardType {
-    fn to_sql(&self) -> Result<ToSqlOutput, rusqlite::Error> {
+    fn to_sql(&self) -> Result<ToSqlOutput, Error> {
         Ok(ToSqlOutput::from(*self as u8))
     }
 }
 
+#[cfg(feature = "sql")]
 impl FromSql for ContactCardType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let val = value.as_i64()?;
