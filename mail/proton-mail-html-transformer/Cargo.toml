@@ -8,10 +8,8 @@ edition = "2021"
 html5ever = "=0.26"
 kuchikiki = "=0.8.2"
 lazy_static = { workspace = true }
-scraper = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
-rayon = "1.10.0"
 
 [lints]
 workspace = true

@@ -8,8 +8,6 @@ pub mod labels;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SidebarError {
-    #[error("Couldn't load Settings from database")]
-    SettingsNotFound,
     #[error("Mail Context Error: {0}")]
     MailContext(#[from] MailContextError),
     #[error("Stash Error: {0}")]

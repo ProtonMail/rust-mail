@@ -8,23 +8,18 @@ categories = ["api-bindings"]
 [dependencies]
 bitflags = { workspace = true }
 bytes = { workspace = true }
-indoc = { workspace = true }
-lazy_static = { workspace = true }
 proton-api-core = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_with = "3.8.1"
 smart-default = { workspace = true }
-stash = { workspace = true }
-thiserror = "1"
-tokio = { workspace = true }
-tracing = { workspace = true }
 velcro = { workspace = true }
 
 [dev-dependencies]
 bytes = "1.6.0"
+tokio = { workspace = true }
+tracing = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
 reqwest = { version = "0.12.2", features = ["stream"] }
