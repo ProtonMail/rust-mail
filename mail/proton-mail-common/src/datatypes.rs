@@ -39,7 +39,7 @@
 
 pub(crate) mod exclusive_location;
 
-use crate::models::{Conversation, MessageBodyMetadata};
+use crate::models::{Conversation, Label, MessageBodyMetadata};
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -1711,6 +1711,9 @@ pub struct ContextualConversation {
 
     /// Time of reception of the last message in this conversation.
     pub time: u64,
+
+    /// List of custom labels.
+    pub custom_labels: Vec<CustomLabel>,
 }
 
 impl ContextualConversation {
@@ -1741,6 +1744,40 @@ impl ContextualConversation {
             size: label.context_size,
             subject: conversation.subject,
             time: label.context_time,
+            custom_labels: conversation.custom_labels,
         })
+    }
+}
+
+/// Information about [`Label`] of type [`LabelType::Label`] that are applied
+/// to [`Conversation`] or [`Messages`].
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct CustomLabel {
+    /// Local id of the label
+    pub local_id: u64,
+    /// Name of the label
+    pub name: String,
+    /// Color of the label.
+    pub color: LabelColor,
+}
+
+impl CustomLabel {
+    /// Create a new instance from a `label`
+    pub fn new(label: &Label) -> Self {
+        Self {
+            local_id: label.local_id.expect("Should be set"),
+            name: label.name.clone(),
+            color: label.color.clone(),
+        }
+    }
+}
+
+impl From<Label> for CustomLabel {
+    fn from(value: Label) -> Self {
+        Self {
+            local_id: value.local_id.expect("Should be set"),
+            name: value.name,
+            color: value.color,
+        }
     }
 }

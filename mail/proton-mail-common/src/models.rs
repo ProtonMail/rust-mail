@@ -34,11 +34,12 @@ mod tests;
 use crate::cache::CacheMessageConfig;
 use crate::datatypes::{
     AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature,
-    ComposerDirection, ComposerMode, ConversationCount, DecryptedMessageBody, Disposition,
-    EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType, MessageAddress,
-    MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount, MessageFlags, MimeType,
-    MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme, PmSignature, ShowImages,
-    ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
+    ComposerDirection, ComposerMode, ConversationCount, CustomLabel, DecryptedMessageBody,
+    Disposition, EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType,
+    MessageAddress, MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount,
+    MessageFlags, MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme,
+    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
+    ViewMode,
 };
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
@@ -601,6 +602,9 @@ pub struct Conversation {
     #[DbField]
     pub subject: String,
 
+    /// List of custom labels.
+    pub custom_labels: Vec<CustomLabel>,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -972,6 +976,12 @@ impl Conversation {
         self.attachments_metadata =
             Attachment::load_conversation_attachment_metadata(self.local_id.unwrap(), interface)
                 .await?;
+
+        self.custom_labels = labels
+            .into_iter()
+            .filter(|l| l.label_type == LabelType::Label)
+            .map(CustomLabel::from)
+            .collect();
 
         // Example... not good to do this here, though, as the total number comes
         // from the API.
@@ -1643,6 +1653,7 @@ impl From<ApiConversation> for Conversation {
             senders: MessageAddresses {
                 value: value.senders.into_iter().map(|v| v.into()).collect(),
             },
+            custom_labels: vec![],
             size: value.size,
             subject: value.subject,
             row_id: None,
@@ -2743,6 +2754,9 @@ pub struct Message {
     #[DbField]
     pub unread: bool,
 
+    /// List of custom labels.
+    pub custom_labels: Vec<CustomLabel>,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -2821,6 +2835,7 @@ impl Message {
                 to_list: MessageAddresses {
                     value: metadata.to_list.into_iter().map(|v| v.into()).collect(),
                 },
+                custom_labels: vec![],
                 unread: metadata.unread,
                 row_id: None,
                 stash: Some(stash.clone()),
@@ -2919,7 +2934,10 @@ impl Message {
         .await?;
 
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
-        self.label_ids = labels.into_iter().map(|l| l.remote_id.unwrap()).collect();
+        self.label_ids = labels
+            .iter()
+            .map(|l| l.remote_id.clone().unwrap())
+            .collect();
 
         if let Some(body) = MessageBodyMetadata::find_first(
             "WHERE local_message_id = ?",
@@ -2932,6 +2950,12 @@ impl Message {
             self.mime_type = body.mime_type;
             self.parsed_headers = body.parsed_headers;
         }
+
+        self.custom_labels = labels
+            .into_iter()
+            .filter(|l| l.label_type == LabelType::Label)
+            .map(CustomLabel::from)
+            .collect();
 
         // TODO: The message body might need to be loaded in here, but it's not
         // TODO: totally clear how best to do that seeing as the cache feature
@@ -3434,6 +3458,7 @@ impl From<ApiMessage> for Message {
             unread: value.metadata.unread,
             row_id: None,
             stash: None,
+            custom_labels: vec![],
         }
     }
 }
@@ -3479,6 +3504,7 @@ mod default_message {
                 time: Default::default(),
                 to_list: Default::default(),
                 unread: Default::default(),
+                custom_labels: Default::default(),
                 row_id: Default::default(),
                 stash: Default::default(),
             }
