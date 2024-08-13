@@ -100,7 +100,7 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 /// 1. If the user has conversation view mode enabled, the first pieces
 ///    of metadata ([`AttachmentMetadata`]) arrive through the
 ///    [`Conversation`] type. If the view mode is message, go to 3.
-///     1.1. The metadata is stored using [`save_from_conversation_metadata()`]
+///     1.1. The metadata is stored using [`Conversation::on_save()`]
 ///          method which ensures that it does not override a fully synchronized
 ///          [`Attachment`] and only updates the conversation local and remote id.
 ///     1.2. If no record for this attachment exists one is created.
@@ -108,7 +108,7 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 ///    [`Message`]s.
 /// 3. [`Messages`] also contains [`AttachmentMetadata`] as well as the address
 ///    id for the key this attachment was encrypted with.
-///     3.1 This is now stored with [`save_from_message_metadata()`], which also
+///     3.1 This is now stored with [`Message::on_save()`], which also
 ///         ensures it does not override a fully synced attachment and updates
 ///         the message ids and the address id.
 ///     3.2 If no attachment record exists, one is created.
@@ -257,92 +257,6 @@ impl From<Attachment> for AttachmentMetadata {
 }
 
 impl Attachment {
-    /// Create attachment from partial metadata present in a `message`.
-    ///
-    /// If attachment record already exists, only the message ids and the
-    /// address id are updated.
-    ///
-    /// If no record exists we create a new one.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the data could not be written to the database
-    pub async fn save_from_message_metadata(
-        message: &Message,
-        interface: &AgnosticInterface,
-    ) -> Result<Vec<u64>, StashError> {
-        let mut result = Vec::with_capacity(message.attachments_metadata.len());
-        for metadata in &message.attachments_metadata {
-            let mut attachment = Attachment::find_first(
-                "WHERE remote_id = ?",
-                params![metadata.remote_id.clone()],
-                interface,
-            )
-            .await?
-            .unwrap_or(Attachment::from(metadata.clone()));
-
-            attachment.remote_address_id = Some(message.address_id.clone());
-            attachment.local_message_id = message.local_id;
-            attachment.remote_message_id = message.remote_id.clone();
-            attachment.save_using(interface).await?;
-
-            let local_id = attachment.local_id.expect("Should be set");
-
-            interface
-                .execute(
-                    "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
-                    params![message.local_id.unwrap(), local_id],
-                )
-                .await?;
-
-            result.push(local_id);
-        }
-
-        Ok(result)
-    }
-
-    /// Create attachment from partial metadata present in a `conversation`.
-    ///
-    /// If attachment record already exists, the conversation ids are updated.
-    ///
-    /// If no record exists we create a new one.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the data could not be written to the database
-    pub async fn save_from_conversation_metadata(
-        conversation: &Conversation,
-        interface: &AgnosticInterface,
-    ) -> Result<Vec<u64>, StashError> {
-        let mut result = Vec::with_capacity(conversation.attachments_metadata.len());
-        for metadata in &conversation.attachments_metadata {
-            let mut attachment = Attachment::find_first(
-                "WHERE remote_id = ?",
-                params![metadata.remote_id.clone()],
-                interface,
-            )
-            .await?
-            .unwrap_or(Attachment::from(metadata.clone()));
-
-            attachment.local_conversation_id = conversation.local_id;
-            attachment.remote_conversation_id = conversation.remote_id.clone();
-            attachment.save_using(interface).await?;
-
-            let local_id = attachment.local_id.expect("Should be set");
-
-            interface
-                .execute(
-                    "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
-                    params![conversation.local_id.unwrap(), local_id],
-                )
-                .await?;
-
-            result.push(local_id);
-        }
-
-        Ok(result)
-    }
-
     /// Load attachment metadata for a given `conversation_id`.
     ///
     /// # Errors
@@ -1117,7 +1031,38 @@ impl Conversation {
 
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.is_empty() {
-            let local_ids = Attachment::save_from_conversation_metadata(self, interface).await?;
+            let local_ids = {
+                // Create attachment from partial metadata present in a conversation.
+                // If attachment record already exists, the conversation ids are updated.
+                // If no record exists we create a new one.
+                let mut result = Vec::with_capacity(self.attachments_metadata.len());
+                for metadata in &self.attachments_metadata {
+                    let mut attachment = Attachment::find_first(
+                        "WHERE remote_id = ?",
+                        params![metadata.remote_id.clone()],
+                        interface,
+                    )
+                    .await?
+                    .unwrap_or(Attachment::from(metadata.clone()));
+
+                    attachment.local_conversation_id = self.local_id;
+                    attachment.remote_conversation_id = self.remote_id.clone();
+                    attachment.save_using(interface).await?;
+
+                    let local_id = attachment.local_id.expect("Should be set");
+
+                    interface
+                        .execute(
+                            "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
+                            params![self.local_id.unwrap(), local_id],
+                        )
+                        .await?;
+
+                    result.push(local_id);
+                }
+
+                result
+            };
 
             #[allow(trivial_casts)]
             interface
@@ -3065,7 +3010,40 @@ impl Message {
 
         // Remove any attachments that are no longer associated with this conversation.
         if !self.attachments_metadata.is_empty() {
-            let local_ids = Attachment::save_from_message_metadata(self, interface).await?;
+            let local_ids = {
+                // Create attachment from partial metadata present in a message.
+                // If attachment record already exists, only the message ids and the
+                // address id are updated.
+                // If no record exists we create a new one.
+                let mut result = Vec::with_capacity(self.attachments_metadata.len());
+                for metadata in &self.attachments_metadata {
+                    let mut attachment = Attachment::find_first(
+                        "WHERE remote_id = ?",
+                        params![metadata.remote_id.clone()],
+                        interface,
+                    )
+                    .await?
+                    .unwrap_or(Attachment::from(metadata.clone()));
+
+                    attachment.remote_address_id = Some(self.address_id.clone());
+                    attachment.local_message_id = self.local_id;
+                    attachment.remote_message_id = self.remote_id.clone();
+                    attachment.save_using(interface).await?;
+
+                    let local_id = attachment.local_id.expect("Should be set");
+
+                    interface
+                        .execute(
+                            "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
+                            params![self.local_id.unwrap(), local_id],
+                        )
+                        .await?;
+
+                    result.push(local_id);
+                }
+                result
+            };
+
             #[allow(trivial_casts)]
             interface
                 .execute(
