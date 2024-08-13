@@ -11,9 +11,8 @@
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSession, MailSessionError, MailboxError};
 use itertools::Itertools as _;
-use proton_core_common::datatypes::LocalId;
 use proton_mail_common::decrypted_message::{self, DecryptedMessageBody};
-use proton_mail_common::models::{MailSettings, Message as RealMessage};
+use proton_mail_common::models::{self, MailSettings, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use std::sync::Arc;
@@ -151,8 +150,7 @@ pub async fn available_actions_for_message(
 /// Obtains a [`DecryptedMessage`] given a message id.
 #[uniffi::export]
 pub async fn get_message_body(mbox: &Mailbox, id: u64) -> MailboxResult<DecryptedMessage> {
-    Ok(DecryptedMessage {
-        ctx: mbox.mbox().user_context(),
-        body: mbox.mbox().message_body(LocalId(id)).await?,
-    })
+    let ctx = mbox.mbox().user_context();
+    let body = models::Message::message_body(&ctx, id.into()).await?;
+    Ok(DecryptedMessage { ctx, body })
 }

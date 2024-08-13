@@ -77,31 +77,32 @@ pub fn transform_html(
     mail_settings: &MailSettings,
     user_session_id: &str,
 ) -> String {
-    let mut t = Transformer::new(html);
-    t.strip_whitelist()
+    let mut transformer = Transformer::new(html);
+    transformer
+        .strip_whitelist()
         .strip_utm()
         .add_noreferrer()
         .insert_links()
         .inject_style();
 
     if mail_settings.image_proxy | 2 == 2 {
-        t.proxy_images(user_session_id);
+        transformer.proxy_images(user_session_id);
     }
 
     if cfg!(target_os = "ios") {
-        t.inject_ios_content_size();
+        transformer.inject_ios_content_size();
     }
 
     match remote_content {
         RemoteContent::Disabled | // Explicit disable
         RemoteContent::Default if mail_settings.hide_remote_images  => {
-            t.disable_remote_content();
+            transformer.disable_remote_content();
         }
         _ => (),
     }
 
     if let BlockQuote::Strip = blockquote {
-        t.strip_blockquote();
+        transformer.strip_blockquote();
     }
-    t.to_string()
+    transformer.to_string()
 }

@@ -81,7 +81,7 @@ async fn mailbox_message_body_simple() {
         .unwrap();
     let api = user_context.session().api();
     let decrypted_body = saved_message
-        .message_body(cache, address_keys.clone(), pgp_provider, api)
+        .fetch_message_body(cache, address_keys.clone(), pgp_provider, api)
         .await
         .unwrap();
 
@@ -98,7 +98,7 @@ async fn mailbox_message_body_simple() {
     let pgp_provider = new_pgp_provider();
     // Only one call to API is done
     saved_message
-        .message_body(cache, address_keys, pgp_provider, api)
+        .fetch_message_body(cache, address_keys, pgp_provider, api)
         .await
         .unwrap();
     assert_eq!(cache.len(), 1);

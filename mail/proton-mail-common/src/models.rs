@@ -42,11 +42,12 @@ use crate::datatypes::{
     ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout, ViewMode,
 };
 use crate::decrypted_message::DecryptedMessageBody;
-use crate::{AppError, ALL_LABEL_TYPES};
+use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
 use proton_action_queue::db::OptionalExtension;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{
     GetConversationsOptions, GetMessagesOptions, PatchLabelRequest, PostLabelsRequest,
     PutLabelRequest,
@@ -70,6 +71,7 @@ use proton_crypto_inbox::attachment::{
     KeyPackets as RealKeyPackets,
 };
 use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
+use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use smart_default::SmartDefault;
@@ -3140,48 +3142,6 @@ impl Message {
         self.label_ids.iter().any(|l| *l == LabelId::starred())
     }
 
-    /// Get the message's body.
-    ///
-    /// This will attempt to fetch the message data from the servers if it has
-    /// not yet been downloaded before.
-    ///
-    /// # Parameters
-    ///
-    /// * `cache_path`   - TODO: Document this parameter.
-    /// * `address_keys` - The address keys to use for decryption.
-    /// * `pgp_provider` - The PGP provider to use for decryption.
-    /// * `api`          - The API instance to use.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the message failed to download, the db query failed or
-    /// the message body could not be written to the cache.
-    ///
-    pub async fn message_body<P: PgpProviderSync, PM: ProtonMail>(
-        &self,
-        cache: &ProtonCache<CacheMessageConfig>,
-        address_keys: UnlockedAddressKeys<P>,
-        pgp_provider: P,
-        api: &PM,
-    ) -> Result<DecryptedMessageBody, AppError> {
-        let key = self.local_id.expect("Message does not have a local id");
-        if let Some(mut content) = cache.get_item(&key)? {
-            let mut body = String::new();
-            content.read_to_string(&mut body)?;
-            let metadata = self
-                .get_message_body_metadata()
-                .await?
-                .ok_or(AppError::MessageBodyMetadataMissing(key))?;
-            Ok(DecryptedMessageBody { body, metadata })
-        } else {
-            let decrypted_message_body = self
-                .decrypt_from_remote(address_keys, pgp_provider, api)
-                .await?;
-            cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())?;
-            Ok(decrypted_message_body)
-        }
-    }
-
     /// Get message from remote and decrypt it
     pub async fn decrypt_from_remote<P: PgpProviderSync, PM: ProtonMail>(
         &self,
@@ -3503,6 +3463,80 @@ impl Message {
         ));
 
         Ok(actions)
+    }
+
+    /// Gets the body of a message from a message id.
+    ///
+    /// This will attempt to fetch the message data from the servers if it has
+    /// not yet been downloaded before.
+    ///
+    /// # Errors
+    ///
+    /// - if the message failed to download
+    /// - if the db query failed
+    /// - if the message body could not be written to the cache
+    /// - if a message with the given id could not be found
+    pub async fn message_body(
+        user_context: &MailUserContext,
+        id: LocalId,
+    ) -> MailboxResult<DecryptedMessageBody> {
+        let cache = user_context.messages_cache();
+        let saved_message = Message::load(id, user_context.stash())
+            .await?
+            .ok_or(MailboxError::MessageNotFound(id))?;
+
+        let pgp_provider = proton_crypto::new_pgp_provider();
+        let address_id = saved_message.address_id.clone();
+        let address_keys = user_context
+            .unlocked_address_keys(&pgp_provider, &address_id)
+            .await?;
+        let api = user_context.session().api();
+
+        Ok(saved_message
+            .fetch_message_body(cache, address_keys, pgp_provider, api)
+            .await?)
+    }
+
+    /// Get the message's body.
+    ///
+    /// This will attempt to fetch the message data from the servers if it has
+    /// not yet been downloaded before.
+    ///
+    /// # Parameters
+    ///
+    /// * `cache_path`   - TODO: Document this parameter.
+    /// * `address_keys` - The address keys to use for decryption.
+    /// * `pgp_provider` - The PGP provider to use for decryption.
+    /// * `api`          - The API instance to use.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the message failed to download, the db query failed or
+    /// the message body could not be written to the cache.
+    ///
+    pub async fn fetch_message_body<P: PgpProviderSync, PM: ProtonMail>(
+        &self,
+        cache: &ProtonCache<CacheMessageConfig>,
+        address_keys: UnlockedAddressKeys<P>,
+        pgp_provider: P,
+        api: &PM,
+    ) -> Result<DecryptedMessageBody, AppError> {
+        let key = self.local_id.expect("Message does not have a local id");
+        if let Some(mut content) = cache.get_item(&key)? {
+            let mut body = String::new();
+            content.read_to_string(&mut body)?;
+            let metadata = self
+                .get_message_body_metadata()
+                .await?
+                .ok_or(AppError::MessageBodyMetadataMissing(key))?;
+            Ok(DecryptedMessageBody { body, metadata })
+        } else {
+            let decrypted_message_body = self
+                .decrypt_from_remote(address_keys, pgp_provider, api)
+                .await?;
+            cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())?;
+            Ok(decrypted_message_body)
+        }
     }
 }
 
