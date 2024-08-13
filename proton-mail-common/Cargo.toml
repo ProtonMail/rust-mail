@@ -2,7 +2,6 @@
 name = "proton-mail-common"
 version = "0.5.31"
 edition = "2021"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -30,13 +29,12 @@ smart-default = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-test = "0.4.4"
 tracing = { workspace = true }
 url = { workspace = true }
-uuid = { version = "1.8.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 lazy_static = { workspace = true }
+pretty_assertions = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
 secrecy = { version = "0.8", features = ["serde"] }
@@ -47,8 +45,6 @@ tracing-subscriber = { workspace = true }
 tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
 velcro = "0.5.4"
 wiremock = { workspace = true }
-pretty_assertions = { workspace = true }
-
 # not compatible with global clippy configuration yet
 # [lints]
 # workspace = true

@@ -21,10 +21,9 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
-        let Some(settings) = MailSettings::load(MAIL_SETTINGS_ID, self.user_ctx.stash()).await?
-        else {
-            return Err(SidebarError::SettingsNotFound);
-        };
+        let settings = MailSettings::load(MAIL_SETTINGS_ID, self.user_ctx.stash())
+            .await?
+            .unwrap_or_default();
 
         let mut result = vec![self.get_label(LabelId::inbox()).await?];
         if settings.show_moved == ShowMoved::KeepInDrafts

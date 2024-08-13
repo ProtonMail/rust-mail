@@ -22,8 +22,6 @@ use tracing::warn;
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum SidebarError {
-    #[error("Couldn't load Settings from database")]
-    SettingsNotFound,
     #[error("Mailbox Error: {0}")]
     MailSessionError(#[from] MailSessionError),
     #[error("Stash Error: {0}")]
@@ -35,7 +33,6 @@ type SidebarResult<T> = Result<T, SidebarError>;
 impl From<proton_mail_common::SidebarError> for SidebarError {
     fn from(error: proton_mail_common::SidebarError) -> Self {
         match error {
-            proton_mail_common::SidebarError::SettingsNotFound => Self::SettingsNotFound,
             proton_mail_common::SidebarError::MailContext(e) => Self::MailSessionError(e.into()),
             proton_mail_common::SidebarError::Stash(e) => Self::Stash(e),
         }
