@@ -54,7 +54,6 @@ use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as 
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
-use proton_mail_common::datatypes::ExclusiveLocation as RealExclusiveLocation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
@@ -74,9 +73,12 @@ use proton_mail_common::datatypes::{
     SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, ViewLayout as RealViewLayout,
     ViewMode as RealViewMode,
 };
+use proton_mail_common::datatypes::{
+    ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
+};
 use proton_mail_common::models::{
-    Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
-    Message as RealMessage, MessageBodyMetadata as RealMessageBodyMetadata,
+    Label as RealLabel, MailSettings as RealMailSettings, Message as RealMessage,
+    MessageBodyMetadata as RealMessageBodyMetadata,
 };
 use serde_json::{from_str as from_json_string, to_string as to_json_string};
 use smart_default::SmartDefault;
@@ -866,21 +868,10 @@ pub struct Conversation {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Option<u64>,
+    pub local_id: u64,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
-    pub attachment_info: MessageAttachmentInfos,
-
-    /// TODO: Document this field.
+    /// Metadata for all attachments in this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
-
-    /// TODO: Document this field.
-    pub deleted: bool,
 
     /// TODO: Document this field.
     pub display_snooze_reminder: bool,
@@ -889,76 +880,46 @@ pub struct Conversation {
     /// etc.).
     pub exclusive_location: Option<ExclusiveLocation>,
 
-    /// TODO: Document this field.
+    /// When this conversation expires.
     pub expiration_time: u64,
 
-    /// TODO: Document this field.
+    /// Number of attachments in this conversation.
     pub num_attachments: u64,
 
-    /// TODO: Document this field.
+    /// Number of messages in this conversation.
     pub num_messages: u64,
 
-    /// TODO: Document this field.
+    /// Number of unread messages in this conversation.
     pub num_unread: u64,
 
-    /// TODO: Document this field.
+    /// Display order in the list.
     pub display_order: u64,
 
-    /// TODO: Document this field.
+    /// All recipients from messages in this conversation.
     pub recipients: MessageAddresses,
 
-    /// TODO: Document this field.
+    /// All senders from messages in this conversation.
     pub senders: MessageAddresses,
 
-    /// TODO: Document this field.
+    /// Total size of all the messages in this conversation.
     pub size: u64,
 
-    /// TODO: Document this field.
+    /// Subject of the conversation.
     pub subject: String,
+
+    /// Time of the last received message in this conversation.
+    pub time: u64,
 }
 
-impl From<Conversation> for RealConversation {
-    fn from(value: Conversation) -> Self {
-        RealConversation {
+impl From<ContextualConversation> for Conversation {
+    fn from(value: ContextualConversation) -> Self {
+        Self {
             local_id: value.local_id,
-            remote_id: value.remote_id.map(Into::into),
-            attachment_info: value.attachment_info.into(),
             attachments_metadata: value
                 .attachments_metadata
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            deleted: value.deleted,
-            display_snooze_reminder: value.display_snooze_reminder,
-            exclusive_location: value.exclusive_location.map(Into::into),
-            expiration_time: value.expiration_time,
-            labels: vec![],
-            num_attachments: value.num_attachments,
-            num_messages: value.num_messages,
-            num_unread: value.num_unread,
-            display_order: value.display_order,
-            recipients: value.recipients.into(),
-            senders: value.senders.into(),
-            size: value.size,
-            subject: value.subject,
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
-impl From<RealConversation> for Conversation {
-    fn from(value: RealConversation) -> Self {
-        Conversation {
-            local_id: value.local_id,
-            remote_id: value.remote_id.map(Into::into),
-            attachment_info: value.attachment_info.into(),
-            attachments_metadata: value
-                .attachments_metadata
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            deleted: value.deleted,
             display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
@@ -970,6 +931,7 @@ impl From<RealConversation> for Conversation {
             senders: value.senders.into(),
             size: value.size,
             subject: value.subject,
+            time: value.time,
         }
     }
 }
