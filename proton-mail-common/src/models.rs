@@ -90,41 +90,47 @@ pub const MAIL_SETTINGS_ID: u64 = 1;
 /// all the information we need to decrypt it, delivery to the application comes
 /// in several steps that may or may not contain the full data.
 ///
-/// If the user has conversation view mode enabled, the first pieces
-/// of metadata ([`AttachmentMetadata`]) arrive through the
-/// [`Conversation`] type. This is recorded via the
-/// [`save_from_conversation_metadata()`] method which ensures that, if the
-/// full attachment is already present does not completely override
-/// existing the information with incomplete data and only updates the
-/// conversation's id.
+/// A synchronized [`Attachment`] is an attachment which has all the fields
+/// written to the database. [`AttachmentMetadata`] only contains partial
+/// information necessary to identify the attachment and/or display some
+/// context to the user.
 ///
-/// The next expected piece of information arrives when the user views the
-/// [`Message`]s of a [`Conversation`] or if we are in message view mode. Here
-/// we again have [`AttachmentMetadata`] piece as well as the actual address
-/// id of the attachments is now known to us. This is then stored via
-/// [`save_from_message_metadata()`], which also only perform a partial update
-/// if the full data already exists.
+/// # Lifecycle
 ///
-/// From either the [`Conversation`] or the [`Message`], the user can
-/// choose to download/preview one of the attachments. At this stage it is
-/// possible that we only have partial information collected from
-/// [`AttachmentMetadata`]. We may still not have the cryptographic primitives
-/// necessary to decrypt the attachment at this point. We should first check if
-/// the [`full metadata is present`](Attachment::has_complete_metadata) and if
-/// not call [`sync`](Attachment::sync_complete_metadata). This will fetch
-/// the full attachment metadata from the server and update it locally or
-/// create it no such attachment exists.
+/// 1. If the user has conversation view mode enabled, the first pieces
+///    of metadata ([`AttachmentMetadata`]) arrive through the
+///    [`Conversation`] type. If the view mode is message, go to 3.
+///     1.1. The metadata is stored using [`save_from_conversation_metadata()`]
+///          method which ensures that it does not override a fully synchronized
+///          [`Attachment`] and only updates the conversation local and remote id.
+///     1.2. If no record for this attachment exists one is created.
+/// 2. The user now opens the conversation, which sync the respective
+///    [`Message`]s.
+/// 3. [`Messages`] also contains [`AttachmentMetadata`] as well as the address
+///    id for the key this attachment was encrypted with.
+///     3.1 This is now stored with [`save_from_message_metadata()`], which also
+///         ensures it does not override a fully synced attachment and updates
+///         the message ids and the address id.
+///     3.2 If no attachment record exists, one is created.
+/// 4. From 1 or 2, we can receive a request to fetch the full attachment.
+///    At this stage we either have partial data from [`AttachmentMetadata`] or
+///    a fully synchronized attachment.
+///     4.1. We check witch is situation we are in with
+///          [`has_complete_metadata()`].
+///     4.2. If this returns false we need to sync the full attachment with
+///          [`sync_complete_metadata()`].
+///     4.3. If the check returns true, the attachment is ready for use.
+/// 5. Finally, when fetching the message body ([`MessageBodyMetadata`]) we
+///    receive the final bits of data regarding some headers and other metadata
+///    used to display the attachment in web views.
+///
+/// Note: Extracting the last bit of information from [`MessageBodyMetadata`]
+/// will come in a followup patch.
 ///
 /// To ensure that we do not overwrite the [`Attachment`] data in the database
 /// *NEVER* use [`Model::save()`] or [`Model::save_using()`] but instead
 /// *ALWAYS* use [`Attachment::save()`] or [`Attachment::save_using()`].
 ///
-/// Finally, when fetching the [`MessageBodyMetadata`] we receive the final
-/// bits of data regarding some headers and other metadata used to display
-/// the attachment in web views.
-///
-/// Note: Extracting the last bit of information from [`MessageBodyMetadata`]
-/// will come in a followup patch.
 ///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("attachments")]
