@@ -57,9 +57,10 @@ use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
-    ConversationCount as RealConversationCount, DecryptedMessageBody as RealDecryptedMessageBody,
-    Disposition as RealDisposition, EncryptedMessageBody as RealEncryptedMessageBody,
-    LabelColor as RealLabelColor, LabelType as RealLabelType, MessageAddress as RealMessageAddress,
+    ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
+    DecryptedMessageBody as RealDecryptedMessageBody, Disposition as RealDisposition,
+    EncryptedMessageBody as RealEncryptedMessageBody, LabelColor as RealLabelColor,
+    LabelType as RealLabelType, MessageAddress as RealMessageAddress,
     MessageAddresses as RealMessageAddresses, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo,
@@ -909,6 +910,9 @@ pub struct Conversation {
 
     /// Time of the last received message in this conversation.
     pub time: u64,
+
+    /// List of custom labels.
+    pub custom_labels: Vec<CustomLabel>,
 }
 
 impl From<ContextualConversation> for Conversation {
@@ -932,6 +936,7 @@ impl From<ContextualConversation> for Conversation {
             size: value.size,
             subject: value.subject,
             time: value.time,
+            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -1651,6 +1656,9 @@ pub struct Message {
 
     /// TODO: Document this field.
     pub unread: bool,
+
+    /// List of custom labels.
+    pub custom_labels: Vec<CustomLabel>,
 }
 
 impl From<Message> for RealMessage {
@@ -1691,6 +1699,7 @@ impl From<Message> for RealMessage {
             time: value.time,
             to_list: value.to_list.into(),
             unread: value.unread,
+            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
             row_id: None,
             stash: None,
         }
@@ -1733,6 +1742,7 @@ impl From<RealMessage> for Message {
             time: value.time,
             to_list: value.to_list.into(),
             unread: value.unread,
+            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -2394,6 +2404,38 @@ impl From<RealRemoteIds> for RemoteIds {
     fn from(value: RealRemoteIds) -> Self {
         RemoteIds {
             value: value.value.iter().map(|id| id.clone().into()).collect(),
+        }
+    }
+}
+
+/// Information about [`Label`] of type [`Label`] that are applied
+/// to [`Conversation`] or [`Messages`].
+#[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
+pub struct CustomLabel {
+    /// Local id of the label
+    pub local_id: u64,
+    /// Name of the label
+    pub name: String,
+    /// Color of the label.
+    pub color: LabelColor,
+}
+
+impl From<RealCustomLabel> for CustomLabel {
+    fn from(value: RealCustomLabel) -> Self {
+        Self {
+            local_id: value.local_id,
+            name: value.name,
+            color: value.color.into(),
+        }
+    }
+}
+
+impl From<CustomLabel> for RealCustomLabel {
+    fn from(value: CustomLabel) -> Self {
+        Self {
+            local_id: value.local_id,
+            name: value.name,
+            color: value.color.into(),
         }
     }
 }
