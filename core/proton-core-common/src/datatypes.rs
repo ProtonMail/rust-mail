@@ -279,6 +279,24 @@ impl Id for AgnosticId {
     }
 }
 
+impl IdOpt<LocalId> for AgnosticId {
+    fn opt<I: Into<Self>>(id: I) -> Option<LocalId> {
+        match id.into() {
+            Self::Local(id) => Some(id),
+            Self::Remote(_) => None,
+        }
+    }
+}
+
+impl IdOpt<RemoteId> for AgnosticId {
+    fn opt<I: Into<Self>>(id: I) -> Option<RemoteId> {
+        match id.into() {
+            Self::Local(_) => None,
+            Self::Remote(id) => Some(id),
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
@@ -892,6 +910,30 @@ pub trait Id: Clone + Send + Sync {
         A: Into<AgnosticInterface> + Interface;
 }
 
+/// Extension of functionality shared by both [`LocalId`] and [`RemoteId`].
+///
+/// This trait extends the baseline functionality provided by the [`Id`] trait
+/// in order to provide additional functionality that requires implementation
+/// to [`AgnosticId`] by enum variant and not to the whole enum generally. At
+/// present this is just the [`opt()`](IdOpt::opt) function, which wraps the ID
+/// in an [`Option`].
+///
+pub trait IdOpt<T>: Id
+where
+    T: Id,
+{
+    /// Wraps the ID in an [`Option`].
+    ///
+    /// This function wraps the ID in an [`Option`], returning `Some(id)`. This
+    /// is useful for use in chaining and conversion.
+    ///
+    /// # Parameters
+    ///
+    /// * `id` - The ID to wrap.
+    ///
+    fn opt<I: Into<Self>>(id: I) -> Option<T>;
+}
+
 //  STRUCTS
 //==============================================================================
 
@@ -1365,6 +1407,12 @@ impl Id for LocalId {
     }
 }
 
+impl IdOpt<Self> for LocalId {
+    fn opt<I: Into<Self>>(id: I) -> Option<Self> {
+        Some(id.into())
+    }
+}
+
 impl ToSql for LocalId {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         self.0.to_sql()
@@ -1661,6 +1709,12 @@ impl Id for RemoteId {
         A: Into<AgnosticInterface> + Interface,
     {
         T::find_first("WHERE remote_id = ?", params![self.clone()], interface).await
+    }
+}
+
+impl IdOpt<Self> for RemoteId {
+    fn opt<I: Into<Self>>(id: I) -> Option<Self> {
+        Some(id.into())
     }
 }
 
