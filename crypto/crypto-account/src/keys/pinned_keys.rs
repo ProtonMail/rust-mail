@@ -2,7 +2,8 @@ use std::str::FromStr;
 
 use proton_crypto::crypto::{PublicKey, UnixTimestamp};
 
-use super::{InboxPublicKeys, RecipientType};
+use super::InboxPublicKeys;
+use std::collections::HashMap;
 
 /// Error returned if parsing the [`PGPScheme`] from a string fails.
 #[derive(Debug, PartialEq, Eq)]
@@ -110,10 +111,24 @@ impl<Pub: PublicKey> PinnedPublicKeys<Pub> {
         }
     }
 
-    /// Finds a valid matching encryption key from the list of pinned keys.
+    /// Finds a valid encryption key from the list of pinned keys given the keys from the API.
     ///
-    /// This function iterates through the `pinned_keys` and attempts to find a matching encryption key
-    /// that can be used for encryption at the given `encryption_time`.
+    /// Selects the key according the following steps:
+    ///  - The client should encrypt the email with the first valid pinned key (the keys in the vCard should be ordered according to their PREF property;
+    ///    if that has not been specified they are taken in the order in which they are written in the vCard)
+    ///    whose fingerprint matches the fingerprint of one of the keys served by the API.
+    ///
+    /// - There are pinned keys, but none of the fingerprints of the pinned keys matches the fingerprint of one of the keys served by the API.
+    ///   In this case the client should force the user (via a modal) to trust one of the keys served by the API before sending any email.
+    ///
+    /// - If there are no pinned keys, then the client should encrypt with the first valid key served by the API.
+    ///
+    /// - If there are no api keys, but pinned keys are present, the first valid pinned key is returned.
+    ///
+    /// # Returns
+    ///
+    /// Returns `None` if no key has been found, `KeyTrust::PromptUserToTrust(key)` if an API key is selected but there are pinned keys,
+    /// or `KeyTrust::Trusted(key)` if a pinned key is selected.
     ///
     /// # Parameters
     ///
@@ -121,50 +136,69 @@ impl<Pub: PublicKey> PinnedPublicKeys<Pub> {
     ///   to be matched against the pinned keys.
     /// * `encryption_time` - A `UnixTimestamp` representing the time at which the encryption will be performed.
     ///
-    /// # Returns
-    ///
-    /// Returns an `Option<Pub>` containing the first valid matching public key that can be used for encryption,
-    /// or `None` if no valid key is found.
-    ///
-    /// # Conditions for a key to be considered valid:
-    ///
-    /// 1. If there is matching api key the key flags must be valid.
-    /// 2. If the recipient type is `Internal`, there must be a matching public key in `api_keys`.
-    /// 3. The key must not be compromised or revoked at the time of encryption.
-    /// 4. The key must be able to encrypt at the given `encryption_time`.
-    /// 5. The key must not be expired at the time of encryption.
-    ///
-    /// If any of these conditions are not met, the key is considered invalid and the function will continue
-    /// to search for another key.
-    pub fn find_valid_matching_encryption_key(
+    pub fn select_encryption_key(
         &self,
         api_keys: &InboxPublicKeys<Pub>,
         encryption_time: UnixTimestamp,
-    ) -> Option<Pub> {
-        self.pinned_keys.iter().find_map(|pinned_key| {
-            let fingerprint = pinned_key.key_fingerprint();
-            let matching_public = api_keys
-                .public_keys
-                .iter()
-                .find(|api_key| api_key.public_keys.key_fingerprint() == fingerprint);
+    ) -> Option<KeyTrust<Pub>> {
+        let fingerprint_map: HashMap<_, _> = api_keys
+            .public_keys
+            .iter()
+            .map(|api_key| (api_key.public_keys.key_fingerprint(), api_key))
+            .collect();
 
-            // Check if the key is invalid based on the given conditions
-            // TODO: In a more advanced version we might want to signal if something is invalid
-            // Maybe, by emitting warnings? 
-            let is_invalid = matches!(
-                matching_public,
-                Some(matching_key) if matching_key.flags.is_compromised() || matching_key.flags.is_obsolete()
-            ) || (api_keys.recipient_type == RecipientType::Internal
-                && matching_public.is_none())
+        // The client should encrypt the email with the first pinned key whose fingerprint matches
+        // the fingerprint of one of the keys served by the API.
+        let selected_key_matching_opt = self.pinned_keys.iter().find_map(|pinned_key| {
+            let matching_key = fingerprint_map.get(&pinned_key.key_fingerprint())?;
+            let is_invalid = matching_key.flags.is_compromised()
+                || matching_key.flags.is_obsolete()
                 || !pinned_key.can_encrypt(encryption_time)
                 || pinned_key.is_expired(encryption_time)
                 || pinned_key.is_revoked(encryption_time);
-
             if is_invalid {
                 None
             } else {
                 Some(pinned_key.clone())
             }
-        })
+        });
+
+        if let Some(selected_key_matching) = selected_key_matching_opt {
+            return Some(KeyTrust::Trusted(selected_key_matching));
+        }
+
+        // If there are pinned keys, but none of the fingerprints of the pinned keys matches the fingerprint
+        // of one of the keys served by the API.
+        // In this case the client should force the user (via a modal) to trust one of the keys served by the API before sending any email.
+        if let Some(first_api_key) = api_keys.public_keys.first() {
+            Some(KeyTrust::PromptUserToTrust(
+                first_api_key.public_keys.clone(),
+            ))
+        } else {
+            self.pinned_keys
+                .iter()
+                .find_map(|pinned_key| {
+                    if fingerprint_map.contains_key(&pinned_key.key_fingerprint()) {
+                        return None;
+                    };
+                    if !pinned_key.can_encrypt(encryption_time)
+                        || pinned_key.is_expired(encryption_time)
+                        || pinned_key.is_revoked(encryption_time)
+                    {
+                        None
+                    } else {
+                        Some(pinned_key.clone())
+                    }
+                })
+                .map(KeyTrust::Trusted)
+        }
     }
+}
+
+/// Type that indicates if a public key can be trusted
+/// or should be trusted by the user.
+#[derive(Debug, Clone)]
+pub enum KeyTrust<Pub: PublicKey> {
+    Trusted(Pub),
+    PromptUserToTrust(Pub),
 }

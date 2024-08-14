@@ -1,7 +1,9 @@
 //! [Confluence Sending Preferences](https://confluence.protontech.ch/display/MAILFE/Send+preferences+for+outgoing+email)
 //! [Advanced encryption setting](https://confluence.protontech.ch/display/MAILFE/Advanced+PGP+settings)
 use proton_crypto_account::{
-    keys::{DecryptedAddressKey, InboxPublicKeys, PGPScheme, PinnedPublicKeys, RecipientType},
+    keys::{
+        DecryptedAddressKey, InboxPublicKeys, KeyTrust, PGPScheme, PinnedPublicKeys, RecipientType,
+    },
     proton_crypto::{
         crypto::{PrivateKey, PublicKey, UnixTimestamp},
         keytransparency::KTVerificationResult,
@@ -10,14 +12,14 @@ use proton_crypto_account::{
 
 use crate::message::packages::PackageMimeType;
 
-use super::{CryptoPackageTypeError, EncryptionPreferencesError};
+use super::{CryptoPackageTypeError, EncryptionPreferencesError, UserWarning};
 
 /// A helper type that contains the default PGP preferences
 /// extracted from the user's mailsettings.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct CryptoMailSettings {
     /// The default PGP scheme to use.
-    pub pgp_scheme: CryptoPackageType,
+    pub pgp_scheme: PGPScheme,
 
     /// The default content mime type to use.
     pub mime_type: PackageMimeType,
@@ -72,22 +74,22 @@ impl CryptoPackageType {
         }
     }
 
-    pub fn from_scheme(scheme: PGPScheme, encrypt: bool, sign: bool) -> Option<CryptoPackageType> {
+    pub fn from_scheme(scheme: PGPScheme, encrypt: bool, sign: bool) -> CryptoPackageType {
         match scheme {
             PGPScheme::PGPMime => {
                 if !encrypt && sign {
-                    Some(CryptoPackageType::ClearMime)
+                    CryptoPackageType::ClearMime
                 } else if encrypt {
-                    Some(CryptoPackageType::PgpMime)
+                    CryptoPackageType::PgpMime
                 } else {
-                    Some(CryptoPackageType::Cleartext)
+                    CryptoPackageType::Cleartext
                 }
             }
             PGPScheme::PGPInline => {
                 if encrypt {
-                    Some(CryptoPackageType::PgpInline)
+                    CryptoPackageType::PgpInline
                 } else {
-                    Some(CryptoPackageType::Cleartext)
+                    CryptoPackageType::Cleartext
                 }
             }
         }
@@ -126,6 +128,9 @@ pub struct InboxSendPreferences<Pub: PublicKey> {
 
     /// Indicates whether the recipient has an Proton API key.
     pub has_api_keys: bool,
+
+    /// Stores information if the user should be warned about te key selection.
+    pub user_warning: Option<UserWarning>,
 
     /// Result of the key transparency verification process.
     pub key_transparency_verification: KTVerificationResult,
@@ -169,6 +174,7 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
             mime_type: mail_settings.mime_type,
             is_selected_key_pinned: false,
             has_api_keys: true,
+            user_warning: None,
             selected_key: Some(primary_address_key.public_key.to_owned()),
             key_transparency_verification: KTVerificationResult::Ok(()),
         })
@@ -227,17 +233,33 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
         ) = Self::extract_send_settings(vcard_keys, mail_settings, is_internal);
 
         // Select the pinned key.
-        let selected_pinned_key = vcard_keys.as_ref().and_then(|pinned_keys| {
-            pinned_keys.find_valid_matching_encryption_key(api_keys, encryption_time)
-        });
-
+        let selected_encryption_key = vcard_keys
+            .as_ref()
+            .and_then(|pinned_keys| pinned_keys.select_encryption_key(api_keys, encryption_time));
+        let (selected_pinned_key, user_warning, is_selected_key_pinned) =
+            match selected_encryption_key {
+                Some(KeyTrust::Trusted(key)) => (Some(key), None, true),
+                Some(KeyTrust::PromptUserToTrust(key)) => {
+                    let fingerprint = key.key_fingerprint();
+                    (
+                        Some(key),
+                        Some(UserWarning::PromptUserToTrust(fingerprint)),
+                        false,
+                    )
+                }
+                None => {
+                    if matches!(vcard_keys, Some(keys) if !keys.pinned_keys.is_empty()) {
+                        (None, Some(UserWarning::NoValidPinnedKey), false)
+                    } else {
+                        (None, None, false)
+                    }
+                }
+            };
         // Select the api key: the first key is the primary key for encryption.
         let selected_api_key = api_keys
             .public_keys
             .first()
             .map(|key| key.public_keys.clone());
-
-        let is_selected_key_pinned = selected_pinned_key.is_some();
 
         // Select keys and modify flags if necessary
         let selected_key = match api_keys.recipient_type {
@@ -270,7 +292,7 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
                             // No v-card information and no keys.
                             send_settings_encrypt = false;
                             send_settings_pgp_type = CryptoPackageType::Cleartext;
-                            send_settings_mime_type = PackageMimeType::Text;
+                            send_settings_mime_type = mail_settings.mime_type;
                         }
                         None
                     }
@@ -287,6 +309,7 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
             mime_type: send_settings_mime_type,
             selected_key,
             is_selected_key_pinned,
+            user_warning,
             has_api_keys,
             key_transparency_verification: api_keys.key_transparency_verification.clone(),
         })
@@ -306,11 +329,12 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
             .and_then(|pinned_keys| pinned_keys.mime_type.map(Into::into))
             .unwrap_or(mail_settings.mime_type);
 
-        // Try to extract information if encryption should be enabled,
-        // fallback to true if no vcard was present else false.
+        // Try to extract information if encryption should be enabled;.
+        // With pinned keys, an undefined flag also defaults to true
+        // (because in the past, we did not store the encryption flag in the contact when pinning keys from WKD)
         let send_settings_encrypt = vcard_keys
             .and_then(|pinned_keys| pinned_keys.encrypt_to_pinned)
-            .unwrap_or(vcard_keys.is_none());
+            .unwrap_or(true);
 
         // Try to extract information if sign should be enabled,
         // fallback to the mailsettings if not information can be extracted.
@@ -325,14 +349,20 @@ impl<Pub: PublicKey> InboxSendPreferences<Pub> {
         } else {
             vcard_keys
                 .and_then(|pinned_keys| pinned_keys.scheme)
-                .and_then(|scheme| {
+                .map_or(
                     CryptoPackageType::from_scheme(
-                        scheme,
+                        mail_settings.pgp_scheme,
                         send_settings_encrypt,
                         send_settings_sign,
-                    )
-                })
-                .unwrap_or(mail_settings.pgp_scheme)
+                    ),
+                    |scheme| {
+                        CryptoPackageType::from_scheme(
+                            scheme,
+                            send_settings_encrypt,
+                            send_settings_sign,
+                        )
+                    },
+                )
         };
 
         if send_settings_pgp_type == CryptoPackageType::PgpInline {
