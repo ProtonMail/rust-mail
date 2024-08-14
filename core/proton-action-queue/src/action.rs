@@ -2,6 +2,7 @@ use crate::db::StoredAction;
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::Session;
+use proton_core_common::datatypes::LocalId;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use stash::exports::{
@@ -268,7 +269,7 @@ pub trait Handler: Default + 'static {
 pub struct Metadata {
     /// List of queued actions the action depends upon. The action will only execute if all
     /// the dependencies have been executed.
-    pub(crate) dependencies: Vec<u64>,
+    pub(crate) dependencies: Vec<LocalId>,
     /// Optional debug string which can be assigned to diagnose issues or provide more context.
     pub(crate) debug_string: Option<String>,
     /// A list of resources to associate with this action. Can be any of any type as long as it is
@@ -352,7 +353,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependency(mut self, action_id: u64) -> Self {
+    pub fn with_dependency(mut self, action_id: LocalId) -> Self {
         self.metadata.dependencies.push(action_id);
         self
     }
@@ -365,7 +366,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = u64>) -> Self {
+    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = LocalId>) -> Self {
         self.metadata.dependencies.extend(action_ids);
         self
     }
@@ -412,7 +413,7 @@ impl MetadataBuilder {
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryError {
     #[error("Stored action {0} has unknown action type: {1}")]
-    UnknownType(u64, String),
+    UnknownType(LocalId, String),
     #[error("Action has invalid version {0}")]
     InvalidVersion(u32),
     #[error("Failed to deserialize: {0}")]

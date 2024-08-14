@@ -6,7 +6,7 @@ use crate::action;
 use crate::action::{Action, Metadata, Priority};
 use chrono::{DateTime, Utc};
 use indoc::indoc;
-use proton_core_common::datatypes::Resources;
+use proton_core_common::datatypes::{LocalId, Resources};
 use proton_sqlite3::{Migration, MigratorError};
 use stash::datatypes::QueryResultU64;
 use stash::exports::SqliteError;
@@ -28,7 +28,7 @@ pub struct StoredAction {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub id: Option<u64>,
+    pub id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -39,7 +39,7 @@ pub struct StoredAction {
     pub debug_string: Option<String>,
 
     /// TODO: Document this field.
-    pub dependencies: Vec<u64>,
+    pub dependencies: Vec<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -135,7 +135,7 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn contains(tether: &Tether, id: u64) -> Result<bool, StashError> {
+    pub async fn contains(tether: &Tether, id: LocalId) -> Result<bool, StashError> {
         let ids = tether
             .query::<_, QueryResultU64>(
                 "SELECT id AS value FROM action_queue WHERE id = ?",
@@ -160,7 +160,7 @@ impl StoredAction {
             )
             .await?;
         self.dependencies
-            .extend(dependencies.into_iter().map(|v| v.value));
+            .extend(dependencies.into_iter().map(|v| LocalId::from(v.value)));
 
         // Resources
         self.resources = interface
@@ -208,7 +208,7 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    pub async fn delete(tether: &Tether, id: u64) -> Result<(), StashError> {
+    pub async fn delete(tether: &Tether, id: LocalId) -> Result<(), StashError> {
         tether
             .execute("DELETE FROM action_queue WHERE id = ?", params![id])
             .await?;
@@ -220,7 +220,7 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn dependees(tether: &Tether, id: u64) -> Result<Vec<u64>, StashError> {
+    pub async fn dependees(tether: &Tether, id: LocalId) -> Result<Vec<LocalId>, StashError> {
         let ids = tether
             .query::<_, QueryResultU64>(
                 "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
@@ -228,7 +228,7 @@ impl StoredAction {
             )
             .await?;
 
-        Ok(ids.into_iter().map(|v| v.value).collect::<Vec<_>>())
+        Ok(ids.into_iter().map(|v| v.value.into()).collect::<Vec<_>>())
     }
 
     /// Get the next action to be executed.
