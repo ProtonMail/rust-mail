@@ -30,8 +30,9 @@
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, CardType,
     ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, HighSecurity,
-    LabelId, Labels, LogAuth, Password, Phone, ProductUsedSpace, QueryResultRemoteId, Referral,
-    RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType, WeekStart,
+    LabelId, Labels, LocalId, LogAuth, Password, Phone, ProductUsedSpace, QueryResultRemoteId,
+    Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
+    WeekStart,
 };
 use crate::CoreContextResult;
 use flume::Sender as QueueSender;
@@ -168,7 +169,7 @@ pub trait ModelExtension: Model {
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         interface: &A,
-    ) -> Result<Vec<u64>, StashError>
+    ) -> Result<Vec<LocalId>, StashError>
     where
         Q: Into<String> + Send,
         A: Into<AgnosticInterface> + Interface,
@@ -190,7 +191,7 @@ pub trait ModelExtension: Model {
             )
             .await?
             .into_iter()
-            .map(|r| r.value)
+            .map(|r| r.value.into())
             .collect())
     }
 
@@ -751,7 +752,7 @@ pub struct ContactCard {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]

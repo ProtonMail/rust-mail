@@ -524,7 +524,7 @@ fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
     contact.contact_emails = emails;
     contact.cards = vec![
             ContactCard {
-                local_id: Some(1),
+                local_id: Some(1.into()),
                 remote_contact_id: contact.remote_id.clone(),
                 card_type: CardType::Signed,
                 data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(), 
@@ -533,7 +533,7 @@ fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
                 stash: stash.clone(),
             },
             ContactCard {
-                local_id: Some(2),
+                local_id: Some(2.into()),
                 remote_contact_id: contact.remote_id.clone(),
                 card_type: CardType::EncryptedAndSigned,
                 data: "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_owned(), 
@@ -604,7 +604,7 @@ fn create_test_local_full_modified_contact(
     contact.contact_emails.push(new_email.clone());
     contact.cards = vec![
         ContactCard {
-            local_id: Some(3),
+            local_id: Some(3.into()),
             remote_contact_id: contact.remote_id.clone(),
             card_type: CardType::Signed,
             data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-129892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:sdfsdf@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(), 
@@ -613,7 +613,7 @@ fn create_test_local_full_modified_contact(
             stash: stash.clone(),
         },
         ContactCard {
-            local_id: Some(4),
+            local_id: Some(4.into()),
             remote_contact_id: contact.remote_id.clone(),
             card_type: CardType::EncryptedAndSigned,
             data: "-----BEGIN PGP MESSAGE-----modified.*-----END PGP MESSAGE-----".to_owned(), 
