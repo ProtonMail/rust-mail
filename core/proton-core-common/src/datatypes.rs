@@ -1011,6 +1011,61 @@ impl Deref for Labels {
 
 sql_using_serde!(Labels);
 
+/// Local ID.
+///
+/// This minimal struct is simply a wrapper around a [`u64`], and is used to
+/// formalise all IDs used for internal storage, and to present associated
+/// functionality.
+///
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct LocalId(u64);
+
+impl LocalId {
+    /// Represents the internal value as an unsigned 64-bit integer.
+    #[must_use]
+    pub const fn as_u64(&self) -> u64 {
+        self.0
+    }
+}
+
+impl Deref for LocalId {
+    type Target = u64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for LocalId {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<u64> for LocalId {
+    fn from(id: u64) -> Self {
+        Self(id)
+    }
+}
+
+impl From<LocalId> for u64 {
+    fn from(id: LocalId) -> Self {
+        id.0
+    }
+}
+
+impl FromSql for LocalId {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        u64::column_result(value).map(LocalId)
+    }
+}
+
+impl ToSql for LocalId {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        self.0.to_sql()
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HighSecurity {
