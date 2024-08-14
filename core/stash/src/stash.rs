@@ -1166,6 +1166,21 @@ impl Stash {
     /// managed by it, as there can only be one worker per [`Stash`] instance
     /// and database operations need to be executed sequentially.
     ///
+    /// # WARNING
+    ///
+    /// Please ensure that you handle multiple concurrent connections sensibly,
+    /// in order to avoid exhausting the pool. Things like properly waiting for
+    /// tasks and threads to complete, for example.
+    ///
+    /// Be wary in multithreaded environment of possible panics while dealing
+    /// with transactions with in-memory storage. There may or may not be a
+    /// problem here, caused by [`r2d2_sqlite`]'s connection pool, which in the
+    /// past has had similar issues. Though it seems to be patched for
+    /// multithreading generally, it might still cause issues for async with
+    /// threads, although this is not completely confirmed.
+    ///
+    ///   - Reference: https://github.com/ivanceras/r2d2-sqlite/issues/39
+    ///
     /// # Parameters
     ///
     /// * `path` - The path to the SQLite database file. If `None`, an in-memory
@@ -1176,12 +1191,6 @@ impl Stash {
     /// A [`StashError::TetherError`] is returned if there is a problem creating
     /// the database or connection pool.
     ///
-    /// ! Warning - please be wary in multithreaded environment of the probable
-    /// ! panics while dealing with transactions with in memory storage.
-    /// ! This caused by r2d2_sqlite's connection pool, which in the past
-    /// ! also dealed with similar issues. Though it seems to be patched
-    /// ! for multithreading it still can cause issues for async + threads.
-    /// ! Old issue: https://github.com/ivanceras/r2d2-sqlite/issues/39
     pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
         let (sender, receiver) = flume::unbounded();
         let stash = Self {
