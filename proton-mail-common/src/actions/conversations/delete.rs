@@ -3,7 +3,7 @@ use crate::actions::ActionError;
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{self, Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
@@ -86,7 +86,8 @@ impl proton_action_queue::action::Handler for Handler {
         if !failed_ids.is_empty() {
             error!("Delete operation failed for: {:?}", failed_ids);
             let tx = stash.transaction().await?;
-            let local_ids = Conversation::find_local_ids(failed_ids.clone(), &tx).await?;
+            let local_ids =
+                RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
 
             Conversation::remove_label_from_multiple(action.0.label_id, local_ids, &tx)
                 .await

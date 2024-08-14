@@ -1,7 +1,7 @@
 use crate::actions::ActionError;
 use crate::models::{Conversation, Label as LabelModel};
 use proton_api_mail::services::proton::response_data::OperationResult;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
 use tracing::error;
@@ -62,7 +62,7 @@ impl ActionData {
 
         self.remote_label_id = Some(find_remote_label_id(tx, self.label_id).await?);
 
-        let conv_ids = Conversation::find_remote_ids(self.ids.clone(), tx)
+        let conv_ids = LocalId::counterparts::<Conversation, _>(self.ids.clone(), tx)
             .await
             .map_err(|e| {
                 error!("Failed to resolve conversation ids: {e}");
@@ -81,11 +81,11 @@ impl ActionData {
 ///
 /// Returns error if the resolution failed.
 async fn find_remote_label_id(tether: &Tether, local_id: LocalId) -> Result<LabelId, ActionError> {
-    let Some(label_id) = LabelModel::find_remote_id(local_id, tether).await? else {
+    let Some(label_id) = local_id.counterpart::<LabelModel, _>(tether).await? else {
         return Err(AppError::LabelNotFound(local_id).into());
     };
 
-    Ok(label_id)
+    Ok(label_id.into())
 }
 
 /// Filter server response for conversations on which the operation failed.
