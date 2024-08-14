@@ -97,7 +97,7 @@ impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
     pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
-        let mbox = proton_mail_common::Mailbox::new(ctx.ctx().clone(), label_id).await?;
+        let mbox = proton_mail_common::Mailbox::new(ctx.ctx().clone(), label_id.into()).await?;
         if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
             error!("Could not sync mailbox: {e}");
         }
@@ -133,7 +133,7 @@ impl Mailbox {
     /// Get the label id of the mailbox.
     #[must_use]
     pub fn label_id(&self) -> u64 {
-        self.mbox.label_id()
+        self.mbox.label_id().into()
     }
 
     /// Get the mailbox's active view mode.
@@ -173,35 +173,43 @@ impl Mailbox {
 impl From<RealMailboxError> for MailboxError {
     fn from(value: RealMailboxError) -> Self {
         match value {
-            RealMailboxError::LabelNotFound(e) => Self::LabelNotFound(e),
+            RealMailboxError::LabelNotFound(e) => Self::LabelNotFound(e.into()),
             RealMailboxError::RemoteLabelNotFound(e) => Self::RemoteLabelNotFound(e.into()),
-            RealMailboxError::LabelDoesNotHaveRemoteId(e) => Self::LabelDoesNotHaveRemoteId(e),
+            RealMailboxError::LabelDoesNotHaveRemoteId(e) => {
+                Self::LabelDoesNotHaveRemoteId(e.into())
+            }
             RealMailboxError::Context(e) => Self::Context(e.into()),
             RealMailboxError::ActionQueue(e) => Self::ActionQueue(e),
             RealMailboxError::InvalidAction(e) => Self::InvalidAction(e),
-            RealMailboxError::ConversationNotFound(e) => Self::ConversationNotFound(e),
-            RealMailboxError::ConversationError(e) => Self::ConversationError(e),
+            RealMailboxError::ConversationNotFound(e) => Self::ConversationNotFound(e.into()),
+            RealMailboxError::ConversationError(e) => Self::ConversationError(e.into()),
             RealMailboxError::APIError(e) => Self::APIError(e),
             RealMailboxError::InvalidViewMode => Self::InvalidViewMode,
-            RealMailboxError::AttachmentNotFound(e) => Self::AttachmentNotFound(e),
+            RealMailboxError::AttachmentNotFound(e) => Self::AttachmentNotFound(e.into()),
             RealMailboxError::AttachmentDecryption(e) => Self::AttachmentDecryption(e.to_string()),
             RealMailboxError::AttachmentDecryptionIO(e) => {
                 Self::AttachmentDecryption(e.to_string())
             }
             RealMailboxError::ConversationDoesNotHaveRemoteId(e) => {
-                Self::ConversationDoesNotHaveRemoteId(e)
+                Self::ConversationDoesNotHaveRemoteId(e.into())
             }
             RealMailboxError::Stash(e) => Self::Stash(e),
-            RealMailboxError::MessageDoesNotHaveRemoteId(e) => Self::MessageDoesNotHaveRemoteId(e),
+            RealMailboxError::MessageDoesNotHaveRemoteId(e) => {
+                Self::MessageDoesNotHaveRemoteId(e.into())
+            }
             RealMailboxError::MessageDecryption(e) => Self::MessageDecryption(anyhow!("{e}")),
-            RealMailboxError::ConversationHasNoMessages(e) => Self::ConversationHasNoMessages(e),
+            RealMailboxError::ConversationHasNoMessages(e) => {
+                Self::ConversationHasNoMessages(e.into())
+            }
             RealMailboxError::DecryptedMessage(e) => Self::DecryptedMessage(e),
             RealMailboxError::AttachmentDoesNotHaveRemoteId(e) => {
-                Self::AttachmentDoesNotHaveRemoteId(e)
+                Self::AttachmentDoesNotHaveRemoteId(e.into())
             }
-            RealMailboxError::MessageNotFound(e) => Self::MessageNotFound(e),
+            RealMailboxError::MessageNotFound(e) => Self::MessageNotFound(e.into()),
             RealMailboxError::AppError(e) => Self::AppError(e),
-            RealMailboxError::NoExclusiveLocationFound(e) => Self::NoExclusiveLocationFound(e),
+            RealMailboxError::NoExclusiveLocationFound(e) => {
+                Self::NoExclusiveLocationFound(e.into())
+            }
             RealMailboxError::Cache(e) => Self::Cache(e),
             RealMailboxError::IO(e) => Self::IO(e),
         }

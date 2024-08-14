@@ -2,6 +2,7 @@ use crate::datatypes::AttachmentMetadata;
 use crate::models::Attachment;
 use crate::{AppError, MailContextError, Mailbox, MailboxError, MailboxResult};
 use proton_api_core::session::CoreSession;
+use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
@@ -45,7 +46,7 @@ impl Mailbox {
     /// Signature verification failures are not returned as errors.
     pub async fn load_attachment_to_buffer(
         &self,
-        attachment_id: u64,
+        attachment_id: LocalId,
     ) -> MailboxResult<DecryptedAttachment> {
         let attachment = self.sync_attachment(attachment_id).await?;
         let data_path = self
@@ -69,7 +70,7 @@ impl Mailbox {
     /// Content is cached in file system
     pub async fn get_attachment_content(
         &self,
-        attachment_id: u64,
+        attachment_id: LocalId,
         attachment: &Attachment,
     ) -> MailboxResult<PathBuf> {
         let user_context = self.user_context();
@@ -96,7 +97,7 @@ impl Mailbox {
                 .await
                 .inspect_err(|e| error!("Failed to decrypt attachment({attachment_id}): {e})"))?;
             let data_path = cache
-                .add_item(attachment_id, decrypted_content.as_ref())
+                .add_item(attachment_id.into(), decrypted_content.as_ref())
                 .inspect_err(|e| {
                     error!("Failed to add attachment({attachment_id} into cache: {e})")
                 })?;
@@ -105,7 +106,7 @@ impl Mailbox {
     }
 
     /// Sync attachment metadata
-    async fn sync_attachment(&self, attachment_id: u64) -> MailboxResult<Attachment> {
+    async fn sync_attachment(&self, attachment_id: LocalId) -> MailboxResult<Attachment> {
         let user_context = self.user_context();
         let mut attachment = Attachment::load(attachment_id, user_context.stash())
             .await

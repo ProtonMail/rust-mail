@@ -61,7 +61,7 @@ async fn mailbox_message_body_simple() {
     mailbox.sync(10).await.unwrap();
 
     // Resolve local id.
-    let saved_message = Message::load(1, &user_context.stash().connection())
+    let saved_message = Message::load(1.into(), &user_context.stash().connection())
         .await
         .unwrap()
         .expect("failed to load message");

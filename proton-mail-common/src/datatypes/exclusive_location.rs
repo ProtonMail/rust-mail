@@ -8,7 +8,7 @@ use crate::{
 };
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{LabelId, LocalId};
 
 lazy_static! {
     pub(crate) static ref INBOX_LABEL_ID: LabelId = LabelId::inbox();
@@ -40,7 +40,7 @@ pub enum ExclusiveLocation {
     Outbox,
     Custom {
         name: String,
-        local_id: u64,
+        local_id: LocalId,
         color: LabelColor,
     },
 }

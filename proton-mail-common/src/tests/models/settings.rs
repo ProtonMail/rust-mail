@@ -53,10 +53,10 @@ async fn test_mail_settings_store_read() {
         stash: Some(stash.clone()),
     };
     settings.save_using(&stash.connection()).await.unwrap();
-    let db_settings = MailSettings::load(MAIL_SETTINGS_ID, &stash)
+    let db_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), &stash)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(db_settings, settings);
-    assert_eq!(db_settings.local_id, Some(MAIL_SETTINGS_ID));
+    assert_eq!(db_settings.local_id, Some(MAIL_SETTINGS_ID.into()));
 }

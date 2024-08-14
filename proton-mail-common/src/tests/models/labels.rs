@@ -378,7 +378,7 @@ async fn update_local_label() {
         .await
         .expect("failed to create label");
 
-    async fn compare_db_label(tx: &Tether, id: u64, f: impl FnOnce(&Label)) {
+    async fn compare_db_label(tx: &Tether, id: LocalId, f: impl FnOnce(&Label)) {
         let db_label = Label::load(id, tx)
             .await
             .expect("failed to get label")

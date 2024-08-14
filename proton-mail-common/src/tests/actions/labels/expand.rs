@@ -8,7 +8,7 @@ const REMOTE_ID: &str = "RemoteID";
 
 pub struct TestCase {
     action: Expand,
-    local_id: u64,
+    local_id: LocalId,
     stash: Stash,
 }
 

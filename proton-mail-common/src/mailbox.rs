@@ -11,7 +11,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
@@ -24,33 +24,33 @@ pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 #[derive(Debug, thiserror::Error)]
 pub enum MailboxError {
     #[error("Could not find label with local id '{0}'")]
-    LabelNotFound(u64),
+    LabelNotFound(LocalId),
     #[error("Could not find label with remote id '{0}'")]
     RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
-    LabelDoesNotHaveRemoteId(u64),
+    LabelDoesNotHaveRemoteId(LocalId),
     #[error("No exclusive location found for message '{0}'")]
-    NoExclusiveLocationFound(u64),
+    NoExclusiveLocationFound(LocalId),
     #[error("Attachment '{0}' not found")]
-    AttachmentNotFound(u64),
+    AttachmentNotFound(LocalId),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(#[from] AttachmentDecryptionError),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryptionIO(String),
     #[error("Attachment '{0}' does not have a remote id")]
-    AttachmentDoesNotHaveRemoteId(u64),
+    AttachmentDoesNotHaveRemoteId(LocalId),
     #[error("Conversation '{0}' not found")]
-    ConversationNotFound(u64),
+    ConversationNotFound(LocalId),
     #[error("Conversation '{0}' does not have a remote id")]
-    ConversationDoesNotHaveRemoteId(u64),
+    ConversationDoesNotHaveRemoteId(LocalId),
     #[error("Message '{0}' does not have a remote id")]
-    MessageDoesNotHaveRemoteId(u64),
+    MessageDoesNotHaveRemoteId(LocalId),
     #[error("Could not find message with local id '{0}'")]
-    MessageNotFound(u64),
+    MessageNotFound(LocalId),
     #[error("Problem with conversation with local ID: '{0}'")]
-    ConversationError(u64),
+    ConversationError(LocalId),
     #[error("Conversation '{0}' has no messages")]
-    ConversationHasNoMessages(u64),
+    ConversationHasNoMessages(LocalId),
     #[error("App error: {0}")]
     AppError(#[from] AppError),
     #[error("API request failed with error: '{0}'")]
@@ -92,7 +92,7 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 #[derive(Clone)]
 pub struct Mailbox {
     user_ctx: Arc<MailUserContext>,
-    label_id: u64,
+    label_id: LocalId,
     view_mode: ViewMode,
 }
 
@@ -107,14 +107,14 @@ impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> 
 }
 
 impl Mailbox {
-    pub async fn new(user_ctx: Arc<MailUserContext>, label_id: u64) -> MailboxResult<Self> {
+    pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {
         let Some(label) = Label::load(label_id, user_ctx.stash()).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
         let view_mode = if let Some(view_mode) = label.view_mode() {
             view_mode
         } else {
-            MailSettings::load(MAIL_SETTINGS_ID, user_ctx.stash())
+            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.stash())
                 .await
                 .map_err(|e| {
                     error!("Failed to load mail settings: {e}");
@@ -141,7 +141,7 @@ impl Mailbox {
             .await?
             .unwrap();
         let view_mode = label.view_mode().unwrap_or(
-            MailSettings::load(MAIL_SETTINGS_ID, user_ctx.stash())
+            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.stash())
                 .await?
                 .unwrap()
                 .view_mode,
@@ -173,7 +173,7 @@ impl Mailbox {
         self.user_ctx.stash()
     }
 
-    pub fn label_id(&self) -> u64 {
+    pub fn label_id(&self) -> LocalId {
         self.label_id
     }
 

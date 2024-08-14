@@ -97,8 +97,8 @@ async fn test_new_mailbox_sync_conversations() {
 
     let conversations = params.conversations.clone();
     ctx.setup_user(params.clone()).await;
-    ctx.mock_get_conversations(conversations, 1).await;
-    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1)
+    ctx.mock_get_conversations(conversations, 1u64.into()).await;
+    ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1u64.into())
         .await;
     ctx.catch_all().await;
     ctx.user_context()

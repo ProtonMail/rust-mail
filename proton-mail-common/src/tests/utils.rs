@@ -1,6 +1,6 @@
 use crate::datatypes::{ConversationCount, MessageAddress, MessageAddresses, MessageCount};
 use crate::models::{Conversation, ConversationLabel, Label, Message};
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use stash::orm::Model;
 use stash::stash::{Interface, Tether};
@@ -16,9 +16,9 @@ pub struct TestDBState {
 
 #[derive(Default)]
 pub struct TestDBStateMap {
-    pub labels: HashMap<LabelId, u64>,
-    pub conversations: HashMap<RemoteId, u64>,
-    pub messages: HashMap<RemoteId, u64>,
+    pub labels: HashMap<LabelId, LocalId>,
+    pub conversations: HashMap<RemoteId, LocalId>,
+    pub messages: HashMap<RemoteId, LocalId>,
     pub conversation_counts: HashMap<LabelId, ConversationCount>,
     pub message_counts: HashMap<LabelId, MessageCount>,
 }
@@ -263,7 +263,7 @@ pub fn message_counts_for_conversation(
     (unread, total)
 }
 
-pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<u64, ConversationCount> {
+pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<LocalId, ConversationCount> {
     BTreeMap::from_iter(
         Label::all(tx.stash(), None)
             .await
@@ -282,7 +282,7 @@ pub async fn conv_counts_as_map(tx: &Tether) -> BTreeMap<u64, ConversationCount>
     )
 }
 
-pub async fn msg_counts_as_map(tx: &Tether) -> BTreeMap<u64, MessageCount> {
+pub async fn msg_counts_as_map(tx: &Tether) -> BTreeMap<LocalId, MessageCount> {
     BTreeMap::from_iter(
         Label::all(tx.stash(), None)
             .await

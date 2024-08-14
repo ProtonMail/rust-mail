@@ -4,6 +4,7 @@ use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::datatypes::LocalId;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
@@ -16,7 +17,7 @@ pub struct Label(ActionData);
 
 impl Label {
     /// Create a new instance which applies `label_id` to the conversations with `ids`.
-    pub fn new(label_id: u64, ids: impl IntoIterator<Item = u64>) -> Self {
+    pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
         Self(ActionData::new(label_id, ids))
     }
 }

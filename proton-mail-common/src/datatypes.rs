@@ -57,7 +57,7 @@ use proton_api_mail::services::proton::response_data::{
     SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction, ViewLayout as ApiViewLayout,
     ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
@@ -851,7 +851,7 @@ sql_using_serde!(AttachmentEncryptedSignature);
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AttachmentMetadata {
     /// Local attachment id.
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// Attachment Id on the server.
     pub remote_id: Option<RemoteId>,
@@ -1662,7 +1662,7 @@ impl SystemLabelId for LabelId {}
 /// to be displayed to the client.
 pub struct ContextualConversation {
     /// Local id of the conversation.
-    pub local_id: u64,
+    pub local_id: LocalId,
 
     /// Remote id of the conversation.
     pub remote_id: Option<RemoteId>,
@@ -1725,7 +1725,7 @@ impl ContextualConversation {
     ///
     /// If the `local_label_id` is not present in the `conversation`, `None` is
     /// returned. This means that the conversation is not present in this label.
-    pub fn new(conversation: Conversation, local_label_id: u64) -> Option<Self> {
+    pub fn new(conversation: Conversation, local_label_id: LocalId) -> Option<Self> {
         let label = conversation
             .labels
             .iter()
@@ -1760,7 +1760,7 @@ impl ContextualConversation {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CustomLabel {
     /// Local id of the label
-    pub local_id: u64,
+    pub local_id: LocalId,
     /// Name of the label
     pub name: String,
     /// Color of the label.

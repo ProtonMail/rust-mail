@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MimeType as ApiMimeType,
 };
-use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType, RemoteId};
+use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType, LocalId, RemoteId};
 use proton_core_common::models::Address;
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use proton_crypto_inbox::attachment::{
@@ -60,7 +60,7 @@ async fn test_attachment_create_with_metadata() {
         .await
         .unwrap();
 
-    let db_attachment = Attachment::load(1, &stash).await.unwrap().unwrap();
+    let db_attachment = Attachment::load(1.into(), &stash).await.unwrap().unwrap();
     assert!(!db_attachment.has_complete_metadata());
 
     let mut attachment = Attachment::from(api_attachment.clone());
@@ -115,7 +115,7 @@ fn message_id() -> RemoteId {
 async fn create_attachment_dependencies(
     tx: &Tether,
     metadata: Option<ApiAttachmentMetadata>,
-) -> Result<(RemoteId, u64, u64), AppError> {
+) -> Result<(RemoteId, LocalId, LocalId), AppError> {
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
 
     Address {

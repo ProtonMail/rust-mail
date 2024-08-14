@@ -1,6 +1,6 @@
 use crate::actions::labels::Expand;
 use crate::{AppError, MailContextError};
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{LabelId, LocalId};
 use stash::orm::Model;
 use stash::params;
 use tracing::error;
@@ -21,7 +21,7 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
-        let settings = MailSettings::load(MAIL_SETTINGS_ID, self.user_ctx.stash())
+        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), self.user_ctx.stash())
             .await?
             .unwrap_or_default();
 
@@ -72,7 +72,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self, parent_id: Option<u64>) -> SidebarResult<Vec<Label>> {
+    pub async fn custom_folders(&self, parent_id: Option<LocalId>) -> SidebarResult<Vec<Label>> {
         if let Some(parent_id) = parent_id {
             Ok(Label::find(
                 "WHERE label_type = ? AND local_parent_id = ? ORDER BY display_order",
@@ -112,7 +112,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
+    pub async fn collapse_folder(&self, local_id: LocalId) -> SidebarResult<()> {
         self.user_ctx
             .execute_action(Expand::collapse(local_id))
             .await?;
@@ -124,7 +124,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
+    pub async fn expand_folder(&self, local_id: LocalId) -> SidebarResult<()> {
         self.user_ctx
             .execute_action(Expand::expand(local_id))
             .await?;
