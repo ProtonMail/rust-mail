@@ -4,72 +4,73 @@ mod tests;
 
 use crate::action;
 use crate::action::{Action, Metadata, Priority};
+use chrono::{DateTime, Utc};
 use indoc::indoc;
+use proton_core_common::datatypes::Resources;
 use proton_sqlite3::{Migration, MigratorError};
+use stash::datatypes::QueryResultU64;
+use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::ops::Add;
-use chrono::{DateTime, Utc};
 use tracing::debug;
-use stash::datatypes::QueryResultU64;
-use stash::exports::SqliteError;
 
 /// Associated action resource.
 #[derive(Debug, Eq, PartialEq, Model, Clone)]
 #[TableName("action_queue")]
-#[ModelActions(on_save)]
+#[ModelActions(on_load, on_save)]
 pub struct StoredAction {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    #[IdField(optional)]
+    #[IdField(autoincrement)]
     pub id: Option<u64>,
-    
+
     /// TODO: Document this field.
     #[DbField]
     pub action_type: String,
-    
+
     /// TODO: Document this field.
     #[DbField]
     pub debug_string: Option<String>,
-    
+
     /// TODO: Document this field.
     pub dependencies: Vec<u64>,
-    
+
     /// TODO: Document this field.
     #[DbField]
     pub created: DateTime<Utc>,
-    
+
     /// TODO: Document this field.
     #[DbField]
     pub priority: Priority,
-    
+
     /// TODO: Document this field.
     #[DbField]
     pub scheduled: DateTime<Utc>,
-    
+
     /// TODO: Document this field.
     #[DbField]
     pub state: Vec<u8>,
-    
+
     /// TODO: Document this field.
-    pub resources: Vec<Vec<u8>>,
-    
+    pub resources: Resources,
+
     /// TODO: Document this field.
     #[DbField]
     pub version: u32,
-    
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
-    
+
     /// The database instance that the record is associated with. This is
     /// present for convenience.
     #[StashField]
@@ -92,7 +93,7 @@ impl StoredAction {
             debug_string: None,
             dependencies: metadata.dependencies,
             priority: metadata.priority_override.unwrap_or(T::PRIORITY),
-            resources: metadata.resources,
+            resources: metadata.resources.into(),
             scheduled: delayed,
             state: serialized_state,
             version: T::VERSION,
@@ -100,7 +101,7 @@ impl StoredAction {
             stash: None,
         })
     }
-    
+
     pub(crate) fn short_dbg_str(&self) -> String {
         format!(
             "Action {{id={:?} type={} version={} queued={} delayed={} debug_str={} }}",
@@ -112,7 +113,7 @@ impl StoredAction {
             self.debug_string.as_deref().unwrap_or("")
         )
     }
-    
+
     /// Return the number of pending actions in the queue.
     ///
     ///
@@ -122,7 +123,10 @@ impl StoredAction {
     pub async fn pending_count(tether: &Tether) -> Result<u64, StashError> {
         let count = tether
             .query::<_, QueryResultU64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
-            .await?.into_iter().next().ok_or_else(|| StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
         Ok(count.value)
     }
 
@@ -133,11 +137,14 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn contains(tether: &Tether, id: u64) -> Result<bool, StashError> {
         let ids = tether
-            .query::<_, QueryResultU64>("SELECT id AS value FROM action_queue WHERE id = ?", params![id])
+            .query::<_, QueryResultU64>(
+                "SELECT id AS value FROM action_queue WHERE id = ?",
+                params![id],
+            )
             .await?;
         Ok(!ids.is_empty())
     }
-    
+
     /// Extends [`Model::load()`] to load associated data.
     ///
     /// # Errors
@@ -152,21 +159,18 @@ impl StoredAction {
                 params![self.id],
             )
             .await?;
-        self
-            .dependencies
+        self.dependencies
             .extend(dependencies.into_iter().map(|v| v.value));
 
         // Resources
-        let resources = interface
-            .query::<_, QueryResultU64>(
+        self.resources = interface
+            .query::<_, Resources>(
                 "SELECT resource AS value FROM action_queue_resources WHERE action_id = ?",
-                params!(self.id),
+                params![self.id],
             )
-            .await?;
-        #[allow(clippy::cast_possible_truncation)]
-        self
-            .resources
-            .extend(resources.into_iter().map(|v| vec![v.value as u8]));
+            .await?
+            .pop()
+            .unwrap_or_default();
 
         Ok(())
     }
@@ -189,14 +193,12 @@ impl StoredAction {
         }
 
         // Create resources
-        for resource in &self.resources {
-            interface
-                .execute(
-                    "INSERT INTO action_queue_resources VALUES (?,?)",
-                    params![self.id, resource.clone()],
-                )
-                .await?;
-        }
+        interface
+            .execute(
+                "INSERT INTO action_queue_resources VALUES (?,?)",
+                params![self.id, self.resources.value.clone()],
+            )
+            .await?;
 
         Ok(())
     }
@@ -246,7 +248,6 @@ impl StoredAction {
                     ) = 0
                 ORDER BY
                     priority ASC, created ASC
-                LIMIT 1
             ",
             params![Utc::now()],
             tether,

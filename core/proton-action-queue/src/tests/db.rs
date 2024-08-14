@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::tests::common::NoopActionHandler;
+use pretty_assertions::assert_eq;
 use proton_api_core::service::ApiServiceError;
 use stash::orm::Model;
 use stash::stash::Interface;
@@ -62,15 +63,15 @@ async fn action_store_and_retrieve() {
         .build();
 
     let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
+    dbg!(&stored.resources);
+    stored.set_stash(&stash);
 
     conn.transaction().await.unwrap();
-    let mut stored_clone = stored.clone();
-    stored_clone.save_using(&conn).await.unwrap();
-    let id = stored_clone.id.unwrap();
+    stored.save_using(&conn).await.unwrap();
+    let id = stored.id.unwrap();
     conn.commit().await.unwrap();
     let db_action = StoredAction::load(id, &conn).await.unwrap().unwrap();
 
-    stored.id = Some(id);
     assert_eq!(stored, db_action);
 
     // delete action should delete both actions
@@ -82,6 +83,18 @@ async fn action_store_and_retrieve() {
 }
 
 async fn new_test_connection() -> Stash {
+    use std::io::stdout;
+    use tracing::subscriber::set_global_default;
+    use tracing::Level;
+    use tracing_subscriber::fmt::layer;
+    use tracing_subscriber::fmt::writer::MakeWriterExt;
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::{registry, EnvFilter};
+    drop(set_global_default(
+        registry()
+            .with(EnvFilter::new("debug,stash=debug"))
+            .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
+    ));
     let stash = Stash::new(None).unwrap();
     create_tables(&stash).await.unwrap();
     stash

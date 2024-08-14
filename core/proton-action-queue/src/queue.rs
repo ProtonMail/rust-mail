@@ -11,6 +11,7 @@ use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
+use stash::orm::Model;
 use stash::stash::{Interface, Stash, StashError, Tether};
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
@@ -18,7 +19,6 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use topological_sort::TopologicalSort;
 use tracing::{debug, error, Level};
-use stash::orm::Model;
 
 /// Errors which can occur while operating on the queue.
 #[derive(Debug, thiserror::Error)]
@@ -151,7 +151,7 @@ impl From<StoredAction> for QueuedMetadata {
             priority: value.priority,
             dependencies: value.dependencies,
             debug_string: value.debug_string,
-            resources: value.resources,
+            resources: value.resources.into(),
         }
     }
 }
@@ -606,6 +606,7 @@ impl Queue {
             e
         })?;
         tx.commit().await?;
+        dbg!("HERE");
 
         Ok(stored_action.id.unwrap())
     }

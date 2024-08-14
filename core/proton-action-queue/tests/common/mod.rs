@@ -87,9 +87,13 @@ impl TestExtension for Tether {
 
     async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
         let v = self
-            .query::<_, QueryResultU64>("SELECT value FROM ext WHERE key = ?", params![key.to_owned()])
+            .query::<_, QueryResultU64>(
+                "SELECT value FROM ext WHERE key = ?",
+                params![key.to_owned()],
+            )
             .await?
-            .into_iter().next();
+            .into_iter()
+            .next();
 
         Ok(v.map(|v| v.value as u32))
     }

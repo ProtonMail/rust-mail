@@ -1,7 +1,7 @@
 //! Common data types used for common generic query responses.
 
-use crate as stash;
 use crate::macros::DbRecord;
+use crate::{self as stash};
 use core::fmt::Debug;
 use rusqlite::types::FromSql;
 use rusqlite::ToSql;

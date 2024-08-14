@@ -8,11 +8,13 @@ edition = "2021"
 [dependencies]
 anyhow = { workspace = true }
 chrono = { workspace = true }
+flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
 log = "0.4.20"
 parking_lot = { workspace = true }
 proton-api-core = { workspace = true }
+proton-core-common = { workspace = true }
 proton-sqlite3 = { workspace = true }
 rmp = "0.8"
 rmp-serde = "1.1"
@@ -29,6 +31,7 @@ reqwest = { workspace = true }
 tempfile = "3"
 tracing-subscriber = "0.3"
 tracing-test = { version = "0.2", features = ["no-env-filter"] }
+pretty_assertions = { workspace = true }
 
 [lints]
 workspace = true

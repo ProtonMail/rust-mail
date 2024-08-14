@@ -39,6 +39,7 @@
 
 use core::fmt;
 use indoc::formatdoc;
+use itertools::Itertools;
 use proton_api_core::services::proton::common::{
     LightOrDarkMode as ApiLightOrDarkMode, RemoteId as ApiRemoteId,
 };
@@ -67,7 +68,7 @@ use stash::stash::{AgnosticInterface, Interface, StashError};
 use stash::utils::sql_using_serde;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::repeat;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use zeroize::Zeroize;
 
 //  ENUMS
@@ -1827,3 +1828,93 @@ impl Serialize for UserKeys {
 }
 
 sql_using_serde!(UserKeys);
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Resource(Vec<u8>);
+
+impl From<Vec<u8>> for Resource {
+    fn from(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Resource> for Vec<u8> {
+    fn from(value: Resource) -> Self {
+        value.0
+    }
+}
+
+sql_using_serde!(Resource);
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct InnerResources(Vec<Resource>);
+
+impl InnerResources {
+    pub fn into_inner(self) -> Vec<Resource> {
+        self.0
+    }
+}
+
+impl From<Vec<Vec<u8>>> for InnerResources {
+    fn from(resources: Vec<Vec<u8>>) -> Self {
+        Self(resources.into_iter().map_into().collect())
+    }
+}
+
+impl Deref for InnerResources {
+    type Target = Vec<Resource>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for InnerResources {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+sql_using_serde!(InnerResources);
+
+#[derive(Clone, DbRecord, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Resources {
+    #[DbField]
+    pub value: InnerResources,
+}
+
+impl Resources {
+    pub fn into_inner(self) -> Vec<Resource> {
+        self.value.into_inner()
+    }
+}
+
+impl From<Vec<Vec<u8>>> for Resources {
+    fn from(resources: Vec<Vec<u8>>) -> Self {
+        Self {
+            value: resources.into(),
+        }
+    }
+}
+
+impl From<Resources> for Vec<Vec<u8>> {
+    fn from(resources: Resources) -> Self {
+        resources.into_inner().into_iter().map_into().collect()
+    }
+}
+
+impl Deref for Resources {
+    type Target = Vec<Resource>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl DerefMut for Resources {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
+sql_using_serde!(Resources);
