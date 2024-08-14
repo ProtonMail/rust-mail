@@ -189,12 +189,12 @@ lazy_static! {
 fn find_conversation_message_id(
     labels: &[&Label],
     messages: &[(MessageFlags, bool)],
-    expected_id: Option<u64>,
+    expected_id: Option<LocalId>,
 ) {
     let messages = messages
         .iter()
         .enumerate()
-        .map(|(id, (flags, unread))| message_metadata_with_flags(id as u64, *flags, *unread))
+        .map(|(id, (flags, unread))| message_metadata_with_flags((id as u64).into(), *flags, *unread))
         .collect::<Vec<_>>();
 
     for label in labels {

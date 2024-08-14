@@ -62,7 +62,7 @@ use proton_api_mail::services::proton::responses::{
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -143,7 +143,7 @@ pub struct Attachment {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// API Attachment id.
     #[DbField]
@@ -157,7 +157,7 @@ pub struct Attachment {
 
     /// Local conversation id where this attachment is present.
     #[DbField]
-    pub local_conversation_id: Option<u64>,
+    pub local_conversation_id: Option<LocalId>,
 
     /// Remote conversation id where this attachment is present.
     #[DbField]
@@ -165,7 +165,7 @@ pub struct Attachment {
 
     /// Local message id where this attachment is present.
     #[DbField]
-    pub local_message_id: Option<u64>,
+    pub local_message_id: Option<LocalId>,
 
     /// Remote message id where this attachment is present.
     #[DbField]
@@ -265,7 +265,7 @@ impl Attachment {
     ///
     /// Return error if the query failed.
     pub async fn load_conversation_attachment_metadata(
-        conversation_id: u64,
+        conversation_id: LocalId,
         interface: &AgnosticInterface,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM conversation_attachments WHERE local_conversation_id = ?)",
@@ -282,7 +282,7 @@ impl Attachment {
     ///
     /// Return error if the query failed.
     pub async fn load_message_attachment_metadata(
-        message_id: u64,
+        message_id: LocalId,
         interface: &AgnosticInterface,
     ) -> Result<Vec<AttachmentMetadata>, StashError> {
         Self::find("WHERE local_id IN (SELECT local_attachment_id FROM message_attachments WHERE local_message_id = ?)",
@@ -362,7 +362,7 @@ impl Attachment {
     pub async fn find_local_id_for_remote_id(
         remote_id: RemoteId,
         interface: &AgnosticInterface,
-    ) -> Result<Option<u64>, StashError> {
+    ) -> Result<Option<LocalId>, StashError> {
         let Some(local_id) = interface
             .query::<_, QueryResultU64>(
                 format!(
@@ -377,7 +377,7 @@ impl Attachment {
             return Ok(None);
         };
 
-        Ok(Some(local_id[0].value))
+        Ok(Some(local_id[0].value.into()))
     }
 
     /// Fetch attachment content from the API.
@@ -532,7 +532,7 @@ pub struct Conversation {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -633,8 +633,8 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn apply_label_to_multiple(
-        label_id: u64,
-        ids: Vec<u64>,
+        label_id: LocalId,
+        ids: Vec<LocalId>,
         tether: &Tether,
     ) -> Result<(), StashError> {
         let label = Label::load(label_id, tether).await?.unwrap();
@@ -724,7 +724,7 @@ impl Conversation {
     pub async fn create_or_update_conversations(
         conversations: Vec<Conversation>,
         stash: &Stash,
-    ) -> Result<Vec<u64>, AppError> {
+    ) -> Result<Vec<LocalId>, AppError> {
         let mut ids = Vec::with_capacity(conversations.len());
 
         for mut conv in conversations {
@@ -756,8 +756,8 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn delete_multiple(
-        ids: Vec<u64>,
-        label_id: u64,
+        ids: Vec<LocalId>,
+        label_id: LocalId,
         tether: &Tether,
     ) -> Result<usize, StashError> {
         // TODO: This used to do more, but the additional behaviour will be
@@ -846,7 +846,7 @@ impl Conversation {
     pub async fn find_local_ids(
         remote_ids: Vec<RemoteId>,
         tether: &Tether,
-    ) -> Result<Vec<u64>, StashError> {
+    ) -> Result<Vec<LocalId>, StashError> {
         let mut ids = Vec::with_capacity(remote_ids.len());
         let query = format!(
             "SELECT local_id FROM {} WHERE remote_id = ?",
@@ -858,7 +858,7 @@ impl Conversation {
                 .await
                 .optional()?
             {
-                ids.push(id.value)
+                ids.push(id.value.into())
             }
         }
         Ok(ids)
@@ -876,7 +876,7 @@ impl Conversation {
     /// Returns an error if the data could not be read from the database.
     ///
     pub async fn find_remote_ids(
-        local_ids: Vec<u64>,
+        local_ids: Vec<LocalId>,
         tether: &Tether,
     ) -> Result<Vec<RemoteId>, StashError> {
         let mut ids = Vec::with_capacity(local_ids.len());
@@ -914,7 +914,7 @@ impl Conversation {
     /// * `label`    - TODO: Document this parameter.
     /// * `messages` - TODO: Document this parameter.
     ///
-    pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<u64> {
+    pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<LocalId> {
         if messages.is_empty() {
             return None;
         }
@@ -922,7 +922,7 @@ impl Conversation {
         fn first_consecutive_unread_msg(
             messages: &[Message],
             filter: impl Fn(&Message) -> bool,
-        ) -> Option<u64> {
+        ) -> Option<LocalId> {
             let mut last_unread = None;
 
             for msg in messages.iter().rev() {
@@ -1158,7 +1158,10 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_multiple_as_read(ids: Vec<u64>, stash: &Tether) -> Result<(), StashError> {
+    pub async fn mark_multiple_as_read(
+        ids: Vec<LocalId>,
+        stash: &Tether,
+    ) -> Result<(), StashError> {
         for id in ids {
             if let Some(mut conv) = Conversation::load(id, stash).await? {
                 conv.num_unread = 0;
@@ -1199,7 +1202,10 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_multiple_as_unread(ids: Vec<u64>, tether: &Tether) -> Result<(), StashError> {
+    pub async fn mark_multiple_as_unread(
+        ids: Vec<LocalId>,
+        tether: &Tether,
+    ) -> Result<(), StashError> {
         // TODO: This is simplified, and will be updated when these operations are
         // TODO: refactored
         for id in ids {
@@ -1244,8 +1250,8 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn remove_label_from_multiple(
-        label_id: u64,
-        ids: Vec<u64>,
+        label_id: LocalId,
+        ids: Vec<LocalId>,
         tether: &Tether,
     ) -> Result<(), StashError> {
         // TODO: This used to do more, but the additional behaviour will be
@@ -1361,7 +1367,7 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn star_multiple(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
+    pub async fn star_multiple(ids: Vec<LocalId>, stash: &Stash) -> Result<(), StashError> {
         let label_id = match Label::find_by_remote_id(LabelId::starred().into(), stash).await? {
             Some(label) => label.local_id.unwrap(),
             None => {
@@ -1384,7 +1390,7 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn unstar_multiple(ids: Vec<u64>, stash: &Stash) -> Result<(), StashError> {
+    pub async fn unstar_multiple(ids: Vec<LocalId>, stash: &Stash) -> Result<(), StashError> {
         let label_id = match Label::find_by_remote_id(LabelId::starred().into(), stash).await? {
             Some(label) => label.local_id.unwrap(),
             None => {
@@ -1481,8 +1487,8 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn undelete_multiple(
-        ids: Vec<u64>,
-        label_id: u64,
+        ids: Vec<LocalId>,
+        label_id: LocalId,
         tether: &Tether,
     ) -> Result<usize, StashError> {
         // TODO: This used to do more, but the additional behaviour will be
@@ -1558,9 +1564,9 @@ impl Conversation {
     ///
     /// Returns errors if the operation failed.
     pub async fn move_conversations(
-        source_id: u64,
-        destination_id: u64,
-        ids: Vec<u64>,
+        source_id: LocalId,
+        destination_id: LocalId,
+        ids: Vec<LocalId>,
         tx: &Tether,
     ) -> Result<(LabelId, LabelId), AppError> {
         let Some(source_label) = Label::load(source_id, tx).await? else {
@@ -1809,15 +1815,15 @@ pub struct ConversationLabel {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
-    pub local_conversation_id: Option<u64>,
+    pub local_conversation_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
-    pub local_label_id: Option<u64>,
+    pub local_label_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1871,9 +1877,9 @@ impl ConversationLabel {
     ///
     /// Returns error if the query failed.
     pub async fn labels_ids_for_conversation(
-        conversation_id: u64,
+        conversation_id: LocalId,
         tether: &Tether,
-    ) -> Result<Vec<u64>, StashError> {
+    ) -> Result<Vec<LocalId>, StashError> {
         let query = format!(
             "SELECT local_id FROM {} WHERE local_conversation_id = ?",
             Self::table_name()
@@ -1883,7 +1889,7 @@ impl ConversationLabel {
             .query::<_, QueryResultU64>(&query, params![conversation_id])
             .await?
             .into_iter()
-            .map(|v| v.value)
+            .map(|v| v.value.into())
             .collect())
     }
 
@@ -1996,7 +2002,7 @@ pub struct Label {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -2006,7 +2012,7 @@ pub struct Label {
 
     /// TODO: Document this field.
     #[DbField]
-    pub local_parent_id: Option<u64>,
+    pub local_parent_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -2381,7 +2387,7 @@ impl Label {
     pub async fn find_local_ids(
         remote_ids: Vec<LabelId>,
         interface: &AgnosticInterface,
-    ) -> Result<Vec<u64>, StashError> {
+    ) -> Result<Vec<LocalId>, StashError> {
         let mut ids = Vec::with_capacity(remote_ids.len());
         let query = format!(
             "SELECT local_id as value FROM {} WHERE remote_id = ?",
@@ -2393,7 +2399,7 @@ impl Label {
                 .await
                 .optional()?
             {
-                ids.extend(id.iter().map(|v| v.value).collect::<Vec<_>>())
+                ids.extend(id.iter().map(|v| v.value.into()).collect::<Vec<LocalId>>())
             }
         }
         Ok(ids)
@@ -2411,7 +2417,7 @@ impl Label {
     /// Returns an error if the data could not be read from the database.
     ///
     pub async fn find_remote_id(
-        local_id: u64,
+        local_id: LocalId,
         tether: &Tether,
     ) -> Result<Option<LabelId>, StashError> {
         let query = format!(
@@ -2520,7 +2526,7 @@ pub struct MailSettings {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -2786,7 +2792,7 @@ pub struct Message {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_id: Option<u64>,
+    pub local_id: Option<LocalId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
@@ -2796,7 +2802,7 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub local_conversation_id: Option<u64>,
+    pub local_conversation_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -2943,7 +2949,7 @@ impl Message {
     pub async fn create_or_update_messages_from_metadata(
         metadata: Vec<ApiMessageMetadata>,
         stash: &Stash,
-    ) -> Result<Vec<u64>, AppError> {
+    ) -> Result<Vec<LocalId>, AppError> {
         let mut ids = Vec::with_capacity(metadata.len());
 
         for metadata in metadata {
@@ -3331,7 +3337,7 @@ impl Message {
             let decrypted_message_body = self
                 .decrypt_from_remote(address_keys, pgp_provider, api)
                 .await?;
-            cache.add_item(key, decrypted_message_body.body.clone().as_bytes())?;
+            cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())?;
             Ok(decrypted_message_body)
         }
     }
@@ -3811,7 +3817,7 @@ pub struct MessageBodyMetadata {
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
-    pub local_message_id: Option<u64>,
+    pub local_message_id: Option<LocalId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of

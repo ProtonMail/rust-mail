@@ -244,7 +244,7 @@ impl From<ExclusiveLocation> for RealExclusiveLocation {
                 color,
             } => RealExclusiveLocation::Custom {
                 name,
-                local_id,
+                local_id: local_id.into(),
                 color: color.into(),
             },
         }
@@ -267,7 +267,7 @@ impl From<RealExclusiveLocation> for ExclusiveLocation {
                 color,
             } => ExclusiveLocation::Custom {
                 name,
-                local_id,
+                local_id: local_id.into(),
                 color: color.into(),
             },
         }
@@ -812,7 +812,7 @@ pub struct AttachmentMetadata {
 impl From<AttachmentMetadata> for RealAttachmentMetadata {
     fn from(value: AttachmentMetadata) -> Self {
         RealAttachmentMetadata {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
@@ -825,7 +825,7 @@ impl From<AttachmentMetadata> for RealAttachmentMetadata {
 impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
         AttachmentMetadata {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
@@ -923,7 +923,7 @@ pub struct Conversation {
 impl From<ContextualConversation> for Conversation {
     fn from(value: ContextualConversation) -> Self {
         Self {
-            local_id: value.local_id,
+            local_id: value.local_id.into(),
             attachments_metadata: value
                 .attachments_metadata
                 .into_iter()
@@ -1239,9 +1239,9 @@ pub struct Label {
 impl From<Label> for RealLabel {
     fn from(value: Label) -> Self {
         RealLabel {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             remote_id: value.remote_id.map(Into::into),
-            local_parent_id: value.local_parent_id,
+            local_parent_id: value.local_parent_id.map(Into::into),
             remote_parent_id: value.remote_parent_id.map(Into::into),
             color: value.color.into(),
             display: value.display,
@@ -1267,9 +1267,9 @@ impl From<Label> for RealLabel {
 impl From<RealLabel> for Label {
     fn from(value: RealLabel) -> Self {
         Label {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             remote_id: value.remote_id.map(Into::into),
-            local_parent_id: value.local_parent_id,
+            local_parent_id: value.local_parent_id.map(Into::into),
             remote_parent_id: value.remote_parent_id.map(Into::into),
             color: value.color.into(),
             display: value.display,
@@ -1468,7 +1468,7 @@ pub struct MailSettings {
 impl From<MailSettings> for RealMailSettings {
     fn from(value: MailSettings) -> Self {
         RealMailSettings {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
@@ -1518,7 +1518,7 @@ impl From<MailSettings> for RealMailSettings {
 impl From<RealMailSettings> for MailSettings {
     fn from(value: RealMailSettings) -> Self {
         MailSettings {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
@@ -1673,9 +1673,9 @@ pub struct Message {
 impl From<Message> for RealMessage {
     fn from(value: Message) -> Self {
         RealMessage {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             remote_id: value.remote_id.map(Into::into),
-            local_conversation_id: value.local_conversation_id,
+            local_conversation_id: value.local_conversation_id.map(Into::into),
             remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
             attachments_metadata: value
@@ -1720,9 +1720,9 @@ impl From<RealMessage> for Message {
         let starred = value.is_starred();
 
         Message {
-            local_id: value.local_id,
+            local_id: value.local_id.map(Into::into),
             remote_id: value.remote_id.map(Into::into),
-            local_conversation_id: value.local_conversation_id,
+            local_conversation_id: value.local_conversation_id.map(Into::into),
             remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
             attachments_metadata: value
@@ -2087,7 +2087,7 @@ pub struct MessageBodyMetadata {
 impl From<MessageBodyMetadata> for RealMessageBodyMetadata {
     fn from(value: MessageBodyMetadata) -> Self {
         RealMessageBodyMetadata {
-            local_message_id: value.local_message_id,
+            local_message_id: value.local_message_id.map(Into::into),
             remote_message_id: value.remote_message_id.map(Into::into),
             header: value.header,
             mime_type: value.mime_type.into(),
@@ -2101,7 +2101,7 @@ impl From<MessageBodyMetadata> for RealMessageBodyMetadata {
 impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
     fn from(value: RealMessageBodyMetadata) -> Self {
         MessageBodyMetadata {
-            local_message_id: value.local_message_id,
+            local_message_id: value.local_message_id.map(Into::into),
             remote_message_id: value.remote_message_id.map(Into::into),
             header: value.header,
             mime_type: value.mime_type.into(),
@@ -2435,7 +2435,7 @@ pub struct CustomLabel {
 impl From<RealCustomLabel> for CustomLabel {
     fn from(value: RealCustomLabel) -> Self {
         Self {
-            local_id: value.local_id,
+            local_id: value.local_id.into(),
             name: value.name,
             color: value.color.into(),
         }
@@ -2445,7 +2445,7 @@ impl From<RealCustomLabel> for CustomLabel {
 impl From<CustomLabel> for RealCustomLabel {
     fn from(value: CustomLabel) -> Self {
         Self {
-            local_id: value.local_id,
+            local_id: value.local_id.into(),
             name: value.name,
             color: value.color.into(),
         }

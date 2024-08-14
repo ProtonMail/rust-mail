@@ -6,7 +6,7 @@ use crate::models::Label;
 use crate::{actions::ActionError, AppError};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{LabelId, LocalId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Stash, Tether};
@@ -14,7 +14,7 @@ use tracing::debug;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Expand {
-    local_id: u64,
+    local_id: LocalId,
     remote_id: Option<LabelId>,
     expand: bool,
     original_state: Option<bool>,
@@ -22,15 +22,15 @@ pub struct Expand {
 
 impl Expand {
     #[allow(clippy::self_named_constructors)]
-    pub fn expand(local_id: u64) -> Self {
+    pub fn expand(local_id: LocalId) -> Self {
         Self::new(local_id, true)
     }
 
-    pub fn collapse(local_id: u64) -> Self {
+    pub fn collapse(local_id: LocalId) -> Self {
         Self::new(local_id, false)
     }
 
-    fn new(local_id: u64, expand: bool) -> Self {
+    fn new(local_id: LocalId, expand: bool) -> Self {
         Self {
             local_id,
             expand,

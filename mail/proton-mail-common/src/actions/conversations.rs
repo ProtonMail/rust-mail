@@ -1,7 +1,7 @@
 use crate::actions::ActionError;
 use crate::models::{Conversation, Label as LabelModel};
 use proton_api_mail::services::proton::response_data::OperationResult;
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::Tether;
 use tracing::error;
@@ -26,20 +26,20 @@ pub use unlabel::Unlabel;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ActionData {
     /// Local label id which this action applies to.
-    label_id: u64,
+    label_id: LocalId,
     /// Resolved remote label id.
     ///
     /// Note: this is only for user with remote execution, it should be set by then.
     remote_label_id: Option<LabelId>,
     /// Local conversation ids for the action to act on.
-    ids: Vec<u64>,
+    ids: Vec<LocalId>,
     /// Resolved remote conversation ids.
     remote_ids: Vec<RemoteId>,
 }
 
 impl ActionData {
     /// Create a new instance with the given `label_id` and conversation `ids`.
-    pub fn new(label_id: u64, ids: impl IntoIterator<Item = u64>) -> Self {
+    pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
         Self {
             ids: Vec::from_iter(ids),
             label_id,
@@ -80,7 +80,7 @@ impl ActionData {
 /// # Errors
 ///
 /// Returns error if the resolution failed.
-async fn find_remote_label_id(tether: &Tether, local_id: u64) -> Result<LabelId, ActionError> {
+async fn find_remote_label_id(tether: &Tether, local_id: LocalId) -> Result<LabelId, ActionError> {
     let Some(label_id) = LabelModel::find_remote_id(local_id, tether).await? else {
         return Err(AppError::LabelNotFound(local_id).into());
     };

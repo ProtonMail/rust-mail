@@ -44,7 +44,7 @@ use test_case::test_case;
 #[test_case(&[(&LabelId::from("custom_folder"), Folder)]
     => Some(ExclusiveLocation::Custom {
         name: "custom_folder".to_string(),
-        local_id: 0,
+        local_id: 0.into(),
         color: Default::default()
     }); "TEST7 - in custom folder"
 )]
@@ -57,7 +57,7 @@ use test_case::test_case;
     ]
     => Some(ExclusiveLocation::Custom {
         name: "custom_folder".to_string(),
-        local_id: 1,
+        local_id: 1.into(),
         color: Default::default()
     }); "TEST11 - in custom folder and starred"
 )]
@@ -84,7 +84,7 @@ use test_case::test_case;
     ]
     => Some(ExclusiveLocation::Custom {
         name: "custom_folder".to_string(),
-        local_id: 3,
+        local_id: 3.into(),
         color: Default::default()
     }); "TEST14 - all possible label types, but system label is not exclusive"
 )]
@@ -100,7 +100,7 @@ fn labels_from_ids(labels: &[(&LabelId, LabelType)]) -> Vec<Label> {
         .enumerate()
         .map(|(idx, (rid, label_type))| Label {
             remote_id: Some((*rid).clone()),
-            local_id: Some(idx as u64),
+            local_id: Some((idx as u64).into()),
             name: rid.as_str().to_owned(),
             label_type: *label_type,
             ..Default::default()

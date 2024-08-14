@@ -28,7 +28,7 @@ use proton_api_core::service::ApiServiceError;
 pub use proton_api_mail;
 pub use proton_core_common;
 use proton_core_common::cache::CacheError;
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{LabelId, LocalId};
 use stash::stash::StashError;
 
 use thiserror::Error;
@@ -46,11 +46,11 @@ pub enum AppError {
     #[error("API error: {0}")]
     API(#[from] ApiServiceError),
     #[error("Label with local id {0} does not have remote id")]
-    LabelDoesNotHaveRemoteId(u64),
+    LabelDoesNotHaveRemoteId(LocalId),
     #[error("Label with local id {0} not found")]
-    LabelNotFound(u64),
+    LabelNotFound(LocalId),
     #[error("MessageBodyMetadata missing in database for message {0}")]
-    MessageBodyMetadataMissing(u64),
+    MessageBodyMetadataMissing(LocalId),
     #[error("Could not find remote label {0}")]
     RemoteLabelDoesNotExist(LabelId),
     #[error("Cache error: {0}")]

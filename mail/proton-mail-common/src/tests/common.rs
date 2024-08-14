@@ -9,7 +9,7 @@ use proton_api_mail::services::proton::response_data::{
     ConversationLabel as ApiConversationLabel, MessageAddress as ApiMessageAddress,
 };
 use proton_core_common::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LabelId,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LabelId, LocalId,
 };
 use proton_core_common::models::{Address, ModelExtension};
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
@@ -54,7 +54,7 @@ macro_rules! conversation {
     }};
 }
 
-pub async fn create_labels(tx: &Tether) -> Vec<u64> {
+pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
     let mut labels = [test_label1(), test_label2()];
     for label in &mut labels {
         label.save_using(tx).await.expect("failed to create labels");

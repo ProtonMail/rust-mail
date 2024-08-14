@@ -16,7 +16,7 @@ use crate::mail::datatypes::{
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
 use crate::{LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
-use proton_core_common::datatypes::RemoteId as RealRemoteId;
+use proton_core_common::datatypes::{LocalId as RealLocalId, RemoteId as RealRemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
@@ -45,10 +45,12 @@ pub async fn apply_label(
     label_id: u64,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(
-        RealConversation::apply_label_to_multiple(label_id, ids, &session.stash().connection())
-            .await?,
+    Ok(RealConversation::apply_label_to_multiple(
+        label_id.into(),
+        ids.into_iter().map(Into::into).collect(),
+        &session.stash().connection(),
     )
+    .await?)
 }
 
 /// Delete the given conversations.
@@ -64,8 +66,12 @@ pub async fn apply_label(
 ///
 #[uniffi::export]
 pub async fn delete(mailbox: Arc<Mailbox>, ids: Vec<u64>) -> Result<(), MailboxError> {
-    RealConversation::delete_multiple(ids, mailbox.label_id(), &mailbox.stash().connection())
-        .await?;
+    RealConversation::delete_multiple(
+        ids.into_iter().map(Into::into).collect(),
+        mailbox.label_id().into(),
+        &mailbox.stash().connection(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -124,11 +130,11 @@ pub async fn load(
     id: u64,
     label_id: u64,
 ) -> Result<Option<Conversation>, MailboxError> {
-    let Some(conversation) = RealConversation::load(id, session.stash()).await? else {
+    let Some(conversation) = RealConversation::load(id.into(), session.stash()).await? else {
         return Ok(None);
     };
 
-    Ok(ContextualConversation::new(conversation, label_id).map(Into::into))
+    Ok(ContextualConversation::new(conversation, label_id.into()).map(Into::into))
 }
 
 /// Retrieve a conversation by remote ID.
@@ -159,7 +165,7 @@ pub async fn load_remote(
         return Ok(None);
     };
 
-    Ok(ContextualConversation::new(conversation, local_label_id).map(Into::into))
+    Ok(ContextualConversation::new(conversation, local_label_id.into()).map(Into::into))
 }
 
 /// Mark the given conversations as read.
@@ -175,7 +181,11 @@ pub async fn load_remote(
 ///
 #[uniffi::export]
 pub async fn mark_as_read(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
-    Ok(RealConversation::mark_multiple_as_read(ids, &session.stash().connection()).await?)
+    Ok(RealConversation::mark_multiple_as_read(
+        ids.into_iter().map(Into::into).collect(),
+        &session.stash().connection(),
+    )
+    .await?)
 }
 
 /// Mark the given conversations as unread.
@@ -191,7 +201,11 @@ pub async fn mark_as_read(session: Arc<MailSession>, ids: Vec<u64>) -> Result<()
 ///
 #[uniffi::export]
 pub async fn mark_as_unread(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
-    Ok(RealConversation::mark_multiple_as_unread(ids, &session.stash().connection()).await?)
+    Ok(RealConversation::mark_multiple_as_unread(
+        ids.into_iter().map(Into::into).collect(),
+        &session.stash().connection(),
+    )
+    .await?)
 }
 
 /// Move the given conversations from the current mailbox.
@@ -217,9 +231,9 @@ pub async fn relocate(
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
     RealConversation::move_conversations(
-        mailbox.label_id(),
-        label_id,
-        ids,
+        mailbox.label_id().into(),
+        label_id.into(),
+        ids.into_iter().map(Into::into).collect(),
         &mailbox.stash().connection(),
     )
     .await?;
@@ -244,10 +258,12 @@ pub async fn remove_label(
     label_id: u64,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(
-        RealConversation::remove_label_from_multiple(label_id, ids, &session.stash().connection())
-            .await?,
+    Ok(RealConversation::remove_label_from_multiple(
+        label_id.into(),
+        ids.into_iter().map(Into::into).collect(),
+        &session.stash().connection(),
     )
+    .await?)
 }
 
 /// Filter or search conversations which match the specified options.
@@ -275,7 +291,7 @@ pub async fn search_for_conversations(
         RealConversation::search(options.into(), session.api(), session.stash())
             .await?
             .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, local_label_id))
+            .filter_map(|c| ContextualConversation::new(c, local_label_id.into()))
             .map(Into::into)
             .collect(),
     )
@@ -294,7 +310,10 @@ pub async fn search_for_conversations(
 ///
 #[uniffi::export]
 pub async fn star(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
-    Ok(RealConversation::star_multiple(ids, session.stash()).await?)
+    Ok(
+        RealConversation::star_multiple(ids.into_iter().map(Into::into).collect(), session.stash())
+            .await?,
+    )
 }
 
 /// Unstar the given conversations.
@@ -310,7 +329,11 @@ pub async fn star(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), Mailbo
 ///
 #[uniffi::export]
 pub async fn unstar(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
-    Ok(RealConversation::unstar_multiple(ids, session.stash()).await?)
+    Ok(RealConversation::unstar_multiple(
+        ids.into_iter().map(Into::into).collect(),
+        session.stash(),
+    )
+    .await?)
 }
 
 /// Messages and watch handle for watched messages.
@@ -347,7 +370,7 @@ pub async fn watch(
     id: u64,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversation, MailboxError> {
-    let (sender, receiver) = flume::unbounded::<ResultsetChange<RealMessage, u64>>();
+    let (sender, receiver) = flume::unbounded::<ResultsetChange<RealMessage, RealLocalId>>();
     let results = RealMessage::find(
         "WHERE local_conversation_id = ?",
         params![id],
@@ -371,7 +394,7 @@ pub async fn watch(
             }
             match change {
                 ResultsetChange::Inserted(message) => {
-                    if message.local_conversation_id == Some(id) {
+                    if message.local_conversation_id == Some(id.into()) {
                         debug!("Received new message for watched conversation ({id})");
                         // Unwrapping is safe here, as we will always have the local ID
                         ids.push(message.local_id.unwrap());
@@ -384,7 +407,7 @@ pub async fn watch(
                     }
                 }
                 ResultsetChange::Updated(message) => {
-                    if message.local_conversation_id == Some(id) {
+                    if message.local_conversation_id == Some(id.into()) {
                         debug!("Received updated message for watched conversation ({id})");
                         callback.on_update();
                     } else {

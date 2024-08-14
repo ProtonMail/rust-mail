@@ -4,7 +4,7 @@ use crate::common::attachment::{testdata_attachment_data, testdata_expected_atta
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_mail_common::datatypes::{Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::Mailbox;
@@ -106,7 +106,7 @@ async fn load_attachment_from_cache() {
     // Add another value into cache
     user_context
         .attachements_cache()
-        .add_item(attachment_local_id, &testdata_attachment_data())
+        .add_item(attachment_local_id.into(), &testdata_attachment_data())
         .unwrap();
 
     // Load and decrypt attachment.
@@ -133,7 +133,7 @@ async fn load_attachment_content_first_time() {
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
     let attachment_local_id = 42;
-    attachment.local_id = Some(attachment_local_id);
+    attachment.local_id = Some(attachment_local_id.into());
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
@@ -155,7 +155,7 @@ async fn load_attachment_content_first_time() {
     // Action:
     //   * Get attachment
     let data_path = mailbox
-        .get_attachment_content(attachment_local_id, &attachment)
+        .get_attachment_content(attachment_local_id.into(), &attachment)
         .await
         .unwrap();
 
@@ -181,7 +181,7 @@ async fn load_attachment_content_from_cache() {
     let user_context = ctx.user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let attachment_local_id = 42;
-    let attachment = get_attachment(attachment_local_id, test_attachment);
+    let attachment = get_attachment(attachment_local_id.into(), test_attachment);
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -204,7 +204,7 @@ async fn load_attachment_content_from_cache() {
     // Action:
     //   * Get attachment
     let data_path = mailbox
-        .get_attachment_content(attachment_local_id, &attachment)
+        .get_attachment_content(attachment_local_id.into(), &attachment)
         .await
         .unwrap();
 
@@ -217,7 +217,7 @@ async fn load_attachment_content_from_cache() {
     );
 }
 
-fn get_attachment(id: u64, attachment: &ApiAttachment) -> Attachment {
+fn get_attachment(id: LocalId, attachment: &ApiAttachment) -> Attachment {
     Attachment {
         local_id: Some(id),
         remote_id: Some(attachment.id.clone().into()),

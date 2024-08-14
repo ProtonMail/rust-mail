@@ -4,6 +4,7 @@ use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
+use proton_core_common::datatypes::LocalId;
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
@@ -13,15 +14,15 @@ use tracing::error;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Move {
     /// The current label whether the conversations are locate.
-    source_label_id: u64,
+    source_label_id: LocalId,
     /// The destination label where the conversations should move to.
-    destination_label_id: u64,
+    destination_label_id: LocalId,
     /// Resolved remote id for the source label.
     remote_source_label_id: Option<LabelId>,
     /// Resolved remote id for the destination label.
     remote_destination_id: Option<LabelId>,
     /// Local conversation ids that need to be moved.
-    ids: Vec<u64>,
+    ids: Vec<LocalId>,
     /// Resolved remote conversation ids.
     remote_ids: Vec<RemoteId>,
 }
@@ -30,9 +31,9 @@ impl Move {
     /// Create a new action which moves conversations with `ids` from `source_label_id` to
     ///`destination_label_id`.
     pub fn new(
-        source_label_id: u64,
-        destination_label_id: u64,
-        ids: impl IntoIterator<Item = u64>,
+        source_label_id: LocalId,
+        destination_label_id: LocalId,
+        ids: impl IntoIterator<Item = LocalId>,
     ) -> Self {
         Self {
             source_label_id,

@@ -272,8 +272,8 @@ async fn test_create_message() {
         .unwrap()
         .unwrap();
     expected.set_stash(&stash);
-    expected.local_id = Some(1);
-    expected.row_id = Some(1);
+    expected.local_id = Some(1.into());
+    expected.row_id = Some(1u64.into());
     expected.exclusive_location = Some(ExclusiveLocation::Inbox);
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
@@ -500,7 +500,7 @@ async fn test_update_message() {
         name: label.name,
         color: label.color,
     }];
-    expected.local_id = Some(1);
+    expected.local_id = Some(1.into());
     expected.row_id = Some(1);
     assert_eq!(db_message, expected);
     assert!(db_message.is_starred());
@@ -1632,7 +1632,7 @@ async fn test_create_message_dependencies(tx: &Tether) -> u64 {
         .save()
         .await
         .expect("failed to create conversation");
-    conversation.local_id.unwrap()
+    conversation.local_id.unwrap().into()
 }
 
 fn test_message_metadata(

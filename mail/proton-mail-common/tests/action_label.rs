@@ -28,7 +28,7 @@ async fn test_label_custom_label() {
     let (init_params, conv_id, label_id, _) = test_init_params_label();
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
-    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.mock_get_conversations(conversations, 1u64.into()).await;
     ctx.mock_label_conversation(
         &label_id.clone().into(),
         vec![conv_id.clone().into()],

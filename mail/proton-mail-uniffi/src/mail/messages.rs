@@ -34,7 +34,7 @@ use super::datatypes::MessageAvailableAction;
 ///
 #[uniffi::export]
 pub async fn body(mailbox: Arc<Mailbox>, id: u64) -> Result<String, MailboxError> {
-    RealMessage::load(id, mailbox.stash())
+    RealMessage::load(id.into(), mailbox.stash())
         .await?
         .ok_or(MailboxError::MessageNotFound(id))
         // TODO: This might need to return a DecryptedMessageBody instead, but it's

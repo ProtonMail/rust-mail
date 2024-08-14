@@ -8,6 +8,7 @@ use crate::mail::datatypes::Label;
 use crate::mail::datatypes::LabelType;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::{LiveQueryCallback, WatchHandle};
+use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::LabelType as RealLabelType;
 use proton_mail_common::models::Label as RealLabel;
 use stash::orm::{Model, ResultsetChange};
@@ -87,7 +88,7 @@ impl Sidebar {
     pub async fn custom_folders(&self, parent_id: Option<u64>) -> SidebarResult<Vec<Label>> {
         Ok(self
             .sidebar
-            .custom_folders(parent_id)
+            .custom_folders(parent_id.map(Into::into))
             .await?
             .into_iter()
             .map(Into::into)
@@ -178,7 +179,7 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
-        Ok(self.sidebar.collapse_folder(local_id).await?)
+        Ok(self.sidebar.collapse_folder(local_id.into()).await?)
     }
 
     /// Set folder `expanded` field to it's expanded state
@@ -187,7 +188,7 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
-        Ok(self.sidebar.expand_folder(local_id).await?)
+        Ok(self.sidebar.expand_folder(local_id.into()).await?)
     }
 
     /// Watch labels of a given type.
@@ -209,7 +210,7 @@ impl Sidebar {
         label_type: LabelType,
         callback: Box<dyn LiveQueryCallback>,
     ) -> SidebarResult<Arc<WatchHandle>> {
-        let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, u64>>();
+        let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, RealLocalId>>();
         let results = RealLabel::find(
             "WHERE label_type = ?",
             params![RealLabelType::from(label_type)],

@@ -34,9 +34,9 @@ use proton_api_mail::services::proton::responses::{
     GetSettingsResponse as GetMailSettingsResponse,
 };
 use proton_core_common::datatypes::{
-    AddressStatus, AddressType, DateFormat, Density, Email, Flags, HighSecurity, LabelId, LogAuth,
-    Password, Phone, ProductUsedSpace, RemoteId, SettingsFlags, TfaStatus, TimeFormat, TwoFa,
-    UserMnemonicStatus, UserType, WeekStart,
+    AddressStatus, AddressType, DateFormat, Density, Email, Flags, HighSecurity, LabelId, LocalId,
+    LogAuth, Password, Phone, ProductUsedSpace, RemoteId, SettingsFlags, TfaStatus, TimeFormat,
+    TwoFa, UserMnemonicStatus, UserType, WeekStart,
 };
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_mail_common::datatypes::{ConversationCount, LabelType, MessageCount, SystemLabelId};

@@ -839,7 +839,7 @@ pub struct ContactCard {
 impl From<ContactCard> for RealContactCard {
     fn from(card: ContactCard) -> Self {
         Self {
-            local_id: card.local_id,
+            local_id: card.local_id.map(Into::into),
             remote_contact_id: card.remote_contact_id.map(Into::into),
             card_type: card.card_type.into(),
             data: card.data,
@@ -853,7 +853,7 @@ impl From<ContactCard> for RealContactCard {
 impl From<RealContactCard> for ContactCard {
     fn from(card: RealContactCard) -> Self {
         Self {
-            local_id: card.local_id,
+            local_id: card.local_id.map(Into::into),
             remote_contact_id: card.remote_contact_id.map(Into::into),
             card_type: card.card_type.into(),
             data: card.data,
