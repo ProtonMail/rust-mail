@@ -68,7 +68,7 @@ use stash::stash::{AgnosticInterface, Interface, StashError};
 use stash::utils::sql_using_serde;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::repeat;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use zeroize::Zeroize;
 
 //  ENUMS
@@ -1850,7 +1850,7 @@ sql_using_serde!(Resource);
 pub struct InnerResources(Vec<Resource>);
 
 impl InnerResources {
-    pub fn into_inner(self) -> Vec<Resource> {
+    fn into_inner(self) -> Vec<Resource> {
         self.0
     }
 }
@@ -1861,30 +1861,17 @@ impl From<Vec<Vec<u8>>> for InnerResources {
     }
 }
 
-impl Deref for InnerResources {
-    type Target = Vec<Resource>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for InnerResources {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 sql_using_serde!(InnerResources);
 
 #[derive(Clone, DbRecord, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(transparent)]
 pub struct Resources {
     #[DbField]
     pub value: InnerResources,
 }
 
 impl Resources {
-    pub fn into_inner(self) -> Vec<Resource> {
+    fn into_inner(self) -> Vec<Resource> {
         self.value.into_inner()
     }
 }
@@ -1900,20 +1887,6 @@ impl From<Vec<Vec<u8>>> for Resources {
 impl From<Resources> for Vec<Vec<u8>> {
     fn from(resources: Resources) -> Self {
         resources.into_inner().into_iter().map_into().collect()
-    }
-}
-
-impl Deref for Resources {
-    type Target = Vec<Resource>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl DerefMut for Resources {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
     }
 }
 

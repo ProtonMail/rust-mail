@@ -606,7 +606,6 @@ impl Queue {
             e
         })?;
         tx.commit().await?;
-        dbg!("HERE");
 
         Ok(stored_action.id.unwrap())
     }

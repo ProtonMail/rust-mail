@@ -196,7 +196,7 @@ impl StoredAction {
         interface
             .execute(
                 "INSERT INTO action_queue_resources VALUES (?,?)",
-                params![self.id, self.resources.value.clone()],
+                params![self.id, self.resources.clone()],
             )
             .await?;
 

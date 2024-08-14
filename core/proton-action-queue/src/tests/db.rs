@@ -63,7 +63,6 @@ async fn action_store_and_retrieve() {
         .build();
 
     let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
-    dbg!(&stored.resources);
     stored.set_stash(&stash);
 
     conn.transaction().await.unwrap();
