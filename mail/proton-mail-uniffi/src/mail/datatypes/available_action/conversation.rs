@@ -22,7 +22,7 @@ impl From<RealConversationAvailabaleAction> for ConversationAvailableAction {
     fn from(value: RealConversationAvailabaleAction) -> Self {
         ConversationAvailableAction {
             action: value.action.into(),
-            local_id: value.local_id,
+            local_id: value.local_id.into(),
             static_id: value.static_id.to_owned(),
         }
     }
@@ -61,17 +61,17 @@ impl From<RealConversationActionKind> for ConversationActionKind {
             RealConversationActionKind::Star => ConversationActionKind::Star,
             RealConversationActionKind::Unstar => ConversationActionKind::Unstar,
             RealConversationActionKind::Move { label } => ConversationActionKind::Move {
-                label_id: label.label_id,
+                label_id: label.label_id.into(),
                 name: label.name,
                 color: label.color.into(),
             },
             RealConversationActionKind::Label { label } => ConversationActionKind::Label {
-                label_id: label.label_id,
+                label_id: label.label_id.into(),
                 name: label.name,
                 color: label.color.into(),
             },
             RealConversationActionKind::Unlabel { label } => ConversationActionKind::Unlabel {
-                label_id: label.label_id,
+                label_id: label.label_id.into(),
                 name: label.name,
                 color: label.color.into(),
             },

@@ -63,12 +63,12 @@ mod available_actions {
         MessageAvailableAction::new(
             MessageActionKind::Move {
                 label: LabelAction {
-                    label_id: 0,
+                    label_id: 0.into(),
                     name: name.as_ref().to_owned(),
                     color: LabelColor::black(),
                 },
             },
-            0,
+            0.into(),
         )
     }
 
@@ -76,12 +76,12 @@ mod available_actions {
         MessageAvailableAction::new(
             MessageActionKind::Label {
                 label: LabelAction {
-                    label_id: 0,
+                    label_id: 0.into(),
                     name: name.as_ref().to_owned(),
                     color: LabelColor::purple(),
                 },
             },
-            0,
+            0.into(),
         )
     }
 
@@ -89,12 +89,12 @@ mod available_actions {
         MessageAvailableAction::new(
             MessageActionKind::Unlabel {
                 label: LabelAction {
-                    label_id: 0,
+                    label_id: 0.into(),
                     name: name.as_ref().to_owned(),
                     color: LabelColor::purple(),
                 },
             },
-            0,
+            0.into(),
         )
     }
 
@@ -108,9 +108,9 @@ mod available_actions {
                 move_action("Archive"),
                 move_action("Spam"),
                 move_action("Trash"),
-                MessageAvailableAction::new(MessageActionKind::Delete, 0),
-                MessageAvailableAction::new(MessageActionKind::Unstar, 0),
-                MessageAvailableAction::new(MessageActionKind::MarkRead, 0),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::Unstar, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::MarkRead, 0.into()),
             ],
         };
         static ref TEST2: TestCase = TestCase {
@@ -124,9 +124,9 @@ mod available_actions {
                 move_action("Trash"),
                 unlabel_action("Applicable Label 1"),
                 label_action("Applicable Label 2"),
-                MessageAvailableAction::new(MessageActionKind::Delete, 0),
-                MessageAvailableAction::new(MessageActionKind::Star, 0),
-                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::Star, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0.into()),
             ],
         };
         static ref TEST3: TestCase = TestCase {
@@ -135,9 +135,9 @@ mod available_actions {
             other_labels: vec![&APPLICABLE_LABEL_2],
             expected: vec![
                 label_action("Applicable Label 2"),
-                MessageAvailableAction::new(MessageActionKind::Delete, 0),
-                MessageAvailableAction::new(MessageActionKind::Star, 0),
-                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::Star, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0.into()),
             ],
         };
         static ref TEST4: TestCase = TestCase {
@@ -150,9 +150,9 @@ mod available_actions {
                 move_action("Trash"),
                 unlabel_action("Applicable Label 1"),
                 label_action("Applicable Label 2"),
-                MessageAvailableAction::new(MessageActionKind::Delete, 0),
-                MessageAvailableAction::new(MessageActionKind::Unstar, 0),
-                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+                MessageAvailableAction::new(MessageActionKind::Delete, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::Unstar, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0.into()),
             ],
         };
         static ref TEST5: TestCase = TestCase {
@@ -165,8 +165,8 @@ mod available_actions {
                 move_action("Trash"),
                 unlabel_action("Applicable Label 2"),
                 label_action("Applicable Label 1"),
-                MessageAvailableAction::new(MessageActionKind::Unstar, 0),
-                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0),
+                MessageAvailableAction::new(MessageActionKind::Unstar, 0.into()),
+                MessageAvailableAction::new(MessageActionKind::MarkUnread, 0.into()),
             ],
         };
     }
@@ -228,7 +228,7 @@ mod available_actions {
         actual.iter_mut().for_each(|action| match action.action {
             MessageActionKind::Move { ref mut label }
             | MessageActionKind::Label { ref mut label }
-            | MessageActionKind::Unlabel { ref mut label } => label.label_id = 0,
+            | MessageActionKind::Unlabel { ref mut label } => label.label_id = 0.into(),
             _ => {}
         });
         let expected = test_case

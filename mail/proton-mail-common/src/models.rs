@@ -45,6 +45,7 @@ use crate::datatypes::{
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
+use proton_action_queue::db::OptionalExtension;
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::requests::{
     GetConversationsOptions, GetMessagesOptions, PatchLabelRequest, PostLabelsRequest,
