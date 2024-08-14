@@ -4,8 +4,7 @@ use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
-use proton_core_common::datatypes::LocalId;
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
@@ -78,7 +77,7 @@ impl proton_action_queue::action::Handler for Handler {
         )
         .await?;
 
-        let remote_ids = Conversation::find_remote_ids(action.ids.clone(), tx)
+        let remote_ids = LocalId::counterparts::<Conversation, _>(action.ids.clone(), tx)
             .await
             .map_err(|e| {
                 error!("Failed to resolve conversation ids: {e}");
@@ -130,7 +129,7 @@ impl proton_action_queue::action::Handler for Handler {
         error!("Move operation failed for: {:?}", failed_ids);
 
         let tx = stash.transaction().await?;
-        let local_ids = Conversation::find_local_ids(failed_ids.clone(), &tx).await?;
+        let local_ids = RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
 
         Conversation::move_conversations(
             action.destination_label_id,

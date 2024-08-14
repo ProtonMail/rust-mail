@@ -25,7 +25,7 @@ use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition, MimeType as ApiMimeType,
 };
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{Id, LabelId};
 use stash::orm::Model;
 use stash::params;
 
@@ -739,12 +739,11 @@ async fn test_conversation_create_with_attachment() {
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id = Attachment::find_local_id_for_remote_id(
-        conv.attachments_metadata[0].id.clone().into(),
-        &stash.into(),
-    )
-    .await
-    .unwrap();
+    local_conversation.attachments_metadata[0].local_id =
+        RemoteId::from(conv.attachments_metadata[0].id.clone())
+            .counterpart::<Attachment, _>(&stash)
+            .await
+            .unwrap();
 
     assert_eq!(
         db_conversation.attachments_metadata[0],
@@ -793,12 +792,11 @@ async fn test_conversation_create_with_attachment_and_label() {
         .expect("should have value");
 
     // Patch local id.
-    local_conversation.attachments_metadata[0].local_id = Attachment::find_local_id_for_remote_id(
-        conv.attachments_metadata[0].id.clone().into(),
-        &stash.into(),
-    )
-    .await
-    .unwrap();
+    local_conversation.attachments_metadata[0].local_id =
+        RemoteId::from(conv.attachments_metadata[0].id.clone())
+            .counterpart::<Attachment, _>(&stash)
+            .await
+            .unwrap();
 
     assert_eq!(db_conversation.attachments_metadata.len(), 1);
     assert_eq!(
@@ -901,12 +899,11 @@ async fn test_conversation_update() {
 
     assert_eq!(local_conversation2.attachments_metadata.len(), 1);
     // Patch local id.
-    local_conversation2.attachments_metadata[0].local_id = Attachment::find_local_id_for_remote_id(
-        conv_update.attachments_metadata[0].id.clone().into(),
-        &stash.clone().into(),
-    )
-    .await
-    .unwrap();
+    local_conversation2.attachments_metadata[0].local_id =
+        RemoteId::from(conv_update.attachments_metadata[0].id.clone())
+            .counterpart::<Attachment, _>(&stash)
+            .await
+            .unwrap();
     local_conversation2.labels.remove(1);
 
     let db_conversation = Conversation::load(id, &stash)

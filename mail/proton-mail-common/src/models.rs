@@ -45,7 +45,6 @@ use crate::datatypes::{
 use crate::{AppError, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
-use proton_action_queue::db::{ActionQueueExtension, OptionalExtension};
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::requests::{
     GetConversationsOptions, GetMessagesOptions, PatchLabelRequest, PostLabelsRequest,
@@ -62,7 +61,7 @@ use proton_api_mail::services::proton::responses::{
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::ProtonCache;
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
@@ -73,9 +72,9 @@ use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use smart_default::SmartDefault;
-use stash::datatypes::{QueryResultString, QueryResultU64};
+use stash::datatypes::QueryResultU64;
 use stash::exports::ToSql;
-use stash::macros::{DbRecord, Model};
+use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
@@ -352,32 +351,6 @@ impl Attachment {
         }
 
         <Self as Model>::save(self).await
-    }
-
-    /// Retrieve the local id of an attachment based on their `remote_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
-    pub async fn find_local_id_for_remote_id(
-        remote_id: RemoteId,
-        interface: &AgnosticInterface,
-    ) -> Result<Option<LocalId>, StashError> {
-        let Some(local_id) = interface
-            .query::<_, QueryResultU64>(
-                format!(
-                    "SELECT local_id as value FROM {} WHERE remote_id=? LIMIT 1",
-                    Attachment::table_name()
-                ),
-                params![remote_id],
-            )
-            .await
-            .optional()?
-        else {
-            return Ok(None);
-        };
-
-        Ok(Some(local_id[0].value.into()))
     }
 
     /// Fetch attachment content from the API.
@@ -829,77 +802,6 @@ impl Conversation {
         api.get_conversations_count()
             .await
             .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
-    }
-
-    /// Find local IDs for the given remote IDs.
-    ///
-    /// # Parameters
-    ///
-    /// * `remote_ids` - The remote IDs to find local IDs for.
-    /// * `tether`     - The tether to use for the database connection.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn find_local_ids(
-        remote_ids: Vec<RemoteId>,
-        tether: &Tether,
-    ) -> Result<Vec<LocalId>, StashError> {
-        let mut ids = Vec::with_capacity(remote_ids.len());
-        let query = format!(
-            "SELECT local_id FROM {} WHERE remote_id = ?",
-            Self::table_name()
-        );
-        for remote_id in remote_ids {
-            if let Some(id) = tether
-                .query_row::<_, QueryResultU64>(&query, params![remote_id])
-                .await
-                .optional()?
-            {
-                ids.push(id.value.into())
-            }
-        }
-        Ok(ids)
-    }
-
-    /// Find remote IDs for the given local IDs.
-    ///
-    /// # Parameters
-    ///
-    /// * `local_ids` - The local IDs to find remote IDs for.
-    /// * `tether`    - The tether to use for the database connection.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn find_remote_ids(
-        local_ids: Vec<LocalId>,
-        tether: &Tether,
-    ) -> Result<Vec<RemoteId>, StashError> {
-        let mut ids = Vec::with_capacity(local_ids.len());
-        let query = format!(
-            "SELECT remote_id FROM {} WHERE local_id = ? AND remote_id IS NOT NULL",
-            Self::table_name()
-        );
-
-        #[derive(Debug, DbRecord, Eq, PartialEq, Clone)]
-        struct Record {
-            #[DbField]
-            remote_id: RemoteId,
-        }
-
-        for local_id in local_ids {
-            if let Some(id) = tether
-                .query_row::<_, Record>(&query, params![local_id])
-                .await
-                .optional()?
-            {
-                ids.push(id.remote_id)
-            }
-        }
-        Ok(ids)
     }
 
     /// Retrieve the first unread message that should be displayed to the user
@@ -1578,7 +1480,11 @@ impl Conversation {
             return Err(AppError::LabelDoesNotHaveRemoteId(source_id));
         };
 
-        let Some(remote_destination_id) = Label::find_remote_id(destination_id, tx).await? else {
+        let Some(remote_destination_id) = destination_id
+            .counterpart::<Label, _>(tx)
+            .await?
+            .map(LabelId::from)
+        else {
             return Err(AppError::LabelDoesNotHaveRemoteId(destination_id));
         };
 
@@ -1594,16 +1500,11 @@ impl Conversation {
 
         // When moving in Trash or Spam, remove all labels (but AllMail)
         if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
-            let all_mail_id = Label::find_local_ids(
-                vec![LabelId::all_mail()],
-                &AgnosticInterface::Tether(tx.to_owned()),
-            )
-            .await?;
-            if all_mail_id.is_empty() {
-                return Err(AppError::RemoteLabelDoesNotExist(LabelId::all_mail()));
-            }
-
-            let all_mail_local_id = all_mail_id[0];
+            let all_mail_id = RemoteId::from(LabelId::all_mail())
+                .counterpart::<Label, _>(&AgnosticInterface::Tether(tx.to_owned()))
+                .await?;
+            let all_mail_local_id = all_mail_id
+                .ok_or_else(|| AppError::RemoteLabelDoesNotExist(LabelId::all_mail()))?;
 
             for &local_conversation_id in &ids {
                 let label_ids =
@@ -1623,16 +1524,12 @@ impl Conversation {
             }
             // When moving out of Trash or Spam, add AlmostAllMail label
         } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
-            let almost_all_mail_id = Label::find_local_ids(
-                vec![LabelId::almost_all_mail()],
-                &AgnosticInterface::Tether(tx.to_owned()),
-            )
-            .await?;
-            if almost_all_mail_id.is_empty() {
-                return Err(AppError::RemoteLabelDoesNotExist(LabelId::almost_all_mail()));
-            }
+            let almost_all_mail_id = RemoteId::from(LabelId::almost_all_mail())
+                .counterpart::<Label, _>(&AgnosticInterface::Tether(tx.to_owned()))
+                .await?;
+            let almost_all_mail_local_id = almost_all_mail_id
+                .ok_or_else(|| AppError::RemoteLabelDoesNotExist(LabelId::almost_all_mail()))?;
 
-            let almost_all_mail_local_id = almost_all_mail_id[0];
             Conversation::apply_label_to_multiple(almost_all_mail_local_id, ids.clone(), tx)
                 .await
                 .map_err(|e| {
@@ -2224,12 +2121,11 @@ impl Label {
         for label in all_labels.iter_mut() {
             let parent_id_option = label.remote_parent_id.clone();
             label.local_parent_id = match parent_id_option {
-                Some(parent_id) => Self::find_local_ids(
-                    vec![parent_id],
-                    &AgnosticInterface::Stash(stash.to_owned()),
-                )
-                .await?
-                .pop(),
+                Some(parent_id) => {
+                    parent_id
+                        .counterpart::<Self, _>(&AgnosticInterface::Stash(stash.to_owned()))
+                        .await?
+                }
                 None => None,
             };
             let db_label =
@@ -2262,9 +2158,7 @@ impl Label {
         let parent_id_option = self.remote_parent_id.clone();
         self.local_parent_id = match parent_id_option {
             Some(parent_id) => {
-                let res = Self::find_local_ids(vec![parent_id], interface)
-                    .await?
-                    .pop();
+                let res = parent_id.counterpart::<Self, _>(interface).await?;
                 if res.is_none() {
                     // TODO: handle this error
                     error!(
@@ -2370,64 +2264,6 @@ impl Label {
         }
 
         None
-    }
-
-    /// Find local IDs for the given remote IDs.
-    ///
-    /// # Parameters
-    ///
-    /// * `remote_ids` - The remote IDs to find local IDs for.
-    /// * `tether`     - The tether to use for the database connection.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn find_local_ids(
-        remote_ids: Vec<LabelId>,
-        interface: &AgnosticInterface,
-    ) -> Result<Vec<LocalId>, StashError> {
-        let mut ids = Vec::with_capacity(remote_ids.len());
-        let query = format!(
-            "SELECT local_id as value FROM {} WHERE remote_id = ?",
-            Self::table_name()
-        );
-        for remote_id in remote_ids {
-            if let Some(id) = interface
-                .query::<_, QueryResultU64>(&query, params![remote_id])
-                .await
-                .optional()?
-            {
-                ids.extend(id.iter().map(|v| v.value.into()).collect::<Vec<LocalId>>())
-            }
-        }
-        Ok(ids)
-    }
-
-    /// Find remote ID for the given local ID.
-    ///
-    /// # Parameters
-    ///
-    /// * `local_id` - The local ID to find remote ID.
-    /// * `tether`   - The tether to use for the database connection.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    pub async fn find_remote_id(
-        local_id: LocalId,
-        tether: &Tether,
-    ) -> Result<Option<LabelId>, StashError> {
-        let query = format!(
-            "SELECT remote_id FROM {} WHERE local_id = ? AND remote_id IS NOT NULL",
-            Self::table_name()
-        );
-        Ok(tether
-            .query_row::<_, QueryResultString>(&query, params![local_id])
-            .await
-            .optional()?
-            .map(|v| LabelId::from(v.value)))
     }
 
     /// Get all labels with given kind
