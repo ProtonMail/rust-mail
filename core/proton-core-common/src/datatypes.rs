@@ -66,6 +66,7 @@ use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use stash::utils::sql_using_serde;
 use std::fmt::{Debug, Display, Formatter};
+use std::iter::repeat;
 use std::ops::Deref;
 use zeroize::Zeroize;
 
@@ -228,6 +229,41 @@ impl Id for AgnosticId {
                 .counterpart::<T, A>(interface)
                 .await
                 .map(|id| id.map(Self::Local)),
+        }
+    }
+
+    async fn counterparts<T, A>(
+        ids: Vec<Self>,
+        interface: &A,
+    ) -> Result<Vec<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        match ids.first() {
+            Some(Self::Local(_)) => LocalId::counterparts::<T, A>(
+                ids.into_iter()
+                    .map(|id| match id {
+                        Self::Local(id) => id,
+                        Self::Remote(_) => unreachable!(),
+                    })
+                    .collect(),
+                interface,
+            )
+            .await
+            .map(|ids| ids.into_iter().map(Self::Remote).collect()),
+            Some(Self::Remote(_)) => RemoteId::counterparts::<T, A>(
+                ids.into_iter()
+                    .map(|id| match id {
+                        Self::Local(_) => unreachable!(),
+                        Self::Remote(id) => id,
+                    })
+                    .collect(),
+                interface,
+            )
+            .await
+            .map(|ids| ids.into_iter().map(Self::Local).collect()),
+            None => Ok(vec![]),
         }
     }
 
@@ -799,6 +835,36 @@ pub trait Id: Clone + Send + Sync {
         T: Model,
         A: Into<AgnosticInterface> + Interface;
 
+    /// Obtain the counterparts of a list of IDs.
+    ///
+    /// This function looks up the counterparts to the specified IDs, i.e. if
+    /// the IDs are [`LocalId`]s then the corresponding [`RemoteId`]s are
+    /// returned, and vice versa. Note that it does this via database query.
+    ///
+    /// For full usage details, see [`Model::find()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`       - The list of IDs to find the counterparts for.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::find()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::find()`]
+    ///
+    async fn counterparts<T, A>(
+        ids: Vec<Self>,
+        interface: &A,
+    ) -> Result<Vec<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface;
+
     /// Loads a record from the database by ID.
     ///
     /// This function retrieves a single record from the database by its unique
@@ -1254,6 +1320,42 @@ impl Id for LocalId {
             .map(|r| r.id))
     }
 
+    async fn counterparts<T, A>(
+        ids: Vec<Self>,
+        interface: &A,
+    ) -> Result<Vec<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let placeholders = repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+        #[allow(trivial_casts)]
+        let values = ids
+            .into_iter()
+            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+            .collect();
+        Ok(interface
+            .query::<_, QueryResultRemoteId>(
+                formatdoc!(
+                    "
+                    SELECT
+                        remote_id AS id
+                    FROM
+                        {}
+                    WHERE
+                        local_id IN ({})
+                    ",
+                    T::table_name(),
+                    placeholders,
+                ),
+                values,
+            )
+            .await?
+            .into_iter()
+            .map(|r| r.id)
+            .collect())
+    }
+
     async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
     where
         T: Model,
@@ -1515,6 +1617,42 @@ impl Id for RemoteId {
             .into_iter()
             .next()
             .map(|r| r.value.into()))
+    }
+
+    async fn counterparts<T, A>(
+        ids: Vec<Self>,
+        interface: &A,
+    ) -> Result<Vec<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let placeholders = repeat("?").take(ids.len()).collect::<Vec<_>>().join(", ");
+        #[allow(trivial_casts)]
+        let values = ids
+            .into_iter()
+            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+            .collect();
+        Ok(interface
+            .query::<_, QueryResultU64>(
+                formatdoc!(
+                    "
+                    SELECT
+                        local_id AS value
+                    FROM
+                        {}
+                    WHERE
+                        remote_id IN ({})
+                    ",
+                    T::table_name(),
+                    placeholders,
+                ),
+                values,
+            )
+            .await?
+            .into_iter()
+            .map(|r| r.value.into())
+            .collect())
     }
 
     async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
