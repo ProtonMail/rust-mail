@@ -117,7 +117,7 @@ async fn test_delete_remote() {
     for label in labels.clone() {
         let mut label = Label::from(label);
         if let Some(parent_id) = label.remote_parent_id.clone() {
-            label.local_parent_id = Label::find_by_remote_id(parent_id.into(), &stash)
+            label.local_parent_id = Label::find_by_id(RemoteId::from(parent_id), &stash)
                 .await
                 .expect("failed to get parent label")
                 .expect("parent label should exist")
@@ -601,7 +601,7 @@ async fn compare_local_to_remote(stash: &Stash, local: &Label, remote: &ApiLabel
     );
 
     if let Some(remote_parent_id) = local.remote_parent_id.clone() {
-        let parent_label = Label::find_by_remote_id(remote_parent_id.into(), stash)
+        let parent_label = Label::find_by_id(RemoteId::from(remote_parent_id), stash)
             .await
             .expect("failed to find parent label")
             .expect("Parent label should exist");

@@ -925,7 +925,7 @@ async fn test_conversation_undelete_all_mail() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&tx, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
-    let all_mail_label = Label::find_by_remote_id(LabelId::all_mail().into(), tx.stash())
+    let all_mail_label = Label::find_by_id(RemoteId::from(LabelId::all_mail()), tx.stash())
         .await
         .unwrap()
         .unwrap()
@@ -1012,7 +1012,7 @@ async fn test_conversation_delete_all_mail() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&tx, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
-    let all_mail_label = Label::find_by_remote_id(LabelId::all_mail().into(), tx.stash())
+    let all_mail_label = Label::find_by_id(RemoteId::from(LabelId::all_mail()), tx.stash())
         .await
         .unwrap()
         .unwrap()

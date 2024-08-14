@@ -160,7 +160,7 @@ pub async fn load_remote(
     local_label_id: u64,
 ) -> Result<Option<Conversation>, MailboxError> {
     let Some(conversation) =
-        RealConversation::find_by_remote_id(RealRemoteId::from(id), session.stash()).await?
+        RealConversation::find_by_id(RealRemoteId::from(id), session.stash()).await?
     else {
         return Ok(None);
     };

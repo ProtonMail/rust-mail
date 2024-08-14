@@ -267,7 +267,7 @@ async fn test_create_message() {
         .expect("failed to get message")
         .expect("must have a value");
     let mut expected = Message::from(message);
-    let label = Label::find_by_remote_id(MY_LABEL_ID1.clone().into(), &stash)
+    let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &stash)
         .await
         .unwrap()
         .unwrap();
@@ -489,7 +489,7 @@ async fn test_update_message() {
     db_message.flags = MessageFlags::from(metadata_updated.metadata.flags);
     db_message.save().await.expect("failed to update message");
 
-    let label = Label::find_by_remote_id(MY_LABEL_ID1.clone().into(), &stash)
+    let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &stash)
         .await
         .unwrap()
         .unwrap();

@@ -729,8 +729,7 @@ impl Conversation {
 
         for mut conv in conversations {
             conv.set_stash(stash);
-            if let Some(existing) =
-                Self::find_by_remote_id(conv.remote_id.clone().unwrap(), stash).await?
+            if let Some(existing) = Self::find_by_id(conv.remote_id.clone().unwrap(), stash).await?
             {
                 conv.local_id = existing.local_id;
                 conv.row_id = existing.row_id;
@@ -1368,7 +1367,7 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn star_multiple(ids: Vec<LocalId>, stash: &Stash) -> Result<(), StashError> {
-        let label_id = match Label::find_by_remote_id(LabelId::starred().into(), stash).await? {
+        let label_id = match Label::find_by_id(RemoteId::from(LabelId::starred()), stash).await? {
             Some(label) => label.local_id.unwrap(),
             None => {
                 error!("Starred label not found");
@@ -1391,7 +1390,7 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn unstar_multiple(ids: Vec<LocalId>, stash: &Stash) -> Result<(), StashError> {
-        let label_id = match Label::find_by_remote_id(LabelId::starred().into(), stash).await? {
+        let label_id = match Label::find_by_id(RemoteId::from(LabelId::starred()), stash).await? {
             Some(label) => label.local_id.unwrap(),
             None => {
                 error!("Starred label not found");
@@ -1944,7 +1943,7 @@ impl ConversationLabel {
         };
 
         let Some(local_label) =
-            Label::find_by_remote_id(remote_label_id.clone().into(), interface).await?
+            Label::find_by_id(RemoteId::from(remote_label_id.clone()), interface).await?
         else {
             return Err(StashError::Custom(
                 "Missing remote local label id".to_owned(),
@@ -2234,7 +2233,7 @@ impl Label {
                 None => None,
             };
             let db_label =
-                Label::find_by_remote_id(label.remote_id.clone().unwrap().into(), stash).await?;
+                Label::find_by_id(RemoteId::from(label.remote_id.clone().unwrap()), stash).await?;
             if let Some(mut db_label) = db_label {
                 db_label.color = label.color.clone();
                 db_label.display = label.display;
@@ -3004,7 +3003,7 @@ impl Message {
                 stash: Some(stash.clone()),
             };
             if let Some(existing) =
-                Self::find_by_remote_id(message.remote_id.clone().unwrap(), stash).await?
+                Self::find_by_id(message.remote_id.clone().unwrap(), stash).await?
             {
                 message.local_id = existing.local_id;
                 message.row_id = existing.row_id;
