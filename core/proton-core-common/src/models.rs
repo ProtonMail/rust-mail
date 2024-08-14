@@ -28,8 +28,8 @@
 //!
 
 use crate::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, CardType,
-    ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, HighSecurity,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, AgnosticId, CardType,
+    ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, HighSecurity, Id,
     LabelId, Labels, LocalId, LogAuth, Password, Phone, ProductUsedSpace, QueryResultRemoteId,
     Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
     WeekStart,
@@ -88,7 +88,7 @@ pub trait ModelExtension: Model {
         Self::find(String::new(), vec![], &interface.clone().into(), queue).await
     }
 
-    /// Finds a record by its remote ID.
+    /// Finds a record by its ID.
     ///
     /// The [`load()`](Model::load()) method is so-called to be the counterpart
     /// to [`save()`](Model::save()), but could equally be called `find_by_id()`
@@ -96,10 +96,10 @@ pub trait ModelExtension: Model {
     /// we have multiple ID types, and so "load" is a more generic term that is
     /// closely associated with local representations.
     ///
-    /// However, there is a need to find records by their remote IDs, which is
-    /// why this method is provided. It is a convenience method that wraps
-    /// [`find()`](Model::find_first()) and returns the first record found, if
-    /// any.
+    /// However, there is a need to find records by their remote IDs, and indeed
+    /// a need to *generically* find records regardless of ID type. Hence this
+    /// method is provided to help with that. It is a convenience method that
+    /// calls [`load()`](Id::load()) on the ID type itself.
     ///
     /// It does very little, and exists to formalise the interface for carrying
     /// out this process, for uniformity and centralisation of this common
@@ -107,7 +107,7 @@ pub trait ModelExtension: Model {
     ///
     /// # Parameters
     ///
-    /// * `remote_id` - The remote ID of the record to find.
+    /// * `id`        - The ID of the record to find.
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
     ///                 use for finding the record.
     ///
@@ -120,14 +120,12 @@ pub trait ModelExtension: Model {
     /// * [`find_first()`](Model::find_first())
     /// * [`load()`](Model::load())
     ///
-    async fn find_by_remote_id<A>(
-        remote_id: RemoteId,
-        interface: &A,
-    ) -> Result<Option<Self>, StashError>
+    async fn find_by_id<I, A>(id: I, interface: &A) -> Result<Option<Self>, StashError>
     where
+        I: Into<AgnosticId> + Id,
         A: Into<AgnosticInterface> + Interface,
     {
-        Self::find_first("WHERE remote_id = ?", params![remote_id], interface).await
+        id.load(interface).await
     }
 
     /// Finds local record IDs matching given criteria.
