@@ -38,6 +38,7 @@
 //!
 
 use core::fmt;
+use indoc::formatdoc;
 use proton_api_core::services::proton::common::{
     LightOrDarkMode as ApiLightOrDarkMode, RemoteId as ApiRemoteId,
 };
@@ -55,10 +56,14 @@ use proton_api_core::services::proton::response_data::{
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use secrecy::{CloneableSecret, DebugSecret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use stash::datatypes::QueryResultU64;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::macros::DbRecord;
+use stash::orm::Model;
+use stash::params;
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use stash::utils::sql_using_serde;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
@@ -156,6 +161,85 @@ impl FromSql for AddressType {
 impl ToSql for AddressType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+/// A dual-nature ID representation.
+///
+/// This enum allows transparent handling of a local or remote ID, i.e.
+/// [`LocalId`] or [`RemoteId`], in a single type. This is useful for cases such
+/// as combining functionality, e.g. finding a record by either ID type. This
+/// approach means that both can be accepted and used, plus their core/shared
+/// functionality can be used in the same way, but also the enum can be
+/// destructured to use one or other specifically if needed. This gives full
+/// functionality but also ease of use.
+///
+#[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(clippy::exhaustive_enums)]
+pub enum AgnosticId {
+    /// A [`LocalId`] instance.
+    Local(LocalId),
+
+    /// A [`RemoteId`] instance.
+    Remote(RemoteId),
+}
+
+impl From<LocalId> for AgnosticId {
+    fn from(id: LocalId) -> Self {
+        Self::Local(id)
+    }
+}
+
+impl From<&LocalId> for AgnosticId {
+    fn from(id: &LocalId) -> Self {
+        Self::Local(*id)
+    }
+}
+
+impl From<RemoteId> for AgnosticId {
+    fn from(id: RemoteId) -> Self {
+        Self::Remote(id)
+    }
+}
+
+impl From<&RemoteId> for AgnosticId {
+    fn from(id: &RemoteId) -> Self {
+        Self::Remote(id.clone())
+    }
+}
+
+impl Id for AgnosticId {
+    type Counterpart = AgnosticId;
+
+    async fn counterpart<T, A>(
+        &self,
+        interface: &A,
+    ) -> Result<Option<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        match self {
+            Self::Local(id) => id
+                .counterpart::<T, A>(interface)
+                .await
+                .map(|id| id.map(Self::Remote)),
+            Self::Remote(id) => id
+                .counterpart::<T, A>(interface)
+                .await
+                .map(|id| id.map(Self::Local)),
+        }
+    }
+
+    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        match self {
+            Self::Local(id) => id.load(interface).await,
+            Self::Remote(id) => id.load(interface).await,
+        }
     }
 }
 
@@ -671,6 +755,77 @@ impl ToSql for WeekStart {
     }
 }
 
+//  TRAITS
+//==============================================================================
+
+/// Presentation of functionality shared by both [`LocalId`] and [`RemoteId`].
+///
+/// This trait specifies functionality that is provided by both the [`LocalId`]
+/// and [`RemoteId`] types. Both of these types, plus the [`AgnosticId`] type,
+/// implement this trait, and so the key aspects common to both [`LocalId`]
+/// instances and [`RemoteId`] instances can be used in unified fashion.
+///
+#[allow(async_fn_in_trait)]
+pub trait Id: Clone + Send + Sync {
+    /// The counterpart type to this ID.
+    type Counterpart: Id;
+
+    /// Identify the counterpart to this ID.
+    ///
+    /// This function looks up the counterpart to this ID, i.e. if this ID is a
+    /// [`LocalId`] then the corresponding [`RemoteId`] is returned, and vice
+    /// versa. Note that it does this via database query.
+    ///
+    /// For full usage details, see [`Model::load()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::load()`]
+    ///
+    async fn counterpart<T, A>(
+        &self,
+        interface: &A,
+    ) -> Result<Option<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface;
+
+    /// Loads a record from the database by ID.
+    ///
+    /// This function retrieves a single record from the database by its unique
+    /// ID, as an instance of the specified type `T`, where `T` is any concrete
+    /// type implementing the [`Model`] trait.
+    ///
+    /// For full usage details, see [`Model::load()`].
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    /// # See also
+    ///
+    /// * [`Model::load()`]
+    ///
+    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface;
+}
+
 //  STRUCTS
 //==============================================================================
 
@@ -1028,6 +1183,12 @@ impl LocalId {
     }
 }
 
+impl AsRef<u64> for LocalId {
+    fn as_ref(&self) -> &u64 {
+        &self.0
+    }
+}
+
 impl Deref for LocalId {
     type Target = u64;
 
@@ -1057,6 +1218,48 @@ impl From<LocalId> for u64 {
 impl FromSql for LocalId {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         u64::column_result(value).map(LocalId)
+    }
+}
+
+impl Id for LocalId {
+    type Counterpart = RemoteId;
+
+    async fn counterpart<T, A>(
+        &self,
+        interface: &A,
+    ) -> Result<Option<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query::<_, QueryResultRemoteId>(
+                formatdoc!(
+                    "
+                    SELECT
+                        remote_id AS id
+                    FROM
+                        {}
+                    WHERE
+                        local_id = ?
+                    LIMIT 1
+                    ",
+                    T::table_name(),
+                ),
+                params![*self],
+            )
+            .await?
+            .into_iter()
+            .next()
+            .map(|r| r.id))
+    }
+
+    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        T::find_first("WHERE local_id = ?", params![*self], interface).await
     }
 }
 
@@ -1231,6 +1434,12 @@ impl CloneableSecret for RemoteId {}
 
 impl DebugSecret for RemoteId {}
 
+impl AsRef<str> for RemoteId {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
 impl Deref for RemoteId {
     type Target = String;
 
@@ -1272,6 +1481,48 @@ impl From<&str> for RemoteId {
 impl FromSql for RemoteId {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         String::column_result(value).map(RemoteId)
+    }
+}
+
+impl Id for RemoteId {
+    type Counterpart = LocalId;
+
+    async fn counterpart<T, A>(
+        &self,
+        interface: &A,
+    ) -> Result<Option<Self::Counterpart>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query::<_, QueryResultU64>(
+                formatdoc!(
+                    "
+                    SELECT
+                        local_id AS value
+                    FROM
+                        {}
+                    WHERE
+                        remote_id = ?
+                    LIMIT 1
+                    ",
+                    T::table_name(),
+                ),
+                params![self.clone()],
+            )
+            .await?
+            .into_iter()
+            .next()
+            .map(|r| r.value.into()))
+    }
+
+    async fn load<T, A>(&self, interface: &A) -> Result<Option<T>, StashError>
+    where
+        T: Model,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        T::find_first("WHERE remote_id = ?", params![self.clone()], interface).await
     }
 }
 
