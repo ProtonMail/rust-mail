@@ -297,12 +297,12 @@ mod available_actions {
         ConversationAvailableAction::new(
             ConversationActionKind::Move {
                 label: LabelAction {
-                    label_id: 0,
+                    label_id: 0.into(),
                     name: name.as_ref().to_owned(),
                     color: LabelColor::black(),
                 },
             },
-            0,
+            0.into(),
         )
     }
 
@@ -310,12 +310,12 @@ mod available_actions {
         ConversationAvailableAction::new(
             ConversationActionKind::Label {
                 label: LabelAction {
-                    label_id: 0,
+                    label_id: 0.into(),
                     name: name.as_ref().to_owned(),
                     color: LabelColor::purple(),
                 },
             },
-            0,
+            0.into(),
         )
     }
 
@@ -323,12 +323,12 @@ mod available_actions {
         ConversationAvailableAction::new(
             ConversationActionKind::Unlabel {
                 label: LabelAction {
-                    label_id: 0,
+                    label_id: 0.into(),
                     name: name.as_ref().to_owned(),
                     color: LabelColor::purple(),
                 },
             },
-            0,
+            0.into(),
         )
     }
 
@@ -342,9 +342,9 @@ mod available_actions {
                 move_action("Archive"),
                 move_action("Spam"),
                 move_action("Trash"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
-                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0),
-                ConversationAvailableAction::new(ConversationActionKind::MarkRead, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::MarkRead, 0.into()),
             ],
         };
         static ref TEST2: TestCase = TestCase {
@@ -358,9 +358,9 @@ mod available_actions {
                 move_action("Trash"),
                 unlabel_action("Applicable Label 1"),
                 label_action("Applicable Label 2"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
-                ConversationAvailableAction::new(ConversationActionKind::Star, 0),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::Star, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
             ],
         };
         static ref TEST3: TestCase = TestCase {
@@ -369,9 +369,9 @@ mod available_actions {
             other_labels: vec![&APPLICABLE_LABEL_2],
             expected: vec![
                 label_action("Applicable Label 2"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
-                ConversationAvailableAction::new(ConversationActionKind::Star, 0),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::Star, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
             ],
         };
         static ref TEST4: TestCase = TestCase {
@@ -384,9 +384,9 @@ mod available_actions {
                 move_action("Trash"),
                 unlabel_action("Applicable Label 1"),
                 label_action("Applicable Label 2"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0),
-                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
             ],
         };
         static ref TEST5: TestCase = TestCase {
@@ -399,8 +399,8 @@ mod available_actions {
                 move_action("Trash"),
                 unlabel_action("Applicable Label 2"),
                 label_action("Applicable Label 1"),
-                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0),
+                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0.into()),
+                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
             ],
         };
     }
@@ -466,7 +466,7 @@ mod available_actions {
         actual.iter_mut().for_each(|action| match action.action {
             ConversationActionKind::Move { ref mut label }
             | ConversationActionKind::Label { ref mut label }
-            | ConversationActionKind::Unlabel { ref mut label } => label.label_id = 0,
+            | ConversationActionKind::Unlabel { ref mut label } => label.label_id = 0.into(),
             _ => {}
         });
         let expected = test_case

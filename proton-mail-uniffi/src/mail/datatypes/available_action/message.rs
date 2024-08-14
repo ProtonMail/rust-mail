@@ -22,7 +22,7 @@ impl From<RealMessageAvailabaleAction> for MessageAvailableAction {
     fn from(value: RealMessageAvailabaleAction) -> Self {
         MessageAvailableAction {
             action: value.action.into(),
-            local_id: value.local_id,
+            local_id: value.local_id.into(),
             static_id: value.static_id.to_owned(),
         }
     }
@@ -61,17 +61,17 @@ impl From<RealMessageActionKind> for MessageActionKind {
             RealMessageActionKind::Star => MessageActionKind::Star,
             RealMessageActionKind::Unstar => MessageActionKind::Unstar,
             RealMessageActionKind::Move { label } => MessageActionKind::Move {
-                label_id: label.label_id,
+                label_id: label.label_id.into(),
                 name: label.name,
                 color: label.color.into(),
             },
             RealMessageActionKind::Label { label } => MessageActionKind::Label {
-                label_id: label.label_id,
+                label_id: label.label_id.into(),
                 name: label.name,
                 color: label.color.into(),
             },
             RealMessageActionKind::Unlabel { label } => MessageActionKind::Unlabel {
-                label_id: label.label_id,
+                label_id: label.label_id.into(),
                 name: label.name,
                 color: label.color.into(),
             },

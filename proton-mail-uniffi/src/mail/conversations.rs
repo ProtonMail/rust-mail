@@ -94,7 +94,7 @@ pub async fn available_actions_for_conversation(
     session: Arc<MailSession>,
     id: u64,
 ) -> Result<Vec<ConversationAvailableAction>, MailboxError> {
-    if let Some(conversation) = RealConversation::load(id, session.stash()).await? {
+    if let Some(conversation) = RealConversation::load(id.into(), session.stash()).await? {
         let actions = conversation
             .available_actions(session.stash())
             .await?

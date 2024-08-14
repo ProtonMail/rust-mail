@@ -1,4 +1,5 @@
 use super::LabelAction;
+use proton_core_common::datatypes::LocalId;
 
 /// Struct to reflect what kind of actions
 /// could be taken upon the conversation.
@@ -9,7 +10,7 @@ pub struct ConversationAvailableAction {
     pub action: ConversationActionKind,
 
     /// Conversation::local_id field
-    pub local_id: u64,
+    pub local_id: LocalId,
 
     /// Identificator for FE
     pub static_id: &'static str,
@@ -19,7 +20,7 @@ impl ConversationAvailableAction {
     /// Creates a new instance of ConversationAvailableAction
     /// and automates assignment of static_id
     ///
-    pub fn new(action: ConversationActionKind, label_id: u64) -> Self {
+    pub fn new(action: ConversationActionKind, label_id: LocalId) -> Self {
         let static_id = action.static_id();
 
         Self {

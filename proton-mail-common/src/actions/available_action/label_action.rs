@@ -1,8 +1,9 @@
 use crate::{datatypes::LabelColor, models::Label};
+use proton_core_common::datatypes::LocalId;
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LabelAction {
-    pub label_id: u64,
+    pub label_id: LocalId,
     pub name: String,
     pub color: LabelColor,
 }
