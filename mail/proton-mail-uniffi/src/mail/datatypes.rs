@@ -83,7 +83,7 @@ use proton_mail_common::models::{
     Label as RealLabel, MailSettings as RealMailSettings, Message as RealMessage,
     MessageBodyMetadata as RealMessageBodyMetadata,
 };
-use serde_json::{from_str as from_json_string, to_string as to_json_string};
+use serde_json::to_string as to_json_string;
 use smart_default::SmartDefault;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
@@ -809,19 +809,6 @@ pub struct AttachmentMetadata {
     pub size: u64,
 }
 
-impl From<AttachmentMetadata> for RealAttachmentMetadata {
-    fn from(value: AttachmentMetadata) -> Self {
-        RealAttachmentMetadata {
-            local_id: Some(value.local_id.into()),
-            remote_id: value.remote_id.map(Into::into),
-            disposition: value.disposition.into(),
-            mime_type: value.mime_type.into(),
-            filename: value.name,
-            size: value.size,
-        }
-    }
-}
-
 impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
         AttachmentMetadata {
@@ -960,16 +947,6 @@ pub struct ConversationCount {
 
     /// TODO: Document this field.
     pub unread: u64,
-}
-
-impl From<ConversationCount> for RealConversationCount {
-    fn from(value: ConversationCount) -> Self {
-        RealConversationCount {
-            label_id: value.label_id.into(),
-            total: value.total,
-            unread: value.unread,
-        }
-    }
 }
 
 impl From<RealConversationCount> for ConversationCount {
@@ -1122,15 +1099,6 @@ pub struct EncryptedMessageBody {
     pub metadata: MessageBodyMetadata,
 }
 
-impl From<EncryptedMessageBody> for RealEncryptedMessageBody {
-    fn from(value: EncryptedMessageBody) -> Self {
-        RealEncryptedMessageBody {
-            encrypted_body: value.encrypted_body,
-            metadata: value.metadata.into(),
-        }
-    }
-}
-
 impl From<RealEncryptedMessageBody> for EncryptedMessageBody {
     fn from(value: RealEncryptedMessageBody) -> Self {
         EncryptedMessageBody {
@@ -1206,34 +1174,6 @@ pub struct Label {
 
     /// TODO: Document this field.
     pub unread_msg: u64,
-}
-
-impl From<Label> for RealLabel {
-    fn from(value: Label) -> Self {
-        RealLabel {
-            local_id: Some(value.local_id.into()),
-            remote_id: value.remote_id.map(Into::into),
-            local_parent_id: value.local_parent_id.map(Into::into),
-            remote_parent_id: value.remote_parent_id.map(Into::into),
-            color: value.color.into(),
-            display: value.display,
-            expanded: value.expanded,
-            initialized_conv: value.initialized_conv,
-            initialized_msg: value.initialized_msg,
-            label_type: value.label_type.into(),
-            name: value.name,
-            notify: value.notify,
-            display_order: value.display_order,
-            path: value.path,
-            sticky: value.sticky,
-            total_conv: value.total_conv,
-            total_msg: value.total_msg,
-            unread_conv: value.unread_conv,
-            unread_msg: value.unread_msg,
-            row_id: None,
-            stash: None,
-        }
-    }
 }
 
 impl From<RealLabel> for Label {
@@ -1642,51 +1582,6 @@ pub struct Message {
     pub starred: bool,
 }
 
-impl From<Message> for RealMessage {
-    fn from(value: Message) -> Self {
-        RealMessage {
-            local_id: Some(value.local_id.into()),
-            remote_id: value.remote_id.map(Into::into),
-            local_conversation_id: Some(value.local_conversation_id.into()),
-            remote_conversation_id: value.remote_conversation_id.map(Into::into),
-            address_id: value.address_id.into(),
-            attachments_metadata: value
-                .attachments_metadata
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            bcc_list: value.bcc_list.into(),
-            body: String::new(),
-            cc_list: value.cc_list.into(),
-            deleted: value.deleted,
-            exclusive_location: value.exclusive_location.map(Into::into),
-            expiration_time: value.expiration_time,
-            external_id: value.external_id.map(Into::into),
-            header: value.header,
-            flags: value.flags.into(),
-            is_forwarded: value.is_forwarded,
-            is_replied: value.is_replied,
-            is_replied_all: value.is_replied_all,
-            label_ids: vec![],
-            mime_type: value.mime_type.into(),
-            num_attachments: value.num_attachments,
-            display_order: value.display_order,
-            parsed_headers: value.parsed_headers.into(),
-            reply_tos: value.reply_tos.into(),
-            sender: value.sender.into(),
-            size: value.size,
-            snooze_time: value.snooze_time,
-            subject: value.subject,
-            time: value.time,
-            to_list: value.to_list.into(),
-            unread: value.unread,
-            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
 impl From<RealMessage> for Message {
     fn from(value: RealMessage) -> Self {
         let starred = value.is_starred();
@@ -1829,28 +1724,6 @@ pub struct MessageAttachment {
 
     /// TODO: Document this field.
     pub size: u64,
-}
-
-impl From<MessageAttachment> for RealMessageAttachment {
-    fn from(value: MessageAttachment) -> Self {
-        RealMessageAttachment {
-            id: value.id.into(),
-            disposition: value.disposition.into(),
-            enc_signature: value
-                .enc_signature
-                .as_deref()
-                .map(|v| from_json_string(v).unwrap()),
-            headers: value.headers.into(),
-            key_packets: from_json_string(&value.key_packets).unwrap(),
-            mime_type: value.mime_type.into(),
-            signature: value
-                .signature
-                .as_deref()
-                .map(|v| from_json_string(v).unwrap()),
-            name: value.name,
-            size: value.size,
-        }
-    }
 }
 
 impl From<RealMessageAttachment> for MessageAttachment {
@@ -2006,14 +1879,6 @@ impl DerefMut for MessageAttachments {
     }
 }
 
-impl From<MessageAttachments> for RealMessageAttachments {
-    fn from(value: MessageAttachments) -> Self {
-        RealMessageAttachments {
-            value: value.value.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
 impl From<RealMessageAttachments> for MessageAttachments {
     fn from(value: RealMessageAttachments) -> Self {
         MessageAttachments {
@@ -2056,20 +1921,6 @@ pub struct MessageBodyMetadata {
     pub parsed_headers: ParsedHeaders,
 }
 
-impl From<MessageBodyMetadata> for RealMessageBodyMetadata {
-    fn from(value: MessageBodyMetadata) -> Self {
-        RealMessageBodyMetadata {
-            local_message_id: Some(value.local_message_id.into()),
-            remote_message_id: value.remote_message_id.map(Into::into),
-            header: value.header,
-            mime_type: value.mime_type.into(),
-            parsed_headers: value.parsed_headers.into(),
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
 impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
     fn from(value: RealMessageBodyMetadata) -> Self {
         MessageBodyMetadata {
@@ -2095,16 +1946,6 @@ pub struct MessageCount {
 
     /// TODO: Document this field.
     pub unread: u64,
-}
-
-impl From<MessageCount> for RealMessageCount {
-    fn from(value: MessageCount) -> Self {
-        RealMessageCount {
-            label_id: value.label_id.into(),
-            total: value.total,
-            unread: value.unread,
-        }
-    }
 }
 
 impl From<RealMessageCount> for MessageCount {
@@ -2406,16 +2247,6 @@ pub struct CustomLabel {
 
 impl From<RealCustomLabel> for CustomLabel {
     fn from(value: RealCustomLabel) -> Self {
-        Self {
-            local_id: value.local_id.into(),
-            name: value.name,
-            color: value.color.into(),
-        }
-    }
-}
-
-impl From<CustomLabel> for RealCustomLabel {
-    fn from(value: CustomLabel) -> Self {
         Self {
             local_id: value.local_id.into(),
             name: value.name,
