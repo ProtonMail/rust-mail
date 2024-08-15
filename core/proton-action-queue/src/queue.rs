@@ -3,14 +3,13 @@
 mod tests;
 
 use crate::action::{
-    Action, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult, Handler, Metadata,
-    Priority,
+    Action, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult, Handler, Id, Metadata,
+    Priority, Resources,
 };
 use crate::db::{self, StoredAction};
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_api_core::session::Session;
-use proton_core_common::datatypes::LocalId;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Interface, Stash, StashError, Tether};
@@ -33,7 +32,7 @@ pub enum Error {
     #[error("Deserialization error: {0}")]
     Deserialization(#[from] rmp_serde::decode::Error),
     #[error("Action {0} was cancelled")]
-    Cancelled(LocalId),
+    Cancelled(Id),
 }
 
 /// Errors that result from queuing or apply actions via the queue.
@@ -73,13 +72,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, thiserror::Error)]
 pub enum QueuedError {
     #[error("Factory Error (ActionId={0}): {1}")]
-    Factory(LocalId, FactoryError),
+    Factory(Id, FactoryError),
     #[error("Queued Action error: {0}")]
     Action(anyhow::Error, Box<QueuedMetadata>),
     #[error("DB Error: {0}")]
     DB(#[from] StashError),
     #[error("Action {0} does not exist")]
-    ActionNotFound(LocalId),
+    ActionNotFound(Id),
     #[error("Another thread is currently operating the queue")]
     Busy,
 }
@@ -118,7 +117,7 @@ pub type QueuedResult<T> = std::result::Result<T, QueuedError>;
 #[derive(Debug)]
 pub struct QueuedMetadata {
     /// Identifier of the stored action.
-    pub id: LocalId,
+    pub id: Id,
     /// Unique identifier for this action
     pub action_type: String,
     /// Version of the stored action.
@@ -134,11 +133,11 @@ pub struct QueuedMetadata {
     /// Other actions that this action depends on.
     ///
     /// Note that this only includes actions that have not yet executed.
-    pub dependencies: Vec<LocalId>,
+    pub dependencies: Vec<Id>,
     /// Optional debug string associated with this action.
     pub debug_string: Option<String>,
     /// Resources which were associated with this action.
-    pub resources: Vec<Vec<u8>>,
+    pub resources: Resources,
 }
 
 impl From<StoredAction> for QueuedMetadata {
@@ -152,7 +151,7 @@ impl From<StoredAction> for QueuedMetadata {
             priority: value.priority,
             dependencies: value.dependencies,
             debug_string: value.debug_string,
-            resources: value.resources.into(),
+            resources: value.resources,
         }
     }
 }
@@ -247,7 +246,7 @@ pub enum ActionStatus<T> {
     /// Action was executed successfully on local and on remote.
     Executed(T),
     /// Action could not be executed on the remote at this time and was queued.
-    Queued(LocalId),
+    Queued(Id),
 }
 
 impl Queue {
@@ -299,7 +298,7 @@ impl Queue {
     pub async fn queue_action<T: Action>(
         &self,
         action: T,
-    ) -> std::result::Result<LocalId, ActionError<T>> {
+    ) -> std::result::Result<Id, ActionError<T>> {
         self.queue_action_with_metadata::<T>(action, Metadata::default())
             .await
     }
@@ -315,7 +314,7 @@ impl Queue {
         &self,
         mut action: T,
         metadata: Metadata,
-    ) -> std::result::Result<LocalId, ActionError<T>> {
+    ) -> std::result::Result<Id, ActionError<T>> {
         debug!("Queueing action: {} {:?}", T::TYPE, metadata,);
         let handler = T::Handler::default();
 
@@ -390,7 +389,7 @@ impl Queue {
     ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
     /// another thread is currently invoking this function.
-    pub async fn execute_one(&self, session: &Session) -> QueuedResult<Option<LocalId>> {
+    pub async fn execute_one(&self, session: &Session) -> QueuedResult<Option<Id>> {
         self.with_exec_guard(async { self.execute_impl(session).await })
             .await
     }
@@ -438,7 +437,7 @@ impl Queue {
     ///
     /// Returns error if the db operation failed or if another thread is currently invoking
     /// this function.
-    pub async fn delete_action(&self, action_id: LocalId) -> QueuedResult<()> {
+    pub async fn delete_action(&self, action_id: Id) -> QueuedResult<()> {
         self.with_exec_guard(async {
             let tx = self.stash.transaction().await?;
             StoredAction::delete(&tx, action_id).await?;
@@ -463,7 +462,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the db query failed.
-    pub async fn contains(&self, action_id: LocalId) -> Result<bool> {
+    pub async fn contains(&self, action_id: Id) -> Result<bool> {
         let tether = self.stash.connection();
         Ok(StoredAction::contains(&tether, action_id).await?)
     }
@@ -473,7 +472,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the db query failed.
-    pub async fn action(&self, action_id: LocalId) -> Result<Option<QueuedMetadata>> {
+    pub async fn action(&self, action_id: Id) -> Result<Option<QueuedMetadata>> {
         let tether = self.stash.connection();
         let stored_action = StoredAction::load(action_id, &tether).await?;
         Ok(stored_action.map(QueuedMetadata::from))
@@ -491,7 +490,7 @@ impl Queue {
     /// Returns error if the db query failed, the action could not be found or another thread
     /// is currently invoking this function.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
-    pub async fn cancel(&self, action_id: LocalId) -> QueuedResult<()> {
+    pub async fn cancel(&self, action_id: Id) -> QueuedResult<()> {
         let conn = self.stash.connection();
         self.with_exec_guard(async move {
             let Some(action) = StoredAction::load(action_id, &conn).await? else {
@@ -519,12 +518,12 @@ impl Queue {
     /// Returns error if the db query failed or the action could not be found or another thread
     /// is currently invoking this function.
     #[tracing::instrument(level = Level::DEBUG, skip(self))]
-    pub async fn cancel_with_dependees(&self, action_id: LocalId) -> QueuedResult<Vec<LocalId>> {
+    pub async fn cancel_with_dependees(&self, action_id: Id) -> QueuedResult<Vec<Id>> {
         let tx = self.stash.connection();
         self.with_exec_guard(async move {
             let mut remaining_actions = vec![action_id];
             tx.transaction().await?;
-            let mut sorter = TopologicalSort::<LocalId>::new();
+            let mut sorter = TopologicalSort::<Id>::new();
             let mut cancelled_actions = Vec::new();
             while let Some(action_id) = remaining_actions.pop() {
                 let dependees = StoredAction::dependees(&tx, action_id).await.map_err(|e| {
@@ -557,7 +556,7 @@ impl Queue {
     }
 
     #[tracing::instrument(level = Level::DEBUG, skip(self, session))]
-    async fn execute_impl(&self, session: &Session) -> QueuedResult<Option<LocalId>> {
+    async fn execute_impl(&self, session: &Session) -> QueuedResult<Option<Id>> {
         let Some(action) = self.next_action().await.map_err(|e| {
             error!("Failed to retrieve action: {e}");
             e
@@ -589,7 +588,7 @@ impl Queue {
         handler: &T::Handler,
         action: &mut T,
         metadata: Metadata,
-    ) -> std::result::Result<LocalId, ActionError<T>> {
+    ) -> std::result::Result<Id, ActionError<T>> {
         let tx = self.stash.transaction().await?;
 
         handler.apply_local(action, &tx).await.map_err(|e| {
@@ -614,7 +613,7 @@ impl Queue {
     /// Shared snippet to execute actions remotely.
     async fn execute_action_remote<T: Action>(
         &self,
-        id: LocalId,
+        id: Id,
         handler: &T::Handler,
         action: &mut T,
         session: &Session,
@@ -673,7 +672,7 @@ impl Queue {
     }
 
     /// Check if this action was cancelled/removed.
-    async fn check_cancelled(&self, tether: &Tether, id: LocalId) -> Result<()> {
+    async fn check_cancelled(&self, tether: &Tether, id: Id) -> Result<()> {
         // Perform a sanity check before apply local state to make sure that a concurrent
         // request to cancel this action is identified.
         let contains = StoredAction::contains(tether, id).await.map_err(|e| {
@@ -747,7 +746,7 @@ pub(crate) trait QueuedAction {
 /// Type erasure trait for the action implementation.
 pub(crate) struct TypeErasedAction<T: Action> {
     /// Id of the action.
-    pub action_id: LocalId,
+    pub action_id: Id,
     /// Handler of the action.
     pub handler: T::Handler,
     /// The action itself.
@@ -789,7 +788,7 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
 /// Shared snippet to cancel actions.
 async fn cancel_action_impl<T: Action>(
     tx: &Tether,
-    id: LocalId,
+    id: Id,
     handler: &T::Handler,
     action: &mut T,
 ) -> std::result::Result<(), ActionError<T>> {

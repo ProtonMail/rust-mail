@@ -2,17 +2,18 @@ use crate::db::StoredAction;
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::Session;
-use proton_core_common::datatypes::LocalId;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
+use stash::sql_using_serde;
 use stash::stash::{Stash, Tether};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 /// Actions can return any error type, but we need to be able to inspect the http request error
 /// to detect network failure.
@@ -254,6 +255,51 @@ pub trait Handler: Default + 'static {
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error>;
 }
 
+/// Identifier for an action that has been queued.
+///
+/// This can be used to interact with certain API's available on the [`crate::queue::Queue`].
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct Id(pub u64);
+
+impl Display for Id {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+
+impl FromSql for Id {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        u64::column_result(value).map(Id)
+    }
+}
+
+impl ToSql for Id {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        self.0.to_sql()
+    }
+}
+
+/// A list of resources to associate with this action. Can be any of any type as
+/// long as it is serializable.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct Resources(Vec<Vec<u8>>);
+
+impl Deref for Resources {
+    type Target = Vec<Vec<u8>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for Resources {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+sql_using_serde!(Resources);
+
 /// Metadata associated with an [`Action`].
 ///
 /// By default, [`Action`]s do not have any associated metadata. If you queue an action
@@ -269,12 +315,12 @@ pub trait Handler: Default + 'static {
 pub struct Metadata {
     /// List of queued actions the action depends upon. The action will only execute if all
     /// the dependencies have been executed.
-    pub(crate) dependencies: Vec<LocalId>,
+    pub(crate) dependencies: Vec<Id>,
     /// Optional debug string which can be assigned to diagnose issues or provide more context.
     pub(crate) debug_string: Option<String>,
     /// A list of resources to associate with this action. Can be any of any type as long as it is
     /// serializable.
-    pub(crate) resources: Vec<Vec<u8>>,
+    pub(crate) resources: Resources,
     /// Time at which this action was created.
     pub(crate) created: chrono::DateTime<chrono::Utc>,
     /// If set, overrides the action's default priority.
@@ -288,7 +334,7 @@ impl Default for Metadata {
         Self {
             dependencies: vec![],
             debug_string: None,
-            resources: vec![],
+            resources: Resources::default(),
             created: chrono::Utc::now(),
             priority_override: None,
             delay: None,
@@ -353,7 +399,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependency(mut self, action_id: LocalId) -> Self {
+    pub fn with_dependency(mut self, action_id: Id) -> Self {
         self.metadata.dependencies.push(action_id);
         self
     }
@@ -366,7 +412,7 @@ impl MetadataBuilder {
     /// This function is cumulative and  will not override previous values if called
     /// multiple times.
     #[must_use]
-    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = LocalId>) -> Self {
+    pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = Id>) -> Self {
         self.metadata.dependencies.extend(action_ids);
         self
     }
@@ -413,7 +459,7 @@ impl MetadataBuilder {
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryError {
     #[error("Stored action {0} has unknown action type: {1}")]
-    UnknownType(LocalId, String),
+    UnknownType(Id, String),
     #[error("Action has invalid version {0}")]
     InvalidVersion(u32),
     #[error("Failed to deserialize: {0}")]

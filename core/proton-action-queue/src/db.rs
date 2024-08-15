@@ -3,10 +3,9 @@
 mod tests;
 
 use crate::action;
-use crate::action::{Action, Metadata, Priority};
+use crate::action::{Action, Id, Metadata, Priority, Resources};
 use chrono::{DateTime, Utc};
 use indoc::indoc;
-use proton_core_common::datatypes::{LocalId, Resources};
 use proton_sqlite3::{Migration, MigratorError};
 use stash::exports::SqliteError;
 use stash::macros::Model;
@@ -21,45 +20,42 @@ use tracing::debug;
 #[TableName("action_queue")]
 #[ModelActions(on_load, on_save)]
 pub struct StoredAction {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
+    /// Id assigned to any action that is stored in the queue for future
+    /// execution.
     #[IdField(autoincrement)]
-    pub id: Option<LocalId>,
+    pub id: Option<Id>,
 
-    /// TODO: Document this field.
+    /// Type of the action, used to re-construct this action from a [`Factory`]
     #[DbField]
     pub action_type: String,
 
-    /// TODO: Document this field.
+    /// Custom debug string that can optionally be associated with this action.
     #[DbField]
     pub debug_string: Option<String>,
 
-    /// TODO: Document this field.
-    pub dependencies: Vec<LocalId>,
+    /// Other actions this action depends on.
+    pub dependencies: Vec<Id>,
 
-    /// TODO: Document this field.
+    /// Time at which this action was created.
     #[DbField]
     pub created: DateTime<Utc>,
 
-    /// TODO: Document this field.
+    /// Action execution priority.
     #[DbField]
     pub priority: Priority,
 
-    /// TODO: Document this field.
+    /// Time at which this action should be executed.
     #[DbField]
     pub scheduled: DateTime<Utc>,
 
-    /// TODO: Document this field.
+    /// Serialized state fo the action.
     #[DbField]
     pub state: Vec<u8>,
 
-    /// TODO: Document this field.
+    /// Resources associated with the action.
     pub resources: Resources,
 
-    /// TODO: Document this field.
+    /// Version of the action.
     #[DbField]
     pub version: u32,
 
@@ -92,7 +88,7 @@ impl StoredAction {
             debug_string: None,
             dependencies: metadata.dependencies,
             priority: metadata.priority_override.unwrap_or(T::PRIORITY),
-            resources: metadata.resources.into(),
+            resources: metadata.resources,
             scheduled: delayed,
             state: serialized_state,
             version: T::VERSION,
@@ -130,9 +126,9 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn contains(tether: &Tether, id: LocalId) -> Result<bool, StashError> {
+    pub async fn contains(tether: &Tether, id: Id) -> Result<bool, StashError> {
         match tether
-            .query_value::<_, u64>(
+            .query_value::<_, Id>(
                 "SELECT id AS value FROM action_queue WHERE id = ?",
                 params![id],
             )
@@ -161,23 +157,31 @@ impl StoredAction {
     pub async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         // Dependencies
         let dependencies = interface
-            .query_values::<_, u64>(
+            .query_values::<_, Id>(
                 "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
             )
             .await?;
-        self.dependencies
-            .extend(dependencies.into_iter().map(LocalId::from));
+        self.dependencies.extend(dependencies);
 
         // Resources
-        self.resources = interface
-            .query::<_, Resources>(
+        match interface
+            .query_value::<_, Resources>(
                 "SELECT resource AS value FROM action_queue_resources WHERE action_id = ?",
                 params![self.id],
             )
-            .await?
-            .pop()
-            .unwrap_or_default();
+            .await
+        {
+            Ok(r) => self.resources = r,
+            Err(e) => {
+                if !matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    return Err(e);
+                }
+            }
+        };
 
         Ok(())
     }
@@ -215,7 +219,7 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    pub async fn delete(tether: &Tether, id: LocalId) -> Result<(), StashError> {
+    pub async fn delete(tether: &Tether, id: Id) -> Result<(), StashError> {
         tether
             .execute("DELETE FROM action_queue WHERE id = ?", params![id])
             .await?;
@@ -227,15 +231,13 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn dependees(tether: &Tether, id: LocalId) -> Result<Vec<LocalId>, StashError> {
-        let ids = tether
-            .query_values::<_, u64>(
+    pub async fn dependees(tether: &Tether, id: Id) -> Result<Vec<Id>, StashError> {
+        tether
+            .query_values::<_, Id>(
                 "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
                 params![id],
             )
-            .await?;
-
-        Ok(ids.into_iter().map(Into::into).collect::<Vec<_>>())
+            .await
     }
 
     /// Get the next action to be executed.
