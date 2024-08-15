@@ -547,11 +547,6 @@ impl From<RealWeekStart> for WeekStart {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<RemoteId>,
-
     /// TODO: Document this field.
     pub address_type: AddressType,
 
@@ -592,7 +587,6 @@ pub struct Address {
 impl From<RealAddress> for Address {
     fn from(address: RealAddress) -> Self {
         Self {
-            remote_id: address.remote_id.map(Into::into),
             address_type: address.address_type.into(),
             catch_all: address.catch_all,
             display_name: address.display_name,
@@ -710,11 +704,6 @@ impl From<RealApiConfig> for ApiConfig {
 
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct Contact {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<RemoteId>,
-
     /// TODO: Document this field.
     pub cards: Vec<ContactCard>,
 
@@ -735,15 +724,11 @@ pub struct Contact {
 
     /// TODO: Document this field.
     pub size: u64,
-
-    /// TODO: Document this field.
-    pub uid: RemoteId,
 }
 
 impl From<RealContact> for Contact {
     fn from(contact: RealContact) -> Self {
         Self {
-            remote_id: contact.remote_id.map(Into::into),
             cards: contact.cards.into_iter().map(ContactCard::from).collect(),
             contact_emails: contact
                 .contact_emails
@@ -755,7 +740,6 @@ impl From<RealContact> for Contact {
             modify_time: contact.modify_time,
             name: contact.name,
             size: contact.size,
-            uid: contact.uid.into(),
         }
     }
 }
@@ -775,9 +759,6 @@ pub struct ContactCard {
     pub local_id: u64,
 
     /// TODO: Document this field.
-    pub remote_contact_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
     pub card_type: CardType,
 
     /// TODO: Document this field.
@@ -791,7 +772,6 @@ impl From<RealContactCard> for ContactCard {
     fn from(card: RealContactCard) -> Self {
         Self {
             local_id: card.local_id.unwrap().into(),
-            remote_contact_id: card.remote_contact_id.map(Into::into),
             card_type: card.card_type.into(),
             data: card.data,
             signature: card.signature,
@@ -802,14 +782,6 @@ impl From<RealContactCard> for ContactCard {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct ContactEmail {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
-    pub remote_contact_id: Option<RemoteId>,
-
     /// TODO: Document this field.
     pub canonical_email: String,
 
@@ -841,8 +813,6 @@ pub struct ContactEmail {
 impl From<RealContactEmail> for ContactEmail {
     fn from(email: RealContactEmail) -> Self {
         Self {
-            remote_id: email.remote_id.map(Into::into),
-            remote_contact_id: email.remote_contact_id.map(Into::into),
             canonical_email: email.canonical_email,
             contact_type: email.contact_type.into(),
             defaults: email.defaults.into(),
@@ -1454,11 +1424,6 @@ impl From<RealTwoFa> for TwoFa {
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct User {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<RemoteId>,
-
     /// TODO: Document this field.
     pub create_time: u64,
 
@@ -1520,7 +1485,6 @@ pub struct User {
 impl From<RealUser> for User {
     fn from(user: RealUser) -> Self {
         Self {
-            remote_id: user.remote_id.map(Into::into),
             create_time: user.create_time,
             credit: user.credit,
             currency: user.currency,
@@ -1548,11 +1512,6 @@ impl From<RealUser> for User {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct UserSettings {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<RemoteId>,
-
     /// TODO: Document this field.
     pub crash_reports: bool,
 
@@ -1623,7 +1582,6 @@ pub struct UserSettings {
 impl From<RealUserSettings> for UserSettings {
     fn from(settings: RealUserSettings) -> Self {
         Self {
-            remote_id: settings.remote_id.map(Into::into),
             crash_reports: settings.crash_reports,
             date_format: settings.date_format.into(),
             density: settings.density.into(),

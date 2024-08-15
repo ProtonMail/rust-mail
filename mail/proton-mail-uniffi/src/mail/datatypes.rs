@@ -794,9 +794,6 @@ pub struct AttachmentMetadata {
     pub local_id: u64,
 
     /// TODO: Document this field.
-    pub remote_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
     pub disposition: Disposition,
 
     /// TODO: Document this field.
@@ -813,7 +810,6 @@ impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
         AttachmentMetadata {
             local_id: value.local_id.unwrap().into(),
-            remote_id: value.remote_id.map(Into::into),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
             name: value.filename,
@@ -1119,11 +1115,6 @@ pub struct Label {
     /// API ID, and never leaves the local system.
     pub local_id: u64,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<LabelId>,
-
     /// TODO: Document this field.
     pub local_parent_id: Option<u64>,
 
@@ -1180,7 +1171,6 @@ impl From<RealLabel> for Label {
     fn from(value: RealLabel) -> Self {
         Label {
             local_id: value.local_id.unwrap().into(),
-            remote_id: value.remote_id.map(Into::into),
             local_parent_id: value.local_parent_id.map(Into::into),
             remote_parent_id: value.remote_parent_id.map(Into::into),
             color: value.color.into(),
@@ -1486,11 +1476,6 @@ pub struct Message {
     /// API ID, and never leaves the local system.
     pub local_id: u64,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_id: Option<RemoteId>,
-
     /// TODO: Document this field.
     pub local_conversation_id: u64,
 
@@ -1518,9 +1503,6 @@ pub struct Message {
 
     /// TODO: Document this field.
     pub expiration_time: u64,
-
-    /// TODO: Document this field.
-    pub external_id: Option<RemoteId>,
 
     /// TODO: Document this field.
     pub header: String,
@@ -1588,7 +1570,6 @@ impl From<RealMessage> for Message {
 
         Message {
             local_id: value.local_id.unwrap().into(),
-            remote_id: value.remote_id.map(Into::into),
             local_conversation_id: value.local_conversation_id.unwrap().into(),
             remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
@@ -1602,7 +1583,6 @@ impl From<RealMessage> for Message {
             deleted: value.deleted,
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
-            external_id: value.external_id.map(Into::into),
             header: value.header,
             flags: value.flags.into(),
             is_forwarded: value.is_forwarded,
@@ -1699,9 +1679,6 @@ impl From<RealMessageAddresses> for MessageAddresses {
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
 pub struct MessageAttachment {
     /// TODO: Document this field.
-    pub id: RemoteId,
-
-    /// TODO: Document this field.
     pub disposition: Disposition,
 
     /// TODO: Document this field.
@@ -1729,7 +1706,6 @@ pub struct MessageAttachment {
 impl From<RealMessageAttachment> for MessageAttachment {
     fn from(value: RealMessageAttachment) -> Self {
         MessageAttachment {
-            id: value.id.into(),
             disposition: value.disposition.into(),
             enc_signature: value
                 .enc_signature
@@ -1906,11 +1882,6 @@ pub struct MessageBodyMetadata {
     /// API ID, and never leaves the local system.
     pub local_message_id: u64,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
-    pub remote_message_id: Option<RemoteId>,
-
     /// TODO: Document this field.
     pub header: String,
 
@@ -1925,7 +1896,6 @@ impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
     fn from(value: RealMessageBodyMetadata) -> Self {
         MessageBodyMetadata {
             local_message_id: value.local_message_id.unwrap().into(),
-            remote_message_id: value.remote_message_id.map(Into::into),
             header: value.header,
             mime_type: value.mime_type.into(),
             parsed_headers: value.parsed_headers.into(),
