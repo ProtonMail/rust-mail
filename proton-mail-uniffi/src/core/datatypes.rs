@@ -48,8 +48,8 @@ use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Config as RealApiConfig;
 use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};
 use proton_core_common::datatypes::{
-    AddressKeys as RealAddressKeys, AddressSignedKeyList as RealAddressSignedKeyList,
-    AddressStatus as RealAddressStatus, AddressType as RealAddressType, CardType as RealCardType,
+    AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
+    AddressType as RealAddressType, CardType as RealCardType,
     ContactSendingPreferences as RealContactSendingPreferences, ContactTypes as RealContactTypes,
     DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
     Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
@@ -57,8 +57,8 @@ use proton_core_common::datatypes::{
     LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
     ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
     SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
-    TwoFa as RealTwoFa, UserKeys as RealUserKeys, UserMnemonicStatus as RealUserMnemonicStatus,
-    UserType as RealUserType, WeekStart as RealWeekStart,
+    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    WeekStart as RealWeekStart,
 };
 use proton_core_common::models::{
     Address as RealAddress, Contact as RealContact, ContactCard as RealContactCard,
@@ -589,29 +589,6 @@ pub struct Address {
     pub status: AddressStatus,
 }
 
-impl From<Address> for RealAddress {
-    fn from(address: Address) -> Self {
-        Self {
-            remote_id: address.remote_id.map(Into::into),
-            address_type: address.address_type.into(),
-            catch_all: address.catch_all,
-            display_name: address.display_name,
-            display_order: address.display_order,
-            domain_id: address.domain_id,
-            email: address.email,
-            keys: RealAddressKeys::default(),
-            proton_mx: address.proton_mx,
-            receive: address.receive,
-            send: address.send,
-            signature: address.signature,
-            signed_key_list: address.signed_key_list.into(),
-            status: address.status.into(),
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
 impl From<RealAddress> for Address {
     fn from(address: RealAddress) -> Self {
         Self {
@@ -763,32 +740,6 @@ pub struct Contact {
     pub uid: RemoteId,
 }
 
-impl From<Contact> for RealContact {
-    fn from(contact: Contact) -> Self {
-        Self {
-            remote_id: contact.remote_id.map(Into::into),
-            cards: contact
-                .cards
-                .into_iter()
-                .map(RealContactCard::from)
-                .collect(),
-            contact_emails: contact
-                .contact_emails
-                .into_iter()
-                .map(RealContactEmail::from)
-                .collect(),
-            create_time: contact.create_time,
-            label_ids: contact.label_ids.into(),
-            modify_time: contact.modify_time,
-            name: contact.name,
-            size: contact.size,
-            uid: contact.uid.into(),
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
 impl From<RealContact> for Contact {
     fn from(contact: RealContact) -> Self {
         Self {
@@ -834,20 +785,6 @@ pub struct ContactCard {
 
     /// TODO: Document this field.
     pub signature: Option<String>,
-}
-
-impl From<ContactCard> for RealContactCard {
-    fn from(card: ContactCard) -> Self {
-        Self {
-            local_id: Some(card.local_id.into()),
-            remote_contact_id: card.remote_contact_id.map(Into::into),
-            card_type: card.card_type.into(),
-            data: card.data,
-            signature: card.signature,
-            row_id: None,
-            stash: None,
-        }
-    }
 }
 
 impl From<RealContactCard> for ContactCard {
@@ -899,26 +836,6 @@ pub struct ContactEmail {
 
     /// TODO: Document this field.
     pub name: String,
-}
-
-impl From<ContactEmail> for RealContactEmail {
-    fn from(email: ContactEmail) -> Self {
-        Self {
-            remote_id: email.remote_id.map(Into::into),
-            remote_contact_id: email.remote_contact_id.map(Into::into),
-            canonical_email: email.canonical_email,
-            contact_type: email.contact_type.into(),
-            defaults: email.defaults.into(),
-            display_order: email.display_order,
-            email: email.email,
-            is_proton: email.is_proton,
-            label_ids: email.label_ids.into(),
-            last_used_time: email.last_used_time,
-            name: email.name,
-            row_id: None,
-            stash: None,
-        }
-    }
 }
 
 impl From<RealContactEmail> for ContactEmail {
@@ -1600,36 +1517,6 @@ pub struct User {
     pub user_type: UserType,
 }
 
-impl From<User> for RealUser {
-    fn from(user: User) -> Self {
-        Self {
-            remote_id: user.remote_id.map(Into::into),
-            create_time: user.create_time,
-            credit: user.credit,
-            currency: user.currency,
-            delinquent: user.delinquent,
-            display_name: user.display_name,
-            email: user.email,
-            keys: RealUserKeys::default(),
-            flags: user.flags.into(),
-            max_space: user.max_space,
-            max_upload: user.max_upload,
-            mnemonic_status: user.mnemonic_status.into(),
-            private: user.private,
-            name: user.name,
-            product_used_space: user.product_used_space.into(),
-            role: user.role,
-            services: user.services,
-            subscribed: user.subscribed,
-            to_migrate: user.to_migrate,
-            used_space: user.used_space,
-            user_type: user.user_type.into(),
-            row_id: None,
-            stash: None,
-        }
-    }
-}
-
 impl From<RealUser> for User {
     fn from(user: RealUser) -> Self {
         Self {
@@ -1731,38 +1618,6 @@ pub struct UserSettings {
 
     /// TODO: Document this field.
     pub welcome: bool,
-}
-
-impl From<UserSettings> for RealUserSettings {
-    fn from(settings: UserSettings) -> Self {
-        Self {
-            remote_id: settings.remote_id.map(Into::into),
-            crash_reports: settings.crash_reports,
-            date_format: settings.date_format.into(),
-            density: settings.density.into(),
-            device_recovery: settings.device_recovery,
-            early_access: settings.early_access,
-            email: settings.email.into(),
-            flags: settings.flags.into(),
-            hide_side_panel: settings.hide_side_panel,
-            high_security: settings.high_security.into(),
-            invoice_text: settings.invoice_text,
-            locale: settings.locale,
-            log_auth: settings.log_auth.into(),
-            news: settings.news,
-            password: settings.password.into(),
-            phone: settings.phone.into(),
-            referral: settings.referral.map(RealReferral::from),
-            session_account_recovery: settings.session_account_recovery,
-            telemetry: settings.telemetry,
-            time_format: settings.time_format.into(),
-            two_factor_auth: settings.two_factor_auth.into(),
-            week_start: settings.week_start.into(),
-            welcome: settings.welcome,
-            row_id: None,
-            stash: None,
-        }
-    }
 }
 
 impl From<RealUserSettings> for UserSettings {
