@@ -109,6 +109,72 @@ pub async fn available_actions_for_conversation(
     }
 }
 
+/// Get a specified conversation.
+///
+/// # Parameters
+///
+/// * `mailbox` - The mailbox to use for the request.
+/// * `id`      - The local ID of the conversation to get.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn conversation(
+    mailbox: Arc<Mailbox>,
+    id: u64,
+) -> Result<Option<Conversation>, MailboxError> {
+    Ok(ContextualConversation::new(
+        RealConversation::load(id.into(), mailbox.stash())
+            .await?
+            .unwrap(),
+        mailbox.label_id().into(),
+    )
+    .map(Into::into))
+}
+
+/// Get conversations for the given label.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to get conversations for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn conversations_for_label(
+    session: Arc<MailSession>,
+    label_id: u64,
+) -> Result<Vec<Conversation>, MailboxError> {
+    Ok(RealConversation::find(
+        formatdoc!(
+            "
+            JOIN conversation_labels
+                ON conversations.local_id = conversation_labels.conversation_id
+            WHERE
+                conversation_labels.label_id = ?
+            "
+        ),
+        params![label_id],
+        session.stash(),
+        None,
+    )
+    .await?
+    .into_iter()
+    .map(|c| {
+        ContextualConversation::new(c, label_id.into())
+            .unwrap()
+            .into()
+    })
+    .collect())
+}
+
 /// Retrieve a conversation by local ID.
 ///
 /// Notably, this retrieves a local conversation that has been saved in the
