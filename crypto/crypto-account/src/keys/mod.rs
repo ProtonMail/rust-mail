@@ -16,6 +16,8 @@ mod mail_public_keys;
 pub use mail_public_keys::*;
 mod pinned_keys;
 pub use pinned_keys::*;
+mod recipient;
+pub use recipient::*;
 
 use crate::errors::KeyError;
 

@@ -1,3 +1,4 @@
+use common::TEST_VERIFICATION_KEY;
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicAddressKeys, APIPublicKey, APIPublicKeySource,
     APIUnverifiedPublicAddressKeyGroup, DecryptedAddressKey, EmailMimeType, KeyFlag, KeyId,
@@ -5,8 +6,8 @@ use proton_crypto_account::keys::{
 };
 use proton_crypto_inbox::{
     keys::{
-        CryptoMailSettings, CryptoPackageType, InboxSendPreferences, InboxVerificationPreferences,
-        UserWarning,
+        ComposerPreference, CryptoMailSettings, EncryptionPreferencesError,
+        InboxVerificationPreferences, PackageCryptoType, SendPreferences,
     },
     message::packages::PackageMimeType,
     proton_crypto::{
@@ -16,8 +17,6 @@ use proton_crypto_inbox::{
 };
 
 mod common;
-
-use crate::common::TEST_VERIFICATION_KEY;
 
 const TEST_KEY: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: ProtonMail
@@ -143,17 +142,19 @@ fn test_sending_preferences() {
     let inbox_keys = api_keys.into_inbox_keys(true);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: PackageMimeType::Text,
+        mime_type: EmailMimeType::Text,
         sign: true,
     };
 
-    let sending_preferences = InboxSendPreferences::create_from_public_address_keys(
-        &inbox_keys,
-        Some(&pinned_keys),
-        &mail_setting,
+    let sending_preferences = SendPreferences::new(
+        inbox_keys.clone(),
+        Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        ComposerPreference::default(),
     )
     .expect("should be able to extract sending preferences");
+
     assert!(
         sending_preferences.encrypt
             && sending_preferences.sign
@@ -165,20 +166,22 @@ fn test_sending_preferences() {
     );
     assert_eq!(
         sending_preferences.pgp_scheme,
-        CryptoPackageType::ProtonMail
+        PackageCryptoType::ProtonMail
     );
     assert_eq!(
         sending_preferences.mime_type,
         pinned_keys.mime_type.unwrap().into()
     );
 
-    let sending_preferences = InboxSendPreferences::create_from_public_address_keys(
-        &inbox_keys,
+    let sending_preferences = SendPreferences::new(
+        inbox_keys,
         None,
-        &mail_setting,
         UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        ComposerPreference::default(),
     )
     .expect("should be able to extract sending preferences");
+
     assert!(
         sending_preferences.encrypt
             && sending_preferences.sign
@@ -188,7 +191,7 @@ fn test_sending_preferences() {
         sending_preferences.selected_key.unwrap().key_fingerprint(),
         expected_key.key_fingerprint()
     );
-    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type);
+    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
 }
 
 #[test]
@@ -202,17 +205,18 @@ fn test_sending_preferences_external() {
     let mut inbox_keys = api_keys.into_inbox_keys(true);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: PackageMimeType::Text,
+        mime_type: EmailMimeType::Text,
         sign: true,
     };
 
     pinned_keys.encrypt_to_pinned = Some(true);
 
-    let sending_preferences = InboxSendPreferences::create_from_public_address_keys(
-        &inbox_keys,
-        Some(&pinned_keys),
-        &mail_setting,
+    let sending_preferences = SendPreferences::new(
+        inbox_keys.clone(),
+        Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        ComposerPreference::default(),
     )
     .expect("should be able to extract sending preferences");
     assert!(
@@ -224,108 +228,83 @@ fn test_sending_preferences_external() {
         sending_preferences.selected_key.unwrap().key_fingerprint(),
         expected_key.key_fingerprint()
     );
-    assert_eq!(sending_preferences.pgp_scheme, CryptoPackageType::PgpMime);
+    assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::PgpMime);
     assert_eq!(sending_preferences.mime_type, PackageMimeType::Multipart);
-
     inbox_keys.public_keys = Vec::new();
-    let sending_preferences = InboxSendPreferences::create_from_public_address_keys(
-        &inbox_keys,
-        Some(&pinned_keys),
-        &mail_setting,
+    let sending_preferences = SendPreferences::new(
+        inbox_keys.clone(),
+        Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        ComposerPreference::default(),
     )
     .expect("should be able to extract sending preferences");
     assert!(
         sending_preferences.encrypt
             && sending_preferences.sign
             && sending_preferences.is_selected_key_pinned
-            && !sending_preferences.has_api_keys
     );
 
-    let sending_preferences = InboxSendPreferences::create_from_public_address_keys(
-        &inbox_keys,
+    let sending_preferences = SendPreferences::new(
+        inbox_keys.clone(),
         None,
-        &mail_setting,
         UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        ComposerPreference::default(),
     )
     .expect("should be able to extract sending preferences");
     assert!(
         !sending_preferences.encrypt
             && sending_preferences.sign
             && !sending_preferences.is_selected_key_pinned
-            && !sending_preferences.has_api_keys
     );
-    assert_eq!(sending_preferences.pgp_scheme, CryptoPackageType::Cleartext);
-    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type);
+    assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::ClearMime);
+    assert_eq!(sending_preferences.mime_type, PackageMimeType::Multipart);
 }
 
 #[test]
 fn test_sending_preferences_user_warning() {
     let pgp_provider = new_pgp_provider();
-    let expected_key = pgp_provider
-        .public_key_import(TEST_KEY, DataEncoding::Armor)
-        .unwrap();
     let pinned_keys = create_test_pinned_key(&pgp_provider, TEST_VERIFICATION_KEY);
     let api_keys = create_test_public_key(&pgp_provider);
     let mut inbox_keys = api_keys.into_inbox_keys(true);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: PackageMimeType::Text,
+        mime_type: EmailMimeType::Text,
         sign: true,
     };
 
-    let sending_preferences = InboxSendPreferences::create_from_public_address_keys(
-        &inbox_keys,
-        Some(&pinned_keys),
-        &mail_setting,
+    let sending_preferences = SendPreferences::new(
+        inbox_keys.clone(),
+        Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
-    )
-    .expect("should be able to extract sending preferences");
-    assert!(
-        sending_preferences.encrypt
-            && sending_preferences.sign
-            && !sending_preferences.is_selected_key_pinned
-            && sending_preferences.has_api_keys
-    );
-    assert_eq!(
-        sending_preferences.selected_key.unwrap().key_fingerprint(),
-        expected_key.key_fingerprint()
-    );
-    assert_eq!(
-        sending_preferences.pgp_scheme,
-        CryptoPackageType::ProtonMail
-    );
-    assert_eq!(
-        sending_preferences.mime_type,
-        pinned_keys.mime_type.unwrap().into()
+        &mail_setting,
+        ComposerPreference::default(),
     );
     assert!(matches!(
-        sending_preferences.user_warning,
-        Some(UserWarning::PromptUserToTrust(_))
+        sending_preferences,
+        Err(EncryptionPreferencesError::PrimaryKeyNotPinned(_))
     ));
 
     inbox_keys.public_keys.clear();
     inbox_keys.recipient_type = RecipientType::External;
     let mut pinned_keys = create_test_pinned_key(&pgp_provider, EXPIRED_KEY);
-    pinned_keys.encrypt_to_pinned = Some(false);
-    let sending_preferences = InboxSendPreferences::create_from_public_address_keys(
-        &inbox_keys,
-        Some(&pinned_keys),
-        &mail_setting,
+    pinned_keys.encrypt_to_pinned = Some(true);
+    let sending_preferences = SendPreferences::new(
+        inbox_keys,
+        Some(pinned_keys.clone()),
         UnixTimestamp::new(1_723_459_962),
-    )
-    .expect("should be able to extract sending preferences");
-    assert!(
-        !sending_preferences.encrypt
-            && sending_preferences.sign
-            && !sending_preferences.is_selected_key_pinned
-            && !sending_preferences.has_api_keys
+        &mail_setting,
+        ComposerPreference::default(),
     );
-    assert_eq!(sending_preferences.pgp_scheme, CryptoPackageType::ClearMime);
-    assert_eq!(sending_preferences.mime_type, PackageMimeType::Multipart);
     assert!(matches!(
-        sending_preferences.user_warning,
-        Some(UserWarning::NoValidPinnedKey)
+        sending_preferences,
+        Err(EncryptionPreferencesError::ExternalUserNoValidPinnedKey(
+            _,
+            _,
+            _,
+            _
+        ))
     ));
 }
 
@@ -337,13 +316,16 @@ fn test_sending_preferences_own() {
 
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
-        mime_type: PackageMimeType::Html,
+        mime_type: EmailMimeType::Html,
         sign: true,
     };
 
-    let sending_preferences =
-        InboxSendPreferences::create_from_unlocked_address_keys(&address_keys, &mail_setting)
-            .expect("should be able to extract sending preferences");
+    let sending_preferences = SendPreferences::new_self(
+        &address_keys,
+        UnixTimestamp::new(1_723_459_962),
+        mail_setting,
+    )
+    .expect("should be able to extract sending preferences");
     assert!(
         sending_preferences.encrypt
             && sending_preferences.sign
@@ -355,9 +337,9 @@ fn test_sending_preferences_own() {
     );
     assert_eq!(
         sending_preferences.pgp_scheme,
-        CryptoPackageType::ProtonMail
+        PackageCryptoType::ProtonMail
     );
-    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type);
+    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
 }
 
 fn create_test_pinned_key<T: PGPProviderSync>(
