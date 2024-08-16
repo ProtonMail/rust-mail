@@ -176,10 +176,30 @@ pub trait LiveQueryCallback: Send + Sync {
 ///
 /// This handle can be used to disconnect from the live query.
 ///
-#[derive(uniffi::Object)]
+#[derive(Clone, uniffi::Object)]
 pub struct WatchHandle {
     /// A flag to indicate if the live query should be stopped.
     stop_flag: Arc<AtomicBool>,
+}
+
+impl Default for WatchHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WatchHandle {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            stop_flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    #[must_use]
+    pub fn should_stop(&self) -> bool {
+        self.stop_flag.load(Ordering::SeqCst)
+    }
 }
 
 #[uniffi::export]
