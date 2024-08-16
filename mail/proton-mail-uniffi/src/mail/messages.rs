@@ -8,18 +8,21 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use crate::mail::datatypes::{Message, MessageSearchOptions};
-use crate::mail::{MailSession, MailSessionError, MailboxError};
-use itertools::Itertools as _;
-use proton_mail_common::decrypted_message::{self, DecryptedMessageBody};
-use proton_mail_common::models::{self, MailSettings, Message as RealMessage};
-use proton_mail_common::MailUserContext;
-use stash::orm::Model as _;
-use std::sync::Arc;
-
 use super::datatypes::MessageAvailableAction;
 use super::datatypes::{BlockQuote, RemoteContent};
 use super::{Mailbox, MailboxResult};
+use crate::mail::datatypes::{Message, MessageSearchOptions};
+use crate::mail::{MailSession, MailSessionError, MailboxError};
+use crate::{watch, LiveQueryCallback, WatchHandle};
+use indoc::formatdoc;
+use itertools::Itertools as _;
+use proton_core_common::datatypes::{Id, LabelId as RealLabelId, LocalId as RealLocalId};
+use proton_mail_common::decrypted_message::{self, DecryptedMessageBody};
+use proton_mail_common::models::{self, Label as RealLabel, MailSettings, Message as RealMessage};
+use proton_mail_common::MailUserContext;
+use stash::orm::Model as _;
+use stash::params;
+use std::sync::Arc;
 
 /// Which transform options to apply to the html.
 ///
@@ -153,4 +156,65 @@ pub async fn get_message_body(mbox: &Mailbox, id: u64) -> MailboxResult<Decrypte
     let ctx = mbox.mbox().user_context();
     let body = models::Message::message_body(&ctx, id.into()).await?;
     Ok(DecryptedMessage { ctx, body })
+}
+
+/// Data for watched messages.
+#[derive(uniffi::Record)]
+pub struct WatchedMessages {
+    /// The messages.
+    pub messages: Vec<Message>,
+
+    /// The handle to stop watching the messages.
+    pub handle: Arc<WatchHandle>,
+}
+
+/// Watch messages for the given label.
+///
+/// Watches messages with the specified label for changes. When the messages
+/// change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to watch.
+/// * `callback` - The callback to use for updates. When the specified messages
+///                change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn watch_messages_for_label(
+    session: Arc<MailSession>,
+    label_id: u64,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<WatchedMessages, MailboxError> {
+    let remote_label_id = RealLabelId::from(
+        RealLocalId::from(label_id)
+            .counterpart::<RealLabel, _>(session.stash())
+            .await?
+            .unwrap(),
+    );
+    let (messages, handle) = watch::<_, _, RealMessage>(
+        formatdoc!(
+            "
+            JOIN message_labels
+                ON messages.local_id = message_labels.message_id
+            WHERE
+                message_labels.label_id = ?
+            "
+        ),
+        params![label_id],
+        move |r| r.label_ids.contains(&remote_label_id),
+        |r| r.local_id.expect("local_id should never be None"),
+        session.stash(),
+        Arc::new(callback),
+    )
+    .await?;
+    Ok(WatchedMessages {
+        messages: messages.into_iter().map(Into::into).collect(),
+        handle,
+    })
 }
