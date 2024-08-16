@@ -7,6 +7,7 @@ mod mailbox;
 pub mod messages;
 mod session;
 mod settings;
+mod sidebar;
 mod user_session;
 
 pub use login::*;
