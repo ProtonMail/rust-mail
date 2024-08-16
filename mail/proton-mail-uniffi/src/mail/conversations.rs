@@ -348,14 +348,20 @@ pub async fn unstar_conversations(
     .await?)
 }
 
-/// Messages and watch handle for watched messages.
+/// Data for a watched conversation.
 #[derive(uniffi::Record)]
 pub struct WatchedConversation {
+    /// The conversation.
+    pub conversation: Conversation,
+
     /// The messages in the conversation.
-    messages: Vec<Message>,
+    pub messages: Vec<Message>,
 
     /// The handle to stop watching the conversation.
-    handle: Arc<WatchHandle>,
+    pub conversation_handle: Arc<WatchHandle>,
+
+    /// The handle to stop watching the conversation's messages.
+    pub messages_handle: Arc<WatchHandle>,
 }
 
 /// Watch the given conversation.
@@ -365,7 +371,7 @@ pub struct WatchedConversation {
 ///
 /// # Parameters
 ///
-/// * `session`  - The session to use for the request.
+/// * `mailbox`  - The mailbox to use for the request.
 /// * `id`       - The local ID of the conversation to watch.
 /// * `callback` - The callback to use for updates. When the specified
 ///                conversation's messages change, the callback will be
@@ -378,21 +384,38 @@ pub struct WatchedConversation {
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
 pub async fn watch_conversation(
-    session: Arc<MailSession>,
+    mailbox: Arc<Mailbox>,
     id: u64,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversation, MailboxError> {
-    let (messages, handle) = watch::<_, _, RealMessage>(
-        "WHERE local_conversation_id = ?",
+    let callback = Arc::new(callback);
+    let (conversations, conversation_handle) = watch::<_, _, RealConversation>(
+        "WHERE local_id = ?",
+        params![id],
+        move |r| r.local_id == Some(id.into()),
+        |r| r.local_id.expect("local_id should never be None"),
+        mailbox.stash(),
+        Arc::clone(&callback),
+    )
+    .await?;
+    let (messages, messages_handle) = watch::<_, _, RealMessage>(
+        "WHERE local_conversation_id = ? LIMIT 1",
         params![id],
         move |r| r.local_conversation_id == Some(id.into()),
         |r| r.local_id.expect("local_id should never be None"),
-        session.stash(),
+        mailbox.stash(),
         callback,
     )
     .await?;
     Ok(WatchedConversation {
+        conversation: ContextualConversation::new(
+            conversations.into_iter().next().unwrap(),
+            mailbox.label_id().into(),
+        )
+        .unwrap()
+        .into(),
         messages: messages.into_iter().map(Into::into).collect(),
-        handle,
+        conversation_handle,
+        messages_handle,
     })
 }
