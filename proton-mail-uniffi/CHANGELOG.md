@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+  - Added watching of `Conversation` as well as its messages
+      - Added `conversation` and extra handle to `WatchedConversation`.
+      - Added watching of `Conversation` as well as its `Messages` to
+        `watch_conversation()`.
+  - Added watchers for conversations and messages by label
+      - Added `watch_conversations_for_label()` and
+        `watch_messages_for_label()`.
+  - Added methods to get messages and conversations
+      - Added `conversation()` and `conversations_for_label()`.
+      - Added `message()`, `messages_for_conversation()`, and
+        `messages_for_label()`.
+
+### Changed
+
+  - Renamed exported UniFFI conversation methods to be long-form
+      - `apply_label()` -> `apply_label_to_conversations()`
+      - `delete()` -> `delete_conversations()`
+      - `load()` -> `load_conversation()`
+      - `load_remote()` -> `load_remote_conversation()`
+      - `mark_as_read()` -> `mark_conversations_as_read()`
+      - `mark_as_unread()` -> `mark_conversations_as_unread()`
+      - `relocate()` -> `move_conversations()`
+      - `remove_label()` -> `remove_label_from_conversations()`
+      - `star()` -> `star_conversations()`
+      - `unstar()` -> `unstar_conversations()`
+      - `watch()` -> `watch_conversation()`
+  - Corrected `starred` field to be `is_starred`.
+
 ## [0.11.7] - 2024-08-16
 
 ### Added
