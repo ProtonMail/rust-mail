@@ -1616,8 +1616,14 @@ pub struct ContextualConversation {
     /// Attachment metadata associated with this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
+    /// List of custom labels.
+    pub custom_labels: Vec<CustomLabel>,
+
     /// Whether a snooze reminder should be displayed.
     pub display_snooze_reminder: bool,
+
+    /// Order in the list this conversation should be displayed.
+    pub display_order: u64,
 
     /// Exclusive location of the [`crate::models::Conversation`] (e.g. Inbox, Archive, Outbox
     /// etc.). This field is auto-calculated, and not stored in the database.
@@ -1631,6 +1637,9 @@ pub struct ContextualConversation {
     /// Time at which this conversation expires.
     pub expiration_time: u64,
 
+    /// Whether this conversation is starred.
+    pub is_starred: bool,
+
     /// Number of attachments on the conversation.
     pub num_attachments: u64,
 
@@ -1639,9 +1648,6 @@ pub struct ContextualConversation {
 
     /// Number of unread messages in this conversation.
     pub num_unread: u64,
-
-    /// Order in the list this conversation should be displayed.
-    pub display_order: u64,
 
     /// Address of the recipients of the messages contained within.
     pub recipients: MessageAddresses,
@@ -1657,12 +1663,6 @@ pub struct ContextualConversation {
 
     /// Time of reception of the last message in this conversation.
     pub time: u64,
-
-    /// List of custom labels.
-    pub custom_labels: Vec<CustomLabel>,
-
-    /// Whether this conversation is starred.
-    pub starred: bool,
 }
 
 impl ContextualConversation {
@@ -1677,26 +1677,26 @@ impl ContextualConversation {
             .iter()
             .find(|&label| label.local_label_id == Some(local_label_id))?;
 
-        let starred = conversation.is_starred();
+        let is_starred = conversation.is_starred();
 
         Some(Self {
             local_id: conversation.local_id.expect("Should be set"),
             remote_id: conversation.remote_id,
             attachments_metadata: conversation.attachments_metadata,
+            custom_labels: conversation.custom_labels,
+            display_order: conversation.display_order,
             display_snooze_reminder: conversation.display_snooze_reminder,
             exclusive_location: conversation.exclusive_location,
             expiration_time: label.context_expiration_time,
+            is_starred,
             num_attachments: label.context_num_attachments,
             num_messages: label.context_num_messages,
             num_unread: label.context_num_unread,
-            display_order: conversation.display_order,
             recipients: conversation.recipients,
             senders: conversation.senders,
             size: label.context_size,
             subject: conversation.subject,
             time: label.context_time,
-            custom_labels: conversation.custom_labels,
-            starred,
         })
     }
 }
