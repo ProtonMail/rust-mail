@@ -120,6 +120,19 @@ pub struct GetLabelsOptions {
     pub label_type: LabelType,
 }
 
+/// Represents `POST /labels/by-ids` request body.
+/// Name refers to the fact it actually gets labels by their IDs.
+/// But due to the fact GET requests are not supposed to have a body
+/// The struct is used with the POST method instead.
+///
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct GetLabelsByIdsOptions {
+    /// Label IDs to get.
+    #[serde(rename = "LabelIDs")]
+    pub label_ids: Vec<RemoteId>,
+}
+
 /// Parameters to filter/search messages with a given criteria.
 #[serde_as]
 #[derive(Clone, Debug, Serialize, SmartDefault)]

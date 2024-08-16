@@ -33,6 +33,18 @@ macro_rules! label {
 }
 
 #[macro_export]
+macro_rules! api_label {
+    ($($field:tt)*) => {{
+        use proton_api_mail::services::proton::response_data::{Label as ApiLabel};
+
+        ApiLabel {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
 macro_rules! message {
     ($($field:tt)*) => {{
         Message {
@@ -43,9 +55,45 @@ macro_rules! message {
 }
 
 #[macro_export]
+macro_rules! api_message {
+    ($($field:tt)*) => {{
+        use proton_api_mail::services::proton::response_data::{Message as ApiMessage};
+
+        ApiMessage {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! api_message_meta {
+    ($($field:tt)*) => {{
+        use proton_api_mail::services::proton::response_data::{MessageMetadata as ApiMessageMetadata};
+
+        ApiMessageMetadata {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
 macro_rules! conversation {
     ($($field:tt)*) => {{
         Conversation {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! api_conversation {
+    ($($field:tt)*) => {{
+        use proton_api_mail::services::proton::response_data::{Conversation as ApiConversation};
+
+        ApiConversation {
             $($field)*,
             ..Default::default()
         }

@@ -41,6 +41,7 @@ use bytes::Bytes;
 use proton_api_core::service::{ApiService, ApiServiceError, Json, NO_PARAMS};
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::Proton;
+use requests::GetLabelsByIdsOptions;
 use velcro::hash_map;
 
 pub trait ProtonMail: ApiService {
@@ -202,6 +203,33 @@ pub trait ProtonMail: ApiService {
         self.get::<_, Json<_>>(
             &format!("{}/labels", Self::BASE_PATH_CORE),
             Some(GetLabelsOptions { label_type }),
+            None,
+        )
+        .await
+    }
+
+    /// Method to get labels by their IDs.
+    /// Makes a POST request to the `/labels/by-ids` endpoint.
+    /// Names refer to the fact labels are acquired by their IDs.
+    /// HTTP `GET` method is not suppose to have a body,
+    /// so POST method is used instead.
+    ///
+    ///
+    /// # Parameters
+    ///
+    /// * `label_ids` - List of label IDs to get.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn get_labels_by_ids(
+        &self,
+        label_ids: Vec<RemoteId>,
+    ) -> Result<GetLabelsResponse, ApiServiceError> {
+        self.post::<_, Json<_>>(
+            &format!("{}/labels/by-ids", Self::BASE_PATH_CORE),
+            Some(GetLabelsByIdsOptions { label_ids }),
             None,
         )
         .await
