@@ -1,5 +1,4 @@
-// https://github.com/rust-lang/rust-clippy/issues/13155
-// This lint is complaining about passing an Rc by value!
+// https://github.com/rust-lang/rust-clippy/issues/13155 This lint is complaining about passing an Rc by value!
 #![allow(clippy::needless_pass_by_value)]
 
 //! HTML content transformer for proton mail applications.
@@ -210,4 +209,13 @@ impl Display for Transformer {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.document.to_string())
     }
+}
+
+#[cfg(test)]
+mod integration_tests {
+    // I get a really stranget linker error if I `import cpuprofiler as _`.
+    // TODO: Report this bug to rustc.
+    // use cpuprofiler as _;
+    use criterion as _;
+    use pprof as _;
 }
