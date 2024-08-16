@@ -68,9 +68,11 @@ impl Store for AuthStore {
 
     fn get(&self) -> BoxFuture<'_, Result<Option<Auth>, StoreError>> {
         async {
+            // If we have no user id it means one of two things.
+            // 1. The auth data got deleted.
+            // 2. We are performing a new login.
             let Some(user_id) = &self.user_id else {
-                error!("Can not load auth from store if no User ID is specified");
-                return Err("No user id set".into());
+                return Ok(None);
             };
 
             let key = self.encryption_key()?;
