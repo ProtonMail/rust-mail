@@ -110,69 +110,6 @@ impl Sidebar {
             .collect())
     }
 
-    /// Watch folder labels.
-    ///
-    /// Watches folder labels for changes. When the labels change, the callback will
-    /// be invoked.
-    ///
-    /// # Parameters
-    ///
-    /// * `callback` - The callback to use for updates. When the specified label
-    ///                list changes, the callback will be invoked.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    ///
-    pub async fn watch_folder_labels(
-        &self,
-        callback: Box<dyn LiveQueryCallback>,
-    ) -> SidebarResult<Arc<WatchHandle>> {
-        self.watch_labels(LabelType::Folder, callback).await
-    }
-
-    /// Watch standard labels.
-    ///
-    /// Watches standard labels for changes. When the labels change, the callback will
-    /// be invoked.
-    ///
-    /// # Parameters
-    ///
-    /// * `callback` - The callback to use for updates. When the specified label
-    ///                list changes, the callback will be invoked.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    ///
-    pub async fn watch_standard_labels(
-        &self,
-        callback: Box<dyn LiveQueryCallback>,
-    ) -> SidebarResult<Arc<WatchHandle>> {
-        self.watch_labels(LabelType::Label, callback).await
-    }
-
-    /// Watch system labels.
-    ///
-    /// Watches system labels for changes. When the labels change, the callback will
-    /// be invoked.
-    ///
-    /// # Parameters
-    ///
-    /// * `callback` - The callback to use for updates. When the specified label
-    ///                list changes, the callback will be invoked.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    ///
-    pub async fn watch_system_labels(
-        &self,
-        callback: Box<dyn LiveQueryCallback>,
-    ) -> SidebarResult<Arc<WatchHandle>> {
-        self.watch_labels(LabelType::System, callback).await
-    }
-
     /// Set folder `expanded` field to it's collapsed state
     ///
     /// # Errors
@@ -198,14 +135,15 @@ impl Sidebar {
     ///
     /// # Parameters
     ///
-    /// * `callback` - The callback to use for updates. When the specified label
-    ///                list changes, the callback will be invoked.
+    /// * `label_type` - an enum value from `System`, `Folder` and `Label`.
+    /// * `callback`   - The callback to use for updates. When the specified label
+    ///                  list changes, the callback will be invoked.
     ///
     /// # Errors
     ///
     /// Returns an error if the database query fails.
     ///
-    async fn watch_labels(
+    pub async fn watch_labels(
         &self,
         label_type: LabelType,
         callback: Box<dyn LiveQueryCallback>,
