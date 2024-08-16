@@ -14,18 +14,15 @@ use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
-use crate::{LiveQueryCallback, WatchHandle};
+use crate::{watch, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
-use proton_core_common::datatypes::{LocalId as RealLocalId, RemoteId as RealRemoteId};
+use proton_core_common::datatypes::RemoteId as RealRemoteId;
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
-use stash::orm::{Model, ResultsetChange};
+use stash::orm::Model;
 use stash::params;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::spawn as spawn_async;
-use tracing::{debug, warn};
 
 /// Label the given conversations with the given label id.
 ///
@@ -385,67 +382,17 @@ pub async fn watch_conversation(
     id: u64,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversation, MailboxError> {
-    let (sender, receiver) = flume::unbounded::<ResultsetChange<RealMessage, RealLocalId>>();
-    let results = RealMessage::find(
+    let (messages, handle) = watch::<_, _, RealMessage>(
         "WHERE local_conversation_id = ?",
         params![id],
+        move |r| r.local_conversation_id == Some(id.into()),
+        |r| r.local_id.expect("local_id should never be None"),
         session.stash(),
-        Some(sender),
+        callback,
     )
     .await?;
-    // Unwrapping is safe here, as we will always have the local ID
-    let mut ids = results
-        .iter()
-        .map(|m| m.local_id.unwrap())
-        .collect::<Vec<_>>();
-    let stop_flag = Arc::new(AtomicBool::new(false));
-    let stop_flag_clone = Arc::clone(&stop_flag);
-
-    spawn_async(async move {
-        while let Ok(change) = receiver.recv_async().await {
-            if stop_flag_clone.load(Ordering::SeqCst) {
-                debug!("Stop flag set, stopping watch");
-                break;
-            }
-            match change {
-                ResultsetChange::Inserted(message) => {
-                    if message.local_conversation_id == Some(id.into()) {
-                        debug!("Received new message for watched conversation ({id})");
-                        // Unwrapping is safe here, as we will always have the local ID
-                        ids.push(message.local_id.unwrap());
-                        callback.on_update();
-                    } else {
-                        debug!(
-                            "Received new message for different conversation ({} instead of {id})",
-                            message.local_conversation_id.unwrap()
-                        );
-                    }
-                }
-                ResultsetChange::Updated(message) => {
-                    if message.local_conversation_id == Some(id.into()) {
-                        debug!("Received updated message for watched conversation ({id})");
-                        callback.on_update();
-                    } else {
-                        debug!("Received updated message for different conversation ({} instead of {id})", message.local_conversation_id.unwrap());
-                    }
-                }
-                ResultsetChange::Deleted(local_message_id) => {
-                    if ids.contains(&local_message_id) {
-                        debug!("Received deleted message for watched conversation ({id})");
-                        callback.on_update();
-                    } else {
-                        debug!("Received deleted message for different conversation (unknown instead of {id})");
-                    }
-                }
-                _ => {
-                    warn!("Received unknown change type");
-                }
-            };
-        }
-    });
-
     Ok(WatchedConversation {
-        messages: results.into_iter().map(Into::into).collect(),
-        handle: Arc::new(WatchHandle { stop_flag }),
+        messages: messages.into_iter().map(Into::into).collect(),
+        handle,
     })
 }
