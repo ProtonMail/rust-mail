@@ -859,6 +859,9 @@ pub struct Conversation {
     /// Metadata for all attachments in this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
+    /// List of custom labels.
+    pub custom_labels: Vec<CustomLabel>,
+
     /// TODO: Document this field.
     pub display_snooze_reminder: bool,
 
@@ -868,6 +871,9 @@ pub struct Conversation {
 
     /// When this conversation expires.
     pub expiration_time: u64,
+
+    /// Whether the conversation is starred.
+    pub is_starred: bool,
 
     /// Number of attachments in this conversation.
     pub num_attachments: u64,
@@ -895,12 +901,6 @@ pub struct Conversation {
 
     /// Time of the last received message in this conversation.
     pub time: u64,
-
-    /// List of custom labels.
-    pub custom_labels: Vec<CustomLabel>,
-
-    /// Whether the conversation is starred.
-    pub starred: bool,
 }
 
 impl From<ContextualConversation> for Conversation {
@@ -912,20 +912,20 @@ impl From<ContextualConversation> for Conversation {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
+            display_order: value.display_order,
             display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
             num_unread: value.num_unread,
-            display_order: value.display_order,
             recipients: value.recipients.into(),
             senders: value.senders.into(),
             size: value.size,
+            is_starred: value.is_starred,
             subject: value.subject,
             time: value.time,
-            custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
-            starred: value.starred,
         }
     }
 }
