@@ -90,6 +90,90 @@ impl DecryptedMessage {
     }
 }
 
+/// Get a specified message.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `id`       - The local ID of the message to get.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn message(session: Arc<MailSession>, id: u64) -> Result<Option<Message>, MailboxError> {
+    Ok(RealMessage::load(id.into(), session.stash())
+        .await?
+        .map(Into::into))
+}
+
+/// Get messages for the given conversation.
+///
+/// # Parameters
+///
+/// * `session`         - The session to use for the request.
+/// * `conversation_id` - The local ID of the conversation to get messages for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn messages_for_conversation(
+    session: Arc<MailSession>,
+    conversation_id: u64,
+) -> Result<Vec<Message>, MailboxError> {
+    Ok(RealMessage::find(
+        "WHERE local_conversation_id = ?",
+        params![conversation_id],
+        session.stash(),
+        None,
+    )
+    .await?
+    .into_iter()
+    .map(Into::into)
+    .collect())
+}
+
+/// Get messages for the given label.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to get messages for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn messages_for_label(
+    session: Arc<MailSession>,
+    label_id: u64,
+) -> Result<Vec<Message>, MailboxError> {
+    Ok(RealMessage::find(
+        formatdoc!(
+            "
+            JOIN message_labels
+                ON messages.local_id = message_labels.message_id
+            WHERE
+                message_labels.label_id = ?
+            "
+        ),
+        params![label_id],
+        session.stash(),
+        None,
+    )
+    .await?
+    .into_iter()
+    .map(Into::into)
+    .collect())
+}
+
 /// Filter or search messages which match the specified options.
 ///
 /// Note that search results are inserted into the database.
