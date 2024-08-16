@@ -1238,7 +1238,7 @@ pub struct MailSettings {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: u64,
+    local_id: u64,
 
     /// TODO: Document this field.
     pub almost_all_mail: AlmostAllMail,
