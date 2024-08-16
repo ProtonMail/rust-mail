@@ -22,7 +22,6 @@ bytes = "1.6.0"
 tokio = { workspace = true }
 tracing = { workspace = true }
 proton-api-core = { workspace = true }
-proton-api-mail = { workspace = true }
 reqwest = { version = "0.12.2", features = ["stream"] }
 tracing-subscriber = { workspace = true }
 wiremock = { workspace = true }

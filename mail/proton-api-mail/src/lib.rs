@@ -11,3 +11,13 @@ pub const MAX_LIMIT_VALUE_U64: u64 = 150;
 
 pub use proton_api_core;
 pub use session::*;
+
+#[cfg(test)]
+mod integration_tests {
+    use bytes as _;
+    use reqwest as _;
+    use tokio as _;
+    use tracing as _;
+    use tracing_subscriber as _;
+    use wiremock as _;
+}

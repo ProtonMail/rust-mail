@@ -18,7 +18,6 @@ workspace = true
 cpuprofiler = "0.0.4"
 criterion = "0.5.1"
 insta = { version = "1.39.0", features = ["toml"] }
-cargo-insta = "1.39.0"
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 
 [profile.dev.package]
