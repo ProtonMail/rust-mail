@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use indoc::indoc;
 use proton_core_common::datatypes::{LocalId, Resources};
 use proton_sqlite3::{Migration, MigratorError};
-use stash::datatypes::QueryResultU64;
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -122,12 +121,12 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn pending_count(tether: &Tether) -> Result<u64, StashError> {
         let count = tether
-            .query::<_, QueryResultU64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
+            .query_value::<_, u64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
             .await?
             .into_iter()
             .next()
             .ok_or_else(|| StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
-        Ok(count.value)
+        Ok(count)
     }
 
     /// Check whether the action with `id` is in the queue.
@@ -137,7 +136,7 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn contains(tether: &Tether, id: LocalId) -> Result<bool, StashError> {
         let ids = tether
-            .query::<_, QueryResultU64>(
+            .query_value::<_, u64>(
                 "SELECT id AS value FROM action_queue WHERE id = ?",
                 params![id],
             )
@@ -154,13 +153,13 @@ impl StoredAction {
     pub async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         // Dependencies
         let dependencies = interface
-            .query::<_, QueryResultU64>(
+            .query_value::<_, u64>(
                 "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
             )
             .await?;
         self.dependencies
-            .extend(dependencies.into_iter().map(|v| LocalId::from(v.value)));
+            .extend(dependencies.into_iter().map(LocalId::from));
 
         // Resources
         self.resources = interface
@@ -222,13 +221,13 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn dependees(tether: &Tether, id: LocalId) -> Result<Vec<LocalId>, StashError> {
         let ids = tether
-            .query::<_, QueryResultU64>(
+            .query_value::<_, u64>(
                 "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
                 params![id],
             )
             .await?;
 
-        Ok(ids.into_iter().map(|v| v.value.into()).collect::<Vec<_>>())
+        Ok(ids.into_iter().map(Into::into).collect::<Vec<_>>())
     }
 
     /// Get the next action to be executed.

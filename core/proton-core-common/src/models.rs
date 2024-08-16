@@ -45,7 +45,6 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::Proton;
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
-use stash::datatypes::QueryResultU64;
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
@@ -173,7 +172,7 @@ pub trait ModelExtension: Model {
         A: Into<AgnosticInterface> + Interface,
     {
         Ok(interface
-            .query::<_, QueryResultU64>(
+            .query_value::<_, u64>(
                 formatdoc!(
                     "
                     SELECT
@@ -189,7 +188,7 @@ pub trait ModelExtension: Model {
             )
             .await?
             .into_iter()
-            .map(|r| r.value.into())
+            .map(Into::into)
             .collect())
     }
 

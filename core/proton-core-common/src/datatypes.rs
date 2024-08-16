@@ -57,7 +57,6 @@ use proton_api_core::services::proton::response_data::{
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use secrecy::{CloneableSecret, DebugSecret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use stash::datatypes::QueryResultU64;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
@@ -1647,7 +1646,7 @@ impl Id for RemoteId {
         A: Into<AgnosticInterface> + Interface,
     {
         Ok(interface
-            .query::<_, QueryResultU64>(
+            .query_value::<_, u64>(
                 formatdoc!(
                     "
                     SELECT
@@ -1665,7 +1664,7 @@ impl Id for RemoteId {
             .await?
             .into_iter()
             .next()
-            .map(|r| r.value.into()))
+            .map(Into::into))
     }
 
     async fn counterparts<T, A>(
@@ -1683,7 +1682,7 @@ impl Id for RemoteId {
             .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
             .collect();
         Ok(interface
-            .query::<_, QueryResultU64>(
+            .query_value::<_, u64>(
                 formatdoc!(
                     "
                     SELECT
@@ -1700,7 +1699,7 @@ impl Id for RemoteId {
             )
             .await?
             .into_iter()
-            .map(|r| r.value.into())
+            .map(Into::into)
             .collect())
     }
 

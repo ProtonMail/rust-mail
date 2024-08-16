@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use futures::executor::block_on;
-use stash::datatypes::QueryResultString;
 use stash::params;
 use stash::stash::{Interface, Stash, Tether};
 use std::thread::spawn;
@@ -26,9 +25,9 @@ async fn insert(stash: &Stash, value: &str) {
         .unwrap();
 }
 
-async fn query(stash: &Stash, value: &str) -> Vec<QueryResultString> {
+async fn query(stash: &Stash, value: &str) -> Vec<String> {
     stash
-        .query::<_, QueryResultString>(
+        .query_value::<_, String>(
             r#"SELECT value FROM test_kv WHERE value = ?"#,
             params![value.to_owned()],
         )
@@ -51,8 +50,8 @@ async fn insert_tx(tx: &Tether, value: &str) {
     .unwrap();
 }
 
-async fn query_tx(tx: &Tether, value: &str) -> Vec<QueryResultString> {
-    tx.query::<_, QueryResultString>(
+async fn query_tx(tx: &Tether, value: &str) -> Vec<String> {
+    tx.query_value::<_, String>(
         r#"SELECT value FROM test_kv WHERE value = ?"#,
         params![value.to_owned()],
     )
@@ -83,15 +82,12 @@ mod concurrency_basic_sync {
 
         // Query the data
         let result = stash
-            .query::<_, QueryResultString>(
-                r#"SELECT value FROM test_kv WHERE value = "test""#,
-                vec![],
-            )
+            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
             .await
             .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -117,10 +113,7 @@ mod concurrency_basic_sync {
 
         // Query the data
         let result = tx
-            .query::<_, QueryResultString>(
-                r#"SELECT value FROM test_kv WHERE value = "test""#,
-                vec![],
-            )
+            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
             .await
             .unwrap();
 
@@ -128,7 +121,7 @@ mod concurrency_basic_sync {
         tx.commit().await.expect("Failed to commit transaction");
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -159,10 +152,7 @@ mod concurrency_basic_sync {
 
         // Query the data, from the uncommitted transaction
         let result1 = tx1
-            .query::<_, QueryResultString>(
-                r#"SELECT value FROM test_kv WHERE value = "test1""#,
-                vec![],
-            )
+            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test1""#, vec![])
             .await
             .unwrap();
 
@@ -179,26 +169,23 @@ mod concurrency_basic_sync {
 
         // Query the data, re-using the transaction connections
         let result2 = tx2
-            .query::<_, QueryResultString>(
-                r#"SELECT value FROM test_kv WHERE value = "test2""#,
-                vec![],
-            )
+            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test2""#, vec![])
             .await
             .unwrap();
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query::<_, QueryResultString>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
         assert_eq!(result1.len(), 1);
-        assert_eq!(result1[0].value, "test1".to_owned());
+        assert_eq!(result1[0], "test1".to_owned());
         assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0].value, "test2".to_owned());
+        assert_eq!(result2[0], "test2".to_owned());
         assert_eq!(result3.len(), 2);
-        assert_eq!(result3[0].value, "test1".to_owned());
-        assert_eq!(result3[1].value, "test2".to_owned());
+        assert_eq!(result3[0], "test1".to_owned());
+        assert_eq!(result3[1], "test2".to_owned());
     }
 }
 
@@ -216,7 +203,7 @@ mod concurrency_async_functions {
         let result = query(&stash, "test").await;
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -234,7 +221,7 @@ mod concurrency_async_functions {
         tx.commit().await.expect("Failed to commit transaction");
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -275,17 +262,17 @@ mod concurrency_async_functions {
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query::<_, QueryResultString>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
         assert_eq!(result1.len(), 1);
-        assert_eq!(result1[0].value, "test1".to_owned());
+        assert_eq!(result1[0], "test1".to_owned());
         assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0].value, "test2".to_owned());
+        assert_eq!(result2[0], "test2".to_owned());
         assert_eq!(result3.len(), 2);
-        assert_eq!(result3[0].value, "test1".to_owned());
-        assert_eq!(result3[1].value, "test2".to_owned());
+        assert_eq!(result3[0], "test1".to_owned());
+        assert_eq!(result3[1], "test2".to_owned());
     }
 }
 
@@ -307,7 +294,7 @@ mod concurrency_async_threads {
         .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -330,7 +317,7 @@ mod concurrency_async_threads {
         .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -371,17 +358,17 @@ mod concurrency_async_threads {
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query::<_, QueryResultString>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
         assert_eq!(result1.len(), 1);
-        assert_eq!(result1[0].value, "test1".to_owned());
+        assert_eq!(result1[0], "test1".to_owned());
         assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0].value, "test2".to_owned());
+        assert_eq!(result2[0], "test2".to_owned());
         assert_eq!(result3.len(), 2);
-        assert_eq!(result3[0].value, "test1".to_owned());
-        assert_eq!(result3[1].value, "test2".to_owned());
+        assert_eq!(result3[0], "test1".to_owned());
+        assert_eq!(result3[1], "test2".to_owned());
     }
 }
 
@@ -405,7 +392,7 @@ mod concurrency_std_threads {
         .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -430,7 +417,7 @@ mod concurrency_std_threads {
         .unwrap();
 
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].value, "test".to_owned());
+        assert_eq!(result[0], "test".to_owned());
     }
 
     #[tokio::test]
@@ -475,17 +462,17 @@ mod concurrency_std_threads {
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query::<_, QueryResultString>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
         assert_eq!(result1.len(), 1);
-        assert_eq!(result1[0].value, "test1".to_owned());
+        assert_eq!(result1[0], "test1".to_owned());
         assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0].value, "test2".to_owned());
+        assert_eq!(result2[0], "test2".to_owned());
         assert_eq!(result3.len(), 2);
-        assert_eq!(result3[0].value, "test1".to_owned());
-        assert_eq!(result3[1].value, "test2".to_owned());
+        assert_eq!(result3[0], "test1".to_owned());
+        assert_eq!(result3[1], "test2".to_owned());
     }
 }
 
@@ -604,28 +591,28 @@ mod concurrency_mixed {
         // Query the data, using the main Stash (no specific connection or transaction)
         let result7 = query(&stash, "test7").await;
         let result8 = stash
-            .query::<_, QueryResultString>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
         assert_eq!(result1.len(), 1);
-        assert_eq!(result1[0].value, "test1".to_owned());
+        assert_eq!(result1[0], "test1".to_owned());
         assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0].value, "test2".to_owned());
+        assert_eq!(result2[0], "test2".to_owned());
         assert_eq!(result3.len(), 1);
-        assert_eq!(result3[0].value, "test3".to_owned());
+        assert_eq!(result3[0], "test3".to_owned());
         assert_eq!(result4.len(), 1);
-        assert_eq!(result4[0].value, "test4".to_owned());
+        assert_eq!(result4[0], "test4".to_owned());
         assert_eq!(result5.len(), 1);
-        assert_eq!(result5[0].value, "test5".to_owned());
+        assert_eq!(result5[0], "test5".to_owned());
         assert_eq!(result6.len(), 1);
-        assert_eq!(result6[0].value, "test6".to_owned());
+        assert_eq!(result6[0], "test6".to_owned());
         assert_eq!(result7.len(), 1);
-        assert_eq!(result7[0].value, "test7".to_owned());
+        assert_eq!(result7[0], "test7".to_owned());
         assert_eq!(result9.len(), 1);
-        assert_eq!(result9[0].value, "test9".to_owned());
+        assert_eq!(result9[0], "test9".to_owned());
         assert_eq!(result8.len(), 9);
-        assert_eq!(result8[0].value, "test1".to_owned());
-        assert_eq!(result8[7].value, "test8".to_owned());
+        assert_eq!(result8[0], "test1".to_owned());
+        assert_eq!(result8[7], "test8".to_owned());
     }
 }

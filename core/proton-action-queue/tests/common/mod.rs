@@ -3,7 +3,6 @@ use proton_action_queue::action::{Action, Error, Factory};
 use proton_action_queue::queue::Queue;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::Session;
-use stash::datatypes::QueryResultU64;
 use stash::params;
 use stash::stash::{Interface, Stash, StashError, Tether};
 
@@ -87,7 +86,7 @@ impl TestExtension for Tether {
 
     async fn ext_get_value(&self, key: &str) -> Result<Option<u32>, StashError> {
         let v = self
-            .query::<_, QueryResultU64>(
+            .query_value::<_, u32>(
                 "SELECT value FROM ext WHERE key = ?",
                 params![key.to_owned()],
             )
@@ -95,7 +94,7 @@ impl TestExtension for Tether {
             .into_iter()
             .next();
 
-        Ok(v.map(|v| v.value as u32))
+        Ok(v)
     }
 }
 

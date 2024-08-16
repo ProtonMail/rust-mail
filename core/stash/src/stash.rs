@@ -383,6 +383,7 @@
 //!
 
 use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, Model};
+use core::fmt::Debug;
 use core::ops::Deref;
 use core::ptr::null;
 use core::sync::atomic::{AtomicBool, Ordering};
@@ -390,7 +391,9 @@ use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
+use rusqlite::types::FromSql;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction};
+use stash_macros::DbRecord;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::Path;
 use std::sync::{Arc, Weak};
@@ -401,6 +404,8 @@ use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
 use tokio::time::Instant;
 use tracing::{debug, error, warn};
+// Used to resolve undeclared crate of module `stash` from DbRecord proc marco
+use crate as stash;
 
 /// A dual-nature connection wrapper.
 ///
@@ -516,6 +521,21 @@ impl Interface for AgnosticInterface {
         match *self {
             Self::Stash(ref stash) => stash.query(query, params).await,
             Self::Tether(ref tether) => tether.query(query, params).await,
+        }
+    }
+
+    async fn query_value<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+    {
+        match *self {
+            Self::Stash(ref stash) => stash.query_value(query, params).await,
+            Self::Tether(ref tether) => tether.query_value(query, params).await,
         }
     }
 
@@ -1341,6 +1361,18 @@ impl Interface for Stash {
         perform_query(query, params, None, &self.queue).await
     }
 
+    async fn query_value<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+    {
+        perform_value_query(query, params, None, &self.queue).await
+    }
+
     fn stash(&self) -> &Stash {
         self
     }
@@ -1639,6 +1671,18 @@ impl Interface for Tether {
         DbRecords: FromIterator<Box<T>>,
     {
         perform_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
+    }
+
+    async fn query_value<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+    {
+        perform_value_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
 
     fn stash(&self) -> &Stash {
@@ -2697,6 +2741,60 @@ pub trait Interface: Clone + Send + Sync {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>;
 
+    /// Utility function to return rows of a singular type.
+    ///
+    /// This function is similar in nature to [`Interface::query()`] but it
+    /// returns values that implement [`FromSql`] and [`ToSql`] rather
+    /// than [`DbRecord`]. This is functionally equivalent to writing the
+    /// following snippet:
+    ///
+    /// ```skip
+    ///  #[derive(DbRecord, Debug,Eq,PartialEq)
+    ///  struct RecordValue<T:FromSql> {
+    ///     #[DbField]
+    ///     value:T
+    ///  }
+    ///
+    ///  let values:Vec<RecordValue<T>> = interface.query(
+    ///         "SELECT number AS value FROM table",
+    ///         vec![]).await.unwrap();
+    /// ```
+    ///
+    /// # Query structure
+    ///
+    /// This utility function requires all the queries to return only one value
+    /// named `value` or the conversion will not be successful.
+    ///
+    /// # Errors
+    ///
+    /// See [`Interface::query`] for more information.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use stash::params;
+    /// use stash::stash::{AgnosticInterface, Interface};
+    ///
+    /// async fn value_query(interface:&AgnosticInterface) {
+    ///     let values:Vec<f64> = interface.query_value(
+    ///         "SELECT number AS value FROM table",
+    ///         vec![]).await.unwrap();
+    /// }
+    /// ```
+    ///
+    /// # See also
+    ///
+    /// * [`Interface::query`]
+    ///
+    async fn query_value<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<T>, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static;
+
     /// Get the associated [`Stash`].
     ///
     /// This is a convenience function, which only has actual utility when run
@@ -3019,6 +3117,49 @@ async fn perform_execute<Q: Into<String> + Send>(
         .map_err(|err| StashError::OneShotError(err.to_string()))?
 }
 
+/// Runs a query and returns rows with a singular value.
+///
+/// This function prepares a query and executes it on the database, and returns
+/// the resulting rows of data as a collection of instances of the specified `T`
+/// type, where `T` is any single type implementing the [`FromSql`] and
+/// [`ToSql`] trait. It is the internal function that actually does the
+/// querying for the public interface methods [`Stash::query_value()`]
+/// and [`Tether::query_value()`].
+///
+/// For full usage details, see [`Stash::query_value()`].
+///
+/// # Parameters
+///
+/// * `query`       - The query to execute.
+/// * `params`      - The parameters to pass to the query.
+/// * `conn_handle` - The handle of the connection to use for the query.
+/// * `queue`       - The queue to send the query to.
+///
+/// # Errors
+///
+/// See [`Stash::query()`].
+///
+/// # See also
+///
+/// * [`Stash::query()`]
+/// * [`Tether::query()`]
+/// * [`params!`](crate::utils::params)
+///
+async fn perform_value_query<Q, T>(
+    query: Q,
+    params: Vec<Box<dyn ToSql + Send>>,
+    conn_handle: Option<Arc<()>>,
+    queue: &QueueSender<Operation>,
+) -> Result<Vec<T>, StashError>
+where
+    Q: Into<String> + Send,
+    T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+{
+    perform_query::<_, ValueRecord<T>>(query, params, conn_handle, queue)
+        .await
+        .map(|values| values.into_iter().map(|v| v.value).collect())
+}
+
 /// Runs a query and returns any rows of data emitted.
 ///
 /// This function prepares a query and executes it on the database, and returns
@@ -3085,4 +3226,12 @@ where
                 .map_err(|_err| StashError::DowncastError)
         })
         .collect()
+}
+
+/// Value record struct used to generate the `DbRecord` glue code.
+#[derive(Debug, DbRecord, Clone, PartialEq)]
+struct ValueRecord<V: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static> {
+    /// Value we wish to read from the query.
+    #[DbField]
+    value: V,
 }

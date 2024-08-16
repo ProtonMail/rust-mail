@@ -1,7 +1,6 @@
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
-use stash::datatypes::QueryResultI64;
 use stash::macros::DbRecord;
 use stash::params;
 use stash::stash::{Interface, Stash, StashError};
@@ -72,15 +71,14 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
                     data: Some(nums.clone()),
                 };
 
-                let id: i32 = conn
-                    .query::<_, QueryResultI64>(
+                let id: i32 = *conn
+                    .query_value::<_, i32>(
                         "INSERT INTO person (name, data) VALUES (?1, ?2) RETURNING `id` AS value",
                         params![me.name, me.data],
                     )
                     .await?
                     .first()
-                    .unwrap()
-                    .value as i32;
+                    .unwrap();
 
                 nums.shuffle(&mut rng);
 
