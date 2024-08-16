@@ -458,6 +458,28 @@ pub struct Conversation {
     pub subject: String,
 }
 
+#[cfg(any(test, debug_assertions))]
+impl Default for Conversation {
+    fn default() -> Self {
+        Self {
+            id: RemoteId::from(""),
+            attachment_info: HashMap::default(),
+            attachments_metadata: Vec::default(),
+            display_snooze_reminder: false,
+            expiration_time: 0,
+            labels: Vec::default(),
+            num_attachments: 0,
+            num_messages: 0,
+            num_unread: 0,
+            order: 0,
+            recipients: Vec::default(),
+            senders: Vec::default(),
+            size: 0,
+            subject: String::default(),
+        }
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
@@ -571,6 +593,25 @@ pub struct Label {
     /// TODO: Document this field.
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub sticky: bool,
+}
+
+#[cfg(any(test, debug_assertions))]
+impl Default for Label {
+    fn default() -> Self {
+        Self {
+            id: RemoteId::from(""),
+            parent_id: None,
+            color: String::default(),
+            display: false,
+            expanded: false,
+            label_type: LabelType::Label,
+            name: String::default(),
+            notify: false,
+            order: 0,
+            path: None,
+            sticky: false,
+        }
+    }
 }
 
 /// Data for an event related to a [`LabelEvent`] record.
@@ -881,6 +922,20 @@ pub struct MessageAttachment {
     pub size: u64,
 }
 
+#[cfg(any(test, debug_assertions))]
+impl Default for Message {
+    fn default() -> Self {
+        Self {
+            attachments: Vec::default(),
+            body: String::default(),
+            header: String::default(),
+            mime_type: MimeType::TextPlain,
+            parsed_headers: HashMap::default(),
+            metadata: MessageMetadata::default(),
+        }
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
@@ -1162,6 +1217,37 @@ pub struct MessageMetadata {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
     pub unread: bool,
+}
+
+#[cfg(any(test, debug_assertions))]
+impl Default for MessageMetadata {
+    fn default() -> Self {
+        Self {
+            id: RemoteId::from(""),
+            conversation_id: RemoteId::from(""),
+            address_id: RemoteId::from(""),
+            attachments_metadata: Vec::default(),
+            bcc_list: Vec::default(),
+            cc_list: Vec::default(),
+            expiration_time: 0,
+            external_id: None,
+            flags: MessageFlags::empty(),
+            is_forwarded: false,
+            is_replied: false,
+            is_replied_all: false,
+            label_ids: Vec::default(),
+            num_attachments: 0,
+            order: 0,
+            reply_tos: Vec::default(),
+            sender: MessageAddress::default(),
+            size: 0,
+            snooze_time: 0,
+            subject: String::default(),
+            time: 0,
+            to_list: Vec::default(),
+            unread: false,
+        }
+    }
 }
 
 /// TODO: Document this struct.

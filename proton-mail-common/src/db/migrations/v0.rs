@@ -4,6 +4,7 @@ mod conversations;
 mod events;
 mod labels;
 mod messages;
+mod rollback_actions;
 mod settings;
 
 use stash::stash::{StashError, Tether};
@@ -40,6 +41,9 @@ impl proton_sqlite3::Migration for MigrationV0 {
         let span = debug_span!("settings");
         let entered = span.enter();
         settings::create_settings_table(tx).await?;
+        drop(entered);
+        let entered = span.enter();
+        rollback_actions::create_rollback_action_tables(tx).await?;
         drop(entered);
         Ok(())
     }

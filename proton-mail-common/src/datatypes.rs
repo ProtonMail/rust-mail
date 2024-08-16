@@ -40,6 +40,7 @@
 pub mod attachment;
 pub(crate) mod contextual_conversation;
 pub(crate) mod exclusive_location;
+mod item_type;
 pub mod labels;
 pub(crate) mod system_label;
 
@@ -47,6 +48,7 @@ use crate::models::{Label, MessageBodyMetadata};
 pub use contextual_conversation::ContextualConversation;
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
+pub use item_type::ItemType;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
