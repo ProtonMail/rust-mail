@@ -441,11 +441,11 @@ impl Attachment {
         } else {
             return Err(StashError::IdNotSet.into());
         };
-        let mut attachment = Self::try_from(
+        let mut attachment = Self::from(
             Self::fetch_metadata(remote_attachment_id, api)
                 .await?
                 .attachment,
-        )?;
+        );
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
         attachment.save_using(interface).await?;
@@ -473,11 +473,9 @@ impl DecryptableAttachment for Attachment {
     }
 }
 
-impl TryFrom<ApiAttachment> for Attachment {
-    type Error = AppError;
-
-    fn try_from(value: ApiAttachment) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<ApiAttachment> for Attachment {
+    fn from(value: ApiAttachment) -> Self {
+        Self {
             local_id: None,
             remote_id: Some(value.id.into()),
             remote_address_id: Some(value.address_id.into()),
@@ -489,14 +487,14 @@ impl TryFrom<ApiAttachment> for Attachment {
             enc_signature: value.enc_signature.clone().map(|v| v.into()),
             is_auto_forwardee: value.is_auto_forwardee,
             key_packets: Some(value.key_packets.clone().into()),
-            mime_type: attachment::MimeType::new(value.mime_type)?,
+            mime_type: value.mime_type.parse().unwrap_or_default(),
             filename: value.name,
             sender: value.sender.map(|v| v.into()),
             signature: value.signature.map(|v| v.into()),
             size: value.size,
             row_id: None,
             stash: None,
-        })
+        }
     }
 }
 
@@ -1247,8 +1245,8 @@ impl Conversation {
                 .await?
                 .conversations
                 .into_iter()
-                .map(Conversation::try_from)
-                .collect::<Result<_, _>>()?,
+                .map(Conversation::from)
+                .collect(),
             stash,
         )
         .await?;
@@ -1373,8 +1371,8 @@ impl Conversation {
             response
                 .conversations
                 .into_iter()
-                .map(Conversation::try_from)
-                .collect::<Result<_, _>>()?,
+                .map(Conversation::from)
+                .collect(),
             stash,
         )
         .await?;
@@ -1661,11 +1659,9 @@ impl Conversation {
     }
 }
 
-impl TryFrom<ApiConversation> for Conversation {
-    type Error = AppError;
-
-    fn try_from(value: ApiConversation) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<ApiConversation> for Conversation {
+    fn from(value: ApiConversation) -> Self {
+        Self {
             local_id: None,
             remote_id: Some(value.id.into()),
             attachment_info: MessageAttachmentInfos {
@@ -1678,8 +1674,8 @@ impl TryFrom<ApiConversation> for Conversation {
             attachments_metadata: value
                 .attachments_metadata
                 .into_iter()
-                .map(AttachmentMetadata::try_from)
-                .collect::<Result<_, _>>()?,
+                .map(AttachmentMetadata::from)
+                .collect(),
             deleted: false,
             display_snooze_reminder: value.display_snooze_reminder,
             expiration_time: value.expiration_time,
@@ -1700,7 +1696,7 @@ impl TryFrom<ApiConversation> for Conversation {
             subject: value.subject,
             row_id: None,
             stash: None,
-        })
+        }
     }
 }
 
@@ -2807,8 +2803,8 @@ impl Message {
                 attachments_metadata: metadata
                     .attachments_metadata
                     .into_iter()
-                    .map(AttachmentMetadata::try_from)
-                    .collect::<Result<_, _>>()?,
+                    .map(AttachmentMetadata::from)
+                    .collect(),
                 bcc_list: MessageAddresses {
                     value: metadata.bcc_list.into_iter().map(|v| v.into()).collect(),
                 },
@@ -3356,15 +3352,9 @@ impl Message {
             "MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned(),
         ))?;
         // sync the message body
-        Message::try_from(
-            api.get_message(remote_id.into())
-                .await
-                .map(|v| v.message)
-                .map_err(|e| {
-                    error!("Failed to retrieve message: {e}");
-                    ApiServiceError::UnknownError("MailContextError::from(e)".to_owned())
-                })?,
-        )
+        Ok(Message::from(
+            api.get_message(remote_id.into()).await.map(|v| v.message)?,
+        ))
     }
 
     /// Get the available actions for the message excluding labels which are applied to
@@ -3545,10 +3535,8 @@ impl Message {
     }
 }
 
-impl TryFrom<ApiMessage> for Message {
-    type Error = AppError;
-
-    fn try_from(value: ApiMessage) -> Result<Self, Self::Error> {
+impl From<ApiMessage> for Message {
+    fn from(value: ApiMessage) -> Self {
         let label_ids: Vec<LabelId> = value
             .metadata
             .label_ids
@@ -3556,7 +3544,7 @@ impl TryFrom<ApiMessage> for Message {
             .map(|v| v.into())
             .collect();
 
-        Ok(Self {
+        Self {
             local_id: None,
             remote_id: Some(value.metadata.id.into()),
             local_conversation_id: None,
@@ -3566,8 +3554,8 @@ impl TryFrom<ApiMessage> for Message {
                 .metadata
                 .attachments_metadata
                 .into_iter()
-                .map(AttachmentMetadata::try_from)
-                .collect::<Result<_, _>>()?,
+                .map(AttachmentMetadata::from)
+                .collect(),
             bcc_list: MessageAddresses {
                 value: value
                     .metadata
@@ -3626,7 +3614,7 @@ impl TryFrom<ApiMessage> for Message {
             row_id: None,
             stash: None,
             custom_labels: vec![],
-        })
+        }
     }
 }
 

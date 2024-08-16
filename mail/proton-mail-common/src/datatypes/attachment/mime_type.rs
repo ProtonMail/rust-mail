@@ -1,68 +1,41 @@
-use lazy_static::lazy_static;
 use mime::Mime;
 use stash::sql_using_serde;
 
-use std::collections::HashMap;
+use std::iter::repeat;
+use std::sync::LazyLock;
+use std::{collections::HashMap, str::FromStr};
+
+use crate::AppError;
 
 pub type MimeName = &'static str;
 
-lazy_static! {
-    pub static ref MIME_MAP: HashMap<MimeName, MimeTypeCategory> = {
-        let mut map = HashMap::new();
-        for mime in AUDIO_MIME_TYPES {
-            map.insert(*mime, MimeTypeCategory::Audio);
-        }
-        for mime in CALENDAR_MIME_TYPES {
-            map.insert(*mime, MimeTypeCategory::Calendar);
-        }
-        for mime in CODE_MIME_TYPES {
-            map.insert(*mime, MimeTypeCategory::Code);
-        }
-        for mime in COMPRESSED_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Compressed);
-        }
-        for mime in DEFAULT_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Default);
-        }
-        for mime in EXCEL_MIME_TYPES {
-            map.insert(*mime, MimeTypeCategory::Excel);
-        }
-        for mime in FONT_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Font);
-        }
-        for mime in IMAGE_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Image);
-        }
-        for mime in KEY_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Key);
-        }
-        for mime in KEYNOTE_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Keynote);
-        }
-        for mime in NUMBERS_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Numbers);
-        }
-        for mime in PAGERS_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Pages);
-        }
-        for mime in PDF_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Pdf);
-        }
-        for mime in POWERPOINT_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Powerpoint);
-        }
-        for mime in TEXT_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Text);
-        }
-        for mime in VIDEO_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Video);
-        }
-        for mime in WORD_MIME_TYPE {
-            map.insert(*mime, MimeTypeCategory::Word);
-        }
-        map
+macro_rules! zip {
+    ($mime_types: expr, $mime_category: expr) => {
+        $mime_types.into_iter().zip(repeat($mime_category))
     };
 }
+
+static MIME_MAP: LazyLock<HashMap<MimeName, MimeTypeCategory>> = LazyLock::new(|| {
+    zip!(AUDIO_MIME_TYPES, MimeTypeCategory::Audio)
+        .chain(zip!(CALENDAR_MIME_TYPES, MimeTypeCategory::Calendar))
+        .chain(zip!(CODE_MIME_TYPES, MimeTypeCategory::Code))
+        .chain(zip!(COMPRESSED_MIME_TYPE, MimeTypeCategory::Compressed))
+        .chain(zip!(DEFAULT_MIME_TYPE, MimeTypeCategory::Default))
+        .chain(zip!(EXCEL_MIME_TYPES, MimeTypeCategory::Excel))
+        .chain(zip!(FONT_MIME_TYPE, MimeTypeCategory::Font))
+        .chain(zip!(IMAGE_MIME_TYPE, MimeTypeCategory::Image))
+        .chain(zip!(KEY_MIME_TYPE, MimeTypeCategory::Key))
+        .chain(zip!(KEYNOTE_MIME_TYPE, MimeTypeCategory::Keynote))
+        .chain(zip!(NUMBERS_MIME_TYPE, MimeTypeCategory::Numbers))
+        .chain(zip!(PAGES_MIME_TYPE, MimeTypeCategory::Pages))
+        .chain(zip!(PDF_MIME_TYPE, MimeTypeCategory::Pdf))
+        .chain(zip!(POWERPOINT_MIME_TYPE, MimeTypeCategory::Powerpoint))
+        .chain(zip!(TEXT_MIME_TYPE, MimeTypeCategory::Text))
+        .chain(zip!(VIDEO_MIME_TYPE, MimeTypeCategory::Video))
+        .chain(zip!(WORD_MIME_TYPE, MimeTypeCategory::Word))
+        .map(|(mime, category)| (*mime, category))
+        .collect()
+});
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MimeTypeCategory {
@@ -97,31 +70,83 @@ impl MimeTypeCategory {
     }
 }
 
+/// MimeType is a struct that represents a mime type of an attachment.
+/// It is parsed from a string and may fail if the string is not a valid
+/// MIME type.
+///
+/// ## Purpose
+///
+/// Design around this focus on extracting only one important piece of information
+/// Which is the category of the mime type. This is done to simplify the process
+/// of choosing an icon for the attachment.
+///
+/// ## Usage
+///
+/// This struct in production flow should be only created by `FromStr::parse` method.
+/// Such flow ensures that the mime type is always valid and can be used safely.
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MimeType {
     mime: Mime,
     category: MimeTypeCategory,
 }
 
-impl MimeType {
-    pub fn new<A: AsRef<str>>(mime: A) -> Result<Self, anyhow::Error> {
-        let mime = mime.as_ref();
+impl FromStr for MimeType {
+    type Err = AppError;
+
+    fn from_str(mime: &str) -> Result<Self, Self::Err> {
         let category = MimeTypeCategory::new(mime);
-        let mime = mime
-            .parse::<Mime>()
-            .map_err(|e| anyhow::anyhow!("`{}` couldn not be parsed, details: {}", mime, e))?;
+        let mime = mime.parse::<Mime>().map_err(|e| {
+            AppError::InvalidMimeType(format!("`{}` couldn not be parsed, details: {}", mime, e))
+        })?;
 
         Ok(MimeType { mime, category })
     }
+}
 
+impl Default for MimeType {
+    /// According to this RFC: https://www.rfc-editor.org/rfc/rfc2046.txt
+    /// 4.5.1 Octet-Stream Subtype is described as arbitrary stream of bytes
+    /// which exact type is unknown. This Mime type is the best choice for
+    /// not know media type,  although it should be dealt with care since
+    /// it might contain malicious content.
+    ///
+    ///
+    /// As additional prove there is RFC https://www.rfc-editor.org/rfc/rfc7231.txt
+    /// regarding dealing with mime types in HTTP, where it is stated that
+    /// unknown Content-Type should be defined as application/octet-stream.
+    ///
+    /// ## RFC 7231
+    ///
+    /// If a Content-Type header field is not present, the recipient
+    /// MAY either assume a media type of "application/octet-stream"
+    /// ([RFC2046], Section 4.5.1) or examine the data to determine its type.
+    ///
+    /// # Usage
+    /// Default should be used only for belivable source of data such as
+    /// Proton API. Client should not allow user to upload files with
+    /// unknown mime type.
+    ///
+    fn default() -> Self {
+        MimeType {
+            mime: mime::APPLICATION_OCTET_STREAM,
+            category: MimeTypeCategory::Default,
+        }
+    }
+}
+
+impl MimeType {
     pub fn category(&self) -> MimeTypeCategory {
         self.category
     }
+}
 
+#[cfg(any(test, debug_assertions))]
+impl MimeType {
     pub fn text_html() -> Self {
         MimeType {
             mime: mime::TEXT_HTML,
-            category: MimeTypeCategory::Text,
+            category: MimeTypeCategory::Code,
         }
     }
 
@@ -182,7 +207,7 @@ mod mime_deser {
         {
             let mime = MimeTypeDeser::deserialize(deserializer)?;
 
-            MimeType::new(mime.mime_type).map_err(serde::de::Error::custom)
+            mime.mime_type.parse().map_err(serde::de::Error::custom)
         }
     }
 }
@@ -248,8 +273,8 @@ const COMPRESSED_MIME_TYPE: &[MimeName] = &[
 ];
 
 const DEFAULT_MIME_TYPE: &[MimeName] = &[
-    "application/epub+zip",
     "application/octet-stream",
+    "application/epub+zip",
     "application/vnd.amazon.ebook",
     "application/vnd.mozilla.xul+xml",
     "application/x-cocoa",
@@ -310,7 +335,7 @@ const NUMBERS_MIME_TYPE: &[MimeName] = &[
     "application/x-iwork-numbers-sffnumbers",
 ];
 
-const PAGERS_MIME_TYPE: &[MimeName] = &[
+const PAGES_MIME_TYPE: &[MimeName] = &[
     "application/vnd.apple.pages",
     "application/x-iwork-pages-sffpages",
 ];
@@ -364,6 +389,11 @@ mod tests {
     use mime::Mime;
 
     use crate::datatypes::attachment::MimeType;
+
+    #[test]
+    fn test_mime_map_len() {
+        assert_eq!(super::MIME_MAP.len(), 129)
+    }
 
     #[test]
     fn test_mime_structure() {

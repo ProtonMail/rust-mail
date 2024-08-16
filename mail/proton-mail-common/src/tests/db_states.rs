@@ -1,6 +1,6 @@
 use crate::datatypes::{
     attachment, AttachmentMetadata, Disposition, LabelType, MessageAddress, MessageAddresses,
-    MimeType, SystemLabelId,
+    SystemLabelId,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::tests::common::{

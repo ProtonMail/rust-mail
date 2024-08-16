@@ -266,7 +266,7 @@ async fn test_create_message() {
         .await
         .expect("failed to get message")
         .expect("must have a value");
-    let mut expected = Message::try_from(message).unwrap();
+    let mut expected = Message::from(message);
     let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &stash)
         .await
         .unwrap()
@@ -493,7 +493,7 @@ async fn test_update_message() {
         .await
         .unwrap()
         .unwrap();
-    let mut expected = Message::try_from(metadata_updated).unwrap();
+    let mut expected = Message::from(metadata_updated);
     expected.set_stash(&stash);
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
@@ -1626,8 +1626,7 @@ async fn test_create_message_dependencies(tx: &Tether) -> u64 {
         }],
         vec![],
     )
-    .try_into()
-    .unwrap();
+    .into();
     conversation.set_stash(tx.stash());
     conversation
         .save()

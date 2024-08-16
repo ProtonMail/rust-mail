@@ -36,7 +36,6 @@ mod tests;
 
 use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::{Conversation, Label, MailSettings};
-use crate::AppError;
 use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, LabelEvent as ApiLabelEvent,
     MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
@@ -78,17 +77,15 @@ impl Event for ConversationEvent {
     }
 }
 
-impl TryFrom<ApiConversationEvent> for ConversationEvent {
-    type Error = AppError;
-
-    fn try_from(value: ApiConversationEvent) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<ApiConversationEvent> for ConversationEvent {
+    fn from(value: ApiConversationEvent) -> Self {
+        Self {
             remote_id: value.id.into(),
             event_id: value.event_id.into(),
             action: value.action.into(),
-            conversation: value.conversation.map(Conversation::try_from).transpose()?,
+            conversation: value.conversation.map(Conversation::from),
             has_more: value.has_more,
-        })
+        }
     }
 }
 
@@ -245,14 +242,6 @@ impl Event for MailEvent {
 
 impl From<ApiMailEvent> for MailEvent {
     fn from(value: ApiMailEvent) -> Self {
-        let conversations = value.conversations.map(|conversations| {
-            conversations
-                .into_iter()
-                .map(ConversationEvent::try_from)
-                .filter_map(Result::ok)
-                .collect()
-        });
-
         Self {
             remote_id: value.id.into(),
             event_id: value.event_id.into(),
@@ -266,7 +255,12 @@ impl From<ApiMailEvent> for MailEvent {
                     .map(ConversationCount::from)
                     .collect()
             }),
-            conversations,
+            conversations: value.conversations.map(|conversations| {
+                conversations
+                    .into_iter()
+                    .map(ConversationEvent::from)
+                    .collect()
+            }),
             has_more: value.has_more,
             labels: value
                 .labels
