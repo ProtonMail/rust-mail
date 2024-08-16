@@ -7,9 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+- `available_actions_for_message` and `available_actions_for_conversation`.
+
+### Fixed
+
+- Fixed login error related to `no user id set`.
+
 ### Changed
 
 - Grouped  `watch_standard_labels`, `watch_folder_labels` and `watch_system_labels` into `watch_labels`.
+- RemoteId removed from exported types
+- LocalIds are non-optional
 
 ## [0.11.6] - 2024-08-13
 
