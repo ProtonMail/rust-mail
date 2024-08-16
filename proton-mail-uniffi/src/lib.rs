@@ -237,7 +237,7 @@ pub async fn watch<Q, A, T>(
     check_record: impl Fn(&T) -> bool + Send + Sync + 'static,
     get_local_id: impl Fn(&T) -> RealLocalId + Send + Sync + 'static,
     interface: &A,
-    callback: Box<dyn LiveQueryCallback>,
+    callback: Arc<Box<dyn LiveQueryCallback>>,
 ) -> Result<(Vec<T>, Arc<WatchHandle>), StashError>
 where
     Q: Into<String> + Send,
