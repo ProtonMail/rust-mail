@@ -15,6 +15,7 @@ use crate::mail::datatypes::{
 };
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
 use crate::{watch, LiveQueryCallback, WatchHandle};
+use indoc::formatdoc;
 use itertools::Itertools;
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
 use proton_core_common::models::ModelExtension;
@@ -417,5 +418,71 @@ pub async fn watch_conversation(
         messages: messages.into_iter().map(Into::into).collect(),
         conversation_handle,
         messages_handle,
+    })
+}
+
+/// Data for watched conversations.
+#[derive(uniffi::Record)]
+pub struct WatchedConversations {
+    /// The conversations.
+    pub conversations: Vec<Conversation>,
+
+    /// The handle to stop watching the conversations.
+    pub handle: Arc<WatchHandle>,
+}
+
+/// Watch conversations for the given label.
+///
+/// Watches conversations with the specified label for changes. When the
+/// conversations change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to watch.
+/// * `callback` - The callback to use for updates. When the specified
+///                conversations change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn watch_conversations_for_label(
+    session: Arc<MailSession>,
+    label_id: u64,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<WatchedConversations, MailboxError> {
+    let (conversations, handle) = watch::<_, _, RealConversation>(
+        formatdoc!(
+            "
+            JOIN conversation_labels
+                ON conversations.local_id = conversation_labels.conversation_id
+            WHERE
+                conversation_labels.label_id = ?
+            "
+        ),
+        params![label_id],
+        move |r| {
+            r.labels
+                .iter()
+                .any(|l| l.local_label_id == Some(label_id.into()))
+        },
+        |r| r.local_id.expect("local_id should never be None"),
+        session.stash(),
+        Arc::new(callback),
+    )
+    .await?;
+    Ok(WatchedConversations {
+        conversations: conversations
+            .into_iter()
+            .map(|c| {
+                ContextualConversation::new(c, label_id.into())
+                    .unwrap()
+                    .into()
+            })
+            .collect(),
+        handle,
     })
 }
