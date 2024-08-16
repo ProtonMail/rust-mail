@@ -7,7 +7,6 @@ use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
     Disposition as ApiDisposition, MessageAddress as ApiMessageAddress,
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
-    MimeType as ApiMimeType,
 };
 use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType, LocalId, RemoteId};
 use proton_core_common::models::Address;
@@ -27,11 +26,11 @@ async fn test_attachment_create_without_metadata() {
     let tx = stash.connection();
     let (_, _, _) = create_attachment_dependencies(&tx, None).await.unwrap();
     let api_attachment = test_attachment();
-    let mut attachment = Attachment::try_from(api_attachment.clone()).unwrap();
+    let mut attachment = Attachment::from(api_attachment.clone());
     attachment.save_using(&tx).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
-    let mut expected = Attachment::try_from(api_attachment).unwrap();
+    let mut expected = Attachment::from(api_attachment);
     expected.local_id = local_id;
     expected.row_id = attachment.row_id;
     expected.set_stash(&stash);
@@ -63,7 +62,7 @@ async fn test_attachment_create_with_metadata() {
     let db_attachment = Attachment::load(1.into(), &stash).await.unwrap().unwrap();
     assert!(!db_attachment.has_complete_metadata());
 
-    let mut attachment = Attachment::try_from(api_attachment.clone()).unwrap();
+    let mut attachment = Attachment::from(api_attachment.clone());
     attachment.save_using(&tx).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
@@ -145,8 +144,8 @@ async fn create_attachment_dependencies(
             attachments_metadata: metadata
                 .clone()
                 .into_iter()
-                .map(AttachmentMetadata::try_from)
-                .collect::<Result<_, _>>()?,
+                .map(AttachmentMetadata::from)
+                .collect(),
             ..Default::default()
         }],
         tx.stash(),

@@ -41,7 +41,6 @@ pub mod attachment;
 pub(crate) mod exclusive_location;
 
 use crate::models::{Conversation, Label, MessageBodyMetadata};
-use crate::AppError;
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -71,7 +70,6 @@ use stash::exports::{
 };
 use stash::sql_using_serde;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 
@@ -870,18 +868,16 @@ pub struct AttachmentMetadata {
     pub size: u64,
 }
 
-impl TryFrom<ApiAttachmentMetadata> for AttachmentMetadata {
-    type Error = AppError;
-
-    fn try_from(value: ApiAttachmentMetadata) -> Result<Self, Self::Error> {
-        Ok(Self {
+impl From<ApiAttachmentMetadata> for AttachmentMetadata {
+    fn from(value: ApiAttachmentMetadata) -> Self {
+        Self {
             local_id: None,
             remote_id: Some(value.id.into()),
             disposition: value.disposition.into(),
-            mime_type: attachment::MimeType::new(value.mime_type)?,
+            mime_type: value.mime_type.parse().unwrap_or_default(),
             filename: value.name,
             size: value.size,
-        })
+        }
     }
 }
 
@@ -1158,19 +1154,19 @@ pub struct MessageAttachment {
     pub size: u64,
 }
 
-impl MessageAttachment {
-    pub fn new(value: ApiMessageAttachment) -> Result<Self, AppError> {
-        Ok(Self {
+impl From<ApiMessageAttachment> for MessageAttachment {
+    fn from(value: ApiMessageAttachment) -> Self {
+        Self {
             id: value.id.into(),
             disposition: value.disposition.into(),
             enc_signature: value.enc_signature.map(|v| v.into()),
             headers: value.headers.into(),
             key_packets: value.key_packets.into(),
-            mime_type: attachment::MimeType::new(value.mime_type)?,
+            mime_type: value.mime_type.parse().unwrap_or_default(),
             name: value.name,
             signature: value.signature.map(|v| v.into()),
             size: value.size,
-        })
+        }
     }
 }
 

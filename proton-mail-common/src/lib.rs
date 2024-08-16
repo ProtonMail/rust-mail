@@ -50,7 +50,7 @@ pub enum AppError {
     #[error("Label with local id {0} not found")]
     LabelNotFound(LocalId),
     #[error("Incorrect mime type: {0}")]
-    InvalidMimeType(#[from] anyhow::Error),
+    InvalidMimeType(String),
     #[error("MessageBodyMetadata missing in database for message {0}")]
     MessageBodyMetadataMissing(LocalId),
     #[error("Could not find remote label {0}")]

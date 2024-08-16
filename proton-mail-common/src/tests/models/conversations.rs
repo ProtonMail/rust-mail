@@ -23,7 +23,7 @@ use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
-    Disposition as ApiDisposition, MimeType as ApiMimeType,
+    Disposition as ApiDisposition,
 };
 use proton_core_common::datatypes::{Id, LabelId};
 use stash::orm::Model;
@@ -490,7 +490,7 @@ async fn test_conversation_create_no_labels() {
     create_address(&tx).await;
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
-    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
+    let mut local_conversation = Conversation::from(conv.clone());
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -512,7 +512,7 @@ async fn test_conversation_has_messages_flag() {
     create_address(&tx).await;
     create_labels(&tx).await;
     let conv = test_conversation(vec![], vec![]);
-    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
+    let mut local_conversation = Conversation::from(conv.clone());
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -561,7 +561,7 @@ async fn test_conversation_create_starred() {
 
     // Add starred label, should gain starred attribute.
     let conv = test_conversation(vec![conv_label.clone()], vec![]);
-    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
+    let mut local_conversation = Conversation::from(conv.clone());
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -574,7 +574,7 @@ async fn test_conversation_create_starred() {
             .await
             .expect("failed to get conversation")
             .expect("should have value");
-        let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
+        let mut local_conversation = Conversation::from(conv.clone());
         local_conversation.set_stash(&stash);
         local_conversation.row_id = Some(1);
         local_conversation.local_id = Some(1.into());
@@ -676,7 +676,7 @@ async fn test_conversation_create_with_labels() {
         ],
         vec![],
     );
-    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
+    let mut local_conversation = Conversation::from(conv.clone());
     local_conversation.labels = vec![ConversationLabel {
         local_id: None,
         local_conversation_id: None,
@@ -722,7 +722,7 @@ async fn test_conversation_create_with_attachment() {
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
+    let mut local_conversation = Conversation::from(conv.clone());
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -776,7 +776,7 @@ async fn test_conversation_create_with_attachment_and_label() {
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation = Conversation::try_from(conv.clone()).unwrap();
+    let mut local_conversation = Conversation::from(conv.clone());
     local_conversation.set_stash(&stash);
     local_conversation
         .save()
@@ -830,7 +830,7 @@ async fn test_conversation_update() {
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation1 = Conversation::try_from(conv.clone()).unwrap();
+    let mut local_conversation1 = Conversation::from(conv.clone());
     local_conversation1.set_stash(&stash);
     local_conversation1
         .save()
@@ -855,7 +855,7 @@ async fn test_conversation_update() {
             disposition: ApiDisposition::Attachment,
         }],
     );
-    let mut local_conversation2 = Conversation::try_from(conv_update.clone()).unwrap();
+    let mut local_conversation2 = Conversation::from(conv_update.clone());
     local_conversation2.labels = vec![
         ConversationLabel {
             local_id: None,
