@@ -40,7 +40,7 @@ use tracing::{debug, warn};
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn apply_label(
+pub async fn apply_label_to_conversations(
     session: Arc<MailSession>,
     label_id: u64,
     ids: Vec<u64>,
@@ -65,7 +65,10 @@ pub async fn apply_label(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn delete(mailbox: Arc<Mailbox>, ids: Vec<u64>) -> Result<(), MailboxError> {
+pub async fn delete_conversations(
+    mailbox: Arc<Mailbox>,
+    ids: Vec<u64>,
+) -> Result<(), MailboxError> {
     RealConversation::delete_multiple(
         ids.into_iter().map(Into::into).collect(),
         mailbox.label_id().into(),
@@ -125,7 +128,7 @@ pub async fn available_actions_for_conversation(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn load(
+pub async fn load_conversation(
     session: Arc<MailSession>,
     id: u64,
     label_id: u64,
@@ -154,7 +157,7 @@ pub async fn load(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn load_remote(
+pub async fn load_remote_conversation(
     session: Arc<MailSession>,
     id: RemoteId,
     local_label_id: u64,
@@ -180,7 +183,10 @@ pub async fn load_remote(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn mark_as_read(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
+pub async fn mark_converstions_as_read(
+    session: Arc<MailSession>,
+    ids: Vec<u64>,
+) -> Result<(), MailboxError> {
     Ok(RealConversation::mark_multiple_as_read(
         ids.into_iter().map(Into::into).collect(),
         &session.stash().connection(),
@@ -200,7 +206,10 @@ pub async fn mark_as_read(session: Arc<MailSession>, ids: Vec<u64>) -> Result<()
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn mark_as_unread(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
+pub async fn mark_conversations_as_unread(
+    session: Arc<MailSession>,
+    ids: Vec<u64>,
+) -> Result<(), MailboxError> {
     Ok(RealConversation::mark_multiple_as_unread(
         ids.into_iter().map(Into::into).collect(),
         &session.stash().connection(),
@@ -225,7 +234,7 @@ pub async fn mark_as_unread(session: Arc<MailSession>, ids: Vec<u64>) -> Result<
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn relocate(
+pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
     label_id: u64,
     ids: Vec<u64>,
@@ -253,7 +262,7 @@ pub async fn relocate(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn remove_label(
+pub async fn remove_label_from_conversations(
     session: Arc<MailSession>,
     label_id: u64,
     ids: Vec<u64>,
@@ -309,7 +318,10 @@ pub async fn search_for_conversations(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn star(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
+pub async fn star_conversations(
+    session: Arc<MailSession>,
+    ids: Vec<u64>,
+) -> Result<(), MailboxError> {
     Ok(
         RealConversation::star_multiple(ids.into_iter().map(Into::into).collect(), session.stash())
             .await?,
@@ -328,7 +340,10 @@ pub async fn star(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), Mailbo
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn unstar(session: Arc<MailSession>, ids: Vec<u64>) -> Result<(), MailboxError> {
+pub async fn unstar_conversations(
+    session: Arc<MailSession>,
+    ids: Vec<u64>,
+) -> Result<(), MailboxError> {
     Ok(RealConversation::unstar_multiple(
         ids.into_iter().map(Into::into).collect(),
         session.stash(),
@@ -365,7 +380,7 @@ pub struct WatchedConversation {
 ///
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
-pub async fn watch(
+pub async fn watch_conversation(
     session: Arc<MailSession>,
     id: u64,
     callback: Box<dyn LiveQueryCallback>,
