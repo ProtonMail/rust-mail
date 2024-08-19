@@ -524,7 +524,7 @@ impl Interface for AgnosticInterface {
         }
     }
 
-    async fn query_value<Q, T>(
+    async fn query_values<Q, T>(
         &self,
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -534,8 +534,8 @@ impl Interface for AgnosticInterface {
         T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
     {
         match *self {
-            Self::Stash(ref stash) => stash.query_value(query, params).await,
-            Self::Tether(ref tether) => tether.query_value(query, params).await,
+            Self::Stash(ref stash) => stash.query_values(query, params).await,
+            Self::Tether(ref tether) => tether.query_values(query, params).await,
         }
     }
 
@@ -1361,7 +1361,7 @@ impl Interface for Stash {
         perform_query(query, params, None, &self.queue).await
     }
 
-    async fn query_value<Q, T>(
+    async fn query_values<Q, T>(
         &self,
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -1673,7 +1673,7 @@ impl Interface for Tether {
         perform_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
 
-    async fn query_value<Q, T>(
+    async fn query_values<Q, T>(
         &self,
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -2776,7 +2776,7 @@ pub trait Interface: Clone + Send + Sync {
     /// use stash::stash::{AgnosticInterface, Interface};
     ///
     /// async fn value_query(interface:&AgnosticInterface) {
-    ///     let values:Vec<f64> = interface.query_value(
+    ///     let values:Vec<f64> = interface.query_values(
     ///         "SELECT number AS value FROM table",
     ///         vec![]).await.unwrap();
     /// }
@@ -2786,7 +2786,7 @@ pub trait Interface: Clone + Send + Sync {
     ///
     /// * [`Interface::query`]
     ///
-    async fn query_value<Q, T>(
+    async fn query_values<Q, T>(
         &self,
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -2794,6 +2794,39 @@ pub trait Interface: Clone + Send + Sync {
     where
         Q: Into<String> + Send,
         T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static;
+
+    /// Utility function to return a single row of a singular type.
+    ///
+    /// This function is similar in nature to [`Interface::query_values()`] but
+    /// it returns only one value.
+    ///
+    /// # Errors
+    ///
+    /// If no rows are returned, this function returns
+    /// [`SqliteError::QueryReturnedNoRows`].
+    ///
+    /// See [`Interface::query_values()`] for more information.
+    ///
+    /// # See also
+    ///
+    /// * [`Interface::query_values()`]
+    ///
+    async fn query_value<Q, T>(
+        &self,
+        query: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<T, StashError>
+    where
+        Q: Into<String> + Send,
+        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+    {
+        let mut values = self.query_values::<Q, T>(query, params).await?;
+        if values.is_empty() {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        }
+
+        Ok(values.swap_remove(0))
+    }
 
     /// Get the associated [`Stash`].
     ///
@@ -3123,10 +3156,10 @@ async fn perform_execute<Q: Into<String> + Send>(
 /// the resulting rows of data as a collection of instances of the specified `T`
 /// type, where `T` is any single type implementing the [`FromSql`] and
 /// [`ToSql`] trait. It is the internal function that actually does the
-/// querying for the public interface methods [`Stash::query_value()`]
-/// and [`Tether::query_value()`].
+/// querying for the public interface methods [`Stash::query_values()`]
+/// and [`Tether::query_values()`].
 ///
-/// For full usage details, see [`Stash::query_value()`].
+/// For full usage details, see [`Stash::query_values()`].
 ///
 /// # Parameters
 ///

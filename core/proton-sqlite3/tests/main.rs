@@ -72,7 +72,7 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
                 };
 
                 let id: i32 = *conn
-                    .query_value::<_, i32>(
+                    .query_values::<_, i32>(
                         "INSERT INTO person (name, data) VALUES (?1, ?2) RETURNING `id` AS value",
                         params![me.name, me.data],
                     )

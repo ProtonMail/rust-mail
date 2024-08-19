@@ -121,7 +121,7 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn pending_count(tether: &Tether) -> Result<u64, StashError> {
         let count = tether
-            .query_value::<_, u64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
+            .query_values::<_, u64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
             .await?
             .into_iter()
             .next()
@@ -136,7 +136,7 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn contains(tether: &Tether, id: LocalId) -> Result<bool, StashError> {
         let ids = tether
-            .query_value::<_, u64>(
+            .query_values::<_, u64>(
                 "SELECT id AS value FROM action_queue WHERE id = ?",
                 params![id],
             )
@@ -153,7 +153,7 @@ impl StoredAction {
     pub async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         // Dependencies
         let dependencies = interface
-            .query_value::<_, u64>(
+            .query_values::<_, u64>(
                 "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
             )
@@ -221,7 +221,7 @@ impl StoredAction {
     /// Returns error if the query failed.
     pub async fn dependees(tether: &Tether, id: LocalId) -> Result<Vec<LocalId>, StashError> {
         let ids = tether
-            .query_value::<_, u64>(
+            .query_values::<_, u64>(
                 "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
                 params![id],
             )

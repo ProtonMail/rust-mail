@@ -172,7 +172,7 @@ pub trait ModelExtension: Model {
         A: Into<AgnosticInterface> + Interface,
     {
         Ok(interface
-            .query_value::<_, u64>(
+            .query_values::<_, u64>(
                 formatdoc!(
                     "
                     SELECT

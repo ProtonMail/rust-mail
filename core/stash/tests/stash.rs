@@ -27,7 +27,7 @@ async fn insert(stash: &Stash, value: &str) {
 
 async fn query(stash: &Stash, value: &str) -> Vec<String> {
     stash
-        .query_value::<_, String>(
+        .query_values::<_, String>(
             r#"SELECT value FROM test_kv WHERE value = ?"#,
             params![value.to_owned()],
         )
@@ -51,7 +51,7 @@ async fn insert_tx(tx: &Tether, value: &str) {
 }
 
 async fn query_tx(tx: &Tether, value: &str) -> Vec<String> {
-    tx.query_value::<_, String>(
+    tx.query_values::<_, String>(
         r#"SELECT value FROM test_kv WHERE value = ?"#,
         params![value.to_owned()],
     )
@@ -82,7 +82,7 @@ mod concurrency_basic_sync {
 
         // Query the data
         let result = stash
-            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
             .await
             .unwrap();
 
@@ -113,7 +113,7 @@ mod concurrency_basic_sync {
 
         // Query the data
         let result = tx
-            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
             .await
             .unwrap();
 
@@ -152,7 +152,7 @@ mod concurrency_basic_sync {
 
         // Query the data, from the uncommitted transaction
         let result1 = tx1
-            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test1""#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test1""#, vec![])
             .await
             .unwrap();
 
@@ -169,13 +169,13 @@ mod concurrency_basic_sync {
 
         // Query the data, re-using the transaction connections
         let result2 = tx2
-            .query_value::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test2""#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test2""#, vec![])
             .await
             .unwrap();
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
@@ -262,7 +262,7 @@ mod concurrency_async_functions {
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
@@ -358,7 +358,7 @@ mod concurrency_async_threads {
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
@@ -462,7 +462,7 @@ mod concurrency_std_threads {
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result3 = stash
-            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 
@@ -591,7 +591,7 @@ mod concurrency_mixed {
         // Query the data, using the main Stash (no specific connection or transaction)
         let result7 = query(&stash, "test7").await;
         let result8 = stash
-            .query_value::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+            .query_values::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
             .await
             .unwrap();
 

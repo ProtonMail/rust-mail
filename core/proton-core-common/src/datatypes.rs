@@ -1646,7 +1646,7 @@ impl Id for RemoteId {
         A: Into<AgnosticInterface> + Interface,
     {
         Ok(interface
-            .query_value::<_, u64>(
+            .query_values::<_, u64>(
                 formatdoc!(
                     "
                     SELECT
@@ -1682,7 +1682,7 @@ impl Id for RemoteId {
             .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
             .collect();
         Ok(interface
-            .query_value::<_, u64>(
+            .query_values::<_, u64>(
                 formatdoc!(
                     "
                     SELECT
