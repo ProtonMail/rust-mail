@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Added `message()`, `messages_for_conversation()`, and
         `messages_for_label()`.
   - Added getter and watcher for MailSettings
-    - Added `message_settings()`
+    - Added `mail_settings()`
     - Added `watch_mail_settings()`
 
 ### Changed
