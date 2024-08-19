@@ -17,6 +17,7 @@ pub enum SidebarError {
 pub type SidebarResult<T> = Result<T, SidebarError>;
 
 /// Represents the sidebar where user can navigate between mailbox, folders, labels, settings, ...
+#[derive(Clone)]
 pub struct Sidebar {
     pub user_ctx: Arc<MailUserContext>,
 }

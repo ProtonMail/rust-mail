@@ -3,6 +3,7 @@ mod attachments;
 use crate::core::datatypes::LabelId;
 use crate::mail::datatypes::ViewMode;
 use crate::mail::{MailSessionError, MailUserSession};
+use crate::uniffi_async;
 use anyhow::anyhow;
 use proton_action_queue::queue::Error as QueueError;
 use proton_api_core::service::ApiServiceError;
@@ -13,6 +14,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::{AppError, MailboxError as RealMailboxError};
 use stash::stash::{Stash, StashError};
 use std::sync::Arc;
+use tokio::task::JoinError;
 use tracing::error;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
@@ -72,6 +74,12 @@ pub enum MailboxError {
     Other(anyhow::Error),
 }
 
+impl From<JoinError> for MailboxError {
+    fn from(value: JoinError) -> Self {
+        Self::Other(anyhow::Error::new(value))
+    }
+}
+
 pub type MailboxResult<T> = Result<T, MailboxError>;
 
 /// A [`Mailbox`] provides a gateway to manipulating messages and conversations for a given label.
@@ -94,11 +102,15 @@ impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
     pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
-        let mbox = proton_mail_common::Mailbox::new(ctx.ctx().clone(), label_id.into()).await?;
-        if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
-            error!("Could not sync mailbox: {e}");
-        }
-        Ok(Arc::new(Self { mbox }))
+        let ctx = ctx.ctx().clone();
+        uniffi_async(async move {
+            let mbox = proton_mail_common::Mailbox::new(ctx, label_id.into()).await?;
+            if let Err(e) = mbox.sync(DEFAULT_CONVERSATION_COUNT).await {
+                error!("Could not sync mailbox: {e}");
+            }
+            Ok(Arc::new(Self { mbox }))
+        })
+        .await
     }
 
     /// Create a new mailbox for a given remote id.

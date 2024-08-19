@@ -1,9 +1,10 @@
 use crate::mail::MailUserSession;
+use crate::uniffi_async;
 use anyhow::anyhow;
 use proton_api_core::service::ApiServiceError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError as RealEventLoopError;
-use tokio::spawn;
+use tokio::task::JoinError;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -12,13 +13,11 @@ impl MailUserSession {
     /// *NOTE*: do not call this function concurrently.
     pub async fn poll_events(&self) -> Result<(), EventLoopError> {
         let ctx = self.ctx.clone();
-        let handle = spawn(async move {
+        uniffi_async(async move {
             ctx.poll_event_loop().await?;
             Ok(())
-        });
-        handle
-            .await
-            .map_err(|e| EventLoopError::Other(anyhow::anyhow!("Failed to join task: {e}")))?
+        })
+        .await
     }
 }
 
@@ -35,6 +34,12 @@ pub enum EventLoopError {
     Subscriber(String, SubscriberError),
     #[error("Other: {0}")]
     Other(anyhow::Error),
+}
+
+impl From<JoinError> for EventLoopError {
+    fn from(value: JoinError) -> Self {
+        Self::Other(anyhow::Error::new(value))
+    }
 }
 
 impl From<RealEventLoopError> for EventLoopError {

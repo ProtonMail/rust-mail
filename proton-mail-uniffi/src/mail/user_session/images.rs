@@ -1,6 +1,7 @@
 use crate::mail::datatypes::MailSettings;
 use crate::mail::MailUserSession;
 use crate::mail::{MailSessionError, MailSessionResult};
+use crate::uniffi_async;
 use proton_core_common::datatypes::LightOrDarkMode;
 use std::os::unix::ffi::OsStrExt;
 
@@ -32,22 +33,25 @@ impl MailUserSession {
         mode: Option<String>,
         format: Option<String>,
     ) -> MailSessionResult<Option<Vec<u8>>> {
-        let mode = light_or_dark_mode_from_string(mode)?;
+        let ctx = self.ctx.clone();
+        uniffi_async(async move {
+            let mode = light_or_dark_mode_from_string(mode)?;
 
-        //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
-        Ok(self
-            .ctx
-            .image_for_sender(
-                &mail_settings.clone().into(),
-                address,
-                bimi_selector.as_deref(),
-                display_sender_image,
-                size,
-                mode,
-                format,
-            )
-            .await
-            .map(|v| v.map(|v| v.as_os_str().as_bytes().to_vec()))?)
+            //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
+            Ok(ctx
+                .image_for_sender(
+                    &mail_settings.clone().into(),
+                    address,
+                    bimi_selector.as_deref(),
+                    display_sender_image,
+                    size,
+                    mode,
+                    format,
+                )
+                .await
+                .map(|v| v.map(|v| v.as_os_str().as_bytes().to_vec()))?)
+        })
+        .await
     }
 }
 

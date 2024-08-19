@@ -4,7 +4,7 @@ mod images;
 mod initialization;
 mod labels;
 
-use crate::{core::datatypes::User, mail::MailSessionError};
+use crate::{core::datatypes::User, mail::MailSessionError, uniffi_async};
 use proton_mail_common::MailUserContext;
 use std::sync::Arc;
 
@@ -37,8 +37,12 @@ impl MailUserSession {
 impl MailUserSession {
     /// Log out a session.
     pub async fn logout(&self) -> Result<(), MailSessionError> {
-        self.ctx().logout().await?;
-        Ok(())
+        let ctx = self.ctx.clone();
+        uniffi_async(async move {
+            ctx.logout().await?;
+            Ok(())
+        })
+        .await
     }
 
     /// Fork the current session.
@@ -56,11 +60,9 @@ impl MailUserSession {
     /// there is a problem with the HTTP request.
     ///
     pub async fn fork(&self) -> Result<String, MailSessionError> {
-        self.ctx
-            .session()
-            .fork()
+        let ctx = self.ctx.clone();
+        uniffi_async(async move { ctx.session().fork().await.map_err(MailSessionError::from) })
             .await
-            .map_err(MailSessionError::from)
     }
 
     /// Provides a way to get the datatypes::User FFI instance.
@@ -69,8 +71,11 @@ impl MailUserSession {
     ///
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
     pub async fn user(&self) -> Result<User, MailSessionError> {
-        let user = self.ctx().user().await?;
-
-        Ok(user.into())
+        let ctx = self.ctx.clone();
+        uniffi_async(async move {
+            let user = ctx.user().await?;
+            Ok(user.into())
+        })
+        .await
     }
 }

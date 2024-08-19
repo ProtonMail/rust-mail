@@ -7,7 +7,7 @@
 use crate::mail::datatypes::Label;
 use crate::mail::datatypes::LabelType;
 use crate::mail::{MailSessionError, MailUserSession};
-use crate::{LiveQueryCallback, WatchHandle};
+use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::LabelType as RealLabelType;
 use proton_mail_common::models::Label as RealLabel;
@@ -16,7 +16,7 @@ use stash::params;
 use stash::stash::StashError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::spawn as spawn_async;
+use tokio::task::JoinError;
 use tracing::debug;
 use tracing::warn;
 
@@ -29,6 +29,11 @@ pub enum SidebarError {
     Stash(#[from] StashError),
 }
 
+impl From<JoinError> for SidebarError {
+    fn from(value: JoinError) -> Self {
+        Self::MailSessionError(value.into())
+    }
+}
 type SidebarResult<T> = Result<T, SidebarError>;
 
 impl From<proton_mail_common::SidebarError> for SidebarError {
@@ -67,13 +72,16 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
-        Ok(self
-            .sidebar
-            .system_labels()
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move {
+            Ok(sidebar
+                .system_labels()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+        .await
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
@@ -86,13 +94,16 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn custom_folders(&self, parent_id: Option<u64>) -> SidebarResult<Vec<Label>> {
-        Ok(self
-            .sidebar
-            .custom_folders(parent_id.map(Into::into))
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move {
+            Ok(sidebar
+                .custom_folders(parent_id.map(Into::into))
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+        .await
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
@@ -101,13 +112,16 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn custom_labels(&self) -> SidebarResult<Vec<Label>> {
-        Ok(self
-            .sidebar
-            .custom_labels()
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move {
+            Ok(sidebar
+                .custom_labels()
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect())
+        })
+        .await
     }
 
     /// Set folder `expanded` field to it's collapsed state
@@ -116,7 +130,8 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
-        Ok(self.sidebar.collapse_folder(local_id.into()).await?)
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move { Ok(sidebar.collapse_folder(local_id.into()).await?) }).await
     }
 
     /// Set folder `expanded` field to it's expanded state
@@ -125,7 +140,8 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
-        Ok(self.sidebar.expand_folder(local_id.into()).await?)
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move { Ok(sidebar.expand_folder(local_id.into()).await?) }).await
     }
 
     /// Watch labels of a given type.
@@ -148,61 +164,64 @@ impl Sidebar {
         label_type: LabelType,
         callback: Box<dyn LiveQueryCallback>,
     ) -> SidebarResult<Arc<WatchHandle>> {
-        let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, RealLocalId>>();
-        let results = RealLabel::find(
-            "WHERE label_type = ?",
-            params![RealLabelType::from(label_type)],
-            self.sidebar.user_ctx.stash(),
-            Some(sender),
-        )
-        .await?;
-        // Unwrapping is safe here, as we will always have the local ID
-        let mut ids = results
-            .iter()
-            .map(|m| m.local_id.unwrap())
-            .collect::<Vec<_>>();
-        let stop_flag = Arc::new(AtomicBool::new(false));
-        let stop_flag_clone = Arc::clone(&stop_flag);
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move {
+            let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, RealLocalId>>();
+            let results = RealLabel::find(
+                "WHERE label_type = ?",
+                params![RealLabelType::from(label_type)],
+                sidebar.user_ctx.stash(),
+                Some(sender),
+            )
+                .await?;
+            // Unwrapping is safe here, as we will always have the local ID
+            let mut ids = results
+                .iter()
+                .map(|m| m.local_id.unwrap())
+                .collect::<Vec<_>>();
+            let stop_flag = Arc::new(AtomicBool::new(false));
+            let stop_flag_clone = Arc::clone(&stop_flag);
 
-        spawn_async(async move {
-            while let Ok(change) = receiver.recv_async().await {
-                if stop_flag_clone.load(Ordering::SeqCst) {
-                    debug!("Stop flag set, stopping watch");
-                    break;
+            spawn_async(async move {
+                while let Ok(change) = receiver.recv_async().await {
+                    if stop_flag_clone.load(Ordering::SeqCst) {
+                        debug!("Stop flag set, stopping watch");
+                        break;
+                    }
+                    match change {
+                        ResultsetChange::Inserted(label) => {
+                            if label.label_type == label_type.into() {
+                                debug!("Received new label for watched label type ({label_type})");
+                                // Unwrapping is safe here, as we will always have the local ID
+                                ids.push(label.local_id.unwrap());
+                                callback.on_update();
+                            } else {
+                                debug!("Received new label for different label type ({} instead of {label_type})", label.label_type);
+                            }
+                        }
+                        ResultsetChange::Updated(label) => {
+                            if label.label_type == label_type.into() {
+                                debug!("Received updated label for watched label type ({label_type})");
+                                callback.on_update();
+                            } else {
+                                debug!("Received updated label for different label type ({} instead of {label_type})", label.label_type);
+                            }
+                        }
+                        ResultsetChange::Deleted(local_label_id) => {
+                            if ids.contains(&local_label_id) {
+                                debug!("Received deleted label for watched label type ({label_type})");
+                                callback.on_update();
+                            } else {
+                                debug!("Received deleted label for different label type (unknown instead of {label_type})");
+                            }
+                        }
+                        _ => {
+                            warn!("Received unknown change type");
+                        }
+                    };
                 }
-                match change {
-                    ResultsetChange::Inserted(label) => {
-                        if label.label_type == label_type.into() {
-                            debug!("Received new label for watched label type ({label_type})");
-                            // Unwrapping is safe here, as we will always have the local ID
-                            ids.push(label.local_id.unwrap());
-                            callback.on_update();
-                        } else {
-                            debug!("Received new label for different label type ({} instead of {label_type})", label.label_type);
-                        }
-                    }
-                    ResultsetChange::Updated(label) => {
-                        if label.label_type == label_type.into() {
-                            debug!("Received updated label for watched label type ({label_type})");
-                            callback.on_update();
-                        } else {
-                            debug!("Received updated label for different label type ({} instead of {label_type})", label.label_type);
-                        }
-                    }
-                    ResultsetChange::Deleted(local_label_id) => {
-                        if ids.contains(&local_label_id) {
-                            debug!("Received deleted label for watched label type ({label_type})");
-                            callback.on_update();
-                        } else {
-                            debug!("Received deleted label for different label type (unknown instead of {label_type})");
-                        }
-                    }
-                    _ => {
-                        warn!("Received unknown change type");
-                    }
-                };
-            }
-        });
-        Ok(Arc::new(WatchHandle { stop_flag }))
+            });
+            Ok(Arc::new(WatchHandle { stop_flag }))
+        }).await
     }
 }
