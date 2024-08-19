@@ -176,7 +176,7 @@ pub trait ModelExtension: Model {
                 formatdoc!(
                     "
                     SELECT
-                        local_id AS id
+                        local_id AS value
                     FROM
                         {}
                     {}
