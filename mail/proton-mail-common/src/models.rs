@@ -752,8 +752,6 @@ impl Conversation {
                 AND local_id IN (
                     SELECT local_message_id FROM message_labels WHERE local_label_id = ?
                 )
-            RETURNING
-                local_id
             ",
                     ids.iter()
                         .map(ToString::to_string)
@@ -1412,8 +1410,6 @@ impl Conversation {
                 AND local_id IN (
                     SELECT local_message_id FROM message_labels WHERE local_label_id = ?
                 )
-            RETURNING
-                local_id
                 ",
                     ids.iter()
                         .map(ToString::to_string)
@@ -2777,6 +2773,55 @@ pub struct Message {
 }
 
 impl Message {
+    /// Save a message to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that local ids are resolved before they can be written
+    /// to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the local conversation id is not set or the query
+    /// failed.
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save a message to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// ensure that local ids are resolved before they can be written
+    /// to the database.
+    ///
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the local conversation id is not set or the query
+    /// failed.
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if self.local_conversation_id.is_none() {
+            if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
+                if let Some(conversation) =
+                    Conversation::find_by_id(remote_conversation_id, interface).await?
+                {
+                    self.local_conversation_id = conversation.local_id;
+                } else {
+                    return Err(StashError::Custom(
+                        "Missing local conversation id".to_owned(),
+                    ));
+                }
+            }
+        }
+
+        <Self as Model>::save_using(self, interface).await
+    }
     /// TODO: Document this method.
     ///
     /// # Parameters
