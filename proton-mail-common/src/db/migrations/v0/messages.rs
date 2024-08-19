@@ -8,7 +8,7 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE DEFAULT NULL,
                 address_id TEXT NOT NULL,
-                local_conversation_id INTEGER DEFAULT NULL,
+                local_conversation_id INTEGER NOT NULL,
                 remote_conversation_id TEXT DEFAULT NULL,
                 display_order INTEGER NOT NULL,
                 subject TEXT NOT NULL,

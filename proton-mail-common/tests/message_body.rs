@@ -31,7 +31,8 @@ use std::io::read_to_string;
 use std::iter;
 
 #[tokio::test]
-// TODO: work with https://gitlab.protontech.ch/rust/proton-api-core/-/merge_requests/92
+#[ignore] // TODO(@Leander) Disabled until message can be created without conversation counterparts
+          // TODO: work with https://gitlab.protontech.ch/rust/proton-api-core/-/merge_requests/92
 async fn mailbox_message_body_simple() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::with_user_secret_and_user_id(

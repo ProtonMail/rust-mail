@@ -180,7 +180,32 @@ mod available_actions {
     async fn test_available_actions(test_case: &TestCase) {
         let stash = new_test_connection().await;
         let tx = stash.connection();
+        let mut conversation = Conversation {
+            local_id: None,
+            remote_id: Some("Conv".into()),
+            attachment_info: Default::default(),
+            attachments_metadata: vec![],
+            deleted: false,
+            display_snooze_reminder: false,
+            exclusive_location: None,
+            expiration_time: 0,
+            labels: vec![],
+            num_attachments: 0,
+            num_messages: 0,
+            num_unread: 0,
+            display_order: 0,
+            recipients: Default::default(),
+            senders: Default::default(),
+            size: 0,
+            subject: "".to_string(),
+            custom_labels: vec![],
+            row_id: None,
+            stash: None,
+        };
+        conversation.save_using(&tx).await.unwrap();
         let mut message: Message = test_case.message.clone();
+        message.remote_conversation_id = conversation.remote_id.clone();
+        message.local_conversation_id = conversation.local_id;
         let address = create_address(&tx).await;
         message.address_id = address.remote_id.unwrap();
         message.stash = Some(stash.clone());
@@ -272,6 +297,7 @@ async fn test_create_message() {
         .unwrap()
         .unwrap();
     expected.set_stash(&stash);
+    resolve_local_ids(&tx, &mut expected).await;
     expected.local_id = Some(1.into());
     expected.row_id = Some(1u64.into());
     expected.exclusive_location = Some(ExclusiveLocation::Inbox);
@@ -495,6 +521,7 @@ async fn test_update_message() {
         .unwrap();
     let mut expected = Message::from(metadata_updated);
     expected.set_stash(&stash);
+    resolve_local_ids(&tx, &mut expected).await;
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
         name: label.name,
@@ -1715,5 +1742,19 @@ fn test_message_with_metadata(
             attachments_metadata: attachments.into_iter().collect(),
             snooze_time: 5000,
         },
+    }
+}
+
+pub(super) async fn resolve_local_ids<A>(interface: &A, message: &mut Message)
+where
+    A: Into<AgnosticInterface> + Interface,
+{
+    if message.local_conversation_id.is_none() {
+        let conversation =
+            Conversation::find_by_id(message.remote_conversation_id.clone().unwrap(), interface)
+                .await
+                .unwrap()
+                .unwrap();
+        message.local_conversation_id = conversation.local_id;
     }
 }
