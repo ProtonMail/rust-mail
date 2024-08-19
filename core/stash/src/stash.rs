@@ -531,7 +531,7 @@ impl Interface for AgnosticInterface {
     ) -> Result<Vec<T>, StashError>
     where
         Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
         match *self {
             Self::Stash(ref stash) => stash.query_values(query, params).await,
@@ -1368,7 +1368,7 @@ impl Interface for Stash {
     ) -> Result<Vec<T>, StashError>
     where
         Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
         perform_value_query(query, params, None, &self.queue).await
     }
@@ -1680,7 +1680,7 @@ impl Interface for Tether {
     ) -> Result<Vec<T>, StashError>
     where
         Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
         perform_value_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
@@ -2793,7 +2793,7 @@ pub trait Interface: Clone + Send + Sync {
     ) -> Result<Vec<T>, StashError>
     where
         Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static;
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static;
 
     /// Utility function to return a single row of a singular type.
     ///
@@ -2818,7 +2818,7 @@ pub trait Interface: Clone + Send + Sync {
     ) -> Result<T, StashError>
     where
         Q: Into<String> + Send,
-        T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
         let mut values = self.query_values::<Q, T>(query, params).await?;
         if values.is_empty() {

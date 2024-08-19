@@ -6,6 +6,7 @@ mod tests;
 
 #[allow(unused_imports)]
 use futures::executor::block_on;
+use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::{Interface, Stash, StashError, Tether};
 use thiserror::Error;
@@ -118,11 +119,9 @@ async fn get_current_table_version(
     table_name: &str,
 ) -> Result<Option<usize>, StashError> {
     let query = "SELECT COUNT(DISTINCT `name`) AS value FROM sqlite_master WHERE `type`='table' AND name= ?";
-    let count = *tx
-        .query_values::<_, u64>(query, params![VERSION_TABLE_NAME])
-        .await?
-        .first()
-        .unwrap();
+    let count = tx
+        .query_value::<_, u64>(query, params![VERSION_TABLE_NAME])
+        .await?;
     if count == 0 {
         return Ok(None);
     }
@@ -139,11 +138,22 @@ async fn read_current_table_version(tx: &Tether, id: &str) -> Result<usize, Stas
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} AS value FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
-    let version = *tx
-        .query_values::<_, u64>(query, params![id.to_owned()])
-        .await?
-        .first()
-        .unwrap_or(&0);
+    let version = match tx
+        .query_value::<_, u64>(query, params![id.to_owned()])
+        .await
+    {
+        Ok(v) => v,
+        Err(e) => {
+            if matches!(
+                e,
+                StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+            ) {
+                0
+            } else {
+                return Err(e);
+            }
+        }
+    };
     #[allow(clippy::cast_possible_truncation)]
     Ok(version as usize)
 }

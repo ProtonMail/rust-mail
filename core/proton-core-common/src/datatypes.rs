@@ -1645,8 +1645,8 @@ impl Id for RemoteId {
         T: Model,
         A: Into<AgnosticInterface> + Interface,
     {
-        Ok(interface
-            .query_values::<_, u64>(
+        match interface
+            .query_value::<_, u64>(
                 formatdoc!(
                     "
                     SELECT
@@ -1661,10 +1661,20 @@ impl Id for RemoteId {
                 ),
                 params![self.clone()],
             )
-            .await?
-            .into_iter()
-            .next()
-            .map(Into::into))
+            .await
+        {
+            Ok(v) => Ok(Some(v.into())),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     async fn counterparts<T, A>(

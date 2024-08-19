@@ -120,13 +120,9 @@ impl StoredAction {
     ///
     /// Returns error if the query failed.
     pub async fn pending_count(tether: &Tether) -> Result<u64, StashError> {
-        let count = tether
-            .query_values::<_, u64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
-            .await?
-            .into_iter()
-            .next()
-            .ok_or_else(|| StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
-        Ok(count)
+        tether
+            .query_value::<_, u64>("SELECT COUNT(id) AS value FROM action_queue", vec![])
+            .await
     }
 
     /// Check whether the action with `id` is in the queue.
@@ -135,13 +131,25 @@ impl StoredAction {
     ///
     /// Returns error if the query failed.
     pub async fn contains(tether: &Tether, id: LocalId) -> Result<bool, StashError> {
-        let ids = tether
-            .query_values::<_, u64>(
+        match tether
+            .query_value::<_, u64>(
                 "SELECT id AS value FROM action_queue WHERE id = ?",
                 params![id],
             )
-            .await?;
-        Ok(!ids.is_empty())
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(false)
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     /// Extends [`Model::load()`] to load associated data.

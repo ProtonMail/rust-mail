@@ -71,13 +71,12 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
                     data: Some(nums.clone()),
                 };
 
-                let id: i32 = *conn
-                    .query_values::<_, i32>(
+                let id: i32 = conn
+                    .query_value::<_, i32>(
                         "INSERT INTO person (name, data) VALUES (?1, ?2) RETURNING `id` AS value",
                         params![me.name, me.data],
                     )
-                    .await?
-                    .first()
+                    .await
                     .unwrap();
 
                 nums.shuffle(&mut rng);
