@@ -1,13 +1,13 @@
 use crate::mail::{MailSessionResult, MailUserSession};
-use futures::executor::block_on;
+use crate::{async_runtime, uniffi_async};
 use proton_api_core::auth::{ExposeSecret, SecretString, StoreError};
 use proton_api_core::login::Flow as CoreLoginFlow;
 use proton_api_core::login::LoginError as RealLoginFlowError;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::response_data::HumanVerificationChallenge;
 use std::sync::Arc;
-use tokio::spawn;
 use tokio::sync::Mutex;
+use tokio::task::JoinError;
 use uniffi::deps::anyhow::anyhow;
 
 /// Flow through the required steps to authenticate and login a user.
@@ -59,6 +59,8 @@ pub enum LoginFlowError {
     WrongMailboxPassword,
     #[error("Authentication Store error: {0}")]
     AuthStore(#[from] StoreError),
+    #[error("Other: {0}")]
+    Other(anyhow::Error),
 }
 
 pub type LoginFlowResult<T> = Result<T, LoginFlowError>;
@@ -80,71 +82,59 @@ impl LoginFlow {
     pub async fn login(&self, email: String, password: String) -> LoginFlowResult<()> {
         let flow = self.flow.clone();
         let password = SecretString::from(password);
-        let handle = spawn(async move {
+        uniffi_async::<_, LoginFlowError, _>(async move {
             let mut guard = flow.lock().await;
-            guard
+            Ok(guard
                 .login(email, password.expose_secret().clone(), None)
-                .await
-        });
-        handle.await.map_err(|e| {
-            LoginFlowError::Request(ApiServiceError::UnknownError(format!(
-                "failed to join task handle {e}"
-            )))
-        })??;
+                .await?)
+        })
+        .await?;
         Ok(())
     }
 
     /// Submit 2FA totp code.
     pub async fn submit_totp(&self, code: String) -> LoginFlowResult<()> {
         let flow = self.flow.clone();
-        let handle = spawn(async move {
+        uniffi_async::<_, LoginFlowError, _>(async move {
             let mut guard = flow.lock().await;
-            guard.submit_totp(code).await
-        });
-        handle.await.map_err(|e| {
-            LoginFlowError::Request(ApiServiceError::UnknownError(format!(
-                "failed to join task handle {e}"
-            )))
-        })??;
+            Ok(guard.submit_totp(code).await?)
+        })
+        .await?;
         Ok(())
     }
 
     /// Submit mailbox password.
     pub async fn submit_mailbox_password(&self, mailbox_password: String) -> LoginFlowResult<()> {
         let flow = self.flow.clone();
-        let handle = spawn(async move {
+        uniffi_async::<_, LoginFlowError, _>(async move {
             let mut guard = flow.lock().await;
-            guard.submit_mailbox_password(&mailbox_password).await
-        });
-        handle.await.map_err(|e| {
-            LoginFlowError::Request(ApiServiceError::UnknownError(format!(
-                "failed to join task handle {e}"
-            )))
-        })??;
+            Ok(guard.submit_mailbox_password(&mailbox_password).await?)
+        })
+        .await?;
         Ok(())
     }
 
     /// Check whether the login flow has completed.
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
-        block_on(async { self.flow.lock().await.is_logged_in() })
+        async_runtime().block_on(async { self.flow.lock().await.is_logged_in() })
     }
 
     /// Check whether the login flow is awaiting 2FA input.
     #[must_use]
     pub fn is_awaiting_2fa(&self) -> bool {
-        block_on(async { self.flow.lock().await.is_awaiting_2fa() })
+        async_runtime().block_on(async { self.flow.lock().await.is_awaiting_2fa() })
     }
 
     /// Check whether the login flow is awaiting mailbox password input.
     #[must_use]
     pub fn is_awaiting_mailbox_password(&self) -> bool {
-        block_on(async { self.flow.lock().await.is_awaiting_mailbox_password() })
+        async_runtime().block_on(async { self.flow.lock().await.is_awaiting_mailbox_password() })
     }
 
     /// When the flow is considered logged in, transform it into a `MailUserContext`.
     pub fn to_user_context(&self) -> MailSessionResult<Arc<MailUserSession>> {
-        block_on(async {
+        async_runtime().block_on(async {
             let guard = self.flow.lock().await;
             let user_ctx = self.ctx.user_context_from_login_flow(&guard).await?;
             Ok(MailUserSession::new(user_ctx))
@@ -172,5 +162,11 @@ impl From<RealLoginFlowError> for LoginFlowError {
             RealLoginFlowError::WrongMailboxPassword => LoginFlowError::WrongMailboxPassword,
             RealLoginFlowError::AuthStore(e) => LoginFlowError::AuthStore(e),
         }
+    }
+}
+
+impl From<JoinError> for LoginFlowError {
+    fn from(value: JoinError) -> Self {
+        LoginFlowError::Other(anyhow::Error::new(value))
     }
 }

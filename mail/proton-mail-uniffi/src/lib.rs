@@ -145,9 +145,11 @@ use proton_core_common::datatypes::LocalId as RealLocalId;
 use stash::exports::ToSql;
 use stash::orm::{Model, ResultsetChange};
 use stash::stash::{AgnosticInterface, Interface, StashError};
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use tokio::spawn as spawn_async;
+use std::sync::{Arc, LazyLock};
+use tokio::runtime::Runtime;
+use tokio::task::JoinError;
 use tracing::{debug, warn};
 
 pub mod core;
@@ -315,4 +317,37 @@ where
         results.into_iter().map(Into::into).collect(),
         Arc::new(WatchHandle { stop_flag }),
     ))
+}
+
+/// Get the async runtime.
+fn async_runtime() -> &'static Runtime {
+    static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_io()
+            .enable_time()
+            .build()
+            .expect("Failed to init runtime")
+    });
+
+    &RUNTIME
+}
+
+/// Spawn an async function on the runtime.
+fn spawn_async<T, F>(future: F) -> tokio::task::JoinHandle<T>
+where
+    T: Send + 'static,
+    F: Future<Output = T> + Send + 'static,
+{
+    async_runtime().spawn(future)
+}
+
+/// Run an async function on the Tokio runtime.
+async fn uniffi_async<T, E, F>(future: F) -> Result<T, E>
+where
+    E: Send + From<JoinError> + 'static,
+    T: Send + 'static,
+    F: Future<Output = Result<T, E>> + Send + 'static,
+{
+    let handle = async_runtime().spawn(future);
+    handle.await?
 }

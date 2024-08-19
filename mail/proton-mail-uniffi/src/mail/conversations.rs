@@ -14,7 +14,7 @@ use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
-use crate::{watch, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
@@ -43,12 +43,16 @@ pub async fn apply_label_to_conversations(
     label_id: u64,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(RealConversation::apply_label_to_multiple(
-        label_id.into(),
-        ids.into_iter().map(Into::into).collect(),
-        &session.stash().connection(),
-    )
-    .await?)
+    let conn = session.stash().connection();
+    uniffi_async(async move {
+        Ok(RealConversation::apply_label_to_multiple(
+            label_id.into(),
+            ids.into_iter().map(Into::into).collect(),
+            &conn,
+        )
+        .await?)
+    })
+    .await
 }
 
 /// Delete the given conversations.
@@ -67,13 +71,17 @@ pub async fn delete_conversations(
     mailbox: Arc<Mailbox>,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    RealConversation::delete_multiple(
-        ids.into_iter().map(Into::into).collect(),
-        mailbox.label_id().into(),
-        &mailbox.stash().connection(),
-    )
-    .await?;
-    Ok(())
+    let conn = mailbox.stash().connection();
+    uniffi_async(async move {
+        RealConversation::delete_multiple(
+            ids.into_iter().map(Into::into).collect(),
+            mailbox.label_id().into(),
+            &conn,
+        )
+        .await?;
+        Ok(())
+    })
+    .await
 }
 
 /// Returns available actions for conversation.
@@ -95,18 +103,22 @@ pub async fn available_actions_for_conversation(
     session: Arc<MailSession>,
     id: u64,
 ) -> Result<Vec<ConversationAvailableAction>, MailboxError> {
-    if let Some(conversation) = RealConversation::load(id.into(), session.stash()).await? {
-        let actions = conversation
-            .available_actions(session.stash())
-            .await?
-            .into_iter()
-            .map_into()
-            .collect();
+    let conn = session.stash().connection();
+    uniffi_async(async move {
+        if let Some(conversation) = RealConversation::load(id.into(), &conn).await? {
+            let actions = conversation
+                .available_actions(session.stash())
+                .await?
+                .into_iter()
+                .map_into()
+                .collect();
 
-        Ok(actions)
-    } else {
-        Ok(vec![])
-    }
+            Ok(actions)
+        } else {
+            Ok(vec![])
+        }
+    })
+    .await
 }
 
 /// Get a specified conversation.
@@ -126,13 +138,15 @@ pub async fn conversation(
     mailbox: Arc<Mailbox>,
     id: u64,
 ) -> Result<Option<Conversation>, MailboxError> {
-    Ok(ContextualConversation::new(
-        RealConversation::load(id.into(), mailbox.stash())
-            .await?
-            .unwrap(),
-        mailbox.label_id().into(),
-    )
-    .map(Into::into))
+    let conn = mailbox.stash().connection();
+    uniffi_async(async move {
+        Ok(ContextualConversation::new(
+            RealConversation::load(id.into(), &conn).await?.unwrap(),
+            mailbox.label_id().into(),
+        )
+        .map(Into::into))
+    })
+    .await
 }
 
 /// Get conversations for the given label.
@@ -152,27 +166,31 @@ pub async fn conversations_for_label(
     session: Arc<MailSession>,
     label_id: u64,
 ) -> Result<Vec<Conversation>, MailboxError> {
-    Ok(RealConversation::find(
-        formatdoc!(
-            "
-            JOIN conversation_labels
-                ON conversations.local_id = conversation_labels.conversation_id
-            WHERE
-                conversation_labels.label_id = ?
-            "
-        ),
-        params![label_id],
-        session.stash(),
-        None,
-    )
-    .await?
-    .into_iter()
-    .map(|c| {
-        ContextualConversation::new(c, label_id.into())
-            .unwrap()
-            .into()
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        Ok(RealConversation::find(
+            formatdoc!(
+                "
+                JOIN conversation_labels
+                    ON conversations.local_id = conversation_labels.conversation_id
+                WHERE
+                    conversation_labels.label_id = ?
+                "
+            ),
+            params![label_id],
+            &stash,
+            None,
+        )
+        .await?
+        .into_iter()
+        .map(|c| {
+            ContextualConversation::new(c, label_id.into())
+                .unwrap()
+                .into()
+        })
+        .collect())
     })
-    .collect())
+    .await
 }
 
 /// Retrieve a conversation by local ID.
@@ -197,11 +215,15 @@ pub async fn load_conversation(
     id: u64,
     label_id: u64,
 ) -> Result<Option<Conversation>, MailboxError> {
-    let Some(conversation) = RealConversation::load(id.into(), session.stash()).await? else {
-        return Ok(None);
-    };
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        let Some(conversation) = RealConversation::load(id.into(), &stash).await? else {
+            return Ok(None);
+        };
 
-    Ok(ContextualConversation::new(conversation, label_id.into()).map(Into::into))
+        Ok(ContextualConversation::new(conversation, label_id.into()).map(Into::into))
+    })
+    .await
 }
 
 /// Retrieve a conversation by remote ID.
@@ -226,13 +248,17 @@ pub async fn load_remote_conversation(
     id: RemoteId,
     local_label_id: u64,
 ) -> Result<Option<Conversation>, MailboxError> {
-    let Some(conversation) =
-        RealConversation::find_by_id(RealRemoteId::from(id), session.stash()).await?
-    else {
-        return Ok(None);
-    };
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        let Some(conversation) =
+            RealConversation::find_by_id(RealRemoteId::from(id), &stash).await?
+        else {
+            return Ok(None);
+        };
 
-    Ok(ContextualConversation::new(conversation, local_label_id.into()).map(Into::into))
+        Ok(ContextualConversation::new(conversation, local_label_id.into()).map(Into::into))
+    })
+    .await
 }
 
 /// Mark the given conversations as read.
@@ -251,11 +277,15 @@ pub async fn mark_converstions_as_read(
     session: Arc<MailSession>,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(RealConversation::mark_multiple_as_read(
-        ids.into_iter().map(Into::into).collect(),
-        &session.stash().connection(),
-    )
-    .await?)
+    let tether = session.stash().connection();
+    uniffi_async(async move {
+        Ok(RealConversation::mark_multiple_as_read(
+            ids.into_iter().map(Into::into).collect(),
+            &tether,
+        )
+        .await?)
+    })
+    .await
 }
 
 /// Mark the given conversations as unread.
@@ -274,11 +304,15 @@ pub async fn mark_conversations_as_unread(
     session: Arc<MailSession>,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(RealConversation::mark_multiple_as_unread(
-        ids.into_iter().map(Into::into).collect(),
-        &session.stash().connection(),
-    )
-    .await?)
+    let conn = session.stash().connection();
+    uniffi_async(async move {
+        Ok(RealConversation::mark_multiple_as_unread(
+            ids.into_iter().map(Into::into).collect(),
+            &conn,
+        )
+        .await?)
+    })
+    .await
 }
 
 /// Move the given conversations from the current mailbox.
@@ -303,14 +337,18 @@ pub async fn move_conversations(
     label_id: u64,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    RealConversation::move_conversations(
-        mailbox.label_id().into(),
-        label_id.into(),
-        ids.into_iter().map(Into::into).collect(),
-        &mailbox.stash().connection(),
-    )
-    .await?;
-    Ok(())
+    let conn = mailbox.stash().connection();
+    uniffi_async(async move {
+        RealConversation::move_conversations(
+            mailbox.label_id().into(),
+            label_id.into(),
+            ids.into_iter().map(Into::into).collect(),
+            &conn,
+        )
+        .await?;
+        Ok(())
+    })
+    .await
 }
 
 /// Unlabel the given conversations with the given label id.
@@ -331,12 +369,16 @@ pub async fn remove_label_from_conversations(
     label_id: u64,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(RealConversation::remove_label_from_multiple(
-        label_id.into(),
-        ids.into_iter().map(Into::into).collect(),
-        &session.stash().connection(),
-    )
-    .await?)
+    let conn = session.stash().connection();
+    uniffi_async(async move {
+        Ok(RealConversation::remove_label_from_multiple(
+            label_id.into(),
+            ids.into_iter().map(Into::into).collect(),
+            &conn,
+        )
+        .await?)
+    })
+    .await
 }
 
 /// Filter or search conversations which match the specified options.
@@ -360,14 +402,18 @@ pub async fn search_for_conversations(
     local_label_id: u64,
     options: ConversationSearchOptions,
 ) -> Result<Vec<Conversation>, MailSessionError> {
-    Ok(
-        RealConversation::search(options.into(), session.api(), session.stash())
-            .await?
-            .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, local_label_id.into()))
-            .map(Into::into)
-            .collect(),
-    )
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        Ok(
+            RealConversation::search(options.into(), session.api(), &stash)
+                .await?
+                .into_iter()
+                .filter_map(|c| ContextualConversation::new(c, local_label_id.into()))
+                .map(Into::into)
+                .collect(),
+        )
+    })
+    .await
 }
 
 /// Star the given conversations.
@@ -386,10 +432,14 @@ pub async fn star_conversations(
     session: Arc<MailSession>,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(
-        RealConversation::star_multiple(ids.into_iter().map(Into::into).collect(), session.stash())
-            .await?,
-    )
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        Ok(
+            RealConversation::star_multiple(ids.into_iter().map(Into::into).collect(), &stash)
+                .await?,
+        )
+    })
+    .await
 }
 
 /// Unstar the given conversations.
@@ -408,11 +458,14 @@ pub async fn unstar_conversations(
     session: Arc<MailSession>,
     ids: Vec<u64>,
 ) -> Result<(), MailboxError> {
-    Ok(RealConversation::unstar_multiple(
-        ids.into_iter().map(Into::into).collect(),
-        session.stash(),
-    )
-    .await?)
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        Ok(
+            RealConversation::unstar_multiple(ids.into_iter().map(Into::into).collect(), &stash)
+                .await?,
+        )
+    })
+    .await
 }
 
 /// Data for a watched conversation.
@@ -455,36 +508,40 @@ pub async fn watch_conversation(
     id: u64,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversation, MailboxError> {
-    let callback = Arc::new(callback);
-    let (conversations, conversation_handle) = watch::<_, _, RealConversation>(
-        "WHERE local_id = ?",
-        params![id],
-        move |r| r.local_id == Some(id.into()),
-        |r| r.local_id.expect("local_id should never be None"),
-        mailbox.stash(),
-        Arc::clone(&callback),
-    )
-    .await?;
-    let (messages, messages_handle) = watch::<_, _, RealMessage>(
-        "WHERE local_conversation_id = ? LIMIT 1",
-        params![id],
-        move |r| r.local_conversation_id == Some(id.into()),
-        |r| r.local_id.expect("local_id should never be None"),
-        mailbox.stash(),
-        callback,
-    )
-    .await?;
-    Ok(WatchedConversation {
-        conversation: ContextualConversation::new(
-            conversations.into_iter().next().unwrap(),
-            mailbox.label_id().into(),
+    let stash = mailbox.stash().clone();
+    uniffi_async(async move {
+        let callback = Arc::new(callback);
+        let (conversations, conversation_handle) = watch::<_, _, RealConversation>(
+            "WHERE local_id = ?",
+            params![id],
+            move |r| r.local_id == Some(id.into()),
+            |r| r.local_id.expect("local_id should never be None"),
+            &stash,
+            Arc::clone(&callback),
         )
-        .unwrap()
-        .into(),
-        messages: messages.into_iter().map(Into::into).collect(),
-        conversation_handle,
-        messages_handle,
+        .await?;
+        let (messages, messages_handle) = watch::<_, _, RealMessage>(
+            "WHERE local_conversation_id = ? LIMIT 1",
+            params![id],
+            move |r| r.local_conversation_id == Some(id.into()),
+            |r| r.local_id.expect("local_id should never be None"),
+            &stash,
+            callback,
+        )
+        .await?;
+        Ok(WatchedConversation {
+            conversation: ContextualConversation::new(
+                conversations.into_iter().next().unwrap(),
+                mailbox.label_id().into(),
+            )
+            .unwrap()
+            .into(),
+            messages: messages.into_iter().map(Into::into).collect(),
+            conversation_handle,
+            messages_handle,
+        })
     })
+    .await
 }
 
 /// Data for watched conversations.
@@ -520,35 +577,39 @@ pub async fn watch_conversations_for_label(
     label_id: u64,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversations, MailboxError> {
-    let (conversations, handle) = watch::<_, _, RealConversation>(
-        formatdoc!(
-            "
-            JOIN conversation_labels
-                ON conversations.local_id = conversation_labels.conversation_id
-            WHERE
-                conversation_labels.label_id = ?
-            "
-        ),
-        params![label_id],
-        move |r| {
-            r.labels
-                .iter()
-                .any(|l| l.local_label_id == Some(label_id.into()))
-        },
-        |r| r.local_id.expect("local_id should never be None"),
-        session.stash(),
-        Arc::new(callback),
-    )
-    .await?;
-    Ok(WatchedConversations {
-        conversations: conversations
-            .into_iter()
-            .map(|c| {
-                ContextualConversation::new(c, label_id.into())
-                    .unwrap()
-                    .into()
-            })
-            .collect(),
-        handle,
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        let (conversations, handle) = watch::<_, _, RealConversation>(
+            formatdoc!(
+                "
+                JOIN conversation_labels
+                    ON conversations.local_id = conversation_labels.conversation_id
+                WHERE
+                    conversation_labels.label_id = ?
+                "
+            ),
+            params![label_id],
+            move |r| {
+                r.labels
+                    .iter()
+                    .any(|l| l.local_label_id == Some(label_id.into()))
+            },
+            |r| r.local_id.expect("local_id should never be None"),
+            &stash,
+            Arc::new(callback),
+        )
+        .await?;
+        Ok(WatchedConversations {
+            conversations: conversations
+                .into_iter()
+                .map(|c| {
+                    ContextualConversation::new(c, label_id.into())
+                        .unwrap()
+                        .into()
+                })
+                .collect(),
+            handle,
+        })
     })
+    .await
 }

@@ -1,5 +1,6 @@
 use crate::mail::datatypes::{Label, LabelType};
 use crate::mail::{MailSessionError, MailUserSession};
+use crate::uniffi_async;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::{LabelType as RealLabelType, SystemLabelId};
 use proton_mail_common::models::Label as RealLabel;
@@ -14,16 +15,20 @@ impl MailUserSession {
     /// # Errors
     /// Returns an error if the list can not be retrieved.
     pub async fn movable_folders(&self) -> Result<Vec<Label>, MailSessionError> {
-        // TODO: Unclear how exactly the system folders fit into this.
-        let _sys_folders = RealLabelId::movable_sys_folder_list();
-        Ok(RealLabel::find(
-            "WHERE label_type = ? ORDER BY display_order",
-            params![RealLabelType::from(LabelType::Folder)],
-            self.ctx().stash(),
-            None,
-        )
+        let stash = self.ctx().stash().clone();
+        uniffi_async(async move {
+            // TODO: Unclear how exactly the system folders fit into this.
+            let _sys_folders = RealLabelId::movable_sys_folder_list();
+            Ok(RealLabel::find(
+                "WHERE label_type = ? ORDER BY display_order",
+                params![RealLabelType::from(LabelType::Folder)],
+                &stash,
+                None,
+            )
+            .await
+            .map(|labels| labels.into_iter().map(Label::from).collect())?)
+        })
         .await
-        .map(|labels| labels.into_iter().map(Label::from).collect())?)
     }
 
     /// Return the list of labels of type Label that can be applied to conversations or
@@ -32,13 +37,17 @@ impl MailUserSession {
     /// # Errors
     /// Returns an error if the list can not be retrieved.
     pub async fn applicable_labels(&self) -> Result<Vec<Label>, MailSessionError> {
-        Ok(RealLabel::find(
-            "WHERE label_type = ? ORDER BY display_order",
-            params![RealLabelType::from(LabelType::Label)],
-            self.ctx().stash(),
-            None,
-        )
+        let stash = self.ctx.stash().clone();
+        uniffi_async(async move {
+            Ok(RealLabel::find(
+                "WHERE label_type = ? ORDER BY display_order",
+                params![RealLabelType::from(LabelType::Label)],
+                &stash,
+                None,
+            )
+            .await
+            .map(|labels| labels.into_iter().map(Label::from).collect())?)
+        })
         .await
-        .map(|labels| labels.into_iter().map(Label::from).collect())?)
     }
 }

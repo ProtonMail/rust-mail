@@ -13,7 +13,7 @@ use super::datatypes::{BlockQuote, RemoteContent};
 use super::{Mailbox, MailboxResult};
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSession, MailSessionError, MailboxError};
-use crate::{watch, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_core_common::datatypes::{Id, LabelId as RealLabelId, LocalId as RealLocalId};
@@ -23,6 +23,7 @@ use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use stash::params;
 use std::sync::Arc;
+use tokio::task::JoinError;
 
 /// Which transform options to apply to the html.
 ///
@@ -62,12 +63,15 @@ impl DecryptedMessage {
     /// or if the message doesn't exist.
     pub async fn body(&self, opts: TransformOpts) -> Result<BodyOutput, MailboxError> {
         let user_ctx = self.ctx.clone();
-        let user_session_id = user_ctx.user_id();
-        let mail_settings = MailSettings::get(&user_ctx.stash().into())
-            .await
-            .unwrap_or_default()
-            .unwrap_or_default();
-
+        let mail_settings = uniffi_async::<_, JoinError, _>(async move {
+            let mail_settings = MailSettings::get(&user_ctx.stash().into())
+                .await
+                .unwrap_or_default()
+                .unwrap_or_default();
+            Ok(mail_settings)
+        })
+        .await?;
+        let user_session_id = self.ctx.user_id();
         let body = decrypted_message::transform_html(
             &self.body.body,
             opts.remote_content.into(),
@@ -104,9 +108,9 @@ impl DecryptedMessage {
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
 pub async fn message(session: Arc<MailSession>, id: u64) -> Result<Option<Message>, MailboxError> {
-    Ok(RealMessage::load(id.into(), session.stash())
-        .await?
-        .map(Into::into))
+    let stash = session.stash().clone();
+    uniffi_async(async move { Ok(RealMessage::load(id.into(), &stash).await?.map(Into::into)) })
+        .await
 }
 
 /// Get messages for the given conversation.
@@ -126,16 +130,20 @@ pub async fn messages_for_conversation(
     session: Arc<MailSession>,
     conversation_id: u64,
 ) -> Result<Vec<Message>, MailboxError> {
-    Ok(RealMessage::find(
-        "WHERE local_conversation_id = ?",
-        params![conversation_id],
-        session.stash(),
-        None,
-    )
-    .await?
-    .into_iter()
-    .map(Into::into)
-    .collect())
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        Ok(RealMessage::find(
+            "WHERE local_conversation_id = ?",
+            params![conversation_id],
+            &stash,
+            None,
+        )
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+    })
+    .await
 }
 
 /// Get messages for the given label.
@@ -155,23 +163,27 @@ pub async fn messages_for_label(
     session: Arc<MailSession>,
     label_id: u64,
 ) -> Result<Vec<Message>, MailboxError> {
-    Ok(RealMessage::find(
-        formatdoc!(
-            "
-            JOIN message_labels
-                ON messages.local_id = message_labels.message_id
-            WHERE
-                message_labels.label_id = ?
-            "
-        ),
-        params![label_id],
-        session.stash(),
-        None,
-    )
-    .await?
-    .into_iter()
-    .map(Into::into)
-    .collect())
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        Ok(RealMessage::find(
+            formatdoc!(
+                "
+                JOIN message_labels
+                    ON messages.local_id = message_labels.message_id
+                WHERE
+                    message_labels.label_id = ?
+                "
+            ),
+            params![label_id],
+            &stash,
+            None,
+        )
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect())
+    })
+    .await
 }
 
 /// Filter or search messages which match the specified options.
@@ -192,13 +204,15 @@ pub async fn search_for_messages(
     session: Arc<MailSession>,
     options: MessageSearchOptions,
 ) -> Result<Vec<Message>, MailSessionError> {
-    Ok(
-        RealMessage::search(options.into(), session.api(), session.stash())
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        Ok(RealMessage::search(options.into(), session.api(), &stash)
             .await?
             .into_iter()
             .map(Into::into)
-            .collect(),
-    )
+            .collect())
+    })
+    .await
 }
 
 /// Returns available actions for message
@@ -220,15 +234,19 @@ pub async fn available_actions_for_message(
     session: Arc<MailSession>,
     id: u64,
 ) -> MailboxResult<Vec<MessageAvailableAction>> {
-    let Some(message) = RealMessage::load(id.into(), session.stash()).await? else {
-        return Ok(vec![]);
-    };
-    Ok(message
-        .available_actions(session.stash())
-        .await?
-        .into_iter()
-        .map_into()
-        .collect())
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        let Some(message) = RealMessage::load(id.into(), &stash).await? else {
+            return Ok(vec![]);
+        };
+        Ok(message
+            .available_actions(&stash)
+            .await?
+            .into_iter()
+            .map_into()
+            .collect())
+    })
+    .await
 }
 /// Return the decrypted body of the specified message.
 ///
@@ -238,8 +256,11 @@ pub async fn available_actions_for_message(
 #[uniffi::export]
 pub async fn get_message_body(mbox: &Mailbox, id: u64) -> MailboxResult<DecryptedMessage> {
     let ctx = mbox.mbox().user_context();
-    let body = models::Message::message_body(&ctx, id.into()).await?;
-    Ok(DecryptedMessage { ctx, body })
+    uniffi_async(async move {
+        let body = models::Message::message_body(&ctx, id.into()).await?;
+        Ok(DecryptedMessage { ctx, body })
+    })
+    .await
 }
 
 /// Data for watched messages.
@@ -275,30 +296,34 @@ pub async fn watch_messages_for_label(
     label_id: u64,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedMessages, MailboxError> {
-    let remote_label_id = RealLabelId::from(
-        RealLocalId::from(label_id)
-            .counterpart::<RealLabel, _>(session.stash())
-            .await?
-            .unwrap(),
-    );
-    let (messages, handle) = watch::<_, _, RealMessage>(
-        formatdoc!(
-            "
-            JOIN message_labels
-                ON messages.local_id = message_labels.message_id
-            WHERE
-                message_labels.label_id = ?
-            "
-        ),
-        params![label_id],
-        move |r| r.label_ids.contains(&remote_label_id),
-        |r| r.local_id.expect("local_id should never be None"),
-        session.stash(),
-        Arc::new(callback),
-    )
-    .await?;
-    Ok(WatchedMessages {
-        messages: messages.into_iter().map(Into::into).collect(),
-        handle,
+    let stash = session.stash().clone();
+    uniffi_async(async move {
+        let remote_label_id = RealLabelId::from(
+            RealLocalId::from(label_id)
+                .counterpart::<RealLabel, _>(session.stash())
+                .await?
+                .unwrap(),
+        );
+        let (messages, handle) = watch::<_, _, RealMessage>(
+            formatdoc!(
+                "
+                JOIN message_labels
+                    ON messages.local_id = message_labels.message_id
+                WHERE
+                    message_labels.label_id = ?
+                "
+            ),
+            params![label_id],
+            move |r| r.label_ids.contains(&remote_label_id),
+            |r| r.local_id.expect("local_id should never be None"),
+            &stash,
+            Arc::new(callback),
+        )
+        .await?;
+        Ok(WatchedMessages {
+            messages: messages.into_iter().map(Into::into).collect(),
+            handle,
+        })
     })
+    .await
 }
