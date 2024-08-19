@@ -2825,6 +2825,10 @@ pub trait Interface: Clone + Send + Sync {
             return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
         }
 
+        if values.len() > 1 {
+            return Err(StashError::Custom("Query returned multiple rows".into()));
+        }
+
         Ok(values.swap_remove(0))
     }
 
