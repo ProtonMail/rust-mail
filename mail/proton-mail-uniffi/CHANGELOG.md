@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
   
   - Updated `ConversationSearchOptions` to use local IDs.
+  - Changed `Message.address_id` to use a local ID.
 
 ### Removed
 

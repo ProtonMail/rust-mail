@@ -118,6 +118,7 @@ async fn create_attachment_dependencies(
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
 
     Address {
+        local_id: None,
         remote_id: Some(address_id()),
         email: String::new(),
         send: false,

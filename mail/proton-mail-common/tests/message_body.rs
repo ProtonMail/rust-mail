@@ -62,7 +62,7 @@ async fn mailbox_message_body_simple() {
     mailbox.sync(10).await.unwrap();
 
     // Resolve local id.
-    let saved_message = Message::load(1.into(), &user_context.stash().connection())
+    let saved_message = Message::load(1.into(), user_context.stash())
         .await
         .unwrap()
         .expect("failed to load message");
@@ -75,14 +75,20 @@ async fn mailbox_message_body_simple() {
     // Decrypt the message body.
     let pgp_provider = new_pgp_provider();
     let local_id = saved_message.local_id.unwrap();
-    let address_id = saved_message.address_id.clone();
+    let address_id = saved_message.remote_address_id.clone();
     let address_keys = user_context
         .unlocked_address_keys(&pgp_provider, &address_id)
         .await
         .unwrap();
     let api = user_context.session().api();
     let decrypted_body = saved_message
-        .fetch_message_body(cache, address_keys.clone(), pgp_provider, api)
+        .fetch_message_body(
+            cache,
+            address_keys.clone(),
+            pgp_provider,
+            api,
+            user_context.stash(),
+        )
         .await
         .unwrap();
 
@@ -99,7 +105,7 @@ async fn mailbox_message_body_simple() {
     let pgp_provider = new_pgp_provider();
     // Only one call to API is done
     saved_message
-        .fetch_message_body(cache, address_keys, pgp_provider, api)
+        .fetch_message_body(cache, address_keys, pgp_provider, api, user_context.stash())
         .await
         .unwrap();
     assert_eq!(cache.len(), 1);
