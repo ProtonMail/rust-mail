@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-    - Added `message_id_to_open` field into `WatchedConversation`
+  - Added `message_id_to_open` field into `WatchedConversation`
 
 ### Changed
   
@@ -32,10 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - Added `MimeType` for attachment,
-    - Added `category` field to determin media icon for attachment
+      - Added `category` field to determin media icon for attachment
   - Added `SystemLabel` enum available on `Label.label_description` field.
-  - Added `LabelDescription` enim
-    - `LabelDescription` enum contains `System` field with optional `SystemLabel` information
+  - Added `LabelDescription` enum
+      - `LabelDescription` enum contains `System` field with optional `SystemLabel` information
 
 ### Changed
 
@@ -100,7 +100,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - Grouped  `watch_standard_labels()`, `watch_folder_labels()` and
+  - Grouped `watch_standard_labels()`, `watch_folder_labels()` and
     `watch_system_labels()` into `watch_labels()`.
   - `RemoteId` removed from exported types
   - `LocalId`s are non-optional
@@ -109,7 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - Added `custom_labels` and  `starred` properties to `Conversation` and
+  - Added `custom_labels` and `starred` properties to `Conversation` and
     `Message`.
   - Added `time` property to `Conversation`.
   - Methods that load conversation now require the local label id for the

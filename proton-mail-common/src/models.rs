@@ -300,8 +300,8 @@ impl Attachment {
 
     /// Save or update the attachment in the database.
     ///
-    /// It's imperative to call this function rather than [`Model::save_using`]
-    /// to make sure that we override the existing partial metadata rather than
+    /// It's imperative to call this function rather than [`Model::save()`] to
+    /// make sure that we override the existing partial metadata rather than
     /// create a new entry that will cause a conflict.
     ///
     /// There is currently no way to handle this in stash directly, so we have
@@ -309,7 +309,34 @@ impl Attachment {
     ///
     /// # Errors
     ///
-    /// Returns error if the query failed.
+    /// Returns an error if the query failed.
+    ///
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+        self.save_using(&stash).await
+    }
+
+    /// Save or update the attachment in the database.
+    ///
+    /// It's imperative to call this function rather than
+    /// [`Model::save_using()`] to make sure that we override the existing
+    /// partial metadata rather than create a new entry that will cause a
+    /// conflict.
+    ///
+    /// There is currently no way to handle this in stash directly, so we have
+    /// to manually perform this check.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query failed.
+    ///
     pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -324,39 +351,15 @@ impl Attachment {
                 }
             }
         }
-
-        <Self as Model>::save_using(self, interface).await
-    }
-
-    /// Save or update the attachment in the database.
-    ///
-    /// It's imperative to call this function rather than [`Model::save`] to
-    /// make sure that we override the existing partial metadata rather than
-    /// create a new entry that will cause a conflict.
-    ///
-    /// There is currently no way to handle this in stash directly, so we have
-    /// to manually perform this check.
-    ///
-    /// # Errors
-    ///
-    pub async fn save(&mut self) -> Result<(), StashError> {
-        {
-            let Some(stash) = self.stash() else {
-                return Err(StashError::NoStashAvailable);
-            };
-            if self.local_id.is_none() {
-                if let Some(remote_id) = self.remote_id.clone() {
-                    if let Some(existing) =
-                        Self::find_first("WHERE remote_id=?", params![remote_id], stash).await?
-                    {
-                        self.local_id = existing.local_id;
-                        self.row_id = existing.row_id;
-                    }
-                }
+        if self.local_address_id.is_none() {
+            if let Some(remote_address_id) = self.remote_address_id.clone() {
+                self.local_address_id = remote_address_id
+                    .counterpart::<Address, _>(interface)
+                    .await?;
             }
         }
 
-        <Self as Model>::save(self).await
+        <Self as Model>::save_using(self, interface).await
     }
 
     /// Fetch attachment content from the API.
@@ -2781,8 +2784,9 @@ impl Message {
     ///
     /// # Errors
     ///
-    /// Returns error if the local conversation id is not set or the query
+    /// Returns an error if the local conversation id is not set or the query
     /// failed.
+    ///
     pub async fn save(&mut self) -> Result<(), StashError> {
         let Some(stash) = self.stash.clone() else {
             return Err(StashError::NoStashAvailable);
@@ -2797,11 +2801,16 @@ impl Message {
     /// ensure that local ids are resolved before they can be written
     /// to the database.
     ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
     ///
     /// # Errors
     ///
-    /// Returns error if the local conversation id is not set or the query
+    /// Returns an error if the local conversation id is not set or the query
     /// failed.
+    ///
     pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
