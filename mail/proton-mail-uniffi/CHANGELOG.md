@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Replaced `LabelType` enum with `LabelDescription` enum on the `Label` type.
   - Added `mime_type` in `DecryptedMessage`
 
+### Fixed
+
+  - Error storing credentials after login.
+
 ## [0.11.9] - 2024-08-19
 
 ### Fixed
