@@ -1,6 +1,6 @@
 use crate::datatypes::RemoteId;
-use crate::models::Address;
 use crate::models::User;
+use crate::models::{Address, ModelExtension};
 use crate::{CoreContextResult, UserContext};
 use parking_lot::RwLock;
 use proton_api_core::auth::UserKeySecret;
@@ -319,7 +319,7 @@ impl CryptoKeyManager {
         address_id: &RemoteId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         // Load the address from the DB.
-        let address = Address::load(address_id.clone(), &user_ctx.stash)
+        let address = Address::find_by_id(address_id.clone(), &user_ctx.stash)
             .await?
             .ok_or(KeyHandlingError::NoAddress(address_id.clone()))?;
         // Load the user keys.

@@ -266,10 +266,18 @@ impl<T: Model> ModelExtension for T {}
 #[TableName("addresses")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[IdField(autoincrement)]
+    pub local_id: Option<LocalId>,
+
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
-    #[IdField(optional)]
+    #[DbField]
     pub remote_id: Option<RemoteId>,
 
     /// TODO: Document this field.
@@ -368,6 +376,7 @@ impl Address {
 impl From<ApiAddress> for Address {
     fn from(value: ApiAddress) -> Self {
         Self {
+            local_id: None,
             remote_id: Some(value.id.into()),
             address_type: value.address_type.into(),
             catch_all: value.catch_all,

@@ -6,7 +6,8 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         tx.execute(
             r"
             CREATE TABLE addresses (
-                remote_id TEXT PRIMARY KEY,
+                local_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                remote_id TEXT NOT NULL,
                 domain_id TEXT DEFAULT NULL,
                 email TEXT UNIQUE NOT NULL,
                 send INTEGER NOT NULL,
@@ -36,7 +37,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
             r"
             CREATE TABLE address_keys (
                 remote_id TEXT PRIMARY KEY,
-                address_id TEXT NOT NULL,
+                address_id INTEGER NOT NULL,
                 version INTEGER NOT NULL,
                 private_key TEXT,
                 token TEXT,
@@ -48,12 +49,12 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                 
                 CONSTRAINT address_keys_id
                     FOREIGN KEY (address_id)
-                    REFERENCES addresses (remote_id)
+                    REFERENCES addresses (local_id)
                     ON DELETE CASCADE,
                 
                 CONSTRAINT address_keys_forwarding_id
                     FOREIGN KEY (address_forwarding_id)
-                    REFERENCES addresses (remote_id)
+                    REFERENCES addresses (local_id)
                     ON DELETE SET NULL
             )
         ",
