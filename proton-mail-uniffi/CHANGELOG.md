@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed `Label.remote_parent_id` and `Message.remote_conversation_id`.
   - Removed `ConversationSearchOptions.external_id` and
     `MessageSearchOptions.external_id`.
+  - Removed `RemoteIds` as it is no longer used/needed.
 
 ## [0.11.10] - 2024-08-20
 
