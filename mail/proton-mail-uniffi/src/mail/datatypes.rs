@@ -1048,9 +1048,6 @@ pub struct ConversationSearchOptions {
     // TODO: Improve the documentation above, as it doesn't make total sense.
     pub end_id: Option<RemoteId>,
 
-    /// External ID to filter on.
-    pub external_id: Option<RemoteId>,
-
     /// Keyword search of `From` field.
     pub from: Option<String>,
 
@@ -1098,7 +1095,7 @@ impl From<ConversationSearchOptions> for GetConversationsOptions {
             desc: value.desc,
             end: value.end,
             end_id: value.end_id.map(Into::into),
-            external_id: value.external_id.map(Into::into),
+            external_id: None,
             from: value.from,
             ids: value
                 .ids
@@ -1127,7 +1124,6 @@ impl From<GetConversationsOptions> for ConversationSearchOptions {
             desc: value.desc,
             end: value.end,
             end_id: value.end_id.map(Into::into),
-            external_id: value.external_id.map(Into::into),
             from: value.from,
             ids: value
                 .ids
@@ -2044,9 +2040,6 @@ pub struct MessageSearchOptions {
     /// specified message ID.
     pub end_id: Option<RemoteId>,
 
-    /// Filter on external ID.
-    pub external_id: Option<RemoteId>,
-
     /// Keyword search `From` field.
     pub from: Option<String>,
 
@@ -2100,7 +2093,7 @@ impl From<MessageSearchOptions> for GetMessagesOptions {
             desc: value.desc,
             end: value.end,
             end_id: value.end_id.map(Into::into),
-            external_id: value.external_id.map(Into::into),
+            external_id: None,
             from: value.from,
             ids: value
                 .ids
@@ -2135,7 +2128,6 @@ impl From<GetMessagesOptions> for MessageSearchOptions {
             desc: value.desc,
             end: value.end,
             end_id: value.end_id.map(Into::into),
-            external_id: value.external_id.map(Into::into),
             from: value.from,
             ids: value
                 .ids
