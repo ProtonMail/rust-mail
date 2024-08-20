@@ -20,7 +20,9 @@ use itertools::Itertools;
 use proton_core_common::datatypes::RemoteId as RealRemoteId;
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
+use proton_mail_common::models::{
+    Conversation as RealConversation, Label as RealLabel, Message as RealMessage,
+};
 use stash::orm::Model;
 use stash::params;
 use std::sync::Arc;
@@ -477,6 +479,9 @@ pub struct WatchedConversation {
     /// The messages in the conversation.
     pub messages: Vec<Message>,
 
+    /// The Id of the message to open.
+    pub message_id_to_open: Option<u64>,
+
     /// The handle to stop watching the conversation.
     pub conversation_handle: Arc<WatchHandle>,
 
@@ -529,6 +534,12 @@ pub async fn watch_conversation(
             callback,
         )
         .await?;
+        let label_id = mailbox.label_id();
+        let label = RealLabel::load(label_id.into(), &stash)
+            .await?
+            .ok_or(MailboxError::LabelNotFound(label_id))?;
+        let message_id_to_open =
+            RealConversation::first_unread_message(&label, messages.as_slice()).map(|i| i.as_u64());
         Ok(WatchedConversation {
             conversation: ContextualConversation::new(
                 conversations.into_iter().next().unwrap(),
@@ -537,6 +548,7 @@ pub async fn watch_conversation(
             .unwrap()
             .into(),
             messages: messages.into_iter().map(Into::into).collect(),
+            message_id_to_open,
             conversation_handle,
             messages_handle,
         })
