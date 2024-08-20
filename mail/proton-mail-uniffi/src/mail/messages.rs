@@ -48,11 +48,12 @@ pub struct DecryptedMessage {
 pub struct BodyOutput {
     /// The transformed html of the message.
     body: String,
+    /// Whether or not [`RemoteContent::Strip`] removed a blockquote.
+    has_blockquote: bool,
 }
 
 #[uniffi::export]
 impl DecryptedMessage {
-    ///
     /// # Parameters
     ///
     /// * `opts`: Which transform to apply to the html.
@@ -73,14 +74,17 @@ impl DecryptedMessage {
         })
         .await?;
         let user_session_id = self.ctx.user_id();
-        let body = decrypted_message::transform_html(
+        let (has_blockquote, body) = decrypted_message::transform_html(
             &self.body.body,
             opts.remote_content.into(),
             opts.block_quote.into(),
             &mail_settings,
             user_session_id,
         );
-        Ok(BodyOutput { body })
+        Ok(BodyOutput {
+            body,
+            has_blockquote,
+        })
     }
 
     #[must_use]

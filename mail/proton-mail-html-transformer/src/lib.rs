@@ -192,9 +192,8 @@ impl Transformer {
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
-    pub fn strip_blockquote(&mut self) -> &mut Self {
-        _ = message_detector::locate_blockquote(self.document().clone());
-        self
+    pub fn strip_blockquote(&mut self) -> bool {
+        message_detector::strip_blockquote(self.document().clone())
     }
 
     /// Try to locate and extract the eventual blockquote present in the document no matter the expeditor of the mail

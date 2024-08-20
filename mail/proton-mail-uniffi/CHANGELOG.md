@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+- Added `has_blockquote` as a field in `BodyOutput`
+
+
 ## [0.11.12] - 2024-08-21
 
 ### Added

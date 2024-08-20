@@ -88,6 +88,51 @@ fn find_split_doc(i: impl Iterator<Item = NodeRef>) -> Option<NodeRef> {
     })
 }
 
+/// Try to remove the blockquote and returns if it had it.
+#[must_use]
+#[allow(clippy::missing_panics_doc)]
+pub fn strip_blockquote(message: NodeRef) -> bool {
+    // First let's find an element with a well known selector
+    // such as an element with class `protonmail_quote
+    let i = message
+        .select("body")
+        .unwrap() // The selector is well formed
+        .next() // Only one body ;)
+        .unwrap() // Guaranteed to exist
+        .as_node()
+        .children() // We only care about the first-level children of the body
+        .filter_map(|body_child| {
+            body_child
+                .select(&BLOCKQUOTE_SELECTOR)
+                .unwrap()
+                .next() // We want the top level element, not any children.
+                .map(|x| x.as_node().to_owned())
+        });
+
+    if find_split_doc(i).is_some() {
+        return true;
+    }
+
+    // We haven't found such a thing, let's see if we find the string
+    // ------- Original Message ------- in a text node and get its parent.
+    let i = message
+        .traverse_inclusive()
+        .filter_map(|node| match node {
+            NodeEdge::Start(node_ref) => Some(node_ref),
+            NodeEdge::End(_) => None,
+        })
+        .filter_map(|node_ref| match node_ref.data() {
+            NodeData::Text(text) if *text.borrow() == "------- Original Message -------" => {
+                node_ref
+                    .parent() // Get tag
+                    .and_then(|x| x.parent()) // Get partent
+            }
+            _ => None,
+        });
+
+    find_split_doc(i).is_some()
+}
+
 /// Try to locate the eventual blockquote present in the document no matter the expeditor of the mail
 #[must_use]
 #[allow(clippy::missing_panics_doc)]

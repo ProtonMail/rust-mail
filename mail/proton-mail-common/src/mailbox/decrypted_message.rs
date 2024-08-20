@@ -76,7 +76,7 @@ pub fn transform_html(
     blockquote: BlockQuote,
     mail_settings: &MailSettings,
     user_session_id: &str,
-) -> String {
+) -> (bool, String) {
     let mut transformer = Transformer::new(html);
     transformer
         .strip_whitelist()
@@ -101,8 +101,10 @@ pub fn transform_html(
         _ => (),
     }
 
-    if let BlockQuote::Strip = blockquote {
-        transformer.strip_blockquote();
-    }
-    transformer.to_string()
+    let had_blockquote = if let BlockQuote::Strip = blockquote {
+        transformer.strip_blockquote()
+    } else {
+        false
+    };
+    (had_blockquote, transformer.to_string())
 }
