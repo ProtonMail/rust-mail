@@ -45,7 +45,7 @@ use crate::datatypes::{
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use bytes::Bytes;
-use indoc::formatdoc;
+use indoc::{formatdoc, indoc};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{
@@ -80,7 +80,7 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::io::Read;
 use tracing::{debug, error};
 
@@ -3061,6 +3061,23 @@ impl Message {
     /// See [`Model::save()`].
     ///
     pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+        // Get local conversation id for reference conversation
+        if let Some(conversation_id) = self.remote_conversation_id.clone() {
+            interface
+                .execute(
+                    formatdoc!(
+                        "
+                UPDATE messages SET
+                    local_conversation_id=(
+                        SELECT local_id FROM conversations
+                        WHERE remote_id = ?
+                    )
+                WHERE local_id=?"
+                    ),
+                    params![conversation_id, self.local_id],
+                )
+                .await?;
+        }
         // Remove any labels that are no longer associated with this message.
         if !self.label_ids.is_empty() {
             #[allow(trivial_casts)]
@@ -3627,6 +3644,156 @@ impl Message {
             cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())?;
             Ok(decrypted_message_body)
         }
+    }
+
+    /// Mark the messages with `ids` as read.
+    ///
+    /// This method also updates all the label counters and conversation labels
+    /// where these messages belong to.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries fails.
+    pub async fn mark_read<A>(
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::mark_read_or_unread(true, ids, interface).await
+    }
+
+    /// Mark the messages with `ids` as unread.
+    ///
+    /// This method also updates all the label counters and conversation labels
+    /// where these messages belong to.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries fails.
+    pub async fn mark_unread<A>(
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::mark_read_or_unread(false, ids, interface).await
+    }
+
+    async fn mark_read_or_unread<A>(
+        mark_read: bool,
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        struct IdPair {
+            local_message_id: LocalId,
+            local_conversation_id: LocalId,
+        }
+
+        let ids = ids.into_iter();
+
+        let mut updated: Vec<IdPair> = Vec::with_capacity(ids.size_hint().1.unwrap_or(0));
+
+        // update unread flag
+        for id in ids {
+            if let Some(mut message) = Message::find_first(
+                "WHERE local_id=? AND unread=?",
+                params![id, if mark_read { 1 } else { 0 }],
+                interface,
+            )
+            .await?
+            {
+                message.unread = !mark_read;
+                message.save_using(interface).await?;
+                updated.push(IdPair {
+                    local_message_id: message.local_id.unwrap(),
+                    local_conversation_id: message.local_conversation_id.unwrap(),
+                });
+            }
+        }
+
+        if updated.is_empty() {
+            // Nothing was changed.
+            return Ok(());
+        }
+
+        // Publish updates for all affected ids.
+
+        // Messages Counters
+        for id_pair in &updated {
+            let labels = Label::find(
+                indoc! {"
+                        WHERE local_id IN (
+                            SELECT local_label_id FROM message_labels
+                            WHERE local_message_id=?
+                         )"},
+                params![id_pair.local_message_id],
+                interface,
+                None,
+            )
+            .await?;
+            for mut label in labels {
+                if mark_read {
+                    label.unread_msg -= 1;
+                } else {
+                    label.unread_msg += 1;
+                }
+
+                label.save_using(interface).await?
+            }
+        }
+
+        let mut label_ids = BTreeSet::new();
+        // Update conversation labels
+        for id_pair in &updated {
+            let mut conversation_labels = ConversationLabel::find(
+                indoc! {
+                "WHERE local_conversation_id=? AND local_label_id IN (
+                    SELECT local_label_id FROM message_labels WHERE local_message_id=?
+                )"},
+                params![id_pair.local_conversation_id, id_pair.local_message_id],
+                interface,
+                None,
+            )
+            .await?;
+            for conversation_label in &mut conversation_labels {
+                if mark_read {
+                    conversation_label.context_num_unread -= 1;
+                } else {
+                    conversation_label.context_num_unread += 1;
+                }
+                conversation_label.save_using(interface).await?
+            }
+
+            for conversation_label in conversation_labels {
+                if mark_read {
+                    if conversation_label.context_num_unread == 0 {
+                        label_ids.insert(conversation_label.local_label_id.unwrap());
+                    }
+                } else if conversation_label.context_num_unread == 1 {
+                    label_ids.insert(conversation_label.local_label_id.unwrap());
+                }
+            }
+        }
+
+        for label_id in label_ids {
+            // Update conversation label counts.
+            if let Some(mut label) = Label::find_by_id(label_id, interface).await? {
+                if mark_read {
+                    label.unread_conv -= 1;
+                } else {
+                    label.unread_conv += 1;
+                }
+                label.save_using(interface).await?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Converts an [`ApiMessage`] into a [`Message`].
