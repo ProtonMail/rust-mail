@@ -1,43 +1,44 @@
 #![allow(non_snake_case)]
 
-use super::*;
+use super::{ExclusiveLocation, SystemLabel};
 use crate::{
     datatypes::LabelType::{self, *},
+    datatypes::SystemLabelId,
     models::Label,
 };
 use proton_core_common::datatypes::LabelId;
 use test_case::test_case;
 
 #[test_case(&[] => None; "TEST1 - empty")]
-#[test_case(&[( &*INBOX_LABEL_ID, System )] => Some(ExclusiveLocation::Inbox); "TEST2 - only inbox")]
+#[test_case(&[(&SystemLabel::Inbox.into(), System )] => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST2 - only inbox")]
 #[test_case(&[
-        (&LabelId::snoozed(), System),
-        (&LabelId::almost_all_mail(), System),
-        (&LabelId::all_scheduled(), System),
-        (&LabelId::starred(), System),
-        (&LabelId::outbox(), System),
-        (&LabelId::drafts(), System),
-        (&LabelId::sent(), System),
-        (&LabelId::archive(), System),
-        (&LabelId::all_mail(), System),
-        (&LabelId::spam(), System),
-        (&LabelId::trash(), System),
-        (&LabelId::all_sent(), System),
-        (&LabelId::all_drafts(), System),
-        (&LabelId::inbox(), System),
-    ] => Some(ExclusiveLocation::Inbox); "TEST3 - all system labels"
+        (&SystemLabel::Snoozed.into(), System),
+        (&SystemLabel::AlmostAllMail.into(), System),
+        (&SystemLabel::Scheduled.into(), System),
+        (&SystemLabel::Starred.into(), System),
+        (&SystemLabel::Outbox.into(), System),
+        (&SystemLabel::Drafts.into(), System),
+        (&SystemLabel::Sent.into(), System),
+        (&SystemLabel::Archive.into(), System),
+        (&SystemLabel::AllMail.into(), System),
+        (&SystemLabel::Spam.into(), System),
+        (&SystemLabel::Trash.into(), System),
+        (&SystemLabel::AllSent.into(), System),
+        (&SystemLabel::AllDrafts.into(), System),
+        (&SystemLabel::Inbox.into(), System),
+    ] => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST3 - all system labels"
 )]
 #[test_case(
     &[
-        (&*OUTBOX_LABEL_ID, System),
-        (&*TRASH_LABEL_ID, System)
-    ] => Some(ExclusiveLocation::Trash); "TEST4 - outbox and trash"
+        (&SystemLabel::Outbox.into(), System),
+        (&SystemLabel::Trash.into(), System)
+    ] => Some(ExclusiveLocation::System(SystemLabel::Trash)); "TEST4 - outbox and trash"
 )]
 #[test_case(
     &[
-        (&*INBOX_LABEL_ID, System),
-        (&*OUTBOX_LABEL_ID, System)
-] => Some(ExclusiveLocation::Inbox); "TEST5 - message sent to themself")]
+        (&SystemLabel::Inbox.into(), System),
+        (&SystemLabel::Outbox.into(), System)
+] => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST5 - message sent to themself")]
 #[test_case(&[(&LabelId::starred(), System)]
     => None; "TEST6 - message is starred and does not belong to any exclusive location"
 )]
@@ -72,9 +73,9 @@ use test_case::test_case;
 )]
 #[test_case(&[
         (&LabelId::from("custom_folder"), Folder),
-        (&INBOX_LABEL_ID, System)
+        (&SystemLabel::Inbox.into(), System)
     ]
-    => Some(ExclusiveLocation::Inbox); "TEST13 - in custom folder and inbox"
+    => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST13 - in custom folder and inbox"
 )]
 #[test_case(&[
         (&LabelId::drafts(), System),

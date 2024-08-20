@@ -1,7 +1,9 @@
 #![allow(non_snake_case)]
 
 use super::super::*;
-use crate::datatypes::{attachment, ExclusiveLocation, MessageCount, MessageFlags, SystemLabelId};
+use crate::datatypes::{
+    attachment, ExclusiveLocation, MessageCount, MessageFlags, SystemLabel, SystemLabelId,
+};
 use crate::db::new_test_connection_file;
 use crate::tests::common::{
     create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
@@ -300,7 +302,7 @@ async fn test_create_message() {
     resolve_local_ids(&tx, &mut expected).await;
     expected.local_id = Some(1.into());
     expected.row_id = Some(1u64.into());
-    expected.exclusive_location = Some(ExclusiveLocation::Inbox);
+    expected.exclusive_location = Some(ExclusiveLocation::System(SystemLabel::Inbox));
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
         name: label.name,

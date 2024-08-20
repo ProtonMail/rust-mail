@@ -50,6 +50,7 @@
 //!
 mod attachment;
 mod available_action;
+mod system_label;
 
 use crate::core::datatypes::{LabelId, RemoteId};
 pub use attachment::*;
@@ -75,8 +76,8 @@ use proton_mail_common::datatypes::{
     NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
     ParsedHeaders as RealParsedHeaders, PgpScheme as RealPgpScheme, PmSignature as RealPmSignature,
     RemoteIds as RealRemoteIds, ShowImages as RealShowImages, ShowMoved as RealShowMoved,
-    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, ViewLayout as RealViewLayout,
-    ViewMode as RealViewMode,
+    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, SystemLabel as RealSystemLabel,
+    ViewLayout as RealViewLayout, ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -91,6 +92,7 @@ use smart_default::SmartDefault;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
+pub use system_label::*;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
 //  ENUMS
@@ -234,13 +236,15 @@ pub enum ExclusiveLocation {
 impl From<ExclusiveLocation> for RealExclusiveLocation {
     fn from(value: ExclusiveLocation) -> Self {
         match value {
-            ExclusiveLocation::Inbox => RealExclusiveLocation::Inbox,
-            ExclusiveLocation::Trash => RealExclusiveLocation::Trash,
-            ExclusiveLocation::Archive => RealExclusiveLocation::Archive,
-            ExclusiveLocation::Spam => RealExclusiveLocation::Spam,
-            ExclusiveLocation::Snoozed => RealExclusiveLocation::Snoozed,
-            ExclusiveLocation::Scheduled => RealExclusiveLocation::Scheduled,
-            ExclusiveLocation::Outbox => RealExclusiveLocation::Outbox,
+            ExclusiveLocation::Inbox => RealExclusiveLocation::System(RealSystemLabel::Inbox),
+            ExclusiveLocation::Trash => RealExclusiveLocation::System(RealSystemLabel::Trash),
+            ExclusiveLocation::Archive => RealExclusiveLocation::System(RealSystemLabel::Archive),
+            ExclusiveLocation::Spam => RealExclusiveLocation::System(RealSystemLabel::Spam),
+            ExclusiveLocation::Snoozed => RealExclusiveLocation::System(RealSystemLabel::Snoozed),
+            ExclusiveLocation::Scheduled => {
+                RealExclusiveLocation::System(RealSystemLabel::Scheduled)
+            }
+            ExclusiveLocation::Outbox => RealExclusiveLocation::System(RealSystemLabel::Outbox),
             ExclusiveLocation::Custom {
                 name,
                 local_id,
@@ -257,13 +261,15 @@ impl From<ExclusiveLocation> for RealExclusiveLocation {
 impl From<RealExclusiveLocation> for ExclusiveLocation {
     fn from(value: RealExclusiveLocation) -> Self {
         match value {
-            RealExclusiveLocation::Inbox => ExclusiveLocation::Inbox,
-            RealExclusiveLocation::Trash => ExclusiveLocation::Trash,
-            RealExclusiveLocation::Archive => ExclusiveLocation::Archive,
-            RealExclusiveLocation::Spam => ExclusiveLocation::Spam,
-            RealExclusiveLocation::Snoozed => ExclusiveLocation::Snoozed,
-            RealExclusiveLocation::Scheduled => ExclusiveLocation::Scheduled,
-            RealExclusiveLocation::Outbox => ExclusiveLocation::Outbox,
+            RealExclusiveLocation::System(RealSystemLabel::Inbox) => ExclusiveLocation::Inbox,
+            RealExclusiveLocation::System(RealSystemLabel::Trash) => ExclusiveLocation::Trash,
+            RealExclusiveLocation::System(RealSystemLabel::Archive) => ExclusiveLocation::Archive,
+            RealExclusiveLocation::System(RealSystemLabel::Spam) => ExclusiveLocation::Spam,
+            RealExclusiveLocation::System(RealSystemLabel::Snoozed) => ExclusiveLocation::Snoozed,
+            RealExclusiveLocation::System(RealSystemLabel::Scheduled) => {
+                ExclusiveLocation::Scheduled
+            }
+            RealExclusiveLocation::System(RealSystemLabel::Outbox) => ExclusiveLocation::Outbox,
             RealExclusiveLocation::Custom {
                 name,
                 local_id,
@@ -273,11 +279,11 @@ impl From<RealExclusiveLocation> for ExclusiveLocation {
                 local_id: local_id.into(),
                 color: color.into(),
             },
+            RealExclusiveLocation::System(_) => unreachable!(),
         }
     }
 }
 
-/// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
 pub enum LabelType {
@@ -323,6 +329,55 @@ impl From<RealLabelType> for LabelType {
             RealLabelType::ContactGroup => LabelType::ContactGroup,
             RealLabelType::Folder => LabelType::Folder,
             RealLabelType::System => LabelType::System,
+        }
+    }
+}
+
+/// This enum is extended version of the `LabelType` enum. It contains additional
+/// information regarding the system label type.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
+pub enum LabelDescription {
+    Label,
+    ContactGroup,
+    Folder,
+
+    /// System field contain information about the system label type.
+    /// SystemLabel main purpose is to determine the type of the system label.
+    /// It is required for localization in the sidebar & dropdowns.
+    /// The information is optional as we cannot forsee all possible system labels.
+    System(Option<SystemLabel>),
+}
+
+impl LabelDescription {
+    #[must_use]
+    pub fn new(label: &RealLabel) -> Self {
+        match label.label_type {
+            RealLabelType::Label => LabelDescription::Label,
+            RealLabelType::ContactGroup => LabelDescription::ContactGroup,
+            RealLabelType::Folder => LabelDescription::Folder,
+            RealLabelType::System => LabelDescription::System(SystemLabel::new(label)),
+        }
+    }
+}
+
+impl Display for LabelDescription {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Label => write!(f, "Label"),
+            Self::ContactGroup => write!(f, "Contact Group"),
+            Self::Folder => write!(f, "Folder"),
+            Self::System(_) => write!(f, "System"),
+        }
+    }
+}
+
+impl From<LabelDescription> for RealLabelType {
+    fn from(value: LabelDescription) -> Self {
+        match value {
+            LabelDescription::Label => RealLabelType::Label,
+            LabelDescription::ContactGroup => RealLabelType::ContactGroup,
+            LabelDescription::Folder => RealLabelType::Folder,
+            LabelDescription::System(_) => RealLabelType::System,
         }
     }
 }
@@ -1142,7 +1197,7 @@ pub struct Label {
     pub initialized_msg: bool,
 
     /// TODO: Document this field.
-    pub label_type: LabelType,
+    pub label_description: LabelDescription,
 
     /// TODO: Document this field.
     pub name: String,
@@ -1174,6 +1229,8 @@ pub struct Label {
 
 impl From<RealLabel> for Label {
     fn from(value: RealLabel) -> Self {
+        let label_description = LabelDescription::new(&value);
+
         Label {
             local_id: value.local_id.unwrap().into(),
             local_parent_id: value.local_parent_id.map(Into::into),
@@ -1183,7 +1240,7 @@ impl From<RealLabel> for Label {
             expanded: value.expanded,
             initialized_conv: value.initialized_conv,
             initialized_msg: value.initialized_msg,
-            label_type: value.label_type.into(),
+            label_description,
             name: value.name,
             notify: value.notify,
             display_order: value.display_order,

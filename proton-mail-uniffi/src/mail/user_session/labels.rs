@@ -1,4 +1,4 @@
-use crate::mail::datatypes::{Label, LabelType};
+use crate::mail::datatypes::Label;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::uniffi_async;
 use proton_core_common::datatypes::LabelId as RealLabelId;
@@ -21,7 +21,7 @@ impl MailUserSession {
             let _sys_folders = RealLabelId::movable_sys_folder_list();
             Ok(RealLabel::find(
                 "WHERE label_type = ? ORDER BY display_order",
-                params![RealLabelType::from(LabelType::Folder)],
+                params![RealLabelType::Folder],
                 &stash,
                 None,
             )
@@ -41,7 +41,7 @@ impl MailUserSession {
         uniffi_async(async move {
             Ok(RealLabel::find(
                 "WHERE label_type = ? ORDER BY display_order",
-                params![RealLabelType::from(LabelType::Label)],
+                params![RealLabelType::Label],
                 &stash,
                 None,
             )
