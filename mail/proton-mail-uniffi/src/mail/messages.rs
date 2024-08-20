@@ -212,11 +212,15 @@ pub async fn search_for_messages(
 ) -> Result<Vec<Message>, MailSessionError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
-        Ok(RealMessage::search(options.into(), session.api(), &stash)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect())
+        Ok(RealMessage::search(
+            options.into_api_options(&stash).await?,
+            session.api(),
+            &stash,
+        )
+        .await?
+        .into_iter()
+        .map(Into::into)
+        .collect())
     })
     .await
 }

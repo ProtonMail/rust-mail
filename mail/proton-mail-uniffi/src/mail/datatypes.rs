@@ -2040,7 +2040,7 @@ impl From<RealMessageFlags> for MessageFlags {
 #[derive(Clone, Debug, SmartDefault, UniffiRecord)]
 pub struct MessageSearchOptions {
     /// Filter on address ID.
-    pub address_id: Option<RemoteId>,
+    pub address_id: Option<u64>,
 
     /// If `true`, return only messages which have attachments. If `false`,
     /// return only messages which have no attachments.
@@ -2058,13 +2058,13 @@ pub struct MessageSearchOptions {
 
     /// Return only messages newer, in creation time (NOT timestamp), than
     /// the specified message ID.
-    pub begin_id: Option<RemoteId>,
+    pub begin_id: Option<u64>,
 
     /// Keyword search of CC field.
     pub cc: Option<String>,
 
     /// Filter messages by conversation ID.
-    pub conversation_id: Option<RemoteId>,
+    pub conversation_id: Option<u64>,
 
     /// If `true`, sort results descending. If `false`, sort ascending.
     pub desc: Option<bool>,
@@ -2074,19 +2074,19 @@ pub struct MessageSearchOptions {
 
     /// Return only messages older, in creation time (NOT timestamp), than the
     /// specified message ID.
-    pub end_id: Option<RemoteId>,
+    pub end_id: Option<u64>,
 
     /// Keyword search `From` field.
     pub from: Option<String>,
 
     /// Filter on the given message IDs.
-    pub ids: Option<Vec<RemoteId>>,
+    pub ids: Option<Vec<u64>>,
 
     /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
     pub keyword: Option<String>,
 
     /// Label IDs to filter on.
-    pub label_id: Option<Vec<RemoteId>>,
+    pub label_ids: Option<Vec<u64>>,
 
     /// The number of messages to return.
     pub limit: Option<u64>,
@@ -2115,72 +2115,113 @@ pub struct MessageSearchOptions {
     pub unread: Option<bool>,
 }
 
-impl From<MessageSearchOptions> for GetMessagesOptions {
-    fn from(value: MessageSearchOptions) -> Self {
-        GetMessagesOptions {
-            address_id: value.address_id.map(Into::into),
-            attachments: value.attachments,
-            auto_wildcard: value.auto_wildcard,
-            bcc: value.bcc,
-            begin: value.begin,
-            begin_id: value.begin_id.map(Into::into),
-            cc: value.cc,
-            conversation_id: value.conversation_id.map(Into::into),
-            desc: value.desc,
-            end: value.end,
-            end_id: value.end_id.map(Into::into),
-            external_id: None,
-            from: value.from,
-            ids: value
-                .ids
-                .map(|ids| ids.into_iter().map(Into::into).collect()),
-            keyword: value.keyword,
-            label_id: value
-                .label_id
-                .map(|ids| ids.into_iter().map(Into::into).collect()),
-            limit: value.limit,
-            page: value.page,
-            page_size: value.page_size,
-            recipients: value.recipients,
-            sort: value.sort.map(Into::into),
-            subject: value.subject,
-            to: value.to,
-            unread: value.unread,
-        }
-    }
-}
+impl MessageSearchOptions {
+    /// Converts incoming client options to API options.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`](stash::stash::Stash)
+    ///                 or [`Tether`](tether::tether::Tether) to use for finding
+    ///                 the records.
+    ///
+    /// # Errors
+    ///
+    /// An error will be returned if there are problems running the queries to
+    /// look up the remote IDs for the local IDs specified.
+    ///
+    pub async fn into_api_options<A>(self, interface: &A) -> Result<GetMessagesOptions, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let ids = match self.ids {
+            Some(local_ids) => {
+                let mut ids = Vec::with_capacity(local_ids.len());
+                for id in &local_ids {
+                    if let Some(resolved_id) = RealLocalId::from(*id)
+                        .counterpart::<RealMessage, _>(interface)
+                        .await?
+                    {
+                        ids.push(resolved_id.into());
+                    }
+                }
+                if ids.is_empty() {
+                    None
+                } else {
+                    Some(ids)
+                }
+            }
+            None => None,
+        };
+        let label_ids = match self.label_ids {
+            Some(local_ids) => {
+                let mut ids = Vec::with_capacity(local_ids.len());
+                for id in &local_ids {
+                    if let Some(resolved_id) = RealLocalId::from(*id)
+                        .counterpart::<RealLabel, _>(interface)
+                        .await?
+                    {
+                        ids.push(resolved_id.into());
+                    }
+                }
+                if ids.is_empty() {
+                    None
+                } else {
+                    Some(ids)
+                }
+            }
+            None => None,
+        };
 
-impl From<GetMessagesOptions> for MessageSearchOptions {
-    fn from(value: GetMessagesOptions) -> Self {
-        MessageSearchOptions {
-            address_id: value.address_id.map(Into::into),
-            attachments: value.attachments,
-            auto_wildcard: value.auto_wildcard,
-            bcc: value.bcc,
-            begin: value.begin,
-            begin_id: value.begin_id.map(Into::into),
-            cc: value.cc,
-            conversation_id: value.conversation_id.map(Into::into),
-            desc: value.desc,
-            end: value.end,
-            end_id: value.end_id.map(Into::into),
-            from: value.from,
-            ids: value
-                .ids
-                .map(|ids| ids.into_iter().map(Into::into).collect()),
-            keyword: value.keyword,
-            label_id: value
-                .label_id
-                .map(|ids| ids.into_iter().map(Into::into).collect()),
-            limit: value.limit,
-            page: value.page,
-            page_size: value.page_size,
-            recipients: value.recipients,
-            sort: value.sort.map(Into::into),
-            subject: value.subject,
-            to: value.to,
-            unread: value.unread,
-        }
+        Ok(GetMessagesOptions {
+            address_id: match self.address_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealAddress, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            attachments: self.attachments,
+            auto_wildcard: self.auto_wildcard,
+            bcc: self.bcc,
+            begin: self.begin,
+            begin_id: match self.address_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealMessage, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            cc: self.cc,
+            conversation_id: match self.conversation_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealConversation, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            desc: self.desc,
+            end: self.end,
+            end_id: match self.address_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealMessage, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            external_id: None,
+            from: self.from,
+            ids,
+            keyword: self.keyword,
+            label_id: label_ids,
+            limit: self.limit,
+            page: self.page,
+            page_size: self.page_size,
+            recipients: self.recipients,
+            sort: self.sort.map(Into::into),
+            subject: self.subject,
+            to: self.to,
+            unread: self.unread,
+        })
     }
 }
 
