@@ -46,7 +46,6 @@ use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::formatdoc;
-use proton_action_queue::db::OptionalExtension;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{
@@ -76,7 +75,6 @@ use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use smart_default::SmartDefault;
-use stash::datatypes::QueryResultU64;
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -1781,12 +1779,9 @@ impl ConversationLabel {
             Self::table_name()
         );
 
-        Ok(tether
-            .query::<_, QueryResultU64>(&query, params![conversation_id])
-            .await?
-            .into_iter()
-            .map(|v| v.value.into())
-            .collect())
+        tether
+            .query_values::<_, LocalId>(&query, params![conversation_id])
+            .await
     }
 
     /// Save or update a Conversation Label.
@@ -2281,11 +2276,7 @@ impl Label {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let folders = Label::find("WHERE label_type = ?", params![kind], interface, None)
-            .await
-            .optional()?;
-
-        Ok(folders.unwrap_or(vec![]))
+        Label::find("WHERE label_type = ?", params![kind], interface, None).await
     }
 }
 

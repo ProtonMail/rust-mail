@@ -14,9 +14,9 @@ use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
 use proton_event_loop::subscriber::Subscriber;
 use proton_event_loop::EventLoopError;
-use stash::datatypes::QueryResultString;
+use stash::exports::SqliteError;
 use stash::params;
-use stash::stash::Interface;
+use stash::stash::{Interface, StashError};
 use std::sync::Weak;
 use tracing::error;
 
@@ -25,20 +25,28 @@ const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 impl Store for MailUserContext {
     fn load(&self) -> anyhow::Result<Option<ApiRemoteId>> {
         let conn = self.user_context.stash();
-        Ok(block_on(async {
-            conn.query::<_, QueryResultString>(
+        match block_on(async {
+            conn.query_value::<_, String>(
                 "SELECT value FROM event_id_store WHERE id = ?1",
                 params![MAIL_EVENT_TYPE_ID],
             )
             .await
         })
-        .map_err(|e| {
-            error!("Failed to load event id from db:{e}");
-            anyhow!("Failed to load event id {e}")
-        })?
-        .into_iter()
-        .next()
-        .map(|result| ApiRemoteId::from(result.value)))
+        .map(ApiRemoteId::from)
+        {
+            Ok(value) => Ok(Some(value)),
+            Err(e) => {
+                if matches!(
+                    e,
+                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                ) {
+                    Ok(None)
+                } else {
+                    error!("Failed to load event id from db:{e}");
+                    Err(anyhow!("Failed to load event id {e}"))
+                }
+            }
+        }
     }
 
     fn store(&self, id: ApiRemoteId) -> anyhow::Result<()> {
