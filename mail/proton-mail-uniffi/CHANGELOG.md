@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+    - Added `message_id_to_open` field into `WatchedConversation`
+
 ## [0.11.10] - 2024-08-20
 
 ### Added
