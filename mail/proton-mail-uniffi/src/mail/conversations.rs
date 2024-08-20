@@ -368,14 +368,16 @@ pub async fn search_for_conversations(
 ) -> Result<Vec<Conversation>, MailSessionError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
-        Ok(
-            RealConversation::search(options.into(), session.api(), &stash)
-                .await?
-                .into_iter()
-                .filter_map(|c| ContextualConversation::new(c, local_label_id.into()))
-                .map(Into::into)
-                .collect(),
+        Ok(RealConversation::search(
+            options.into_api_options(&stash).await?,
+            session.api(),
+            &stash,
         )
+        .await?
+        .into_iter()
+        .filter_map(|c| ContextualConversation::new(c, local_label_id.into()))
+        .map(Into::into)
+        .collect())
     })
     .await
 }

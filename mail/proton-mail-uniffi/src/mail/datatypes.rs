@@ -59,6 +59,8 @@ use core::fmt;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
+use proton_core_common::datatypes::{Id as RealId, LocalId as RealLocalId};
+use proton_core_common::models::Address as RealAddress;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
@@ -84,11 +86,12 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::decrypted_message;
 use proton_mail_common::models::{
-    Label as RealLabel, MailSettings as RealMailSettings, Message as RealMessage,
-    MessageBodyMetadata as RealMessageBodyMetadata,
+    Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
+    Message as RealMessage, MessageBodyMetadata as RealMessageBodyMetadata,
 };
 use serde_json::to_string as to_json_string;
 use smart_default::SmartDefault;
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -1019,7 +1022,7 @@ impl From<RealConversationCount> for ConversationCount {
 #[derive(Clone, Debug, SmartDefault, UniffiRecord)]
 pub struct ConversationSearchOptions {
     /// Address ID to filter on.
-    pub address_id: Option<RemoteId>,
+    pub address_id: Option<u64>,
 
     /// If `true`, only return conversations which have attachments. If `false`,
     /// only return conversations which have no attachments.
@@ -1035,7 +1038,7 @@ pub struct ConversationSearchOptions {
     /// Return only conversations newer, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `begin`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
-    pub begin_id: Option<RemoteId>,
+    pub begin_id: Option<u64>,
 
     /// If `true`, return results in descending order rather than ascending.
     pub desc: Option<bool>,
@@ -1046,19 +1049,19 @@ pub struct ConversationSearchOptions {
     /// Return only conversations older, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `end`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
-    pub end_id: Option<RemoteId>,
+    pub end_id: Option<u64>,
 
     /// Keyword search of `From` field.
     pub from: Option<String>,
 
     /// Conversation IDs to filter on.
-    pub ids: Option<Vec<RemoteId>>,
+    pub ids: Option<Vec<u64>>,
 
     /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
     pub keyword: Option<String>,
 
     /// Label ID to filter on.
-    pub label_id: Option<RemoteId>,
+    pub label_id: Option<u64>,
 
     /// The number of conversations to return.
     pub limit: Option<u64>,
@@ -1084,60 +1087,93 @@ pub struct ConversationSearchOptions {
     pub unread: Option<bool>,
 }
 
-impl From<ConversationSearchOptions> for GetConversationsOptions {
-    fn from(value: ConversationSearchOptions) -> Self {
-        GetConversationsOptions {
-            address_id: value.address_id.map(Into::into),
-            attachments: value.attachments,
-            auto_wildcard: value.auto_wildcard,
-            begin: value.begin,
-            begin_id: value.begin_id.map(Into::into),
-            desc: value.desc,
-            end: value.end,
-            end_id: value.end_id.map(Into::into),
-            external_id: None,
-            from: value.from,
-            ids: value
-                .ids
-                .map(|ids| ids.into_iter().map(Into::into).collect()),
-            keyword: value.keyword,
-            label_id: value.label_id.map(Into::into),
-            limit: value.limit,
-            page: value.page,
-            page_size: value.page_size,
-            recipients: value.recipients,
-            sort: value.sort.map(Into::into),
-            subject: value.subject,
-            unread: value.unread,
-        }
-    }
-}
+impl ConversationSearchOptions {
+    /// Converts incoming client options to API options.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`](stash::stash::Stash)
+    ///                 or [`Tether`](tether::tether::Tether) to use for finding
+    ///                 the records.
+    ///
+    /// # Errors
+    ///
+    /// An error will be returned if there are problems running the queries to
+    /// look up the remote IDs for the local IDs specified.
+    ///
+    pub async fn into_api_options<A>(
+        self,
+        interface: &A,
+    ) -> Result<GetConversationsOptions, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let ids = match self.ids {
+            Some(local_ids) => {
+                let mut ids = Vec::with_capacity(local_ids.len());
+                for id in &local_ids {
+                    if let Some(resolved_id) = RealLocalId::from(*id)
+                        .counterpart::<RealConversation, _>(interface)
+                        .await?
+                    {
+                        ids.push(resolved_id.into());
+                    }
+                }
+                if ids.is_empty() {
+                    None
+                } else {
+                    Some(ids)
+                }
+            }
+            None => None,
+        };
 
-impl From<GetConversationsOptions> for ConversationSearchOptions {
-    fn from(value: GetConversationsOptions) -> Self {
-        ConversationSearchOptions {
-            address_id: value.address_id.map(Into::into),
-            attachments: value.attachments,
-            auto_wildcard: value.auto_wildcard,
-            begin: value.begin,
-            begin_id: value.begin_id.map(Into::into),
-            desc: value.desc,
-            end: value.end,
-            end_id: value.end_id.map(Into::into),
-            from: value.from,
-            ids: value
-                .ids
-                .map(|ids| ids.into_iter().map(Into::into).collect()),
-            keyword: value.keyword,
-            label_id: value.label_id.map(Into::into),
-            limit: value.limit,
-            page: value.page,
-            page_size: value.page_size,
-            recipients: value.recipients,
-            sort: value.sort.map(Into::into),
-            subject: value.subject,
-            unread: value.unread,
-        }
+        Ok(GetConversationsOptions {
+            address_id: match self.address_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealAddress, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            attachments: self.attachments,
+            auto_wildcard: self.auto_wildcard,
+            begin: self.begin,
+            begin_id: match self.begin_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealConversation, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            desc: self.desc,
+            end: self.end,
+            end_id: match self.end_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealConversation, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            external_id: None,
+            from: self.from,
+            ids,
+            keyword: self.keyword,
+            label_id: match self.label_id {
+                Some(id) => RealLocalId::from(id)
+                    .counterpart::<RealLabel, _>(interface)
+                    .await?
+                    .map(Into::into),
+                None => None,
+            },
+            limit: self.limit,
+            page: self.page,
+            page_size: self.page_size,
+            recipients: self.recipients,
+            sort: self.sort.map(Into::into),
+            subject: self.subject,
+            unread: self.unread,
+        })
     }
 }
 
