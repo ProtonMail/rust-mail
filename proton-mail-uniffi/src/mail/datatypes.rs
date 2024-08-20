@@ -1179,9 +1179,6 @@ pub struct Label {
     pub local_parent_id: Option<u64>,
 
     /// TODO: Document this field.
-    pub remote_parent_id: Option<LabelId>,
-
-    /// TODO: Document this field.
     pub color: LabelColor,
 
     /// TODO: Document this field.
@@ -1234,7 +1231,6 @@ impl From<RealLabel> for Label {
         Label {
             local_id: value.local_id.unwrap().into(),
             local_parent_id: value.local_parent_id.map(Into::into),
-            remote_parent_id: value.remote_parent_id.map(Into::into),
             color: value.color.into(),
             display: value.display,
             expanded: value.expanded,
@@ -1542,9 +1538,6 @@ pub struct Message {
     pub local_conversation_id: u64,
 
     /// TODO: Document this field.
-    pub remote_conversation_id: Option<RemoteId>,
-
-    /// TODO: Document this field.
     pub address_id: RemoteId,
 
     /// Attachment metadata associated with this message.
@@ -1633,7 +1626,6 @@ impl From<RealMessage> for Message {
         Message {
             local_id: value.local_id.unwrap().into(),
             local_conversation_id: value.local_conversation_id.unwrap().into(),
-            remote_conversation_id: value.remote_conversation_id.map(Into::into),
             address_id: value.address_id.into(),
             attachments_metadata: value
                 .attachments_metadata
