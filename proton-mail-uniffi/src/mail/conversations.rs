@@ -9,7 +9,6 @@
 //! won't.
 //!
 
-use crate::core::datatypes::RemoteId;
 use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
@@ -17,8 +16,6 @@ use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
 use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools;
-use proton_core_common::datatypes::RemoteId as RealRemoteId;
-use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, Message as RealMessage,
@@ -224,41 +221,6 @@ pub async fn load_conversation(
         };
 
         Ok(ContextualConversation::new(conversation, label_id.into()).map(Into::into))
-    })
-    .await
-}
-
-/// Retrieve a conversation by remote ID.
-///
-/// Notably, this retrieves a local conversation that has been saved in the
-/// database. It does not use the network.
-///
-/// # Parameters
-///
-/// * `session`         - The session to use for the request.
-/// * `id`              - The remote ID of the conversation to retrieve.
-/// * `local_label_id`  - Local label id of the label context in which to
-///                       display the conversation.
-///
-/// # Errors
-///
-/// Returns an error if the database query fails.
-///
-#[uniffi::export]
-pub async fn load_remote_conversation(
-    session: Arc<MailSession>,
-    id: RemoteId,
-    local_label_id: u64,
-) -> Result<Option<Conversation>, MailboxError> {
-    let stash = session.stash().clone();
-    uniffi_async(async move {
-        let Some(conversation) =
-            RealConversation::find_by_id(RealRemoteId::from(id), &stash).await?
-        else {
-            return Ok(None);
-        };
-
-        Ok(ContextualConversation::new(conversation, local_label_id.into()).map(Into::into))
     })
     .await
 }
