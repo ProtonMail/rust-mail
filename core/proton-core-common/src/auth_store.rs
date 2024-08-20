@@ -54,6 +54,16 @@ impl Store for AuthStore {
                 Box::new(e)
             })?;
 
+            if let Some(existing) = EncryptedUserSession::find_first(
+                "WHERE user_id=?",
+                params![decrypted.user_id.to_string()],
+                &self.stash,
+            )
+            .await?
+            {
+                encrypted.set_row_id(existing.row_id);
+            }
+
             encrypted.set_stash(&self.stash);
             encrypted.save().await.map_err(|e| -> StoreError {
                 error!("Failed to save data to the database: {e}");
