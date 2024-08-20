@@ -90,19 +90,20 @@ pub async fn prepare_and_patch_db_state_and_skip(
     }
 
     // update conversation labels with message data
-    fn find_conversation(list: &[Conversation], id: &RemoteId) -> Conversation {
-        list.iter()
+    fn find_conversation<'a>(list: &'a mut [Conversation], id: &RemoteId) -> &'a mut Conversation {
+        list.iter_mut()
             .find(|c| c.remote_id == Some(id.clone()))
             .expect("Failed to find conversation")
-            .clone()
     }
 
-    fn find_conversation_label(conv: &Conversation, id: &LabelId) -> ConversationLabel {
+    fn find_conversation_label<'a>(
+        conv: &'a mut Conversation,
+        id: &LabelId,
+    ) -> &'a mut ConversationLabel {
         conv.labels
-            .iter()
+            .iter_mut()
             .find(|cl| cl.remote_label_id == Some(id.clone()))
             .expect("Failed to find conversation label")
-            .clone()
     }
 
     fn extend_addresses(addresses: &mut MessageAddresses, new_addresses: &[MessageAddress]) {
@@ -129,7 +130,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
 
     for message in env.messages.iter() {
         let mut conv = find_conversation(
-            &env.conversations,
+            &mut env.conversations,
             &message.remote_conversation_id.clone().unwrap(),
         );
         conv.num_attachments += message.num_attachments as u64;
@@ -143,7 +144,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         extend_addresses(&mut conv.recipients, &message.cc_list.value);
 
         for label_id in &message.label_ids {
-            let mut conv_label = find_conversation_label(&conv, label_id);
+            let conv_label = find_conversation_label(&mut conv, label_id);
             conv_label.context_num_messages += 1;
             conv_label.context_size += message.size;
             conv_label.context_num_attachments += message.num_attachments as u64;
