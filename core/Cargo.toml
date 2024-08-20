@@ -30,11 +30,11 @@ parking_lot = "0.12"
 paste = "1"
 pin-project = "1"
 pretty_assertions = "1.4.0"
-proton-api-core = { version = "=0.6.7", path = "proton-api-core", registry = "proton" }
-proton-core-common = { version = "=0.6.11", path = "proton-core-common" }
+proton-api-core = { version = "=0.6.8", path = "proton-api-core", registry = "proton" }
+proton-core-common = { version = "=0.6.12", path = "proton-core-common" }
 proton-crypto-account = { version = "=0.5.0", registry = "proton" }
-proton-event-loop = { version = "=0.7.7", path = "proton-event-loop", registry = "proton" }
-proton-sqlite3 = { version = "=0.7.2", path = "proton-sqlite3", registry = "proton" }
+proton-event-loop = { version = "=0.7.8", path = "proton-event-loop", registry = "proton" }
+proton-sqlite3 = { version = "=0.7.3", path = "proton-sqlite3", registry = "proton" }
 quick_cache = "0.5"
 rand = "0.8"
 regex = "1.10.5"
@@ -51,7 +51,7 @@ serde = { version = "1", features = ["derive"] }
 serde-aux = "4.5"
 serde_json = "1"
 serde_repr = "0.1"
-stash = { version = "0.1.2", path = "stash", registry = "proton" }
+stash = { version = "0.1.4", path = "stash", registry = "proton" }
 tempdir = "0.3.1"
 tempfile = "3.10.1"
 thiserror = "1"
