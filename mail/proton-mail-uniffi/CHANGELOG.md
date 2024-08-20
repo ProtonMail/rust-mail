@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
-### Change
-  
-  - Added `mime_type` in `DecryptedMessage` 
+### Added
+
+  - Added `MimeType` for attachment,
+    - Added `category` field to determin media icon for attachment
+  - Added `SystemLabel` enum available on `Label.label_description` field.
+  - Added `LabelDescription` enim
+    - `LabelDescription` enum contains `System` field with optional `SystemLabel` information
+
+### Changed
+
+  - Replaced `LabelType` enum with `LabelDescription` enum on the `Label` type.
+  - Added `mime_type` in `DecryptedMessage`
 
 ## [0.11.9] - 2024-08-19
 

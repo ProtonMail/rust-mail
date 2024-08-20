@@ -39,6 +39,7 @@
 
 pub mod attachment;
 pub(crate) mod exclusive_location;
+pub(crate) mod system_label;
 
 use crate::models::{Conversation, Label, MessageBodyMetadata};
 use core::fmt;
@@ -72,6 +73,7 @@ use stash::sql_using_serde;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
+pub use system_label::SystemLabel;
 
 //  ENUMS
 //==============================================================================
