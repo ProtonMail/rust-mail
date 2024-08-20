@@ -52,7 +52,7 @@ mod attachment;
 mod available_action;
 mod system_label;
 
-use crate::core::datatypes::{LabelId, RemoteId};
+use crate::core::datatypes::LabelId;
 pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
@@ -77,9 +77,9 @@ use proton_mail_common::datatypes::{
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
     NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
     ParsedHeaders as RealParsedHeaders, PgpScheme as RealPgpScheme, PmSignature as RealPmSignature,
-    RemoteIds as RealRemoteIds, ShowImages as RealShowImages, ShowMoved as RealShowMoved,
-    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, SystemLabel as RealSystemLabel,
-    ViewLayout as RealViewLayout, ViewMode as RealViewMode,
+    ShowImages as RealShowImages, ShowMoved as RealShowMoved, SpamAction as RealSpamAction,
+    SwipeAction as RealSwipeAction, SystemLabel as RealSystemLabel, ViewLayout as RealViewLayout,
+    ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -2303,27 +2303,6 @@ impl From<RealParsedHeaders> for ParsedHeaders {
     fn from(value: RealParsedHeaders) -> Self {
         ParsedHeaders {
             headers: value.headers,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
-pub struct RemoteIds {
-    pub value: Vec<RemoteId>,
-}
-
-impl From<RemoteIds> for RealRemoteIds {
-    fn from(value: RemoteIds) -> Self {
-        RealRemoteIds {
-            value: value.value.iter().map(|id| id.clone().into()).collect(),
-        }
-    }
-}
-
-impl From<RealRemoteIds> for RemoteIds {
-    fn from(value: RealRemoteIds) -> Self {
-        RemoteIds {
-            value: value.value.iter().map(|id| id.clone().into()).collect(),
         }
     }
 }
