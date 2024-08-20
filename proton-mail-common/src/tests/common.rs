@@ -82,6 +82,7 @@ pub async fn create_address(core_tx: &Tether) -> Address {
 
 pub fn test_address() -> Address {
     Address {
+        local_id: None,
         remote_id: Some(MY_ADDRESS_ID.clone().into()),
         email: "hello@world".to_owned(),
         send: Default::default(),

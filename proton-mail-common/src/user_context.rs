@@ -4,27 +4,26 @@ mod events;
 mod images;
 mod initialization;
 
-use anyhow::anyhow;
-pub use initialization::*;
-use proton_core_common::models::User;
-use stash::orm::Model;
-use std::path::PathBuf;
-
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
 use crate::{MailContext, MailContextError, MailContextResult};
+use anyhow::anyhow;
 use futures::executor::block_on;
+pub use initialization::*;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::RemoteId;
+use proton_core_common::models::User;
 use proton_core_common::{LoadKeySecret, UserContext};
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::foreground_loop::EventLoop;
+use stash::orm::Model;
 use stash::stash::Stash;
+use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 
 pub struct MailUserContext {

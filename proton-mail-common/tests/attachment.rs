@@ -4,11 +4,13 @@ use crate::common::attachment::{testdata_attachment_data, testdata_expected_atta
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
-use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::models::Address;
 use proton_mail_common::datatypes::{Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::Mailbox;
 use stash::orm::Model;
+use stash::stash::{AgnosticInterface, Interface};
 use std::fs;
 
 #[tokio::test]
@@ -181,7 +183,12 @@ async fn load_attachment_content_from_cache() {
     let user_context = ctx.user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let attachment_local_id = 42;
-    let attachment = get_attachment(attachment_local_id.into(), test_attachment);
+    let attachment = get_attachment(
+        attachment_local_id.into(),
+        test_attachment,
+        user_context.stash(),
+    )
+    .await;
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -217,10 +224,23 @@ async fn load_attachment_content_from_cache() {
     );
 }
 
-fn get_attachment(id: LocalId, attachment: &ApiAttachment) -> Attachment {
+async fn get_attachment<A>(id: LocalId, attachment: &ApiAttachment, interface: &A) -> Attachment
+where
+    A: Into<AgnosticInterface> + Interface,
+{
     Attachment {
         local_id: Some(id),
         remote_id: Some(attachment.id.clone().into()),
+        // TODO: Should probably be something like this:
+        // local_address_id: Some(
+        //     RemoteId::from(attachment.address_id.clone())
+        //         .counterpart::<Address, _>(interface)
+        //         .await
+        //         .unwrap()
+        //         .expect("Saved address not found")
+        //         .into(),
+        // ),
+        local_address_id: None,
         remote_address_id: Some(attachment.address_id.clone().into()),
         local_conversation_id: None,
         remote_conversation_id: Some(attachment.conversation_id.clone().into()),

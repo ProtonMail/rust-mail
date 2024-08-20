@@ -15,6 +15,7 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
                 filename TEXT NOT NULL,
                 size INTEGER NOT NULL,
                 mime_type INTEGER NOT NULL,
+                local_address_id INTEGER DEFAULT NULL,
                 remote_address_id TEXT DEFAULT NULL,
                 key_packets TEXT DEFAULT NULL,
                 signature TEXT DEFAULT NULL,
@@ -28,8 +29,8 @@ pub async fn create_attachment_tables(tx: &Tether) -> Result<(), StashError> {
                 image_height TEXT DEFAULT NULL,
 
                 CONSTRAINT attachments_address_id
-                    FOREIGN KEY (remote_address_id)
-                    REFERENCES addresses (remote_id),
+                    FOREIGN KEY (local_address_id)
+                    REFERENCES addresses (local_id),
 
                 CONSTRAINT attachments_conversation_id
                     FOREIGN KEY (local_conversation_id)

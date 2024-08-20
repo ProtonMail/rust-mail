@@ -114,7 +114,8 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(0)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 0,
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 subject: "Message subject".to_owned(),
@@ -153,7 +154,8 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(1)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 label_ids: vec![MY_LABEL_ID2.clone().into()],
                 subject: "FW: Message subject".to_owned(),
@@ -185,7 +187,8 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(3)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 subject: "RE: FW: Message subject".to_owned(),
@@ -217,7 +220,8 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(10)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 subject: "FW: Message subject".to_owned(),
                 sender: MessageAddress {
@@ -247,7 +251,8 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(4)),
                 remote_conversation_id: Some(conv_id2.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 label_ids: vec![MY_LABEL_ID2.clone().into()],
                 subject: "Test".to_owned(),
@@ -287,7 +292,8 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(5)),
                 remote_conversation_id: Some(conv_id2.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 label_ids: vec![MY_LABEL_ID2.clone().into()],
                 subject: "RE: Test".to_owned(),
@@ -365,7 +371,8 @@ pub fn new_test_unread_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(0)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 subject: "Message subject".to_owned(),
                 sender: MessageAddress {
@@ -405,7 +412,8 @@ pub fn new_test_unread_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(1)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 label_ids: vec![MY_LABEL_ID2.clone().into()],
                 subject: "FW: Message subject".to_owned(),
@@ -437,7 +445,8 @@ pub fn new_test_unread_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(3)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 subject: "RE: FW: Message subject".to_owned(),
@@ -468,7 +477,8 @@ pub fn new_test_unread_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(10)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 subject: "FW: Message subject".to_owned(),
                 sender: MessageAddress {
@@ -512,7 +522,8 @@ pub fn new_test_label_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(0)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 subject: "Message subject".to_owned(),
                 sender: MessageAddress {
                     address: "bar@bar.com".to_owned(),
@@ -551,7 +562,8 @@ pub fn new_test_label_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(1)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 subject: "FW: Message subject".to_owned(),
                 sender: MessageAddress {
@@ -584,7 +596,8 @@ pub fn new_test_label_db_state() -> TestDBState {
             Message {
                 remote_id: Some(new_message_id(3)),
                 remote_conversation_id: Some(conv_id1.clone()),
-                address_id: MY_ADDRESS_ID.clone().into(),
+                local_address_id: 1.into(),
+                remote_address_id: MY_ADDRESS_ID.clone().into(),
                 display_order: 1,
                 label_ids: vec![],
                 subject: "RE: FW: Message subject".to_owned(),
@@ -648,7 +661,8 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
         messages: vec![Message {
             remote_id: Some(new_message_id(0)),
             remote_conversation_id: Some(conv_id1.clone()),
-            address_id: MY_ADDRESS_ID.clone().into(),
+            local_address_id: 1.into(),
+            remote_address_id: MY_ADDRESS_ID.clone().into(),
             display_order: 0,
             label_ids: vec![MY_LABEL_ID2.clone().into()],
             subject: "Message subject".to_owned(),

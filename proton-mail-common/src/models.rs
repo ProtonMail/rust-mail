@@ -64,7 +64,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
-use proton_core_common::models::ModelExtension;
+use proton_core_common::models::{Address, ModelExtension};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
@@ -151,8 +151,11 @@ pub struct Attachment {
     pub remote_id: Option<RemoteId>,
 
     /// Address with which this attachment was encrypted.
-    ///
-    /// The address id can only be retrieved from a [`Message`] or the full [`Attachment`] type.
+    #[DbField]
+    pub local_address_id: Option<LocalId>,
+
+    /// Address with which this attachment was encrypted. The address id can
+    /// only be retrieved from a [`Message`] or the full [`Attachment`] type.
     #[DbField]
     pub remote_address_id: Option<RemoteId>,
 
@@ -226,6 +229,7 @@ impl From<AttachmentMetadata> for Attachment {
         Self {
             local_id: value.local_id,
             remote_id: value.remote_id,
+            local_address_id: None,
             remote_address_id: None,
             local_conversation_id: None,
             remote_conversation_id: None,
@@ -476,6 +480,7 @@ impl From<ApiAttachment> for Attachment {
         Self {
             local_id: None,
             remote_id: Some(value.id.into()),
+            local_address_id: None,
             remote_address_id: Some(value.address_id.into()),
             local_conversation_id: None,
             remote_conversation_id: Some(value.conversation_id.into()),
@@ -2640,7 +2645,11 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub address_id: RemoteId,
+    pub local_address_id: LocalId,
+
+    /// TODO: Document this field.
+    #[DbField]
+    pub remote_address_id: RemoteId,
 
     /// TODO: Document this field.
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -2835,7 +2844,16 @@ impl Message {
             let mut message = Self {
                 local_id: None,
                 remote_id: Some(metadata.id.into()),
-                address_id: metadata.address_id.into(),
+                local_address_id: RemoteId::from(metadata.address_id.clone())
+                    .counterpart::<Address, _>(stash)
+                    .await?
+                    .ok_or_else(|| {
+                        AppError::LocalIdNotFound(
+                            "Address".to_owned(),
+                            metadata.address_id.clone().into(),
+                        )
+                    })?,
+                remote_address_id: metadata.address_id.into(),
                 attachments_metadata: metadata
                     .attachments_metadata
                     .into_iter()
@@ -3111,7 +3129,8 @@ impl Message {
                     .await?
                     .unwrap_or(Attachment::from(metadata.clone()));
 
-                    attachment.remote_address_id = Some(self.address_id.clone());
+                    attachment.local_address_id = Some(self.local_address_id);
+                    attachment.remote_address_id = Some(self.remote_address_id.clone());
                     attachment.local_message_id = self.local_id;
                     attachment.remote_message_id = self.remote_id.clone();
                     attachment.save_using(interface).await?;
@@ -3180,14 +3199,18 @@ impl Message {
     }
 
     /// Get message from remote and decrypt it
-    pub async fn decrypt_from_remote<P: PgpProviderSync, PM: ProtonMail>(
+    pub async fn decrypt_from_remote<P: PgpProviderSync, PM: ProtonMail, A>(
         &self,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         api: &PM,
-    ) -> Result<DecryptedMessageBody, AppError> {
+        interface: &A,
+    ) -> Result<DecryptedMessageBody, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         // Fetch metadata first to sync contents and cache.
-        let encrypted_msg = self.sync_message_body(api).await?;
+        let encrypted_msg = self.sync_message_body(api, interface).await?;
 
         // TODO: Verify signature.
         let (decrypted_body, _) = encrypted_msg
@@ -3297,21 +3320,27 @@ impl Message {
     ///
     /// * `cache_path` - TODO: Document this parameter.
     /// * `api`        - The API instance to use.
+    /// * `interface`  - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                  to use for finding the records.
     ///
     /// # Errors
     ///
     /// Returns error if the API request failed or the data could not be written
     /// to the database.
     ///
-    pub async fn sync_message_body<PM: ProtonMail>(
+    pub async fn sync_message_body<PM: ProtonMail, A>(
         &self,
         api: &PM,
-    ) -> Result<EncryptedMessageBody, AppError> {
-        let (metadata, body) = self.sync_message_metadata(api).await?;
+        interface: &A,
+    ) -> Result<EncryptedMessageBody, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let (metadata, body) = self.sync_message_metadata(api, interface).await?;
         let encrypted_body = if let Some(body) = body {
             body
         } else {
-            self.get_message_from_remote(api).await?.body
+            self.get_message_from_remote(api, interface).await?.body
         };
         Ok(EncryptedMessageBody {
             encrypted_body,
@@ -3323,17 +3352,23 @@ impl Message {
     ///
     /// # Parameters
     ///
-    /// * `api` - The API instance to use.
+    /// * `api`       - The API instance to use.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
     ///
     /// # Errors
     ///
     /// Returns error if the API request failed or the data could not be written
     /// to the database.
     ///
-    async fn sync_message_metadata<PM: ProtonMail>(
+    async fn sync_message_metadata<PM: ProtonMail, A>(
         &self,
         api: &PM,
-    ) -> Result<(MessageBodyMetadata, Option<String>), AppError> {
+        interface: &A,
+    ) -> Result<(MessageBodyMetadata, Option<String>), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let Some(conn) = self.stash() else {
             return Err(StashError::NoStashAvailable.into());
         };
@@ -3341,7 +3376,7 @@ impl Message {
         if let Some(metadata) = self.get_message_body_metadata().await? {
             Ok((metadata, None))
         } else {
-            let message = self.get_message_from_remote(api).await?;
+            let message = self.get_message_from_remote(api, interface).await?;
 
             // create message in the database and store body in the cache.
             let mut metadata = MessageBodyMetadata {
@@ -3382,15 +3417,24 @@ impl Message {
     }
 
     /// Get message from remote
-    async fn get_message_from_remote<PM: ProtonMail>(&self, api: &PM) -> Result<Message, AppError> {
+    async fn get_message_from_remote<PM: ProtonMail, A>(
+        &self,
+        api: &PM,
+        interface: &A,
+    ) -> Result<Message, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         // metadata is not there it is either missing or the message does not exist.
         let remote_id = self.remote_id.clone().ok_or(AppError::Other(
             "MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned(),
         ))?;
         // sync the message body
-        Ok(Message::from(
+        Message::from_api_data(
             api.get_message(remote_id.into()).await.map(|v| v.message)?,
-        ))
+            interface,
+        )
+        .await
     }
 
     /// Get the available actions for the message excluding labels which are applied to
@@ -3517,14 +3561,14 @@ impl Message {
             .ok_or(MailboxError::MessageNotFound(id))?;
 
         let pgp_provider = proton_crypto::new_pgp_provider();
-        let address_id = saved_message.address_id.clone();
+        let address_id = saved_message.remote_address_id.clone();
         let address_keys = user_context
             .unlocked_address_keys(&pgp_provider, &address_id)
             .await?;
         let api = user_context.session().api();
 
         Ok(saved_message
-            .fetch_message_body(cache, address_keys, pgp_provider, api)
+            .fetch_message_body(cache, address_keys, pgp_provider, api, user_context.stash())
             .await?)
     }
 
@@ -3539,19 +3583,25 @@ impl Message {
     /// * `address_keys` - The address keys to use for decryption.
     /// * `pgp_provider` - The PGP provider to use for decryption.
     /// * `api`          - The API instance to use.
+    /// * `interface`    - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                    to use for finding the records.
     ///
     /// # Errors
     ///
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
-    pub async fn fetch_message_body<P: PgpProviderSync, PM: ProtonMail>(
+    pub async fn fetch_message_body<P: PgpProviderSync, PM: ProtonMail, A>(
         &self,
         cache: &ProtonCache<CacheMessageConfig>,
         address_keys: UnlockedAddressKeys<P>,
         pgp_provider: P,
         api: &PM,
-    ) -> Result<DecryptedMessageBody, AppError> {
+        interface: &A,
+    ) -> Result<DecryptedMessageBody, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let key = self.local_id.expect("Message does not have a local id");
         if let Some(mut content) = cache.get_item(&key)? {
             let mut body = String::new();
@@ -3563,16 +3613,25 @@ impl Message {
             Ok(DecryptedMessageBody { body, metadata })
         } else {
             let decrypted_message_body = self
-                .decrypt_from_remote(address_keys, pgp_provider, api)
+                .decrypt_from_remote(address_keys, pgp_provider, api, interface)
                 .await?;
             cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())?;
             Ok(decrypted_message_body)
         }
     }
-}
 
-impl From<ApiMessage> for Message {
-    fn from(value: ApiMessage) -> Self {
+    /// Converts an [`ApiMessage`] into a [`Message`].
+    ///
+    /// # Parameters
+    ///
+    /// * `value`     - The [`ApiMessage`] to convert.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    pub async fn from_api_data<A>(value: ApiMessage, interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let label_ids: Vec<LabelId> = value
             .metadata
             .label_ids
@@ -3580,12 +3639,21 @@ impl From<ApiMessage> for Message {
             .map(|v| v.into())
             .collect();
 
-        Self {
+        Ok(Self {
             local_id: None,
             remote_id: Some(value.metadata.id.into()),
             local_conversation_id: None,
             remote_conversation_id: Some(value.metadata.conversation_id.into()),
-            address_id: value.metadata.address_id.into(),
+            local_address_id: RemoteId::from(value.metadata.address_id.clone())
+                .counterpart::<Address, _>(interface)
+                .await?
+                .ok_or_else(|| {
+                    AppError::LocalIdNotFound(
+                        "Address".to_owned(),
+                        value.metadata.address_id.clone().into(),
+                    )
+                })?,
+            remote_address_id: value.metadata.address_id.into(),
             attachments_metadata: value
                 .metadata
                 .attachments_metadata
@@ -3650,20 +3718,19 @@ impl From<ApiMessage> for Message {
             row_id: None,
             stash: None,
             custom_labels: vec![],
-        }
+        })
     }
 }
 
 #[cfg(test)]
 mod default_message {
-    use proton_core_common::datatypes::RemoteId;
-
-    use crate::models::Message;
+    use super::*;
 
     impl Default for Message {
         fn default() -> Self {
             Self {
-                address_id: RemoteId::new(Default::default()),
+                local_address_id: 0.into(),
+                remote_address_id: RemoteId::new(Default::default()),
                 // The rest are by default default.
                 flags: Default::default(),
                 local_id: Default::default(),

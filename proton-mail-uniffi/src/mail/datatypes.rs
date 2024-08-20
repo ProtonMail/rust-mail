@@ -1570,7 +1570,7 @@ pub struct Message {
     pub local_conversation_id: u64,
 
     /// TODO: Document this field.
-    pub address_id: RemoteId,
+    pub address_id: u64,
 
     /// Attachment metadata associated with this message.
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -1658,7 +1658,7 @@ impl From<RealMessage> for Message {
         Message {
             local_id: value.local_id.unwrap().into(),
             local_conversation_id: value.local_conversation_id.unwrap().into(),
-            address_id: value.address_id.into(),
+            address_id: value.local_address_id.into(),
             attachments_metadata: value
                 .attachments_metadata
                 .into_iter()

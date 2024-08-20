@@ -7,7 +7,8 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
             CREATE TABLE messages(
                 local_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 remote_id TEXT UNIQUE DEFAULT NULL,
-                address_id TEXT NOT NULL,
+                local_address_id INTEGER NOT NULL,
+                remote_address_id TEXT NOT NULL,
                 local_conversation_id INTEGER NOT NULL,
                 remote_conversation_id TEXT DEFAULT NULL,
                 display_order INTEGER NOT NULL,
@@ -31,8 +32,8 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
                 deleted INTEGER NOT NULL DEFAULT 0,
 
                 CONSTRAINT messages_address_id
-                    FOREIGN KEY (address_id)
-                    REFERENCES addresses (remote_id),
+                    FOREIGN KEY (local_address_id)
+                    REFERENCES addresses (local_id),
 
                 CONSTRAINT messages_conversation_id
                     FOREIGN KEY (local_conversation_id)

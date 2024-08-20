@@ -24,7 +24,7 @@ use proton_api_mail::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
     MimeType as ApiMimeType,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::{Id, LabelId, RemoteId};
 use proton_crypto_inbox::attachment::KeyPackets;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
@@ -209,7 +209,15 @@ mod available_actions {
         message.remote_conversation_id = conversation.remote_id.clone();
         message.local_conversation_id = conversation.local_id;
         let address = create_address(&tx).await;
-        message.address_id = address.remote_id.unwrap();
+        message.local_address_id = address
+            .remote_id
+            .clone()
+            .unwrap()
+            .counterpart::<Address, _>(&stash)
+            .await
+            .unwrap()
+            .unwrap();
+        message.remote_address_id = address.remote_id.unwrap();
         message.stash = Some(stash.clone());
         message.save_using(&tx).await.unwrap();
 
@@ -293,7 +301,7 @@ async fn test_create_message() {
         .await
         .expect("failed to get message")
         .expect("must have a value");
-    let mut expected = Message::from(message);
+    let mut expected = Message::from_api_data(message, &tx).await.unwrap();
     let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &stash)
         .await
         .unwrap()
@@ -521,7 +529,9 @@ async fn test_update_message() {
         .await
         .unwrap()
         .unwrap();
-    let mut expected = Message::from(metadata_updated);
+    let mut expected = Message::from_api_data(metadata_updated, &stash)
+        .await
+        .unwrap();
     expected.set_stash(&stash);
     resolve_local_ids(&tx, &mut expected).await;
     expected.custom_labels = vec![CustomLabel {
