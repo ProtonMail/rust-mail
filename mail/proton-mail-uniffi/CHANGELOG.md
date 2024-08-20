@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Change
+  
+  - Added `mime_type` in `DecryptedMessage` 
+
 ## [0.11.9] - 2024-08-19
 
 ### Fixed
