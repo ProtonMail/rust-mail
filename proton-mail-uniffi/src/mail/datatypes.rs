@@ -1051,6 +1051,10 @@ pub struct ConversationSearchOptions {
     // TODO: Improve the documentation above, as it doesn't make total sense.
     pub end_id: Option<u64>,
 
+    /// Filter on external ID.
+    // TODO: Document this properly.
+    pub external_id: Option<String>,
+
     /// Keyword search of `From` field.
     pub from: Option<String>,
 
@@ -1155,7 +1159,7 @@ impl ConversationSearchOptions {
                     .map(Into::into),
                 None => None,
             },
-            external_id: None,
+            external_id: self.external_id,
             from: self.from,
             ids,
             keyword: self.keyword,
@@ -2076,6 +2080,10 @@ pub struct MessageSearchOptions {
     /// specified message ID.
     pub end_id: Option<u64>,
 
+    /// Filter on external ID.
+    // TODO: Document this properly.
+    pub external_id: Option<String>,
+
     /// Keyword search `From` field.
     pub from: Option<String>,
 
@@ -2208,7 +2216,7 @@ impl MessageSearchOptions {
                     .map(Into::into),
                 None => None,
             },
-            external_id: None,
+            external_id: self.external_id,
             from: self.from,
             ids,
             keyword: self.keyword,

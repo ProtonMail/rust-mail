@@ -64,7 +64,8 @@ pub struct GetConversationsOptions {
     pub end_id: Option<RemoteId>,
 
     /// External ID to filter on.
-    pub external_id: Option<RemoteId>,
+    // TODO: Document this properly.
+    pub external_id: Option<String>,
 
     /// Keyword search of `From` field.
     pub from: Option<String>,
@@ -162,8 +163,9 @@ pub struct GetMessagesOptions {
     pub end_id: Option<RemoteId>,
 
     /// Filter on external ID.
+    // TODO: Document this properly.
     #[serde(rename = "ExternalID")]
-    pub external_id: Option<RemoteId>,
+    pub external_id: Option<String>,
 
     /// Keyword search `From` field.
     pub from: Option<String>,
