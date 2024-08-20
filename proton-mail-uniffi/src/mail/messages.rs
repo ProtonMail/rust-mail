@@ -8,8 +8,8 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::MessageAvailableAction;
 use super::datatypes::{BlockQuote, RemoteContent};
+use super::datatypes::{MessageAvailableAction, MimeType};
 use super::{Mailbox, MailboxResult};
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSession, MailSessionError, MailboxError};
@@ -91,6 +91,12 @@ impl DecryptedMessage {
             Some(decrypted_message::ParsedHeaderValue::String(s)) => vec![s],
             None => vec![],
         }
+    }
+
+    #[must_use]
+    /// Get the mime type from this message
+    pub fn mime_type(&self) -> MimeType {
+        self.body.metadata.mime_type.into()
     }
 }
 
