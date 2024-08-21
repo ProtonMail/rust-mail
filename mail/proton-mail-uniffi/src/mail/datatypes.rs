@@ -81,7 +81,9 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
 };
-use proton_mail_common::decrypted_message;
+use proton_mail_common::decrypted_message::{
+    BlockQuote as RealBlockQuote, RemoteContent as RealRemoteContent,
+};
 use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
     Message as RealMessage, MessageBodyMetadata as RealMessageBodyMetadata,
@@ -127,32 +129,31 @@ impl From<RealAlmostAllMail> for AlmostAllMail {
     }
 }
 
-/// What to do with the blockquote (previous conversation threads)
-#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
+/// What to do with the blockquote (previous conversation threads).
+#[derive(Debug, Clone, Copy, Default, UniffiEnum)]
 pub enum BlockQuote {
     /// Remove the previous conversation.
     #[default]
     Strip,
-    /// Don't remove the previous conversation
+
+    /// Don't remove the previous conversation.
     Untouched,
 }
 
-impl From<decrypted_message::BlockQuote> for BlockQuote {
-    fn from(value: decrypted_message::BlockQuote) -> Self {
-        use decrypted_message::BlockQuote::{Strip, Untouched};
+impl From<RealBlockQuote> for BlockQuote {
+    fn from(value: RealBlockQuote) -> Self {
         match value {
-            Strip => Self::Strip,
-            Untouched => Self::Untouched,
+            RealBlockQuote::Strip => Self::Strip,
+            RealBlockQuote::Untouched => Self::Untouched,
         }
     }
 }
 
-impl From<BlockQuote> for decrypted_message::BlockQuote {
+impl From<BlockQuote> for RealBlockQuote {
     fn from(value: BlockQuote) -> Self {
-        use decrypted_message::BlockQuote as Bq;
         match value {
-            BlockQuote::Strip => Bq::Strip,
-            BlockQuote::Untouched => Bq::Untouched,
+            BlockQuote::Strip => Self::Strip,
+            BlockQuote::Untouched => Self::Untouched,
         }
     }
 }
@@ -654,35 +655,35 @@ impl From<RealPmSignature> for PmSignature {
 }
 
 /// Enable or disable remote content (images).
-#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
+#[derive(Debug, Clone, Copy, Default, UniffiEnum)]
 pub enum RemoteContent {
-    /// Use whatever is in the user's [`MailSettings`]
+    /// Use whatever is in the user's [`MailSettings`].
     #[default]
     Default,
-    /// Override the settings and show images
-    Enabled,
-    /// Override the settings and don't show images
+
+    /// Override the settings and don't show images.
     Disabled,
+
+    /// Override the settings and show images.
+    Enabled,
 }
 
-impl From<decrypted_message::RemoteContent> for RemoteContent {
-    fn from(value: decrypted_message::RemoteContent) -> Self {
-        use decrypted_message::RemoteContent::{Default, Disabled, Enabled};
+impl From<RealRemoteContent> for RemoteContent {
+    fn from(value: RealRemoteContent) -> Self {
         match value {
-            Default => Self::Default,
-            Enabled => Self::Enabled,
-            Disabled => Self::Disabled,
+            RealRemoteContent::Default => Self::Default,
+            RealRemoteContent::Disabled => Self::Disabled,
+            RealRemoteContent::Enabled => Self::Enabled,
         }
     }
 }
 
-impl From<RemoteContent> for decrypted_message::RemoteContent {
+impl From<RemoteContent> for RealRemoteContent {
     fn from(value: RemoteContent) -> Self {
-        use decrypted_message::RemoteContent as Rc;
         match value {
-            RemoteContent::Default => Rc::Default,
-            RemoteContent::Enabled => Rc::Enabled,
-            RemoteContent::Disabled => Rc::Disabled,
+            RemoteContent::Default => Self::Default,
+            RemoteContent::Disabled => Self::Disabled,
+            RemoteContent::Enabled => Self::Enabled,
         }
     }
 }
@@ -1247,14 +1248,19 @@ impl ConversationSearchOptions {
     }
 }
 
-/// Information about [`Label`] of type [`Label`] that are applied
-/// to [`Conversation`] or [`Messages`].
+/// User-defined labels, i.e. not system labels.
+///
+/// Information about [`Label`]s of type [`LabelType::Label`](RealLabelType::Label)
+/// that are applied to [`Conversation`]s or [`Message`]s.
+///
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
 pub struct CustomLabel {
-    /// Local id of the label
+    /// Local ID of the label.
     pub id: Id,
-    /// Name of the label
+
+    /// Name of the label.
     pub name: String,
+
     /// Color of the label.
     pub color: LabelColor,
 }
