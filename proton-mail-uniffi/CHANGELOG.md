@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `MessageCount.label_ids`.
   - Removed `MailboxError::RemoteLabelNotFound` variant.
   - Removed `Mailbox.with_remote_id()`.
+  - Removed `RemoteId` type.
 
 ## [0.11.11] - 2024-08-20
 

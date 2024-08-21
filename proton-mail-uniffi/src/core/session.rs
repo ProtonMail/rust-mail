@@ -1,4 +1,3 @@
-use crate::core::datatypes::RemoteId;
 use proton_mail_common::proton_core_common::db::session::EncryptedUserSession;
 use std::sync::Arc;
 
@@ -51,13 +50,13 @@ impl StoredSession {
 
     /// Get the session's user id.
     #[must_use]
-    pub fn user_id(&self) -> RemoteId {
-        self.session.user_id.clone().into()
+    pub fn user_id(&self) -> String {
+        self.session.user_id.to_string()
     }
 
     /// Get the session id.
     #[must_use]
-    pub fn session_id(&self) -> RemoteId {
-        self.session.session_id.clone().into()
+    pub fn session_id(&self) -> String {
+        self.session.session_id.to_string()
     }
 }
