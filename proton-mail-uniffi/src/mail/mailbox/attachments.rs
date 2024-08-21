@@ -1,3 +1,4 @@
+use crate::core::datatypes::Id;
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::{Mailbox, MailboxError};
 use crate::uniffi_async;
@@ -40,7 +41,7 @@ impl Mailbox {
     /// Signature verification failures are not returned as errors.
     pub async fn load_attachment_to_buffer(
         &self,
-        local_attachment_id: u64,
+        local_attachment_id: Id,
     ) -> Result<DecryptedAttachment, MailboxError> {
         let mbox = self.mbox.clone();
         uniffi_async(async move {

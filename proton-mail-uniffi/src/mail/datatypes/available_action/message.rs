@@ -1,3 +1,4 @@
+use crate::core::datatypes::Id;
 use crate::mail::datatypes::LabelColor;
 use proton_mail_common::actions::{
     MessageActionKind as RealMessageActionKind,
@@ -13,7 +14,7 @@ pub struct MessageAvailableAction {
     /// Enum based action describer
     pub action: MessageActionKind,
     /// Message::local_id field
-    pub local_id: u64,
+    pub local_id: Id,
     /// Identificator for FE
     pub static_id: String,
 }
@@ -31,17 +32,17 @@ impl From<RealMessageAvailabaleAction> for MessageAvailableAction {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
 pub enum MessageActionKind {
     Move {
-        label_id: u64,
+        label_id: Id,
         name: String,
         color: LabelColor,
     },
     Label {
-        label_id: u64,
+        label_id: Id,
         name: String,
         color: LabelColor,
     },
     Unlabel {
-        label_id: u64,
+        label_id: Id,
         name: String,
         color: LabelColor,
     },
