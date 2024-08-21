@@ -52,19 +52,21 @@ use proton_core_common::datatypes::{
     AddressType as RealAddressType, CardType as RealCardType,
     ContactSendingPreferences as RealContactSendingPreferences, DateFormat as RealDateFormat,
     Density as RealDensity, EarlyAccess as RealEarlyAccess, Email as RealEmail,
-    FidoKey as RealFidoKey, Flags as RealFlags, HighSecurity as RealHighSecurity,
-    LabelId as RealLabelId, LocalId as RealLocalId, LogAuth as RealLogAuth,
-    Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
-    Referral as RealReferral, RemoteId as RealRemoteId, SettingsFlags as RealSettingsFlags,
-    TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat, TwoFa as RealTwoFa,
-    UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    FidoKey as RealFidoKey, Flags as RealFlags, HighSecurity as RealHighSecurity, Id as RealId,
+    LocalId as RealLocalId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
+    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
+    SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
+    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
 use proton_core_common::models::{
     Address as RealAddress, Contact as RealContact, ContactCard as RealContactCard,
     ContactEmail as RealContactEmail, User as RealUser, UserSettings as RealUserSettings,
 };
+use proton_mail_common::models::Label as RealLabel;
+use proton_mail_common::AppError;
 use smart_default::SmartDefault;
+use stash::stash::{AgnosticInterface, Interface};
 use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
@@ -722,7 +724,7 @@ pub struct Contact {
     pub create_time: u64,
 
     /// TODO: Document this field.
-    pub label_ids: Vec<LabelId>,
+    pub label_ids: Vec<Id>,
 
     /// TODO: Document this field.
     pub modify_time: u64,
@@ -734,26 +736,45 @@ pub struct Contact {
     pub size: u64,
 }
 
-impl From<RealContact> for Contact {
-    fn from(contact: RealContact) -> Self {
-        Self {
-            cards: contact.cards.into_iter().map(ContactCard::from).collect(),
-            contact_emails: contact
-                .contact_emails
-                .into_iter()
-                .map(ContactEmail::from)
-                .collect(),
-            create_time: contact.create_time,
-            label_ids: contact
-                .label_ids
-                .into_inner()
-                .into_iter()
-                .map(LabelId::from)
-                .collect(),
-            modify_time: contact.modify_time,
-            name: contact.name,
-            size: contact.size,
+impl Contact {
+    /// Converts a [`RealContact`] into a [`Contact`].
+    ///
+    /// # Parameters
+    ///
+    /// * `value`     - The [`RealContact`] to convert.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    pub async fn try_from_real<A>(value: RealContact, interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut contact_emails = Vec::with_capacity(value.contact_emails.len());
+        for email in &value.contact_emails {
+            contact_emails.push(ContactEmail::try_from_real(email.clone(), interface).await?);
         }
+
+        Ok(Self {
+            cards: value.cards.into_iter().map(ContactCard::from).collect(),
+            contact_emails,
+            create_time: value.create_time,
+            label_ids: RealRemoteId::counterparts::<RealLabel, _>(
+                value
+                    .label_ids
+                    .into_inner()
+                    .into_iter()
+                    .map(RealRemoteId::from)
+                    .collect(),
+                interface,
+            )
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+            modify_time: value.modify_time,
+            name: value.name,
+            size: value.size,
+        })
     }
 }
 
@@ -814,7 +835,7 @@ pub struct ContactEmail {
     pub is_proton: bool,
 
     /// TODO: Document this field.
-    pub label_ids: Vec<LabelId>,
+    pub label_ids: Vec<Id>,
 
     /// TODO: Document this field.
     pub last_used_time: u64,
@@ -823,24 +844,42 @@ pub struct ContactEmail {
     pub name: String,
 }
 
-impl From<RealContactEmail> for ContactEmail {
-    fn from(email: RealContactEmail) -> Self {
-        Self {
-            canonical_email: email.canonical_email,
-            contact_type: email.contact_type.deref().clone(),
-            defaults: email.defaults.into(),
-            display_order: email.display_order,
-            email: email.email,
-            is_proton: email.is_proton,
-            label_ids: email
-                .label_ids
-                .into_inner()
-                .into_iter()
-                .map(LabelId::from)
-                .collect(),
-            last_used_time: email.last_used_time,
-            name: email.name,
-        }
+impl ContactEmail {
+    /// Converts a [`RealContactEmail`] into a [`ContactEmail`].
+    ///
+    /// # Parameters
+    ///
+    /// * `value`     - The [`RealContactEmail`] to convert.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    pub async fn try_from_real<A>(value: RealContactEmail, interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(Self {
+            canonical_email: value.canonical_email,
+            contact_type: value.contact_type.deref().clone(),
+            defaults: value.defaults.into(),
+            display_order: value.display_order,
+            email: value.email,
+            is_proton: value.is_proton,
+            label_ids: RealRemoteId::counterparts::<RealLabel, _>(
+                value
+                    .label_ids
+                    .into_inner()
+                    .into_iter()
+                    .map(RealRemoteId::from)
+                    .collect(),
+                interface,
+            )
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect(),
+            last_used_time: value.last_used_time,
+            name: value.name,
+        })
     }
 }
 
@@ -1027,61 +1066,6 @@ impl From<Id> for RealLocalId {
 impl From<RealLocalId> for Id {
     fn from(id: RealLocalId) -> Self {
         Self { value: id.as_u64() }
-    }
-}
-
-/// Wrapper type around `RemoteId` to implement label-specific functionality.
-#[derive(Clone, Debug, Eq, Hash, PartialEq, UniffiRecord)]
-pub struct LabelId {
-    value: RemoteId,
-}
-
-impl LabelId {
-    /// Create a new [`LabelId`] instance from a [`String`].
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The ID to wrap.
-    ///
-    #[must_use]
-    pub fn new(id: String) -> Self {
-        Self {
-            value: RemoteId::new(id),
-        }
-    }
-
-    /// Convert the [`LabelId`] into the inner [`RemoteId`].
-    #[must_use]
-    pub fn into_inner(self) -> RemoteId {
-        self.value
-    }
-}
-
-impl Deref for LabelId {
-    type Target = RemoteId;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl Display for LabelId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-impl From<LabelId> for RealLabelId {
-    fn from(label_id: LabelId) -> Self {
-        RealLabelId::from(RealRemoteId::from(label_id.into_inner()))
-    }
-}
-
-impl From<RealLabelId> for LabelId {
-    fn from(label_id: RealLabelId) -> Self {
-        Self {
-            value: label_id.into_inner().into(),
-        }
     }
 }
 

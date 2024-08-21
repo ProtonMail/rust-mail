@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - For `MessageBodyMetadata`:
           - `parsed_headers` is now `HashMap<String, String>` instead of
             `ParsedHeaders`.
+  - Renamed `Mailbox::with_local_id()` to `with_label_id()`.
 
 ### Removed
 
@@ -59,6 +60,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed fields:
       - `Message.deleted`,
       - `Message.mime_type`.
+  - Removed `LabelId`, as `Id` is now being used for all local IDs. Affects:
+      - `Contact.label_ids`,
+      - `ContactEmail.label_ids`,
+      - `ConversationCount.label_ids`,
+      - `MessageCount.label_ids`.
+  - Removed `MailboxError::RemoteLabelNotFound` variant.
+  - Removed `Mailbox.with_remote_id()`.
 
 ## [0.11.11] - 2024-08-20
 

@@ -24,8 +24,6 @@ pub const DEFAULT_CONVERSATION_COUNT: usize = 50;
 pub enum MailboxError {
     #[error("Could not find label with local id '{0}'")]
     LabelNotFound(LocalId),
-    #[error("Could not find label with remote id '{0}'")]
-    RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
     LabelDoesNotHaveRemoteId(LocalId),
     #[error("No exclusive location found for message '{0}'")]

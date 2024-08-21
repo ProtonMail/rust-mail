@@ -52,14 +52,16 @@ mod attachment;
 mod available_action;
 mod system_label;
 
-use crate::core::datatypes::{Id, LabelId};
+use crate::core::datatypes::Id;
 pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_core_common::datatypes::{Id as RealId, LocalId as RealLocalId};
+use proton_core_common::datatypes::{
+    Id as RealId, LocalId as RealLocalId, RemoteId as RealRemoteId,
+};
 use proton_core_common::models::Address as RealAddress;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::{
@@ -88,6 +90,7 @@ use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
     Message as RealMessage, MessageBodyMetadata as RealMessageBodyMetadata,
 };
+use proton_mail_common::AppError;
 use serde_json::to_string as to_json_string;
 use smart_default::SmartDefault;
 use stash::stash::{AgnosticInterface, Interface, StashError};
@@ -1066,7 +1069,7 @@ impl From<ContextualConversation> for Conversation {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct ConversationCount {
     /// TODO: Document this field.
-    pub label_id: LabelId,
+    pub label_id: Id,
 
     /// TODO: Document this field.
     pub total: u64,
@@ -1075,13 +1078,33 @@ pub struct ConversationCount {
     pub unread: u64,
 }
 
-impl From<RealConversationCount> for ConversationCount {
-    fn from(value: RealConversationCount) -> Self {
-        ConversationCount {
-            label_id: value.label_id.into(),
+impl ConversationCount {
+    /// Converts a [`RealConversationCount`] into a [`ConversationCount`].
+    ///
+    /// # Parameters
+    ///
+    /// * `value`     - The [`RealConversationCount`] to convert.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    pub async fn try_from_real<A>(
+        value: RealConversationCount,
+        interface: &A,
+    ) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(Self {
+            label_id: RealRemoteId::from(value.label_id.clone())
+                .counterpart::<RealLabel, _>(interface)
+                .await?
+                .ok_or_else(|| {
+                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
+                })?
+                .into(),
             total: value.total,
             unread: value.unread,
-        }
+        })
     }
 }
 
@@ -2008,7 +2031,7 @@ impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct MessageCount {
     /// TODO: Document this field.
-    pub label_id: LabelId,
+    pub label_id: Id,
 
     /// TODO: Document this field.
     pub total: u64,
@@ -2017,13 +2040,30 @@ pub struct MessageCount {
     pub unread: u64,
 }
 
-impl From<RealMessageCount> for MessageCount {
-    fn from(value: RealMessageCount) -> Self {
-        MessageCount {
-            label_id: value.label_id.into(),
+impl MessageCount {
+    /// Converts a [`RealMessageCount`] into a [`MessageCount`].
+    ///
+    /// # Parameters
+    ///
+    /// * `value`     - The [`RealMessageCount`] to convert.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    pub async fn try_from_real<A>(value: RealMessageCount, interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(Self {
+            label_id: RealRemoteId::from(value.label_id.clone())
+                .counterpart::<RealLabel, _>(interface)
+                .await?
+                .ok_or_else(|| {
+                    AppError::LocalIdNotFound("Label".to_owned(), value.label_id.into())
+                })?
+                .into(),
             total: value.total,
             unread: value.unread,
-        }
+        })
     }
 }
 
