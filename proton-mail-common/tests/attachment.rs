@@ -4,8 +4,7 @@ use crate::common::attachment::{testdata_attachment_data, testdata_expected_atta
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
-use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
-use proton_core_common::models::Address;
+use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_mail_common::datatypes::{Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::Mailbox;
@@ -224,7 +223,7 @@ async fn load_attachment_content_from_cache() {
     );
 }
 
-async fn get_attachment<A>(id: LocalId, attachment: &ApiAttachment, interface: &A) -> Attachment
+async fn get_attachment<A>(id: LocalId, attachment: &ApiAttachment, _interface: &A) -> Attachment
 where
     A: Into<AgnosticInterface> + Interface,
 {

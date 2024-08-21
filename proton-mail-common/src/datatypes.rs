@@ -41,7 +41,8 @@ pub mod attachment;
 pub(crate) mod exclusive_location;
 pub(crate) mod system_label;
 
-use crate::models::{Conversation, Label, MessageBodyMetadata};
+use crate::models::{Conversation, Label, MailSettings, MessageBodyMetadata, MAIL_SETTINGS_ID};
+use crate::AppError;
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -69,7 +70,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
+use stash::orm::Model;
 use stash::sql_using_serde;
+use stash::stash::{AgnosticInterface, Interface};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -1734,6 +1737,201 @@ impl From<Label> for CustomLabel {
             local_id: value.local_id.expect("Should be set"),
             name: value.name,
             color: value.color,
+        }
+    }
+}
+
+/// Contextual representation of a [`Label`] when it is opened for display.
+pub struct ContextualLabel {
+    /// Local id of the Label.
+    pub local_id: LocalId,
+
+    /// TODO: Document this field.
+    pub parent_id: Option<LocalId>,
+
+    /// TODO: Document this field.
+    pub color: Option<LabelColor>,
+
+    /// TODO: Document this field.
+    pub display: bool,
+
+    /// TODO: Document this field.
+    pub expanded: bool,
+
+    /// TODO: Document this field.
+    pub initialized_conv: bool,
+
+    /// TODO: Document this field.
+    pub initialized_msg: bool,
+
+    /// TODO: Document this field.
+    pub label_description: LabelDescription,
+
+    /// TODO: Document this field.
+    pub name: String,
+
+    /// TODO: Document this field.
+    pub notify: bool,
+
+    /// TODO: Document this field.
+    pub display_order: u32,
+
+    /// TODO: Document this field.
+    pub path: Option<String>,
+
+    /// TODO: Document this field.
+    pub sticky: bool,
+
+    /// TODO: Document this field.
+    pub total_conv: u64,
+
+    /// TODO: Document this field.
+    pub total_msg: u64,
+
+    /// TODO: Document this field.
+    pub unread_conv: u64,
+
+    /// TODO: Document this field.
+    pub unread_msg: u64,
+}
+
+impl ContextualLabel {
+    pub async fn new<A>(value: &Label, interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let color = Self::color_to_display(value, interface).await?;
+        let label_description = LabelDescription::new(value);
+        Ok(Self {
+            local_id: value.local_id.expect("Should be set"),
+            parent_id: value.local_parent_id,
+            color,
+            display: value.display,
+            expanded: value.expanded,
+            initialized_conv: value.initialized_conv,
+            initialized_msg: value.initialized_msg,
+            label_description,
+            name: value.name.clone(),
+            notify: value.notify,
+            display_order: value.display_order,
+            path: value.path.clone(),
+            sticky: value.sticky,
+            total_conv: value.total_conv,
+            total_msg: value.total_msg,
+            unread_conv: value.unread_conv,
+            unread_msg: value.unread_msg,
+        })
+    }
+
+    /// Get the color a [`Label`] should be displayed with.
+    ///
+    /// The color depends on [`MailSettings`] `enable_folder_color` and `inherit_parent_folder_color`
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - The [`Label`]
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Panics
+    ///
+    /// If there is no [`MailSettings`] in the [`Stash`]
+    ///
+    async fn color_to_display<A>(
+        value: &Label,
+        interface: &A,
+    ) -> Result<Option<LabelColor>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
+            .await?
+            .expect("MailSettings in Stash");
+
+        if settings.enable_folder_color {
+            if settings.inherit_parent_folder_color {
+                // Get parent until there is no more parent and take its color
+                let mut current = value.clone();
+                while let Some(parent_id) = current.local_parent_id {
+                    current = Label::load(parent_id, interface)
+                        .await?
+                        .ok_or(AppError::LabelNotFound(parent_id))?;
+                }
+                Ok(Some(current.color))
+            } else {
+                Ok(Some(value.color.clone()))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Converts a vec of [`crate::models::Label`] into a vec of [`Label`].
+    ///
+    /// # Parameters
+    ///
+    /// * `value`     - The vec of [`crate::models::Label`] to convert.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    pub async fn from_labels<A>(labels: &[Label], interface: &A) -> Result<Vec<Self>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut result = Vec::with_capacity(labels.len());
+        for label in labels {
+            let label = Self::new(label, interface).await?;
+            result.push(label);
+        }
+        Ok(result)
+    }
+}
+
+/// This enum is extended version of the `LabelType` enum. It contains additional
+/// information regarding the system label type.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum LabelDescription {
+    Label,
+    ContactGroup,
+    Folder,
+
+    /// System field contain information about the system label type.
+    /// SystemLabel main purpose is to determine the type of the system label.
+    /// It is required for localization in the sidebar & dropdowns.
+    /// The information is optional as we cannot for see all possible system labels.
+    System(Option<SystemLabel>),
+}
+
+impl LabelDescription {
+    #[must_use]
+    pub fn new(label: &Label) -> Self {
+        match label.label_type {
+            LabelType::Label => LabelDescription::Label,
+            LabelType::ContactGroup => LabelDescription::ContactGroup,
+            LabelType::Folder => LabelDescription::Folder,
+            LabelType::System => LabelDescription::System(SystemLabel::new(label)),
+        }
+    }
+}
+
+impl Display for LabelDescription {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Label => write!(f, "Label"),
+            Self::ContactGroup => write!(f, "Contact Group"),
+            Self::Folder => write!(f, "Folder"),
+            Self::System(_) => write!(f, "System"),
+        }
+    }
+}
+
+impl From<LabelDescription> for LabelType {
+    fn from(value: LabelDescription) -> Self {
+        match value {
+            LabelDescription::Label => LabelType::Label,
+            LabelDescription::ContactGroup => LabelType::ContactGroup,
+            LabelDescription::Folder => LabelType::Folder,
+            LabelDescription::System(_) => LabelType::System,
         }
     }
 }

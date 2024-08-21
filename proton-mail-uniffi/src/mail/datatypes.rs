@@ -66,9 +66,10 @@ use proton_core_common::models::Address as RealAddress;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
-    ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
+    ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode, ContextualLabel,
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
-    Disposition as RealDisposition, LabelColor as RealLabelColor, LabelType as RealLabelType,
+    Disposition as RealDisposition, LabelColor as RealLabelColor,
+    LabelDescription as RealLabelDescription, LabelType as RealLabelType,
     MessageAddress as RealMessageAddress, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,
@@ -371,40 +372,20 @@ pub enum LabelDescription {
     /// System field contain information about the system label type.
     /// SystemLabel main purpose is to determine the type of the system label.
     /// It is required for localization in the sidebar & dropdowns.
-    /// The information is optional as we cannot forsee all possible system labels.
+    /// The information is optional as we cannot for see all possible system labels.
     System(Option<SystemLabel>),
 }
 
-impl LabelDescription {
-    #[must_use]
-    pub fn new(label: &RealLabel) -> Self {
-        match label.label_type {
-            RealLabelType::Label => LabelDescription::Label,
-            RealLabelType::ContactGroup => LabelDescription::ContactGroup,
-            RealLabelType::Folder => LabelDescription::Folder,
-            RealLabelType::System => LabelDescription::System(SystemLabel::new(label)),
-        }
-    }
-}
-
-impl Display for LabelDescription {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Label => write!(f, "Label"),
-            Self::ContactGroup => write!(f, "Contact Group"),
-            Self::Folder => write!(f, "Folder"),
-            Self::System(_) => write!(f, "System"),
-        }
-    }
-}
-
-impl From<LabelDescription> for RealLabelType {
-    fn from(value: LabelDescription) -> Self {
+impl From<RealLabelDescription> for LabelDescription {
+    fn from(value: RealLabelDescription) -> Self {
         match value {
-            LabelDescription::Label => RealLabelType::Label,
-            LabelDescription::ContactGroup => RealLabelType::ContactGroup,
-            LabelDescription::Folder => RealLabelType::Folder,
-            LabelDescription::System(_) => RealLabelType::System,
+            RealLabelDescription::Label => LabelDescription::Label,
+            RealLabelDescription::ContactGroup => LabelDescription::ContactGroup,
+            RealLabelDescription::Folder => LabelDescription::Folder,
+            RealLabelDescription::System(system_label) => {
+                let system_label = system_label.map(SystemLabel::from);
+                LabelDescription::System(system_label)
+            }
         }
     }
 }
@@ -1311,7 +1292,7 @@ pub struct Label {
     pub parent_id: Option<Id>,
 
     /// TODO: Document this field.
-    pub color: LabelColor,
+    pub color: Option<LabelColor>,
 
     /// TODO: Document this field.
     pub display: bool,
@@ -1356,19 +1337,17 @@ pub struct Label {
     pub unread_msg: u64,
 }
 
-impl From<RealLabel> for Label {
-    fn from(value: RealLabel) -> Self {
-        let label_description = LabelDescription::new(&value);
-
-        Label {
-            id: value.local_id.unwrap().into(),
-            parent_id: value.local_parent_id.map(Into::into),
-            color: value.color.into(),
+impl From<ContextualLabel> for Label {
+    fn from(value: ContextualLabel) -> Self {
+        Self {
+            id: value.local_id.into(),
+            parent_id: value.parent_id.map(Into::into),
+            color: value.color.map(LabelColor::from),
             display: value.display,
             expanded: value.expanded,
             initialized_conv: value.initialized_conv,
             initialized_msg: value.initialized_msg,
-            label_description,
+            label_description: value.label_description.into(),
             name: value.name,
             notify: value.notify,
             display_order: value.display_order,
