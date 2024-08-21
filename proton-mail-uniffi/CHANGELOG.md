@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - Changed all local IDs from `u64` to `Id`.
+  - Removed `local_` prefix from all ID fields:
+      - `local_id` is now just `id`,
+      - `local_conversation_id` is now just `conversation_id`,
+      - `local_message_id` is now just `message_id`,
+      - `local_parent_id` is now just `parent_id`,
+      - Etc.
 
 ## [0.11.11] - 2024-08-20
 

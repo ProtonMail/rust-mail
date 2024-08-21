@@ -231,7 +231,7 @@ pub enum ExclusiveLocation {
     Outbox,
     Custom {
         name: String,
-        local_id: Id,
+        id: Id,
         color: LabelColor,
     },
 }
@@ -248,13 +248,9 @@ impl From<ExclusiveLocation> for RealExclusiveLocation {
                 RealExclusiveLocation::System(RealSystemLabel::Scheduled)
             }
             ExclusiveLocation::Outbox => RealExclusiveLocation::System(RealSystemLabel::Outbox),
-            ExclusiveLocation::Custom {
+            ExclusiveLocation::Custom { name, id, color } => RealExclusiveLocation::Custom {
                 name,
-                local_id,
-                color,
-            } => RealExclusiveLocation::Custom {
-                name,
-                local_id: local_id.into(),
+                local_id: id.into(),
                 color: color.into(),
             },
         }
@@ -279,7 +275,7 @@ impl From<RealExclusiveLocation> for ExclusiveLocation {
                 color,
             } => ExclusiveLocation::Custom {
                 name,
-                local_id: local_id.into(),
+                id: local_id.into(),
                 color: color.into(),
             },
             RealExclusiveLocation::System(_) => unreachable!(),
@@ -852,7 +848,7 @@ impl From<RealViewMode> for ViewMode {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct AttachmentMetadata {
     /// Local attachment id
-    pub local_id: Id,
+    pub id: Id,
 
     /// TODO: Document this field.
     pub disposition: Disposition,
@@ -872,7 +868,7 @@ pub struct AttachmentMetadata {
 impl From<RealAttachmentMetadata> for AttachmentMetadata {
     fn from(value: RealAttachmentMetadata) -> Self {
         AttachmentMetadata {
-            local_id: value.local_id.unwrap().into(),
+            id: value.local_id.unwrap().into(),
             disposition: value.disposition.into(),
             mime_type: value.mime_type.into(),
             name: value.filename,
@@ -917,7 +913,7 @@ pub struct Conversation {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Id,
+    pub id: Id,
 
     /// Metadata for all attachments in this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -969,7 +965,7 @@ pub struct Conversation {
 impl From<ContextualConversation> for Conversation {
     fn from(value: ContextualConversation) -> Self {
         Self {
-            local_id: value.local_id.into(),
+            id: value.local_id.into(),
             attachments_metadata: value
                 .attachments_metadata
                 .into_iter()
@@ -1209,10 +1205,10 @@ pub struct Label {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Id,
+    pub id: Id,
 
     /// TODO: Document this field.
-    pub local_parent_id: Option<Id>,
+    pub parent_id: Option<Id>,
 
     /// TODO: Document this field.
     pub color: LabelColor,
@@ -1265,8 +1261,8 @@ impl From<RealLabel> for Label {
         let label_description = LabelDescription::new(&value);
 
         Label {
-            local_id: value.local_id.unwrap().into(),
-            local_parent_id: value.local_parent_id.map(Into::into),
+            id: value.local_id.unwrap().into(),
+            parent_id: value.local_parent_id.map(Into::into),
             color: value.color.into(),
             display: value.display,
             expanded: value.expanded,
@@ -1560,10 +1556,10 @@ pub struct Message {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: Id,
+    pub id: Id,
 
     /// TODO: Document this field.
-    pub local_conversation_id: Id,
+    pub conversation_id: Id,
 
     /// TODO: Document this field.
     pub address_id: Id,
@@ -1652,8 +1648,8 @@ impl From<RealMessage> for Message {
         let starred = value.is_starred();
 
         Message {
-            local_id: value.local_id.unwrap().into(),
-            local_conversation_id: value.local_conversation_id.unwrap().into(),
+            id: value.local_id.unwrap().into(),
+            conversation_id: value.local_conversation_id.unwrap().into(),
             address_id: value.local_address_id.into(),
             attachments_metadata: value
                 .attachments_metadata
@@ -1964,7 +1960,7 @@ pub struct MessageBodyMetadata {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_message_id: Id,
+    pub message_id: Id,
 
     /// TODO: Document this field.
     pub header: String,
@@ -1979,7 +1975,7 @@ pub struct MessageBodyMetadata {
 impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
     fn from(value: RealMessageBodyMetadata) -> Self {
         MessageBodyMetadata {
-            local_message_id: value.local_message_id.unwrap().into(),
+            message_id: value.local_message_id.unwrap().into(),
             header: value.header,
             mime_type: value.mime_type.into(),
             parsed_headers: value.parsed_headers.into(),
@@ -2312,7 +2308,7 @@ impl From<RealParsedHeaders> for ParsedHeaders {
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
 pub struct CustomLabel {
     /// Local id of the label
-    pub local_id: Id,
+    pub id: Id,
     /// Name of the label
     pub name: String,
     /// Color of the label.
@@ -2322,7 +2318,7 @@ pub struct CustomLabel {
 impl From<RealCustomLabel> for CustomLabel {
     fn from(value: RealCustomLabel) -> Self {
         Self {
-            local_id: value.local_id.into(),
+            id: value.local_id.into(),
             name: value.name,
             color: value.color.into(),
         }
