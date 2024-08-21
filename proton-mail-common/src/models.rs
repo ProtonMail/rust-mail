@@ -2899,6 +2899,14 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+                self.local_id = existing.local_id;
+                self.row_id = existing.row_id;
+                self.stash = existing.stash;
+            }
+        }
+
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
                 if let Some(conversation) =
