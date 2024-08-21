@@ -52,7 +52,7 @@ mod attachment;
 mod available_action;
 mod system_label;
 
-use crate::core::datatypes::LabelId;
+use crate::core::datatypes::{Id, LabelId};
 pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
@@ -231,7 +231,7 @@ pub enum ExclusiveLocation {
     Outbox,
     Custom {
         name: String,
-        local_id: u64,
+        local_id: Id,
         color: LabelColor,
     },
 }
@@ -852,7 +852,7 @@ impl From<RealViewMode> for ViewMode {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct AttachmentMetadata {
     /// Local attachment id
-    pub local_id: u64,
+    pub local_id: Id,
 
     /// TODO: Document this field.
     pub disposition: Disposition,
@@ -917,7 +917,7 @@ pub struct Conversation {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: u64,
+    pub local_id: Id,
 
     /// Metadata for all attachments in this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -1022,7 +1022,7 @@ impl From<RealConversationCount> for ConversationCount {
 #[derive(Clone, Debug, SmartDefault, UniffiRecord)]
 pub struct ConversationSearchOptions {
     /// Address ID to filter on.
-    pub address_id: Option<u64>,
+    pub address_id: Option<Id>,
 
     /// If `true`, only return conversations which have attachments. If `false`,
     /// only return conversations which have no attachments.
@@ -1038,7 +1038,7 @@ pub struct ConversationSearchOptions {
     /// Return only conversations newer, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `begin`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
-    pub begin_id: Option<u64>,
+    pub begin_id: Option<Id>,
 
     /// If `true`, return results in descending order rather than ascending.
     pub desc: Option<bool>,
@@ -1049,7 +1049,7 @@ pub struct ConversationSearchOptions {
     /// Return only conversations older, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `end`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
-    pub end_id: Option<u64>,
+    pub end_id: Option<Id>,
 
     /// Filter on external ID.
     // TODO: Document this properly.
@@ -1059,13 +1059,13 @@ pub struct ConversationSearchOptions {
     pub from: Option<String>,
 
     /// Conversation IDs to filter on.
-    pub ids: Option<Vec<u64>>,
+    pub ids: Option<Vec<Id>>,
 
     /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
     pub keyword: Option<String>,
 
     /// Label ID to filter on.
-    pub label_id: Option<u64>,
+    pub label_id: Option<Id>,
 
     /// The number of conversations to return.
     pub limit: Option<u64>,
@@ -1209,10 +1209,10 @@ pub struct Label {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: u64,
+    pub local_id: Id,
 
     /// TODO: Document this field.
-    pub local_parent_id: Option<u64>,
+    pub local_parent_id: Option<Id>,
 
     /// TODO: Document this field.
     pub color: LabelColor,
@@ -1560,13 +1560,13 @@ pub struct Message {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: u64,
+    pub local_id: Id,
 
     /// TODO: Document this field.
-    pub local_conversation_id: u64,
+    pub local_conversation_id: Id,
 
     /// TODO: Document this field.
-    pub address_id: u64,
+    pub address_id: Id,
 
     /// Attachment metadata associated with this message.
     pub attachments_metadata: Vec<AttachmentMetadata>,
@@ -1964,7 +1964,7 @@ pub struct MessageBodyMetadata {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_message_id: u64,
+    pub local_message_id: Id,
 
     /// TODO: Document this field.
     pub header: String,
@@ -2036,7 +2036,7 @@ impl From<RealMessageFlags> for MessageFlags {
 #[derive(Clone, Debug, SmartDefault, UniffiRecord)]
 pub struct MessageSearchOptions {
     /// Filter on address ID.
-    pub address_id: Option<u64>,
+    pub address_id: Option<Id>,
 
     /// If `true`, return only messages which have attachments. If `false`,
     /// return only messages which have no attachments.
@@ -2054,13 +2054,13 @@ pub struct MessageSearchOptions {
 
     /// Return only messages newer, in creation time (NOT timestamp), than
     /// the specified message ID.
-    pub begin_id: Option<u64>,
+    pub begin_id: Option<Id>,
 
     /// Keyword search of CC field.
     pub cc: Option<String>,
 
     /// Filter messages by conversation ID.
-    pub conversation_id: Option<u64>,
+    pub conversation_id: Option<Id>,
 
     /// If `true`, sort results descending. If `false`, sort ascending.
     pub desc: Option<bool>,
@@ -2070,7 +2070,7 @@ pub struct MessageSearchOptions {
 
     /// Return only messages older, in creation time (NOT timestamp), than the
     /// specified message ID.
-    pub end_id: Option<u64>,
+    pub end_id: Option<Id>,
 
     /// Filter on external ID.
     // TODO: Document this properly.
@@ -2080,13 +2080,13 @@ pub struct MessageSearchOptions {
     pub from: Option<String>,
 
     /// Filter on the given message IDs.
-    pub ids: Option<Vec<u64>>,
+    pub ids: Option<Vec<Id>>,
 
     /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
     pub keyword: Option<String>,
 
     /// Label IDs to filter on.
-    pub label_ids: Option<Vec<u64>>,
+    pub label_ids: Option<Vec<Id>>,
 
     /// The number of messages to return.
     pub limit: Option<u64>,
@@ -2312,7 +2312,7 @@ impl From<RealParsedHeaders> for ParsedHeaders {
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
 pub struct CustomLabel {
     /// Local id of the label
-    pub local_id: u64,
+    pub local_id: Id,
     /// Name of the label
     pub name: String,
     /// Color of the label.

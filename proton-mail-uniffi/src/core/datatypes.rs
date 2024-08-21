@@ -54,7 +54,7 @@ use proton_core_common::datatypes::{
     DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
     Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
     HighSecurity as RealHighSecurity, LabelId as RealLabelId, Labels as RealLabels,
-    LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
+    LocalId as RealLocalId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
     ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
     SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
     TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
@@ -756,7 +756,7 @@ pub struct ContactCard {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    pub local_id: u64,
+    pub local_id: Id,
 
     /// TODO: Document this field.
     pub card_type: CardType,
@@ -1000,6 +1000,62 @@ impl From<RealFlags> for Flags {
             sso: flags.sso,
             test_account: flags.test_account,
         }
+    }
+}
+
+/// Local ID.
+///
+/// This minimal struct is simply a wrapper around a [`u64`], and is used to
+/// formalise all IDs used internally for saving to the database.
+///
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, UniffiRecord)]
+pub struct Id {
+    value: u64,
+}
+
+impl Id {
+    /// Represents the internal value as an unsigned 64-bit integer.
+    #[must_use]
+    pub const fn as_u64(&self) -> u64 {
+        self.value
+    }
+}
+
+impl Deref for Id {
+    type Target = u64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl Display for Id {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl From<Id> for u64 {
+    fn from(id: Id) -> Self {
+        id.value
+    }
+}
+
+impl From<u64> for Id {
+    fn from(id: u64) -> Self {
+        Self { value: id }
+    }
+}
+
+impl From<Id> for RealLocalId {
+    fn from(id: Id) -> Self {
+        Self::from(id.value)
+    }
+}
+
+impl From<RealLocalId> for Id {
+    fn from(id: RealLocalId) -> Self {
+        Self { value: id.as_u64() }
     }
 }
 
