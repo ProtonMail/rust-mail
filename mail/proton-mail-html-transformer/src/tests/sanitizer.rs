@@ -6,8 +6,11 @@ use crate::Transformer;
 fn acceptable_html() {
     let html = include_str!("../../tests/htmls/acceptable.html");
 
-    let unsanitized_html = Transformer::new(html).strip_whitelist().to_string();
-    let html = Transformer::new(html).strip_whitelist().to_string();
+    let unsanitized_html = Transformer::new(html).to_string();
+
+    let mut t = Transformer::new(html);
+    let _count = t.strip_whitelist();
+    let html = t.to_string();
     assert_eq!(unsanitized_html, html);
 }
 
@@ -15,7 +18,9 @@ fn acceptable_html() {
 fn strip_bad_html() {
     let html = include_str!("../../tests/htmls/strip_bad.html");
 
-    let html = Transformer::new(html).strip_whitelist().to_string();
+    let mut t = Transformer::new(html);
+    let _count = t.strip_whitelist();
+    let html = t.to_string();
     insta::assert_snapshot!(html);
 }
 
@@ -23,6 +28,8 @@ fn strip_bad_html() {
 fn email_privacy_tester() {
     let html = include_str!("../../tests/htmls/email_privacy_tester.html");
 
-    let html = Transformer::new(html).strip_whitelist().to_string();
+    let mut t = Transformer::new(html);
+    let _count = t.strip_whitelist();
+    let html = t.to_string();
     insta::assert_snapshot!(html);
 }

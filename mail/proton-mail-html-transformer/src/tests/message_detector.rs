@@ -20,9 +20,7 @@ fn locate_blockquote_strings(input: &str) -> (String, String) {
     (message.to_string(), blockquote)
 }
 
-#[test]
-fn detect_blockquote_or_signature() {
-    let input = r#"<div style="font-family: verdana; font-size: 20px;">
+const INPUT_1: &str = r#"<div style="font-family: verdana; font-size: 20px;">
     <div style="font-family: verdana; font-size: 20px;"><br></div>
     <div class="protonmail_signature_block protonmail_signature_block-empty" style="font-family: verdana; font-size: 20px;">
         <div class="protonmail_signature_block-user protonmail_signature_block-empty"></div>
@@ -43,10 +41,18 @@ fn detect_blockquote_or_signature() {
     </div>
 </div>"#;
 
-    let (before, after) = locate_blockquote_strings(input);
+#[test]
+fn detect_blockquote_or_signature() {
+    let (before, after) = locate_blockquote_strings(INPUT_1);
 
     assert!(!before.contains("On Tuesday"));
     assert!(after.contains("On Tuesday"));
+}
+
+#[test]
+fn strip_blockquote_returns_true() {
+    let document = kuchikiki::parse_html().one(INPUT_1);
+    assert!(strip_blockquote(document));
 }
 
 #[test]
