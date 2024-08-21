@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
           - `parsed_headers` is now `HashMap<String, String>` instead of
             `ParsedHeaders`.
   - Renamed `Mailbox::with_local_id()` to `with_label_id()`.
+  - Changed `Labels` color now take in account the `MailSettings`.
 
 ### Fixed
 

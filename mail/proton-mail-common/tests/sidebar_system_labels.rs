@@ -7,8 +7,9 @@ use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Label as ApiLabel, MailSettings as ApiMailSettings,
     MessageCount as ApiMessageCount, ShowMoved,
 };
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{Id, LabelId};
 use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
 use std::default::Default;
 use test_case::test_case;
@@ -69,17 +70,24 @@ async fn sidebar_system_labels(
         .initialize_async(LabelId::inbox().clone(), &NullCallback {})
         .await
         .unwrap();
-    let sidebar = Sidebar::new(user_ctx);
+    let sidebar = Sidebar::new(user_ctx.clone());
 
     // Action
     let result = sidebar.system_labels().await.unwrap();
 
     // Tests
-    let result: Vec<_> = result
-        .iter()
-        .map(|l| l.remote_id.clone().unwrap())
-        .collect();
-    assert_eq!(result, expected);
+    let result: Vec<_> = result.iter().map(|l| l.local_id).collect();
+    let mut to_expect = Vec::with_capacity(expected.len());
+    for label_id in expected {
+        to_expect.push(
+            label_id
+                .counterpart::<Label, _>(user_ctx.stash())
+                .await
+                .unwrap()
+                .unwrap(),
+        )
+    }
+    assert_eq!(result, to_expect);
 }
 
 fn sidebar_test_params(

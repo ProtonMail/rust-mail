@@ -5,7 +5,7 @@ use stash::orm::Model;
 use stash::params;
 use tracing::error;
 
-use crate::datatypes::{AlmostAllMail, ShowMoved};
+use crate::datatypes::{AlmostAllMail, ContextualLabel, ShowMoved};
 use crate::datatypes::{LabelType, SystemLabelId};
 use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
@@ -20,48 +20,49 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
-        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), self.user_ctx.stash())
+    pub async fn system_labels(&self) -> SidebarResult<Vec<ContextualLabel>> {
+        let interface = self.user_ctx.stash();
+        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
             .await?
             .unwrap_or_default();
 
-        let mut result = vec![self.get_label(LabelId::inbox()).await?];
+        let mut labels = vec![self.get_label(LabelId::inbox()).await?];
         if settings.show_moved == ShowMoved::KeepInDrafts
             || settings.show_moved == ShowMoved::KeepBoth
         {
-            result.push(self.get_label(LabelId::all_drafts()).await?);
+            labels.push(self.get_label(LabelId::all_drafts()).await?);
         } else {
-            result.push(self.get_label(LabelId::drafts()).await?);
+            labels.push(self.get_label(LabelId::drafts()).await?);
         }
         let all_scheduled = self.get_label(LabelId::all_scheduled()).await?;
         if all_scheduled.total_msg != 0 || all_scheduled.total_conv != 0 {
-            result.push(all_scheduled);
+            labels.push(all_scheduled);
         }
         let outbox = self.get_label(LabelId::outbox()).await?;
         if outbox.total_conv != 0 || outbox.total_msg != 0 {
-            result.push(outbox);
+            labels.push(outbox);
         }
         let snoozed = self.get_label(LabelId::snoozed()).await?;
         if snoozed.total_conv != 0 || snoozed.total_msg != 0 {
-            result.push(snoozed);
+            labels.push(snoozed);
         }
-        result.push(self.get_label(LabelId::starred()).await?);
+        labels.push(self.get_label(LabelId::starred()).await?);
         if settings.show_moved == ShowMoved::KeepInSent
             || settings.show_moved == ShowMoved::KeepBoth
         {
-            result.push(self.get_label(LabelId::all_sent()).await?);
+            labels.push(self.get_label(LabelId::all_sent()).await?);
         } else {
-            result.push(self.get_label(LabelId::sent()).await?);
+            labels.push(self.get_label(LabelId::sent()).await?);
         }
-        result.push(self.get_label(LabelId::spam()).await?);
-        result.push(self.get_label(LabelId::archive()).await?);
-        result.push(self.get_label(LabelId::trash()).await?);
+        labels.push(self.get_label(LabelId::spam()).await?);
+        labels.push(self.get_label(LabelId::archive()).await?);
+        labels.push(self.get_label(LabelId::trash()).await?);
         if settings.almost_all_mail == AlmostAllMail::AllMail {
-            result.push(self.get_label(LabelId::all_mail()).await?);
+            labels.push(self.get_label(LabelId::all_mail()).await?);
         } else {
-            result.push(self.get_label(LabelId::almost_all_mail()).await?);
+            labels.push(self.get_label(LabelId::almost_all_mail()).await?);
         }
-        Ok(result)
+        Ok(ContextualLabel::from_labels(labels.as_slice(), interface).await?)
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
@@ -72,24 +73,29 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self, parent_id: Option<LocalId>) -> SidebarResult<Vec<Label>> {
-        if let Some(parent_id) = parent_id {
-            Ok(Label::find(
+    pub async fn custom_folders(
+        &self,
+        parent_id: Option<LocalId>,
+    ) -> SidebarResult<Vec<ContextualLabel>> {
+        let interface = self.user_ctx.stash();
+        let labels = if let Some(parent_id) = parent_id {
+            Label::find(
                 "WHERE label_type = ? AND local_parent_id = ? ORDER BY display_order",
                 params![LabelType::Folder, parent_id],
-                self.user_ctx.stash(),
+                interface,
                 None,
             )
-            .await?)
+            .await?
         } else {
-            Ok(Label::find(
+            Label::find(
                 "WHERE label_type = ? AND local_parent_id is NULL ORDER BY display_order",
                 params![LabelType::Folder],
-                self.user_ctx.stash(),
+                interface,
                 None,
             )
-            .await?)
-        }
+            .await?
+        };
+        Ok(ContextualLabel::from_labels(labels.as_slice(), interface).await?)
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
@@ -97,14 +103,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_labels(&self) -> SidebarResult<Vec<Label>> {
-        Ok(Label::find(
+    pub async fn custom_labels(&self) -> SidebarResult<Vec<ContextualLabel>> {
+        let interface = self.user_ctx.stash();
+        let labels = Label::find(
             "WHERE label_type = ? ORDER BY display_order",
             params![LabelType::Label],
-            self.user_ctx.stash(),
+            interface,
             None,
         )
-        .await?)
+        .await?;
+        Ok(ContextualLabel::from_labels(labels.as_slice(), interface).await?)
     }
 
     /// Set folder `expanded` field to it's collapsed state

@@ -3,7 +3,7 @@ use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
@@ -20,25 +20,19 @@ mod common;
     ("foo",  None,        "foo", 1),
     ("bar",  Some("foo"), "bar", 2),
     ("titi", None,        "titi",5)
-], None, &[
-    ("foo",  None, "foo"),
-    ("titi", None, "titi")
-]; "root")]
+], None, &["foo", "titi"]; "root")]
 #[test_case(&[
     ("foo",  None,        "foo",  1),
     ("bar",  Some("foo"), "bar",  2),
     ("baz",  Some("foo"), "baz",  3),
     ("titi", None,        "titi", 5),
     ("toto", Some("baz"), "toto", 4),
-], Some("foo"), &[
-    ("bar",  Some("foo"), "bar"),
-    ("baz",  Some("foo"), "baz"),
-]; "hierarchy")]
+], Some("foo"), &["bar", "baz"]; "hierarchy")]
 #[tokio::test]
 async fn sidebar_custom_folders(
     labels: &[(&str, Option<&str>, &str, u32)],
     parent_id: Option<&str>,
-    expected: &[(&str, Option<&str>, &str)],
+    expected: &[&str],
 ) {
     // Setup:
     //   * Setup User:
@@ -65,24 +59,8 @@ async fn sidebar_custom_folders(
         .unwrap();
 
     // Tests
-    let result: Vec<_> = result
-        .into_iter()
-        .map(|l| (l.remote_id.unwrap(), l.remote_parent_id, l.name))
-        .collect();
-    assert_eq!(
-        result,
-        expected.iter().map(format_expected).collect::<Vec<_>>()
-    );
-}
-
-fn format_expected(
-    (id, parent, name): &(&str, Option<&str>, &str),
-) -> (LabelId, Option<LabelId>, String) {
-    (
-        RemoteId::from(*id).into(),
-        parent.map(|p| RemoteId::from(p).into()),
-        name.to_owned().to_owned(),
-    )
+    let result: Vec<_> = result.into_iter().map(|l| l.name).collect();
+    assert_eq!(result, expected);
 }
 
 fn sidebar_test_params(labels: &[(&str, Option<&str>, &str, u32)]) -> TestParams {

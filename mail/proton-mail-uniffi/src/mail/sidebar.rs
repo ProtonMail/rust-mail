@@ -12,6 +12,7 @@ use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::LabelType as RealLabelType;
 use proton_mail_common::models::Label as RealLabel;
+use proton_mail_common::AppError;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use stash::stash::StashError;
@@ -24,6 +25,8 @@ use tracing::warn;
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
 pub enum SidebarError {
+    #[error("App Error: {0}")]
+    AppError(#[from] AppError),
     #[error("Mailbox Error: {0}")]
     MailSessionError(#[from] MailSessionError),
     #[error("Stash Error: {0}")]
@@ -40,6 +43,7 @@ type SidebarResult<T> = Result<T, SidebarError>;
 impl From<proton_mail_common::SidebarError> for SidebarError {
     fn from(error: proton_mail_common::SidebarError) -> Self {
         match error {
+            proton_mail_common::SidebarError::AppError(e) => Self::AppError(e),
             proton_mail_common::SidebarError::MailContext(e) => Self::MailSessionError(e.into()),
             proton_mail_common::SidebarError::Stash(e) => Self::Stash(e),
         }
@@ -75,12 +79,8 @@ impl Sidebar {
     pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            Ok(sidebar
-                .system_labels()
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect())
+            let labels = sidebar.system_labels().await?;
+            Ok(labels.into_iter().map(Label::from).collect())
         })
         .await
     }
@@ -97,12 +97,8 @@ impl Sidebar {
     pub async fn custom_folders(&self, parent_id: Option<Id>) -> SidebarResult<Vec<Label>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            Ok(sidebar
-                .custom_folders(parent_id.map(Into::into))
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect())
+            let labels = sidebar.custom_folders(parent_id.map(Into::into)).await?;
+            Ok(labels.into_iter().map(Label::from).collect())
         })
         .await
     }
@@ -115,12 +111,8 @@ impl Sidebar {
     pub async fn custom_labels(&self) -> SidebarResult<Vec<Label>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            Ok(sidebar
-                .custom_labels()
-                .await?
-                .into_iter()
-                .map(Into::into)
-                .collect())
+            let labels = sidebar.custom_labels().await?;
+            Ok(labels.into_iter().map(Label::from).collect())
         })
         .await
     }

@@ -2,7 +2,7 @@ use crate::mail::datatypes::Label;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::uniffi_async;
 use proton_core_common::datatypes::LabelId as RealLabelId;
-use proton_mail_common::datatypes::{LabelType as RealLabelType, SystemLabelId};
+use proton_mail_common::datatypes::{ContextualLabel, LabelType as RealLabelType, SystemLabelId};
 use proton_mail_common::models::Label as RealLabel;
 use stash::orm::Model;
 use stash::params;
@@ -19,14 +19,15 @@ impl MailUserSession {
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
             let _sys_folders = RealLabelId::movable_sys_folder_list();
-            Ok(RealLabel::find(
+            let labels = RealLabel::find(
                 "WHERE label_type = ? ORDER BY display_order",
                 params![RealLabelType::Folder],
                 &stash,
                 None,
             )
-            .await
-            .map(|labels| labels.into_iter().map(Label::from).collect())?)
+            .await?;
+            let labels = ContextualLabel::from_labels(labels.as_slice(), &stash).await?;
+            Ok(labels.into_iter().map(Label::from).collect())
         })
         .await
     }
@@ -39,14 +40,15 @@ impl MailUserSession {
     pub async fn applicable_labels(&self) -> Result<Vec<Label>, MailSessionError> {
         let stash = self.ctx.stash().clone();
         uniffi_async(async move {
-            Ok(RealLabel::find(
+            let labels = RealLabel::find(
                 "WHERE label_type = ? ORDER BY display_order",
                 params![RealLabelType::Label],
                 &stash,
                 None,
             )
-            .await
-            .map(|labels| labels.into_iter().map(Label::from).collect())?)
+            .await?;
+            let labels = ContextualLabel::from_labels(labels.as_slice(), &stash).await?;
+            Ok(labels.into_iter().map(Label::from).collect())
         })
         .await
     }

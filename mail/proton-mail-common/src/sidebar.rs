@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use stash::stash::StashError;
 
-use crate::{MailContextError, MailUserContext};
+use crate::{AppError, MailContextError, MailUserContext};
 
 pub mod labels;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SidebarError {
+    #[error("App Error: {0}")]
+    AppError(#[from] AppError),
     #[error("Mail Context Error: {0}")]
     MailContext(#[from] MailContextError),
     #[error("Stash Error: {0}")]
