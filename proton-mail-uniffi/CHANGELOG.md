@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - Added `Id` type to represent local IDs.
+  - Added `Address.local_id`.
 
 ### Changed
 

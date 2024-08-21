@@ -547,6 +547,13 @@ impl From<RealWeekStart> for WeekStart {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    pub local_id: Id,
+
     /// TODO: Document this field.
     pub address_type: AddressType,
 
@@ -587,6 +594,7 @@ pub struct Address {
 impl From<RealAddress> for Address {
     fn from(address: RealAddress) -> Self {
         Self {
+            local_id: address.local_id.unwrap().into(),
             address_type: address.address_type.into(),
             catch_all: address.catch_all,
             display_name: address.display_name,
