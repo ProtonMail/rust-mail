@@ -9,6 +9,7 @@
 //! won't.
 //!
 
+use crate::core::datatypes::Id;
 use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
@@ -16,6 +17,7 @@ use crate::mail::{MailSession, MailSessionError, Mailbox, MailboxError};
 use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools;
+use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, Message as RealMessage,
@@ -39,8 +41,8 @@ use std::sync::Arc;
 #[uniffi::export]
 pub async fn apply_label_to_conversations(
     session: Arc<MailSession>,
-    label_id: u64,
-    ids: Vec<u64>,
+    label_id: Id,
+    ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
     let conn = session.stash().connection();
     uniffi_async(async move {
@@ -66,10 +68,7 @@ pub async fn apply_label_to_conversations(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn delete_conversations(
-    mailbox: Arc<Mailbox>,
-    ids: Vec<u64>,
-) -> Result<(), MailboxError> {
+pub async fn delete_conversations(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> Result<(), MailboxError> {
     let conn = mailbox.stash().connection();
     uniffi_async(async move {
         RealConversation::delete_multiple(
@@ -100,7 +99,7 @@ pub async fn delete_conversations(
 #[uniffi::export]
 pub async fn available_actions_for_conversation(
     session: Arc<MailSession>,
-    id: u64,
+    id: Id,
 ) -> Result<Vec<ConversationAvailableAction>, MailboxError> {
     let conn = session.stash().connection();
     uniffi_async(async move {
@@ -135,7 +134,7 @@ pub async fn available_actions_for_conversation(
 #[uniffi::export]
 pub async fn conversation(
     mailbox: Arc<Mailbox>,
-    id: u64,
+    id: Id,
 ) -> Result<Option<Conversation>, MailboxError> {
     let conn = mailbox.stash().connection();
     uniffi_async(async move {
@@ -163,7 +162,7 @@ pub async fn conversation(
 #[uniffi::export]
 pub async fn conversations_for_label(
     session: Arc<MailSession>,
-    label_id: u64,
+    label_id: Id,
 ) -> Result<Vec<Conversation>, MailboxError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
@@ -176,7 +175,7 @@ pub async fn conversations_for_label(
                     conversation_labels.label_id = ?
                 "
             ),
-            params![label_id],
+            params![RealLocalId::from(label_id)],
             &stash,
             None,
         )
@@ -211,8 +210,8 @@ pub async fn conversations_for_label(
 #[uniffi::export]
 pub async fn load_conversation(
     session: Arc<MailSession>,
-    id: u64,
-    label_id: u64,
+    id: Id,
+    label_id: Id,
 ) -> Result<Option<Conversation>, MailboxError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
@@ -239,7 +238,7 @@ pub async fn load_conversation(
 #[uniffi::export]
 pub async fn mark_converstions_as_read(
     session: Arc<MailSession>,
-    ids: Vec<u64>,
+    ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
     let tether = session.stash().connection();
     uniffi_async(async move {
@@ -266,7 +265,7 @@ pub async fn mark_converstions_as_read(
 #[uniffi::export]
 pub async fn mark_conversations_as_unread(
     session: Arc<MailSession>,
-    ids: Vec<u64>,
+    ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
     let conn = session.stash().connection();
     uniffi_async(async move {
@@ -298,8 +297,8 @@ pub async fn mark_conversations_as_unread(
 #[uniffi::export]
 pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
-    label_id: u64,
-    ids: Vec<u64>,
+    label_id: Id,
+    ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
     let conn = mailbox.stash().connection();
     uniffi_async(async move {
@@ -330,8 +329,8 @@ pub async fn move_conversations(
 #[uniffi::export]
 pub async fn remove_label_from_conversations(
     session: Arc<MailSession>,
-    label_id: u64,
-    ids: Vec<u64>,
+    label_id: Id,
+    ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
     let conn = session.stash().connection();
     uniffi_async(async move {
@@ -363,7 +362,7 @@ pub async fn remove_label_from_conversations(
 #[uniffi::export]
 pub async fn search_for_conversations(
     session: Arc<MailSession>,
-    local_label_id: u64,
+    local_label_id: Id,
     options: ConversationSearchOptions,
 ) -> Result<Vec<Conversation>, MailSessionError> {
     let stash = session.stash().clone();
@@ -396,7 +395,7 @@ pub async fn search_for_conversations(
 #[uniffi::export]
 pub async fn star_conversations(
     session: Arc<MailSession>,
-    ids: Vec<u64>,
+    ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
@@ -422,7 +421,7 @@ pub async fn star_conversations(
 #[uniffi::export]
 pub async fn unstar_conversations(
     session: Arc<MailSession>,
-    ids: Vec<u64>,
+    ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
@@ -444,7 +443,7 @@ pub struct WatchedConversation {
     pub messages: Vec<Message>,
 
     /// The Id of the message to open.
-    pub message_id_to_open: Option<u64>,
+    pub message_id_to_open: Option<Id>,
 
     /// The handle to stop watching the conversation.
     pub conversation_handle: Arc<WatchHandle>,
@@ -474,7 +473,7 @@ pub struct WatchedConversation {
 #[uniffi::export]
 pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
-    id: u64,
+    id: Id,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversation, MailboxError> {
     let stash = mailbox.stash().clone();
@@ -482,7 +481,7 @@ pub async fn watch_conversation(
         let callback = Arc::new(callback);
         let (conversations, conversation_handle) = watch::<_, _, RealConversation>(
             "WHERE local_id = ?",
-            params![id],
+            params![RealLocalId::from(id)],
             move |r| r.local_id == Some(id.into()),
             |r| r.local_id.expect("local_id should never be None"),
             &stash,
@@ -491,7 +490,7 @@ pub async fn watch_conversation(
         .await?;
         let (messages, messages_handle) = watch::<_, _, RealMessage>(
             "WHERE local_conversation_id = ? LIMIT 1",
-            params![id],
+            params![RealLocalId::from(id)],
             move |r| r.local_conversation_id == Some(id.into()),
             |r| r.local_id.expect("local_id should never be None"),
             &stash,
@@ -512,7 +511,7 @@ pub async fn watch_conversation(
             .unwrap()
             .into(),
             messages: messages.into_iter().map(Into::into).collect(),
-            message_id_to_open,
+            message_id_to_open: message_id_to_open.map(Into::into),
             conversation_handle,
             messages_handle,
         })
@@ -550,7 +549,7 @@ pub struct WatchedConversations {
 #[uniffi::export]
 pub async fn watch_conversations_for_label(
     session: Arc<MailSession>,
-    label_id: u64,
+    label_id: Id,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversations, MailboxError> {
     let stash = session.stash().clone();
@@ -564,7 +563,7 @@ pub async fn watch_conversations_for_label(
                     conversation_labels.label_id = ?
                 "
             ),
-            params![label_id],
+            params![RealLocalId::from(label_id)],
             move |r| {
                 r.labels
                     .iter()

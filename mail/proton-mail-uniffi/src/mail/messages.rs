@@ -11,12 +11,13 @@
 use super::datatypes::{BlockQuote, RemoteContent};
 use super::datatypes::{MessageAvailableAction, MimeType};
 use super::{Mailbox, MailboxResult};
+use crate::core::datatypes::Id;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSession, MailSessionError, MailboxError};
 use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools as _;
-use proton_core_common::datatypes::{Id, LabelId as RealLabelId, LocalId as RealLocalId};
+use proton_core_common::datatypes::{Id as RealId, LabelId as RealLabelId, LocalId as RealLocalId};
 use proton_mail_common::decrypted_message::{self, DecryptedMessageBody};
 use proton_mail_common::models::{self, Label as RealLabel, MailSettings, Message as RealMessage};
 use proton_mail_common::MailUserContext;
@@ -113,7 +114,7 @@ impl DecryptedMessage {
 ///
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
-pub async fn message(session: Arc<MailSession>, id: u64) -> Result<Option<Message>, MailboxError> {
+pub async fn message(session: Arc<MailSession>, id: Id) -> Result<Option<Message>, MailboxError> {
     let stash = session.stash().clone();
     uniffi_async(async move { Ok(RealMessage::load(id.into(), &stash).await?.map(Into::into)) })
         .await
@@ -134,13 +135,13 @@ pub async fn message(session: Arc<MailSession>, id: u64) -> Result<Option<Messag
 #[uniffi::export]
 pub async fn messages_for_conversation(
     session: Arc<MailSession>,
-    conversation_id: u64,
+    conversation_id: Id,
 ) -> Result<Vec<Message>, MailboxError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
         Ok(RealMessage::find(
             "WHERE local_conversation_id = ?",
-            params![conversation_id],
+            params![RealLocalId::from(conversation_id)],
             &stash,
             None,
         )
@@ -167,7 +168,7 @@ pub async fn messages_for_conversation(
 #[uniffi::export]
 pub async fn messages_for_label(
     session: Arc<MailSession>,
-    label_id: u64,
+    label_id: Id,
 ) -> Result<Vec<Message>, MailboxError> {
     let stash = session.stash().clone();
     uniffi_async(async move {
@@ -180,7 +181,7 @@ pub async fn messages_for_label(
                     message_labels.label_id = ?
                 "
             ),
-            params![label_id],
+            params![RealLocalId::from(label_id)],
             &stash,
             None,
         )
@@ -242,7 +243,7 @@ pub async fn search_for_messages(
 #[uniffi::export]
 pub async fn available_actions_for_message(
     session: Arc<MailSession>,
-    id: u64,
+    id: Id,
 ) -> MailboxResult<Vec<MessageAvailableAction>> {
     let stash = session.stash().clone();
     uniffi_async(async move {
@@ -264,7 +265,7 @@ pub async fn available_actions_for_message(
 /// the servers.
 /// Obtains a [`DecryptedMessage`] given a message id.
 #[uniffi::export]
-pub async fn get_message_body(mbox: &Mailbox, id: u64) -> MailboxResult<DecryptedMessage> {
+pub async fn get_message_body(mbox: &Mailbox, id: Id) -> MailboxResult<DecryptedMessage> {
     let ctx = mbox.mbox().user_context();
     uniffi_async(async move {
         let body = models::Message::message_body(&ctx, id.into()).await?;
@@ -303,7 +304,7 @@ pub struct WatchedMessages {
 #[uniffi::export]
 pub async fn watch_messages_for_label(
     session: Arc<MailSession>,
-    label_id: u64,
+    label_id: Id,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedMessages, MailboxError> {
     let stash = session.stash().clone();
@@ -323,7 +324,7 @@ pub async fn watch_messages_for_label(
                     message_labels.label_id = ?
                 "
             ),
-            params![label_id],
+            params![RealLocalId::from(label_id)],
             move |r| r.label_ids.contains(&remote_label_id),
             |r| r.local_id.expect("local_id should never be None"),
             &stash,

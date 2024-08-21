@@ -4,6 +4,7 @@
 //! items could be added as needed in the future.
 //!
 
+use crate::core::datatypes::Id;
 use crate::mail::datatypes::Label;
 use crate::mail::datatypes::LabelType;
 use crate::mail::{MailSessionError, MailUserSession};
@@ -93,7 +94,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self, parent_id: Option<u64>) -> SidebarResult<Vec<Label>> {
+    pub async fn custom_folders(&self, parent_id: Option<Id>) -> SidebarResult<Vec<Label>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             Ok(sidebar
@@ -129,7 +130,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn collapse_folder(&self, local_id: u64) -> SidebarResult<()> {
+    pub async fn collapse_folder(&self, local_id: Id) -> SidebarResult<()> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move { Ok(sidebar.collapse_folder(local_id.into()).await?) }).await
     }
@@ -139,7 +140,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn expand_folder(&self, local_id: u64) -> SidebarResult<()> {
+    pub async fn expand_folder(&self, local_id: Id) -> SidebarResult<()> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move { Ok(sidebar.expand_folder(local_id.into()).await?) }).await
     }

@@ -1,5 +1,6 @@
 mod attachments;
 
+use crate::core::datatypes::Id;
 use crate::mail::datatypes::ViewMode;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::uniffi_async;
@@ -20,11 +21,11 @@ use tracing::error;
 #[uniffi(flat_error)]
 pub enum MailboxError {
     #[error("Could not find label with id '{0}'")]
-    LabelNotFound(u64),
+    LabelNotFound(Id),
     #[error("Label '{0}' does not have a remote id")]
-    LabelDoesNotHaveRemoteId(u64),
+    LabelDoesNotHaveRemoteId(Id),
     #[error("No exclusive location found for message '{0}'")]
-    NoExclusiveLocationFound(u64),
+    NoExclusiveLocationFound(Id),
     #[error("{0}")]
     Context(
         #[from]
@@ -36,17 +37,17 @@ pub enum MailboxError {
     #[error("Invalid Action: {0}")]
     InvalidAction(anyhow::Error),
     #[error("Conversation '{0}' not found")]
-    ConversationNotFound(u64),
+    ConversationNotFound(Id),
     #[error("Conversation '{0}' does not have a remote id")]
-    ConversationDoesNotHaveRemoteId(u64),
+    ConversationDoesNotHaveRemoteId(Id),
     #[error("Problem with conversation with local ID: '{0}'")]
-    ConversationError(u64),
+    ConversationError(Id),
     #[error("Could not find message with id '{0}'")]
-    MessageNotFound(u64),
+    MessageNotFound(Id),
     #[error("Message '{0}' does not have a remote id")]
-    MessageDoesNotHaveRemoteId(u64),
+    MessageDoesNotHaveRemoteId(Id),
     #[error("Conversation '{0}' has no messages")]
-    ConversationHasNoMessages(u64),
+    ConversationHasNoMessages(Id),
     #[error("App error: {0}")]
     AppError(#[from] AppError),
     #[error("API request failed with error: '{0}'")]
@@ -54,11 +55,11 @@ pub enum MailboxError {
     #[error("Mailbox is not in the right view mode for the current operation")]
     InvalidViewMode,
     #[error("Attachment '{0}' not found")]
-    AttachmentNotFound(u64),
+    AttachmentNotFound(Id),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(String),
     #[error("Attachment '{0}' does not have a remote id")]
-    AttachmentDoesNotHaveRemoteId(u64),
+    AttachmentDoesNotHaveRemoteId(Id),
     #[error("Message decryption error: {0}")]
     MessageDecryption(anyhow::Error),
     #[error("Stash Error: {0}")]
@@ -98,7 +99,7 @@ const DEFAULT_CONVERSATION_COUNT: usize = 50;
 impl Mailbox {
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub async fn new(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
+    pub async fn new(ctx: &MailUserSession, label_id: Id) -> MailboxResult<Arc<Self>> {
         let ctx = ctx.ctx().clone();
         uniffi_async(async move {
             let mbox = proton_mail_common::Mailbox::new(ctx, label_id.into()).await?;
@@ -121,7 +122,7 @@ impl Mailbox {
 
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub async fn with_label_id(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
+    pub async fn with_label_id(ctx: &MailUserSession, label_id: Id) -> MailboxResult<Arc<Self>> {
         // Note: This is a workaround for the default constructor not being able to be
         // generated on Kotlin.
         Self::new(ctx, label_id).await
@@ -129,7 +130,7 @@ impl Mailbox {
 
     /// Get the label id of the mailbox.
     #[must_use]
-    pub fn label_id(&self) -> u64 {
+    pub fn label_id(&self) -> Id {
         self.mbox.label_id().into()
     }
 
