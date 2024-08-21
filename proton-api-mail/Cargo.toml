@@ -11,6 +11,7 @@ bytes = { workspace = true }
 proton-api-core = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_with = "3.8.1"
 smart-default = { workspace = true }

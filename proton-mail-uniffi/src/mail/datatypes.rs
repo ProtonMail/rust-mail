@@ -68,9 +68,8 @@ use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
-    Disposition as RealDisposition, EncryptedMessageBody as RealEncryptedMessageBody,
-    LabelColor as RealLabelColor, LabelType as RealLabelType, MessageAddress as RealMessageAddress,
-    MessageAttachment as RealMessageAttachment,
+    Disposition as RealDisposition, LabelColor as RealLabelColor, LabelType as RealLabelType,
+    MessageAddress as RealMessageAddress, MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
     MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,
     MessageCount as RealMessageCount, MessageFlags as RealMessageFlags, MimeType as RealMimeType,
@@ -88,13 +87,12 @@ use proton_mail_common::decrypted_message::{
 };
 use proton_mail_common::models::{
     Conversation as RealConversation, Label as RealLabel, MailSettings as RealMailSettings,
-    Message as RealMessage, MessageBodyMetadata as RealMessageBodyMetadata,
+    Message as RealMessage,
 };
 use proton_mail_common::AppError;
 use serde_json::to_string as to_json_string;
 use smart_default::SmartDefault;
 use stash::stash::{AgnosticInterface, Interface, StashError};
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 pub use system_label::*;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
@@ -1300,25 +1298,6 @@ impl From<RealCustomLabel> for CustomLabel {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct EncryptedMessageBody {
-    /// TODO: Document this field.
-    pub encrypted_body: String,
-
-    /// TODO: Document this field.
-    pub metadata: MessageBodyMetadata,
-}
-
-impl From<RealEncryptedMessageBody> for EncryptedMessageBody {
-    fn from(value: RealEncryptedMessageBody) -> Self {
-        EncryptedMessageBody {
-            encrypted_body: value.encrypted_body,
-            metadata: value.metadata.into(),
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Label {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -1723,11 +1702,6 @@ pub struct Message {
     pub display_order: u64,
 
     /// TODO: Document this field.
-    // Unfortunately, some values returned in this struct are either
-    // arrays or strings.
-    pub parsed_headers: HashMap<String, String>,
-
-    /// TODO: Document this field.
     pub reply_tos: Vec<MessageAddress>,
 
     /// TODO: Document this field.
@@ -1792,7 +1766,6 @@ impl From<RealMessage> for Message {
             is_replied_all: value.is_replied_all,
             num_attachments: value.num_attachments,
             display_order: value.display_order,
-            parsed_headers: value.parsed_headers.headers,
             reply_tos: value
                 .reply_tos
                 .value
@@ -1981,46 +1954,6 @@ impl From<RealMessageAttachmentInfo> for MessageAttachmentInfo {
         MessageAttachmentInfo {
             attachment: value.attachment,
             inline: value.inline,
-        }
-    }
-}
-
-/// Metadata associated with the Body of a message.
-///
-/// Message bodies are not stored in the database.
-///
-/// Note that this information does not come directly from the API, and so there
-/// is no equivalent API struct to convert from. Rather, the metadata is
-/// obtained from [`DecryptedMessageBody`].
-///
-/// For metadata associated with a message see [`MessageMetadata`].
-///
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct MessageBodyMetadata {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
-    pub message_id: Id,
-
-    /// TODO: Document this field.
-    pub header: String,
-
-    /// TODO: Document this field.
-    pub mime_type: MimeType,
-
-    /// TODO: Document this field.
-    pub parsed_headers: HashMap<String, String>,
-}
-
-impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
-    fn from(value: RealMessageBodyMetadata) -> Self {
-        MessageBodyMetadata {
-            message_id: value.local_message_id.unwrap().into(),
-            header: value.header,
-            mime_type: value.mime_type.into(),
-            parsed_headers: value.parsed_headers.headers,
         }
     }
 }

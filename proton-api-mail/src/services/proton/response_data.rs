@@ -399,6 +399,7 @@ pub struct AutoResponder {
 }
 
 /// TODO: Document this struct.
+#[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
@@ -417,6 +418,7 @@ pub struct Conversation {
 
     /// TODO: Document this field.
     #[serde(default)]
+    #[serde_as(as = "BoolFromInt")]
     pub display_snooze_reminder: bool,
 
     /// TODO: Document this field.
@@ -851,7 +853,7 @@ pub struct Message {
     /// TODO: Document this field.
     // Unfortunately, some values returned in this struct are either
     // arrays or strings.
-    pub parsed_headers: HashMap<String, String>,
+    pub parsed_headers: HashMap<String, serde_json::Value>,
 
     /// TODO: Document this field.
     #[serde(flatten)]
@@ -1200,15 +1202,19 @@ pub struct MessageAddress {
     /// TODO: Document this field.
     pub bimi_selector: Option<String>,
 
-    /// TODO: Document this field.
+    /// TODO: Document this field
+    #[serde(default)]
+    #[serde_as(as = "BoolFromInt")]
     pub display_sender_image: bool,
 
     /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    #[serde(default)]
+    #[serde_as(as = "BoolFromInt")]
     pub is_proton: bool,
 
     /// TODO: Document this field.
-    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    #[serde(default)]
+    #[serde_as(as = "BoolFromInt")]
     pub is_simple_login: bool,
 
     /// TODO: Document this field.
