@@ -962,8 +962,8 @@ async fn test_create_message_and_body() {
         metadata: test_message_metadata(vec![MY_LABEL_ID1.clone()], vec![]),
         header: "my headers".to_owned(),
         parsed_headers: hash_map! {
-            "foo".to_owned(): "bar".to_owned(),
-            "zeta".to_owned(): "gama".to_owned(),
+            "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+            "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
         },
         body: "my_message".to_owned(),
         mime_type: ApiMimeType::TextPlain,
@@ -1025,8 +1025,8 @@ async fn test_update_message_and_body() {
         metadata: test_message_metadata(vec![MY_LABEL_ID1.clone()], vec![]),
         header: "my headers".to_owned(),
         parsed_headers: hash_map! {
-            "foo".to_owned(): "bar".to_owned(),
-            "zeta".to_owned(): "gama".to_owned(),
+            "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+            "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
         },
         body: "my_message".to_owned(),
         mime_type: ApiMimeType::TextPlain,
@@ -1058,9 +1058,10 @@ async fn test_update_message_and_body() {
         .expect("failed to store message body metadata in db");
 
     // Update the body
-    message
-        .parsed_headers
-        .insert("marco".to_owned(), "polo".to_owned());
+    message.parsed_headers.insert(
+        "marco".to_owned(),
+        serde_json::Value::String("polo".to_owned()),
+    );
     message.header = "new header".to_owned();
     message.body = "new body type".to_owned();
     message.mime_type = ApiMimeType::TextHtml;
@@ -1103,8 +1104,8 @@ async fn test_create_message_and_body_with_attachments() {
         ),
         header: "my headers".to_owned(),
         parsed_headers: hash_map! {
-            "foo".to_owned(): "bar".to_owned(),
-            "zeta".to_owned(): "gama".to_owned(),
+            "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+            "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
         },
         body: "my_message".to_owned(),
         mime_type: ApiMimeType::TextPlain,

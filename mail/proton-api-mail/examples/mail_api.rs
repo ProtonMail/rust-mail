@@ -1,7 +1,8 @@
 use proton_api_core::login::Flow;
+use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::Config;
 use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::services::proton::requests::GetMessagesOptions;
+use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::services::proton::ProtonMail;
 use std::io::{stdin, stdout, BufRead, Write};
 use tracing::level_filters::LevelFilter;
@@ -74,9 +75,23 @@ async fn main() {
     let user = login_flow.reset_and_take_user().unwrap();
     println!("User ID is {}", user.id);
 
+    let _ = session
+        .api()
+        .get_conversations(GetConversationsOptions {
+            page: 0,
+            page_size: 10,
+            label_id: RemoteId::from("0".to_owned()).into(),
+            desc: Some(true),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
     let messages = session
         .api()
         .get_messages(GetMessagesOptions {
+            page: 0,
+            page_size: 10,
             limit: Some(10),
             ..Default::default()
         })

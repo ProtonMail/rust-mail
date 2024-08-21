@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added many stats about transformations to `BodyOutput`
 
+### Fixed
+  - Network request serialization/deserialization
+
+### Removed
+
+  - Removed `headers` from the `Message` type, see `DecryptedMessage instead`.
+  - Removed `MessageBodyMetadata` and `EncryptedMessage` types.
 
 ## [0.11.12] - 2024-08-21
 

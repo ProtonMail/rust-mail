@@ -4,7 +4,6 @@
 
 use crate::models::{MailSettings, MessageBodyMetadata};
 use proton_mail_html_transformer::Transformer;
-use serde_json::from_str as from_json_str;
 use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -42,7 +41,7 @@ pub struct DecryptedMessageBody {
 impl DecryptedMessageBody {
     /// Retrieve a parsed header value for a given `key`.
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
-        let value = from_json_str(self.metadata.parsed_headers.headers.get(key)?).ok()?;
+        let value = self.metadata.parsed_headers.headers.get(key)?;
         match value {
             Value::String(s) => Some(ParsedHeaderValue::String(s.clone())),
             Value::Array(array) => {

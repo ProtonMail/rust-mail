@@ -1489,7 +1489,7 @@ sql_using_serde!(MobileSettings);
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ParsedHeaders {
-    pub headers: HashMap<String, String>,
+    pub headers: HashMap<String, serde_json::Value>,
 }
 
 sql_using_serde!(ParsedHeaders);

@@ -25,7 +25,7 @@ use crate::services::proton::request_data::MessageMetadataSortMode;
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_api_core::services::proton::common::RemoteId;
 use serde::Serialize;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{serde_as, BoolFromInt, DisplayFromStr};
 use smart_default::SmartDefault;
 
 /// Parameters to filter/search conversations with a given criteria.
@@ -33,6 +33,7 @@ use smart_default::SmartDefault;
 #[derive(Clone, Debug, Serialize, SmartDefault)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationsOptions {
+    #[serde(rename = "AddressID")]
     /// Address ID to filter on.
     pub address_id: Option<RemoteId>,
 
@@ -50,9 +51,11 @@ pub struct GetConversationsOptions {
     /// Return only conversations newer, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `begin`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
+    #[serde(rename = "BeginID")]
     pub begin_id: Option<RemoteId>,
 
     /// If `true`, return results in descending order rather than ascending.
+    #[serde_as(as = "Option<BoolFromInt>")]
     pub desc: Option<bool>,
 
     /// UNIX timestamp to filter conversations later than timestamp.
@@ -61,6 +64,7 @@ pub struct GetConversationsOptions {
     /// Return only conversations older, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `end`.
     // TODO: Improve the documentation above, as it doesn't make total sense.
+    #[serde(rename = "EndID")]
     pub end_id: Option<RemoteId>,
 
     /// External ID to filter on.
@@ -71,15 +75,18 @@ pub struct GetConversationsOptions {
     pub from: Option<String>,
 
     /// Conversation IDs to filter on.
+    #[serde(rename = "ID")]
     pub ids: Option<Vec<RemoteId>>,
 
     /// Keyword search of `To`, `CC`, `BCC`, `From`, and `Subject` fields.
     pub keyword: Option<String>,
 
     /// Label ID to filter on.
+    #[serde(rename = "LabelID")]
     pub label_id: Option<RemoteId>,
 
     /// The number of conversations to return.
+    #[serde_as(as = "Option<DisplayFromStr>")]
     pub limit: Option<u64>,
 
     /// Page index.
@@ -100,6 +107,7 @@ pub struct GetConversationsOptions {
 
     /// If `true`, only return conversations which have unread messages. If
     /// `false`, only return conversations which have all messages read.
+    #[serde_as(as = "Option<BoolFromInt>")]
     pub unread: Option<bool>,
 }
 
@@ -182,6 +190,7 @@ pub struct GetMessagesOptions {
     pub label_id: Option<Vec<RemoteId>>,
 
     /// The number of messages to return.
+    #[serde_as(as = "Option<DisplayFromStr>")]
     pub limit: Option<u64>,
 
     /// Page index.
