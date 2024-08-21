@@ -7,11 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.11.13] - 2024-08-21
+
 ### Added
 
-- Added many stats about transformations to `BodyOutput`
+  - Added many stats about transformations to `BodyOutput`
 
 ### Fixed
+
   - Network request serialization/deserialization
 
 ### Removed
