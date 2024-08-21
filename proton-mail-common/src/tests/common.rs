@@ -143,8 +143,8 @@ pub fn test_starred_label() -> Label {
 }
 
 pub fn test_conversation(
-    labels: Vec<ApiConversationLabel>,
-    attachments: Vec<ApiAttachmentMetadata>,
+    labels: impl IntoIterator<Item = ApiConversationLabel>,
+    attachments: impl IntoIterator<Item = ApiAttachmentMetadata>,
 ) -> ApiConversation {
     ApiConversation {
         id: MY_CONVERSATION_ID.clone(),
@@ -172,9 +172,9 @@ pub fn test_conversation(
         num_attachments: 7,
         expiration_time: 1024,
         size: 4909,
-        labels,
+        labels: Vec::from_iter(labels),
         display_snooze_reminder: false,
-        attachments_metadata: attachments,
+        attachments_metadata: Vec::from_iter(attachments),
         attachment_info: Default::default(),
     }
 }

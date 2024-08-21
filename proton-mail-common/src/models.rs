@@ -554,7 +554,7 @@ pub struct Conversation {
     /// TODO: Document this field.
     pub labels: Vec<ConversationLabel>,
 
-    /// TODO: Document this field.
+    /// TODO: Document this field
     #[DbField]
     pub num_attachments: u64,
 
@@ -586,6 +586,18 @@ pub struct Conversation {
     #[DbField]
     pub subject: String,
 
+    /// Whether this conversation is fully known.
+    ///
+    /// When in message view mode we need to be able to create messages
+    /// without their conversation counterpart. We create an unknown conversation
+    /// entry.
+    ///
+    /// As it is expensive to sync the conversation, we need to defer this until
+    /// we either retrieve the conversation from the server or one of the
+    /// events creates it for us.
+    #[DbField]
+    pub is_known: bool,
+
     /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
 
@@ -603,6 +615,83 @@ pub struct Conversation {
 }
 
 impl Conversation {
+    /// Create a new unknown conversation where we only know the `remote_id`.
+    ///
+    /// See [`Conversation::is_known`] for more details.
+    pub fn unknown(remote_id: RemoteId) -> Self {
+        Self {
+            local_id: None,
+            remote_id: Some(remote_id),
+            attachment_info: Default::default(),
+            attachments_metadata: vec![],
+            deleted: false,
+            display_snooze_reminder: false,
+            exclusive_location: None,
+            expiration_time: 0,
+            labels: vec![],
+            num_attachments: 0,
+            num_messages: 0,
+            num_unread: 0,
+            display_order: 0,
+            recipients: Default::default(),
+            senders: Default::default(),
+            size: 0,
+            subject: "".to_string(),
+            is_known: false,
+            custom_labels: vec![],
+            row_id: None,
+            stash: None,
+        }
+    }
+
+    /// Save a conversation to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that existing conversations are updated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save a message to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// ensure that existing conversations are updated.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+                self.local_id = existing.local_id;
+                self.row_id = existing.row_id;
+                self.stash = existing.stash;
+            }
+        }
+
+        <Self as Model>::save_using(self, interface).await
+    }
+
     /// Label multiple conversations.
     ///
     /// # Parameters
@@ -698,28 +787,22 @@ impl Conversation {
     /// # Parameters
     ///
     /// * `conversations` - TODO: Document this parameter.
-    /// * `stash`         - The stash to use for the database connection.
+    /// * `interface`     - The interface to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn create_or_update_conversations(
+    pub async fn create_or_update_conversations<A>(
         conversations: Vec<Conversation>,
-        stash: &Stash,
-    ) -> Result<Vec<LocalId>, AppError> {
+        interface: &A,
+    ) -> Result<Vec<LocalId>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let mut ids = Vec::with_capacity(conversations.len());
-
         for mut conv in conversations {
-            conv.set_stash(stash);
-            if let Some(existing) = Self::find_by_id(conv.remote_id.clone().unwrap(), stash).await?
-            {
-                conv.local_id = existing.local_id;
-                conv.row_id = existing.row_id;
-                conv.stash = existing.stash;
-            }
-            conv.save().await?;
-
+            conv.save_using(interface).await?;
             ids.push(conv.local_id.unwrap());
         }
         Ok(ids)
@@ -1698,6 +1781,7 @@ impl From<ApiConversation> for Conversation {
             subject: value.subject,
             row_id: None,
             stash: None,
+            is_known: true,
         }
     }
 }
@@ -2818,13 +2902,14 @@ impl Message {
         if self.local_conversation_id.is_none() {
             if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
                 if let Some(conversation) =
-                    Conversation::find_by_id(remote_conversation_id, interface).await?
+                    Conversation::find_by_id(remote_conversation_id.clone(), interface).await?
                 {
                     self.local_conversation_id = conversation.local_id;
                 } else {
-                    return Err(StashError::Custom(
-                        "Missing local conversation id".to_owned(),
-                    ));
+                    // Create an unknown entry.
+                    let mut conversation = Conversation::unknown(remote_conversation_id);
+                    conversation.save_using(interface).await?;
+                    self.local_conversation_id = conversation.local_id;
                 }
             }
         }
@@ -2835,18 +2920,22 @@ impl Message {
     ///
     /// # Parameters
     ///
-    /// * `metadata` - TODO: Document this parameter.
-    /// * `stash`    - The stash to use for the database connection.
+    /// * `metadata`  - TODO: Document this parameter.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for accessing the database.
     ///
     /// # Errors
     ///
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn create_or_update_messages_from_metadata(
+    pub async fn create_or_update_messages_from_metadata<A>(
         metadata: Vec<ApiMessageMetadata>,
-        stash: &Stash,
-    ) -> Result<Vec<LocalId>, AppError> {
+        interface: &A,
+    ) -> Result<Vec<LocalId>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let mut ids = Vec::with_capacity(metadata.len());
 
         for metadata in metadata {
@@ -2854,7 +2943,7 @@ impl Message {
                 local_id: None,
                 remote_id: Some(metadata.id.into()),
                 local_address_id: RemoteId::from(metadata.address_id.clone())
-                    .counterpart::<Address, _>(stash)
+                    .counterpart::<Address, _>(interface)
                     .await?
                     .ok_or_else(|| {
                         AppError::LocalIdNotFound(
@@ -2907,16 +2996,16 @@ impl Message {
                 custom_labels: vec![],
                 unread: metadata.unread,
                 row_id: None,
-                stash: Some(stash.clone()),
+                stash: None,
             };
             if let Some(existing) =
-                Self::find_by_id(message.remote_id.clone().unwrap(), stash).await?
+                Self::find_by_id(message.remote_id.clone().unwrap(), interface).await?
             {
                 message.local_id = existing.local_id;
                 message.row_id = existing.row_id;
                 message.stash = existing.stash;
             }
-            message.save().await?;
+            message.save_using(interface).await?;
 
             ids.push(message.local_id.unwrap());
         }
