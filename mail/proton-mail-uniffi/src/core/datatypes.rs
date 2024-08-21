@@ -44,7 +44,6 @@
 //!
 
 use core::fmt;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Config as RealApiConfig;
 use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};
 use proton_core_common::datatypes::{
@@ -1230,77 +1229,6 @@ impl From<RealReferral> for Referral {
         Self {
             eligible: referral.eligible,
             link: referral.link,
-        }
-    }
-}
-
-/// Remote ID.
-///
-/// This minimal struct is simply a wrapper around a [`String`], and is used to
-/// formalise all IDs used by the Proton API.
-///
-#[derive(Clone, Debug, Eq, Hash, PartialEq, UniffiRecord)]
-pub struct RemoteId {
-    value: String,
-}
-
-impl RemoteId {
-    /// Create a new [`RemoteId`] from a [`String`].
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The ID to wrap.
-    ///
-    #[must_use]
-    pub fn new(id: String) -> Self {
-        Self { value: id }
-    }
-
-    /// Convert the [`RemoteId`] into the inner [`String`].
-    #[must_use]
-    pub fn into_inner(self) -> String {
-        self.value
-    }
-}
-
-impl Deref for RemoteId {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl Display for RemoteId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-impl From<ApiRemoteId> for RemoteId {
-    fn from(value: ApiRemoteId) -> Self {
-        Self {
-            value: value.into_inner(),
-        }
-    }
-}
-
-impl From<RemoteId> for ApiRemoteId {
-    fn from(value: RemoteId) -> Self {
-        Self::new(value.into_inner())
-    }
-}
-
-impl From<RemoteId> for RealRemoteId {
-    fn from(remote_id: RemoteId) -> Self {
-        Self::new(remote_id.into_inner())
-    }
-}
-
-impl From<RealRemoteId> for RemoteId {
-    fn from(remote_id: RealRemoteId) -> Self {
-        Self {
-            value: remote_id.into_inner(),
         }
     }
 }
