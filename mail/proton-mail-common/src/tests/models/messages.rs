@@ -202,6 +202,7 @@ mod available_actions {
             recipients: Default::default(),
             senders: Default::default(),
             size: 0,
+            is_known: true,
             subject: "".to_string(),
             custom_labels: vec![],
             row_id: None,
@@ -324,58 +325,60 @@ async fn test_create_message() {
     assert_eq!(db_message.label_ids.len(), 2);
 }
 
-// #[test]
-// fn test_create_message_without_synced_conversation() {
-//     // Validate that we can create messages without having fetch the conversation.
-//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
-//         with_tx_core(&mut core_conn, test_create_message_dependencies_core);
-//         with_tx(&mut conn, |tx| {
-//             create_labels(tx);
-//             let metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
-//             let id = tx
-//                 .create_message_from_metadata(&metadata)
-//                 .expect("failed to create message");
-//             let db_metadata = tx
-//                 .get_message_metadata(id)
-//                 .expect("failed to get message")
-//                 .expect("must have a value");
-//
-//             // ensure we can't access this conversation
-//             let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
-//             assert!(conv.is_none());
-//             let (is_known, rid) = tx
-//                 .is_conversation_known(db_metadata.conversation_id)
-//                 .unwrap();
-//             assert!(!is_known);
-//             assert_eq!(rid, Some(metadata.conversation_id.clone()));
-//
-//             // create the conversation
-//             let conversation = test_conversation(
-//                 [ConversationLabels {
-//                     id: MY_LABEL_ID1.clone(),
-//                     context_num_unread: 0,
-//                     context_num_messages: 0,
-//                     context_time: 0,
-//                     context_size: 0,
-//                     context_num_attachments: 0,
-//                     context_expiration_time: 0,
-//                     context_snooze_time: 0,
-//                 }],
-//                 [],
-//             );
-//             tx.create_conversation(&conversation)
-//                 .expect("failed to create conversation");
-//
-//             let conv = tx.get_conversation(db_metadata.conversation_id).unwrap();
-//             assert!(conv.is_some());
-//             let (is_known, rid) = tx
-//                 .is_conversation_known(db_metadata.conversation_id)
-//                 .unwrap();
-//             assert!(is_known);
-//             assert_eq!(rid, Some(metadata.conversation_id.clone()));
-//         });
-//     });
-// }
+#[tokio::test]
+async fn test_create_message_without_synced_conversation() {
+    // Validate that we can create messages without having fetch the conversation.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+    test_create_message_dependencies_core(&tx).await;
+    create_labels(&tx).await;
+
+    let api_metadata = test_message_metadata([MY_LABEL_ID1.clone().into()], []);
+    let remote_id = api_metadata.id.clone();
+    Message::create_or_update_messages_from_metadata(vec![api_metadata], &tx)
+        .await
+        .expect("failed to create message");
+    let db_metadata = Message::find_by_id(RemoteId::from(remote_id), &tx)
+        .await
+        .expect("failed to get message")
+        .expect("must have a value");
+
+    // ensure we can't access this conversation
+    let conv = Conversation::find_by_id(db_metadata.local_conversation_id.unwrap(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!conv.is_known);
+    assert_eq!(conv.remote_id, db_metadata.remote_conversation_id);
+
+    // create the conversation
+    let mut conversation: Conversation = test_conversation(
+        [ApiConversationLabel {
+            id: MY_LABEL_ID1.clone(),
+            context_num_unread: 0,
+            context_num_messages: 0,
+            context_time: 0,
+            context_size: 0,
+            context_num_attachments: 0,
+            context_expiration_time: 0,
+            context_snooze_time: 0,
+        }],
+        [],
+    )
+    .into();
+
+    conversation
+        .save_using(&tx)
+        .await
+        .expect("failed to create conversation");
+
+    let conv = Conversation::find_by_id(conversation.local_id.unwrap(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(conv.is_known);
+    assert_eq!(conv.remote_id, db_metadata.remote_conversation_id);
+}
 
 #[tokio::test]
 async fn test_create_message_with_attachments() {
@@ -1738,8 +1741,8 @@ async fn test_create_message_dependencies(tx: &Tether) -> u64 {
 }
 
 fn test_message_metadata(
-    label_ids: Vec<ApiRemoteId>,
-    attachments: Vec<ApiAttachmentMetadata>,
+    label_ids: impl IntoIterator<Item = ApiRemoteId>,
+    attachments: impl IntoIterator<Item = ApiAttachmentMetadata>,
 ) -> ApiMessageMetadata {
     ApiMessageMetadata {
         id: MY_MESSAGE_ID.clone().into(),
