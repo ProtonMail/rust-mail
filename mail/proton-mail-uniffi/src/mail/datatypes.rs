@@ -1579,9 +1579,6 @@ pub struct Message {
     /// TODO: Document this field.
     pub cc_list: Vec<MessageAddress>,
 
-    /// TODO: Document this field.
-    pub deleted: bool,
-
     /// Exclusive location of the [`Message`] (e.g. Inbox, Archive, Outbox
     /// etc.).
     pub exclusive_location: Option<ExclusiveLocation>,
@@ -1603,9 +1600,6 @@ pub struct Message {
 
     /// TODO: Document this field.
     pub is_replied_all: bool,
-
-    /// TODO: Document this field.
-    pub mime_type: MimeType,
 
     /// TODO: Document this field.
     pub num_attachments: u32,
@@ -1674,7 +1668,6 @@ impl From<RealMessage> for Message {
                 .into_iter()
                 .map(MessageAddress::from)
                 .collect(),
-            deleted: value.deleted,
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
             header: value.header,
@@ -1682,7 +1675,6 @@ impl From<RealMessage> for Message {
             is_forwarded: value.is_forwarded,
             is_replied: value.is_replied,
             is_replied_all: value.is_replied_all,
-            mime_type: value.mime_type.into(),
             num_attachments: value.num_attachments,
             display_order: value.display_order,
             parsed_headers: value.parsed_headers.headers,
