@@ -21,6 +21,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `local_message_id` is now just `message_id`,
       - `local_parent_id` is now just `parent_id`,
       - Etc.
+  - For `Contact`:
+      - Changed `label_ids` to be `Vec<LabelId>` instead of `Labels`.
+  - For `ContactEmail`:
+      - Changed `contact_type` to be `Vec<String>` instead of `ContactTypes`.
+      - Changed `label_ids` to be `Vec<LabelId>` instead of `Labels`.
+  - For `Conversation`:
+      - Changed `recipients` to be `Vec<MessageAddress>` instead of
+        `MessageAddresses`.
+      - Changed `senders` to be `Vec<MessageAddress>` instead of
+        `MessageAddresses`.
+  - For `Message`:
+      - Changed `bcc_list` to be `Vec<MessageAddress>` instead of
+        `MessageAddresses`.
+      - Changed `cc_list` to be `Vec<MessageAddress>` instead of
+        `MessageAddresses`.
+      - Changed `parsed_headers` to be `HashMap<String, String>` instead of
+        `ParsedHeaders`.
+      - Changed `reply_tos` to be `Vec<MessageAddress>` instead of
+        `MessageAddresses`.
+      - Changed `to_list` to be `Vec<MessageAddress>` instead of
+        `MessageAddresses`.
+  - For `MessageBodyMetadata`:
+      - Changed `parsed_headers` to be `HashMap<String, String>` instead of
+        `ParsedHeaders`.
+
+### Removed
+
+  - Removed `ContactTypes` type.
+  - Removed `Labels` type.
+  - Removed `MessageAddresses` type.
+  - Removed `MessageAttachmentInfos` type (was unused).
+  - Removed `MessageAttachments` type (was unused).
+  - Removed `ParsedHeaders` type.
 
 ## [0.11.11] - 2024-08-20
 
