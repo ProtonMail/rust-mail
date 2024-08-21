@@ -127,6 +127,36 @@ impl From<RealAlmostAllMail> for AlmostAllMail {
     }
 }
 
+/// What to do with the blockquote (previous conversation threads)
+#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
+pub enum BlockQuote {
+    /// Remove the previous conversation.
+    #[default]
+    Strip,
+    /// Don't remove the previous conversation
+    Untouched,
+}
+
+impl From<decrypted_message::BlockQuote> for BlockQuote {
+    fn from(value: decrypted_message::BlockQuote) -> Self {
+        use decrypted_message::BlockQuote::{Strip, Untouched};
+        match value {
+            Strip => Self::Strip,
+            Untouched => Self::Untouched,
+        }
+    }
+}
+
+impl From<BlockQuote> for decrypted_message::BlockQuote {
+    fn from(value: BlockQuote) -> Self {
+        use decrypted_message::BlockQuote as Bq;
+        match value {
+            BlockQuote::Strip => Bq::Strip,
+            BlockQuote::Untouched => Bq::Untouched,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
 #[repr(u8)]
@@ -619,6 +649,40 @@ impl From<RealPmSignature> for PmSignature {
             RealPmSignature::Disabled => PmSignature::Disabled,
             RealPmSignature::Enabled => PmSignature::Enabled,
             RealPmSignature::EnabledLocked => PmSignature::EnabledLocked,
+        }
+    }
+}
+
+/// Enable or disable remote content (images).
+#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
+pub enum RemoteContent {
+    /// Use whatever is in the user's [`MailSettings`]
+    #[default]
+    Default,
+    /// Override the settings and show images
+    Enabled,
+    /// Override the settings and don't show images
+    Disabled,
+}
+
+impl From<decrypted_message::RemoteContent> for RemoteContent {
+    fn from(value: decrypted_message::RemoteContent) -> Self {
+        use decrypted_message::RemoteContent::{Default, Disabled, Enabled};
+        match value {
+            Default => Self::Default,
+            Enabled => Self::Enabled,
+            Disabled => Self::Disabled,
+        }
+    }
+}
+
+impl From<RemoteContent> for decrypted_message::RemoteContent {
+    fn from(value: RemoteContent) -> Self {
+        use decrypted_message::RemoteContent as Rc;
+        match value {
+            RemoteContent::Default => Rc::Default,
+            RemoteContent::Enabled => Rc::Enabled,
+            RemoteContent::Disabled => Rc::Disabled,
         }
     }
 }
@@ -1180,6 +1244,28 @@ impl ConversationSearchOptions {
             subject: self.subject,
             unread: self.unread,
         })
+    }
+}
+
+/// Information about [`Label`] of type [`Label`] that are applied
+/// to [`Conversation`] or [`Messages`].
+#[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
+pub struct CustomLabel {
+    /// Local id of the label
+    pub id: Id,
+    /// Name of the label
+    pub name: String,
+    /// Color of the label.
+    pub color: LabelColor,
+}
+
+impl From<RealCustomLabel> for CustomLabel {
+    fn from(value: RealCustomLabel) -> Self {
+        Self {
+            id: value.local_id.into(),
+            name: value.name,
+            color: value.color.into(),
+        }
     }
 }
 
@@ -2205,92 +2291,6 @@ impl From<RealMobileSettings> for MobileSettings {
             conversation_toolbar: value.conversation_toolbar.into(),
             list_toolbar: value.list_toolbar.into(),
             message_toolbar: value.message_toolbar.into(),
-        }
-    }
-}
-
-/// Information about [`Label`] of type [`Label`] that are applied
-/// to [`Conversation`] or [`Messages`].
-#[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
-pub struct CustomLabel {
-    /// Local id of the label
-    pub id: Id,
-    /// Name of the label
-    pub name: String,
-    /// Color of the label.
-    pub color: LabelColor,
-}
-
-impl From<RealCustomLabel> for CustomLabel {
-    fn from(value: RealCustomLabel) -> Self {
-        Self {
-            id: value.local_id.into(),
-            name: value.name,
-            color: value.color.into(),
-        }
-    }
-}
-
-/// Enable or disable remote content (images).
-#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
-pub enum RemoteContent {
-    /// Use whatever is in the user's [`MailSettings`]
-    #[default]
-    Default,
-    /// Override the settings and show images
-    Enabled,
-    /// Override the settings and don't show images
-    Disabled,
-}
-
-/// What to do with the blockquote (previous conversation threads)
-#[derive(Debug, Clone, Copy, Default, uniffi::Enum)]
-pub enum BlockQuote {
-    /// Remove the previous conversation.
-    #[default]
-    Strip,
-    /// Don't remove the previous conversation
-    Untouched,
-}
-
-impl From<decrypted_message::RemoteContent> for RemoteContent {
-    fn from(value: decrypted_message::RemoteContent) -> Self {
-        use decrypted_message::RemoteContent::{Default, Disabled, Enabled};
-        match value {
-            Default => Self::Default,
-            Enabled => Self::Enabled,
-            Disabled => Self::Disabled,
-        }
-    }
-}
-
-impl From<decrypted_message::BlockQuote> for BlockQuote {
-    fn from(value: decrypted_message::BlockQuote) -> Self {
-        use decrypted_message::BlockQuote::{Strip, Untouched};
-        match value {
-            Strip => Self::Strip,
-            Untouched => Self::Untouched,
-        }
-    }
-}
-
-impl From<RemoteContent> for decrypted_message::RemoteContent {
-    fn from(value: RemoteContent) -> Self {
-        use decrypted_message::RemoteContent as Rc;
-        match value {
-            RemoteContent::Default => Rc::Default,
-            RemoteContent::Enabled => Rc::Enabled,
-            RemoteContent::Disabled => Rc::Disabled,
-        }
-    }
-}
-
-impl From<BlockQuote> for decrypted_message::BlockQuote {
-    fn from(value: BlockQuote) -> Self {
-        use decrypted_message::BlockQuote as Bq;
-        match value {
-            BlockQuote::Strip => Bq::Strip,
-            BlockQuote::Untouched => Bq::Untouched,
         }
     }
 }
