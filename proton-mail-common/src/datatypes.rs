@@ -40,15 +40,14 @@
 pub mod attachment;
 pub(crate) mod contextual_conversation;
 pub(crate) mod exclusive_location;
-mod item_type;
 pub mod labels;
+mod rollback_item_type;
 pub(crate) mod system_label;
 
 use crate::models::{Label, MessageBodyMetadata};
 pub use contextual_conversation::ContextualConversation;
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
-pub use item_type::ItemType;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
@@ -70,6 +69,7 @@ use proton_crypto_inbox::attachment::{
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
 use proton_crypto_inbox::message::{DecryptableMessage, GettablePGPMessage};
+pub use rollback_item_type::RollbackItemType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,

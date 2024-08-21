@@ -4,13 +4,13 @@ use stash::exports::{
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[repr(u8)]
-pub enum ItemType {
+pub enum RollbackItemType {
     Label = 1,
     Message = 2,
     Conversation = 3,
 }
 
-impl FromSql for ItemType {
+impl FromSql for RollbackItemType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match u8::column_result(value)? {
             1 => Ok(Self::Label),
@@ -21,7 +21,7 @@ impl FromSql for ItemType {
     }
 }
 
-impl ToSql for ItemType {
+impl ToSql for RollbackItemType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }

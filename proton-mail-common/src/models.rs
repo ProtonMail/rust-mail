@@ -852,33 +852,16 @@ impl Conversation {
         A: Into<AgnosticInterface> + Interface,
     {
         let mut ids = Vec::with_capacity(conversations.len());
-        let tx = stash.transaction().await?;
+        let tx = interface.transaction().await?;
 
         for mut conv in conversations {
-            Self::sync_conversation(&mut conv, &tx).await?;
+            Self::save_using(&mut conv, &tx).await?;
             ids.push(conv.local_id.unwrap());
         }
 
         tx.commit().await?;
 
         Ok(ids)
-    }
-
-    pub async fn sync_conversation(
-        api_conversation: &mut Conversation,
-        tether: &Tether,
-    ) -> Result<(), AppError> {
-        if let Some(db_conversation) =
-            Self::find_by_id(api_conversation.remote_id.clone().unwrap(), tether).await?
-        {
-            api_conversation.local_id = db_conversation.local_id;
-            api_conversation.row_id = db_conversation.row_id;
-        }
-
-        api_conversation.set_stash(tether.stash());
-        api_conversation.save_using(tether).await?;
-
-        Ok(())
     }
 
     /// Delete multiple conversations.
@@ -2515,8 +2498,10 @@ impl Label {
             if let Some(label) =
                 Label::find_first("WHERE remote_id=?", params![remote_id], interface).await?
             {
+                self.local_parent_id = label.local_parent_id;
                 self.local_id = label.local_id;
                 self.row_id = label.row_id;
+                self.stash = label.stash;
             }
         }
 
@@ -2657,29 +2642,10 @@ impl Label {
         let tx = stash.transaction().await?;
 
         for mut label in all_labels {
-            Self::sync_label(&mut label, &tx).await?;
+            Self::save_using(&mut label, &tx).await?;
         }
 
         tx.commit().await?;
-
-        Ok(())
-    }
-
-    pub async fn sync_label(api_label: &mut Label, tether: &Tether) -> Result<(), AppError> {
-        let parent_id_option = api_label.remote_parent_id.clone();
-        api_label.local_parent_id = match parent_id_option {
-            Some(parent_id) => parent_id.counterpart::<Self, _>(tether).await?,
-            None => None,
-        };
-        let db_label =
-            Label::find_by_id(RemoteId::from(api_label.remote_id.clone().unwrap()), tether).await?;
-        if let Some(db_label) = db_label {
-            api_label.local_id = db_label.local_id;
-            api_label.row_id = db_label.row_id;
-        }
-
-        api_label.set_stash(tether.stash());
-        api_label.save_using(tether).await?;
 
         Ok(())
     }
@@ -3457,27 +3423,11 @@ impl Message {
                 stash: None,
             };
 
-            let tx = stash.transaction().await?;
-            Self::sync_message(&mut message, &tx).await?;
-            tx.commit().await?;
+            Self::save_using(&mut message, interface).await?;
 
             ids.push(message.local_id.unwrap());
         }
         Ok(ids)
-    }
-
-    pub async fn sync_message(api_message: &mut Self, tether: &Tether) -> Result<(), AppError> {
-        if let Some(db_message) =
-            Self::find_by_id(api_message.remote_id.clone().unwrap(), tether).await?
-        {
-            api_message.local_id = db_message.local_id;
-            api_message.row_id = db_message.row_id;
-        }
-
-        api_message.set_stash(tether.stash());
-        api_message.save_using(tether).await?;
-
-        Ok(())
     }
 
     /// Delete multiple messages.

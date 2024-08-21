@@ -2,7 +2,8 @@
 #[path = "../../tests/actions/labels/expand.rs"]
 mod tests;
 
-use crate::models::Label;
+use crate::datatypes::RollbackItemType;
+use crate::models::{Label, RollbackItem};
 use crate::{actions::ActionError, AppError};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
@@ -104,7 +105,15 @@ impl proton_action_queue::action::Handler for Handler {
 
         action.expand = original_state;
 
-        self.apply_local(action, tx).await
+        self.apply_local(action, tx).await?;
+
+        if let Some(remote_id) = action.remote_id.clone() {
+            RollbackItem::new(remote_id.into(), RollbackItemType::Label)
+                .save_using(tx)
+                .await?;
+        }
+
+        Ok(())
     }
 
     async fn apply_remote(

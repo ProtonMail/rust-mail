@@ -5,7 +5,8 @@ pub async fn create_rollback_action_tables(tx: &Tether) -> Result<(), StashError
         r#"
             CREATE TABLE rollback_actions(
                 remote_id TEXT NOT NULL,
-                item_type INTEGER NOT NULL
+                item_type INTEGER NOT NULL,
+                PRIMARY KEY (remote_id, item_type)
             )
         "#,
         vec![],
@@ -13,7 +14,7 @@ pub async fn create_rollback_action_tables(tx: &Tether) -> Result<(), StashError
     .await?;
 
     tx.execute(
-        "CREATE INDEX index_rollback_action_item_type ON rollback_actions (item_type)",
+        "CREATE INDEX index_rollback_actions_item_type ON rollback_actions (item_type)",
         vec![],
     )
     .await?;

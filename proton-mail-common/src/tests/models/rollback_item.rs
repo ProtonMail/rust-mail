@@ -25,10 +25,10 @@ use super::*;
 #[test_case(vec![
     conversation!(remote_id: Some("123".into())).into(),
     message!(remote_id: Some("123".into())).into()
-]; "Test 1: 2 different items with the same remote_id")]
+], None; "Test 1: 2 different items with the same remote_id")]
 #[test_case(vec![
     label!(remote_id: Some("123".into())).into(),
-]; "Test 2: Only one label")]
+], None; "Test 2: Only one label")]
 #[test_case(vec![
     label!(remote_id: Some("123".into())).into(),
     label!(remote_id: Some("124".into())).into(),
@@ -36,7 +36,7 @@ use super::*;
     label!(remote_id: Some("126".into())).into(),
     label!(remote_id: Some("127".into())).into(),
     label!(remote_id: Some("128".into())).into(),
-]; "Test 3: 6 labels")]
+], None; "Test 3: 6 labels")]
 #[test_case(vec![
     conversation!(remote_id: Some("123".into())).into(),
     message!(remote_id: Some("123".into())).into(),
@@ -45,7 +45,7 @@ use super::*;
     message!(remote_id: Some("126".into())).into(),
     message!(remote_id: Some("127".into())).into(),
     message!(remote_id: Some("128".into())).into(),
-]; "Test 4: 6 messages")]
+], None; "Test 4: 6 messages")]
 #[test_case(vec![
     label!(remote_id: Some("123".into())).into(),
     label!(remote_id: Some("124".into())).into(),
@@ -60,50 +60,63 @@ use super::*;
     message!(remote_id: Some("127".into())).into(),
     message!(remote_id: Some("128".into())).into(),
     conversation!(remote_id: Some("123".into())).into(),
-]; "Test 5: 13 different items")]
-// TODO: Fix those tests
-/// note: I cannot mock more than one conversation due to query params not being set correctly
-/// So i cannot differ between requests
-///
-// #[test_case(vec![
-//     conversation!(remote_id: Some("123".into())).into(),
-//     conversation!(remote_id: Some("124".into())).into(),
-//     conversation!(remote_id: Some("125".into())).into(),
-//     conversation!(remote_id: Some("126".into())).into(),
-//     conversation!(remote_id: Some("127".into())).into(),
-//     conversation!(remote_id: Some("128".into())).into(),
-// ]; "Test 6: 6 conversations")]
-// #[test_case(vec![
-//     label!(remote_id: Some("123".into())).into(),
-//     label!(remote_id: Some("124".into())).into(),
-//     label!(remote_id: Some("125".into())).into(),
-//     label!(remote_id: Some("126".into())).into(),
-//     label!(remote_id: Some("127".into())).into(),
-//     label!(remote_id: Some("128".into())).into(),
-//     message!(remote_id: Some("123".into())).into(),
-//     message!(remote_id: Some("124".into())).into(),
-//     message!(remote_id: Some("125".into())).into(),
-//     message!(remote_id: Some("126".into())).into(),
-//     message!(remote_id: Some("127".into())).into(),
-//     message!(remote_id: Some("128".into())).into(),
-//     conversation!(remote_id: Some("123".into())).into(),
-//     conversation!(remote_id: Some("124".into())).into(),
-//     conversation!(remote_id: Some("125".into())).into(),
-//     conversation!(remote_id: Some("126".into())).into(),
-//     conversation!(remote_id: Some("127".into())).into(),
-//     conversation!(remote_id: Some("128".into())).into(),
-// ]; "Test 7: 18 different items")]
+], None; "Test 5: 13 different items")]
+#[test_case(vec![
+    conversation!(remote_id: Some("123".into())).into(),
+    conversation!(remote_id: Some("124".into())).into(),
+    conversation!(remote_id: Some("125".into())).into(),
+    conversation!(remote_id: Some("126".into())).into(),
+    conversation!(remote_id: Some("127".into())).into(),
+    conversation!(remote_id: Some("128".into())).into(),
+], None; "Test 6: 6 conversations")]
+#[test_case(vec![
+    label!(remote_id: Some("123".into())).into(),
+    label!(remote_id: Some("124".into())).into(),
+    label!(remote_id: Some("125".into())).into(),
+    label!(remote_id: Some("126".into())).into(),
+    label!(remote_id: Some("127".into())).into(),
+    label!(remote_id: Some("128".into())).into(),
+    message!(remote_id: Some("123".into())).into(),
+    message!(remote_id: Some("124".into())).into(),
+    message!(remote_id: Some("125".into())).into(),
+    message!(remote_id: Some("126".into())).into(),
+    message!(remote_id: Some("127".into())).into(),
+    message!(remote_id: Some("128".into())).into(),
+    conversation!(remote_id: Some("123".into())).into(),
+    conversation!(remote_id: Some("124".into())).into(),
+    conversation!(remote_id: Some("125".into())).into(),
+    conversation!(remote_id: Some("126".into())).into(),
+    conversation!(remote_id: Some("127".into())).into(),
+    conversation!(remote_id: Some("128".into())).into(),
+], None; "Test 7: 18 different items")]
+#[test_case(vec![
+    conversation!(remote_id: Some("123".into())).into(),
+    conversation!(remote_id: Some("123".into())).into(),
+    conversation!(remote_id: Some("123".into())).into(),
+    conversation!(remote_id: Some("123".into())).into(),
+    conversation!(remote_id: Some("123".into())).into(),
+    conversation!(remote_id: Some("123".into())).into(),
+], Some(vec![conversation!(remote_id: Some("123".into())).into()]); "Test 8: 6 exactly the same conversations")]
 #[tokio::test]
-async fn test_store_and_delete_remote_items(mut expected: Vec<RollbackItem>) {
+async fn test_store_and_delete_remote_items(
+    mut input: Vec<RollbackItem>,
+    mut expected: Option<Vec<RollbackItem>>,
+) {
     // * RollbackItem is correctly stored *
     let (stash, _tempdir) = new_test_connection_file().await;
     let tx = stash.connection();
 
-    for item in expected.iter_mut() {
+    for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
         item.set_stash(&stash);
         item.save().await.unwrap();
     }
 
+    for item in input.iter_mut() {
+        item.set_stash(&stash);
+        item.save().await.unwrap();
+    }
+
+    let expected = expected.unwrap_or_else(|| input);
     let actual = RollbackItem::all(&stash, None).await.unwrap();
 
     assert_eq!(expected, actual);
@@ -112,12 +125,15 @@ async fn test_store_and_delete_remote_items(mut expected: Vec<RollbackItem>) {
     setup_database(&tx).await;
     let (_mock, api) = start_server(&stash).await;
 
-    RollbackItem::sync_all(&api, &stash).await.unwrap();
+    RollbackItem::sync_all(&api, &stash, 2).await.unwrap();
 
     // * RollbackItems are correctly deleted during sync *
     let actual = RollbackItem::all(&stash, None).await.unwrap();
 
     assert_eq!(actual.len(), 0);
+
+    // * RollbackItems with no limit for empty stash *
+    RollbackItem::sync_all(&api, &stash, None).await.unwrap();
 }
 
 async fn setup_database(tx: &Tether) {
@@ -145,7 +161,7 @@ async fn setup_database(tx: &Tether) {
 }
 
 async fn conversations(tx: &Tether) -> Vec<Conversation> {
-    let items = RollbackItem::find_by_kind(ItemType::Conversation, tx)
+    let items = RollbackItem::find_by_kind(RollbackItemType::Conversation, tx)
         .await
         .unwrap();
 
@@ -160,7 +176,7 @@ async fn messages(
     remote_conversation_id: Option<RemoteId>,
     tx: &Tether,
 ) -> Vec<Message> {
-    let items = RollbackItem::find_by_kind(ItemType::Message, tx)
+    let items = RollbackItem::find_by_kind(RollbackItemType::Message, tx)
         .await
         .unwrap();
     let address = create_address(&tx).await;
@@ -181,7 +197,7 @@ async fn messages(
 }
 
 async fn labels(tx: &Tether) -> Vec<Label> {
-    let items = RollbackItem::find_by_kind(ItemType::Label, tx)
+    let items = RollbackItem::find_by_kind(RollbackItemType::Label, tx)
         .await
         .unwrap();
 
@@ -205,7 +221,11 @@ async fn start_server(stash: &Stash) -> (MockServer, Proton) {
         ..Default::default()
     };
     let api = Proton::new(api_config, None, None).await.unwrap();
-    let kinds = vec![ItemType::Conversation, ItemType::Message, ItemType::Label];
+    let kinds = vec![
+        RollbackItemType::Conversation,
+        RollbackItemType::Message,
+        RollbackItemType::Label,
+    ];
 
     for kind in kinds {
         let items = RollbackItem::find_by_kind(kind, stash).await.unwrap();
@@ -213,9 +233,9 @@ async fn start_server(stash: &Stash) -> (MockServer, Proton) {
         for item in items {
             dbg!(&item);
             match item.item_type {
-                ItemType::Conversation => mock_get_conversation(&mock_server, &item).await,
-                ItemType::Message => mock_get_message(&mock_server, &item, &stash).await,
-                ItemType::Label => mock_label(&mock_server, &item).await,
+                RollbackItemType::Conversation => mock_get_conversation(&mock_server, &item).await,
+                RollbackItemType::Message => mock_get_message(&mock_server, &item, &stash).await,
+                RollbackItemType::Label => mock_label(&mock_server, &item).await,
             }
         }
     }
@@ -229,12 +249,7 @@ async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
 
     Mock::given(method("GET"))
         .and(path(format!("/api/mail/v4/conversations")))
-        // TODO: No idea why this parameters are not set...
-        // .and(query_param_contains("ID", remote_id.to_string()))
-        // .and(query_param_contains(
-        //     "page_size",
-        //     MAX_PAGE_ELEMENT_COUNT_U64.to_string(),
-        // ))
+        .and(query_param_contains("ID[0]", remote_id.to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
                 conversations: vec![api_conversation],

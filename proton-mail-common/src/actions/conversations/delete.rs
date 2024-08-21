@@ -57,6 +57,8 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::undelete_multiple(action.0.ids.clone(), action.0.label_id, tx).await?;
+        action.0.mark_rollback_conversations(tx).await?;
+
         Ok(())
     }
 
