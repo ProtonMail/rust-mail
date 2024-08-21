@@ -1,6 +1,5 @@
 mod attachments;
 
-use crate::core::datatypes::LabelId;
 use crate::mail::datatypes::ViewMode;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::uniffi_async;
@@ -22,8 +21,6 @@ use tracing::error;
 pub enum MailboxError {
     #[error("Could not find label with id '{0}'")]
     LabelNotFound(u64),
-    #[error("Could not find label with remote id '{0}'")]
-    RemoteLabelNotFound(LabelId),
     #[error("Label '{0}' does not have a remote id")]
     LabelDoesNotHaveRemoteId(u64),
     #[error("No exclusive location found for message '{0}'")]
@@ -113,27 +110,18 @@ impl Mailbox {
         .await
     }
 
-    /// Create a new mailbox for a given remote id.
+    /// Create a new mailbox for Inbox.
     #[uniffi::constructor]
-    pub async fn with_remote_id(
-        ctx: &MailUserSession,
-        label_id: &LabelId,
-    ) -> MailboxResult<Arc<Self>> {
+    pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Arc<Self>> {
         let mbox =
-            proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), label_id.clone().into())
+            proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), RealLabelId::inbox())
                 .await?;
         Self::sync(mbox).await
     }
 
-    /// Create a new mailbox for Inbox.
-    #[uniffi::constructor]
-    pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Arc<Self>> {
-        Self::with_remote_id(ctx, &RealLabelId::inbox().into()).await
-    }
-
     /// Create a new mailbox for a given label id.
     #[uniffi::constructor]
-    pub async fn with_local_id(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
+    pub async fn with_label_id(ctx: &MailUserSession, label_id: u64) -> MailboxResult<Arc<Self>> {
         // Note: This is a workaround for the default constructor not being able to be
         // generated on Kotlin.
         Self::new(ctx, label_id).await
@@ -183,7 +171,6 @@ impl From<RealMailboxError> for MailboxError {
     fn from(value: RealMailboxError) -> Self {
         match value {
             RealMailboxError::LabelNotFound(e) => Self::LabelNotFound(e.into()),
-            RealMailboxError::RemoteLabelNotFound(e) => Self::RemoteLabelNotFound(e.into()),
             RealMailboxError::LabelDoesNotHaveRemoteId(e) => {
                 Self::LabelDoesNotHaveRemoteId(e.into())
             }
