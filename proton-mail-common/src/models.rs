@@ -3061,23 +3061,6 @@ impl Message {
     /// See [`Model::save()`].
     ///
     pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
-        // Get local conversation id for reference conversation
-        if let Some(conversation_id) = self.remote_conversation_id.clone() {
-            interface
-                .execute(
-                    formatdoc!(
-                        "
-                UPDATE messages SET
-                    local_conversation_id=(
-                        SELECT local_id FROM conversations
-                        WHERE remote_id = ?
-                    )
-                WHERE local_id=?"
-                    ),
-                    params![conversation_id, self.local_id],
-                )
-                .await?;
-        }
         // Remove any labels that are no longer associated with this message.
         if !self.label_ids.is_empty() {
             #[allow(trivial_casts)]
