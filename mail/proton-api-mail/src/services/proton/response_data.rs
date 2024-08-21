@@ -463,7 +463,7 @@ impl Default for Conversation {
     fn default() -> Self {
         Self {
             id: RemoteId::from(""),
-            attachment_info: HashMap::default(),
+            attachment_info: BTreeMap::default(),
             attachments_metadata: Vec::default(),
             display_snooze_reminder: false,
             expiration_time: 0,

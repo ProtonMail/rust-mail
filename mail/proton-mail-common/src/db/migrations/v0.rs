@@ -42,6 +42,7 @@ impl proton_sqlite3::Migration for MigrationV0 {
         let entered = span.enter();
         settings::create_settings_table(tx).await?;
         drop(entered);
+        let span = debug_span!("rollback_actions");
         let entered = span.enter();
         rollback_actions::create_rollback_action_tables(tx).await?;
         drop(entered);

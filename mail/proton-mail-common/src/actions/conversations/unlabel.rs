@@ -53,6 +53,9 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Conversation::apply_label(action.0.label_id, action.0.ids.clone(), tx).await?;
+
+        action.0.mark_rollback_conversations(tx).await?;
+
         Ok(())
     }
 

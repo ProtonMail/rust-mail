@@ -1,6 +1,7 @@
 use crate::actions::conversations::filter_conversation_responses;
 use crate::actions::ActionError;
-use crate::models::Conversation;
+use crate::datatypes::RollbackItemType;
+use crate::models::{Conversation, RollbackItem};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
@@ -103,6 +104,13 @@ impl proton_action_queue::action::Handler for Handler {
             tx,
         )
         .await?;
+
+        for remote_id in action.remote_ids.iter() {
+            RollbackItem::new(remote_id.clone(), RollbackItemType::Conversation)
+                .save_using(tx)
+                .await?;
+        }
+
         Ok(())
     }
 

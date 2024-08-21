@@ -1,5 +1,6 @@
 use crate::actions::ActionError;
-use crate::models::{Conversation, Label as LabelModel};
+use crate::datatypes::RollbackItemType;
+use crate::models::{Conversation, Label as LabelModel, RollbackItem};
 use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
@@ -46,6 +47,16 @@ impl ActionData {
             remote_label_id: None,
             remote_ids: vec![],
         }
+    }
+
+    async fn mark_rollback_conversations(&self, tx: &Tether) -> Result<(), ActionError> {
+        for remote_id in self.remote_ids.iter() {
+            RollbackItem::new(remote_id.clone(), RollbackItemType::Conversation)
+                .save_using(tx)
+                .await?;
+        }
+
+        Ok(())
     }
 
     /// Resolve all remote ids.
