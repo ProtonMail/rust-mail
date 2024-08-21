@@ -68,18 +68,15 @@ use proton_mail_common::datatypes::{
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
     Disposition as RealDisposition, EncryptedMessageBody as RealEncryptedMessageBody,
     LabelColor as RealLabelColor, LabelType as RealLabelType, MessageAddress as RealMessageAddress,
-    MessageAddresses as RealMessageAddresses, MessageAttachment as RealMessageAttachment,
+    MessageAttachment as RealMessageAttachment,
     MessageAttachmentHeaders as RealMessageAttachmentHeaders,
-    MessageAttachmentInfo as RealMessageAttachmentInfo,
-    MessageAttachmentInfos as RealMessageAttachmentInfos,
-    MessageAttachments as RealMessageAttachments, MessageButtons as RealMessageButtons,
+    MessageAttachmentInfo as RealMessageAttachmentInfo, MessageButtons as RealMessageButtons,
     MessageCount as RealMessageCount, MessageFlags as RealMessageFlags, MimeType as RealMimeType,
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
     NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
-    ParsedHeaders as RealParsedHeaders, PgpScheme as RealPgpScheme, PmSignature as RealPmSignature,
-    ShowImages as RealShowImages, ShowMoved as RealShowMoved, SpamAction as RealSpamAction,
-    SwipeAction as RealSwipeAction, SystemLabel as RealSystemLabel, ViewLayout as RealViewLayout,
-    ViewMode as RealViewMode,
+    PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
+    ShowMoved as RealShowMoved, SpamAction as RealSpamAction, SwipeAction as RealSwipeAction,
+    SystemLabel as RealSystemLabel, ViewLayout as RealViewLayout, ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -94,7 +91,6 @@ use smart_default::SmartDefault;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::ops::{Deref, DerefMut};
 pub use system_label::*;
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
@@ -947,10 +943,10 @@ pub struct Conversation {
     pub display_order: u64,
 
     /// All recipients from messages in this conversation.
-    pub recipients: MessageAddresses,
+    pub recipients: Vec<MessageAddress>,
 
     /// All senders from messages in this conversation.
-    pub senders: MessageAddresses,
+    pub senders: Vec<MessageAddress>,
 
     /// Total size of all the messages in this conversation.
     pub size: u64,
@@ -979,8 +975,18 @@ impl From<ContextualConversation> for Conversation {
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
             num_unread: value.num_unread,
-            recipients: value.recipients.into(),
-            senders: value.senders.into(),
+            recipients: value
+                .recipients
+                .value
+                .into_iter()
+                .map(MessageAddress::from)
+                .collect(),
+            senders: value
+                .senders
+                .value
+                .into_iter()
+                .map(MessageAddress::from)
+                .collect(),
             size: value.size,
             is_starred: value.is_starred,
             subject: value.subject,
@@ -1568,10 +1574,10 @@ pub struct Message {
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
     /// TODO: Document this field.
-    pub bcc_list: MessageAddresses,
+    pub bcc_list: Vec<MessageAddress>,
 
     /// TODO: Document this field.
-    pub cc_list: MessageAddresses,
+    pub cc_list: Vec<MessageAddress>,
 
     /// TODO: Document this field.
     pub deleted: bool,
@@ -1610,10 +1616,10 @@ pub struct Message {
     /// TODO: Document this field.
     // Unfortunately, some values returned in this struct are either
     // arrays or strings.
-    pub parsed_headers: ParsedHeaders,
+    pub parsed_headers: HashMap<String, String>,
 
     /// TODO: Document this field.
-    pub reply_tos: MessageAddresses,
+    pub reply_tos: Vec<MessageAddress>,
 
     /// TODO: Document this field.
     pub sender: MessageAddress,
@@ -1631,7 +1637,7 @@ pub struct Message {
     pub time: u64,
 
     /// TODO: Document this field.
-    pub to_list: MessageAddresses,
+    pub to_list: Vec<MessageAddress>,
 
     /// TODO: Document this field.
     pub unread: bool,
@@ -1656,8 +1662,18 @@ impl From<RealMessage> for Message {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            bcc_list: value.bcc_list.into(),
-            cc_list: value.cc_list.into(),
+            bcc_list: value
+                .bcc_list
+                .value
+                .into_iter()
+                .map(MessageAddress::from)
+                .collect(),
+            cc_list: value
+                .cc_list
+                .value
+                .into_iter()
+                .map(MessageAddress::from)
+                .collect(),
             deleted: value.deleted,
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
@@ -1669,14 +1685,24 @@ impl From<RealMessage> for Message {
             mime_type: value.mime_type.into(),
             num_attachments: value.num_attachments,
             display_order: value.display_order,
-            parsed_headers: value.parsed_headers.into(),
-            reply_tos: value.reply_tos.into(),
+            parsed_headers: value.parsed_headers.headers,
+            reply_tos: value
+                .reply_tos
+                .value
+                .into_iter()
+                .map(MessageAddress::from)
+                .collect(),
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time,
             subject: value.subject,
             time: value.time,
-            to_list: value.to_list.into(),
+            to_list: value
+                .to_list
+                .value
+                .into_iter()
+                .map(MessageAddress::from)
+                .collect(),
             unread: value.unread,
             custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
             starred,
@@ -1729,27 +1755,6 @@ impl From<RealMessageAddress> for MessageAddress {
             is_proton: value.is_proton,
             is_simple_login: value.is_simple_login,
             name: value.name,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAddresses {
-    pub value: Vec<MessageAddress>,
-}
-
-impl From<MessageAddresses> for RealMessageAddresses {
-    fn from(value: MessageAddresses) -> Self {
-        RealMessageAddresses {
-            value: value.value.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-impl From<RealMessageAddresses> for MessageAddresses {
-    fn from(value: RealMessageAddresses) -> Self {
-        MessageAddresses {
-            value: value.value.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -1873,76 +1878,6 @@ impl From<RealMessageAttachmentInfo> for MessageAttachmentInfo {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAttachmentInfos {
-    pub value: HashMap<String, MessageAttachmentInfo>,
-}
-
-impl Deref for MessageAttachmentInfos {
-    type Target = HashMap<String, MessageAttachmentInfo>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl DerefMut for MessageAttachmentInfos {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
-    }
-}
-
-impl From<MessageAttachmentInfos> for RealMessageAttachmentInfos {
-    fn from(value: MessageAttachmentInfos) -> Self {
-        RealMessageAttachmentInfos {
-            value: value
-                .value
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-
-impl From<RealMessageAttachmentInfos> for MessageAttachmentInfos {
-    fn from(value: RealMessageAttachmentInfos) -> Self {
-        MessageAttachmentInfos {
-            value: value
-                .value
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAttachments {
-    pub value: Vec<MessageAttachment>,
-}
-
-impl Deref for MessageAttachments {
-    type Target = Vec<MessageAttachment>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl DerefMut for MessageAttachments {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.value
-    }
-}
-
-impl From<RealMessageAttachments> for MessageAttachments {
-    fn from(value: RealMessageAttachments) -> Self {
-        MessageAttachments {
-            value: value.value.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
 /// Metadata associated with the Body of a message.
 ///
 /// Message bodies are not stored in the database.
@@ -1969,7 +1904,7 @@ pub struct MessageBodyMetadata {
     pub mime_type: MimeType,
 
     /// TODO: Document this field.
-    pub parsed_headers: ParsedHeaders,
+    pub parsed_headers: HashMap<String, String>,
 }
 
 impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
@@ -1978,7 +1913,7 @@ impl From<RealMessageBodyMetadata> for MessageBodyMetadata {
             message_id: value.local_message_id.unwrap().into(),
             header: value.header,
             mime_type: value.mime_type.into(),
-            parsed_headers: value.parsed_headers.into(),
+            parsed_headers: value.parsed_headers.headers,
         }
     }
 }
@@ -2278,27 +2213,6 @@ impl From<RealMobileSettings> for MobileSettings {
             conversation_toolbar: value.conversation_toolbar.into(),
             list_toolbar: value.list_toolbar.into(),
             message_toolbar: value.message_toolbar.into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, UniffiRecord)]
-pub struct ParsedHeaders {
-    pub headers: HashMap<String, String>,
-}
-
-impl From<ParsedHeaders> for RealParsedHeaders {
-    fn from(value: ParsedHeaders) -> Self {
-        RealParsedHeaders {
-            headers: value.headers,
-        }
-    }
-}
-
-impl From<RealParsedHeaders> for ParsedHeaders {
-    fn from(value: RealParsedHeaders) -> Self {
-        ParsedHeaders {
-            headers: value.headers,
         }
     }
 }

@@ -50,14 +50,14 @@ use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
     AddressType as RealAddressType, CardType as RealCardType,
-    ContactSendingPreferences as RealContactSendingPreferences, ContactTypes as RealContactTypes,
-    DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
-    Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
-    HighSecurity as RealHighSecurity, LabelId as RealLabelId, Labels as RealLabels,
-    LocalId as RealLocalId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
-    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
-    SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
-    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    ContactSendingPreferences as RealContactSendingPreferences, DateFormat as RealDateFormat,
+    Density as RealDensity, EarlyAccess as RealEarlyAccess, Email as RealEmail,
+    FidoKey as RealFidoKey, Flags as RealFlags, HighSecurity as RealHighSecurity,
+    LabelId as RealLabelId, LocalId as RealLocalId, LogAuth as RealLogAuth,
+    Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
+    Referral as RealReferral, RemoteId as RealRemoteId, SettingsFlags as RealSettingsFlags,
+    TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat, TwoFa as RealTwoFa,
+    UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
 use proton_core_common::models::{
@@ -722,7 +722,7 @@ pub struct Contact {
     pub create_time: u64,
 
     /// TODO: Document this field.
-    pub label_ids: Labels,
+    pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
     pub modify_time: u64,
@@ -744,7 +744,12 @@ impl From<RealContact> for Contact {
                 .map(ContactEmail::from)
                 .collect(),
             create_time: contact.create_time,
-            label_ids: contact.label_ids.into(),
+            label_ids: contact
+                .label_ids
+                .into_inner()
+                .into_iter()
+                .map(LabelId::from)
+                .collect(),
             modify_time: contact.modify_time,
             name: contact.name,
             size: contact.size,
@@ -794,7 +799,7 @@ pub struct ContactEmail {
     pub canonical_email: String,
 
     /// TODO: Document this field.
-    pub contact_type: ContactTypes,
+    pub contact_type: Vec<String>,
 
     /// TODO: Document this field.
     pub defaults: ContactSendingPreferences,
@@ -809,7 +814,7 @@ pub struct ContactEmail {
     pub is_proton: bool,
 
     /// TODO: Document this field.
-    pub label_ids: Labels,
+    pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
     pub last_used_time: u64,
@@ -822,61 +827,19 @@ impl From<RealContactEmail> for ContactEmail {
     fn from(email: RealContactEmail) -> Self {
         Self {
             canonical_email: email.canonical_email,
-            contact_type: email.contact_type.into(),
+            contact_type: email.contact_type.deref().clone(),
             defaults: email.defaults.into(),
             display_order: email.display_order,
             email: email.email,
             is_proton: email.is_proton,
-            label_ids: email.label_ids.into(),
+            label_ids: email
+                .label_ids
+                .into_inner()
+                .into_iter()
+                .map(LabelId::from)
+                .collect(),
             last_used_time: email.last_used_time,
             name: email.name,
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct ContactTypes {
-    value: Vec<String>,
-}
-
-impl ContactTypes {
-    /// Create a new [`ContactTypes`] instance from a list of [`String`]s.
-    ///
-    /// # Parameters
-    ///
-    /// * `types` - The types to wrap.
-    ///
-    #[must_use]
-    pub fn new(types: Vec<String>) -> Self {
-        Self { value: types }
-    }
-
-    /// Convert the [`ContactTypes`] into the inner [`Vec`].
-    #[must_use]
-    pub fn into_inner(self) -> Vec<String> {
-        self.value
-    }
-}
-
-impl Deref for ContactTypes {
-    type Target = Vec<String>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl From<ContactTypes> for RealContactTypes {
-    fn from(contact_types: ContactTypes) -> Self {
-        Self::new(contact_types.into_inner())
-    }
-}
-
-impl From<RealContactTypes> for ContactTypes {
-    fn from(contact_types: RealContactTypes) -> Self {
-        Self {
-            value: contact_types.into_inner(),
         }
     }
 }
@@ -1118,59 +1081,6 @@ impl From<RealLabelId> for LabelId {
     fn from(label_id: RealLabelId) -> Self {
         Self {
             value: label_id.into_inner().into(),
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct Labels {
-    value: Vec<LabelId>,
-}
-
-impl Labels {
-    /// Create a new [`Labels`] instance from a list of [`LabelId`]s.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids` - The IDs to wrap.
-    ///
-    #[must_use]
-    pub fn new(ids: Vec<LabelId>) -> Self {
-        Self { value: ids }
-    }
-
-    /// Convert the [`Labels`] into the inner [`Vec`].
-    #[must_use]
-    pub fn into_inner(self) -> Vec<LabelId> {
-        self.value
-    }
-}
-
-impl Deref for Labels {
-    type Target = Vec<LabelId>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl From<Labels> for RealLabels {
-    fn from(labels: Labels) -> Self {
-        Self::new(
-            labels
-                .into_inner()
-                .into_iter()
-                .map(RealLabelId::from)
-                .collect(),
-        )
-    }
-}
-
-impl From<RealLabels> for Labels {
-    fn from(labels: RealLabels) -> Self {
-        Self {
-            value: labels.into_inner().into_iter().map(LabelId::from).collect(),
         }
     }
 }
