@@ -114,10 +114,13 @@ impl Mailbox {
     /// Create a new mailbox for Inbox.
     #[uniffi::constructor]
     pub async fn inbox(ctx: &MailUserSession) -> MailboxResult<Arc<Self>> {
-        let mbox =
-            proton_mail_common::Mailbox::with_remote_id(ctx.ctx().clone(), RealLabelId::inbox())
-                .await?;
-        Self::sync(mbox).await
+        let ctx = ctx.ctx().clone();
+        uniffi_async(async move {
+            let mbox =
+                proton_mail_common::Mailbox::with_remote_id(ctx, RealLabelId::inbox()).await?;
+            Self::sync(mbox).await
+        })
+        .await
     }
 
     /// Create a new mailbox for a given label id.

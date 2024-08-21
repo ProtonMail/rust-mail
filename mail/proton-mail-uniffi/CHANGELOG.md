@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             `ParsedHeaders`.
   - Renamed `Mailbox::with_local_id()` to `with_label_id()`.
 
+### Fixed
+
+  - Missing async wrapper for `Mailbox::inbox()`.
+
 ### Removed
 
   - Removed grouping types:
@@ -77,7 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `message_id_to_open` field into `WatchedConversation`
 
 ### Changed
-  
+
   - Updated `ConversationSearchOptions` to use local IDs.
   - Updated `MessageSearchOptions` to use local IDs.
   - Renamed `MessageSearchOptions.label_id` to `label_ids`.
