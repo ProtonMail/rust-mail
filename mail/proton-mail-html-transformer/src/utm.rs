@@ -22,11 +22,13 @@ pub enum Error {
     Url(#[from] url::ParseError),
 }
 
+#[must_use]
 #[allow(clippy::missing_panics_doc)] // The select is well formed.
 /// Strip UTM trackers from all HTML links in the given `document`.
-pub fn strip(document: NodeRef) {
+pub fn strip(document: NodeRef) -> u64 {
     let select = document.select("[href]").unwrap();
 
+    let mut acc = 0;
     for element in select {
         let mut attributes = element.attributes.borrow_mut();
         let Some(value) = attributes.get_mut("href") else {
@@ -38,10 +40,12 @@ pub fn strip(document: NodeRef) {
         // We don't throw the error back because the transformer doesn't care if the HTML
         // contains invalid links (how is it supposed to recover?)
         // We also don't error because that would short circuit and leave some tags unstripped.
-        if let Ok(new_value) = strip_from_string(value) {
+        if let Ok((new_value, count)) = strip_from_string(value) {
             *value = new_value.to_string();
+            acc += count;
         }
     }
+    acc
 }
 
 /// Removes UTM parameters from a given `url`.
@@ -59,7 +63,7 @@ pub fn strip(document: NodeRef) {
 /// ```
 ///
 #[must_use]
-pub fn strip_from_url(url: &Url) -> Url {
+pub fn strip_from_url(url: &Url) -> (Url, u64) {
     // TODO: [ET-84] We should not clone the URL, but we need to do it for now.
     let mut stripped_url = url.clone();
     stripped_url.set_query(None);
@@ -70,7 +74,9 @@ pub fn strip_from_url(url: &Url) -> Url {
         }
     }
 
-    stripped_url
+    let count = url.query_pairs().count() - stripped_url.query_pairs().count();
+
+    (stripped_url, count as u64)
 }
 
 /// Removes UTM parameters from an `url` defined as a string.
@@ -78,7 +84,7 @@ pub fn strip_from_url(url: &Url) -> Url {
 /// # Errors
 ///
 /// Will return error if `url` cannot be parsed into an [`Url`]
-pub fn strip_from_string(url: &str) -> Result<Url, url::ParseError> {
+pub fn strip_from_string(url: &str) -> Result<(Url, u64), url::ParseError> {
     let url = Url::parse(url)?;
     Ok(strip_from_url(&url))
 }

@@ -134,18 +134,17 @@ pub fn all_transforms(c: &mut Criterion) {
     pub fn parse_inner(c: &mut Criterion, html: &str) {
         c.bench_function("All passes", |b| {
             b.iter(|| {
-                Transformer::new(html)
-                    .strip_utm()
-                    .enable_remote_content()
-                    .disable_remote_content()
-                    .inject_ios_content_size()
-                    .strip_whitelist()
-                    .inject_style()
-                    .add_noreferrer()
-                    .insert_links()
-                    .proxy_images("THISISATOKEN")
-                    .strip_blockquote()
-                    .to_string()
+                let mut t = Transformer::new(html);
+                _ = t.strip_utm();
+                _ = t.enable_remote_content();
+                _ = t.disable_remote_content();
+                _ = t.inject_ios_content_size();
+                _ = t.strip_whitelist();
+                _ = t.inject_style();
+                _ = t.add_noreferrer();
+                _ = t.proxy_images("THIS_IS_A_TOKEN");
+                _ = t.strip_blockquote();
+                _ = t.insert_links();
             })
         });
     }
