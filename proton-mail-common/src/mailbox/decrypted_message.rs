@@ -70,20 +70,35 @@ impl DecryptedMessageBody {
     }
 }
 
+/// The result of transforming the message body.
+pub struct BodyOutput {
+    /// The transformed html of the message.
+    pub body: String,
+
+    /// Whether or not [`RemoteContent::Strip`] removed a blockquote.
+    pub had_blockquote: bool,
+
+    /// How many html tags it has removed.
+    pub tags_stripped: u64,
+
+    /// How many UTM tracking params it has removed.
+    pub utm_stripped: u64,
+}
+
 pub fn transform_html(
     html: &str,
     remote_content: RemoteContent,
     blockquote: BlockQuote,
     mail_settings: &MailSettings,
     user_session_id: &str,
-) -> (bool, String) {
+) -> BodyOutput {
     let mut transformer = Transformer::new(html);
-    transformer
-        .strip_whitelist()
-        .strip_utm()
-        .add_noreferrer()
-        .insert_links()
-        .inject_style();
+    let tags_stripped = transformer.strip_whitelist();
+    let utm_stripped = transformer.strip_utm();
+
+    transformer.add_noreferrer();
+    transformer.insert_links();
+    transformer.inject_style();
 
     if mail_settings.image_proxy | 2 == 2 {
         transformer.proxy_images(user_session_id);
@@ -106,5 +121,11 @@ pub fn transform_html(
     } else {
         false
     };
-    (had_blockquote, transformer.to_string())
+
+    BodyOutput {
+        body: transformer.to_string(),
+        had_blockquote,
+        tags_stripped,
+        utm_stripped,
+    }
 }

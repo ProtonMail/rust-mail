@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `has_blockquote` as a field in `BodyOutput`
+- Added many stats about transformations to `BodyOutput`
 
 
 ## [0.11.12] - 2024-08-21

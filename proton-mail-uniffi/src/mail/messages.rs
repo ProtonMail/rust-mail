@@ -18,7 +18,9 @@ use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_core_common::datatypes::{Id as RealId, LabelId as RealLabelId, LocalId as RealLocalId};
-use proton_mail_common::decrypted_message::{self, DecryptedMessageBody};
+use proton_mail_common::decrypted_message::{
+    self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
+};
 use proton_mail_common::models::{self, Label as RealLabel, MailSettings, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
@@ -45,11 +47,19 @@ pub struct DecryptedMessage {
 /// It will have more things in the future
 #[non_exhaustive]
 #[derive(Debug, Clone, uniffi::Record)]
+/// The result of transforming the message body.
 pub struct BodyOutput {
     /// The transformed html of the message.
-    body: String,
+    pub body: String,
+
     /// Whether or not [`RemoteContent::Strip`] removed a blockquote.
-    has_blockquote: bool,
+    pub had_blockquote: bool,
+
+    /// How many html tags it has removed.
+    pub tags_stripped: u64,
+
+    /// How many UTM tracking params it has removed.
+    pub utm_stripped: u64,
 }
 
 #[uniffi::export]
@@ -74,7 +84,12 @@ impl DecryptedMessage {
         })
         .await?;
         let user_session_id = self.ctx.user_id();
-        let (has_blockquote, body) = decrypted_message::transform_html(
+        let RealBodyOutput {
+            body,
+            had_blockquote,
+            tags_stripped,
+            utm_stripped,
+        } = decrypted_message::transform_html(
             &self.body.body,
             opts.remote_content.into(),
             opts.block_quote.into(),
@@ -83,7 +98,9 @@ impl DecryptedMessage {
         );
         Ok(BodyOutput {
             body,
-            has_blockquote,
+            had_blockquote,
+            tags_stripped,
+            utm_stripped,
         })
     }
 

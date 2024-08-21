@@ -11,6 +11,7 @@ lazy_static::lazy_static! {
     static ref ATTR_SET: HashSet<&'static str> = ATTRS.into();
 }
 
+#[must_use]
 /// This function removes the tags and attributes defined in this file
 ///
 /// Such a whitelist come from the JS library [DOMPurify](https://github.com/cure53/DOMPurify) with a few exceptions:
@@ -19,7 +20,7 @@ lazy_static::lazy_static! {
 /// - Extra disallowed tags: `style`, `input`, `form`
 /// - Extra disallowed attributes `srcset`, `for`
 /// - Only html tags and attributes are included. This is, svg and mathML are disallowed.
-pub fn strip_whitelist(doc: NodeRef) {
+pub fn strip_whitelist(doc: NodeRef) -> u64 {
     let rem = doc
         .traverse_inclusive()
         .filter_map(|node| match node {
@@ -42,9 +43,10 @@ pub fn strip_whitelist(doc: NodeRef) {
         })
         .collect::<Vec<_>>();
 
-    for node in rem {
+    for node in &rem {
         node.detach();
     }
+    rem.len() as u64
 }
 
 pub const ATTRS: [&str; 112] = [

@@ -83,13 +83,13 @@ impl Transformer {
     /// Strip HTML links of UTM tracking codes.
     ///
     /// See [`utm::strip()`] for more details.
+    /// Returns how many tracking codes it removed.
     ///
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
-    pub fn strip_utm(&mut self) -> &mut Self {
-        utm::strip(self.document.clone());
-        self
+    pub fn strip_utm(&mut self) -> u64 {
+        utm::strip(self.document.clone())
     }
 
     /// Disables remote content.
@@ -132,9 +132,8 @@ impl Transformer {
     /// # Remarks
     ///
     /// This is a destructive operation and can not be undone.
-    pub fn strip_whitelist(&mut self) -> &mut Self {
-        sanitizer::strip_whitelist(self.document.clone());
-        self
+    pub fn strip_whitelist(&mut self) -> u64 {
+        sanitizer::strip_whitelist(self.document.clone())
     }
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
