@@ -1327,13 +1327,6 @@ impl From<&str> for LabelColor {
 #[derive(Clone, Debug, Eq, PartialEq, SmartDefault, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MailSettings {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
-    local_id: u64,
-
     /// TODO: Document this field.
     pub almost_all_mail: AlmostAllMail,
 
@@ -1464,7 +1457,7 @@ pub struct MailSettings {
 impl From<MailSettings> for RealMailSettings {
     fn from(value: MailSettings) -> Self {
         RealMailSettings {
-            local_id: Some(value.local_id.into()),
+            local_id: None,
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
@@ -1514,7 +1507,6 @@ impl From<MailSettings> for RealMailSettings {
 impl From<RealMailSettings> for MailSettings {
     fn from(value: RealMailSettings) -> Self {
         MailSettings {
-            local_id: value.local_id.unwrap().into(),
             almost_all_mail: value.almost_all_mail.into(),
             attach_public_key: value.attach_public_key,
             auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
