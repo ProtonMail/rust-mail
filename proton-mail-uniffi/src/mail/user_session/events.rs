@@ -1,23 +1,27 @@
 use crate::mail::MailUserSession;
-use crate::uniffi_async;
 use anyhow::anyhow;
 use proton_api_core::service::ApiServiceError;
 use proton_event_loop::subscriber::SubscriberError;
 use proton_event_loop::EventLoopError as RealEventLoopError;
 use tokio::task::JoinError;
+use tracing::warn;
 
 #[uniffi::export]
 impl MailUserSession {
     /// Poll Event loop and apply events.
     ///
     /// *NOTE*: do not call this function concurrently.
+    #[allow(clippy::unused_async)]
     pub async fn poll_events(&self) -> Result<(), EventLoopError> {
-        let ctx = self.ctx.clone();
-        uniffi_async(async move {
-            ctx.poll_event_loop().await?;
-            Ok(())
-        })
-        .await
+        warn!("Event loop disabled");
+        //TODO: ET-1047
+        //let ctx = self.ctx.clone();
+        //uniffi_async(async move {
+        //    ctx.poll_event_loop().await?;
+        //    Ok(())
+        //})
+        //.await
+        Ok(())
     }
 }
 
