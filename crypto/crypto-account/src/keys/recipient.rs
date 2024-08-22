@@ -42,6 +42,9 @@ pub struct RecipientPublicKeyModel<Pub: PublicKey> {
     /// An optional MIME type indicating the email body format type.
     pub mime_type: Option<EmailMimeType>,
 
+    /// Indicates if the recipient is an internal address with disabled e2e encryption.
+    pub is_internal_with_disabled_e2ee: bool,
+
     /// Result of the key transparency verification process.
     pub key_transparency_verification: KTVerificationResult,
 
@@ -62,7 +65,6 @@ pub struct RecipientPublicKeyModel<Pub: PublicKey> {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum ContactType {
     Internal,
-    InternalWithDisabledE2EEForMail,
     ExternalWithApiKeys,
     ExternalWithNoApiKeys,
 }
@@ -71,9 +73,6 @@ impl Display for ContactType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ContactType::Internal => f.write_str("internal recipient"),
-            ContactType::InternalWithDisabledE2EEForMail => {
-                f.write_str("internal recipient with disable e2e")
-            }
             ContactType::ExternalWithApiKeys => f.write_str("external recipient with api keys"),
             ContactType::ExternalWithNoApiKeys => {
                 f.write_str("external recipient with no api keys")
@@ -88,11 +87,11 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
     ///
     /// This function processes the provided public keys (`api_keys`) and optionally considers
     /// any pinned public keys (`pinned_keys`). It uses the current encryption time (`encryption_time`)
-    /// to determine the validity of keys (e.g., checking for obsolesce, compromise, encryption capability) and then
+    /// to determine the validity of keys (e.g., checking for obsolescence, compromise, encryption capability) and then
     /// sorts them according to their priority. The sorted keys, along with relevant settings
     /// for encryption, signing, MIME type, and `OpenPGP` scheme, are packaged into a `RecipientPublicKeyModel`.
     ///
-    /// The function  does not select a single key for use but rather provides a structured
+    /// The function does not select a single key for use but rather provides a structured
     /// way to handle these keys based on their priority, allowing for further decision-making downstream in the encryption preferences.
     /// See [confluence](https://confluence.protontech.ch/display/MAILFE/Send+preferences+for+outgoing+email), where [`RecipientPublicKeyModel`] refers to
     /// advanced pgp settings.
@@ -166,6 +165,7 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
             trusted_fingerprints,
             obsolete_fingerprints,
             encryption_capable_fingerprints,
+            is_internal_with_disabled_e2ee: api_keys.is_internal_with_disabled_e2ee,
             compromised_fingerprints,
         }
     }
@@ -205,9 +205,7 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
         match api_keys.recipient_type {
             super::RecipientType::Internal => ContactType::Internal,
             super::RecipientType::External => {
-                if api_keys.is_internal_with_disabled_e2ee {
-                    ContactType::InternalWithDisabledE2EEForMail
-                } else if api_keys.public_keys.is_empty() {
+                if api_keys.public_keys.is_empty() {
                     ContactType::ExternalWithNoApiKeys
                 } else {
                     ContactType::ExternalWithApiKeys

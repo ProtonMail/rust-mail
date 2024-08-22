@@ -283,7 +283,7 @@ fn test_sending_preferences_user_warning() {
     );
     assert!(matches!(
         sending_preferences,
-        Err(EncryptionPreferencesError::PrimaryKeyNotPinned(_))
+        Err(EncryptionPreferencesError::ApiKeyNotPinned(_))
     ));
 
     inbox_keys.public_keys.clear();
