@@ -10,7 +10,9 @@ use crate::tests::common::{
     create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
     MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
-use crate::tests::db_states::{new_test_delete_db_state, new_test_unread_db_state};
+use crate::tests::db_states::{
+    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+};
 use crate::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
     prepare_db_state_core,
@@ -1459,254 +1461,287 @@ async fn messages_mark_unread() {
     assert_eq!(db_conv.num_unread, 3);
 }
 
-// #[test]
-// fn label_messages() {
-//     // Label conversation with a label that was never assigned to the conversation.
-//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
-//         let state = new_test_label_db_state();
-//         with_tx_core(&mut core_conn, |core_tx| {
-//             prepare_db_state_core(core_tx, &state.addresses)
-//         });
-//         with_tx(&mut conn, |tx| {
-//             let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
-//
-//             let local_conv_id = *state_map
-//                 .conversations
-//                 .get(&state.conversations[0].id)
-//                 .unwrap();
-//             let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
-//             let local_msg_id2 = *state_map.messages.get(&state.messages[1].id).unwrap();
-//             let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
-//             let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
-//             tx.label_message(local_label_id1, local_msg_id1)
-//                 .expect("failed to label");
-//
-//             let db_conversation = tx
-//                 .get_conversation_with_context(local_conv_id, local_label_id1)
-//                 .expect("failed to get conversation")
-//                 .unwrap();
-//
-//             // There should be 1 unread message.
-//             assert_eq!(db_conversation.num_unread, 0);
-//             assert_eq!(db_conversation.num_messages_ctx, 1);
-//             assert_eq!(db_conversation.num_attachments, 1);
-//             assert_eq!(db_conversation.size, state.messages[0].size,);
-//             assert_eq!(db_conversation.time, state.messages[0].time,);
-//             assert_eq!(
-//                 db_conversation.expiration_time,
-//                 state.messages[0].expiration_time,
-//             );
-//             assert_eq!(db_conversation.snooze_time, state.messages[0].snooze_time,);
-//
-//             // Check conversation counts have the new conversation.
-//             {
-//                 let conv_counts = conv_counts_as_map(tx);
-//                 let label_counts = conv_counts.get(&local_label_id1).unwrap();
-//                 assert_eq!(label_counts.unread, 0);
-//                 assert_eq!(label_counts.total, 1);
-//             }
-//
-//             // Check message counts.
-//             {
-//                 let message_counts = msg_counts_as_map(tx);
-//                 let label_counts = message_counts.get(&local_label_id1).unwrap();
-//                 assert_eq!(label_counts.unread, 0);
-//                 assert_eq!(label_counts.total, 1);
-//             }
-//
-//             let check_full_conversations = |tx: &mut MailSqliteConnectionMut| {
-//                 // Check conversation after all messages have been labeled.
-//                 let db_conversation = tx
-//                     .get_conversation_with_context(local_conv_id, local_label_id1)
-//                     .expect("failed to get conversation")
-//                     .unwrap();
-//                 assert_eq!(db_conversation.num_unread, 1);
-//                 assert_eq!(db_conversation.num_messages_ctx, 3);
-//                 assert_eq!(db_conversation.num_attachments, 1);
-//                 assert_eq!(
-//                     db_conversation.size,
-//                     state.messages.iter().fold(0, |x, m| x + m.size)
-//                 );
-//                 assert_eq!(
-//                     db_conversation.time,
-//                     state.messages.iter().fold(0, |x, m| x.max(m.time))
-//                 );
-//                 assert_eq!(
-//                     db_conversation.expiration_time,
-//                     state
-//                         .messages
-//                         .iter()
-//                         .fold(0, |x, m| x.max(m.expiration_time))
-//                 );
-//                 assert_eq!(
-//                     db_conversation.snooze_time,
-//                     state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
-//                 );
-//
-//                 // Check conversation counts.
-//                 {
-//                     let conv_counts = conv_counts_as_map(tx);
-//                     let label_counts = conv_counts.get(&local_label_id1).unwrap();
-//                     assert_eq!(label_counts.unread, 1);
-//                     assert_eq!(label_counts.total, 1);
-//                 }
-//
-//                 // Check message counts.
-//                 {
-//                     let message_counts = msg_counts_as_map(tx);
-//                     let label_counts = message_counts.get(&local_label_id1).unwrap();
-//                     assert_eq!(label_counts.unread, 1);
-//                     assert_eq!(label_counts.total, 3);
-//                 }
-//             };
-//
-//             // Label remaining messages.
-//             tx.label_messages(local_label_id1, [local_msg_id2, local_msg_id3])
-//                 .unwrap();
-//
-//             check_full_conversations(tx);
-//
-//             // Apply again, should be noop.
-//             tx.label_messages(
-//                 local_label_id1,
-//                 [local_msg_id1, local_msg_id2, local_msg_id3],
-//             )
-//             .unwrap();
-//
-//             check_full_conversations(tx);
-//         });
-//     });
-// }
+#[tokio::test]
+async fn label_messages() {
+    // Label conversation with a label that was never assigned to the conversation.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+    let mut state = new_test_label_db_state();
+    prepare_db_state_core(&tx, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
 
-// #[test]
-// fn unlabel_messages() {
-//     // Label conversation with a label that was never assigned to the conversation.
-//     with_file_sqlite_db(|mut core_conn, mut conn, _| {
-//         let state = new_test_label_db_state();
-//         with_tx_core(&mut core_conn, |core_tx| {
-//             prepare_db_state_core(core_tx, &state.addresses)
-//         });
-//         with_tx(&mut conn, |tx| {
-//             let (state, state_map) = prepare_and_patch_db_state(tx, state.clone());
-//
-//             let local_conv_id = *state_map
-//                 .conversations
-//                 .get(&state.conversations[0].id)
-//                 .unwrap();
-//             let local_msg_id1 = *state_map.messages.get(&state.messages[0].id).unwrap();
-//             let local_msg_id2 = *state_map.messages.get(&state.messages[1].id).unwrap();
-//             let local_msg_id3 = *state_map.messages.get(&state.messages[2].id).unwrap();
-//             let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
-//             tx.label_messages(
-//                 local_label_id1,
-//                 [local_msg_id1, local_msg_id2, local_msg_id3],
-//             )
-//             .expect("failed to label");
-//
-//             // unlabel first message.
-//             tx.unlabel_message(local_label_id1, local_msg_id1).unwrap();
-//
-//             let remote_msg_id1 = state.messages[0].id.clone();
-//
-//             let db_conversation = tx
-//                 .get_conversation_with_context(local_conv_id, local_label_id1)
-//                 .expect("failed to get conversation")
-//                 .unwrap();
-//
-//             // Check conversation status.
-//             assert_eq!(db_conversation.num_unread, 1);
-//             assert_eq!(db_conversation.num_messages_ctx, 2);
-//             assert_eq!(db_conversation.num_attachments, 0);
-//             assert_eq!(
-//                 db_conversation.size,
-//                 state
-//                     .messages
-//                     .iter()
-//                     .filter(|m| m.id != remote_msg_id1)
-//                     .fold(0, |x, m| x + m.size)
-//             );
-//             assert_eq!(
-//                 db_conversation.time,
-//                 state
-//                     .messages
-//                     .iter()
-//                     .filter(|m| m.id != remote_msg_id1)
-//                     .fold(0, |x, m| x.max(m.time))
-//             );
-//             assert_eq!(
-//                 db_conversation.expiration_time,
-//                 state
-//                     .messages
-//                     .iter()
-//                     .filter(|m| m.id != remote_msg_id1)
-//                     .fold(0, |x, m| x.max(m.expiration_time))
-//             );
-//             assert_eq!(
-//                 db_conversation.snooze_time,
-//                 state
-//                     .messages
-//                     .iter()
-//                     .filter(|m| m.id != remote_msg_id1)
-//                     .fold(0, |x, m| x.max(m.snooze_time))
-//             );
-//
-//             // Check conversation counts have the new conversation.
-//             {
-//                 let conv_counts = conv_counts_as_map(tx);
-//                 let label_counts = conv_counts.get(&local_label_id1).unwrap();
-//                 assert_eq!(label_counts.unread, 1);
-//                 assert_eq!(label_counts.total, 1);
-//             }
-//
-//             // Check message counts.
-//             {
-//                 let message_counts = msg_counts_as_map(tx);
-//                 let label_counts = message_counts.get(&local_label_id1).unwrap();
-//                 assert_eq!(label_counts.unread, 1);
-//                 assert_eq!(label_counts.total, 2);
-//             }
-//
-//             let check_final_conv_state = |tx: &mut MailSqliteConnectionMut| {
-//                 // Check conversation after all messages have been labeled.
-//                 assert!(tx
-//                     .get_conversation_with_context(local_conv_id, local_label_id1)
-//                     .expect("failed to get conversation")
-//                     .is_none());
-//
-//                 // Check conversation counts.
-//                 {
-//                     let conv_counts = conv_counts_as_map(tx);
-//                     let label_counts = conv_counts.get(&local_label_id1).unwrap();
-//                     assert_eq!(label_counts.unread, 0);
-//                     assert_eq!(label_counts.total, 0);
-//                 }
-//
-//                 // Check message counts.
-//                 {
-//                     let message_counts = msg_counts_as_map(tx);
-//                     let label_counts = message_counts.get(&local_label_id1).unwrap();
-//                     assert_eq!(label_counts.unread, 0);
-//                     assert_eq!(label_counts.total, 0);
-//                 }
-//             };
-//
-//             // Label remaining messages.
-//             tx.unlabel_messages(local_label_id1, [local_msg_id2, local_msg_id3])
-//                 .unwrap();
-//
-//             check_final_conv_state(tx);
-//
-//             // Apply again, should be noop.
-//             tx.unlabel_messages(
-//                 local_label_id1,
-//                 [local_msg_id1, local_msg_id2, local_msg_id3],
-//             )
-//             .unwrap();
-//
-//             check_final_conv_state(tx);
-//         });
-//     });
-// }
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id1 = *state_map
+        .messages
+        .get(state.messages[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id2 = *state_map
+        .messages
+        .get(state.messages[1].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id3 = *state_map
+        .messages
+        .get(state.messages[2].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+
+    Message::apply_label(local_label_id1, std::iter::once(local_msg_id1), &tx)
+        .await
+        .expect("failed to label");
+
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+        .await
+        .expect("failed to get conversation")
+        .unwrap();
+
+    // There should be no unread messages.
+    assert_eq!(db_conversation.num_unread, 0);
+    assert_eq!(db_conversation.num_messages, 1);
+    assert_eq!(db_conversation.num_attachments, 1);
+    assert_eq!(db_conversation.size, state.messages[0].size,);
+    assert_eq!(db_conversation.time, state.messages[0].time,);
+    assert_eq!(
+        db_conversation.expiration_time,
+        state.messages[0].expiration_time,
+    );
+    assert_eq!(db_conversation.snooze_time, state.messages[0].snooze_time,);
+
+    // Check conversation counts have the new conversation.
+    {
+        let conv_counts = conv_counts_as_map(&tx).await;
+        let label_counts = conv_counts.get(&local_label_id1).unwrap();
+        assert_eq!(label_counts.unread, 0);
+        assert_eq!(label_counts.total, 1);
+    }
+
+    // Check message counts.
+    {
+        let message_counts = msg_counts_as_map(&tx).await;
+        let label_counts = message_counts.get(&local_label_id1).unwrap();
+        assert_eq!(label_counts.unread, 0);
+        assert_eq!(label_counts.total, 1);
+    }
+
+    let check_full_conversations = |tx: Tether| -> BoxFuture<'_, ()> {
+        let state = &state;
+        async move {
+            // Check conversation after all messages have been labeled.
+            let db_conversation =
+                ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+                    .await
+                    .expect("failed to get conversation")
+                    .unwrap();
+            assert_eq!(db_conversation.num_unread, 1);
+            assert_eq!(db_conversation.num_messages, 3);
+            assert_eq!(db_conversation.num_attachments, 1);
+            assert_eq!(
+                db_conversation.size,
+                state.messages.iter().fold(0, |x, m| x + m.size)
+            );
+            assert_eq!(
+                db_conversation.time,
+                state.messages.iter().fold(0, |x, m| x.max(m.time))
+            );
+            assert_eq!(
+                db_conversation.expiration_time,
+                state
+                    .messages
+                    .iter()
+                    .fold(0, |x, m| x.max(m.expiration_time))
+            );
+            assert_eq!(
+                db_conversation.snooze_time,
+                state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
+            );
+
+            // Check conversation counts.
+            {
+                let conv_counts = conv_counts_as_map(&tx).await;
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 1);
+                assert_eq!(label_counts.total, 1);
+            }
+
+            // Check message counts.
+            {
+                let message_counts = msg_counts_as_map(&tx).await;
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 1);
+                assert_eq!(label_counts.total, 3);
+            }
+        }
+        .boxed()
+    };
+
+    // Label remaining messages.
+    Message::apply_label(local_label_id1, [local_msg_id2, local_msg_id3], &tx)
+        .await
+        .unwrap();
+
+    check_full_conversations(tx.clone()).await;
+
+    // Apply again, should be noop.
+    Message::apply_label(
+        local_label_id1,
+        [local_msg_id1, local_msg_id2, local_msg_id3],
+        &tx,
+    )
+    .await
+    .unwrap();
+
+    check_full_conversations(tx.clone()).await;
+}
+
+#[tokio::test]
+async fn unlabel_messages() {
+    // assign a label to messages and progressively remove it.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+    let mut state = new_test_label_db_state();
+    prepare_db_state_core(&tx, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id1 = *state_map
+        .messages
+        .get(state.messages[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id2 = *state_map
+        .messages
+        .get(state.messages[1].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_msg_id3 = *state_map
+        .messages
+        .get(state.messages[2].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+
+    Message::apply_label(
+        local_label_id1,
+        [local_msg_id1, local_msg_id2, local_msg_id3],
+        &tx,
+    )
+    .await
+    .expect("failed to label");
+
+    // unlabel first message.
+    Message::remove_label(local_label_id1, std::iter::once(local_msg_id1), &tx)
+        .await
+        .unwrap();
+
+    let remote_msg_id1 = state.messages[0].remote_id.clone().unwrap();
+
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+        .await
+        .expect("failed to get conversation")
+        .unwrap();
+
+    // Check conversation status.
+    assert_eq!(db_conversation.num_unread, 1);
+    assert_eq!(db_conversation.num_messages, 2);
+    assert_eq!(db_conversation.num_attachments, 0);
+    assert_eq!(
+        db_conversation.size,
+        state
+            .messages
+            .iter()
+            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
+            .fold(0, |x, m| x + m.size)
+    );
+    assert_eq!(
+        db_conversation.time,
+        state
+            .messages
+            .iter()
+            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
+            .fold(0, |x, m| x.max(m.time))
+    );
+    assert_eq!(
+        db_conversation.expiration_time,
+        state
+            .messages
+            .iter()
+            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
+            .fold(0, |x, m| x.max(m.expiration_time))
+    );
+    assert_eq!(
+        db_conversation.snooze_time,
+        state
+            .messages
+            .iter()
+            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
+            .fold(0, |x, m| x.max(m.snooze_time))
+    );
+
+    // Check conversation counts have the new conversation.
+    {
+        let conv_counts = conv_counts_as_map(&tx).await;
+        let label_counts = conv_counts.get(&local_label_id1).unwrap();
+        assert_eq!(label_counts.unread, 1);
+        assert_eq!(label_counts.total, 1);
+    }
+
+    // Check message counts.
+    {
+        let message_counts = msg_counts_as_map(&tx).await;
+        let label_counts = message_counts.get(&local_label_id1).unwrap();
+        assert_eq!(label_counts.unread, 1);
+        assert_eq!(label_counts.total, 2);
+    }
+
+    let check_final_conv_state = |tx: Tether| -> BoxFuture<'_, ()> {
+        async move {
+            // Conversation should no longer have the label
+            assert!(
+                ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+                    .await
+                    .expect("failed to get conversation")
+                    .is_none()
+            );
+
+            // Check conversation counts.
+            {
+                let conv_counts = conv_counts_as_map(&tx).await;
+                let label_counts = conv_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 0);
+            }
+
+            // Check message counts.
+            {
+                let message_counts = msg_counts_as_map(&tx).await;
+                let label_counts = message_counts.get(&local_label_id1).unwrap();
+                assert_eq!(label_counts.unread, 0);
+                assert_eq!(label_counts.total, 0);
+            }
+        }
+        .boxed()
+    };
+
+    // Label remaining messages.
+    Message::remove_label(local_label_id1, [local_msg_id2, local_msg_id3], &tx)
+        .await
+        .unwrap();
+
+    check_final_conv_state(tx.clone()).await;
+
+    // Apply again, should be noop.
+    Message::remove_label(
+        local_label_id1,
+        [local_msg_id1, local_msg_id2, local_msg_id3],
+        &tx,
+    )
+    .await
+    .unwrap();
+
+    check_final_conv_state(tx.clone()).await;
+}
 
 lazy_static! {
     pub(super) static ref MY_MESSAGE_ID: RemoteId = RemoteId::from("MyRemoteId");
