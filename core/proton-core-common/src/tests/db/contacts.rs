@@ -1,10 +1,9 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::{
-    CardType, ContactSendingPreferences, ContactTypes, LabelId, Labels, RemoteId,
-};
+use crate::datatypes::{ContactSendingPreferences, ContactTypes, LabelId, Labels, RemoteId};
 use crate::db::tests::new_core_test_connection;
 use crate::models::{Contact, ContactCard, ContactEmail};
+use proton_crypto_account::contacts::ContactCardType;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
@@ -125,7 +124,7 @@ fn create_test_full_contact(stash: &Stash) -> Contact {
             ContactCard {
                 local_id: Some(1.into()),
                 remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
-                card_type: CardType::Signed,
+                card_type: ContactCardType::Signed,
                 data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
                 row_id: Some(1),
@@ -134,7 +133,7 @@ fn create_test_full_contact(stash: &Stash) -> Contact {
             ContactCard {
                 local_id: Some(2.into()),
                 remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
-                card_type: CardType::EncryptedAndSigned,
+                card_type: ContactCardType::EncryptedAndSigned,
                 data: "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
                 row_id: Some(2),

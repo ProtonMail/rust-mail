@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+base64 = { workspace = true }
 chrono = { workspace = true }
 ical = { workspace = true }
 oxilangtag = { workspace = true }
 paste = { workspace = true }
+proton-crypto-account = { workspace = true }
 regex_static = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

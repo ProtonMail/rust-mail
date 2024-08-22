@@ -28,7 +28,7 @@
 //!
 
 use crate::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, AgnosticId, CardType,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, AgnosticId,
     ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, HighSecurity, Id,
     LabelId, Labels, LocalId, LogAuth, Password, Phone, ProductUsedSpace, QueryResultRemoteId,
     Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
@@ -45,6 +45,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::Proton;
 use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
+use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard};
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
@@ -766,7 +767,7 @@ pub struct ContactCard {
 
     /// TODO: Document this field.
     #[DbField]
-    pub card_type: CardType,
+    pub card_type: ContactCardType,
 
     /// TODO: Document this field.
     #[DbField]
@@ -789,12 +790,30 @@ pub struct ContactCard {
     pub stash: Option<Stash>,
 }
 
+impl DecryptableVerifiableCard for ContactCard {
+    fn card_data(&self) -> &[u8] {
+        self.data.as_bytes()
+    }
+
+    fn card_signature(&self) -> Option<&[u8]> {
+        if let Some(string_signature) = &self.signature {
+            Some(string_signature.as_bytes())
+        } else {
+            None
+        }
+    }
+
+    fn card_type(&self) -> ContactCardType {
+        self.card_type
+    }
+}
+
 impl From<ApiContactCard> for ContactCard {
     fn from(value: ApiContactCard) -> Self {
         Self {
             local_id: None,
             remote_contact_id: None,
-            card_type: value.card_type.into(),
+            card_type: value.card_type,
             data: value.data,
             signature: value.signature,
             row_id: None,

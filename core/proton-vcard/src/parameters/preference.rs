@@ -3,9 +3,13 @@ use std::fmt::{Debug, Formatter};
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::ParameterType;
 
+const MIN_PREF: u32 = 1;
+const MAX_PREF: u32 = 100;
+const LOWEST_PREF: u32 = 101;
+
 /// The PREF parameter is OPTIONAL and is used to indicate that the corresponding instance of a
 /// property is preferred by the vCard author.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Preference {
     /// Value
     pub value: u32,
@@ -15,6 +19,16 @@ impl Preference {
     #[must_use]
     pub fn new(value: u32) -> Self {
         Self { value }
+    }
+
+    #[must_use]
+    pub fn is_valid_value(&self) -> bool {
+        (MIN_PREF..=MAX_PREF).contains(&self.value)
+    }
+
+    #[must_use]
+    pub fn less_than_lowest() -> Self {
+        Self { value: LOWEST_PREF }
     }
 }
 

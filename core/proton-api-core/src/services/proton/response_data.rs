@@ -25,6 +25,7 @@
 
 use crate::services::proton::common::{Fido2Auth, HumanVerificationType, RemoteId};
 use crate::services::proton::responses::GetEventResponse;
+use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
 use serde::Deserialize;
 #[cfg(any(test, debug_assertions))]
@@ -91,24 +92,6 @@ pub enum AddressType {
 
     /// TODO: Document this variant.
     External = 5,
-}
-
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
-#[repr(u8)]
-pub enum CardType {
-    /// TODO: Document this variant.
-    ClearText = 0,
-
-    /// TODO: Document this variant.
-    Encrypted = 1,
-
-    /// TODO: Document this variant.
-    Signed = 2,
-
-    /// TODO: Document this variant.
-    EncryptedAndSigned = 3,
 }
 
 /// TODO: Document this enum.
@@ -433,7 +416,7 @@ pub struct ContactBasic {
 pub struct ContactCard {
     /// TODO: Document this field.
     #[serde(rename = "Type")]
-    pub card_type: CardType,
+    pub card_type: ContactCardType,
 
     /// TODO: Document this field.
     pub data: String,

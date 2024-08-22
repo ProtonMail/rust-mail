@@ -6,8 +6,7 @@ use crate::db::migrations::{migrate_core_db, migrate_session_db};
 use crate::db::session::{EncryptedUserSession, SessionEncryptionKey};
 use crate::os::{KeyChain, KeyChainError};
 use crate::session::Session;
-use crate::user_context::{UserContext, UserDatabaseInitializer};
-use crate::KeyHandlingError;
+use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{anyhow, Error as AnyhowError};
 use proton_api_core::login::Flow;
 use proton_api_core::service::{ApiService, ApiServiceError};
@@ -46,8 +45,20 @@ pub enum CoreContextError {
     Stash(#[from] StashError),
     #[error("Cache error: {0}")]
     CacheError(#[from] CacheError),
+    #[error("Problem with loading contact: {0}")]
+    ContactError(#[from] ContactError),
     #[error("{0}")]
     Other(AnyhowError),
+}
+
+#[derive(Debug, Error)]
+pub enum ContactError {
+    #[error("ContactCard not found for email: {0}")]
+    CardNotFound(String),
+    #[error("RemoteId not present for ContactCard for email: {0}")]
+    ContactCardRemoteIdNotPresent(String),
+    #[error("Contact not found for email: {0}")]
+    FullContactNotFound(String),
 }
 
 /// Callback when the status of the network changes.

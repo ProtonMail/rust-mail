@@ -68,9 +68,9 @@ use crate::services::proton::requests::{
 use crate::services::proton::response_data::{ApiErrorInfo, HumanVerificationChallenge};
 use crate::services::proton::responses::{
     GetAddressesResponse, GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
-    GetEventResponse, GetEventsLatestResponse, GetKeysAllResponse, GetKeysSaltsResponse,
-    GetSettingsResponse, GetUsersResponse, PostAuthInfoResponse, PostAuthRefreshResponse,
-    PostAuthResponse, PostAuthSessionsForksResponse,
+    GetEventResponse, GetEventsLatestResponse, GetKeysSaltsResponse, GetSettingsResponse,
+    GetUsersResponse, PostAuthInfoResponse, PostAuthRefreshResponse, PostAuthResponse,
+    PostAuthSessionsForksResponse,
 };
 use crate::{
     DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL, DEFAULT_REDIRECT_URL,
@@ -78,6 +78,7 @@ use crate::{
 };
 use bytes::Bytes;
 use parking_lot::RwLock;
+use proton_crypto_account::keys::APIPublicAddressKeys;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Method, Url};
 use secrecy::ExposeSecret;
@@ -565,7 +566,7 @@ impl Proton {
         &self,
         email: String,
         internal_only: Option<bool>,
-    ) -> Result<GetKeysAllResponse, ApiServiceError> {
+    ) -> Result<APIPublicAddressKeys, ApiServiceError> {
         self.get::<_, Json<_>>(
             &format!("{}/keys/all", Self::BASE_PATH),
             Some(GetKeysAllOptions {

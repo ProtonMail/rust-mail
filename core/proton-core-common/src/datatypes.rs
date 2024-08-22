@@ -44,14 +44,14 @@ use proton_api_core::services::proton::common::{
 };
 use proton_api_core::services::proton::response_data::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
-    AddressType as ApiAddressType, CardType as ApiCardType,
-    ContactSendingPreferences as ApiContactSendingPreferences, DateFormat as ApiDateFormat,
-    Density as ApiDensity, EarlyAccess as ApiEarlyAccess, Email as ApiEmail, FidoKey as ApiFidoKey,
-    Flags as ApiFlags, HighSecurity as ApiHighSecurity, LogAuth as ApiLogAuth,
-    Password as ApiPassword, Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace,
-    Referral as ApiReferral, SettingsFlags as ApiSettingsFlags, TfaStatus as ApiTfaStatus,
-    TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus,
-    UserType as ApiUserType, WeekStart as ApiWeekStart,
+    AddressType as ApiAddressType, ContactSendingPreferences as ApiContactSendingPreferences,
+    DateFormat as ApiDateFormat, Density as ApiDensity, EarlyAccess as ApiEarlyAccess,
+    Email as ApiEmail, FidoKey as ApiFidoKey, Flags as ApiFlags, HighSecurity as ApiHighSecurity,
+    LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
+    ProductUsedSpace as ApiProductUsedSpace, Referral as ApiReferral,
+    SettingsFlags as ApiSettingsFlags, TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat,
+    TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
+    WeekStart as ApiWeekStart,
 };
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use secrecy::{CloneableSecret, DebugSecret};
@@ -293,52 +293,6 @@ impl IdOpt<RemoteId> for AgnosticId {
             Self::Local(_) => None,
             Self::Remote(id) => Some(id),
         }
-    }
-}
-
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-#[repr(u8)]
-pub enum CardType {
-    /// TODO: Document this variant.
-    ClearText = 0,
-
-    /// TODO: Document this variant.
-    Encrypted = 1,
-
-    /// TODO: Document this variant.
-    Signed = 2,
-
-    /// TODO: Document this variant.
-    EncryptedAndSigned = 3,
-}
-
-impl From<ApiCardType> for CardType {
-    fn from(value: ApiCardType) -> Self {
-        match value {
-            ApiCardType::ClearText => Self::ClearText,
-            ApiCardType::Encrypted => Self::Encrypted,
-            ApiCardType::Signed => Self::Signed,
-            ApiCardType::EncryptedAndSigned => Self::EncryptedAndSigned,
-        }
-    }
-}
-
-impl FromSql for CardType {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match u8::column_result(value)? {
-            0 => Ok(Self::ClearText),
-            1 => Ok(Self::Encrypted),
-            2 => Ok(Self::Signed),
-            3 => Ok(Self::EncryptedAndSigned),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
-        }
-    }
-}
-
-impl ToSql for CardType {
-    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }
 

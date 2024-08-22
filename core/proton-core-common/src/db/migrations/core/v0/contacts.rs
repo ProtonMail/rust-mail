@@ -30,7 +30,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
             CREATE TABLE contact_emails (
                 remote_id TEXT UNIQUE,
                 name TEXT NOT NULL,
-                email TEXT NOT NULL,
+                email TEXT NOT NULL COLLATE NOCASE,
                 contact_type TEXT NOT NULL,
                 defaults INTEGER NOT NULL,
                 display_order INTEGER NOT NULL,
@@ -51,7 +51,7 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
         .await?;
 
         tx.execute(
-            r"CREATE INDEX index_contact_emails_email ON contact_emails (canonical_email)",
+            r"CREATE INDEX index_contact_emails_email ON contact_emails (email)",
             vec![],
         )
         .await?;

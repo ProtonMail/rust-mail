@@ -1,140 +1,30 @@
 use crate::datatypes::RemoteId;
 use crate::models::User;
 use crate::models::{Address, ModelExtension};
-use crate::{CoreContextResult, UserContext};
+use crate::{CoreContextError, CoreContextResult, UserContext};
 use parking_lot::RwLock;
-use proton_api_core::auth::UserKeySecret;
+use proton_api_core::session::CoreSession;
+use proton_crypto_account::keys::PublicAddressKeys;
 use proton_crypto_account::keys::{
-    DecryptedAddressKey, DecryptedUserKey, KeyFlag, UnlockedAddressKey, UnlockedAddressKeys,
-    UnlockedUserKey, UnlockedUserKeys,
+    UnlockedAddressKey, UnlockedAddressKeys, UnlockedUserKey, UnlockedUserKeys,
 };
-use proton_crypto_account::proton_crypto::crypto::{
-    DataEncoding, PGPProviderSync as PgpProviderSync,
-};
-use proton_crypto_account::proton_crypto::CryptoError;
-use secrecy::{ExposeSecret, SecretVec};
+use proton_crypto_account::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use stash::orm::Model;
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::{Duration, Instant},
+use std::{collections::HashMap, time::Duration};
+
+use super::KeyHandlingError;
+use super::KeyHandlingResult;
+use super::LoadKeySecret;
+
+use super::{
+    cache::{
+        CacheOption, CachedAddressKey, CachedUserKey, ADDRESS_KEY_LIFETIME, USER_KEY_LIFETIME,
+    },
+    CachedAddressKeys, CachedUserKeys,
 };
-use thiserror::Error;
 
+/// Manages an caches the PGP keys.
 #[allow(clippy::module_name_repetitions)]
-type CachedUserKeys = Vec<CachedUserKey>;
-#[allow(clippy::module_name_repetitions)]
-type CachedAddressKeys = Vec<CachedAddressKey>;
-
-/// The default lifetime of user keys in the cache.
-const USER_KEY_LIFETIME: Duration = Duration::from_secs(600);
-
-/// The default lifetime of address keys in the cache.
-const ADDRESS_KEY_LIFETIME: Duration = Duration::from_secs(300);
-
-/// A trait that loads the user secret to unlock the user keys.
-pub trait LoadKeySecret {
-    /// Loads the user secret to unlock the user keys.
-    fn key_secret(&self) -> Option<UserKeySecret>;
-}
-
-/// Represents a cached user key independent of the PGP provider.
-struct CachedUserKey {
-    id: RemoteId,
-    private_key: SecretVec<u8>,
-}
-
-impl CachedUserKey {
-    /// Tries to create a [`CachedUserKey`] from an [`UnlockedUserKey`].
-    pub fn new<Provider: PgpProviderSync>(
-        pgp_provider: &Provider,
-        key: &UnlockedUserKey<Provider>,
-    ) -> Result<CachedUserKey, KeyHandlingError> {
-        let exported_key =
-            pgp_provider.private_key_export_unlocked(&key.private_key, DataEncoding::Bytes)?;
-        Ok(CachedUserKey {
-            id: key.id.to_string().into(),
-            private_key: SecretVec::new(exported_key.as_ref().to_vec()),
-        })
-    }
-
-    /// Tries to transform a [`CachedUserKey`] into a [`UnlockedUserKey`].
-    pub fn to_unlocked_key<Provider: PgpProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<UnlockedUserKey<Provider>, KeyHandlingError> {
-        let imported_key = pgp_provider
-            .private_key_import_unlocked(self.private_key.expose_secret(), DataEncoding::Bytes)?;
-        let public_key = pgp_provider.private_key_to_public_key(&imported_key)?;
-        Ok(DecryptedUserKey {
-            id: self.id.to_string().into(),
-            private_key: imported_key,
-            public_key,
-        })
-    }
-}
-
-/// Represents a cached address key independent of the PGP provider.
-struct CachedAddressKey {
-    id: RemoteId,
-    flags: KeyFlag,
-    primary: bool,
-    private_key: SecretVec<u8>,
-}
-
-impl CachedAddressKey {
-    /// Tries to create a [`CachedAddressKey`] from an [`UnlockedAddressKey`].
-    pub fn new<Provider: PgpProviderSync>(
-        pgp_provider: &Provider,
-        key: &UnlockedAddressKey<Provider>,
-    ) -> Result<CachedAddressKey, KeyHandlingError> {
-        let exported_key =
-            pgp_provider.private_key_export_unlocked(&key.private_key, DataEncoding::Bytes)?;
-        Ok(CachedAddressKey {
-            id: key.id.to_string().into(),
-            flags: key.flags,
-            primary: key.primary,
-            private_key: SecretVec::new(exported_key.as_ref().to_vec()),
-        })
-    }
-
-    /// Tries to transform a [`CachedAddressKey`] into a [`UnlockedAddressKey`].
-    pub fn to_unlocked_key<Provider: PgpProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<UnlockedAddressKey<Provider>, KeyHandlingError> {
-        let imported_key = pgp_provider
-            .private_key_import_unlocked(self.private_key.expose_secret(), DataEncoding::Bytes)?;
-        let public_key = pgp_provider.private_key_to_public_key(&imported_key)?;
-        Ok(DecryptedAddressKey {
-            id: self.id.to_string().into(),
-            flags: self.flags,
-            primary: self.primary,
-            public_key,
-            private_key: imported_key,
-        })
-    }
-}
-
-/// An error type that is thrown when loading keys
-/// via the [`CryptoKeyManager`].
-#[derive(Debug, Error)]
-pub enum KeyHandlingError {
-    #[error("No user found")]
-    NoUser,
-    #[error("No user secret found")]
-    NoUserSecret,
-    #[error("No user keys unlocked but has {0} user keys")]
-    UserKeyUnlock(usize),
-    #[error("Failed to store user keys in the cache {0}")]
-    UserKeyCacheStore(#[from] CryptoError),
-    #[error("No address found for id {0}")]
-    NoAddress(RemoteId),
-    #[error("Failed to unlock at least one address key, but the user has {0} address keys")]
-    AddressKeyUnlock(usize),
-}
-
-/// Manages an caches the PGP keys of a user.
 pub struct CryptoKeyManager {
     /// Lifetime duration of user keys in the cache.
     user_key_lifetime: Duration,
@@ -216,6 +106,31 @@ impl CryptoKeyManager {
         Ok(unlocked_keys)
     }
 
+    /// Loads the public address keys for an email address from the backend API.
+    ///
+    /// Imports the keys with the PGP provider. In the future, this function will also
+    /// verify the keys with key transparency.
+    ///
+    /// # Errors
+    /// Returns a [`KeyHandlingError`] if the operation fails.
+    pub async fn public_address_keys<Provider: PgpProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        email: &str,
+        internal_only: bool,
+        user_context: &UserContext,
+    ) -> CoreContextResult<PublicAddressKeys<<Provider>::PublicKey>> {
+        // TODO: A limited TTL cache would make sense here for active keys.
+        let api_keys = user_context
+            .session()
+            .api()
+            .get_keys_all(email.to_owned(), Some(internal_only))
+            .await?;
+        api_keys
+            .import(pgp_provider)
+            .map_err(|_| CoreContextError::Crypto)
+    }
+
     /// Clears the user key cache.
     pub fn clear_user_key_cache(&self) {
         let mut user_keys_ref_mut = self.user_keys.write();
@@ -243,7 +158,7 @@ impl CryptoKeyManager {
         &self,
         pgp_provider: &Provider,
         keys: &[UnlockedUserKey<Provider>],
-    ) -> Result<(), KeyHandlingError> {
+    ) -> KeyHandlingResult<()> {
         let mut new_cached_keys: CachedUserKeys = Vec::with_capacity(keys.len());
         for key in keys {
             let cached_key = CachedUserKey::new(pgp_provider, key)?;
@@ -260,7 +175,7 @@ impl CryptoKeyManager {
         pgp_provider: &Provider,
         address_id: &RemoteId,
         keys: &[UnlockedAddressKey<Provider>],
-    ) -> Result<(), KeyHandlingError> {
+    ) -> KeyHandlingResult<()> {
         let mut new_cached_keys: CachedAddressKeys = Vec::with_capacity(keys.len());
         for key in keys {
             let cached_key = CachedAddressKey::new(pgp_provider, key)?;
@@ -286,7 +201,7 @@ impl CryptoKeyManager {
     fn load_user_keys_cache<Provider: PgpProviderSync>(
         pgp_provider: &Provider,
         user_keys: &CachedUserKeys,
-    ) -> Result<UnlockedUserKeys<Provider>, KeyHandlingError> {
+    ) -> KeyHandlingResult<UnlockedUserKeys<Provider>> {
         let mut unlocked_user_keys = Vec::with_capacity(user_keys.len());
         for key in user_keys {
             let imported_key = key.to_unlocked_key(pgp_provider)?;
@@ -299,7 +214,7 @@ impl CryptoKeyManager {
     fn load_address_keys_cache<Provider: PgpProviderSync>(
         pgp_provider: &Provider,
         address_keys: &CachedAddressKeys,
-    ) -> Result<UnlockedAddressKeys<Provider>, KeyHandlingError> {
+    ) -> KeyHandlingResult<UnlockedAddressKeys<Provider>> {
         let mut unlocked_address_keys = Vec::with_capacity(address_keys.len());
         for key in address_keys {
             let imported_key = key.to_unlocked_key(pgp_provider)?;
@@ -334,7 +249,9 @@ impl CryptoKeyManager {
             .keys
             .unlock(pgp_provider, &user_keys, passphrase.as_ref());
         if unlock_result.unlocked_keys.is_empty() {
-            return Err(KeyHandlingError::AddressKeyUnlock(unlock_result.failed.len()).into());
+            return Err(CoreContextError::PGPKeyAccess(
+                KeyHandlingError::AddressKeyUnlock(unlock_result.failed.len()),
+            ));
         }
         // Update the cache.
         self.update_address_key_cache(pgp_provider, address_id, &unlock_result.unlocked_keys)?;
@@ -361,71 +278,12 @@ impl CryptoKeyManager {
         // Unlock the keys.
         let unlock_result = user.keys.unlock(pgp_provider, pw.expose_secret());
         if unlock_result.unlocked_keys.is_empty() {
-            return Err(KeyHandlingError::UserKeyUnlock(unlock_result.failed.len()).into());
+            return Err(CoreContextError::PGPKeyAccess(
+                KeyHandlingError::UserKeyUnlock(unlock_result.failed.len()),
+            ));
         }
         // Update the cache.
         self.update_user_key_cache(pgp_provider, &unlock_result.unlocked_keys)?;
         Ok(unlock_result.unlocked_keys)
-    }
-}
-
-impl UserContext {
-    /// Returns the unlocked user keys of this user.
-    ///
-    /// First tries to retrieve them from the cache else
-    /// it loads and unlocks them from the database.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn user_keys_unlocked<Provider: PgpProviderSync, Secret: LoadKeySecret>(
-        &self,
-        pgp_provider: &Provider,
-        secret_loader: &Secret,
-    ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
-        self.key_manager
-            .user_keys(pgp_provider, secret_loader, self)
-            .await
-    }
-
-    /// Returns the unlocked address keys of this user for the given address.
-    ///
-    /// Loads the address keys from the database and unlocks them with the user keys.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn address_keys_unlocked<Provider: PgpProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-        secret_load_fn: &impl LoadKeySecret,
-        address_id: &RemoteId,
-    ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
-        self.key_manager
-            .address_keys(pgp_provider, secret_load_fn, self, address_id)
-            .await
-    }
-}
-
-pub struct CacheOption<T>(Option<(Instant, Arc<T>)>);
-
-impl<T> CacheOption<T> {
-    fn new(item: T) -> Self {
-        Self(Some((Instant::now(), Arc::new(item))))
-    }
-
-    fn none() -> Self {
-        Self(None)
-    }
-
-    fn get(&self, lifetime: Duration) -> Option<Arc<T>> {
-        match &self.0 {
-            Some((cache, value)) => {
-                let item_lifetime = cache.elapsed();
-                if item_lifetime > lifetime {
-                    return None;
-                }
-                Some(Arc::clone(value))
-            }
-            None => None,
-        }
     }
 }

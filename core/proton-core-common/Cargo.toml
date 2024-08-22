@@ -14,11 +14,13 @@ bytes = { workspace = true }
 indoc = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
+ical= { workspace = true }
 parking_lot = { workspace = true }
 proton-api-core = { workspace = true }
-proton-crypto-account = { workspace = true }
+proton-crypto-account = { workspace = true, features = ["sql"]}
 proton-event-loop = { workspace = true }
 proton-sqlite3 = { workspace = true }
+proton-vcard = { workspace = true }
 quick_cache.workspace = true
 secrecy = { workspace = true }
 serde = { workspace = true }
