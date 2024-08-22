@@ -129,7 +129,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
     });
 
     for message in env.messages.iter() {
-        let mut conv = find_conversation(
+        let conv = find_conversation(
             &mut env.conversations,
             &message.remote_conversation_id.clone().unwrap(),
         );
@@ -144,7 +144,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
         extend_addresses(&mut conv.recipients, &message.cc_list.value);
 
         for label_id in &message.label_ids {
-            let conv_label = find_conversation_label(&mut conv, label_id);
+            let conv_label = find_conversation_label(conv, label_id);
             conv_label.context_num_messages += 1;
             conv_label.context_size += message.size;
             conv_label.context_num_attachments += message.num_attachments as u64;

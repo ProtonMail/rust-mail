@@ -48,7 +48,7 @@ async fn test_move_between_folders() {
         test_init_params_conversation(&conv_id, labels, vec![LabelId::inbox().clone()]);
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
-    ctx.mock_get_conversations(conversations, 1u64.into()).await;
+    ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
         &folder_id.clone().into(),
         vec![conv_id.clone().into()],
@@ -166,7 +166,7 @@ async fn test_move_from_label_does_not_unlabel() {
     let init_params = test_init_params_conversation(&conv_id, labels, vec![label_id.clone()]);
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
-    ctx.mock_get_conversations(conversations, 1u64.into()).await;
+    ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
         &LabelId::inbox().into(),
         vec![conv_id.clone().into()],
@@ -265,7 +265,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
 
-    ctx.mock_get_conversations(conversations, 2u64.into()).await;
+    ctx.mock_get_conversations(conversations, 2_u64).await;
     ctx.mock_label_conversation(
         &LabelId::trash().into(),
         vec![conv_id.clone().into()],
@@ -402,7 +402,7 @@ async fn test_move_into_spam_remove_labels() {
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
 
-    ctx.mock_get_conversations(conversations, 2u64.into()).await;
+    ctx.mock_get_conversations(conversations, 2_u64).await;
     ctx.mock_label_conversation(
         &LabelId::spam().into(),
         vec![conv_id.clone().into()],
@@ -489,7 +489,7 @@ async fn move_out_of_trash_set_almost_all_mail() {
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
 
-    ctx.mock_get_conversations(conversations, 3u64.into()).await;
+    ctx.mock_get_conversations(conversations, 3_u64).await;
     ctx.mock_label_conversation(
         &LabelId::inbox().into(),
         vec![conv_id.clone().into()],
@@ -574,7 +574,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     let conversations = init_params.conversations.clone();
     ctx.setup_user(init_params).await;
 
-    ctx.mock_get_conversations(conversations, 3u64.into()).await;
+    ctx.mock_get_conversations(conversations, 3_u64).await;
     ctx.mock_label_conversation(
         &LabelId::inbox().into(),
         vec![conv_id.clone().into()],

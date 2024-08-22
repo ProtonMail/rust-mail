@@ -230,7 +230,7 @@ mod first_unread_message {
 
         for label in labels {
             assert_eq!(
-                Conversation::first_unread_message(&label, &messages),
+                Conversation::first_unread_message(label, &messages),
                 expected_id,
                 "Test failed for label: {:?}, {:?}",
                 label.label_type,
@@ -257,7 +257,7 @@ mod first_unread_message {
     }
 
     fn new_label(label_type: LabelType, rid: Option<LabelId>) -> Label {
-        label!(label_type: label_type, remote_id: rid)
+        label!(label_type, remote_id: rid)
     }
 }
 

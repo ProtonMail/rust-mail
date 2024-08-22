@@ -39,7 +39,7 @@ async fn get_sender_image() {
 
     let conversations = params.conversations.clone();
     ctx.setup_user(params.clone()).await;
-    ctx.mock_get_conversations(conversations, 1u64.into()).await;
+    ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_get_image_for_conversation(b"abcdef".to_vec())
         .await;
     ctx.catch_all().await;

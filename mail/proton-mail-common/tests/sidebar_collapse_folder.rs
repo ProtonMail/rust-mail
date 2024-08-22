@@ -34,7 +34,7 @@ async fn folder_expansion() {
     let sidebar = Sidebar::new(user_ctx.clone());
 
     let folder = get_folder("foo", stash).await;
-    assert_eq!(!folder.expanded, true);
+    assert!(!folder.expanded);
 
     ctx.mock_patch_label(folder.remote_id.unwrap(), true).await;
     ctx.catch_all().await;
@@ -69,7 +69,7 @@ async fn folder_collapse() {
     let sidebar = Sidebar::new(user_ctx.clone());
 
     let folder = get_folder("foo", stash).await;
-    assert_eq!(folder.expanded, true);
+    assert!(folder.expanded);
 
     ctx.mock_patch_label(folder.remote_id.unwrap(), false).await;
     ctx.catch_all().await;
