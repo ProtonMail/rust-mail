@@ -61,6 +61,7 @@ use proton_api_mail::services::proton::response_data::{
     ViewMode as ApiViewMode,
 };
 use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
@@ -71,11 +72,11 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 pub use system_label::SystemLabel;
-
 //  ENUMS
 //==============================================================================
 
@@ -1668,6 +1669,9 @@ pub struct ContextualConversation {
 
     /// Time of reception of the last message in this conversation.
     pub time: u64,
+
+    /// TODO: Document this field
+    pub snooze_time: u64,
 }
 
 impl ContextualConversation {
@@ -1702,7 +1706,33 @@ impl ContextualConversation {
             size: label.context_size,
             subject: conversation.subject,
             time: label.context_time,
+            snooze_time: label.context_snooze_time,
         })
+    }
+
+    /// Load a conversation with `local_conversation_id` and the
+    /// `local_label_id` where  the contextual information should be applied.
+    ///
+    /// If the `local_label_id` is not present in the `conversation`, `None` is
+    /// returned. This means that the conversation is not present in this label.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if conversation could not be loaded from the database.
+    pub async fn with_id<A>(
+        local_conversation_id: LocalId,
+        local_label_id: LocalId,
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(conversation) = Conversation::find_by_id(local_conversation_id, interface).await?
+        else {
+            return Ok(None);
+        };
+
+        Ok(Self::new(conversation, local_label_id))
     }
 }
 

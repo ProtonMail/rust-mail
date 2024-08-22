@@ -76,12 +76,13 @@ use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
 use smart_default::SmartDefault;
-use stash::exports::ToSql;
+use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
 use tracing::{debug, error};
 
@@ -1810,7 +1811,7 @@ impl Conversation {
     {
         Message::find(
             r"
-        WHERE 
+        WHERE
           local_conversation_id == ?
         ",
             params![self.local_id.unwrap()],
@@ -1826,7 +1827,7 @@ impl Conversation {
         let ids = Self::find_local_ids(
             r"
         WHERE
-          expiration_time < STRFTIME('%s', 'NOW') 
+          expiration_time < STRFTIME('%s', 'NOW')
           AND expiration_time != 0
         ",
             vec![],
@@ -1873,6 +1874,128 @@ impl Conversation {
         } else {
             Ok(())
         }
+    }
+
+    async fn check_has_label_and_is_unread<A>(
+        local_label_id: LocalId,
+        local_conversation_id: LocalId,
+        interface: &A,
+    ) -> Result<(bool, bool), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(label) = ConversationLabel::find_first(
+            "WHERE local_conversation_id=? AND local_label_id=?",
+            params![local_conversation_id, local_label_id],
+            interface,
+        )
+        .await?
+        {
+            Ok((true, label.context_num_unread != 0))
+        } else {
+            Ok((false, false))
+        }
+    }
+
+    /// Shared implementation to apply a label for messages and conversation.
+    ///
+    /// # Params
+    ///
+    /// * `local_label_id`         - Local label id of the [`Label`].
+    /// * `local_conversation_id`  - Local conversation id to which the label
+    ///                              should be applied.
+    /// * `local_message_ids`      - Local ids of the messages which belong to
+    ///                              `local_conversation_id` where the label
+    ///                              should be applied.
+    async fn label_impl<A>(
+        local_label_id: LocalId,
+        local_conversation_id: LocalId,
+        local_message_ids: &[LocalId],
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if local_message_ids.is_empty() {
+            return Ok(());
+        }
+
+        let (has_label, is_unread) = Conversation::check_has_label_and_is_unread(
+            local_label_id,
+            local_conversation_id,
+            interface,
+        )
+        .await?;
+
+        let stats = ConversationMessageLabelStats::with(
+            local_conversation_id,
+            local_label_id,
+            local_message_ids,
+            interface,
+        )
+        .await?;
+
+        // Update conversation labels.
+        let mut conversation_label = if let Some(mut label) = ConversationLabel::find_first(
+            "WHERE local_conversation_id=? AND local_label_id=?",
+            params![local_conversation_id, local_label_id],
+            interface,
+        )
+        .await?
+        {
+            label.context_time = label.context_time.max(stats.time);
+            label.context_snooze_time = label.context_snooze_time.max(stats.snooze_time);
+            label.context_expiration_time =
+                label.context_expiration_time.max(stats.expiration_time);
+            label.context_size += stats.size;
+            label.context_num_unread += stats.unread;
+            label.context_num_attachments += stats.num_attachments as u64;
+            label.context_num_messages += stats.count;
+            label
+        } else {
+            let remote_label_id =
+                if let Some(label) = Label::find_by_id(local_label_id, interface).await? {
+                    label.remote_id
+                } else {
+                    None
+                };
+            ConversationLabel {
+                local_id: None,
+                local_conversation_id: Some(local_conversation_id),
+                local_label_id: Some(local_label_id),
+                remote_label_id,
+                context_expiration_time: stats.expiration_time,
+                context_num_attachments: stats.num_attachments as u64,
+                context_num_messages: stats.count,
+                context_num_unread: stats.unread,
+                context_size: stats.size,
+                context_snooze_time: stats.snooze_time,
+                context_time: stats.time,
+                row_id: None,
+                stash: None,
+            }
+        };
+
+        conversation_label.save_using(interface).await?;
+
+        // Update message label counts.
+        let Some(mut label) = Label::find_by_id(local_label_id, interface).await? else {
+            error!("Could not find label");
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        };
+
+        label.unread_msg += stats.unread;
+        label.total_msg += stats.count;
+
+        let should_increment_count = !has_label;
+        let should_increment_unread = !is_unread && stats.unread != 0;
+
+        label.total_conv += should_increment_count as u64;
+        label.unread_conv += should_increment_unread as u64;
+
+        label.save_using(interface).await?;
+
+        Ok(())
     }
 }
 
@@ -4168,6 +4291,194 @@ impl Message {
             custom_labels: vec![],
         })
     }
+
+    /// Apply label with `local_label_id` to the given messages with `ids`.
+    ///
+    /// This will also update conversation labels and label counters.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries fail.
+    pub async fn apply_label<A>(
+        local_label_id: LocalId,
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalId>>::new();
+
+        for id in ids {
+            if match interface
+                .query_value::<_, LocalId>(
+                    "INSERT OR IGNORE INTO message_labels VALUES (?,?) RETURNING local_message_id AS value",
+                    params![id, local_label_id],
+                )
+                .await
+            {
+                Ok(_) => true,
+                Err(e) => {
+                    if !matches!(
+                        e,
+                        StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                    ) {
+                        return Err(e);
+                    }
+                    false
+                }
+            } {
+                if let Some(message) = Message::find_by_id(id, interface).await? {
+                    match conversation_messages.entry(message.local_conversation_id.unwrap()) {
+                        Entry::Vacant(v) => {
+                            v.insert(vec![id]);
+                        }
+                        Entry::Occupied(mut o) => {
+                            o.get_mut().push(id);
+                        }
+                    }
+                }
+            }
+        }
+
+        if conversation_messages.is_empty() {
+            // Nothing to do.
+            return Ok(());
+        }
+
+        for (conversation_id, message_ids) in conversation_messages {
+            Conversation::label_impl(local_label_id, conversation_id, &message_ids, interface)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Remove label with `local_label_id` to the given messages with `ids`.
+    ///
+    /// This will also update conversation labels and label counters.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries fail.
+    pub async fn remove_label<A>(
+        local_label_id: LocalId,
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut unread_count = 0_u64;
+        let mut updated_count = 0_u64;
+        let mut conversation_messages = BTreeMap::<LocalId, Vec<LocalId>>::new();
+
+        for id in ids {
+            let id = match interface.query_value::<_,LocalId>(
+                "DELETE FROM message_labels WHERE local_label_id=? AND local_message_id=? RETURNING local_message_id AS value",
+                params![local_label_id, id],
+            ).await {
+                Ok(v) => v,
+                Err(e) => {
+                    if !matches!(e, StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) {
+                        return Err(e)
+                    }
+                    continue;
+                }
+            };
+
+            let message = Message::find_by_id(id, interface)
+                .await?
+                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+
+            match conversation_messages.entry(message.local_conversation_id.unwrap()) {
+                Entry::Vacant(v) => {
+                    v.insert(vec![id]);
+                }
+                Entry::Occupied(mut o) => {
+                    o.get_mut().push(id);
+                }
+            }
+
+            if message.unread {
+                unread_count += 1;
+            }
+
+            updated_count += 1;
+        }
+
+        if conversation_messages.is_empty() {
+            // nothing to do.
+            return Ok(());
+        }
+
+        for (conversation_id, message_ids) in conversation_messages {
+            let (remaining_unread, remaining_messages): (u64, u64) =
+                match ConversationMessageLabelStats::without(
+                    conversation_id,
+                    local_label_id,
+                    &message_ids,
+                    interface,
+                )
+                .await
+                {
+                    Ok(stats) => {
+                        let mut conversation_label = ConversationLabel::find_first(
+                            "WHERE local_conversation_id=? AND local_label_id=?",
+                            params![conversation_id, local_label_id],
+                            interface,
+                        )
+                        .await?
+                        .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+                        conversation_label.context_time = stats.time;
+                        conversation_label.context_snooze_time = stats.snooze_time;
+                        conversation_label.context_expiration_time = stats.expiration_time;
+                        conversation_label.context_size = stats.size;
+                        conversation_label.context_num_messages = stats.count;
+                        conversation_label.context_num_attachments = stats.num_attachments as u64;
+                        conversation_label.save_using(interface).await?;
+                        (
+                            conversation_label.context_num_unread,
+                            conversation_label.context_num_messages,
+                        )
+                    }
+                    Err(e) => {
+                        if !matches!(
+                            e,
+                            StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
+                        ) {
+                            return Err(e);
+                        }
+                        // If no information is returned it means there are no messages associated
+                        // with this label.
+                        interface.execute("DELETE FROM conversation_labels WHERE local_conversation_id=? AND local_label_id=?", params![conversation_id,local_label_id]).await?;
+                        (0, 0)
+                    }
+                };
+
+            let mut label = Label::find_by_id(local_label_id, interface)
+                .await?
+                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+
+            // update conversation counters
+            if remaining_unread == 0 || remaining_messages == 0 {
+                if remaining_unread == 0 && unread_count != 0 {
+                    label.unread_conv -= 1;
+                }
+                if remaining_messages == 0 {
+                    label.total_conv -= 1;
+                }
+            }
+
+            // update message counters
+            label.unread_msg -= unread_count;
+            label.total_msg -= updated_count;
+
+            label.save_using(interface).await?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -4268,4 +4579,103 @@ pub struct MessageBodyMetadata {
     /// present for convenience.
     #[StashField]
     pub stash: Option<Stash>,
+}
+
+/// Calculates the combined information for a list of message that belong to a given
+/// conversation and a given label.
+struct ConversationMessageLabelStats {
+    pub size: u64,
+    pub time: u64,
+    pub expiration_time: u64,
+    pub count: u64,
+    pub unread: u64,
+    pub num_attachments: u32,
+    pub snooze_time: u64,
+}
+
+impl ConversationMessageLabelStats {
+    /// Get stats about for a conversation with `conversation_id` with the
+    /// given `message_ids` for a label with `label_id`.
+    async fn with<A>(
+        conversation_id: LocalId,
+        label_id: LocalId,
+        message_ids: &[LocalId],
+        interface: &A,
+    ) -> Result<Self, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let params = [label_id, conversation_id]
+            .into_iter()
+            .chain(message_ids.iter().cloned())
+            .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
+            .collect();
+        let messages = Message::find(format!(indoc! {"
+                JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
+                WHERE messages.local_conversation_id = ? AND messages.local_id IN ({})
+            "}, vec!["?"; message_ids.len()].join(",")),
+                                     params, interface, None).await?;
+
+        if messages.is_empty() {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        }
+
+        Ok(Self::from_messages(&messages))
+    }
+
+    /// Get stats about for a conversation with `conversation_id` for all the
+    /// message that do not match the given `message_ids` for a label with
+    /// `label_id`.
+    pub async fn without<A>(
+        conversation_id: LocalId,
+        label_id: LocalId,
+        message_ids: &[LocalId],
+        interface: &A,
+    ) -> Result<Self, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let params = [label_id, conversation_id]
+            .into_iter()
+            .chain(message_ids.iter().cloned())
+            .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
+            .collect();
+        let messages = Message::find(format!(indoc! {"
+                JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
+                WHERE messages.local_conversation_id = ? AND messages.local_id NOT IN ({})
+            "}, vec!["?"; message_ids.len()].join(",")),
+                                     params, interface, None).await?;
+
+        if messages.is_empty() {
+            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
+        }
+
+        Ok(Self::from_messages(&messages))
+    }
+
+    fn from_messages(messages: &[Message]) -> Self {
+        let mut stats = Self {
+            size: 0,
+            time: 0,
+            expiration_time: 0,
+            count: 0,
+            unread: 0,
+            num_attachments: 0,
+            snooze_time: 0,
+        };
+
+        for message in messages {
+            stats.size += message.size;
+            stats.time = stats.time.max(message.time);
+            stats.expiration_time = stats.expiration_time.max(message.expiration_time);
+            stats.count += 1;
+            if message.unread {
+                stats.unread += 1
+            }
+            stats.num_attachments += message.num_attachments;
+            stats.snooze_time = stats.snooze_time.max(message.snooze_time);
+        }
+
+        stats
+    }
 }
