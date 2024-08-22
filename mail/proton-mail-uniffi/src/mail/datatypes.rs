@@ -1005,10 +1005,14 @@ pub struct Conversation {
 
     /// Time of the last received message in this conversation.
     pub time: u64,
+
+    /// Avatar to be displayed for the sender.
+    pub avatar: AvatarInformation,
 }
 
 impl From<ContextualConversation> for Conversation {
     fn from(value: ContextualConversation) -> Self {
+        let avatar = RealAvatarInformation::from_message_addresses(&value.senders.value);
         Self {
             id: value.local_id.into(),
             attachments_metadata: value
@@ -1040,6 +1044,7 @@ impl From<ContextualConversation> for Conversation {
             is_starred: value.is_starred,
             subject: value.subject,
             time: value.time,
+            avatar: avatar.into(),
         }
     }
 }
@@ -1695,12 +1700,15 @@ pub struct Message {
 
     /// Whether the message is starred.
     pub starred: bool,
+
+    /// Avatar to be displayed for the sender.
+    pub avatar: AvatarInformation,
 }
 
 impl From<RealMessage> for Message {
     fn from(value: RealMessage) -> Self {
         let starred = value.is_starred();
-
+        let avatar = RealAvatarInformation::from_message_address(&value.sender);
         Message {
             id: value.local_id.unwrap().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),
@@ -1751,6 +1759,7 @@ impl From<RealMessage> for Message {
             unread: value.unread,
             custom_labels: value.custom_labels.into_iter().map(Into::into).collect(),
             starred,
+            avatar: avatar.into(),
         }
     }
 }
