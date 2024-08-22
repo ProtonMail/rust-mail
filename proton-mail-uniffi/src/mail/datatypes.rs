@@ -50,6 +50,7 @@
 //!
 mod attachment;
 mod available_action;
+pub(crate) mod custom_folder;
 mod system_label;
 
 use crate::core::datatypes::Id;

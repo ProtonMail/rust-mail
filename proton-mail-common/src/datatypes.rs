@@ -38,6 +38,7 @@
 //!
 
 pub mod attachment;
+pub mod custom_folder;
 pub(crate) mod exclusive_location;
 pub(crate) mod system_label;
 

@@ -5,6 +5,7 @@
 //!
 
 use crate::core::datatypes::Id;
+use crate::mail::datatypes::custom_folder::CustomFolder;
 use crate::mail::datatypes::Label;
 use crate::mail::datatypes::LabelType;
 use crate::mail::{MailSessionError, MailUserSession};
@@ -94,11 +95,11 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self, parent_id: Option<Id>) -> SidebarResult<Vec<Label>> {
+    pub async fn custom_folders(&self) -> SidebarResult<Vec<CustomFolder>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            let labels = sidebar.custom_folders(parent_id.map(Into::into)).await?;
-            Ok(labels.into_iter().map(Label::from).collect())
+            let labels = sidebar.custom_folders().await?;
+            Ok(labels.into_iter().map(CustomFolder::from).collect())
         })
         .await
     }

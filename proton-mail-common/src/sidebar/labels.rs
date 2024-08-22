@@ -3,8 +3,12 @@ use crate::{AppError, MailContextError};
 use proton_core_common::datatypes::{LabelId, LocalId};
 use stash::orm::Model;
 use stash::params;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 use tracing::error;
 
+use crate::datatypes::custom_folder::CustomFolder;
 use crate::datatypes::{AlmostAllMail, ContextualLabel, ShowMoved};
 use crate::datatypes::{LabelType, SystemLabelId};
 use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
@@ -73,28 +77,64 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(
-        &self,
-        parent_id: Option<LocalId>,
-    ) -> SidebarResult<Vec<ContextualLabel>> {
+    pub async fn custom_folders(&self) -> SidebarResult<Vec<CustomFolder>> {
+        let labels: Vec<_> = self.all_custom_folders().await?;
+
+        // Create Hierarchy
+        let mut index: HashMap<_, _> = labels
+            .iter()
+            .map(|l| {
+                (
+                    l.local_id.as_u64(),
+                    Rc::new(RefCell::new(Hierarchy {
+                        id: l.local_id.as_u64(),
+                        parent_id: l.parent_id.map(|i| i.as_u64()),
+                        children: vec![],
+                    })),
+                )
+            })
+            .collect();
+
+        // Construct Hierarchy
+        for value in &labels {
+            if let Some(parent_id) = value.parent_id {
+                let rc = index.get(&value.local_id.as_u64()).unwrap().clone();
+                index
+                    .entry(parent_id.as_u64())
+                    .and_modify(|f| f.borrow_mut().children.push(rc));
+            }
+        }
+
+        // Index CustomFolder by their local_id
+        let by_id = labels.iter().fold(HashMap::new(), |mut acc, f| {
+            acc.insert(f.local_id.as_u64(), f);
+            acc
+        });
+
+        // Map CustomFolders to their hierarchy
+        let mut result: Vec<_> = index
+            .iter()
+            .filter(|(_, f)| f.borrow().parent_id.is_none())
+            .map(|(_, f)| {
+                let mut folder = CustomFolder::from(*by_id.get(&f.borrow().id).unwrap());
+                folder.children = f.borrow().map_children(&by_id);
+                folder
+            })
+            .collect();
+        result.sort_by_cached_key(|a| a.display_order);
+
+        Ok(result)
+    }
+
+    pub async fn all_custom_folders(&self) -> SidebarResult<Vec<ContextualLabel>> {
         let interface = self.user_ctx.user_stash();
-        let labels = if let Some(parent_id) = parent_id {
-            Label::find(
-                "WHERE label_type = ? AND local_parent_id = ? ORDER BY display_order",
-                params![LabelType::Folder, parent_id],
-                interface,
-                None,
-            )
-            .await?
-        } else {
-            Label::find(
-                "WHERE label_type = ? AND local_parent_id is NULL ORDER BY display_order",
-                params![LabelType::Folder],
-                interface,
-                None,
-            )
-            .await?
-        };
+        let labels = Label::find(
+            "WHERE label_type = ? ORDER BY display_order",
+            params![LabelType::Folder],
+            interface,
+            None,
+        )
+        .await?;
         Ok(ContextualLabel::from_labels(labels.as_slice(), interface).await?)
     }
 
@@ -153,5 +193,34 @@ impl Sidebar {
                 label_id,
             )))
         })
+    }
+}
+
+struct Hierarchy {
+    id: u64,
+    parent_id: Option<u64>,
+    children: Vec<Rc<RefCell<Hierarchy>>>,
+}
+
+impl Hierarchy {
+    // Map the children of the current node to a vec of CustomFolder
+    // Called recursively on all children
+    // Note: Sort the children using display_order
+    fn map_children(&self, index: &HashMap<u64, &ContextualLabel>) -> Vec<CustomFolder> {
+        if self.children.is_empty() {
+            vec![]
+        } else {
+            let mut result: Vec<_> = self
+                .children
+                .iter()
+                .map(|c| {
+                    let mut folder = CustomFolder::from(*index.get(&c.borrow().id).unwrap());
+                    folder.children = c.borrow().map_children(index);
+                    folder
+                })
+                .collect();
+            result.sort_by_cached_key(|a| a.display_order);
+            result
+        }
     }
 }
