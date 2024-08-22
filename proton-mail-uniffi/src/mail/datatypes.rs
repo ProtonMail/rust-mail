@@ -1301,12 +1301,6 @@ pub struct Label {
     pub expanded: bool,
 
     /// TODO: Document this field.
-    pub initialized_conv: bool,
-
-    /// TODO: Document this field.
-    pub initialized_msg: bool,
-
-    /// TODO: Document this field.
     pub label_description: LabelDescription,
 
     /// TODO: Document this field.
@@ -1325,16 +1319,10 @@ pub struct Label {
     pub sticky: bool,
 
     /// TODO: Document this field.
-    pub total_conv: u64,
+    pub total: u64,
 
     /// TODO: Document this field.
-    pub total_msg: u64,
-
-    /// TODO: Document this field.
-    pub unread_conv: u64,
-
-    /// TODO: Document this field.
-    pub unread_msg: u64,
+    pub unread: u64,
 }
 
 impl From<ContextualLabel> for Label {
@@ -1345,18 +1333,14 @@ impl From<ContextualLabel> for Label {
             color: value.color.map(LabelColor::from),
             display: value.display,
             expanded: value.expanded,
-            initialized_conv: value.initialized_conv,
-            initialized_msg: value.initialized_msg,
             label_description: value.label_description.into(),
             name: value.name,
             notify: value.notify,
             display_order: value.display_order,
             path: value.path,
             sticky: value.sticky,
-            total_conv: value.total_conv,
-            total_msg: value.total_msg,
-            unread_conv: value.unread_conv,
-            unread_msg: value.unread_msg,
+            total: value.total,
+            unread: value.unread,
         }
     }
 }

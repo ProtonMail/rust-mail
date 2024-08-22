@@ -1759,12 +1759,6 @@ pub struct ContextualLabel {
     pub expanded: bool,
 
     /// TODO: Document this field.
-    pub initialized_conv: bool,
-
-    /// TODO: Document this field.
-    pub initialized_msg: bool,
-
-    /// TODO: Document this field.
     pub label_description: LabelDescription,
 
     /// TODO: Document this field.
@@ -1783,16 +1777,10 @@ pub struct ContextualLabel {
     pub sticky: bool,
 
     /// TODO: Document this field.
-    pub total_conv: u64,
+    pub total: u64,
 
     /// TODO: Document this field.
-    pub total_msg: u64,
-
-    /// TODO: Document this field.
-    pub unread_conv: u64,
-
-    /// TODO: Document this field.
-    pub unread_msg: u64,
+    pub unread: u64,
 }
 
 impl ContextualLabel {
@@ -1802,27 +1790,45 @@ impl ContextualLabel {
     {
         let color = Self::color_to_display(value, interface).await?;
         let label_description = LabelDescription::new(value);
+        let (unread, total) = Self::messages_counts(value, interface).await?;
         Ok(Self {
             local_id: value.local_id.expect("Should be set"),
             parent_id: value.local_parent_id,
             color,
             display: value.display,
             expanded: value.expanded,
-            initialized_conv: value.initialized_conv,
-            initialized_msg: value.initialized_msg,
             label_description,
             name: value.name.clone(),
             notify: value.notify,
             display_order: value.display_order,
             path: value.path.clone(),
             sticky: value.sticky,
-            total_conv: value.total_conv,
-            total_msg: value.total_msg,
-            unread_conv: value.unread_conv,
-            unread_msg: value.unread_msg,
+            total,
+            unread,
         })
     }
 
+    async fn view_mode<A>(label: &Label, interface: &A) -> Result<ViewMode, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(label.view_mode().unwrap_or(
+            MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
+                .await?
+                .unwrap_or_default()
+                .view_mode,
+        ))
+    }
+
+    async fn messages_counts<A>(label: &Label, interface: &A) -> Result<(u64, u64), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        match Self::view_mode(label, interface).await? {
+            ViewMode::Conversations => Ok((label.unread_conv, label.total_conv)),
+            ViewMode::Messages => Ok((label.unread_msg, label.total_msg)),
+        }
+    }
     /// Get the color a [`Label`] should be displayed with.
     ///
     /// The color depends on [`MailSettings`] `enable_folder_color` and `inherit_parent_folder_color`

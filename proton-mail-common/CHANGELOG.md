@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+
+- Grouped `total_conv` and `total_msg` from `ContextualLabel` as `total` 
+- Grouped `unread_conv` and `unread_msg` from `ContextualLabel` as `unread`
+
+### Removed
+
+- Removed `initialized_conv` and `initialized_msg` from `ContextualLabel` 
+
+
 ## [0.5.31] - 2024-07-22
 
 ### Changed
@@ -41,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.27] - 2024-06-21
 
-## Changed
+### Changed
 
 - Update `MailUserContext::filter_converstions` to require a label id for context.
 

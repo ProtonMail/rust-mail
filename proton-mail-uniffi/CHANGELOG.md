@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+
+- Grouped `total_conv` and `total_msg` from `Label` as `total`
+- Grouped `unread_conv` and `unread_msg` from `Label` as `unread`
+
+### Removed
+
+- Removed `initialized_conv` and `initialized_msg` from `Label`
+
+
 ## [0.11.13] - 2024-08-21
 
 ### Added
