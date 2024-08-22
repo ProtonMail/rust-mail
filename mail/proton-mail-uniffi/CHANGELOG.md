@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+  - `CustomFolder` struct (like `ContextualLabel` with a children field)
+  - `Sidebar::all_custom_folders` method (return all custom folders in a flat way)
+
+### Changed
+
+  - `Sidebar::custom_folders` to return all custom_folders in a hierarchical way
+
 ## [0.11.16] - 2024-08-23
 
 ### Fixed

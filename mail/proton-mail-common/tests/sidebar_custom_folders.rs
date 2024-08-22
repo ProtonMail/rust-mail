@@ -4,36 +4,61 @@ use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::LabelId;
+use proton_mail_common::datatypes::custom_folder::CustomFolder;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
-use stash::orm::Model;
-use stash::params;
-use stash::stash::Stash;
+use std::iter::zip;
 use test_case::test_case;
 use velcro::hash_map;
 
 mod common;
 
-#[test_case(&[], None, &[]; "empty")]
+#[derive(Clone)]
+struct H {
+    name: String,
+    children: Vec<H>,
+}
+
+impl H {
+    fn is_matching(&self, folder: CustomFolder) {
+        assert_eq!(self.name, folder.name);
+        assert_eq!(self.children.len(), folder.children.len());
+        zip(self.children.clone(), folder.children).for_each(|(h, f)| h.is_matching(f));
+    }
+}
+
+#[test_case(&[], &[]; "empty")]
 #[test_case(&[
-    ("foo",  None,        "foo", 1),
-    ("bar",  Some("foo"), "bar", 2),
-    ("titi", None,        "titi",5)
-], None, &["foo", "titi"]; "root")]
+    ("foo",  None, "foo", 1),
+    ("bar",  None, "bar", 2),
+    ("titi", None, "titi",5)
+], &[H{name: "foo".to_owned(), children: vec![]},
+     H{name: "bar".to_owned(), children: vec![]},
+     H{name: "titi".to_owned(), children: vec![]}]; "root")]
 #[test_case(&[
-    ("foo",  None,        "foo",  1),
-    ("bar",  Some("foo"), "bar",  2),
-    ("baz",  Some("foo"), "baz",  3),
-    ("titi", None,        "titi", 5),
-    ("toto", Some("baz"), "toto", 4),
-], Some("foo"), &["bar", "baz"]; "hierarchy")]
+    ("foo",  None,         "foo",  1),
+    ("bar",  Some("foo"),  "bar",  2),
+    ("baz",  Some("foo"),  "baz",  3),
+    ("toto", Some("baz"),  "toto", 4),
+    ("titi", None,         "titi", 5),
+    ("tutu", Some("titi"), "tutu", 6),
+    ("tata", Some("tutu"), "tata", 7),
+    ("tete", Some("tutu"), "tete", 8),
+    ("tyty", Some("titi"), "tyty", 9),
+], &[H{name: "foo".to_owned(), children: vec![
+        H{name: "bar".to_owned(), children: vec![]},
+        H{name: "baz".to_owned(), children: vec![
+            H{name: "toto".to_owned(), children: vec![]}]},
+     ]},
+     H{name: "titi".to_owned(), children: vec![
+        H{name: "tutu".to_owned(), children: vec![
+            H{name: "tata".to_owned(), children: vec![]},
+            H{name: "tete".to_owned(), children: vec![]},
+        ]},
+        H{name: "tyty".to_owned(), children: vec![]},
+     ]}]; "hierarchy")]
 #[tokio::test]
-async fn sidebar_custom_folders(
-    labels: &[(&str, Option<&str>, &str, u32)],
-    parent_id: Option<&str>,
-    expected: &[&str],
-) {
+async fn sidebar_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], expected: &[H]) {
     // Setup:
     //   * Setup User:
     //     + Create Custom Folders
@@ -50,17 +75,13 @@ async fn sidebar_custom_folders(
         .unwrap();
     let sidebar = Sidebar::new(user_ctx.clone());
 
-    let parent = get_label(parent_id, user_ctx.user_stash()).await;
-
     // Action
-    let result = sidebar
-        .custom_folders(parent.map(|p| p.local_id.unwrap()))
-        .await
-        .unwrap();
+    let result = sidebar.custom_folders().await.unwrap();
 
     // Tests
-    let result: Vec<_> = result.into_iter().map(|l| l.name).collect();
-    assert_eq!(result, expected);
+    for (res, h) in zip(result, expected) {
+        h.is_matching(res);
+    }
 }
 
 fn sidebar_test_params(labels: &[(&str, Option<&str>, &str, u32)]) -> TestParams {
@@ -83,15 +104,5 @@ fn create_label((id, parent_id, name, order): &(&str, Option<&str>, &str, u32)) 
         order: order.to_owned(),
         path: None,
         sticky: false,
-    }
-}
-
-async fn get_label(label_name: Option<&str>, stash: &Stash) -> Option<Label> {
-    if let Some(name) = label_name {
-        Label::find_first("WHERE remote_id = ?", params![LabelId::from(name)], stash)
-            .await
-            .unwrap()
-    } else {
-        None
     }
 }
