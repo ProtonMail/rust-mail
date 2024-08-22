@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.11.14] - 2024-08-22
+
 ### Changed
 
 - Grouped `total_conv` and `total_msg` from `Label` as `total`
