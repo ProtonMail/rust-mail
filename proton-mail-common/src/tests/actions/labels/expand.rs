@@ -56,7 +56,7 @@ fn create_label(expanded: bool) -> Label {
 
     label.remote_id = Some(REMOTE_ID.to_string().into());
     label.label_type = LabelType::Folder;
-    label.name = format!("label_name");
+    label.name = "label_name".to_string();
     label.color = LabelColor::black();
     label.expanded = expanded;
     label.display = true;
@@ -87,7 +87,7 @@ mod apply_local {
 
             let tx = test.con().transaction().await.unwrap();
             for _ in 0..apply {
-                Handler::default()
+                Handler
                     .apply_local(&mut test.action, &tx)
                     .await
                     .expect("failed to apply local");
@@ -123,14 +123,14 @@ mod revert_local {
 
             let tx = test.con().transaction().await.unwrap();
             for _ in 0..apply {
-                Handler::default()
+                Handler
                     .apply_local(&mut test.action, &tx)
                     .await
                     .expect("failed to apply local");
             }
 
             for _ in 0..revert {
-                Handler::default()
+                Handler
                     .revert_local(&mut test.action, &tx)
                     .await
                     .expect("failed to apply local");
@@ -222,7 +222,7 @@ mod apply_remote {
 
         let tx = test.con().transaction().await.unwrap();
         for _ in 0..apply_local {
-            Handler::default()
+            Handler
                 .apply_local(&mut test.action, &tx)
                 .await
                 .expect("failed to apply local");
@@ -231,7 +231,7 @@ mod apply_remote {
 
         for _ in 0..apply_remote {
             let stash = test.con().clone();
-            Handler::default()
+            Handler
                 .apply_remote(&mut test.action, &session, &stash)
                 .await
                 .unwrap();

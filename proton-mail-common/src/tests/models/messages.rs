@@ -313,7 +313,7 @@ async fn test_create_message() {
     expected.set_stash(&stash);
     resolve_local_ids(&tx, &mut expected).await;
     expected.local_id = Some(1.into());
-    expected.row_id = Some(1u64.into());
+    expected.row_id = Some(1_u64);
     expected.exclusive_location = Some(ExclusiveLocation::System(SystemLabel::Inbox));
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
@@ -1280,7 +1280,7 @@ async fn messages_mark_read() {
         .unwrap();
 
     // Msg is read.
-    assert_eq!(db_message.unread, false);
+    assert!(!db_message.unread);
 
     let db_conv = ContextualConversation::new(
         Conversation::find_by_id(local_conv_id, &tx)
@@ -1423,7 +1423,7 @@ async fn messages_mark_unread() {
         .unwrap()
         .unwrap();
     // Msg is unread.
-    assert_eq!(db_message.unread, true);
+    assert!(db_message.unread);
 
     let db_conv = ContextualConversation::new(
         Conversation::find_by_id(local_conv_id, &tx)

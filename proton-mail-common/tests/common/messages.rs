@@ -28,7 +28,7 @@ impl TestContext {
         };
 
         Mock::given(method("POST"))
-            .and(path(format!("/api/mail/v4/messages")))
+            .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
             .mount(self.mock_server())
