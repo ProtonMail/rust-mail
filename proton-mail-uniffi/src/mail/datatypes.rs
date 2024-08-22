@@ -131,7 +131,8 @@ impl From<RealAlmostAllMail> for AlmostAllMail {
     }
 }
 
-/// What to do with the blockquote (previous conversation threads).
+/// What to do with the blockquote (previous conversation threads)
+/// The default behaviour is Strip.
 #[derive(Debug, Clone, Copy, Default, UniffiEnum)]
 pub enum BlockQuote {
     /// Remove the previous conversation.
@@ -637,6 +638,7 @@ impl From<RealPmSignature> for PmSignature {
 }
 
 /// Enable or disable remote content (images).
+/// The default behaviour is Default.
 #[derive(Debug, Clone, Copy, Default, UniffiEnum)]
 pub enum RemoteContent {
     /// Use whatever is in the user's [`MailSettings`].

@@ -6,6 +6,8 @@ use crate::models::{MailSettings, MessageBodyMetadata};
 use proton_mail_html_transformer::Transformer;
 use serde_json::Value;
 
+/// Enable or disable remote content (images).
+/// The default behaviour is Default.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum RemoteContent {
     #[default]
@@ -15,6 +17,7 @@ pub enum RemoteContent {
 }
 
 /// What to do with the blockquote (previous conversation threads)
+/// The default behaviour is Strip.
 #[derive(Debug, Clone, Copy, Default)]
 pub enum BlockQuote {
     #[default]
