@@ -265,4 +265,20 @@ impl Mailbox {
     pub fn view_mode(&self) -> ViewMode {
         self.view_mode
     }
+
+    /// Get the number of unread items in this mailbox.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn unread_count(&self) -> Result<u64, MailboxError> {
+        let Some(label) = Label::find_by_id(self.label_id, self.user_ctx.stash()).await? else {
+            return Err(MailboxError::LabelNotFound(self.label_id));
+        };
+
+        Ok(match self.view_mode {
+            ViewMode::Conversations => label.unread_conv,
+            ViewMode::Messages => label.unread_msg,
+        })
+    }
 }
