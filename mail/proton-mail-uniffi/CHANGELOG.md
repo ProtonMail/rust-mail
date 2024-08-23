@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased] - 2024-00-00
 
 ### Fixed
- - Label sync issue on multiple login.
+
+ - Sync issues on multiple login.
+
+### Changed
+
+ - `StoredSession` `email` and `name` have been replaced with `name_or_address`.
 
 ## [0.11.20] - 2024-08-27
 

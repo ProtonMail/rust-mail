@@ -38,14 +38,8 @@ impl StoredSession {
 impl StoredSession {
     /// Get the session's email.
     #[must_use]
-    pub fn email(&self) -> String {
-        self.session.email.clone()
-    }
-
-    /// Get the session's account name (if any).
-    #[must_use]
-    pub fn name(&self) -> Option<String> {
-        self.session.name.clone()
+    pub fn name_or_address(&self) -> String {
+        self.session.name_or_addr.clone()
     }
 
     /// Get the session's user id.
