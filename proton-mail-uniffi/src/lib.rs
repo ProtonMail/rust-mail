@@ -190,6 +190,12 @@ impl Default for WatchHandle {
     }
 }
 
+impl Drop for WatchHandle {
+    fn drop(&mut self) {
+        self.disconnect();
+    }
+}
+
 impl WatchHandle {
     #[must_use]
     pub fn new() -> Self {
