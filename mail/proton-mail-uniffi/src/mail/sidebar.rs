@@ -5,8 +5,9 @@
 //!
 
 use crate::core::datatypes::Id;
-use crate::mail::datatypes::custom_folder::CustomFolder;
-use crate::mail::datatypes::Label;
+use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
+use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
+use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
@@ -77,29 +78,39 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn system_labels(&self) -> SidebarResult<Vec<Label>> {
+    pub async fn system_labels(&self) -> SidebarResult<Vec<SidebarSystemLabel>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.system_labels().await?;
-            Ok(labels.into_iter().map(Label::from).collect())
+            Ok(labels.into_iter().map(SidebarSystemLabel::from).collect())
         })
         .await
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
     ///
-    /// # Parameters
+    /// # Errors
+    ///   * Database request fail
     ///
-    /// * `parent_id` - id of the parent folder (or `None` for root folders)
+    pub async fn custom_folders(&self) -> SidebarResult<Vec<SidebarCustomFolder>> {
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move {
+            let labels = sidebar.custom_folders().await?;
+            Ok(labels.into_iter().map(SidebarCustomFolder::from).collect())
+        })
+        .await
+    }
+
+    /// Get the list of all the Custom Folders.
     ///
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self) -> SidebarResult<Vec<CustomFolder>> {
+    pub async fn all_custom_folders(&self) -> SidebarResult<Vec<SidebarCustomFolder>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
-            let labels = sidebar.custom_folders().await?;
-            Ok(labels.into_iter().map(CustomFolder::from).collect())
+            let labels = sidebar.all_custom_folders().await?;
+            Ok(labels.into_iter().map(SidebarCustomFolder::from).collect())
         })
         .await
     }
@@ -109,11 +120,11 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_labels(&self) -> SidebarResult<Vec<Label>> {
+    pub async fn custom_labels(&self) -> SidebarResult<Vec<SidebarCustomLabel>> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.custom_labels().await?;
-            Ok(labels.into_iter().map(Label::from).collect())
+            Ok(labels.into_iter().map(SidebarCustomLabel::from).collect())
         })
         .await
     }

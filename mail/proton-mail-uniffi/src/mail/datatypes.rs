@@ -50,7 +50,7 @@
 //!
 mod attachment;
 mod available_action;
-pub(crate) mod custom_folder;
+pub(crate) mod labels;
 mod system_label;
 
 use crate::core::datatypes::Id;
@@ -67,7 +67,7 @@ use proton_core_common::models::Address as RealAddress;
 use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
-    ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode, ContextualLabel,
+    ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationCount as RealConversationCount, CustomLabel as RealCustomLabel,
     Disposition as RealDisposition, LabelColor as RealLabelColor,
     LabelDescription as RealLabelDescription, LabelType as RealLabelType,
@@ -965,7 +965,7 @@ pub struct Conversation {
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
     /// List of custom labels.
-    pub custom_labels: Vec<CustomLabel>,
+    pub custom_labels: Vec<InlineCustomLabel>,
 
     /// TODO: Document this field.
     pub display_snooze_reminder: bool,
@@ -1264,7 +1264,7 @@ impl ConversationSearchOptions {
 /// that are applied to [`Conversation`]s or [`Message`]s.
 ///
 #[derive(Debug, Clone, Eq, PartialEq, UniffiRecord)]
-pub struct CustomLabel {
+pub struct InlineCustomLabel {
     /// Local ID of the label.
     pub id: Id,
 
@@ -1275,80 +1275,12 @@ pub struct CustomLabel {
     pub color: LabelColor,
 }
 
-impl From<RealCustomLabel> for CustomLabel {
+impl From<RealCustomLabel> for InlineCustomLabel {
     fn from(value: RealCustomLabel) -> Self {
         Self {
             id: value.local_id.into(),
             name: value.name,
             color: value.color.into(),
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-#[allow(clippy::struct_excessive_bools)]
-pub struct Label {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
-    pub id: Id,
-
-    /// TODO: Document this field.
-    pub parent_id: Option<Id>,
-
-    /// TODO: Document this field.
-    pub color: Option<LabelColor>,
-
-    /// TODO: Document this field.
-    pub display: bool,
-
-    /// TODO: Document this field.
-    pub expanded: bool,
-
-    /// TODO: Document this field.
-    pub label_description: LabelDescription,
-
-    /// TODO: Document this field.
-    pub name: String,
-
-    /// TODO: Document this field.
-    pub notify: bool,
-
-    /// TODO: Document this field.
-    pub display_order: u32,
-
-    /// TODO: Document this field.
-    pub path: Option<String>,
-
-    /// TODO: Document this field.
-    pub sticky: bool,
-
-    /// TODO: Document this field.
-    pub total: u64,
-
-    /// TODO: Document this field.
-    pub unread: u64,
-}
-
-impl From<ContextualLabel> for Label {
-    fn from(value: ContextualLabel) -> Self {
-        Self {
-            id: value.local_id.into(),
-            parent_id: value.parent_id.map(Into::into),
-            color: value.color.map(LabelColor::from),
-            display: value.display,
-            expanded: value.expanded,
-            label_description: value.label_description.into(),
-            name: value.name,
-            notify: value.notify,
-            display_order: value.display_order,
-            path: value.path,
-            sticky: value.sticky,
-            total: value.total,
-            unread: value.unread,
         }
     }
 }
@@ -1697,7 +1629,7 @@ pub struct Message {
     pub unread: bool,
 
     /// List of custom labels.
-    pub custom_labels: Vec<CustomLabel>,
+    pub custom_labels: Vec<InlineCustomLabel>,
 
     /// Whether the message is starred.
     pub starred: bool,

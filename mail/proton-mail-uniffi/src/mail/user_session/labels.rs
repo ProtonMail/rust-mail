@@ -1,8 +1,11 @@
-use crate::mail::datatypes::Label;
+use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
+use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::{MailSessionError, MailUserSession};
 use crate::uniffi_async;
 use proton_core_common::datatypes::LabelId as RealLabelId;
-use proton_mail_common::datatypes::{ContextualLabel, LabelType as RealLabelType, SystemLabelId};
+use proton_mail_common::datatypes::labels::custom_folder::CustomFolder as RealCustomFolder;
+use proton_mail_common::datatypes::labels::custom_labels::CustomLabel as RealCustomLabel;
+use proton_mail_common::datatypes::{LabelType as RealLabelType, SystemLabelId};
 use proton_mail_common::models::Label as RealLabel;
 use stash::orm::Model;
 use stash::params;
@@ -14,7 +17,7 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn movable_folders(&self) -> Result<Vec<Label>, MailSessionError> {
+    pub async fn movable_folders(&self) -> Result<Vec<SidebarCustomFolder>, MailSessionError> {
         let stash = self.ctx().user_stash().clone();
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
@@ -26,8 +29,8 @@ impl MailUserSession {
                 None,
             )
             .await?;
-            let labels = ContextualLabel::from_labels(labels.as_slice(), &stash).await?;
-            Ok(labels.into_iter().map(Label::from).collect())
+            let labels = RealCustomFolder::from_labels(labels.as_slice(), &stash).await?;
+            Ok(labels.into_iter().map(SidebarCustomFolder::from).collect())
         })
         .await
     }
@@ -37,7 +40,7 @@ impl MailUserSession {
     ///
     /// # Errors
     /// Returns an error if the list can not be retrieved.
-    pub async fn applicable_labels(&self) -> Result<Vec<Label>, MailSessionError> {
+    pub async fn applicable_labels(&self) -> Result<Vec<SidebarCustomLabel>, MailSessionError> {
         let stash = self.ctx.user_stash().clone();
         uniffi_async(async move {
             let labels = RealLabel::find(
@@ -47,8 +50,8 @@ impl MailUserSession {
                 None,
             )
             .await?;
-            let labels = ContextualLabel::from_labels(labels.as_slice(), &stash).await?;
-            Ok(labels.into_iter().map(Label::from).collect())
+            let labels = RealCustomLabel::from_labels(labels.as_slice(), &stash).await?;
+            Ok(labels.into_iter().map(SidebarCustomLabel::from).collect())
         })
         .await
     }

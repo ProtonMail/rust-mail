@@ -8,8 +8,10 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use tracing::error;
 
-use crate::datatypes::custom_folder::CustomFolder;
-use crate::datatypes::{AlmostAllMail, ContextualLabel, ShowMoved};
+use crate::datatypes::labels::custom_folder::CustomFolder;
+use crate::datatypes::labels::custom_labels::CustomLabel;
+use crate::datatypes::labels::system_labels::SystemLabel;
+use crate::datatypes::{AlmostAllMail, ShowMoved};
 use crate::datatypes::{LabelType, SystemLabelId};
 use crate::models::{Label, MailSettings, MAIL_SETTINGS_ID};
 use crate::sidebar::{Sidebar, SidebarError, SidebarResult};
@@ -24,7 +26,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn system_labels(&self) -> SidebarResult<Vec<ContextualLabel>> {
+    pub async fn system_labels(&self) -> SidebarResult<Vec<SystemLabel>> {
         let interface = self.user_ctx.user_stash();
         let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
             .await?
@@ -66,7 +68,7 @@ impl Sidebar {
         } else {
             labels.push(self.get_label(LabelId::almost_all_mail()).await?);
         }
-        Ok(ContextualLabel::from_labels(labels.as_slice(), interface).await?)
+        Ok(SystemLabel::from_labels(labels.as_slice(), interface).await?)
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
@@ -106,7 +108,7 @@ impl Sidebar {
         }
 
         // Index CustomFolder by their local_id
-        let by_id = labels.iter().fold(HashMap::new(), |mut acc, f| {
+        let mut by_id = labels.into_iter().fold(HashMap::new(), |mut acc, f| {
             acc.insert(f.local_id.as_u64(), f);
             acc
         });
@@ -114,10 +116,11 @@ impl Sidebar {
         // Map CustomFolders to their hierarchy
         let mut result: Vec<_> = index
             .iter()
+            // Keep only root Folders
             .filter(|(_, f)| f.borrow().parent_id.is_none())
             .map(|(_, f)| {
-                let mut folder = CustomFolder::from(*by_id.get(&f.borrow().id).unwrap());
-                folder.children = f.borrow().map_children(&by_id);
+                let mut folder = by_id.remove(&f.borrow().id).unwrap();
+                folder.children = f.borrow().map_children(&mut by_id);
                 folder
             })
             .collect();
@@ -126,7 +129,8 @@ impl Sidebar {
         Ok(result)
     }
 
-    pub async fn all_custom_folders(&self) -> SidebarResult<Vec<ContextualLabel>> {
+    /// Get all the [`CustomFolder`].
+    pub async fn all_custom_folders(&self) -> SidebarResult<Vec<CustomFolder>> {
         let interface = self.user_ctx.user_stash();
         let labels = Label::find(
             "WHERE label_type = ? ORDER BY display_order",
@@ -135,7 +139,7 @@ impl Sidebar {
             None,
         )
         .await?;
-        Ok(ContextualLabel::from_labels(labels.as_slice(), interface).await?)
+        Ok(CustomFolder::from_labels(labels.as_slice(), interface).await?)
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
@@ -143,7 +147,7 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_labels(&self) -> SidebarResult<Vec<ContextualLabel>> {
+    pub async fn custom_labels(&self) -> SidebarResult<Vec<CustomLabel>> {
         let interface = self.user_ctx.user_stash();
         let labels = Label::find(
             "WHERE label_type = ? ORDER BY display_order",
@@ -152,7 +156,7 @@ impl Sidebar {
             None,
         )
         .await?;
-        Ok(ContextualLabel::from_labels(labels.as_slice(), interface).await?)
+        Ok(CustomLabel::from_labels(labels.as_slice(), interface).await?)
     }
 
     /// Set folder `expanded` field to it's collapsed state
@@ -196,6 +200,7 @@ impl Sidebar {
     }
 }
 
+#[derive(Debug)]
 struct Hierarchy {
     id: u64,
     parent_id: Option<u64>,
@@ -206,7 +211,7 @@ impl Hierarchy {
     // Map the children of the current node to a vec of CustomFolder
     // Called recursively on all children
     // Note: Sort the children using display_order
-    fn map_children(&self, index: &HashMap<u64, &ContextualLabel>) -> Vec<CustomFolder> {
+    fn map_children(&self, index: &mut HashMap<u64, CustomFolder>) -> Vec<CustomFolder> {
         if self.children.is_empty() {
             vec![]
         } else {
@@ -214,7 +219,7 @@ impl Hierarchy {
                 .children
                 .iter()
                 .map(|c| {
-                    let mut folder = CustomFolder::from(*index.get(&c.borrow().id).unwrap());
+                    let mut folder = index.remove(&c.borrow().id).unwrap();
                     folder.children = c.borrow().map_children(index);
                     folder
                 })

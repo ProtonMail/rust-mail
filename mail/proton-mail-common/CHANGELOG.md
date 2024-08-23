@@ -9,14 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `CustomFolder` struct (like `ContextualLabel` with a children field)
-- `Sidebar::all_custom_folders` method (return all custom folders in a flat way)
+- `CustomFolder` struct (like `ContextualLabel` with a children field).
+- `Sidebar::all_custom_folders` method (return all custom folders in a flat way).
 
 ### Changed
 
-- `Sidebar::custom_folders` to return all custom_folders in a hierarchical way
-- Grouped `total_conv` and `total_msg` from `ContextualLabel` as `total` 
-- Grouped `unread_conv` and `unread_msg` from `ContextualLabel` as `unread`
+- Split `ContextualLabel` in `CustomFolder`, `CustomLabel` and `SystemLabel`. 
+- `Sidebar::custom_folders` to return all custom_folders in a hierarchical way.
+- Grouped `total_conv` and `total_msg` from `ContextualLabel` as `total`.
+- Grouped `unread_conv` and `unread_msg` from `ContextualLabel` as `unread`.
 
 ### Removed
 

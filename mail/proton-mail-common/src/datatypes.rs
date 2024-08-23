@@ -38,12 +38,11 @@
 //!
 
 pub mod attachment;
-pub mod custom_folder;
 pub(crate) mod exclusive_location;
+pub mod labels;
 pub(crate) mod system_label;
 
-use crate::models::{Conversation, Label, MailSettings, MessageBodyMetadata, MAIL_SETTINGS_ID};
-use crate::AppError;
+use crate::models::{Conversation, Label, MessageBodyMetadata};
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -71,9 +70,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
-use stash::orm::Model;
 use stash::sql_using_serde;
-use stash::stash::{AgnosticInterface, Interface};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -1739,158 +1736,6 @@ impl From<Label> for CustomLabel {
             name: value.name,
             color: value.color,
         }
-    }
-}
-
-/// Contextual representation of a [`Label`] when it is opened for display.
-pub struct ContextualLabel {
-    /// Local id of the Label.
-    pub local_id: LocalId,
-
-    /// TODO: Document this field.
-    pub parent_id: Option<LocalId>,
-
-    /// TODO: Document this field.
-    pub color: Option<LabelColor>,
-
-    /// TODO: Document this field.
-    pub display: bool,
-
-    /// TODO: Document this field.
-    pub expanded: bool,
-
-    /// TODO: Document this field.
-    pub label_description: LabelDescription,
-
-    /// TODO: Document this field.
-    pub name: String,
-
-    /// TODO: Document this field.
-    pub notify: bool,
-
-    /// TODO: Document this field.
-    pub display_order: u32,
-
-    /// TODO: Document this field.
-    pub path: Option<String>,
-
-    /// TODO: Document this field.
-    pub sticky: bool,
-
-    /// TODO: Document this field.
-    pub total: u64,
-
-    /// TODO: Document this field.
-    pub unread: u64,
-}
-
-impl ContextualLabel {
-    pub async fn new<A>(value: &Label, interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let color = Self::color_to_display(value, interface).await?;
-        let label_description = LabelDescription::new(value);
-        let (unread, total) = Self::messages_counts(value, interface).await?;
-        Ok(Self {
-            local_id: value.local_id.expect("Should be set"),
-            parent_id: value.local_parent_id,
-            color,
-            display: value.display,
-            expanded: value.expanded,
-            label_description,
-            name: value.name.clone(),
-            notify: value.notify,
-            display_order: value.display_order,
-            path: value.path.clone(),
-            sticky: value.sticky,
-            total,
-            unread,
-        })
-    }
-
-    async fn view_mode<A>(label: &Label, interface: &A) -> Result<ViewMode, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        Ok(label.view_mode().unwrap_or(
-            MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
-                .await?
-                .unwrap_or_default()
-                .view_mode,
-        ))
-    }
-
-    async fn messages_counts<A>(label: &Label, interface: &A) -> Result<(u64, u64), AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        match Self::view_mode(label, interface).await? {
-            ViewMode::Conversations => Ok((label.unread_conv, label.total_conv)),
-            ViewMode::Messages => Ok((label.unread_msg, label.total_msg)),
-        }
-    }
-    /// Get the color a [`Label`] should be displayed with.
-    ///
-    /// The color depends on [`MailSettings`] `enable_folder_color` and `inherit_parent_folder_color`
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - The [`Label`]
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
-    ///
-    /// # Panics
-    ///
-    /// If there is no [`MailSettings`] in the [`Stash`]
-    ///
-    async fn color_to_display<A>(
-        value: &Label,
-        interface: &A,
-    ) -> Result<Option<LabelColor>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
-            .await?
-            .expect("MailSettings in Stash");
-
-        if settings.enable_folder_color {
-            if settings.inherit_parent_folder_color {
-                // Get parent until there is no more parent and take its color
-                let mut current = value.clone();
-                while let Some(parent_id) = current.local_parent_id {
-                    current = Label::load(parent_id, interface)
-                        .await?
-                        .ok_or(AppError::LabelNotFound(parent_id))?;
-                }
-                Ok(Some(current.color))
-            } else {
-                Ok(Some(value.color.clone()))
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Converts a vec of [`crate::models::Label`] into a vec of [`Label`].
-    ///
-    /// # Parameters
-    ///
-    /// * `value`     - The vec of [`crate::models::Label`] to convert.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records.
-    ///
-    pub async fn from_labels<A>(labels: &[Label], interface: &A) -> Result<Vec<Self>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let mut result = Vec::with_capacity(labels.len());
-        for label in labels {
-            let label = Self::new(label, interface).await?;
-            result.push(label);
-        }
-        Ok(result)
     }
 }
 
