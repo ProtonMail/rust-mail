@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added 
+
+- `RecipientPublicKeyModel`: Serves as an intermediary type that mirrors vCard content alongside public key information retrieved from the API. This model facilitates the creation of encryption and send preferences.
+
 ## [0.6.0] - 2024-08-13
 
 ### Changed

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+- `EncryptionPreferences`: Introduced a new type that consolidates data from contact/API keys and user mail settings. This type streamlines the preparation process for encrypting data intended for a recipient.
+
+- `SendPreferences`: Introduced a new type that aggregates information from contact/API keys and user mail settings. This type facilitates the preparation of sending an email to a recipient by specifying details related to signing, encryption, and the keys to be used.
+
 ## [0.6.2] - 2024-08-13
 
 ### Dependencies
