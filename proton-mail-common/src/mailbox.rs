@@ -3,7 +3,7 @@ mod attachments;
 pub mod decrypted_message;
 
 use crate::datatypes::ViewMode;
-use crate::models::{Conversation, Label, MailSettings, Message, MAIL_SETTINGS_ID};
+use crate::models::{Conversation, Label, Message};
 use crate::{AppError, MailContextError, MailUserContext, MailUserContextInitializationCallback};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
@@ -106,20 +106,7 @@ impl Mailbox {
         let Some(label) = Label::load(label_id, user_ctx.user_stash()).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
-        let view_mode = if let Some(view_mode) = label.view_mode() {
-            view_mode
-        } else {
-            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.user_stash())
-                .await
-                .map_err(|e| {
-                    error!("Failed to load mail settings: {e}");
-                    e
-                })
-                .ok()
-                .and_then(|settings| settings)
-                .map(|settings| settings.view_mode)
-                .unwrap_or(ViewMode::Conversations)
-        };
+        let view_mode = label.view_mode(user_ctx.user_stash()).await?;
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
         Ok(Self {
             label_id,
@@ -135,12 +122,7 @@ impl Mailbox {
         let label = Label::find_by_id(RemoteId::from(label_id), user_ctx.user_stash())
             .await?
             .unwrap();
-        let view_mode = label.view_mode().unwrap_or(
-            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.user_stash())
-                .await?
-                .unwrap()
-                .view_mode,
-        );
+        let view_mode = label.view_mode(user_ctx.user_stash()).await?;
         debug!(
             "Creating Mailbox ({}, view_mode={:?})",
             label.local_id.unwrap(),

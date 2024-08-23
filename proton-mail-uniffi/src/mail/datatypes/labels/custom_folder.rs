@@ -1,11 +1,12 @@
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::{LabelColor, LabelDescription};
-use proton_mail_common::datatypes::custom_folder::CustomFolder as RealCustomFolder;
+use proton_mail_common::datatypes::labels::custom_folder::CustomFolder as RealCustomFolder;
 use uniffi::Record as UniffiRecord;
 
+/// Contextual representation of a `Label` when it is opened for display.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 #[allow(clippy::struct_excessive_bools)]
-pub struct CustomFolder {
+pub struct SidebarCustomFolder {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
     /// within the set of all records of this type, and is important for
@@ -13,31 +14,31 @@ pub struct CustomFolder {
     /// API ID, and never leaves the local system.
     pub id: Id,
 
-    /// TODO: Document this field.
+    /// Id of the parent `Folder` of this `Folder` if any.
     pub parent_id: Option<Id>,
 
     /// List of the Labels contained in this Folder
-    pub children: Vec<CustomFolder>,
+    pub children: Vec<SidebarCustomFolder>,
 
-    /// TODO: Document this field.
+    /// Color to display this `Folder` with.
     pub color: Option<LabelColor>,
+
+    /// Description of this `Folder`.
+    pub description: LabelDescription,
 
     /// TODO: Document this field.
     pub display: bool,
 
-    /// TODO: Document this field.
+    /// Is this `Folder` expanded?
     pub expanded: bool,
 
-    /// TODO: Document this field.
-    pub label_description: LabelDescription,
-
-    /// TODO: Document this field.
+    /// Name of this `Folder`.
     pub name: String,
 
     /// TODO: Document this field.
     pub notify: bool,
 
-    /// TODO: Document this field.
+    /// Order to display all the `Folders`.
     pub display_order: u32,
 
     /// TODO: Document this field.
@@ -46,23 +47,27 @@ pub struct CustomFolder {
     /// TODO: Document this field.
     pub sticky: bool,
 
-    /// TODO: Document this field.
+    /// Total number of `Messages` in this `Folder`.
     pub total: u64,
 
-    /// TODO: Document this field.
+    /// Numer of unread `Messages` in this `FOlder`.
     pub unread: u64,
 }
 
-impl From<RealCustomFolder> for CustomFolder {
+impl From<RealCustomFolder> for SidebarCustomFolder {
     fn from(value: RealCustomFolder) -> Self {
         Self {
             id: value.local_id.into(),
             parent_id: value.parent_id.map(Into::into),
-            children: value.children.into_iter().map(CustomFolder::from).collect(),
+            children: value
+                .children
+                .into_iter()
+                .map(SidebarCustomFolder::from)
+                .collect(),
             color: value.color.map(LabelColor::from),
             display: value.display,
             expanded: value.expanded,
-            label_description: value.label_description.into(),
+            description: value.description.into(),
             name: value.name,
             notify: value.notify,
             display_order: value.display_order,

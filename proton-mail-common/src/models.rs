@@ -2338,19 +2338,24 @@ impl Label {
     /// in the user's [`MailSettings`], otherwise the returned value should be
     /// used.
     ///
-    pub fn view_mode(&self) -> Option<ViewMode> {
-        let remote_id = self.remote_id.as_ref()?;
-
-        if *remote_id == LabelId::drafts()
-            || *remote_id == LabelId::sent()
-            || *remote_id == LabelId::all_drafts()
-            || *remote_id == LabelId::all_sent()
-            || *remote_id == LabelId::all_scheduled()
-        {
-            return Some(ViewMode::Messages);
+    pub async fn view_mode<A>(&self, interface: &A) -> Result<ViewMode, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(remote_id) = self.remote_id.as_ref() {
+            if *remote_id == LabelId::drafts()
+                || *remote_id == LabelId::sent()
+                || *remote_id == LabelId::all_drafts()
+                || *remote_id == LabelId::all_sent()
+                || *remote_id == LabelId::all_scheduled()
+            {
+                return Ok(ViewMode::Messages);
+            }
         }
-
-        None
+        Ok(MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
+            .await?
+            .unwrap_or_default()
+            .view_mode)
     }
 
     /// Get all labels with given kind

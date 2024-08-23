@@ -1,0 +1,90 @@
+use crate::datatypes::labels::messages_counts;
+use crate::datatypes::{LabelColor, LabelDescription};
+use crate::models::Label;
+use crate::AppError;
+use proton_core_common::datatypes::LocalId;
+use stash::stash::{AgnosticInterface, Interface};
+
+/// Represent a `Label` defined by End User
+pub struct CustomLabel {
+    /// Local id of the Label.
+    pub local_id: LocalId,
+
+    /// The color of the Label.
+    pub color: LabelColor,
+
+    /// Description of this Label.
+    pub description: LabelDescription,
+
+    /// TODO: Document this field.
+    pub display: bool,
+
+    /// The name of this Label.
+    pub name: String,
+
+    /// TODO: Document this field.
+    pub notify: bool,
+
+    /// Order to display relative to other `CustomLabel`.
+    pub display_order: u32,
+
+    /// TODO: Document this field.
+    pub sticky: bool,
+
+    /// Total count of the message in this Label.
+    pub total: u64,
+
+    /// Count of unread message in this Label.
+    pub unread: u64,
+}
+
+impl CustomLabel {
+    /// Create a new `CustomLabel`.
+    ///
+    /// Create a view on a [`Label`] keeping and transforming the field, so they contain the data
+    /// needed by UI.
+    ///
+    /// # Parameters
+    ///
+    /// * `label`     - the original [`Label`].
+    /// * `interface` - a connexion to the database
+    ///
+    pub async fn new<A>(label: &Label, interface: &A) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let label_description = LabelDescription::new(label);
+        let (unread, total) = messages_counts(label, interface).await?;
+        Ok(Self {
+            local_id: label.local_id.expect("Should be set"),
+            color: label.color.clone(),
+            display: label.display,
+            description: label_description,
+            name: label.name.clone(),
+            notify: label.notify,
+            display_order: label.display_order,
+            sticky: label.sticky,
+            total,
+            unread,
+        })
+    }
+
+    /// Create a vec of `CustomLabel` from a vec of [`Label`]
+    ///
+    /// # Parameters
+    ///
+    /// * `labels`    - the original [`Label`]s to convert in `CustomLabel`.
+    /// * `interface` - a connexion to the database
+    ///
+    pub async fn from_labels<A>(labels: &[Label], interface: &A) -> Result<Vec<Self>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut result = Vec::with_capacity(labels.len());
+        for label in labels {
+            let label = Self::new(label, interface).await?;
+            result.push(label);
+        }
+        Ok(result)
+    }
+}

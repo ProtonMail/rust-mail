@@ -4,7 +4,7 @@ use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::LabelId;
-use proton_mail_common::datatypes::custom_folder::CustomFolder;
+use proton_mail_common::datatypes::labels::custom_folder::CustomFolder;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::Sidebar;
 use std::iter::zip;
@@ -21,8 +21,8 @@ struct H {
 
 impl H {
     fn is_matching(&self, folder: CustomFolder) {
-        assert_eq!(self.name, folder.name);
-        assert_eq!(self.children.len(), folder.children.len());
+        assert_eq!(folder.name, self.name, "{}", self.name);
+        assert_eq!(folder.children.len(), self.children.len(), "{}", self.name);
         zip(self.children.clone(), folder.children).for_each(|(h, f)| h.is_matching(f));
     }
 }
