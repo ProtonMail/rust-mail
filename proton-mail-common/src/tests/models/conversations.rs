@@ -939,13 +939,21 @@ async fn test_conversation_undelete_all_mail() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple(vec![local_conv_id1, local_conv_id2], all_mail_label, &tx)
-        .await
-        .expect("failed to mark as deleted");
+    Conversation::delete_multiple_from_label(
+        vec![local_conv_id1, local_conv_id2],
+        all_mail_label,
+        &tx,
+    )
+    .await
+    .expect("failed to mark as deleted");
 
-    Conversation::delete_multiple(vec![local_conv_id1, local_conv_id2], all_mail_label, &tx)
-        .await
-        .expect("failed to mark conversations as undeleted");
+    Conversation::delete_multiple_from_label(
+        vec![local_conv_id1, local_conv_id2],
+        all_mail_label,
+        &tx,
+    )
+    .await
+    .expect("failed to mark conversations as undeleted");
 
     // Check conversation counts
     {
@@ -1026,7 +1034,7 @@ async fn test_conversation_delete_all_mail() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], all_mail_label, &tx)
+    Conversation::delete_multiple_from_label(vec![local_conv_id], all_mail_label, &tx)
         .await
         .expect("failed to mark as deleted");
 
@@ -1115,7 +1123,7 @@ async fn test_conversation_delete_all_mail() {
         .conversations
         .get(&state.conversations[1].remote_id.clone().unwrap())
         .unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], all_mail_label, &tx)
+    Conversation::delete_multiple_from_label(vec![local_conv_id], all_mail_label, &tx)
         .await
         .expect("failed to mark conv as deleted");
 
@@ -1163,7 +1171,7 @@ async fn test_conversation_delete() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id1, &tx)
+    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id1, &tx)
         .await
         .expect("failed to mark as deleted");
 
@@ -1239,7 +1247,7 @@ async fn test_conversation_delete() {
     }
 
     // Deleting conv1 in label 2  should remove all traces of the  conversation
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id2, &tx)
+    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id2, &tx)
         .await
         .expect("failed to mark conv as deleted");
 
@@ -1313,10 +1321,10 @@ async fn test_conversation_undelete() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id1, &tx)
+    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id1, &tx)
         .await
         .expect("failed to mark as deleted");
-    Conversation::delete_multiple(vec![local_conv_id], local_label_id2, &tx)
+    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id2, &tx)
         .await
         .expect("failed to mark as deleted");
 
@@ -2135,4 +2143,56 @@ async fn test_conversation_unlabel_without_message_metadata() {
         assert_eq!(label_counts.unread, 0);
         assert_eq!(label_counts.total, 0);
     }
+}
+
+#[tokio::test]
+async fn test_conversation_expiration() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+    let mut state = new_test_label_db_state();
+    prepare_db_state_core(&tx, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state_and_skip(&tx, state.clone(), true).await;
+    let tx = &AgnosticInterface::from(tx);
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+
+    dbg!(state.conversations.len());
+
+    // Delete all expired, no matches
+    let res = Conversation::delete_expired(tx).await.unwrap();
+    assert_eq!(res, 0);
+
+    let cv = Conversation::load(local_conv_id, tx)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(cv.expiration_time, 0);
+    assert_eq!(cv.deleted, false);
+
+    // Load a conversation
+    Conversation::set_expiration_time_in(local_conv_id, -1000, tx)
+        .await
+        .unwrap();
+
+    // Delete all expired
+    let res = Conversation::delete_expired(tx).await.unwrap();
+
+    assert_eq!(res, 1);
+
+    // Check if it's deleted
+    let cv = Conversation::load(local_conv_id, tx)
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Check that all messages are deleted too
+    let messages = cv.load_messages(tx).await.unwrap();
+    for message in messages {
+        assert_eq!(message.deleted, true);
+    }
+
+    assert_eq!(cv.deleted, true);
 }

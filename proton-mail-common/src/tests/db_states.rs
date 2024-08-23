@@ -545,7 +545,7 @@ pub fn new_test_label_db_state() -> TestDBState {
                 },
                 time: 100,
                 size: 512,
-                expiration_time: 100,
+                expiration_time: 0,
                 num_attachments: 1,
                 attachments_metadata: vec![AttachmentMetadata {
                     local_id: None,
@@ -587,7 +587,7 @@ pub fn new_test_label_db_state() -> TestDBState {
                 time: 200,
                 size: 100,
                 is_forwarded: true,
-                expiration_time: 900,
+                expiration_time: 0,
                 num_attachments: 0,
                 snooze_time: 2000,
                 ..Default::default()
@@ -622,7 +622,7 @@ pub fn new_test_label_db_state() -> TestDBState {
                 time: 400,
                 size: 300,
                 unread: true,
-                expiration_time: 400,
+                expiration_time: 0,
                 num_attachments: 0,
                 snooze_time: 1500,
                 ..Default::default()
@@ -686,7 +686,7 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
             },
             time: 100,
             size: 512,
-            expiration_time: 100,
+            expiration_time: 0,
             num_attachments: 1,
             attachments_metadata: vec![AttachmentMetadata {
                 local_id: None,

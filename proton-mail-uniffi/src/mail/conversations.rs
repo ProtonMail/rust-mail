@@ -72,7 +72,7 @@ pub async fn apply_label_to_conversations(
 pub async fn delete_conversations(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> Result<(), MailboxError> {
     let conn = mailbox.stash().connection();
     uniffi_async(async move {
-        RealConversation::delete_multiple(
+        RealConversation::delete_multiple_from_label(
             ids.into_iter().map(Into::into).collect(),
             mailbox.label_id().into(),
             &conn,
