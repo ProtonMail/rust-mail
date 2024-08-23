@@ -326,7 +326,8 @@ where
 }
 
 /// Get the async runtime.
-fn async_runtime() -> &'static Runtime {
+#[must_use]
+pub fn async_runtime() -> &'static Runtime {
     static RUNTIME: LazyLock<Runtime> = LazyLock::new(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_io()

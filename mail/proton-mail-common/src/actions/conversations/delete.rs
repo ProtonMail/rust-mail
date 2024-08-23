@@ -45,7 +45,8 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::delete_multiple(action.0.ids.clone(), action.0.label_id, tx).await?;
+        Conversation::delete_multiple_from_label(action.0.ids.clone(), action.0.label_id, tx)
+            .await?;
 
         Ok(())
     }

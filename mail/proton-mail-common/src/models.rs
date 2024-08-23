@@ -46,6 +46,7 @@ use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::{formatdoc, indoc};
+use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{
@@ -821,6 +822,65 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn delete_multiple(
+        ids: Vec<LocalId>,
+        tether: &AgnosticInterface,
+    ) -> Result<usize, StashError> {
+        let tether = tether.transaction().await?;
+        let ids = ids
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+            .join(",");
+        let mut count = tether
+            .execute(
+                formatdoc!(
+                    r"
+            UPDATE
+                conversations
+            SET
+                deleted = 1
+            WHERE
+                local_id IN ({ids})
+            "
+                ),
+                vec![],
+            )
+            .await?;
+
+        count += tether
+            .execute(
+                formatdoc!(
+                    r"
+            UPDATE
+                messages
+            SET
+                deleted = 1
+            WHERE
+                local_conversation_id IN ({ids})
+            RETURNING
+                local_id
+            ",
+                ),
+                vec![],
+            )
+            .await?;
+        tether.commit().await?;
+        Ok(count)
+    }
+
+    /// Delete multiple conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`      - The IDs of the conversations to delete.
+    /// * `label_id` - TODO: Document this parameter.
+    /// * `tether`   - The tether to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    pub async fn delete_multiple_from_label(
         ids: Vec<LocalId>,
         label_id: LocalId,
         tether: &Tether,
@@ -1741,6 +1801,78 @@ impl Conversation {
         ));
 
         Ok(actions)
+    }
+
+    /// Finds all of the messages from this conversation
+    pub async fn load_messages<A>(&self, interface: &A) -> Result<Vec<Message>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Message::find(
+            r"
+        WHERE 
+          local_conversation_id == ?
+        ",
+            params![self.local_id.unwrap()],
+            interface,
+            None,
+        )
+        .await
+    }
+
+    /// Finds all of the conversations that have expired and deletes them and all of its
+    /// messages.
+    pub async fn delete_expired(db: &AgnosticInterface) -> Result<usize, StashError> {
+        let ids = Self::find_local_ids(
+            r"
+        WHERE
+          expiration_time < STRFTIME('%s', 'NOW') 
+          AND expiration_time != 0
+        ",
+            vec![],
+            db,
+        )
+        .await?;
+
+        let len = ids.len();
+        if len != 0 {
+            Self::delete_multiple(ids, db).await?;
+        }
+        Ok(len)
+    }
+
+    #[cfg(test)]
+    // TODO: Figure out how we want to do this in the future.
+    ///
+    /// Intended for testing only
+    ///
+    /// Sets a conversation to be deleted in `expire_in` ms
+    pub async fn set_expiration_time_in<A>(
+        id: LocalId,
+        expire_in: i64,
+        db: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let affected = db
+            .execute(
+                r"
+            UPDATE
+                conversations
+            SET
+                expiration_time = (STRFTIME('%s', 'NOW') + ?)
+            WHERE
+                local_id = ?
+            ",
+                params![expire_in, id],
+            )
+            .await?;
+        if affected != 1 {
+            Err(StashError::Custom(String::from("No conversation found")))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -2770,7 +2902,8 @@ pub struct Message {
     /// the fact that this is not a critical field.
     pub exclusive_location: Option<ExclusiveLocation>,
 
-    /// TODO: Document this field.
+    /// The unix timestamp at which this message is set to expire at.
+    /// 0 means that it will not expire.
     #[DbField]
     pub expiration_time: u64,
 
@@ -3037,7 +3170,7 @@ impl Message {
     ///
     /// Returns an error if the API request failed.
     ///
-    pub async fn delete_multiple<PM: ProtonMail>(
+    pub async fn delete_multiple_remote<PM: ProtonMail>(
         ids: Vec<RemoteId>,
         label_id: LabelId,
         api: &PM,
@@ -3048,6 +3181,36 @@ impl Message {
         )
         .await
         .map(|r| r.responses)
+    }
+
+    /// Delete multiple messages
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`        - The IDs of the conversations to delete.
+    /// * `interface`  - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    pub async fn delete_multiple<A>(ids: Vec<LocalId>, interface: &A) -> Result<usize, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        interface
+            .execute(
+                r"
+            UPDATE
+                messages
+            SET
+                deleted = 1
+            WHERE
+                local_id IN (?)
+            ",
+                params![ids.iter().map(ToString::to_string).collect_vec().join(",")],
+            )
+            .await
     }
 
     /// Get the message counts.
@@ -3735,6 +3898,24 @@ impl Message {
             cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())?;
             Ok(decrypted_message_body)
         }
+    }
+
+    /// Finds all messages that have expired and deletes them.
+    pub async fn delete_expired<A>(interface: &A) -> Result<usize, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let ids = Self::find_local_ids(
+            r"
+        WHERE
+          expiration_time < STRFTIME('%s', 'NOW')
+          AND deleted = 0;
+        ",
+            vec![],
+            interface,
+        )
+        .await?;
+        Self::delete_multiple(ids, interface).await
     }
 
     /// Mark the messages with `ids` as read.

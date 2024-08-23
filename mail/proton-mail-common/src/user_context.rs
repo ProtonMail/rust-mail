@@ -4,6 +4,7 @@ mod events;
 mod images;
 mod initialization;
 
+use crate::models::{Conversation, Message};
 use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
 use crate::{MailContext, MailContextError, MailContextResult};
@@ -25,6 +26,8 @@ use stash::orm::Model;
 use stash::stash::Stash;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
+use tracing::error;
 
 pub struct MailUserContext {
     this: Weak<Self>,
@@ -44,14 +47,38 @@ impl MailUserContext {
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
         let cache = Cache::new(cache_path, mail_context.mail_cache_size)?;
         let action_queue = new_action_queue(stash).await.unwrap();
-        Ok(Arc::new_cyclic(|this| Self {
+        let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
             user_context,
             event_loop: EventLoop::new(),
             action_queue,
             cache,
-        }))
+        });
+
+        this.init_expiration_loop();
+        Ok(this)
+    }
+
+    /// Sets a background job where every 60 seconds it deletes all of the messages and conversations
+    /// that have an expiration date.
+    fn init_expiration_loop(&self) {
+        let db = self.user_stash().into();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(60));
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+            loop {
+                if let Err(e) = Conversation::delete_expired(&db).await {
+                    error!("Error in background task deleting expired conversations: {e}");
+                }
+
+                if let Err(e) = Message::delete_expired(&db).await {
+                    error!("Error in background task deleting expired messages: {e}");
+                }
+                interval.tick().await;
+            }
+        });
     }
 
     /// Return a reference on the attachments cache
