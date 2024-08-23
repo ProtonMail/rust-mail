@@ -12,8 +12,8 @@
 
 use proton_crypto_account::{
     keys::{
-        ContactType, DecryptedAddressKey, EmailMimeType, InboxPublicKeys, PGPScheme,
-        PinnedPublicKeys, RecipientPublicKeyModel,
+        ContactType, DecryptedAddressKey, EmailMimeType, PGPScheme, PinnedPublicKeys,
+        PublicAddressKeys, RecipientPublicKeyModel,
     },
     proton_crypto::{
         crypto::{PrivateKey, PublicKey, UnixTimestamp},
@@ -333,13 +333,13 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
 
         // Check for pinned keys.
         if !recipient_key_model.pinned_keys.is_empty() {
-            // The client should encrypt the email with the first pinned key (the keys in the vCard should be ordered according to their PREF property;
-            // if that has not been specified they are taken in the order in which they are written in the vCard)
-            // whose fingerprint matches the fingerprint of one of the keys served by the API.
-
+            // The client should encrypt the email with the first pinned key whose fingerprint matches the fingerprint
+            // of one of the keys served by the API.
+            // The keys in the vCard should be ordered according to their PREF
+            // property if that has not been specified they are taken in the order in which they are written in the vCard.
             let primary_fingerprint = selected_key.key_fingerprint();
             if !recipient_key_model.is_selected_key_trusted(selected_key) {
-                return Err(EncryptionPreferencesError::ApiKeyNotPinned(
+                return Err(EncryptionPreferencesError::PinnedKeyNotProvidedByAPI(
                     primary_fingerprint,
                 ));
             }
@@ -515,7 +515,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     /// the fingerprint of one of the keys served by the API.
     /// In this case the client should force the user (via a modal) to trust one of the keys served by the API before sending any email.
     pub fn new(
-        api_keys: InboxPublicKeys<Pub>,
+        api_keys: PublicAddressKeys<Pub>,
         pinned_keys: Option<PinnedPublicKeys<Pub>>,
         encryption_time: UnixTimestamp,
         crypto_mail_settings: &CryptoMailSettings,

@@ -5,7 +5,10 @@ use proton_crypto::{
     keytransparency::KTVerificationResult,
 };
 
-use super::{EmailMimeType, InboxPublicKeys, PGPScheme, PinnedPublicKeys, PublicAddressKey};
+use super::{
+    EmailMimeType, InboxPublicKeys, PGPScheme, PinnedPublicKeys, PublicAddressKey,
+    PublicAddressKeys,
+};
 
 /// Represents the public key information and preferences for a recipient.
 ///
@@ -102,11 +105,12 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
     /// - `pinned_keys`: An optional `PinnedPublicKeys<Pub>` representing additional encryption key preferences from a v-card.
     /// - `encryption_time`: The `UnixTimestamp` representing the current time for validating the `OpenPGP` keys.
     pub fn create_from(
-        api_keys: InboxPublicKeys<Pub>,
+        api_keys: PublicAddressKeys<Pub>,
         pinned_keys: Option<PinnedPublicKeys<Pub>>,
         encryption_time: UnixTimestamp,
     ) -> Self {
-        let contact_type = Self::determine_contact_type(&api_keys);
+        let api_keys_for_inbox = api_keys.into_inbox_keys(true);
+        let contact_type = Self::determine_contact_type(&api_keys_for_inbox);
 
         let mut trusted_fingerprints = HashSet::new();
         let mut obsolete_fingerprints = HashSet::new();
@@ -114,7 +118,7 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
         let mut compromised_fingerprints = HashSet::new();
 
         Self::process_api_keys(
-            &api_keys.public_keys,
+            &api_keys_for_inbox.public_keys,
             &mut obsolete_fingerprints,
             &mut compromised_fingerprints,
             &mut encryption_capable_fingerprints,
@@ -136,7 +140,7 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
         let mime_type = pinned_keys.as_ref().and_then(|keys| keys.mime_type);
 
         let ordered_api_keys = Self::sort_api_keys_by_priority(
-            api_keys.public_keys,
+            api_keys_for_inbox.public_keys,
             &trusted_fingerprints,
             &obsolete_fingerprints,
             &compromised_fingerprints,
@@ -161,11 +165,11 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
             pgp_scheme,
             mime_type,
             contact_type,
-            key_transparency_verification: api_keys.key_transparency_verification,
+            key_transparency_verification: api_keys_for_inbox.key_transparency_verification,
             trusted_fingerprints,
             obsolete_fingerprints,
             encryption_capable_fingerprints,
-            is_internal_with_disabled_e2ee: api_keys.is_internal_with_disabled_e2ee,
+            is_internal_with_disabled_e2ee: api_keys_for_inbox.is_internal_with_disabled_e2ee,
             compromised_fingerprints,
         }
     }

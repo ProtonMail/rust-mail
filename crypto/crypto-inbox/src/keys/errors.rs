@@ -15,7 +15,7 @@ pub enum EncryptionPreferencesError {
     /// to trust one of the keys served by the API before sending any email.
     /// The provided API key fingerprint is a suggestion for which key to trust, but there may be others.
     #[error("No matching API key found for pinned keys, user should add API key with fingerprint {0} to its contact")]
-    ApiKeyNotPinned(OpenPGPFingerprint),
+    PinnedKeyNotProvidedByAPI(OpenPGPFingerprint),
     #[error("Invalid pinned key with fingerprint {0} (obsolete: {1}, compromised: {2}, can encrypt: {3})")]
     ExternalUserNoValidPinnedKey(OpenPGPFingerprint, bool, bool, bool),
     #[error("No valid key for encryption found in owned address keys")]
