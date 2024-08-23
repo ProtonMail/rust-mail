@@ -3662,7 +3662,7 @@ impl Message {
         id: LocalId,
     ) -> MailboxResult<DecryptedMessageBody> {
         let cache = user_context.messages_cache();
-        let saved_message = Message::load(id, user_context.stash())
+        let saved_message = Message::load(id, user_context.user_stash())
             .await?
             .ok_or(MailboxError::MessageNotFound(id))?;
 
@@ -3674,7 +3674,13 @@ impl Message {
         let api = user_context.session().api();
 
         Ok(saved_message
-            .fetch_message_body(cache, address_keys, pgp_provider, api, user_context.stash())
+            .fetch_message_body(
+                cache,
+                address_keys,
+                pgp_provider,
+                api,
+                user_context.user_stash(),
+            )
             .await?)
     }
 

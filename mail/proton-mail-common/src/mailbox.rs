@@ -103,13 +103,13 @@ impl<T: Send, F: Fn(MailboxResult<T>) + Send + Sync> MailboxBackgroundResult<T> 
 
 impl Mailbox {
     pub async fn new(user_ctx: Arc<MailUserContext>, label_id: LocalId) -> MailboxResult<Self> {
-        let Some(label) = Label::load(label_id, user_ctx.stash()).await? else {
+        let Some(label) = Label::load(label_id, user_ctx.user_stash()).await? else {
             return Err(MailboxError::LabelNotFound(label_id));
         };
         let view_mode = if let Some(view_mode) = label.view_mode() {
             view_mode
         } else {
-            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.stash())
+            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.user_stash())
                 .await
                 .map_err(|e| {
                     error!("Failed to load mail settings: {e}");
@@ -132,11 +132,11 @@ impl Mailbox {
         user_ctx: Arc<MailUserContext>,
         label_id: LabelId,
     ) -> MailboxResult<Self> {
-        let label = Label::find_by_id(RemoteId::from(label_id), user_ctx.stash())
+        let label = Label::find_by_id(RemoteId::from(label_id), user_ctx.user_stash())
             .await?
             .unwrap();
         let view_mode = label.view_mode().unwrap_or(
-            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.stash())
+            MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.user_stash())
                 .await?
                 .unwrap()
                 .view_mode,
@@ -165,7 +165,7 @@ impl Mailbox {
 
     /// Get the database connection.
     pub fn stash(&self) -> &Stash {
-        self.user_ctx.stash()
+        self.user_ctx.user_stash()
     }
 
     pub fn label_id(&self) -> LocalId {
@@ -176,7 +176,7 @@ impl Mailbox {
         &self,
         init_cb: Box<dyn MailUserContextInitializationCallback>,
     ) -> MailboxResult<()> {
-        let Some(label) = Label::load(self.label_id, self.user_ctx.stash()).await? else {
+        let Some(label) = Label::load(self.label_id, self.user_ctx.user_stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
         let Some(rid) = label.remote_id else {
@@ -196,7 +196,7 @@ impl Mailbox {
     /// Returns error if API request or database changes failed.
     pub async fn sync(&self, count: usize) -> MailboxResult<()> {
         let ctx = self.user_ctx.clone();
-        let Some(mut label) = Label::load(self.label_id, ctx.stash()).await? else {
+        let Some(mut label) = Label::load(self.label_id, ctx.user_stash()).await? else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
 
@@ -221,7 +221,7 @@ impl Mailbox {
                     remote_id,
                     count,
                     ctx.session().api(),
-                    ctx.stash(),
+                    ctx.user_stash(),
                 )
                 .await
                 .map_err(|e| {
@@ -232,7 +232,7 @@ impl Mailbox {
                     remote_id,
                     count,
                     ctx.session().api(),
-                    ctx.stash(),
+                    ctx.user_stash(),
                 )
                 .await
                 .map_err(|e| {
@@ -272,7 +272,8 @@ impl Mailbox {
     ///
     /// Returns error if the query failed.
     pub async fn unread_count(&self) -> Result<u64, MailboxError> {
-        let Some(label) = Label::find_by_id(self.label_id, self.user_ctx.stash()).await? else {
+        let Some(label) = Label::find_by_id(self.label_id, self.user_ctx.user_stash()).await?
+        else {
             return Err(MailboxError::LabelNotFound(self.label_id));
         };
 

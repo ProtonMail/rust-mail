@@ -10,7 +10,7 @@ use super::{datatypes::MailSettings, MailSessionError, MailUserSession};
 /// Gets the latest settings or a default if it can't find it.
 #[uniffi::export]
 pub async fn mail_settings(ctx: &MailUserSession) -> MailSettings {
-    let stash = ctx.ctx().stash().clone();
+    let stash = ctx.ctx().user_stash().clone();
     uniffi_async::<_, JoinError, _>(async move {
         Ok(RealSettings::get(&stash.into())
             .await
@@ -34,7 +34,7 @@ pub async fn watch_mail_settings(
     ctx: &MailUserSession,
     on_update: Box<dyn LiveQueryCallback>,
 ) -> Result<SettingsWatcher, MailSessionError> {
-    let db = ctx.ctx().stash().clone();
+    let db = ctx.ctx().user_stash().clone();
     uniffi_async(async move {
         let (tx, rx) = flume::unbounded();
         let settings = RealSettings::find("", vec![], &db, Some(tx))

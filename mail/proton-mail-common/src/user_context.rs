@@ -75,7 +75,7 @@ impl MailUserContext {
 
     /// Get the database connection.
     #[must_use]
-    pub fn stash(&self) -> &Stash {
+    pub fn user_stash(&self) -> &Stash {
         self.user_context.stash()
     }
 
@@ -93,7 +93,7 @@ impl MailUserContext {
     ///
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
     pub async fn user(&self) -> MailContextResult<User> {
-        let stash = self.stash();
+        let stash = self.user_stash();
         let user_id = self.user_id();
         let real_user = User::load(user_id.clone(), stash)
             .await?

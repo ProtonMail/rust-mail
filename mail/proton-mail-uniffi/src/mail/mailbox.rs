@@ -166,7 +166,7 @@ impl Mailbox {
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<Arc<WatchHandle>, MailboxError> {
         let label_id = self.mbox.label_id();
-        let stash = self.mbox.user_context().stash().clone();
+        let stash = self.mbox.user_context().user_stash().clone();
         uniffi_async(async move {
             let (_, handle) = watch::<_, _, RealLabel>(
                 "WHERE local_label_id=?",

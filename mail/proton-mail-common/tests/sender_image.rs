@@ -54,12 +54,12 @@ async fn get_sender_image() {
         .unwrap();
 
     mailbox.sync(1).await.expect("mailbox sync failed");
-    let local_conversation = Conversation::find_first("", vec![], user_context.stash())
+    let local_conversation = Conversation::find_first("", vec![], user_context.user_stash())
         .await
         .unwrap()
         .unwrap();
     let sender = &local_conversation.senders.value.first().unwrap();
-    let mail_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), user_context.stash())
+    let mail_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), user_context.user_stash())
         .await
         .expect("failed to load mail settings")
         .unwrap();

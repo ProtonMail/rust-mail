@@ -21,7 +21,7 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn system_labels(&self) -> SidebarResult<Vec<ContextualLabel>> {
-        let interface = self.user_ctx.stash();
+        let interface = self.user_ctx.user_stash();
         let settings = MailSettings::load(MAIL_SETTINGS_ID.into(), interface)
             .await?
             .unwrap_or_default();
@@ -77,7 +77,7 @@ impl Sidebar {
         &self,
         parent_id: Option<LocalId>,
     ) -> SidebarResult<Vec<ContextualLabel>> {
-        let interface = self.user_ctx.stash();
+        let interface = self.user_ctx.user_stash();
         let labels = if let Some(parent_id) = parent_id {
             Label::find(
                 "WHERE label_type = ? AND local_parent_id = ? ORDER BY display_order",
@@ -104,7 +104,7 @@ impl Sidebar {
     ///   * Database request fail
     ///
     pub async fn custom_labels(&self) -> SidebarResult<Vec<ContextualLabel>> {
-        let interface = self.user_ctx.stash();
+        let interface = self.user_ctx.user_stash();
         let labels = Label::find(
             "WHERE label_type = ? ORDER BY display_order",
             params![LabelType::Label],
@@ -144,7 +144,7 @@ impl Sidebar {
         Label::find_first(
             "WHERE remote_id = ?",
             params![label_id.clone()],
-            self.user_ctx.stash(),
+            self.user_ctx.user_stash(),
         )
         .await?
         .ok_or_else(|| {

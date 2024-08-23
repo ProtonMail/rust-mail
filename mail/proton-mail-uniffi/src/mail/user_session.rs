@@ -6,6 +6,7 @@ mod labels;
 
 use crate::{core::datatypes::User, mail::MailSessionError, uniffi_async};
 use proton_mail_common::MailUserContext;
+use stash::stash::Stash;
 use std::sync::Arc;
 
 /// [`MailUserSession`] contains all the relevant information for an active user session, you
@@ -77,5 +78,13 @@ impl MailUserSession {
             Ok(user.into())
         })
         .await
+    }
+}
+
+impl MailUserSession {
+    /// Get the connection to the user database
+    #[must_use]
+    pub fn user_stash(&self) -> &Stash {
+        self.ctx.user_stash()
     }
 }
