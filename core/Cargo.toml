@@ -34,7 +34,7 @@ proton-api-core = { version = "=0.6.9", path = "proton-api-core", registry = "pr
 proton-core-common = { version = "=0.6.14", path = "proton-core-common" }
 proton-crypto-account = { version = "=0.6.0", registry = "proton", features = ["sql"] }
 proton-event-loop = { version = "=0.7.9", path = "proton-event-loop", registry = "proton" }
-proton-sqlite3 = { version = "=0.7.3", path = "proton-sqlite3", registry = "proton" }
+proton-sqlite3 = { version = "=0.7.4", path = "proton-sqlite3", registry = "proton" }
 proton-vcard = { version = "=0.1.0", path = "proton-vcard", registry = "proton" }
 quick_cache = "0.5"
 rand = "0.8"
@@ -52,7 +52,7 @@ serde = { version = "1", features = ["derive"] }
 serde-aux = "4.5"
 serde_json = "1"
 serde_repr = "0.1"
-stash = { version = "0.1.4", path = "stash", registry = "proton" }
+stash = { version = "0.1.5", path = "stash", registry = "proton" }
 tempdir = "0.3.1"
 tempfile = "3.10.1"
 thiserror = "1"
