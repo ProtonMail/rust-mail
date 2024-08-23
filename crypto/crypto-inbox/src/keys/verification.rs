@@ -35,7 +35,7 @@ impl<Pub: PublicKey> Default for InboxVerificationPreferences<Pub> {
 
 impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     /// Selects the valid signature verification keys from the unlocked user keys of the logged-in user.
-    pub fn create_from_unlocked_address_keys<Priv: PrivateKey>(
+    pub fn from_unlocked_address_keys<Priv: PrivateKey>(
         address_keys: &[DecryptedAddressKey<Priv, Pub>],
     ) -> InboxVerificationPreferences<Pub> {
         let mut compromised_fingerprints = HashSet::new();
@@ -62,7 +62,7 @@ impl<Pub: PublicKey> InboxVerificationPreferences<Pub> {
     ///
     /// Selects the public keys for signature verification based on the public keys fetched from the API
     /// and the public keys found in the associated contact.
-    pub fn create_from_public_address_keys(
+    pub fn from_public_keys(
         api_keys: PublicAddressKeys<Pub>,
         vcard_keys: Option<PinnedPublicKeys<Pub>>,
     ) -> InboxVerificationPreferences<Pub> {

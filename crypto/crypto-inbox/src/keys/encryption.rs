@@ -207,7 +207,7 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
     /// An [`EncryptionPreferencesError::ApiKeyNotPinned`] is thrown if there are pinned keys, but none of the fingerprints of the pinned keys matches
     /// the fingerprint of one of the keys served by the API.
     /// In this case the client should force the user (via a modal) to trust one of the keys served by the API before sending any email.
-    pub fn create_from(
+    pub fn from_key_model_and_settings(
         recipient_key_model: RecipientPublicKeyModel<Pub>,
         crypto_mail_settings: &CryptoMailSettings,
     ) -> Result<Self, EncryptionPreferencesError> {
@@ -276,7 +276,7 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
     ///
     /// This function may return an [`EncryptionPreferencesError::NoPrimaryKey`] if no valid primary key
     /// is found in the user's address keys that meets the required conditions for encryption.
-    fn create_from_self<Priv: PrivateKey>(
+    fn from_unlocked_address_keys_and_settings<Priv: PrivateKey>(
         address_keys: &[DecryptedAddressKey<Priv, Pub>],
         mail_settings: CryptoMailSettings,
         encryption_time: UnixTimestamp,
@@ -440,7 +440,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     ///   transparency verification.
     /// - `encrypt_to_outside`: A `bool` indicating that the user has enable encrypt to outside in the composer.
     /// - `composer_sign`: A `bool` indicating whether the email should be signed based on the user's choice in the composer.
-    pub fn create_from(
+    pub fn from_preferences(
         encryption_preferences: EncryptionPreferences<Pub>,
         composer_preferences: ComposerPreference,
     ) -> Self {
@@ -521,13 +521,18 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
         crypto_mail_settings: &CryptoMailSettings,
         composer_preferences: ComposerPreference,
     ) -> Result<Self, EncryptionPreferencesError> {
-        let recipient_key_model =
-            RecipientPublicKeyModel::create_from(api_keys, pinned_keys, encryption_time);
+        let recipient_key_model = RecipientPublicKeyModel::from_public_keys_at_time(
+            api_keys,
+            pinned_keys,
+            encryption_time,
+        );
 
-        let encryption_preferences =
-            EncryptionPreferences::create_from(recipient_key_model, crypto_mail_settings)?;
+        let encryption_preferences = EncryptionPreferences::from_key_model_and_settings(
+            recipient_key_model,
+            crypto_mail_settings,
+        )?;
 
-        Ok(SendPreferences::create_from(
+        Ok(SendPreferences::from_preferences(
             encryption_preferences,
             composer_preferences,
         ))
@@ -548,18 +553,19 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     /// # Errors
     ///
     /// - [`EncryptionPreferencesError::NoPrimaryKey`] - If no valid primary key can be selected from the address keys.
-    pub fn new_self<Priv: PrivateKey>(
+    pub fn new_for_self<Priv: PrivateKey>(
         address_keys: &[DecryptedAddressKey<Priv, Pub>],
         encryption_time: UnixTimestamp,
         crypto_mail_settings: CryptoMailSettings,
     ) -> Result<Self, EncryptionPreferencesError> {
-        let encryption_preferences = EncryptionPreferences::create_from_self(
-            address_keys,
-            crypto_mail_settings,
-            encryption_time,
-        )?;
+        let encryption_preferences =
+            EncryptionPreferences::from_unlocked_address_keys_and_settings(
+                address_keys,
+                crypto_mail_settings,
+                encryption_time,
+            )?;
 
-        Ok(SendPreferences::create_from(
+        Ok(SendPreferences::from_preferences(
             encryption_preferences,
             ComposerPreference::default(),
         ))
@@ -568,6 +574,6 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
 
 impl<Pub: PublicKey> From<EncryptionPreferences<Pub>> for SendPreferences<Pub> {
     fn from(value: EncryptionPreferences<Pub>) -> Self {
-        Self::create_from(value, ComposerPreference::default())
+        Self::from_preferences(value, ComposerPreference::default())
     }
 }

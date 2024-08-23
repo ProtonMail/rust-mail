@@ -104,7 +104,7 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
     /// - `api_keys`: The `InboxPublicKeys<Pub>` containing the recipient's public keys.
     /// - `pinned_keys`: An optional `PinnedPublicKeys<Pub>` representing additional encryption key preferences from a v-card.
     /// - `encryption_time`: The `UnixTimestamp` representing the current time for validating the `OpenPGP` keys.
-    pub fn create_from(
+    pub fn from_public_keys_at_time(
         api_keys: PublicAddressKeys<Pub>,
         pinned_keys: Option<PinnedPublicKeys<Pub>>,
         encryption_time: UnixTimestamp,
