@@ -47,7 +47,7 @@ url = "2.5.0"
 velcro = "0.5.4"
 wiremock = "0.6.0"
 
-# [patch.proton]
+[patch.proton]
 # proton-action-queue = { path = "../proton-api-core/proton-action-queue" }
 # proton-api-core = { path = "../proton-api-core/proton-api-core" }
 # proton-core-common = { path = "../proton-api-core/proton-core-common" }

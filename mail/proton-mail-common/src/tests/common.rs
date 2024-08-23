@@ -12,7 +12,6 @@ use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LabelId, LocalId, RemoteId,
 };
 use proton_core_common::models::{Address, ModelExtension};
-use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use stash::orm::Model;
 use stash::stash::{Interface, Tether};
 
@@ -93,7 +92,7 @@ pub fn test_address() -> Address {
         display_order: 0,
         display_name: "HelloWorld".to_owned(),
         signature: "SIGNATURE".to_owned(),
-        keys: AddressKeys(RealAddressKeys(vec![])),
+        keys: AddressKeys::default(),
         catch_all: false,
         proton_mx: false,
         signed_key_list: AddressSignedKeyList {

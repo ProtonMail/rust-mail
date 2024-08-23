@@ -10,7 +10,6 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType, LocalId, RemoteId};
 use proton_core_common::models::Address;
-use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
@@ -130,7 +129,7 @@ async fn create_attachment_dependencies(
         display_order: 0,
         display_name: String::new(),
         signature: String::new(),
-        keys: AddressKeys::from(RealAddressKeys::new(vec![])),
+        keys: AddressKeys::default(),
         catch_all: false,
         proton_mx: false,
         signed_key_list: Default::default(),

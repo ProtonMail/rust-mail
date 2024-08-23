@@ -36,6 +36,7 @@ mod tests;
 
 use crate::datatypes::{ConversationCount, MessageCount};
 use crate::models::{Conversation, Label, MailSettings};
+use anyhow::anyhow;
 use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, LabelEvent as ApiLabelEvent,
     MailEvent as ApiMailEvent, MessageEvent as ApiMessageEvent, MessageMetadata,
@@ -43,7 +44,9 @@ use proton_api_mail::services::proton::response_data::{
 use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Address, User, UserSettings};
+use proton_core_common::{CoreEvent, CoreEventSubscriberConnectionProvider};
 use proton_event_loop::Event;
+use stash::stash::Stash;
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -52,39 +55,18 @@ pub struct ConversationEvent {
     pub remote_id: RemoteId,
 
     /// TODO: Document this field.
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
     pub conversation: Option<Conversation>,
-
-    /// TODO: Document this field.
-    pub has_more: bool,
-}
-
-impl Event for ConversationEvent {
-    type Id = RemoteId;
-    type Response = ApiConversationEvent;
-
-    fn event_id(&self) -> &Self::Id {
-        &self.event_id
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
 }
 
 impl From<ApiConversationEvent> for ConversationEvent {
     fn from(value: ApiConversationEvent) -> Self {
         Self {
             remote_id: value.id.into(),
-            event_id: value.event_id.into(),
             action: value.action.into(),
             conversation: value.conversation.map(Conversation::from),
-            has_more: value.has_more,
         }
     }
 }
@@ -96,38 +78,17 @@ pub struct LabelEvent {
     pub remote_id: RemoteId,
 
     /// TODO: Document this field.
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
-    pub has_more: bool,
-
-    /// TODO: Document this field.
     pub label: Option<Label>,
-}
-
-impl Event for LabelEvent {
-    type Id = RemoteId;
-    type Response = ApiLabelEvent;
-
-    fn event_id(&self) -> &Self::Id {
-        &self.event_id
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
 }
 
 impl From<ApiLabelEvent> for LabelEvent {
     fn from(value: ApiLabelEvent) -> Self {
         Self {
             remote_id: value.id.into(),
-            event_id: value.event_id.into(),
             action: value.action.into(),
-            has_more: value.has_more,
             label: value.label.map(Label::from),
         }
     }
@@ -137,13 +98,7 @@ impl From<ApiLabelEvent> for LabelEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MailEvent {
     /// TODO: Document this field.
-    pub remote_id: RemoteId,
-
-    /// TODO: Document this field.
     pub event_id: RemoteId,
-
-    /// TODO: Document this field.
-    pub action: Action,
 
     /// TODO: Document this field.
     pub addresses: Option<Vec<Address>>,
@@ -240,12 +195,73 @@ impl Event for MailEvent {
     }
 }
 
+impl CoreEvent for MailEvent {
+    fn get_core_event_user(&self) -> Option<&User> {
+        MailEvent::get_core_event_user(self)
+    }
+
+    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
+        MailEvent::get_core_event_user_mut(self)
+    }
+
+    fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
+        MailEvent::get_core_event_user_settings(self)
+    }
+
+    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
+        MailEvent::get_core_event_user_settings_mut(self)
+    }
+
+    fn get_core_event_addresses(&self) -> Option<&[Address]> {
+        MailEvent::get_core_event_addresses(self)
+    }
+
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
+        MailEvent::get_core_event_addresses_mut(self)
+    }
+
+    fn get_core_event_used_space(&self) -> Option<i64> {
+        MailEvent::get_core_event_used_space(self)
+    }
+
+    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
+        MailEvent::get_core_event_used_product_space(self)
+    }
+
+    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
+        None // TODO in the ET-1058
+    }
+
+    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
+        None // TODO in the ET-1058
+    }
+
+    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
+        None // TODO in the ET-1058
+    }
+
+    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
+        None // TODO in the ET-1058
+    }
+}
+
+impl CoreEventSubscriberConnectionProvider for MailEvent {
+    fn get_user_id_and_db_connection(&self) -> anyhow::Result<(RemoteId, Stash)> {
+        self.user
+            .as_ref()
+            .and_then(|user| {
+                let user_id = user.remote_id.clone()?;
+                let stash = user.stash.clone()?;
+                Some((user_id, stash))
+            })
+            .ok_or_else(|| anyhow!("User not found"))
+    }
+}
+
 impl From<ApiMailEvent> for MailEvent {
     fn from(value: ApiMailEvent) -> Self {
         Self {
-            remote_id: value.id.into(),
             event_id: value.event_id.into(),
-            action: value.action.into(),
             addresses: value
                 .addresses
                 .map(|addresses| addresses.into_iter().map(Address::from).collect()),
@@ -287,38 +303,17 @@ pub struct MessageEvent {
     pub remote_id: RemoteId,
 
     /// TODO: Document this field.
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
-    pub has_more: bool,
-
-    /// TODO: Document this field.
     pub message: Option<MessageMetadata>,
-}
-
-impl Event for MessageEvent {
-    type Id = RemoteId;
-    type Response = ApiMessageEvent;
-
-    fn event_id(&self) -> &Self::Id {
-        &self.event_id
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
 }
 
 impl From<ApiMessageEvent> for MessageEvent {
     fn from(value: ApiMessageEvent) -> Self {
         Self {
             remote_id: value.id.into(),
-            event_id: value.event_id.into(),
             action: value.action.into(),
-            has_more: value.has_more,
             message: value.message.map(MessageMetadata::from),
         }
     }
