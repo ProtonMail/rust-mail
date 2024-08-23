@@ -81,7 +81,7 @@ async fn test_move_between_folders() {
     mailbox_inbox.sync(10).await.unwrap();
 
     // Get the conversation id
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
         .await
         .unwrap()
         .unwrap()
@@ -192,7 +192,7 @@ async fn test_move_from_label_does_not_unlabel() {
     mailbox_inbox.sync(10).await.unwrap();
 
     // Get the conversation id
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
         .await
         .unwrap()
         .unwrap()
@@ -303,7 +303,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     mailbox_inbox.sync(10).await.expect("failed to sync");
     mailbox_all_mail.sync(10).await.expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
         .await
         .unwrap()
         .unwrap()
@@ -433,7 +433,7 @@ async fn test_move_into_spam_remove_labels() {
     mailbox_inbox.sync(10).await.expect("failed to sync");
     mailbox_all_mail.sync(10).await.expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
         .await
         .unwrap()
         .unwrap()
@@ -522,7 +522,7 @@ async fn move_out_of_trash_set_almost_all_mail() {
         .await
         .expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
         .await
         .unwrap()
         .unwrap()
@@ -607,7 +607,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
         .await
         .expect("failed to sync");
 
-    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+    let local_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
         .await
         .unwrap()
         .unwrap()
@@ -646,7 +646,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
 }
 
 async fn has_conversation(mailbox: &Mailbox, local_conversation_id: LocalId) -> bool {
-    let conversations = Conversation::find_first("", vec![], mailbox.user_context().stash())
+    let conversations = Conversation::find_first("", vec![], mailbox.user_context().user_stash())
         .await
         .unwrap();
     conversations

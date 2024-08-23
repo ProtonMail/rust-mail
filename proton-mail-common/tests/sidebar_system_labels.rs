@@ -81,7 +81,7 @@ async fn sidebar_system_labels(
     for label_id in expected {
         to_expect.push(
             label_id
-                .counterpart::<Label, _>(user_ctx.stash())
+                .counterpart::<Label, _>(user_ctx.user_stash())
                 .await
                 .unwrap()
                 .unwrap(),

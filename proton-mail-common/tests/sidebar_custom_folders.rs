@@ -50,7 +50,7 @@ async fn sidebar_custom_folders(
         .unwrap();
     let sidebar = Sidebar::new(user_ctx.clone());
 
-    let parent = get_label(parent_id, user_ctx.stash()).await;
+    let parent = get_label(parent_id, user_ctx.user_stash()).await;
 
     // Action
     let result = sidebar

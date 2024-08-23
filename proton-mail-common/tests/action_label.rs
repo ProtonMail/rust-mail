@@ -61,17 +61,21 @@ async fn test_label_custom_label() {
         .expect("failed to create mailbox");
 
     // Get the conversation id
-    let remote_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .remote_id
-        .unwrap();
+    let remote_conv_id =
+        Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .remote_id
+            .unwrap();
 
-    let label = Label::load(mailbox_label.label_id(), ctx.user_context().await.stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let label = Label::load(
+        mailbox_label.label_id(),
+        ctx.user_context().await.user_stash(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     // Label conversation.
     Conversation::apply_label_to_multiple_remote(
@@ -144,17 +148,21 @@ async fn test_label_starred() {
         .expect("failed to create mailbox");
 
     // Get the conversation id
-    let remote_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .remote_id
-        .unwrap();
+    let remote_conv_id =
+        Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .remote_id
+            .unwrap();
 
-    let label = Label::load(mailbox_label.label_id(), ctx.user_context().await.stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let label = Label::load(
+        mailbox_label.label_id(),
+        ctx.user_context().await.user_stash(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     // Label conversation.
     Conversation::apply_label_to_multiple_remote(
@@ -213,18 +221,22 @@ async fn test_label_fails_when_labelling_folders() {
         .await
         .expect("failed to create mailbox");
 
-    let label = Label::load(mailbox_folder.label_id(), ctx.user_context().await.stash())
-        .await
-        .unwrap()
-        .unwrap();
+    let label = Label::load(
+        mailbox_folder.label_id(),
+        ctx.user_context().await.user_stash(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
 
     // Get the conversation id
-    let remote_conv_id = Conversation::find_first("", vec![], ctx.user_context().await.stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .remote_id
-        .unwrap();
+    let remote_conv_id =
+        Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
+            .await
+            .unwrap()
+            .unwrap()
+            .remote_id
+            .unwrap();
 
     // Label conversation, should fail.
     Conversation::apply_label_to_multiple_remote(

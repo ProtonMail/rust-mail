@@ -194,8 +194,8 @@ impl MailContext {
         self.core_context.api()
     }
 
-    /// Get the database connection.
-    pub fn stash(&self) -> &Stash {
+    /// Get the connection to the session database.
+    pub fn session_stash(&self) -> &Stash {
         self.core_context.stash()
     }
 }

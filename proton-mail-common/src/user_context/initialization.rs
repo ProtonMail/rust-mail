@@ -49,21 +49,23 @@ impl MailUserContext {
 
         trace!("Syncing User settings");
         cb.on_stage(MailUserContextLoadingStage::User);
-        if let Err(e) = User::sync_user_and_settings(ctx.session().api(), ctx.stash()).await {
+        if let Err(e) = User::sync_user_and_settings(ctx.session().api(), ctx.user_stash()).await {
             error!("Failed to sync user settings: {e}");
             return Err((MailUserContextLoadingStage::User, e.into()));
         }
 
         trace!("Syncing Mail settings");
         cb.on_stage(MailUserContextLoadingStage::MailSettings);
-        if let Err(e) = MailSettings::sync_mail_settings(ctx.session().api(), ctx.stash()).await {
+        if let Err(e) =
+            MailSettings::sync_mail_settings(ctx.session().api(), ctx.user_stash()).await
+        {
             error!("Failed to sync user settings: {e}");
             return Err((MailUserContextLoadingStage::MailSettings, e.into()));
         }
 
         trace!("Syncing Addresses");
         cb.on_stage(MailUserContextLoadingStage::Addresses);
-        if let Err(e) = Address::sync(ctx.session().api(), ctx.stash()).await {
+        if let Err(e) = Address::sync(ctx.session().api(), ctx.user_stash()).await {
             error!("Failed to sync addresses :{e}");
             return Err((MailUserContextLoadingStage::Addresses, e.into()));
         }
@@ -71,7 +73,7 @@ impl MailUserContext {
         // load labels
         trace!("Syncing labels");
         cb.on_stage(MailUserContextLoadingStage::Labels);
-        if let Err(e) = Label::sync_labels(ctx.session().api(), ctx.stash()).await {
+        if let Err(e) = Label::sync_labels(ctx.session().api(), ctx.user_stash()).await {
             error!("Failed to sync labels: {e}");
             return Err((MailUserContextLoadingStage::Labels, e.into()));
         }
@@ -79,9 +81,11 @@ impl MailUserContext {
         // load conversation counters
         trace!("Syncing conversation and message counts");
         cb.on_stage(MailUserContextLoadingStage::Counters);
-        if let Err(e) =
-            Conversation::sync_conversation_and_message_counts(ctx.session().api(), ctx.stash())
-                .await
+        if let Err(e) = Conversation::sync_conversation_and_message_counts(
+            ctx.session().api(),
+            ctx.user_stash(),
+        )
+        .await
         {
             error!("Failed to sync conversation and messages counter: {e}");
             return Err((MailUserContextLoadingStage::Counters, e.into()));

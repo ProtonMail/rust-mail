@@ -250,10 +250,10 @@ impl MailSession {
         self.ctx.api()
     }
 
-    /// Get the database connection.
+    /// Get the session database connection.
     #[must_use]
-    pub fn stash(&self) -> &Stash {
-        self.ctx.stash()
+    pub fn session_stash(&self) -> &Stash {
+        self.ctx.session_stash()
     }
 }
 

@@ -116,7 +116,7 @@ async fn test_new_mailbox_sync_conversations() {
     mailbox.sync(10).await.unwrap();
 
     // Get conversations for mailbox.
-    let conversation = Conversation::find_first("", vec![], ctx.user_context().await.stash())
+    let conversation = Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
         .await
         .unwrap()
         .unwrap();

@@ -42,7 +42,7 @@ async fn test_load_attachment_buffer() {
     mailbox.sync(1).await.expect("mailbox sync failed");
 
     // Get default conversation with the default attachment.
-    let local_conversation = Conversation::find_first("", vec![], user_context.stash())
+    let local_conversation = Conversation::find_first("", vec![], user_context.user_stash())
         .await
         .expect("failed to load conversation")
         .unwrap();
@@ -98,7 +98,7 @@ async fn load_attachment_from_cache() {
     mailbox.sync(1).await.expect("mailbox sync failed");
 
     // Get default conversation with the default attachment.
-    let local_conversation = Conversation::find_first("", vec![], user_context.stash())
+    let local_conversation = Conversation::find_first("", vec![], user_context.user_stash())
         .await
         .expect("failed to load conversation")
         .unwrap();
@@ -185,7 +185,7 @@ async fn load_attachment_content_from_cache() {
     let attachment = get_attachment(
         attachment_local_id.into(),
         test_attachment,
-        user_context.stash(),
+        user_context.user_stash(),
     )
     .await;
 

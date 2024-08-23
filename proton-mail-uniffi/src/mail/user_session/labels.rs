@@ -15,7 +15,7 @@ impl MailUserSession {
     /// # Errors
     /// Returns an error if the list can not be retrieved.
     pub async fn movable_folders(&self) -> Result<Vec<Label>, MailSessionError> {
-        let stash = self.ctx().stash().clone();
+        let stash = self.ctx().user_stash().clone();
         uniffi_async(async move {
             // TODO: Unclear how exactly the system folders fit into this.
             let _sys_folders = RealLabelId::movable_sys_folder_list();
@@ -38,7 +38,7 @@ impl MailUserSession {
     /// # Errors
     /// Returns an error if the list can not be retrieved.
     pub async fn applicable_labels(&self) -> Result<Vec<Label>, MailSessionError> {
-        let stash = self.ctx.stash().clone();
+        let stash = self.ctx.user_stash().clone();
         uniffi_async(async move {
             let labels = RealLabel::find(
                 "WHERE label_type = ? ORDER BY display_order",

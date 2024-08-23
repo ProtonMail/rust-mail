@@ -163,7 +163,7 @@ impl Sidebar {
             let results = RealLabel::find(
                 "WHERE label_type = ?",
                 params![RealLabelType::from(label_type)],
-                sidebar.user_ctx.stash(),
+                sidebar.user_ctx.user_stash(),
                 Some(sender),
             )
                 .await?;

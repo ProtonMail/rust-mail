@@ -26,7 +26,7 @@ async fn folder_expansion() {
     ctx.setup_user(sidebar_test_params(name, false)).await;
 
     let user_ctx = ctx.user_context().await;
-    let stash = user_ctx.stash();
+    let stash = user_ctx.user_stash();
     user_ctx
         .initialize_async(LabelId::inbox().clone(), &NullCallback {})
         .await
@@ -46,7 +46,7 @@ async fn folder_expansion() {
         .unwrap();
 
     // Tests
-    let folder = get_folder(name, sidebar.user_ctx.stash()).await;
+    let folder = get_folder(name, sidebar.user_ctx.user_stash()).await;
     assert!(folder.expanded);
 }
 
@@ -61,7 +61,7 @@ async fn folder_collapse() {
     ctx.setup_user(sidebar_test_params(name, true)).await;
 
     let user_ctx = ctx.user_context().await;
-    let stash = user_ctx.stash();
+    let stash = user_ctx.user_stash();
     user_ctx
         .initialize_async(LabelId::inbox().clone(), &NullCallback {})
         .await
@@ -81,7 +81,7 @@ async fn folder_collapse() {
         .unwrap();
 
     // Tests
-    let folder = get_folder(name, sidebar.user_ctx.stash()).await;
+    let folder = get_folder(name, sidebar.user_ctx.user_stash()).await;
     assert!(!folder.expanded);
 }
 
