@@ -1004,11 +1004,12 @@ where
     let query = formatdoc!(
         "
             SELECT
-                rowid AS rowid, *
+                {}.rowid AS rowid, *
             FROM
                 {}
             {}
         ",
+        T::table_name(),
         T::table_name(),
         query_logic.into(),
     );
@@ -1033,7 +1034,7 @@ where
             let changed_query = formatdoc!(
                 "
                     SELECT
-                        rowid AS rowid, *
+                        {}.rowid AS rowid, *
                     FROM
                         {}
                     WHERE
@@ -1041,6 +1042,7 @@ where
                     LIMIT
                         1
                 ",
+                T::table_name(),
                 T::table_name(),
             );
             loop {
@@ -1108,7 +1110,7 @@ where
     let query = formatdoc!(
         "
         SELECT
-            rowid AS rowid, *
+            {}.rowid AS rowid, *
         FROM
             {}
         WHERE
@@ -1116,6 +1118,7 @@ where
         LIMIT
             1
     ",
+        T::table_name(),
         T::table_name(),
         T::id_field_name(),
     );
@@ -1237,11 +1240,12 @@ pub async fn perform_save<M: Model>(
                 VALUES
                     ({})
                 RETURNING
-                    rowid AS rowid, {} AS id
+                    {}.rowid AS rowid, {} AS id
             ",
                 M::table_name(),
                 fields.join(", "),
                 placeholders,
+                M::table_name(),
                 M::id_field_name(),
             );
             let field_values: Vec<Box<dyn ToSql + Send>> = values.into_iter().collect();
