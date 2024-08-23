@@ -148,7 +148,7 @@ impl Flow {
 
         {
             let auth = Auth {
-                email: username,
+                name_or_addr: username,
                 user_id: auth_response.user_id,
                 uid: auth_response.uid,
                 refresh_token: auth_response.refresh_token,

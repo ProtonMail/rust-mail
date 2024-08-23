@@ -227,7 +227,7 @@ impl Session {
 
 fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
     Auth {
-        email: session.email,
+        name_or_addr: session.name_or_addr,
         user_id: session.user_id.into(),
         uid: session.session_id.into(),
         refresh_token: session.refresh_token.into(),
@@ -237,6 +237,7 @@ fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
     }
 }
 
+#[deprecated(note = "This does not seem to be used anywhere")]
 fn auth_to_encrypted_session(
     auth: Auth,
     encrypted_access_token: EncryptedAccessToken,
@@ -246,8 +247,7 @@ fn auth_to_encrypted_session(
     EncryptedUserSession {
         session_id: auth.uid.into(),
         user_id: auth.user_id.into(),
-        name: None,
-        email: auth.email,
+        name_or_addr: auth.name_or_addr,
         refresh_token: encrypted_refresh_token,
         access_token: encrypted_access_token,
         key_secret: encrypted_key_secret,

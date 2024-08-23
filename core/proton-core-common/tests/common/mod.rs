@@ -121,8 +121,7 @@ impl TestContext {
         let mut session = DecryptedUserSession {
             session_id: Self::test_uid(),
             user_id: user_id.unwrap_or(RemoteId::from(TEST_USER_ID)),
-            name: None,
-            email: TEST_USER_MAIL.to_owned(),
+            name_or_addr: TEST_USER_MAIL.to_owned(),
             refresh_token: SecretString::new("REFRESHTOKEN".to_owned()),
             access_token: SecretString::new("ACCESSTOKEN".to_owned()),
             key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),

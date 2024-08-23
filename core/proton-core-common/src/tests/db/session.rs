@@ -41,8 +41,7 @@ async fn test_session_store_load() {
     let session = DecryptedUserSession {
         session_id: RemoteId::from("session_id"),
         user_id: RemoteId::from("user_id"),
-        name: Some("foobar".to_owned()),
-        email: "foo@bar.com".to_owned(),
+        name_or_addr: "foo@bar.com".to_owned(),
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
@@ -77,8 +76,7 @@ async fn test_session_store_load() {
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, session.session_id);
         assert_eq!(db_session.user_id, session.user_id);
-        assert_eq!(db_session.name, session.name);
-        assert_eq!(db_session.email, session.email);
+        assert_eq!(db_session.name_or_addr, session.name_or_addr);
         assert_eq!(db_session.scopes, session.scopes);
         assert_eq!(
             db_session.access_token.expose_secret(),
@@ -112,8 +110,7 @@ async fn test_session_update() {
     let session = DecryptedUserSession {
         session_id: RemoteId::from("session_id"),
         user_id: RemoteId::from("user_id"),
-        name: Some("foobar".to_owned()),
-        email: "foo@bar.com".to_owned(),
+        name_or_addr: "foo@bar.com".to_owned(),
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
@@ -123,8 +120,7 @@ async fn test_session_update() {
     let updated_session = DecryptedUserSession {
         session_id: RemoteId::from("session_id_2"),
         user_id: RemoteId::from("user_id"),
-        name: Some("foobar".to_owned()),
-        email: "foo@bar.com".to_owned(),
+        name_or_addr: "foo@bar.com".to_owned(),
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
@@ -164,8 +160,7 @@ async fn test_session_update() {
         let db_session = db_encrypted_session.to_decrypted_session(&key).unwrap();
         assert_eq!(db_session.session_id, updated_session.session_id);
         assert_eq!(db_session.user_id, updated_session.user_id);
-        assert_eq!(db_session.name, updated_session.name);
-        assert_eq!(db_session.email, updated_session.email);
+        assert_eq!(db_session.name_or_addr, updated_session.name_or_addr);
         assert_eq!(db_session.scopes, updated_session.scopes);
         assert_eq!(
             db_session.access_token.expose_secret(),
@@ -188,8 +183,7 @@ async fn test_session_delete_user_id() {
     let session = DecryptedUserSession {
         session_id: RemoteId::from("session_id"),
         user_id: RemoteId::from("user_id"),
-        name: Some("foobar".to_owned()),
-        email: "foo@bar.com".to_owned(),
+        name_or_addr: "foo@bar.com".to_owned(),
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
@@ -237,8 +231,7 @@ async fn test_session_delete_session_id() {
     let session = DecryptedUserSession {
         session_id: RemoteId::from("session_id"),
         user_id: RemoteId::from("user_id"),
-        name: Some("foobar".to_owned()),
-        email: "foo@bar.com".to_owned(),
+        name_or_addr: "foo@bar.com".to_owned(),
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),

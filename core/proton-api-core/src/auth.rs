@@ -16,8 +16,8 @@ pub struct Auth {
     /// The authentication token for the current session.
     pub access_token: SecretString,
 
-    /// The email address of the current user.
-    pub email: String,
+    /// The name or address of the user, whatever was used to authenticate.
+    pub name_or_addr: String,
 
     /// A [`KeySecret`] to unlock the user's keys.
     pub key_secret: Option<UserKeySecret>,

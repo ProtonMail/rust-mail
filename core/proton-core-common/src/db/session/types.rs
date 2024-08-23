@@ -26,8 +26,7 @@ use zeroize::Zeroize;
 pub struct DecryptedUserSession {
     pub session_id: RemoteId,
     pub user_id: RemoteId,
-    pub name: Option<String>,
-    pub email: String,
+    pub name_or_addr: String,
     pub refresh_token: SecretString,
     pub access_token: SecretString,
     pub key_secret: Option<UserKeySecret>,
@@ -39,8 +38,7 @@ impl From<Auth> for DecryptedUserSession {
         Self {
             session_id: value.uid.into(),
             user_id: value.user_id.into(),
-            name: None,
-            email: value.email,
+            name_or_addr: value.name_or_addr,
             refresh_token: value.refresh_token.into(),
             access_token: value.access_token.into(),
             key_secret: value.key_secret,
@@ -53,7 +51,7 @@ impl From<DecryptedUserSession> for Auth {
     fn from(value: DecryptedUserSession) -> Self {
         Auth {
             access_token: value.access_token.into(),
-            email: value.email,
+            name_or_addr: value.name_or_addr,
             key_secret: value.key_secret,
             refresh_token: value.refresh_token.into(),
             scope: value.scopes,
@@ -89,8 +87,7 @@ impl DecryptedUserSession {
         Ok(EncryptedUserSession {
             session_id: self.session_id.clone(),
             user_id: self.user_id.clone(),
-            name: self.name.clone(),
-            email: self.email.clone(),
+            name_or_addr: self.name_or_addr.clone(),
             refresh_token: encrypted_refresh_token,
             access_token: encrypted_access_token,
             key_secret: encrypted_key_secret,
@@ -110,9 +107,7 @@ pub struct EncryptedUserSession {
     #[IdField]
     pub user_id: RemoteId,
     #[DbField]
-    pub name: Option<String>,
-    #[DbField]
-    pub email: String,
+    pub name_or_addr: String,
     #[DbField]
     pub refresh_token: EncryptedRefreshToken,
     #[DbField]
@@ -162,8 +157,7 @@ impl EncryptedUserSession {
         Ok(DecryptedUserSession {
             session_id: self.session_id.clone(),
             user_id: self.user_id.clone(),
-            name: self.name.clone(),
-            email: self.email.clone(),
+            name_or_addr: self.name_or_addr.clone(),
             refresh_token: decrypted_refresh_token,
             access_token: decrypted_access_token,
             key_secret: decrypted_key_secret,

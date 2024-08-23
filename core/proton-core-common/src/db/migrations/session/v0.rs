@@ -14,8 +14,7 @@ impl proton_sqlite3::Migration for V0 {
                 CREATE TABLE core_sessions (
                 	session_id TEXT UNIQUE NOT NULL,
 					user_id TEXT UNIQUE NOT NULL PRIMARY KEY,
-					email TEXT NOT NULL,
-					name TEXT DEFAULT NULL,
+					name_or_addr TEXT NOT NULL,
 					access_token BLOB NOT NULL,
 					refresh_token BLOB NOT NULL,
 					key_secret BLOB DEFAULT NULL,
