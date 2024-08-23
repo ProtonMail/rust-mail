@@ -3,7 +3,7 @@ mod attachments;
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::ViewMode;
 use crate::mail::{MailSessionError, MailUserSession};
-use crate::uniffi_async;
+use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
 use anyhow::anyhow;
 use proton_action_queue::queue::Error as QueueError;
 use proton_api_core::service::ApiServiceError;
@@ -11,7 +11,9 @@ use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::{AppError, MailboxError as RealMailboxError};
+use stash::params;
 use stash::stash::{Stash, StashError};
 use std::sync::Arc;
 use tokio::task::JoinError;
@@ -141,6 +143,43 @@ impl Mailbox {
     #[must_use]
     pub fn view_mode(&self) -> ViewMode {
         self.mbox.view_mode().into()
+    }
+
+    /// Get the number of unread items in this mailbox.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn unread_count(&self) -> Result<u64, MailboxError> {
+        let mbox = self.mbox.clone();
+        uniffi_async(async move { Ok(mbox.unread_count().await?) }).await
+    }
+
+    /// Subscribe for updates to the number of unread items in this mailbox.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    #[allow(clippy::missing_panics_doc)]
+    pub async fn watch_unread_count(
+        &self,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> Result<Arc<WatchHandle>, MailboxError> {
+        let label_id = self.mbox.label_id();
+        let stash = self.mbox.user_context().stash().clone();
+        uniffi_async(async move {
+            let (_, handle) = watch::<_, _, RealLabel>(
+                "WHERE local_label_id=?",
+                params![label_id],
+                move |r| r.local_id == Some(label_id),
+                |r| r.local_id.expect("local_id should never be None"),
+                &stash,
+                Arc::new(callback),
+            )
+            .await?;
+            Ok(handle)
+        })
+        .await
     }
 }
 
