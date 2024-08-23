@@ -12,7 +12,7 @@ use reqwest::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Error as JsonError;
-use serde_urlencoded::to_string as to_query_string;
+use serde_qs::to_string as to_query_string;
 use smart_default::SmartDefault;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
@@ -346,7 +346,7 @@ pub trait ApiService {
         Q: Serialize,
         T: ApiResponse,
     {
-        let query = params.and_then(|p| to_query_string(p).ok());
+        let query = params.and_then(|p| to_query_string(&p).ok());
         self.perform_request::<_, T>(Request::<()> {
             headers,
             method: Method::DELETE,
@@ -380,10 +380,12 @@ pub trait ApiService {
         headers: Option<HashMap<String, String>>,
     ) -> Result<T::Inner, ApiServiceError>
     where
-        Q: Serialize,
+        Q: Serialize + Debug,
         T: ApiResponse,
     {
-        let query = params.and_then(|p| to_query_string(p).ok());
+        dbg!(&params);
+        let query = params.and_then(|p| dbg!(to_query_string(&p)).ok());
+        dbg!(&query);
         self.perform_request::<_, T>(Request::<()> {
             headers,
             url: self.get_url(endpoint, query.as_deref()),
