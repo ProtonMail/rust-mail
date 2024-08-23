@@ -134,6 +134,16 @@ deploy-stash-macros:
     CARGO_MANIFEST_OPTIONS: "--manifest-path stash-macros/Cargo.toml"
   when: manual
 
+deploy-proton-vcard:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-vcard/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-vcard/Cargo.toml"
+  when: manual
+
 deploy-stash:
   extends: .deploy_to_protonvpn_repository
   image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
