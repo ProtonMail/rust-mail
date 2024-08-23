@@ -38,9 +38,9 @@ use serde::Serialize;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::{serde_as, BoolFromInt, DefaultOnNull};
+use serde_with::{serde_as, BoolFromInt, DefaultOnError, DefaultOnNull};
 use smart_default::SmartDefault;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 //  ENUMS
 //==============================================================================
@@ -410,7 +410,7 @@ pub struct Conversation {
 
     /// TODO: Document this field.
     #[serde(default)]
-    pub attachment_info: HashMap<String, MessageAttachmentInfo>,
+    pub attachment_info: BTreeMap<String, MessageAttachmentInfo>,
 
     /// TODO: Document this field.
     #[serde(default)]
@@ -441,11 +441,11 @@ pub struct Conversation {
     pub order: u64,
 
     /// TODO: Document this field.
-    #[serde(default)]
+    #[serde_as(deserialize_as = "DefaultOnError")]
     pub recipients: Vec<MessageAddress>,
 
     /// TODO: Document this field.
-    #[serde(default)]
+    #[serde_as(deserialize_as = "DefaultOnError")]
     pub senders: Vec<MessageAddress>,
 
     /// TODO: Document this field.
@@ -482,19 +482,10 @@ pub struct ConversationEvent {
     pub id: RemoteId,
 
     /// TODO: Document this field.
-    #[serde(rename = "EventID")]
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
     pub conversation: Option<Conversation>,
-
-    /// TODO: Document this field.
-    #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    pub has_more: bool,
 }
 
 impl GetEventResponse for ConversationEvent {}
@@ -590,16 +581,7 @@ pub struct LabelEvent {
     pub id: RemoteId,
 
     /// TODO: Document this field.
-    #[serde(rename = "EventID")]
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
-
-    /// TODO: Document this field.
-    #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    pub has_more: bool,
 
     /// TODO: Document this field.
     pub label: Option<Label>,
@@ -614,15 +596,8 @@ impl GetEventResponse for LabelEvent {}
 #[serde(rename_all = "PascalCase")]
 pub struct MailEvent {
     /// TODO: Document this field.
-    #[serde(rename = "ID")]
-    pub id: RemoteId,
-
-    /// TODO: Document this field.
     #[serde(rename = "EventID")]
     pub event_id: RemoteId,
-
-    /// TODO: Document this field.
-    pub action: Action,
 
     /// TODO: Document this field.
     pub addresses: Option<Vec<Address>>,
@@ -959,19 +934,10 @@ pub struct MessageEvent {
     pub id: RemoteId,
 
     /// TODO: Document this field.
-    #[serde(rename = "EventID")]
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
     pub message: Option<MessageMetadata>,
-
-    /// TODO: Document this field.
-    #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    pub has_more: bool,
 }
 
 impl GetEventResponse for MessageEvent {}
