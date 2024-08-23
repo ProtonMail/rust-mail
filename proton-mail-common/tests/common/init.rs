@@ -200,6 +200,20 @@ impl TestContext {
     /// * `params` - The parameters to use for the setup.
     ///
     pub async fn setup_user(&self, mut params: Params) {
+        self.setup_user_repeated(params, 1).await;
+    }
+
+    /// Set up basic user data.
+    ///
+    /// This function sets up basic user data that should be fetched after login
+    /// to initialize the database and/or the context for the tests.
+    ///
+    /// # Parameters
+    ///
+    /// * `params`          - The parameters to use for the setup.
+    /// * `number_of_calls` - The number of times the mocked requests will be called.
+    ///
+    pub async fn setup_user_repeated(&self, mut params: Params, number_of_calls: u64) {
         // Latest event id
         Mock::given(method("GET"))
             .and(path("/api/core/v4/events/latest"))
@@ -208,7 +222,7 @@ impl TestContext {
                     event_id: params.last_event_id.unwrap_or(ApiRemoteId::from("0")),
                 }),
             )
-            .expect(1)
+            .expect(1) // this should only ever be initialized once at the moment
             .mount(self.mock_server())
             .await;
 
@@ -255,7 +269,7 @@ impl TestContext {
                     },
                 }),
             }))
-            .expect(1)
+            .expect(number_of_calls)
             .mount(self.mock_server())
             .await;
 
@@ -314,7 +328,7 @@ impl TestContext {
                     }),
                 }),
             )
-            .expect(1)
+            .expect(number_of_calls)
             .mount(self.mock_server())
             .await;
 
@@ -367,7 +381,7 @@ impl TestContext {
                     }),
                 }),
             )
-            .expect(1)
+            .expect(number_of_calls)
             .mount(self.mock_server())
             .await;
 
@@ -379,7 +393,7 @@ impl TestContext {
                     addresses: params.addresses,
                 }),
             )
-            .expect(1)
+            .expect(number_of_calls)
             .mount(self.mock_server())
             .await;
 
@@ -392,7 +406,7 @@ impl TestContext {
                 .and(path("/api/core/v4/labels"))
                 .and(query_param("Type", (label_type as u8).to_string()))
                 .respond_with(ResponseTemplate::new(200).set_body_json(resp))
-                .expect(1)
+                .expect(number_of_calls)
                 .mount(self.mock_server())
                 .await;
         }
@@ -405,7 +419,7 @@ impl TestContext {
                     counts: params.message_count,
                 }),
             )
-            .expect(1)
+            .expect(number_of_calls)
             .mount(self.mock_server())
             .await;
 
@@ -417,7 +431,7 @@ impl TestContext {
                     counts: params.conversation_count,
                 }),
             )
-            .expect(1)
+            .expect(number_of_calls)
             .mount(self.mock_server())
             .await;
     }
