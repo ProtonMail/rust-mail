@@ -166,13 +166,45 @@ use crate::orm::{perform_find, Model, ResultsetChange};
 use crate::stash::{AgnosticInterface, Interface, Stash, StashError};
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
-use rusqlite::ToSql;
+use rusqlite::types::{ToSqlOutput, Value};
+use rusqlite::{Error as SqliteError, ToSql};
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
 use tracing::error;
+
+/// Represents a parameter for a query.
+#[derive(Clone, Debug)]
+pub enum Param {
+    /// A null value.
+    Null,
+
+    /// An integer value.
+    Integer(i64),
+
+    /// A floating-point value.
+    Real(f64),
+
+    /// A text value.
+    Text(String),
+
+    /// A binary value.
+    Blob(Vec<u8>),
+}
+
+impl ToSql for Param {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(match self {
+            Param::Null => ToSqlOutput::Owned(Value::Null),
+            Param::Integer(i) => (*i).into(),
+            Param::Real(f) => (*f).into(),
+            Param::Text(s) => s.as_str().into(),
+            Param::Blob(b) => ToSqlOutput::Owned(Value::Blob(b.clone())),
+        })
+    }
+}
 
 /// Represents a paginated view of a result set.
 ///
@@ -197,7 +229,7 @@ pub struct Paginator<T: Model> {
     page_size: NonZeroU32,
 
     /// The parameters used in the query.
-    params: Vec<Box<dyn ToSql + Send>>,
+    params: Vec<Param>,
 
     /// The query logic used for finding records. This will be repeated when
     /// obtaining additional pages from the database.
@@ -260,7 +292,7 @@ impl<T: Model> Paginator<T> {
     ///
     pub async fn new<Q, A>(
         query_logic: Q,
-        params: Vec<Box<dyn ToSql + Send>>,
+        params: Vec<Param>,
         interface: &A,
         page_size: NonZeroU32,
         queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
@@ -310,7 +342,7 @@ impl<T: Model> Paginator<T> {
                 "SELECT * FROM {} LIMIT {}",
                 self.query_logic, self.page_size,
             ),
-            self.params.clone(),
+            convert_params(&self.params),
             &interface.clone().into(),
             self.queue.clone(),
         )
@@ -514,7 +546,7 @@ impl<T: Model> Paginator<T> {
                 *self.cursor_index.lock().await,
                 self.page_size,
             ),
-            self.params.clone(),
+            convert_params(&self.params),
             &self.stash.clone().into(),
             self.queue.clone(),
         )
@@ -603,4 +635,12 @@ fn paging_query(
         cursor_index,
         page_size,
     )
+}
+
+fn convert_params(params: &[Param]) -> Vec<Box<dyn ToSql + Send>> {
+    #[allow(trivial_casts)]
+    params
+        .iter()
+        .map(|p| Box::new(p.clone()) as Box<dyn ToSql + Send>)
+        .collect()
 }
