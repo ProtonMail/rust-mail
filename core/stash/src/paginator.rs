@@ -7,11 +7,12 @@
 //!
 //! # Key features
 //!
-//!   1. **Sliding window**: Maintains a sliding window of pages, always keeping
-//!      one page before the current page, one page after, and the first page of
-//!      the result set in memory for quick access, in addition to the current
-//!      page. The size of the window is adaptive, depending on updates to the
-//!      result set.
+//!   1. **Sliding window**: Maintains a sliding window of pages, pre-fetching
+//!      the next page in the background and saving to the database. The offset
+//!      position of the window is adaptive, depending on updates to the result
+//!      set, i.e. additions to the start of the result set will maintain the
+//!      current perceived position by incrementing the cursor position and
+//!      moving the window forward.
 //!
 //!   2. **Live updates**: Supports real-time updates to the result set,
 //!      handling insertions, updates, and deletions.
@@ -20,11 +21,7 @@
 //!      result set, ensuring consistent navigation even as the underlying data
 //!      changes.
 //!
-//!   4. **Efficient memory usage**: Stores a maximum of four pages in memory
-//!      at any time. Also tracks the observed row IDs, but lazily, only when
-//!      the rows in question have been loaded at some point.
-//!
-//!   5. **Asynchronous operations**: All database operations are asynchronous,
+//!   4. **Asynchronous operations**: All database operations are asynchronous,
 //!      preventing blocking.
 //!
 //! # How it works
@@ -33,9 +30,10 @@
 //!
 //! When a [`Paginator`] is created, it:
 //!
-//!   1. Fetches the first two pages of results from the database.
-//!   2. Sets up a listener for live updates (if requested)
-//!   3. Initializes the sliding window with the fetched pages.
+//!   1. Fetches the first page of results from the database, using known data,
+//!      which returns immediately.
+//!   2. Queries the API in the background, to fetch the next page.
+//!   3. Sets up a listener for live updates.
 //!
 //! ## Navigation
 //!
@@ -43,18 +41,16 @@
 //!
 //!   - **Moving to the next page**
 //!
-//!       1. If the next page is not in memory, it's fetched from the database.
-//!       2. The sliding window is updated, potentially dropping the earlier
-//!          page.
-//!       3. The cursor is moved forward.
+//!       1. If the next page is available, it's fetched from the database.
+//!       2. The sliding window is updated, and the cursor is moved forward.
+//!       3. The next page is pre-fetched from the API in the background.
 //!
 //!   - **Moving to the previous page**
 //!
-//!       1. If the previous page is not in memory, it's fetched from the
-//!          database.
-//!       2. The sliding window is updated, potentially dropping the latest
-//!          page.
-//!       3. The cursor is moved backward.
+//!       1. The previous page is fetched from the database.
+//!       2. The sliding window is updated, and the cursor is moved backward.
+//!       3. No API interaction is performed, as the previous page is expected
+//!          to already be in the database.
 //!
 //! ## Live updates
 //!
@@ -62,8 +58,7 @@
 //!
 //!   1. When a change occurs, it's processed immediately.
 //!   2. The total count and cursor are updated as necessary.
-//!   3. The change is applied to the in-memory pages if relevant.
-//!   4. The change is sent to the client via a channel.
+//!   3. The client is alerted via a channel.
 //!
 //! ### Handling specific changes
 //!
@@ -71,18 +66,18 @@
 //!   
 //!       - If the new record belongs before the cursor, the cursor is moved
 //!         forward.
-//!       - The record is inserted into the correct position in the window.
+//!       - The results count is incremented.
 //!   
 //!   - **Update**
 //!   
-//!       - The record is updated in the cached data if it exists.
+//!       - No effect on the cursor or paginator, but the client will be
+//!         notified.
 //!   
 //!   - **Deletion**
 //!   
 //!       - If the deleted record was before the cursor, the cursor is moved
 //!         backward.
-//!       - The record is removed from the window if it exists.
-//!       - If a page becomes empty, it's removed from the window.
+//!       - The results count is decremented.
 //!
 //! ## Cursor management
 //!
@@ -91,35 +86,54 @@
 //! updates occur, ensuring that the client's view of the data remains
 //! consistent even as the underlying data changes.
 //!
+//! The concept of a "page" is nominal, as the approach does not actually use
+//! true pages, even through the word is used for convenience. Instead, it
+//! maintains a sliding window of results, with the cursor indicating the start
+//! of the current frame. This behaves the same as pages for a static result
+//! set, but adapts to changes in the result set which is where the behaviour
+//! differs.
+//!
 //! # Usage for clients
 //!
 //! Clients interact with the [`Paginator`] through a set of intuitive methods:
 //!
 //!   1. [`current_page()`](Paginator::current_page()):
-//!      Get the current page. This will be obtained from the cache.
+//!      Get the current page. This will be obtained from the database, and is
+//!      always based on the current cursor position.
 //!
 //!   2. [`next_page()`](Paginator::next_page()):
-//!      Move to and get the next page. These will be obtained from the cache,
-//!      and the next page will be fetched from the database into the cache.
+//!      Move to and get the next page. This will be obtained from the database,
+//!      and the page after will be fetched from the API into the database in
+//!      the background. The next page is always calculated from the current
+//!      cursor position.
 //!
 //!   3. [`previous_page()`](Paginator::previous_page()):
-//!      Move to and get the previous page. These will be obtained from the
-//!      cache, and the previous page will be fetched from the database into the
-//!      cache.
+//!      Move to and get the previous page. This will be obtained from the
+//!      database. The previous page is always calculated from the current
+//!      cursor position.
 //!
-//!   4. [`current_page_number()`](Paginator::current_page_number()):
-//!      Get the current page number.
+//!   4. [`first_page()`](Paginator::first_page()):
+//!      Get the first page. This will be obtained from the database. Moving to
+//!      the first page will reset the cursor position to the start of the
+//!      result set.
 //!
-//!   5. [`page_count()`](Paginator::page_count()):
-//!      Get the total number of pages.
+//!   5. [`current_page_number()`](Paginator::current_page_number()):
+//!      Get the current page number. Note that this is somewhat arbitrary, as
+//!      the concept of pages is nominal, and so the page number calculated for
+//!      the current cursor position can change as the result set changes. The
+//!      sliding window approach fits better with an infinite scroll model,
+//!      where there are no page numbers.
 //!
-//!   6. [`result_count()`](Paginator::row_count()):
-//!      Get the total number of results.
+//!   6. [`page_count()`](Paginator::page_count()):
+//!      Get the total number of pages. This can change over time.
 //!
-//!   7. [`has_next_page()`](Paginator::has_next_page()):
+//!   7. [`result_count()`](Paginator::result_count()):
+//!      Get the total number of results. This can change over time.
+//!
+//!   8. [`has_next_page()`](Paginator::has_next_page()):
 //!      Check if there's a next page available.
 //!
-//!   8. [`has_previous_page()`](Paginator::has_previous_page()):
+//!   9. [`has_previous_page()`](Paginator::has_previous_page()):
 //!      Check if there's a previous page available.
 //!
 //! # Example
@@ -154,42 +168,11 @@ use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use rusqlite::ToSql;
 use std::collections::HashMap;
-use std::mem::take;
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use tokio::runtime::Runtime;
 use tokio::spawn;
 use tokio::sync::Mutex;
 use tracing::error;
-use uuid::Uuid;
-
-/// Represents a set of cached page frames.
-#[derive(Debug, Default)]
-struct PageCache<T: Model> {
-    /// The first page of records.
-    first: Vec<T>,
-
-    /// The previous page of records.
-    previous: Vec<T>,
-
-    /// The current page of records.
-    current: Vec<T>,
-
-    /// The next page of records.
-    next: Vec<T>,
-}
-
-/// Pagination control parameters.
-pub struct PageControl {
-    /// The current page number. This is a 1-based index.
-    pub page_number: NonZeroU32,
-
-    /// The number of records per page. Note that pages are adaptive windows
-    /// onto the result set, and so the actual number of records returned may
-    /// vary from this value if the result set changes. The page size must not
-    /// be zero — to disable pagination, do so on the [`Paginator`] itself.
-    pub page_size: NonZeroU32,
-}
 
 /// Represents a paginated view of a result set.
 ///
@@ -202,17 +185,11 @@ pub struct PageControl {
 /// changes. It handles live updates, cursor management, and provides an
 /// intuitive navigation experience through the result set.
 ///
+#[derive(Debug)]
 pub struct Paginator<T: Model> {
     /// The current cursor position in the result set. This indicates the start
     /// of the current frame.
     cursor_index: Arc<Mutex<u32>>,
-
-    /// Indicates whether pagination is active (`true`), or if all results were
-    /// fetched (`false`).
-    is_active: bool,
-
-    /// The cached pages of records.
-    page_cache: Arc<Mutex<PageCache<T>>>,
 
     /// The number of records per page. Assuming no changes to the result set,
     /// this will remain constant. However, if the data changes, the number for
@@ -230,24 +207,14 @@ pub struct Paginator<T: Model> {
     /// the end that the paginator uses to send changes to the client.
     queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
 
-    /// The IDs of the rows in the result set. Note that this is populated
-    /// lazily, i.e. only when needed — it will grow over time, and is used to
-    /// track changes to observed data.
-    row_ids: Arc<Mutex<Vec<u64>>>,
-
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
     row_count: Arc<Mutex<u32>>,
 
     /// The [`Stash`] instance used for database operations. This is not used
     /// for the initial query (that uses whatever was supplied), but is required
-    /// for live updates.
+    /// for subsequent queries and for live updates.
     stash: Stash,
-
-    /// The unique identifier for the view that this paginator is associated
-    /// with. This is used to ensure that the paginator only listens for changes
-    /// that are relevant to the current query.
-    view_id: Uuid,
 }
 
 impl<T: Model> Paginator<T> {
@@ -277,9 +244,11 @@ impl<T: Model> Paginator<T> {
     ///                   any subsequent queries that are performed as a result
     ///                   of updates to the result set when pagination is active
     ///                   — those will use the underlying [`Stash`] instance.
-    /// * `paging`      - The pagination options to use. If [`None`], all
-    ///                   results will be fetched, and pagination will not be
-    ///                   used or available.
+    /// * `page_size`   - The number of records per page. Note that pages are
+    ///                   adaptive windows onto the result set, and so the
+    ///                   actual number of records returned may vary from this
+    ///                   value if the result set changes. The page size must
+    ///                   not be zero.
     /// * `queue`       - An optional queue to send changes to. If this is
     ///                   provided, the function will listen for changes to the
     ///                   result set and send them to the queue. This is useful
@@ -289,38 +258,25 @@ impl<T: Model> Paginator<T> {
     ///
     /// See [`Model::find()`].
     ///
-    pub async fn new<Q>(
+    pub async fn new<Q, A>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
-        interface: &AgnosticInterface,
-        paging: Option<PageControl>,
+        interface: &A,
+        page_size: NonZeroU32,
         queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<Self, StashError>
     where
         Q: Into<String> + Send,
+        A: Into<AgnosticInterface> + Interface,
     {
-        let view_id = Uuid::new_v4();
         let paginator = Self {
             cursor_index: Arc::new(Mutex::new(0)),
-            is_active: paging.is_some(),
-            page_cache: Arc::new(Mutex::new(PageCache {
-                first: Vec::new(),
-                previous: Vec::new(),
-                current: Vec::new(),
-                next: Vec::new(),
-            })),
-            page_size: if let Some(options) = paging {
-                options.page_size
-            } else {
-                NonZeroU32::MAX
-            },
+            page_size,
             params,
             query_logic: query_logic.into(),
             queue: queue.clone(),
             row_count: Arc::new(Mutex::new(0)),
-            row_ids: Arc::new(Mutex::new(Vec::new())),
             stash: interface.stash().clone(),
-            view_id,
         };
 
         paginator.initialize(interface).await?;
@@ -338,79 +294,34 @@ impl<T: Model> Paginator<T> {
     ///
     /// # Parameters
     ///
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records. Note that this will
-    ///                   only be respected for the initial query, and not for
-    ///                   any subsequent queries that are performed as a result
-    ///                   of updates to the result set when pagination is active
-    ///                   — those will use the underlying [`Stash`] instance.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records. Note that this will only be
+    ///                 respected for the initial query, and not for any
+    ///                 subsequent queries that are performed as a result of
+    ///                 updates to the result set when pagination is active —
+    ///                 those will use the underlying [`Stash`] instance.
     ///
-    async fn initialize(&self, interface: &AgnosticInterface) -> Result<(), StashError> {
-        let mut page_cache = self.page_cache.lock().await;
-        if !self.is_active {
-            let initial_records = perform_find(
-                self.query_logic.clone(),
-                self.params.clone(),
-                &interface.clone().into(),
-                self.queue.clone(),
-            )
-            .await?;
+    async fn initialize<A>(&self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let initial_records = perform_find(
+            format!(
+                "SELECT * FROM {} LIMIT {}",
+                self.query_logic, self.page_size,
+            ),
+            self.params.clone(),
+            &interface.clone().into(),
+            self.queue.clone(),
+        )
+        .await?;
 
-            *self.row_count.lock().await = initial_records.len() as u32;
-            page_cache.first = initial_records;
-
-            drop(page_cache);
-            return Ok(());
-        }
-
-        let view_name = format!(
-            "paginator_view_{}",
-            self.view_id.to_string().replace("-", "_")
-        );
-        interface
-            .execute(
-                formatdoc!(
-                    "
-					CREATE VIEW
-						{}
-					AS SELECT
-						{}.rowid AS rowid,
-						*
-					FROM
-						{}
-					{}
-					",
-                    view_name,
-                    T::table_name(),
-                    T::table_name(),
-                    self.query_logic.clone()
-                ),
-                self.params.clone(),
-            )
-            .await?;
-        let initial_records = interface
-            .query(
-                format!(
-                    "SELECT * FROM {} LIMIT {}",
-                    self.query_logic,
-                    self.page_size.get() as usize * 2
-                ),
-                self.params.clone(),
-            )
-            .await?;
+        // TODO: Call the API in the background to get the real number of
+        // TODO: records. Also, if the initial result set is empty, call the API
+        // TODO: in the foreground and wait for the first page to be returned.
 
         *self.row_count.lock().await = initial_records.len() as u32;
 
-        page_cache.first = initial_records
-            .into_iter()
-            .take(self.page_size.get() as usize)
-            .collect();
-        page_cache.next = initial_records
-            .into_iter()
-            .skip(self.page_size.get() as usize)
-            .collect();
-
-        drop(page_cache);
         Ok(())
     }
 
@@ -421,10 +332,22 @@ impl<T: Model> Paginator<T> {
         let params = self.params.clone();
         let row_count = Arc::clone(&self.row_count);
         let cursor_index = Arc::clone(&self.cursor_index);
-        let page_cache = Arc::clone(&self.page_cache);
-        let view_id = self.view_id.clone();
 
         spawn(async move {
+            let changed_query = formatdoc!(
+                "
+                    SELECT
+                        {}.rowid AS rowid, *
+                    FROM
+                        {}
+                    WHERE
+                        rowid = ?
+                    LIMIT
+                        1
+                ",
+                T::table_name(),
+                T::table_name(),
+            );
             // For now this is blanket subscriber — this will be optimised later to
             // only listen for changes that are relevant to the current query.
             if let Ok(mut receiver) = stash.subscribe().await {
@@ -436,7 +359,7 @@ impl<T: Model> Paginator<T> {
                                 // We don't use this in the same way here
                                 &mut HashMap::new(),
                                 &stash,
-                                &format!("paginator_view_{view_id}"),
+                                &changed_query,
                             )
                             .await
                             {
@@ -444,9 +367,7 @@ impl<T: Model> Paginator<T> {
                                     &change,
                                     &row_count,
                                     &cursor_index,
-                                    &page_cache,
                                     &stash,
-                                    &view_id.to_string(),
                                     &sender,
                                 )
                                 .await
@@ -476,46 +397,32 @@ impl<T: Model> Paginator<T> {
     /// * `change`       - The change that occurred in the result set.
     /// * `row_count`    - The total number of records in the result set.
     /// * `cursor_index` - The current cursor position in the result set.
-    /// * `page_cache`   - The cached pages of records.
     /// * `stash`        - The [`Stash`] instance used for database operations.
-    /// * `view_id`      - The unique identifier for the view.
     /// * `sender`       - The sender for live updates.
     ///
     async fn handle_change(
         change: &ResultsetChange<T, T::IdType>,
         row_count: &Arc<Mutex<u32>>,
         cursor_index: &Arc<Mutex<u32>>,
-        page_cache: &Arc<Mutex<PageCache<T>>>,
         stash: &Stash,
-        view_id: &str,
         sender: &flume::Sender<ResultsetChange<T, T::IdType>>,
     ) -> Result<(), StashError> {
-        let view_name = format!("paginator_view_{}", view_id);
         let mut count = row_count.lock().await;
         let mut cursor = cursor_index.lock().await;
-        let mut cache = page_cache.lock().await;
 
         match change {
-            ResultsetChange::Inserted(record) | ResultsetChange::Updated(record) => {
-                let position_query = format!(
-                    "SELECT COUNT(*) FROM {} WHERE rowid <= (SELECT rowid FROM {} WHERE id = ?)",
-                    view_name, view_name
-                );
+            ResultsetChange::Inserted(record) => {
+                // TODO: This needs to run the original query to get the position
                 let position: i64 = stash
-                    .query_value(&position_query, vec![Box::new(record.id_value()?)])
+                    .query_value("TODO", vec![Box::new(record.id_value()?)])
                     .await?;
 
-                Self::update_state_for_change(
-                    record,
-                    position as u32,
-                    &mut count,
-                    &mut cursor,
-                    &mut cache,
-                );
+                Self::insert_record(position as u32, &mut count, &mut cursor);
             }
             ResultsetChange::Deleted(id) => {
-                Self::remove_record(id.clone(), &mut count, &mut cursor, &mut cache);
+                Self::remove_record(id.clone(), &mut count, &mut cursor);
             }
+            ResultsetChange::Updated(_record) => {}
         }
 
         // Notify the client of the change
@@ -526,35 +433,27 @@ impl<T: Model> Paginator<T> {
         Ok(())
     }
 
-    /// Updates the paginator's state when a record is inserted or updated.
+    /// Updates the paginator's state when a record is inserted.
     ///
-    /// This function adjusts the total count, cursor position, and cached pages
-    /// based on the position of the new or updated record in the result set.
+    /// This function adjusts the total count and cursor position based on the
+    /// position of the new record in the result set.
     ///
     /// # Behaviour
     ///
-    ///   - Increments the total count for insertions.
-    ///   - Adjusts the cursor if the new/updated record is inserted before it.
-    ///   - Updates the cached previous or next page if the record falls within
-    ///     those ranges.
-    ///   - Does not update the current page, as it's assumed to have already
-    ///     been sent to the client.
+    ///   - Increments the total count.
+    ///   - Adjusts the cursor if the new record is inserted before it.
     ///
     /// # Ordering
     ///
-    /// The order of records is maintained as per the view, which reflects the
-    /// original query's sorting criteria. No additional sorting is performed on
-    /// the cached records.
+    /// The order of records is maintained as per the original query's sorting
+    /// criteria.
     ///
     /// # Parameters
     ///
-    /// * `record`       - The record that was inserted or updated.
     /// * `row_index`    - The position of the record in the overall result set
     ///                    (1-based index).
     /// * `row_count`    - Mutable reference to the total count of records.
     /// * `cursor_index` - Mutable reference to the cursor position.
-    /// * `page_cache`   - Mutable reference to the [`PageCache`] containing
-    ///                    cached pages.
     ///
     /// # Errors
     ///
@@ -562,51 +461,23 @@ impl<T: Model> Paginator<T> {
     /// to handle them in the context of a live update. Any errors are logged
     /// and ignored.
     ///
-    fn update_state_for_change(
-        record: &T,
-        row_index: u32,
-        row_count: &mut u32,
-        cursor_index: &mut u32,
-        page_cache: &mut PageCache<T>,
-    ) {
-        // Increment the total count for insertions
-        *row_count += 1;
+    fn insert_record(row_index: u32, row_count: &mut u32, cursor_index: &mut u32) {
+        *row_count = row_count.saturating_add(1);
 
         // Adjust cursor if the new/updated record is before it
         if row_index <= *cursor_index {
-            *cursor_index += 1;
+            *cursor_index = cursor_index.saturating_add(1);
         }
-
-        // Update the cache
-        if row_index < *cursor_index {
-            // Record belongs in a page before the current one
-            if !page_cache.previous.is_empty()
-                && row_index >= *cursor_index - page_cache.previous.len() as u32
-            {
-                // Insert the record at the correct row_index
-                let insert_index = page_cache.previous.len() - (*cursor_index - row_index) as usize;
-                page_cache.previous.insert(insert_index, record.clone());
-            }
-        } else if row_index >= *cursor_index
-            && row_index < *cursor_index + page_cache.next.len() as u32
-        {
-            // Record belongs in the next page
-            let insert_index = (row_index - *cursor_index) as usize;
-            page_cache.next.insert(insert_index, record.clone());
-        }
-        // Note: We don't update the current page as it's already been sent to the client
     }
 
-    /// Removes a record from the paginator's state.
+    /// Updates the paginator's state when a record is removed.
     ///
-    /// This function adjusts the total count, cursor position, and cached pages
-    /// when a record is deleted from the result set.
+    /// This function adjusts the total count and cursor position when a record
+    /// is deleted from the result set.
     ///
     /// # Behaviour
     ///
     ///   - Decrements the total count of records.
-    ///   - Removes the record from the cached previous and next pages if
-    ///     present.
     ///   - Adjusts the cursor if the deleted record was before it in the result
     ///     set.
     ///
@@ -615,44 +486,39 @@ impl<T: Model> Paginator<T> {
     /// * `id`         - The ID of the record to be removed.
     /// * `row_count`  - Mutable reference to the total count of records.
     /// * `cursor`     - Mutable reference to the cursor position.
-    /// * `page_cache` - Mutable reference to the `PageCache` containing cached
-    ///                  pages.
     ///
-    fn remove_record(
-        id: T::IdType,
-        row_count: &mut u32,
-        cursor_index: &mut u32,
-        page_cache: &mut PageCache<T>,
-    ) {
-        // Decrement the total count
+    /// # Errors
+    ///
+    /// See [`Model::find()`].
+    ///
+    fn remove_record(_id: T::IdType, row_count: &mut u32, _cursor_index: &mut u32) {
         *row_count = row_count.saturating_sub(1);
 
-        // Remove from cache if present
-        page_cache.previous.retain(|r| r.id_value().unwrap() != id);
-        page_cache.next.retain(|r| r.id_value().unwrap() != id);
-
-        // Adjust cursor if the deleted record was before it
-        if page_cache.previous.len() < *cursor_index as usize {
-            *cursor_index = cursor_index.saturating_sub(1);
-        }
-    }
-
-    pub async fn cleanup(&self) -> Result<(), StashError> {
-        self.stash
-            .execute(
-                format!(
-                    "DROP VIEW IF EXISTS paginator_view_{}",
-                    self.view_id.to_string().replace("-", "_")
-                ),
-                vec![],
-            )
-            .await?;
-        Ok(())
+        // TODO: Adjust cursor if the deleted record was before it. In order to
+        // TODO: do this, we need to keep track of the IDs we've shown to the
+        // TODO: client.
     }
 
     /// Retrieves the results of the current page.
-    pub async fn current_page(&mut self) -> Vec<T> {
-        self.page_cache.lock().await.first.clone()
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the current page could not be fetched from the
+    /// database.
+    ///
+    pub async fn current_page(&mut self) -> Result<Vec<T>, StashError> {
+        perform_find(
+            paging_query(
+                T::table_name(),
+                &self.query_logic,
+                *self.cursor_index.lock().await,
+                self.page_size,
+            ),
+            self.params.clone(),
+            &self.stash.clone().into(),
+            self.queue.clone(),
+        )
+        .await
     }
 
     /// Moves to the next page and retrieves its results.
@@ -663,23 +529,12 @@ impl<T: Model> Paginator<T> {
     /// from the database.
     ///
     pub async fn next_page(&mut self) -> Result<Vec<T>, StashError> {
-        let mut page_cache = self.page_cache.lock().await;
-        let mut cursor = self.cursor_index.lock().await;
-
-        if page_cache.next.is_empty() {
-            let next_page = self.fetch_next_page().await?;
-            page_cache.next = next_page;
-        }
-
-        page_cache.previous = take(&mut page_cache.current);
-        page_cache.current = take(&mut page_cache.next);
-        page_cache.next.clear();
-
         // TODO: Pre-fetch the next page here
 
-        *cursor = u32::from(self.page_size);
-
-        Ok(page_cache.current.clone())
+        let mut cursor = self.cursor_index.lock().await;
+        *cursor = cursor.saturating_add(u32::from(self.page_size));
+        drop(cursor);
+        self.current_page().await
     }
 
     /// Moves to the previous page and retrieves its results.
@@ -690,73 +545,12 @@ impl<T: Model> Paginator<T> {
     /// fetched from the database.
     ///
     pub async fn previous_page(&mut self) -> Result<Vec<T>, StashError> {
-        let mut page_cache = self.page_cache.lock().await;
-        let mut cursor = self.cursor_index.lock().await;
-
-        if *cursor == 0 {
-            return Ok(page_cache.first.clone());
-        }
-
-        if page_cache.previous.is_empty() {
-            let prev_page = self.fetch_previous_page().await?;
-            page_cache.previous = prev_page;
-        }
-
-        page_cache.next = take(&mut page_cache.current);
-        page_cache.current = take(&mut page_cache.previous);
-        page_cache.previous.clear();
-
         // TODO: Pre-fetch the previous page here
 
+        let mut cursor = self.cursor_index.lock().await;
         *cursor = cursor.saturating_sub(u32::from(self.page_size));
-
-        Ok(page_cache.current.clone())
-    }
-
-    /// Fetches the next page of results from the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be fetched from the database.
-    ///
-    async fn fetch_next_page(&self) -> Result<Vec<T>, StashError> {
-        let cursor = *self.cursor_index.lock().await;
-        let query = format!(
-            "{} LIMIT {} OFFSET {}",
-            self.query_logic,
-            self.page_size,
-            cursor + u32::from(self.page_size) * 2
-        );
-        perform_find(
-            &query,
-            self.params.clone(),
-            &self.stash.clone().into(),
-            None,
-        )
-        .await
-    }
-
-    /// Fetches the previous page of results from the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be fetched from the database.
-    ///
-    async fn fetch_previous_page(&self) -> Result<Vec<T>, StashError> {
-        let cursor = *self.cursor_index.lock().await;
-        let query = format!(
-            "{} LIMIT {} OFFSET {}",
-            self.query_logic,
-            self.page_size,
-            cursor.saturating_sub(u32::from(self.page_size))
-        );
-        perform_find(
-            &query,
-            self.params.clone(),
-            &self.stash.clone().into(),
-            None,
-        )
-        .await
+        drop(cursor);
+        self.current_page().await
     }
 
     /// Retrieves the total number of records in the result set.
@@ -785,14 +579,28 @@ impl<T: Model> Paginator<T> {
     }
 }
 
-impl<T: Model> Drop for Paginator<T> {
-    fn drop(&mut self) {
-        // Create a new runtime for cleanup
-        let rt = Runtime::new().unwrap();
-        rt.block_on(async {
-            if let Err(e) = self.cleanup().await {
-                eprintln!("Error during Paginator cleanup: {:?}", e);
-            }
-        });
-    }
+fn paging_query(
+    tablename: &str,
+    query_logic: &str,
+    cursor_index: u32,
+    page_size: NonZeroU32,
+) -> String {
+    formatdoc!(
+        "
+            SELECT
+                {}.rowid AS rowid, *
+            FROM
+                {}
+            {}
+            OFFSET
+                {}
+            LIMIT
+                {}
+        ",
+        tablename,
+        tablename,
+        query_logic,
+        cursor_index,
+        page_size,
+    )
 }

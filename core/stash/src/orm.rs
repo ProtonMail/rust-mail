@@ -13,7 +13,6 @@
 //!
 
 use crate::datatypes::QueryResultIdPair;
-use crate::paginator::{PageControl, Paginator};
 use crate::stash::{AgnosticInterface, Interface, Notification, Stash, StashError};
 use core::any::Any;
 use core::fmt::{Debug, Display};
@@ -411,25 +410,14 @@ where
     /// * `query_logic` - The query logic to use for finding the records. This
     ///                   should be a string that represents the conditions,
     ///                   ordering, offset, and limit for the query, as may be
-    ///                   required (note, if using pagination, offset and limit
-    ///                   should be omitted). It can be empty. Note that each
-    ///                   part of the logic is optional — so if conditions are
-    ///                   passed, for instance, the `WHERE` keyword needs to be
-    ///                   included.
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
     /// * `params`      - The parameters to use in the query. These should be in
     ///                   the order they are expected in the query logic, and
     ///                   match with any expectations set in the query logic.
     /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                   to use for finding the records. Note that this will
-    ///                   only be respected for the initial query, and not for
-    ///                   any subsequent queries that are performed as a result
-    ///                   of updates to the result set when pagination is active
-    ///                   — those will use the underlying [`Stash`] instance.
-    /// * `paging`      - The pagination options to use. If [`None`], all
-    ///                   results will be fetched, and pagination will not be
-    ///                   used or available. Note that if pagination is used,
-    ///                   the query logic should not include an `OFFSET` or
-    ///                   `LIMIT` clause.
+    ///                   to use for finding the records.
     /// * `queue`       - An optional queue to send changes to. If this is
     ///                   provided, the function will listen for changes to the
     ///                   result set and send them to the queue. This is useful
@@ -450,21 +438,13 @@ where
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         interface: &A,
-        paging: Option<PageControl>,
         queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
-    ) -> Result<Paginator<Self>, StashError>
+    ) -> Result<Vec<Self>, StashError>
     where
         Q: Into<String> + Send,
         A: Into<AgnosticInterface> + Interface,
     {
-        Paginator::new(
-            query_logic,
-            params,
-            &interface.clone().into(),
-            paging,
-            queue,
-        )
-        .await
+        perform_find(query_logic, params, &interface.clone().into(), queue).await
     }
 
     /// Finds the first record in a result set using specific query logic.
