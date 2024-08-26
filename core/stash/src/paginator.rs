@@ -147,11 +147,11 @@
 //! struct Email { /* ... */ }
 //!
 //! async fn example(stash: &Stash) -> Result<(), StashError> {
-//! 	let (sender, receiver) = flume::unbounded::<ResultsetChange<Email, u64>>();
+//!     let (sender, receiver) = flume::unbounded::<ResultsetChange<Email, u64>>();
 //!     let mut paginator = Email::find(&stash, "ORDER BY date DESC", vec![], PageControl{
-//! 		page_number: 1,
-//! 		page_size: 15,
-//! 	}).await?;
+//!         page_number: 1,
+//!         page_size: 15,
+//!     }).await?;
 //!     
 //!     let first_page = paginator.current_page().await?;
 //!     println!("First page: {:?}", first_page);
@@ -164,12 +164,12 @@
 
 use crate::orm::{perform_find, Model, ResultsetChange};
 use crate::stash::{AgnosticInterface, Interface, Stash, StashError};
+use core::num::NonZeroU32;
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use rusqlite::types::{ToSqlOutput, Value};
 use rusqlite::{Error as SqliteError, ToSql};
 use std::collections::HashMap;
-use std::num::NonZeroU32;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
@@ -177,6 +177,7 @@ use tracing::error;
 
 /// Represents a parameter for a query.
 #[derive(Clone, Debug)]
+#[allow(clippy::exhaustive_enums)]
 pub enum Param {
     /// A null value.
     Null,
@@ -196,12 +197,12 @@ pub enum Param {
 
 impl ToSql for Param {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(match self {
-            Param::Null => ToSqlOutput::Owned(Value::Null),
-            Param::Integer(i) => (*i).into(),
-            Param::Real(f) => (*f).into(),
-            Param::Text(s) => s.as_str().into(),
-            Param::Blob(b) => ToSqlOutput::Owned(Value::Blob(b.clone())),
+        Ok(match *self {
+            Self::Null => ToSqlOutput::Owned(Value::Null),
+            Self::Integer(ref i) => (*i).into(),
+            Self::Real(ref f) => (*f).into(),
+            Self::Text(ref s) => s.as_str().into(),
+            Self::Blob(ref b) => ToSqlOutput::Owned(Value::Blob(b.clone())),
         })
     }
 }
@@ -339,6 +340,7 @@ impl<T: Model> Paginator<T> {
     ///                 updates to the result set when pagination is active —
     ///                 those will use the underlying [`Stash`] instance.
     ///
+    #[allow(clippy::cast_possible_truncation)]
     async fn initialize<A>(&self, interface: &A) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -445,6 +447,7 @@ impl<T: Model> Paginator<T> {
     /// * `stash`         - The [`Stash`] instance used for database operations.
     /// * `sender`        - The sender for live updates.
     ///
+    #[allow(clippy::too_many_arguments)]
     async fn handle_change(
         change: &ResultsetChange<T, T::IdType>,
         query_logic: &str,
@@ -455,19 +458,23 @@ impl<T: Model> Paginator<T> {
         stash: &Stash,
         sender: &flume::Sender<ResultsetChange<T, T::IdType>>,
     ) -> Result<(), StashError> {
+        #[allow(clippy::shadow_reuse)]
         let mut row_count = row_count.lock().await;
+        #[allow(clippy::shadow_reuse)]
         let mut cursor_index = cursor_index.lock().await;
+        #[allow(clippy::shadow_reuse)]
         let cursor_row_id = cursor_row_id.lock().await;
 
-        match change {
+        match *change {
             ResultsetChange::Inserted(_) | ResultsetChange::Deleted(_) => {
                 // Re-run the query to check if the cursor position needs to change. This
                 // gets the first record at the offset of the cursor, and if doesn't have
                 // the same ID as the current cursor record, we need to adjust the cursor.
                 let cursor_record: Option<T> = T::find_first(
+                    #[allow(clippy::unwrap_used)]
                     &paging_query(
                         T::table_name(),
-                        &query_logic,
+                        query_logic,
                         *cursor_index,
                         NonZeroU32::new(1).unwrap(),
                     ),
@@ -478,11 +485,12 @@ impl<T: Model> Paginator<T> {
 
                 match cursor_record {
                     Some(record) => {
+                        #[allow(clippy::cast_lossless, clippy::unwrap_used)]
                         if *cursor_row_id as u64 != record.row_id().unwrap() {
                             // The change was made before the cursor position
-                            if let ResultsetChange::Inserted(_) = change {
+                            if let ResultsetChange::Inserted(_) = *change {
                                 *cursor_index = cursor_index.saturating_add(1);
-                            } else if let ResultsetChange::Deleted(_) = change {
+                            } else if let ResultsetChange::Deleted(_) = *change {
                                 *cursor_index = cursor_index.saturating_sub(1);
                             }
                         }
@@ -490,16 +498,16 @@ impl<T: Model> Paginator<T> {
                     None => {
                         // We've reached the end of the result set, meaning a deletion before the
                         // cursor position
-                        if let ResultsetChange::Deleted(_) = change {
+                        if let ResultsetChange::Deleted(_) = *change {
                             *cursor_index = cursor_index.saturating_sub(1);
                         }
                     }
                 }
 
                 // Update the total count
-                if let ResultsetChange::Inserted(_) = change {
+                if let ResultsetChange::Inserted(_) = *change {
                     *row_count = row_count.saturating_add(1);
-                } else if let ResultsetChange::Deleted(_) = change {
+                } else if let ResultsetChange::Deleted(_) = *change {
                     *row_count = row_count.saturating_sub(1);
                 }
             }
@@ -508,10 +516,14 @@ impl<T: Model> Paginator<T> {
             }
         }
 
+        drop(row_count);
+        drop(cursor_index);
+        drop(cursor_row_id);
+
         // Notify the client of the change
         sender
             .send(change.clone())
-            .map_err(|_| StashError::Custom("Failed to send update".into()))?;
+            .map_err(|_err| StashError::Custom("Failed to send update".into()))?;
 
         Ok(())
     }
@@ -523,7 +535,7 @@ impl<T: Model> Paginator<T> {
     /// Returns an error if the current page could not be fetched from the
     /// database.
     ///
-    pub async fn current_page(&mut self) -> Result<Vec<T>, StashError> {
+    pub async fn current_page(&self) -> Result<Vec<T>, StashError> {
         perform_find(
             paging_query(
                 T::table_name(),
@@ -545,7 +557,7 @@ impl<T: Model> Paginator<T> {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
-    pub async fn next_page(&mut self) -> Result<Vec<T>, StashError> {
+    pub async fn next_page(&self) -> Result<Vec<T>, StashError> {
         // TODO: Pre-fetch the next page here
 
         let mut cursor = self.cursor_index.lock().await;
@@ -561,7 +573,7 @@ impl<T: Model> Paginator<T> {
     /// Returns an error if the page before the previous page could not be
     /// fetched from the database.
     ///
-    pub async fn previous_page(&mut self) -> Result<Vec<T>, StashError> {
+    pub async fn previous_page(&self) -> Result<Vec<T>, StashError> {
         // TODO: Pre-fetch the previous page here
 
         let mut cursor = self.cursor_index.lock().await;
@@ -577,12 +589,22 @@ impl<T: Model> Paginator<T> {
 
     /// Retrieves the current page number.
     pub async fn current_page_number(&self) -> u32 {
-        (*self.cursor_index.lock().await / self.page_size) + 1
+        self.cursor_index
+            .lock()
+            .await
+            .saturating_div(u32::from(self.page_size))
+            .saturating_add(1)
     }
 
     /// Retrieves the total number of pages.
     pub async fn page_count(&self) -> u32 {
-        (*self.row_count.lock().await + u32::from(self.page_size) - 1) / self.page_size
+        #[allow(clippy::arithmetic_side_effects)]
+        self.row_count
+            .lock()
+            .await
+            .saturating_add(u32::from(self.page_size))
+            .saturating_sub(1)
+            .saturating_div(u32::from(self.page_size))
     }
 
     /// Checks if there is a next page available.
@@ -596,6 +618,15 @@ impl<T: Model> Paginator<T> {
     }
 }
 
+/// Constructs a query for paging through a result set.
+///
+/// # Parameters
+///
+/// * `tablename`    - The name of the table to query.
+/// * `query_logic`  - The query logic to use for finding the records.
+/// * `cursor_index` - The current cursor position in the result set.
+/// * `page_size`    - The number of records per page.
+///
 fn paging_query(
     tablename: &str,
     query_logic: &str,
@@ -622,6 +653,13 @@ fn paging_query(
     )
 }
 
+/// Converts a slice of [`Param`] instances into a vector of boxed [`ToSql`]
+/// instances.
+///
+/// # Parameters
+///
+/// * `params` - The slice of parameters to convert.
+///
 fn convert_params(params: &[Param]) -> Vec<Box<dyn ToSql + Send>> {
     #[allow(trivial_casts)]
     params
