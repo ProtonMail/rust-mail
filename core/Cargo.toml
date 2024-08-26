@@ -34,7 +34,7 @@ proton-api-core = { version = "=0.6.10", path = "proton-api-core", registry = "p
 proton-core-common = { version = "=0.6.14", path = "proton-core-common" }
 proton-crypto-account = { version = "=0.6.1", registry = "proton", features = ["sql"] }
 proton-event-loop = { version = "=0.7.10", path = "proton-event-loop", registry = "proton" }
-proton-sqlite3 = { version = "=0.7.4", path = "proton-sqlite3", registry = "proton" }
+proton-sqlite3 = { version = "=0.7.5", path = "proton-sqlite3", registry = "proton" }
 proton-vcard = { version = "=0.1.1", path = "proton-vcard", registry = "proton" }
 quick_cache = "0.5"
 rand = "0.8"
