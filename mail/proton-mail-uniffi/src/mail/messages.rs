@@ -201,9 +201,9 @@ pub async fn messages_for_label(
             formatdoc!(
                 "
                 JOIN message_labels
-                    ON messages.local_id = message_labels.message_id
+                    ON messages.local_id = message_labels.local_message_id
                 WHERE
-                    message_labels.label_id = ?
+                    message_labels.local_label_id = ?
                 "
             ),
             params![RealLocalId::from(label_id)],
@@ -344,9 +344,9 @@ pub async fn watch_messages_for_label(
             formatdoc!(
                 "
                 JOIN message_labels
-                    ON messages.local_id = message_labels.message_id
+                    ON messages.local_id = message_labels.local_message_id
                 WHERE
-                    message_labels.label_id = ?
+                    message_labels.local_label_id = ?
                 "
             ),
             params![RealLocalId::from(label_id)],

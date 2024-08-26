@@ -11,11 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Split `ContextualLabel` in `SidebarCustomFolder`, `SidebarCustomLabel` and `SidebarSystemLabel`.
 
+### Fixed
+
+  - DB query error in `watch_messages_for_label`.
+
 ## [0.11.18] - 2024-08-26
 
 ### Fixed
 
-  - DB query error in `watch_conversation_for_label`.
+  - DB query error in `watch_conversations_for_label`.
 
 ## [0.11.17] - 2024-08-26
 
