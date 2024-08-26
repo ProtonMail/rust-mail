@@ -171,9 +171,9 @@ pub async fn conversations_for_label(
             formatdoc!(
                 "
                 JOIN conversation_labels
-                    ON conversations.local_id = conversation_labels.conversation_id
+                    ON conversations.local_id = conversation_labels.local_conversation_id
                 WHERE
-                    conversation_labels.label_id = ?
+                    conversation_labels.local_label_id = ?
                 "
             ),
             params![RealLocalId::from(label_id)],
