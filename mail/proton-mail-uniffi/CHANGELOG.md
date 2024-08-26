@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.11.19] - 2024-08-26
 
+### Added
+
+  - `Sidebar::all_custom_folders` method (return all custom folders in a flat way).
+
 ### Changed
 
   - Split `ContextualLabel` in `SidebarCustomFolder`, `SidebarCustomLabel` and `SidebarSystemLabel`.
@@ -28,7 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
   - `CustomFolder` struct (like `ContextualLabel` with a children field).
-  - `Sidebar::all_custom_folders` method (return all custom folders in a flat way).
 
 ### Fixed
 
