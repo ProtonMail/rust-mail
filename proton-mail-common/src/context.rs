@@ -10,7 +10,7 @@ use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::session::EncryptedUserSession;
 use proton_core_common::os::{KeyChain, KeyChainError};
-use proton_core_common::{Context, CoreContextError, KeyHandlingError};
+use proton_core_common::{ContactError, Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
@@ -50,6 +50,8 @@ pub enum MailContextError {
     Api(#[from] ApiServiceError),
     #[error("Cache Error: {0}")]
     CacheError(#[from] CacheError),
+    #[error("Problem with loading contact: {0}")]
+    ContactError(#[from] ContactError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -67,6 +69,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::PGPKeyAccess(err) => MailContextError::PGPKeyAccess(err),
             CoreContextError::Stash(err) => MailContextError::Stash(err),
             CoreContextError::CacheError(err) => MailContextError::CacheError(err),
+            CoreContextError::ContactError(err) => MailContextError::ContactError(err),
         }
     }
 }

@@ -48,20 +48,21 @@ use proton_api_core::services::proton::Config as RealApiConfig;
 use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
-    AddressType as RealAddressType, CardType as RealCardType,
-    ContactSendingPreferences as RealContactSendingPreferences, DateFormat as RealDateFormat,
-    Density as RealDensity, EarlyAccess as RealEarlyAccess, Email as RealEmail,
-    FidoKey as RealFidoKey, Flags as RealFlags, HighSecurity as RealHighSecurity, Id as RealId,
-    LocalId as RealLocalId, LogAuth as RealLogAuth, Password as RealPassword, Phone as RealPhone,
-    ProductUsedSpace as RealProductUsedSpace, Referral as RealReferral, RemoteId as RealRemoteId,
-    SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat,
-    TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
+    DateFormat as RealDateFormat, Density as RealDensity, EarlyAccess as RealEarlyAccess,
+    Email as RealEmail, FidoKey as RealFidoKey, Flags as RealFlags,
+    HighSecurity as RealHighSecurity, Id as RealId, LocalId as RealLocalId, LogAuth as RealLogAuth,
+    Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
+    Referral as RealReferral, RemoteId as RealRemoteId, SettingsFlags as RealSettingsFlags,
+    TfaStatus as RealTfaStatus, TimeFormat as RealTimeFormat, TwoFa as RealTwoFa,
+    UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
     WeekStart as RealWeekStart,
 };
 use proton_core_common::models::{
     Address as RealAddress, Contact as RealContact, ContactCard as RealContactCard,
     ContactEmail as RealContactEmail, User as RealUser, UserSettings as RealUserSettings,
 };
+use proton_crypto_account::contacts::ContactCardType as RealCardType;
 use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::AppError;
 use smart_default::SmartDefault;
