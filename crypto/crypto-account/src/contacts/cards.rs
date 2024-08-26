@@ -7,7 +7,7 @@ use proton_crypto::crypto::{
 };
 
 #[cfg(feature = "sql")]
-use proton_sqlite3::rusqlite::{
+use rusqlite::{
     types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, ValueRef},
     Error,
 };

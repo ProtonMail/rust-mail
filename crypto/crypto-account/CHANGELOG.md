@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added 
 
 - `RecipientPublicKeyModel`: Serves as an intermediary type that mirrors vCard content alongside public key information retrieved from the API. This model facilitates the creation of encryption and send preferences.
+  
+### Changed
+
+- Replace `proton-sql` with `rusqlite`.
 
 ## [0.6.0] - 2024-08-13
 

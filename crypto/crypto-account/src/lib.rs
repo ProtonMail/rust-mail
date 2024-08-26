@@ -42,15 +42,15 @@ macro_rules! string_id {
         }
 
         #[cfg(feature = "sql")]
-        impl proton_sqlite3::rusqlite::types::ToSql for $name {
-            fn to_sql(&self) -> Result<proton_sqlite3::rusqlite::types::ToSqlOutput, proton_sqlite3::rusqlite::Error> {
+        impl rusqlite::types::ToSql for $name {
+            fn to_sql(&self) -> Result<rusqlite::types::ToSqlOutput, rusqlite::Error> {
                 self.0.to_sql()
             }
         }
 
         #[cfg(feature = "sql")]
-        impl proton_sqlite3::rusqlite::types::FromSql for $name {
-            fn column_result(value: proton_sqlite3::rusqlite::types::ValueRef<'_>) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
+        impl rusqlite::types::FromSql for $name {
+            fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
                 Ok(Self(value.as_str()?.to_owned()))
             }
         }

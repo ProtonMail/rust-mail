@@ -15,12 +15,18 @@ serde_repr = "0.1"
 serde_json = "1"
 thiserror = { workspace = true }
 zeroize = { workspace = true }
+rusqlite = { version = "0.31.0", features = [
+    "bundled",
+    "chrono",
+    "functions",
+    "trace",
+    "uuid",
+], optional = true}
 
-proton-sqlite3 = {version = "0.6.0", registry = "proton", optional = true}
 
 [lints]
 workspace = true
 
 [features]
 default = []
-sql = ["dep:proton-sqlite3"]
+sql = ["dep:rusqlite"]
