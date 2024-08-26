@@ -488,24 +488,26 @@ where
     /// * [`Stash::query()`]
     /// * [`params!`](crate::utils::params)
     ///
-    async fn find_first<Q, A>(
+    fn find_first<Q, A>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         interface: &A,
-    ) -> Result<Option<Self>, StashError>
+    ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send
     where
         Q: Into<String> + Send,
         A: Into<AgnosticInterface> + Interface,
     {
-        Ok(perform_find(
-            format!("{} LIMIT 1", query_logic.into()),
-            params,
-            &interface.clone().into(),
-            None,
-        )
-        .await?
-        .into_iter()
-        .next())
+        async move {
+            Ok(perform_find(
+                format!("{} LIMIT 1", query_logic.into()),
+                params,
+                &interface.clone().into(),
+                None,
+            )
+            .await?
+            .into_iter()
+            .next())
+        }
     }
 
     /// Handles a change notification for a result set.
