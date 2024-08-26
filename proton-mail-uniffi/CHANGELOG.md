@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Fixed
+
+  - DB query error in `watch_conversation_for_label`.
+
 ## [0.11.17] - 2024-08-26
 
 ### Added
