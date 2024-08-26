@@ -223,6 +223,11 @@ pub struct Paginator<T: Model> {
     /// of the current frame.
     cursor_index: Arc<Mutex<u32>>,
 
+    /// The current row ID of the record at the cursor position in the result
+    /// set. This is used to detect positional changes.
+    #[allow(unused)]
+    cursor_row_id: Arc<Mutex<u32>>,
+
     /// The number of records per page. Assuming no changes to the result set,
     /// this will remain constant. However, if the data changes, the number for
     /// a particular page may vary.
@@ -303,6 +308,7 @@ impl<T: Model> Paginator<T> {
     {
         let paginator = Self {
             cursor_index: Arc::new(Mutex::new(0)),
+            cursor_row_id: Arc::new(Mutex::new(0)),
             page_size,
             params,
             query_logic: query_logic.into(),
@@ -364,8 +370,9 @@ impl<T: Model> Paginator<T> {
         let params = self.params.clone();
         let row_count = Arc::clone(&self.row_count);
         let cursor_index = Arc::clone(&self.cursor_index);
+        let cursor_row_id = Arc::clone(&self.cursor_index);
 
-        spawn(async move {
+        drop(spawn(async move {
             let changed_query = formatdoc!(
                 "
                     SELECT
@@ -382,7 +389,7 @@ impl<T: Model> Paginator<T> {
             );
             // For now this is blanket subscriber — this will be optimised later to
             // only listen for changes that are relevant to the current query.
-            if let Ok(mut receiver) = stash.subscribe().await {
+            if let Ok(receiver) = stash.subscribe().await {
                 loop {
                     match receiver.recv_async().await {
                         Ok(notification) => {
@@ -397,8 +404,11 @@ impl<T: Model> Paginator<T> {
                             {
                                 if let Err(e) = Self::handle_change(
                                     &change,
+                                    &query_logic,
+                                    params.clone(),
                                     &row_count,
                                     &cursor_index,
+                                    &cursor_row_id,
                                     &stash,
                                     &sender,
                                 )
@@ -416,7 +426,7 @@ impl<T: Model> Paginator<T> {
                     }
                 }
             }
-        });
+        }));
     }
 
     /// Handles a change in the result set.
@@ -426,35 +436,76 @@ impl<T: Model> Paginator<T> {
     ///
     /// # Parameters
     ///
-    /// * `change`       - The change that occurred in the result set.
-    /// * `row_count`    - The total number of records in the result set.
-    /// * `cursor_index` - The current cursor position in the result set.
-    /// * `stash`        - The [`Stash`] instance used for database operations.
-    /// * `sender`       - The sender for live updates.
+    /// * `change`        - The change that occurred in the result set.
+    /// * `query_logic`   - The query logic used for finding records.
+    /// * `params`        - The parameters used in the query.
+    /// * `row_count`     - The total number of records in the result set.
+    /// * `cursor_index`  - The current cursor position in the result set.
+    /// * `cursor_row_id` - The current row ID of the record at the cursor.
+    /// * `stash`         - The [`Stash`] instance used for database operations.
+    /// * `sender`        - The sender for live updates.
     ///
     async fn handle_change(
         change: &ResultsetChange<T, T::IdType>,
+        query_logic: &str,
+        params: Vec<Param>,
         row_count: &Arc<Mutex<u32>>,
         cursor_index: &Arc<Mutex<u32>>,
+        cursor_row_id: &Arc<Mutex<u32>>,
         stash: &Stash,
         sender: &flume::Sender<ResultsetChange<T, T::IdType>>,
     ) -> Result<(), StashError> {
-        let mut count = row_count.lock().await;
-        let mut cursor = cursor_index.lock().await;
+        let mut row_count = row_count.lock().await;
+        let mut cursor_index = cursor_index.lock().await;
+        let cursor_row_id = cursor_row_id.lock().await;
 
         match change {
-            ResultsetChange::Inserted(record) => {
-                // TODO: This needs to run the original query to get the position
-                let position: i64 = stash
-                    .query_value("TODO", vec![Box::new(record.id_value()?)])
-                    .await?;
+            ResultsetChange::Inserted(_) | ResultsetChange::Deleted(_) => {
+                // Re-run the query to check if the cursor position needs to change. This
+                // gets the first record at the offset of the cursor, and if doesn't have
+                // the same ID as the current cursor record, we need to adjust the cursor.
+                let cursor_record: Option<T> = T::find_first(
+                    &paging_query(
+                        T::table_name(),
+                        &query_logic,
+                        *cursor_index,
+                        NonZeroU32::new(1).unwrap(),
+                    ),
+                    convert_params(&params),
+                    &stash.clone(),
+                )
+                .await?;
 
-                Self::insert_record(position as u32, &mut count, &mut cursor);
+                match cursor_record {
+                    Some(record) => {
+                        if *cursor_row_id as u64 != record.row_id().unwrap() {
+                            // The change was made before the cursor position
+                            if let ResultsetChange::Inserted(_) = change {
+                                *cursor_index = cursor_index.saturating_add(1);
+                            } else if let ResultsetChange::Deleted(_) = change {
+                                *cursor_index = cursor_index.saturating_sub(1);
+                            }
+                        }
+                    }
+                    None => {
+                        // We've reached the end of the result set, meaning a deletion before the
+                        // cursor position
+                        if let ResultsetChange::Deleted(_) = change {
+                            *cursor_index = cursor_index.saturating_sub(1);
+                        }
+                    }
+                }
+
+                // Update the total count
+                if let ResultsetChange::Inserted(_) = change {
+                    *row_count = row_count.saturating_add(1);
+                } else if let ResultsetChange::Deleted(_) = change {
+                    *row_count = row_count.saturating_sub(1);
+                }
             }
-            ResultsetChange::Deleted(id) => {
-                Self::remove_record(id.clone(), &mut count, &mut cursor);
+            ResultsetChange::Updated(_) => {
+                // No change to cursor or count for updates
             }
-            ResultsetChange::Updated(_record) => {}
         }
 
         // Notify the client of the change
@@ -463,72 +514,6 @@ impl<T: Model> Paginator<T> {
             .map_err(|_| StashError::Custom("Failed to send update".into()))?;
 
         Ok(())
-    }
-
-    /// Updates the paginator's state when a record is inserted.
-    ///
-    /// This function adjusts the total count and cursor position based on the
-    /// position of the new record in the result set.
-    ///
-    /// # Behaviour
-    ///
-    ///   - Increments the total count.
-    ///   - Adjusts the cursor if the new record is inserted before it.
-    ///
-    /// # Ordering
-    ///
-    /// The order of records is maintained as per the original query's sorting
-    /// criteria.
-    ///
-    /// # Parameters
-    ///
-    /// * `row_index`    - The position of the record in the overall result set
-    ///                    (1-based index).
-    /// * `row_count`    - Mutable reference to the total count of records.
-    /// * `cursor_index` - Mutable reference to the cursor position.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return any errors, because there would be no way
-    /// to handle them in the context of a live update. Any errors are logged
-    /// and ignored.
-    ///
-    fn insert_record(row_index: u32, row_count: &mut u32, cursor_index: &mut u32) {
-        *row_count = row_count.saturating_add(1);
-
-        // Adjust cursor if the new/updated record is before it
-        if row_index <= *cursor_index {
-            *cursor_index = cursor_index.saturating_add(1);
-        }
-    }
-
-    /// Updates the paginator's state when a record is removed.
-    ///
-    /// This function adjusts the total count and cursor position when a record
-    /// is deleted from the result set.
-    ///
-    /// # Behaviour
-    ///
-    ///   - Decrements the total count of records.
-    ///   - Adjusts the cursor if the deleted record was before it in the result
-    ///     set.
-    ///
-    /// # Parameters
-    ///
-    /// * `id`         - The ID of the record to be removed.
-    /// * `row_count`  - Mutable reference to the total count of records.
-    /// * `cursor`     - Mutable reference to the cursor position.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::find()`].
-    ///
-    fn remove_record(_id: T::IdType, row_count: &mut u32, _cursor_index: &mut u32) {
-        *row_count = row_count.saturating_sub(1);
-
-        // TODO: Adjust cursor if the deleted record was before it. In order to
-        // TODO: do this, we need to keep track of the IDs we've shown to the
-        // TODO: client.
     }
 
     /// Retrieves the results of the current page.
