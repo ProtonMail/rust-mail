@@ -116,7 +116,7 @@ impl MailUserContext {
     ) -> MailContextResult<UnlockedUserKeys<Provider>> {
         let keys = self
             .user_context
-            .user_keys_unlocked(pgp_provider, self)
+            .unlocked_user_keys(pgp_provider, self)
             .await?;
         Ok(keys)
     }
@@ -132,7 +132,7 @@ impl MailUserContext {
         let secret_loader = CloneSecretLoader(self.session().expose_key_secret().await);
         let keys = self
             .user_context
-            .user_keys_unlocked(pgp_provider, &secret_loader)
+            .unlocked_user_keys(pgp_provider, &secret_loader)
             .await?;
         Ok(keys)
     }
@@ -152,7 +152,7 @@ impl MailUserContext {
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         let keys = self
             .user_context
-            .address_keys_unlocked(pgp_provider, self, address_id)
+            .unlocked_address_keys(pgp_provider, self, address_id)
             .await?;
         Ok(keys)
     }
@@ -170,7 +170,7 @@ impl MailUserContext {
         let secret = CloneSecretLoader(self.session().expose_key_secret().await);
         let keys = self
             .user_context
-            .address_keys_unlocked(pgp_provider, &secret, address_id)
+            .unlocked_address_keys(pgp_provider, &secret, address_id)
             .await?;
         Ok(keys)
     }

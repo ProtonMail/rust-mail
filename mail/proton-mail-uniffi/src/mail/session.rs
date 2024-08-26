@@ -10,6 +10,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
 use proton_core_common::db::session::SessionEncryptionKey;
+use proton_core_common::ContactError;
 use proton_event_loop::EventLoopError;
 use proton_mail_common::actions::ActionError;
 use proton_mail_common::db::DBMigrationError;
@@ -65,6 +66,8 @@ pub enum MailSessionError {
     Api(#[from] ApiServiceError),
     #[error("Cache Error: {0}")]
     CacheError(#[from] CacheError),
+    #[error("Problem with loading contact: {0}")]
+    ContactError(#[from] ContactError),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -274,6 +277,7 @@ impl From<MailContextError> for MailSessionError {
             MailContextError::Stash(e) => Self::Stash(e),
             MailContextError::Api(e) => Self::Api(e),
             MailContextError::CacheError(e) => Self::CacheError(e),
+            MailContextError::ContactError(e) => Self::ContactError(e),
             MailContextError::Other(err) => Self::Other(err),
         }
     }
