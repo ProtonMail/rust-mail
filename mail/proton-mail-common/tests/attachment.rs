@@ -54,7 +54,7 @@ async fn test_load_attachment_buffer() {
 
     // Load and decrypt attachment.
     let decryption_result = mailbox
-        .load_attachment_to_buffer(attachment_local_id)
+        .get_attachment(attachment_local_id)
         .await
         .expect("decryption should not fail");
     assert_eq!(
@@ -64,7 +64,7 @@ async fn test_load_attachment_buffer() {
     );
     assert_eq!(user_context.attachements_cache().len(), 1);
     mailbox
-        .load_attachment_to_buffer(attachment_local_id)
+        .get_attachment(attachment_local_id)
         .await
         .expect("decryption should not fail");
     assert_eq!(user_context.attachements_cache().len(), 1);
@@ -112,7 +112,7 @@ async fn load_attachment_from_cache() {
 
     // Load and decrypt attachment.
     let decryption_result = mailbox
-        .load_attachment_to_buffer(attachment_local_id)
+        .get_attachment(attachment_local_id)
         .await
         .expect("decryption should not fail");
     assert_eq!(
