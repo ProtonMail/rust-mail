@@ -13,7 +13,7 @@ use std::io::Read;
 use std::path::PathBuf;
 use tracing::error;
 
-/// A decrypted attachment returned by [`Mailbox::load_attachment_to_buffer`].
+/// A decrypted attachment returned by [`Mailbox::get_attachment`].
 #[derive(Debug)]
 pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
@@ -31,20 +31,26 @@ pub struct DecryptedAttachment {
 }
 
 impl Mailbox {
-    /// Loads the plaintext attachment for the given local [`attachment_id`] into a buffer.
+    /// Loads the metadata and file path for the given local [`attachment_id`]
+    /// into a [`DecryptedAttachment`].
     ///
-    /// First loads the encrypted attachment, and then decrypts it into the returned buffer with
-    /// the user's address keys.
-    /// Additionally, attempts to verify any attached signatures with the sender's keys. The result can be accessed via
-    /// the [`VerificationResult`] result return type.
+    /// If the attachment is not present on the device it is retrieved from
+    /// the server, decrypted and stored in the cache.
+    ///
+    /// Additionally, attempts to verify any attached signatures with the
+    /// sender's keys. The result can be accessed via the [`VerificationResult`]
+    /// result return type.
     ///
     /// # Warning
-    /// Signature verification is currently always failing since no sender keys are fetched yet.
+    ///
+    /// Signature verification is currently always failing since no sender keys
+    /// are fetched yet.
     ///
     /// # Errors
+    ///
     /// Returns an error if the encrypted attachment fetching or decryption fails.
     /// Signature verification failures are not returned as errors.
-    pub async fn load_attachment_to_buffer(
+    pub async fn get_attachment(
         &self,
         attachment_id: LocalId,
     ) -> MailboxResult<DecryptedAttachment> {

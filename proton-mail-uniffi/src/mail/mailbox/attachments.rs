@@ -3,7 +3,7 @@ use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::{Mailbox, MailboxError};
 use crate::uniffi_async;
 
-/// Returned by [`Mailbox::load_attachment_to_buffer`].
+/// Returned by [`Mailbox::get_attachment`].
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
@@ -26,26 +26,32 @@ impl From<proton_mail_common::DecryptedAttachment> for DecryptedAttachment {
 
 #[uniffi::export]
 impl Mailbox {
-    /// Loads the plaintext attachment with the given local attachment identifier into the buffer.
+    /// Loads the metadata and file path for the given local [`attachment_id`]
+    /// into a [`DecryptedAttachment`].
     ///
-    /// Internally loads the encrypted attachment, decrypts it using the user's matching address keys,
-    /// and writes the data into the buffer.
-    /// Additionally, attempts to verify any attached signatures with the sender's keys. The result can be accessed via
-    /// the `verification_result` field in the [`AttachmentBufferResult`] result type.
+    /// If the attachment is not present on the device it is retrieved from
+    /// the server, decrypted and stored in the cache.
+    ///
+    /// Additionally, attempts to verify any attached signatures with the
+    /// sender's keys. The result can be accessed via the [`VerificationResult`]
+    /// result return type.
     ///
     /// # Warning
-    /// Signature verification is currently always failing since no sender keys are fetched yet.
+    ///
+    /// Signature verification is currently always failing since no sender keys
+    /// are fetched yet.
     ///
     /// # Errors
-    /// Returns errors if the retrieval or decryption of the attachment fails.
+    ///
+    /// Returns an error if the encrypted attachment fetching or decryption fails.
     /// Signature verification failures are not returned as errors.
-    pub async fn load_attachment_to_buffer(
+    pub async fn get_attachment(
         &self,
         local_attachment_id: Id,
     ) -> Result<DecryptedAttachment, MailboxError> {
         let mbox = self.mbox.clone();
         uniffi_async(async move {
-            mbox.load_attachment_to_buffer(local_attachment_id.into())
+            mbox.get_attachment(local_attachment_id.into())
                 .await
                 .map(Into::into)
                 .map_err(MailboxError::from)
