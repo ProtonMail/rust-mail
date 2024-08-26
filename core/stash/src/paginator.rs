@@ -136,31 +136,6 @@
 //!   9. [`has_previous_page()`](Paginator::has_previous_page()):
 //!      Check if there's a previous page available.
 //!
-//! # Example
-//!
-//! ```ignore
-//! use stash::stash::{Stash, StashError};
-//! use stash::orm::{Model, ResultsetChange};
-//! use stash::paginator::PageControl;
-//!
-//! #[derive(Model)]
-//! struct Email { /* ... */ }
-//!
-//! async fn example(stash: &Stash) -> Result<(), StashError> {
-//!     let (sender, receiver) = flume::unbounded::<ResultsetChange<Email, u64>>();
-//!     let mut paginator = Email::find(&stash, "ORDER BY date DESC", vec![], PageControl{
-//!         page_number: 1,
-//!         page_size: 15,
-//!     }).await?;
-//!     
-//!     let first_page = paginator.current_page().await?;
-//!     println!("First page: {:?}", first_page);
-//!     
-//!     let next_page = paginator.next_page().await?;
-//!     println!("Second page: {:?}", next_page);
-//! }
-//! ```
-//!
 
 use crate::orm::{perform_find, Model, ResultsetChange};
 use crate::stash::{AgnosticInterface, Interface, Stash, StashError};
