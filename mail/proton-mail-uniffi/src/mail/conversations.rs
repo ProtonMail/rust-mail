@@ -251,11 +251,7 @@ pub async fn mark_conversations_as_read(
 ) -> Result<(), MailboxError> {
     let tether = session.user_stash().connection();
     uniffi_async(async move {
-        Ok(RealConversation::mark_multiple_as_read(
-            ids.into_iter().map(Into::into).collect(),
-            &tether,
-        )
-        .await?)
+        Ok(RealConversation::mark_read(ids.into_iter().map(Into::into), &tether).await?)
     })
     .await
 }
@@ -264,7 +260,7 @@ pub async fn mark_conversations_as_read(
 ///
 /// # Parameters
 ///
-/// * `session` - The session to use for the request.
+/// * `mailbox` - The mailbox to use for the request.
 /// * `ids`     - The local IDs of the conversations to mark as unread.
 ///
 /// # Errors
@@ -273,16 +269,13 @@ pub async fn mark_conversations_as_read(
 ///
 #[uniffi::export]
 pub async fn mark_conversations_as_unread(
-    session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
 ) -> Result<(), MailboxError> {
-    let conn = session.user_stash().connection();
+    let conn = mailbox.stash().connection();
+    let label_id = mailbox.mbox().label_id();
     uniffi_async(async move {
-        Ok(RealConversation::mark_multiple_as_unread(
-            ids.into_iter().map(Into::into).collect(),
-            &conn,
-        )
-        .await?)
+        Ok(RealConversation::mark_unread(label_id, ids.into_iter().map(Into::into), &conn).await?)
     })
     .await
 }

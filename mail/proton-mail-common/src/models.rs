@@ -86,6 +86,7 @@ use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::btree_map::Entry;
+use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
 use tracing::{debug, error};
@@ -1299,16 +1300,96 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_multiple_as_read(
-        ids: Vec<LocalId>,
-        stash: &Tether,
-    ) -> Result<(), StashError> {
+    pub async fn mark_read<A>(
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         for id in ids {
-            if let Some(mut conv) = Conversation::load(id, stash).await? {
-                conv.num_unread = 0;
-                conv.save().await?;
+            let mut conversation = Conversation::find_by_id(id, interface)
+                .await?
+                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+            // If conversation has no unread messages, there is nothing to do.
+            if conversation.num_unread == 0 {
+                continue;
+            }
+
+            // Update conversation unread count.
+            conversation.num_unread = 0;
+            conversation.save_using(interface).await?;
+
+            // Update conversation labels unread stats.
+            let conversation_labels = ConversationLabel::find(
+                "WHERE local_conversation_id=? AND context_num_unread <> 0",
+                params![id],
+                interface,
+                None,
+            )
+            .await?;
+
+            let mut label_counts = HashMap::new();
+            for mut conversation_label in conversation_labels {
+                match label_counts.entry(conversation_label.local_label_id.unwrap()) {
+                    HmEntry::Occupied(mut o) => {
+                        *o.get_mut() += 1;
+                    }
+                    HmEntry::Vacant(v) => {
+                        v.insert(1);
+                    }
+                }
+
+                conversation_label.context_num_unread = 0;
+                conversation_label.save_using(interface).await?
+            }
+
+            for (label_id, count) in &mut label_counts {
+                if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
+                    label.unread_conv -= *count;
+                    label.save_using(interface).await?
+                }
+
+                // reset for messages.
+                *count = 0;
+            }
+
+            // Update messages
+            let messages = Message::find(
+                "WHERE local_conversation_id=? AND unread<>0",
+                params![id],
+                interface,
+                None,
+            )
+            .await?;
+
+            for mut message in messages {
+                let local_message_id = message.local_id.unwrap();
+                message.unread = false;
+                message.save_using(interface).await?;
+
+                let label_ids = interface.query_values::<_, LocalId>("SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?", params![local_message_id]).await?;
+                for label_id in label_ids {
+                    match label_counts.entry(label_id) {
+                        HmEntry::Occupied(mut o) => {
+                            *o.get_mut() += 1;
+                        }
+                        HmEntry::Vacant(v) => {
+                            v.insert(1);
+                        }
+                    }
+                }
+            }
+
+            // update message label counters
+            for (label_id, count) in &mut label_counts {
+                if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
+                    label.unread_msg -= *count;
+                    label.save_using(interface).await?
+                }
             }
         }
+
         Ok(())
     }
 
@@ -1336,24 +1417,117 @@ impl Conversation {
     ///
     /// # Parameters
     ///
-    /// * `ids`    - The IDs of the conversations to mark as unread.
-    /// * `tether` - The tether to use for the database connection.
+    /// * `local_label_id`  - Label id where the operation is being applied.
+    /// * `ids`             - The IDs of the conversations to mark as unread.
+    /// * `tether`          - The tether to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_multiple_as_unread(
-        ids: Vec<LocalId>,
+    pub async fn mark_unread(
+        local_label_id: LocalId,
+        ids: impl IntoIterator<Item = LocalId>,
         tether: &Tether,
     ) -> Result<(), StashError> {
-        // TODO: This is simplified, and will be updated when these operations are
-        // TODO: refactored
         for id in ids {
-            if let Some(mut conv) = Conversation::load(id, tether).await? {
-                conv.num_unread = 1;
-                conv.save().await?;
+            let Some(mut conversation) = Conversation::find_by_id(id, tether).await? else {
+                continue;
+            };
+            // Find all messages that need to be marked as read.
+            let mut messages = Message::find(
+                "WHERE local_conversation_id=? AND unread=0",
+                params![id],
+                tether,
+                None,
+            )
+            .await?;
+
+            let total_conversation_message_count = tether
+                .query_value::<_, u64>(
+                    "SELECT COUNT(local_id) AS value FROM messages WHERE local_conversation_id=?",
+                    params![id],
+                )
+                .await?;
+
+            if messages.is_empty() {
+                if total_conversation_message_count == 0 {
+                    // These conversations where asked to be marked as read, but had
+                    // no messages. Either the messages were already mark as read or
+                    // there was no metadata. For these we need to set the unread
+                    // count to 1 and update the current label count. We let the
+                    // event loop take care of the rest.
+
+                    let conv_labels = ConversationLabel::find(
+                        "WHERE local_conversation_id=? AND local_label_id=?",
+                        params![id, local_label_id],
+                        tether,
+                        None,
+                    )
+                    .await?;
+                    for mut conv_label in conv_labels {
+                        conv_label.context_num_unread += 1;
+                        conv_label.save_using(tether).await?;
+                    }
+
+                    conversation.num_unread += 1;
+                    conversation.save_using(tether).await?;
+
+                    if let Some(mut label) = Label::find_by_id(local_label_id, tether).await? {
+                        label.unread_conv += 1;
+                        label.save_using(tether).await?;
+                    }
+                }
+                continue;
             }
+
+            let mut label_unread_counts = HashMap::new();
+            for message in &mut messages {
+                message.unread = true;
+                message.save_using(tether).await?;
+
+                let label_ids = tether.query_values::<_, LocalId>("SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?", params![message.local_id.unwrap()]).await?;
+                for label_id in label_ids {
+                    match label_unread_counts.entry(label_id) {
+                        HmEntry::Occupied(mut o) => {
+                            *o.get_mut() += 1_u64;
+                        }
+                        HmEntry::Vacant(v) => {
+                            v.insert(1_u64);
+                        }
+                    }
+                }
+            }
+
+            // update label counts
+            for (label_id, num_unread) in label_unread_counts {
+                if let Some(mut label) = Label::find_by_id(label_id, tether).await? {
+                    label.unread_msg += num_unread;
+                    // only update conversation unread count if we really marked
+                    // all messages as unread. If we have mixture, this value
+                    // should not be modified
+                    if total_conversation_message_count == messages.len() as u64 {
+                        label.unread_conv += 1;
+                    }
+
+                    label.save_using(tether).await?;
+                }
+
+                if let Some(mut conv_label) = ConversationLabel::find_first(
+                    "WHERE local_label_id=?",
+                    params![label_id],
+                    tether,
+                )
+                .await?
+                {
+                    conv_label.context_num_unread += num_unread;
+                    conv_label.save_using(tether).await?;
+                }
+            }
+
+            // update conversations
+            conversation.num_unread += messages.len() as u64;
+            conversation.save_using(tether).await?;
         }
         Ok(())
     }
@@ -1781,7 +1955,7 @@ impl Conversation {
 
         // If moving to trash, mark conversations as read.
         if remote_destination_id == LabelId::trash() {
-            Conversation::mark_multiple_as_read(ids.clone(), tx)
+            Conversation::mark_read(ids.clone(), tx)
                 .await
                 .map_err(|e| {
                     error!("Failed to mark conversations as read when moving to trash: {e}");
