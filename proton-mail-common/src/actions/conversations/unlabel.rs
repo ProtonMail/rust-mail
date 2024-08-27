@@ -43,8 +43,7 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
-        Conversation::remove_label_from_multiple(action.0.label_id, action.0.ids.clone(), tx)
-            .await?;
+        Conversation::remove_label(action.0.label_id, action.0.ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -53,7 +52,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::apply_label_to_multiple(action.0.label_id, action.0.ids.clone(), tx).await?;
+        Conversation::apply_label(action.0.label_id, action.0.ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -79,7 +78,7 @@ impl proton_action_queue::action::Handler for Handler {
             let local_ids =
                 RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
 
-            Conversation::apply_label_to_multiple(action.0.label_id, local_ids, &tx)
+            Conversation::apply_label(action.0.label_id, local_ids, &tx)
                 .await
                 .map_err(|e| {
                     error!("Failed to rollback failed conversations: {e}");
