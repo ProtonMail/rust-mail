@@ -2,7 +2,8 @@
 
 use super::super::*;
 use crate::datatypes::{
-    ConversationCount, LabelColor, LabelType, MessageAddress, MessageFlags, SystemLabelId,
+    ContextualConversation, ConversationCount, LabelColor, LabelType, MessageAddress, MessageFlags,
+    SystemLabelId,
 };
 use crate::db::new_test_connection_file;
 use crate::label;
@@ -451,7 +452,7 @@ mod available_actions {
             let ids = vec![conversation.local_id.unwrap()];
 
             for label_id in label_ids {
-                Conversation::apply_label_to_multiple(label_id, ids.clone(), &tx)
+                Conversation::apply_label(label_id, ids.clone(), &tx)
                     .await
                     .unwrap();
             }
@@ -1736,7 +1737,6 @@ async fn test_conversation_mark_unread() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_label_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation.
     let (stash, _db_dir) = new_test_connection_file().await;
@@ -1750,11 +1750,11 @@ async fn test_conversation_label_with_message_metadata() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
 
-    let db_conversation = Conversation::load(local_conv_id, tx.stash())
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1793,7 +1793,6 @@ async fn test_conversation_label_with_message_metadata() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_double_label_with_message_metadata() {
     // Label conversation with a label that was never assigned to the conversation twice and check
     // the changes are not duplicated.
@@ -1808,14 +1807,14 @@ async fn test_conversation_double_label_with_message_metadata() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
 
-    let db_conversation = Conversation::load(local_conv_id, tx.stash())
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1854,7 +1853,6 @@ async fn test_conversation_double_label_with_message_metadata() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_label_partially() {
     // Label conversation with a label where one of the messages already has been labeled
     let (stash, _db_dir) = new_test_connection_file().await;
@@ -1887,11 +1885,11 @@ async fn test_conversation_label_partially() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
 
-    let db_conversation = Conversation::load(local_conv_id, tx.stash())
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1930,7 +1928,6 @@ async fn test_conversation_label_partially() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_label_without_message_metadata() {
     // Label a conversation with a label that was never assigned without having any message metadata
     // present.
@@ -1945,11 +1942,11 @@ async fn test_conversation_label_without_message_metadata() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
 
-    let db_conversation = Conversation::load(local_conv_id, tx.stash())
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1959,7 +1956,9 @@ async fn test_conversation_label_without_message_metadata() {
     assert_eq!(db_conversation.num_messages, 0);
     assert_eq!(db_conversation.num_attachments, 0);
     assert_eq!(db_conversation.size, 0);
+    assert_eq!(db_conversation.time, 0);
     assert_eq!(db_conversation.expiration_time, 0);
+    assert_eq!(db_conversation.snooze_time, 0);
 
     // Check conversation counts have the new conversation.
     {
@@ -1974,7 +1973,6 @@ async fn test_conversation_label_without_message_metadata() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_double_label_without_message_metadata() {
     // Label a conversation with a label that was never assigned without having any message metadata
     // present 2 times and check the data is not duplicated.
@@ -1989,14 +1987,14 @@ async fn test_conversation_double_label_without_message_metadata() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
 
-    let db_conversation = Conversation::load(local_conv_id, tx.stash())
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2006,7 +2004,9 @@ async fn test_conversation_double_label_without_message_metadata() {
     assert_eq!(db_conversation.num_messages, 0);
     assert_eq!(db_conversation.num_attachments, 0);
     assert_eq!(db_conversation.size, 0);
+    assert_eq!(db_conversation.time, 0);
     assert_eq!(db_conversation.expiration_time, 0);
+    assert_eq!(db_conversation.snooze_time, 0);
 
     // Check conversation counts have the new conversation.
     {
@@ -2021,7 +2021,6 @@ async fn test_conversation_double_label_without_message_metadata() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_label_without_metadata_uses_information_from_other_labels() {
     // Check that when we label a conversation without message metadata, we
     // grab the maximum value of the other labels this conversation belongs to.
@@ -2038,11 +2037,11 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
 
-    let db_conversation = Conversation::load(local_conv_id, tx.stash())
+    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2090,12 +2089,19 @@ async fn test_conversation_unlabel_with_message_metadata() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    Conversation::remove_label_from_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::remove_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to unlabel");
+
+    assert!(
+        ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+            .await
+            .expect("failed to get conversation")
+            .is_none()
+    );
 
     // Check conversation counts should be 0
     {
@@ -2129,12 +2135,19 @@ async fn test_conversation_unlabel_without_message_metadata() {
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
-    Conversation::apply_label_to_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
-    Conversation::remove_label_from_multiple(local_label_id1, vec![local_conv_id], &tx)
+    Conversation::remove_label(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to label");
+
+    assert!(
+        ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+            .await
+            .expect("failed to get conversation")
+            .is_none()
+    );
 
     // Check conversation counts should be 0
     {

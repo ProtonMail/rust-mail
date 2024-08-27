@@ -47,12 +47,10 @@ pub async fn apply_label_to_conversations(
 ) -> Result<(), MailboxError> {
     let conn = session.user_stash().connection();
     uniffi_async(async move {
-        Ok(RealConversation::apply_label_to_multiple(
-            label_id.into(),
-            ids.into_iter().map(Into::into).collect(),
-            &conn,
+        Ok(
+            RealConversation::apply_label(label_id.into(), ids.into_iter().map(Into::into), &conn)
+                .await?,
         )
-        .await?)
     })
     .await
 }
@@ -335,12 +333,10 @@ pub async fn remove_label_from_conversations(
 ) -> Result<(), MailboxError> {
     let conn = session.user_stash().connection();
     uniffi_async(async move {
-        Ok(RealConversation::remove_label_from_multiple(
-            label_id.into(),
-            ids.into_iter().map(Into::into).collect(),
-            &conn,
+        Ok(
+            RealConversation::remove_label(label_id.into(), ids.into_iter().map(Into::into), &conn)
+                .await?,
         )
-        .await?)
     })
     .await
 }

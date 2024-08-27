@@ -90,7 +90,7 @@ impl proton_action_queue::action::Handler for Handler {
             let local_ids =
                 RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
 
-            Conversation::remove_label_from_multiple(action.0.label_id, local_ids, &tx)
+            Conversation::remove_label(action.0.label_id, local_ids, &tx)
                 .await
                 .map_err(|e| {
                     error!("Failed to rollback failed conversations: {e}");
