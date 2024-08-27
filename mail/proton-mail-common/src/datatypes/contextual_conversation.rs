@@ -117,7 +117,7 @@ impl ContextualConversation {
     /// # Errors
     ///
     /// Returns error if conversation could not be loaded from the database.
-    pub async fn with_id<A>(
+    pub async fn load<A>(
         local_conversation_id: LocalId,
         local_label_id: LocalId,
         interface: &A,

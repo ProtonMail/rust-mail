@@ -1492,7 +1492,7 @@ async fn label_messages() {
         .await
         .expect("failed to label");
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .unwrap();
@@ -1529,11 +1529,10 @@ async fn label_messages() {
         let state = &state;
         async move {
             // Check conversation after all messages have been labeled.
-            let db_conversation =
-                ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
-                    .await
-                    .expect("failed to get conversation")
-                    .unwrap();
+            let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
+                .await
+                .expect("failed to get conversation")
+                .unwrap();
             assert_eq!(db_conversation.num_unread, 1);
             assert_eq!(db_conversation.num_messages, 3);
             assert_eq!(db_conversation.num_attachments, 1);
@@ -1637,7 +1636,7 @@ async fn unlabel_messages() {
 
     let remote_msg_id1 = state.messages[0].remote_id.clone().unwrap();
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .unwrap();
@@ -1699,7 +1698,7 @@ async fn unlabel_messages() {
         async move {
             // Conversation should no longer have the label
             assert!(
-                ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+                ContextualConversation::load(local_conv_id, local_label_id1, &tx)
                     .await
                     .expect("failed to get conversation")
                     .is_none()

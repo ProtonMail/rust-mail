@@ -1754,7 +1754,7 @@ async fn test_conversation_label_with_message_metadata() {
         .await
         .expect("failed to label");
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1814,7 +1814,7 @@ async fn test_conversation_double_label_with_message_metadata() {
         .await
         .expect("failed to label");
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1889,7 +1889,7 @@ async fn test_conversation_label_partially() {
         .await
         .expect("failed to label");
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1946,7 +1946,7 @@ async fn test_conversation_label_without_message_metadata() {
         .await
         .expect("failed to label");
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1994,7 +1994,7 @@ async fn test_conversation_double_label_without_message_metadata() {
         .await
         .expect("failed to label");
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2041,7 +2041,7 @@ async fn test_conversation_label_without_metadata_uses_information_from_other_la
         .await
         .expect("failed to label");
 
-    let db_conversation = ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -2097,7 +2097,7 @@ async fn test_conversation_unlabel_with_message_metadata() {
         .expect("failed to unlabel");
 
     assert!(
-        ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+        ContextualConversation::load(local_conv_id, local_label_id1, &tx)
             .await
             .expect("failed to get conversation")
             .is_none()
@@ -2143,7 +2143,7 @@ async fn test_conversation_unlabel_without_message_metadata() {
         .expect("failed to label");
 
     assert!(
-        ContextualConversation::with_id(local_conv_id, local_label_id1, &tx)
+        ContextualConversation::load(local_conv_id, local_label_id1, &tx)
             .await
             .expect("failed to get conversation")
             .is_none()
