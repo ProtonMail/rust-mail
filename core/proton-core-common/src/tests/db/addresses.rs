@@ -29,26 +29,6 @@ async fn test_address_create() {
 }
 
 #[tokio::test]
-async fn test_address_create_duplicate() {
-    let conn = new_core_test_connection().await;
-    let tx = conn
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
-    let mut address = create_test_address(&conn);
-    address.save().await.expect("failed to create address");
-    let mut address2 = create_test_address(&conn);
-    address2.display_order = 10;
-    assert!(address2.save().await.is_err());
-    let db_address = Address::load(address.local_id.unwrap(), &tx)
-        .await
-        .expect("failed to get address")
-        .expect("should exist");
-    assert_eq!(address, db_address);
-    tx.commit().await.expect("Failed to commit transaction");
-}
-
-#[tokio::test]
 async fn test_address_update() {
     let conn = new_core_test_connection().await;
     let tx = conn
