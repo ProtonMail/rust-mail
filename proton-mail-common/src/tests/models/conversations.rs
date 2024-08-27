@@ -37,8 +37,8 @@ mod first_unread_message {
 
     lazy_static! {
         static ref STARRED: Label = new_label(LabelType::System, Some(LabelId::starred().clone()));
-        static ref LABEL: Label = new_label(LabelType::Label, None);
-        static ref FOLDER: Label = new_label(LabelType::Folder, None);
+        static ref LABEL: Label = new_label(LabelType::Label, Some("label".into()));
+        static ref FOLDER: Label = new_label(LabelType::Folder, Some("folder".into()));
         static ref INBOX: Label = new_label(LabelType::System, Some(LabelId::inbox().clone()));
         static ref DRAFTS: Label = new_label(LabelType::System, Some(LabelId::drafts().clone())); // There is no conversations in drafts - this is theoretical case
         static ref ALL_LABELS: Vec<&'static Label> =
@@ -52,180 +52,201 @@ mod first_unread_message {
     &ALL_LABELS, &[], None; "TEST1 - empty messages"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED, false),], Some(0.into()); "TEST2 - read - recieved message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, false, &ALL_LABELS),], Some(0.into()); "TEST2 - read - recieved message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::empty(), false),], None; "TEST3 - read - draft message"
+    &ALL_LABELS, &[(MessageFlags::empty(), false, &ALL_LABELS),], None; "TEST3 - read - draft message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::OPENED, false),], None; "TEST4 - read - draft & opened message"
+    &ALL_LABELS, &[(MessageFlags::OPENED, false, &ALL_LABELS),], None; "TEST4 - read - draft & opened message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::OPENED, true),], None; "TEST5 - unread - draft & opened message"
+    &ALL_LABELS, &[(MessageFlags::OPENED, true, &ALL_LABELS),], None; "TEST5 - unread - draft & opened message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true),], Some(0.into()); "TEST6 - unread - recieved & opened message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true, &ALL_LABELS),], Some(0.into()); "TEST6 - unread - recieved & opened message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED, true),], Some(0.into()); "TEST7 - unread - recieved message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, true, &ALL_LABELS),], Some(0.into()); "TEST7 - unread - recieved message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),], Some(0.into()); "TEST8 - unread - recieved & internal message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true, &ALL_LABELS),], Some(0.into()); "TEST8 - unread - recieved & internal message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::SENT | MessageFlags::INTERNAL, true),], Some(0.into()); "TEST9 - unread - opened & internal message"
+    &ALL_LABELS, &[(MessageFlags::SENT | MessageFlags::INTERNAL, true, &ALL_LABELS),], Some(0.into()); "TEST9 - unread - opened & internal message"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED | MessageFlags::INTERNAL | MessageFlags::OPENED, true),
-        (MessageFlags::RECEIVED | MessageFlags::INTERNAL, true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED | MessageFlags::INTERNAL | MessageFlags::OPENED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED | MessageFlags::INTERNAL, true, &ALL_LABELS),
 
     ], Some(2.into()); "TEST10 - all unread - recieved | internal | opened messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
 
     ], Some(0.into()); "TEST11 - all unread - recieved | draft messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::empty(), false),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::empty(), false, &ALL_LABELS),
 
     ], Some(0.into()); "TEST12 - some unread - recieved | draft messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::SENT, true),
-        (MessageFlags::SENT, true),
-        (MessageFlags::empty(), false),
+        (MessageFlags::SENT, true, &ALL_LABELS),
+        (MessageFlags::SENT, true, &ALL_LABELS),
+        (MessageFlags::empty(), false, &ALL_LABELS),
 
     ], Some(0.into()); "TEST13 - some unread - sent | draft messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::SENT | MessageFlags::RECEIVED, true),
-        (MessageFlags::SENT | MessageFlags::RECEIVED, true),
-        (MessageFlags::empty(), false),
+        (MessageFlags::SENT | MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::SENT | MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::empty(), false, &ALL_LABELS),
 
     ], Some(0.into()); "TEST14 - some unread - sent & received | draft messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::empty(), true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
 
     ], Some(3.into()); "TEST15 - all unread - received | draft messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
     ], Some(2.into()); "TEST16 - first_unread_conversation_message_in_starred_or_custom_label_or_folder"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::empty(), true),
-        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
     ], Some(3.into()); "TEST17 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
     ], Some(2.into()); "TEST18 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
     ], Some(0.into()); "TEST19 - first_unread_conversation_message_in_starred_or_custom_label_or_folder_non_consecutive_with_draft"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
     ], Some(2.into()); "TEST20 - first_unread_conversation_message_default_last_consecutive_unread"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::empty(), true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
     ], Some(2.into()); "TEST21 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::SENT | MessageFlags::AUTO, true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::SENT | MessageFlags::AUTO, true, &ALL_LABELS),
     ], Some(2.into()); "TEST22 - first_unread_conversation_message_default_last_consecutive_unread_if_last_is_draft_or_auto_send"
 )]
     #[test_case(
     &MOVED_CONV_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::SENT | MessageFlags::AUTO, true),
-        (MessageFlags::empty(), true),
-        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::SENT | MessageFlags::AUTO, true, &ALL_LABELS),
+        (MessageFlags::empty(), true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
     ], Some(2.into()); "TEST23A - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
 )]
     #[test_case(
     &INBOX_AND_DRAFTS_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::SENT | MessageFlags::AUTO, true),
-        (MessageFlags::empty(), true),
-        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, true, &INBOX_AND_DRAFTS_LABELS),
+        (MessageFlags::RECEIVED, false, &INBOX_AND_DRAFTS_LABELS),
+        (MessageFlags::SENT | MessageFlags::AUTO, true, &INBOX_AND_DRAFTS_LABELS),
+        (MessageFlags::empty(), true, &INBOX_AND_DRAFTS_LABELS),
+        (MessageFlags::RECEIVED, false, &INBOX_AND_DRAFTS_LABELS),
     ], Some(0.into()); "TEST23B - first_unread_conversation_message_default_last_nonconsecutive_not_draft_or_auto_send"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
-        (MessageFlags::RECEIVED, true),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
+        (MessageFlags::RECEIVED, true, &ALL_LABELS),
     ], Some(0.into()); "TEST24 - oldest_unread_message_selected_in_unread_chain"
 )]
     #[test_case(
     &ALL_LABELS, &[
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED, false),
-        (MessageFlags::RECEIVED, false),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
+        (MessageFlags::RECEIVED, false, &ALL_LABELS),
     ], Some(2.into()); "TEST25 - all read"
 )]
-    fn find_conversation_message_id(
+    #[test_case(
+    &[&INBOX], &[
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+        (MessageFlags::RECEIVED, false, &[&FOLDER]),
+    ], Some(1.into()); "TEST26 - different view labels"
+)]
+    #[test_case(
+    &[&INBOX], &[
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+        (MessageFlags::RECEIVED, false, &[&FOLDER]),
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+    ], Some(2.into()); "TEST27 - different view labels"
+)]
+    #[test_case(
+    &[&INBOX], &[
+        (MessageFlags::RECEIVED, false, &[&FOLDER]),
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+    ], Some(2.into()); "TEST28 - different view labels"
+)]
+    fn first_unread_message(
         labels: &[&Label],
-        messages: &[(MessageFlags, bool)],
+        messages: &[(MessageFlags, bool, &[&Label])],
         expected_id: Option<LocalId>,
     ) {
         let messages = messages
             .iter()
             .enumerate()
-            .map(|(id, (flags, unread))| {
-                message_metadata_with_flags((id as u64).into(), *flags, *unread)
+            .map(|(id, (flags, unread, labels))| {
+                message_metadata_with_flags((id as u64).into(), *flags, *unread, *labels)
             })
             .collect::<Vec<_>>();
 
@@ -240,7 +261,17 @@ mod first_unread_message {
         }
     }
 
-    fn message_metadata_with_flags(id: LocalId, flags: MessageFlags, unread: bool) -> Message {
+    fn message_metadata_with_flags(
+        id: LocalId,
+        flags: MessageFlags,
+        unread: bool,
+        labels: &[&Label],
+    ) -> Message {
+        let label_ids = labels
+            .iter()
+            .map(|label| label.remote_id.clone().unwrap())
+            .collect();
+
         Message {
             local_id: Some(id),
             unread,
@@ -253,6 +284,7 @@ mod first_unread_message {
                 name: String::new(),
             },
             flags,
+            label_ids,
             ..Default::default()
         }
     }

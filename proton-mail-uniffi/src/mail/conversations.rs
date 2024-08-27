@@ -440,7 +440,7 @@ pub struct WatchedConversation {
     pub messages: Vec<Message>,
 
     /// The Id of the message to open.
-    pub message_id_to_open: Option<Id>,
+    pub message_id_to_open: Id,
 
     /// The handle to stop watching the conversation.
     pub conversation_handle: Arc<WatchHandle>,
@@ -477,7 +477,7 @@ pub async fn watch_conversation(
     uniffi_async(async move {
         let callback = Arc::new(callback);
         let (conversations, conversation_handle) = watch::<_, _, RealConversation>(
-            "WHERE local_id = ?",
+            "WHERE local_id = ? LIMIT 1",
             params![RealLocalId::from(id)],
             move |r| r.local_id == Some(id.into()),
             |r| r.local_id.expect("local_id should never be None"),
@@ -486,7 +486,7 @@ pub async fn watch_conversation(
         )
         .await?;
         let (messages, messages_handle) = watch::<_, _, RealMessage>(
-            "WHERE local_conversation_id = ? LIMIT 1",
+            "WHERE local_conversation_id = ?",
             params![RealLocalId::from(id)],
             move |r| r.local_conversation_id == Some(id.into()),
             |r| r.local_id.expect("local_id should never be None"),
@@ -499,7 +499,8 @@ pub async fn watch_conversation(
             .await?
             .ok_or(MailboxError::LabelNotFound(label_id))?;
         let message_id_to_open =
-            RealConversation::first_unread_message(&label, messages.as_slice()).map(|i| i.as_u64());
+            RealConversation::message_id_to_open(id.into(), &label, messages.as_slice())?.into();
+
         Ok(WatchedConversation {
             conversation: ContextualConversation::new(
                 conversations.into_iter().next().unwrap(),
@@ -508,7 +509,7 @@ pub async fn watch_conversation(
             .unwrap()
             .into(),
             messages: messages.into_iter().map(Into::into).collect(),
-            message_id_to_open: message_id_to_open.map(Into::into),
+            message_id_to_open,
             conversation_handle,
             messages_handle,
         })

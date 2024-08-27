@@ -1003,16 +1003,41 @@ impl Conversation {
             .map(|r| r.counts.into_iter().map(|c| c.into()).collect())
     }
 
-    /// Retrieve the first unread message that should be displayed to the user
-    /// from the conversation's `messages`.
+    /// Retrieve in the first order the first unread message that should be displayed to the user
+    /// from the conversation's `messages`. If none was found it will pick last message in the view.
     ///
     /// The returned message will depend on the `label` where the conversation
     /// is returned.
     ///
     /// # Parameters
     ///
-    /// * `label`    - TODO: Document this parameter.
-    /// * `messages` - TODO: Document this parameter.
+    /// * `local_id` - local ID of the conversation.
+    /// * `label`    - label model from where the conversation is being viewed.
+    /// * `messages` - Array of message models for the conversation.
+    ///
+    /// # Errors
+    ///
+    /// When unable to pick the message for the conversation in the current view.
+    ///
+    pub fn message_id_to_open(
+        local_id: LocalId,
+        label: &Label,
+        messages: &[Message],
+    ) -> MailboxResult<LocalId> {
+        Self::first_unread_message(label, messages)
+            .ok_or(MailboxError::ConversationHasNoMessages(local_id))
+    }
+
+    /// Retrieve in the first order the first unread message that should be displayed to the user
+    /// from the conversation's `messages`. If none was found it will pick last message in the view.
+    ///
+    /// The returned message will depend on the `label` where the conversation
+    /// is returned.
+    ///
+    /// # Parameters
+    ///
+    /// * `label`    - label model from where the conversation is being viewed.
+    /// * `messages` - Array of message models for the conversation.
     ///
     pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<LocalId> {
         if messages.is_empty() {
@@ -1020,6 +1045,7 @@ impl Conversation {
         }
 
         fn first_consecutive_unread_msg(
+            label_id: &LabelId,
             messages: &[Message],
             filter: impl Fn(&Message) -> bool,
         ) -> Option<LocalId> {
@@ -1037,7 +1063,7 @@ impl Conversation {
                 messages
                     .iter()
                     .rev()
-                    .find(|m| filter(m))
+                    .find(|m| filter(m) && m.label_ids.contains(label_id))
                     .and_then(|m| m.local_id)
             })
         }
@@ -1045,11 +1071,12 @@ impl Conversation {
         let view_is_starred_label_or_folder = label.label_type == LabelType::Label
             || label.label_type == LabelType::Folder
             || label.remote_id == Some(LabelId::starred());
+        let label_id = label.remote_id.as_ref()?;
 
         if view_is_starred_label_or_folder {
-            first_consecutive_unread_msg(messages, |msg| !msg.flags.is_draft())
+            first_consecutive_unread_msg(label_id, messages, |msg| !msg.flags.is_draft())
         } else {
-            first_consecutive_unread_msg(messages, |msg| {
+            first_consecutive_unread_msg(label_id, messages, |msg| {
                 !(msg.flags.is_draft() || msg.flags.is_sent_auto())
             })
         }

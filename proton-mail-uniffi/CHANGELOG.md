@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added new function `DecryptedMessage::get_multipart_data` that clients have to use to check if the message is multipart and they should show attachments.
 
+## Changed
+
+ - Rework `message_id_to_open` from `Option<Id>` to `Id` on `WatchedConversation` type.
+
 ## [0.11.21] - 2024-08-28
 
 ### Added
