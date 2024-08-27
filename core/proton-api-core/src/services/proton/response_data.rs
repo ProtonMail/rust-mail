@@ -481,19 +481,10 @@ pub struct ContactEmailEvent {
     pub id: RemoteId,
 
     /// TODO: Document this field.
-    #[serde(rename = "EventID")]
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
     pub contact_email: Option<ContactEmail>,
-
-    /// TODO: Document this field.
-    #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    pub has_more: bool,
 }
 
 impl GetEventResponse for ContactEmailEvent {}
@@ -509,19 +500,10 @@ pub struct ContactEvent {
     pub id: RemoteId,
 
     /// TODO: Document this field.
-    #[serde(rename = "EventID")]
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
     pub contact: Option<ContactBasic>,
-
-    /// TODO: Document this field.
-    #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    pub has_more: bool,
 }
 
 impl GetEventResponse for ContactEvent {}

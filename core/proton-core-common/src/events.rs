@@ -35,7 +35,6 @@ use crate::models::{Contact, ContactEmail};
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
 };
-use proton_event_loop::Event;
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -72,39 +71,18 @@ pub struct ContactEmailEvent {
     pub remote_id: RemoteId,
 
     /// TODO: Document this field.
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
     pub contact_email: Option<ContactEmail>,
-
-    /// TODO: Document this field.
-    pub has_more: bool,
-}
-
-impl Event for ContactEmailEvent {
-    type Id = RemoteId;
-    type Response = ApiContactEmailEvent;
-
-    fn event_id(&self) -> &Self::Id {
-        &self.event_id
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
 }
 
 impl From<ApiContactEmailEvent> for ContactEmailEvent {
     fn from(value: ApiContactEmailEvent) -> Self {
         Self {
             remote_id: value.id.into(),
-            event_id: value.event_id.into(),
             action: value.action.into(),
             contact_email: value.contact_email.map(ContactEmail::from),
-            has_more: value.has_more,
         }
     }
 }
@@ -116,39 +94,18 @@ pub struct ContactEvent {
     pub remote_id: RemoteId,
 
     /// TODO: Document this field.
-    pub event_id: RemoteId,
-
-    /// TODO: Document this field.
     pub action: Action,
 
     /// TODO: Document this field.
     pub contact: Option<Contact>,
-
-    /// TODO: Document this field.
-    pub has_more: bool,
-}
-
-impl Event for ContactEvent {
-    type Id = RemoteId;
-    type Response = ApiContactEvent;
-
-    fn event_id(&self) -> &Self::Id {
-        &self.event_id
-    }
-
-    fn has_more(&self) -> bool {
-        self.has_more
-    }
 }
 
 impl From<ApiContactEvent> for ContactEvent {
     fn from(value: ApiContactEvent) -> Self {
         Self {
             remote_id: value.id.into(),
-            event_id: value.event_id.into(),
             action: value.action.into(),
             contact: value.contact.map(Contact::from),
-            has_more: value.has_more,
         }
     }
 }

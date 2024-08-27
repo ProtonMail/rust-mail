@@ -166,17 +166,13 @@ async fn test_sync_and_delete_event_contact() {
 
     let delete_event = ContactEmailEvent {
         remote_id: email_to_remove.id.clone().into(),
-        event_id: RemoteId::from("1"),
         action: Action::Delete,
         contact_email: None,
-        has_more: false,
     };
     let delete_contact_event = ContactEvent {
         remote_id: contact_to_remove.id.clone().into(),
-        event_id: RemoteId::from("2"),
         action: Action::Delete,
         contact: None,
-        has_more: false,
     };
     let events = TestCoreEvent {
         contact_emails: Some(vec![delete_event]),
@@ -231,24 +227,18 @@ async fn test_sync_and_modify_event_contact() {
     let remote_id = modified_contact.remote_id.clone().unwrap();
     let modify_contact_event = ContactEvent {
         remote_id: remote_id.clone(),
-        event_id: remote_id.clone(),
         action: Action::Update,
         contact: Some(modified_contact.clone()),
-        has_more: false,
     };
     let delete_email_event = ContactEmailEvent {
         remote_id: removed_email.remote_id.clone().unwrap(),
-        event_id: removed_email.remote_id.clone().unwrap(),
         action: Action::Delete,
         contact_email: None,
-        has_more: false,
     };
     let add_email_event = ContactEmailEvent {
         remote_id: added_email.remote_id.clone().unwrap(),
-        event_id: added_email.remote_id.clone().unwrap(),
         action: Action::Create,
         contact_email: Some(added_email.clone()),
-        has_more: false,
     };
     let event = TestCoreEvent {
         contacts: Some(vec![modify_contact_event]),
@@ -705,7 +695,7 @@ fn create_test_local_full_modified_contact(
             local_id: Some(3.into()),
             remote_contact_id: contact.remote_id.clone(),
             card_type: ContactCardType::Signed,
-            data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-129892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:sdfsdf@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(), 
+            data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-129892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:sdfsdf@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
             row_id: Some(3),
             stash: stash.clone(),
@@ -714,7 +704,7 @@ fn create_test_local_full_modified_contact(
             local_id: Some(4.into()),
             remote_contact_id: contact.remote_id.clone(),
             card_type: ContactCardType::EncryptedAndSigned,
-            data: "-----BEGIN PGP MESSAGE-----modified.*-----END PGP MESSAGE-----".to_owned(), 
+            data: "-----BEGIN PGP MESSAGE-----modified.*-----END PGP MESSAGE-----".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----modified.*-----END PGP SIGNATURE-----".to_owned()),
             row_id: Some(4),
             stash: stash.clone(),
