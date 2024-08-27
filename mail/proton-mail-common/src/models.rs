@@ -2427,6 +2427,49 @@ pub struct Label {
 }
 
 impl Label {
+    /// Save or update a Label.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that the information is update correctly in the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the local conversation id is not set, the remote
+    /// label_id is not set, the local label can not be found or the query
+    /// failed.
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save or update a Label.
+    ///
+    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// ensure that the information is update correctly in the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the local conversation id is not set, the remote
+    /// label_id is not set, the local label can not be found or the query
+    /// failed.
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(label) =
+                Label::find_first("WHERE remote_id=?", params![remote_id], interface).await?
+            {
+                self.local_id = label.local_id;
+                self.row_id = label.row_id;
+            }
+        }
+
+        <Self as Model>::save_using(self, interface).await
+    }
     /// TODO: Document this function.
     ///
     /// # Parameters

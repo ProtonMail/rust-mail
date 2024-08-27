@@ -1,6 +1,5 @@
 use crate::events::LabelEvent;
 use proton_core_common::events::Action;
-use stash::orm::Model;
 use stash::params;
 use stash::stash::{Interface, StashError, Tether};
 use tracing::warn;

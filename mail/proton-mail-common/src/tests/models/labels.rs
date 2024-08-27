@@ -24,37 +24,6 @@ async fn test_remote_label_add() {
 }
 
 #[tokio::test]
-async fn test_remote_label_add_duplicate() {
-    let stash = new_test_connection().await;
-    let tx = stash.connection();
-    let label = ApiLabel {
-        id: ApiRemoteId::from("label_id2"),
-        parent_id: None,
-        name: "MyLabel".to_owned(),
-        path: None,
-        color: "#ffffff".to_owned(),
-        label_type: ApiLabelType::Label,
-        notify: false,
-        display: true,
-        sticky: false,
-        expanded: true,
-        order: 0,
-    };
-
-    let mut local_label = Label::from(label.clone());
-    local_label.save_using(&tx).await.unwrap();
-    let local_id = local_label.local_id;
-    let mut local_label2 = Label::from(label.clone());
-    assert!(local_label2.save_using(&tx).await.is_err());
-    let db_label = Label::load(local_id.unwrap(), &tx).await.unwrap().unwrap();
-    let mut test_label = Label::from(label);
-    test_label.set_stash(&stash);
-    test_label.local_id = db_label.local_id;
-    test_label.row_id = db_label.row_id;
-    assert_eq!(test_label, db_label);
-}
-
-#[tokio::test]
 async fn test_remote_label_update() {
     let stash = new_test_connection().await;
     let tx = stash.connection();
