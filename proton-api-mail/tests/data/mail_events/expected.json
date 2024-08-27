@@ -360,5 +360,45 @@
     },
     "WeekStart": 1,
     "Welcome": 1
-  }
+  },
+  "Contacts": [
+    {
+      "ID": "afeaefaeTaBub14w==",
+      "Action": 1,
+      "Contact": {
+        "ID": "a29olIjFv0rnXxBhSMw==",
+        "CreateTime": 1503815366,
+        "LabelIDs": [
+          "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="
+        ],
+        "ModifyTime": 1503815366,
+        "Name": "ProtonMail Features",
+        "Size": 1434,
+        "UID": "proton-legacy-139892c2-f691-4118-8c29-061196013e04"
+      }
+    }
+  ],
+  "ContactEmails": [
+    {
+      "ID": "sadfaACXDmTaBub14w==",
+      "Action": 1,
+      "ContactEmail": {
+        "ID": "aefew4323jFv0BhSMw==",
+        "ContactID": "a29olIjFv0rnXxBhSMw==",
+        "CanonicalEmail": "features@protonmail.black",
+        "Type": [
+          "work"
+        ],
+        "Defaults": 1,
+        "Email": "features@protonmail.black",
+        "IsProton": 1,
+        "LabelIDs": [
+          "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w=="
+        ],
+        "LastUsedTime": 0,
+        "Name": "test1",
+        "Order": 1
+      }
+    }
+  ]
 }

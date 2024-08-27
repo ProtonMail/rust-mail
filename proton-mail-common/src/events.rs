@@ -135,50 +135,61 @@ pub struct MailEvent {
 
     /// TODO: Document this field.
     pub user_settings: Option<UserSettings>,
+
+    /// TODO: Document this field.
+    pub contacts: Option<Vec<ContactEvent>>,
+
+    /// TODO: Document this field.
+    pub contact_emails: Option<Vec<ContactEmailEvent>>,
 }
 
-impl MailEvent {
-    pub fn get_core_event_user(&self) -> Option<&User> {
+impl CoreEvent for MailEvent {
+    fn get_core_event_user(&self) -> Option<&User> {
         self.user.as_ref()
     }
-    pub fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
+
+    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
         self.user.as_mut()
     }
 
-    pub fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
+    fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
         self.user_settings.as_ref()
     }
-    pub fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
+
+    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
         self.user_settings.as_mut()
     }
 
-    pub fn get_core_event_used_space(&self) -> Option<i64> {
+    fn get_core_event_used_space(&self) -> Option<i64> {
         self.used_space
     }
 
-    pub fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
+    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
         self.product_used_space.as_ref()
     }
 
-    pub fn get_core_event_addresses(&self) -> Option<&[Address]> {
+    fn get_core_event_addresses(&self) -> Option<&[Address]> {
         self.addresses.as_deref()
     }
-    pub fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
+
+    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
         self.addresses.as_deref_mut()
     }
 
-    pub fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
-        unimplemented!()
-    }
-    pub fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        unimplemented!()
+    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
+        self.contacts.as_deref()
     }
 
-    pub fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
-        unimplemented!()
+    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
+        self.contacts.as_deref_mut()
     }
-    pub fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        unimplemented!()
+
+    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
+        self.contact_emails.as_deref()
+    }
+
+    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
+        self.contact_emails.as_deref_mut()
     }
 }
 
@@ -192,56 +203,6 @@ impl Event for MailEvent {
 
     fn has_more(&self) -> bool {
         self.has_more
-    }
-}
-
-impl CoreEvent for MailEvent {
-    fn get_core_event_user(&self) -> Option<&User> {
-        MailEvent::get_core_event_user(self)
-    }
-
-    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
-        MailEvent::get_core_event_user_mut(self)
-    }
-
-    fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
-        MailEvent::get_core_event_user_settings(self)
-    }
-
-    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
-        MailEvent::get_core_event_user_settings_mut(self)
-    }
-
-    fn get_core_event_addresses(&self) -> Option<&[Address]> {
-        MailEvent::get_core_event_addresses(self)
-    }
-
-    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
-        MailEvent::get_core_event_addresses_mut(self)
-    }
-
-    fn get_core_event_used_space(&self) -> Option<i64> {
-        MailEvent::get_core_event_used_space(self)
-    }
-
-    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
-        MailEvent::get_core_event_used_product_space(self)
-    }
-
-    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
-        None // TODO in the ET-1058
-    }
-
-    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        None // TODO in the ET-1058
-    }
-
-    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
-        None // TODO in the ET-1058
-    }
-
-    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        None // TODO in the ET-1058
     }
 }
 
@@ -292,6 +253,15 @@ impl From<ApiMailEvent> for MailEvent {
             used_space: value.used_space,
             user: value.user.map(User::from),
             user_settings: value.user_settings.map(UserSettings::from),
+            contacts: value
+                .contacts
+                .map(|contacts| contacts.into_iter().map(ContactEvent::from).collect()),
+            contact_emails: value.contact_emails.map(|contact_emails| {
+                contact_emails
+                    .into_iter()
+                    .map(ContactEmailEvent::from)
+                    .collect()
+            }),
         }
     }
 }
