@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - Errors for login flow are now returned as contextual Enums
+  - `mark_conversations_as_unread` now expects a `Mailbox` rather than `MailUserSession`
 
 ## [0.11.34] - 2024-09-05
 

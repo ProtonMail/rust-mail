@@ -1481,7 +1481,6 @@ async fn test_conversation_counts() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_mark_read_no_message_metadata() {
     // Mark conversation as read without message metadata.
     let mut state = new_test_unread_db_state();
@@ -1497,15 +1496,14 @@ async fn test_conversation_mark_read_no_message_metadata() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let mut db_conversation = Conversation::load(local_conv_id, tx.stash())
+    Conversation::mark_read(std::iter::once(local_conv_id), &tx)
+        .await
+        .unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, &tx)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
-    db_conversation.num_unread = 0;
-    db_conversation
-        .save()
-        .await
-        .expect("failed to save conversation");
 
     // No more unread messages
     assert_eq!(db_conversation.num_unread, 0);
@@ -1538,7 +1536,6 @@ async fn test_conversation_mark_read_no_message_metadata() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_mark_read() {
     // Mark conversation as read and update all conversation / message counts
     let (stash, _db_dir) = new_test_connection_file().await;
@@ -1554,15 +1551,14 @@ async fn test_conversation_mark_read() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let mut db_conversation = Conversation::load(local_conv_id, tx.stash())
+    Conversation::mark_read(std::iter::once(local_conv_id), &tx)
+        .await
+        .unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, tx.stash())
         .await
         .expect("failed to get conversation")
         .expect("should have value");
-    db_conversation.num_unread = 0;
-    db_conversation
-        .save()
-        .await
-        .expect("failed to save conversation");
 
     // No more unread messages
     assert_eq!(db_conversation.num_unread, 0);
@@ -1626,7 +1622,6 @@ async fn test_conversation_mark_read() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_mark_unread_no_metadata() {
     // Mark conversation as read and then mark it unread, since we don't have message
     // metadata we should mark the current conversation label only as unread.
@@ -1643,16 +1638,18 @@ async fn test_conversation_mark_unread_no_metadata() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let mut db_conversation = Conversation::load(local_conv_id, tx.stash())
+    Conversation::mark_read(std::iter::once(local_conv_id), &tx)
+        .await
+        .unwrap();
+
+    Conversation::mark_unread(local_label_id1, std::iter::once(local_conv_id), &tx)
+        .await
+        .unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, tx.stash())
         .await
         .expect("failed to get conversation")
         .expect("should have value");
-    db_conversation.num_unread = 0;
-    db_conversation.num_unread = db_conversation.num_messages;
-    db_conversation
-        .save()
-        .await
-        .expect("failed to save conversation");
 
     // There should be 1 unread message.
     assert_eq!(db_conversation.num_unread, 1);
@@ -1684,13 +1681,12 @@ async fn test_conversation_mark_unread_no_metadata() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_mark_unread() {
     // Mark conversation as read and then mark it unread, only the LATEST message in the
     // conversation should be marked read.
     let (stash, _db_dir) = new_test_connection_file().await;
     let tx = stash.connection();
-    let mut state = new_test_delete_db_state();
+    let mut state = new_test_unread_db_state();
     prepare_db_state_core(&tx, &mut state.addresses).await;
     let state = new_test_unread_db_state();
     let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
@@ -1702,19 +1698,21 @@ async fn test_conversation_mark_unread() {
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
-    let mut db_conversation = Conversation::load(local_conv_id, tx.stash())
+    Conversation::mark_read(std::iter::once(local_conv_id), &tx)
+        .await
+        .unwrap();
+
+    Conversation::mark_unread(local_label_id1, std::iter::once(local_conv_id), &tx)
+        .await
+        .unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, tx.stash())
         .await
         .expect("failed to get conversation")
         .expect("should have value");
-    db_conversation.num_unread = 0;
-    db_conversation.num_unread = db_conversation.num_messages;
-    db_conversation
-        .save()
-        .await
-        .expect("failed to save conversation");
 
     // There should be 1 unread message.
-    assert_eq!(db_conversation.num_unread, 1);
+    assert_eq!(db_conversation.num_unread, 4);
     assert_eq!(db_conversation.num_messages, 4);
 
     // Check conversation counts match original values.
@@ -1736,7 +1734,7 @@ async fn test_conversation_mark_unread() {
                 .get(&MY_LABEL_ID2.clone().into())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
-            assert_eq!(label_counts.unread, start_label_counts.unread - 1);
+            assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
     }
@@ -1752,7 +1750,7 @@ async fn test_conversation_mark_unread() {
                 .get(&MY_LABEL_ID1.clone().into())
                 .unwrap();
             let label_counts = message_counts.get(&local_label_id1).unwrap();
-            assert_eq!(label_counts.unread, 1);
+            assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         // Check label2 - should be unchanged.
@@ -1762,7 +1760,7 @@ async fn test_conversation_mark_unread() {
                 .get(&MY_LABEL_ID2.clone().into())
                 .unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
-            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.unread, start_label_counts.unread);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
     }

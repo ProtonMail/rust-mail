@@ -43,7 +43,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::mark_multiple_as_unread(action.0.target_ids.clone(), tx).await?;
+        Conversation::mark_unread(action.0.label_id, action.0.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -52,7 +52,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_multiple_as_read(action.0.target_ids.clone(), tx).await?;
+        Conversation::mark_read(action.0.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)
@@ -82,12 +82,10 @@ impl proton_action_queue::action::Handler for Handler {
             let local_ids =
                 RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
 
-            Conversation::mark_multiple_as_read(local_ids, &tx)
-                .await
-                .map_err(|e| {
-                    error!("Failed to rollback failed conversations: {e}");
-                    e
-                })?;
+            Conversation::mark_read(local_ids, &tx).await.map_err(|e| {
+                error!("Failed to rollback failed conversations: {e}");
+                e
+            })?;
 
             tx.commit().await?;
         }
