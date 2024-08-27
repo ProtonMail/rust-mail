@@ -158,8 +158,8 @@ pub trait ProtonMail: ApiService {
         &self,
         mut options: GetConversationsOptions,
     ) -> Result<GetConversationsResponse, ApiServiceError> {
-        options.page_size = options.page_size.max(MAX_PAGE_ELEMENT_COUNT_U64);
-        options.limit = options.limit.map(|v| v.max(MAX_LIMIT_VALUE_U64));
+        options.page_size = options.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
+        options.limit = options.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
         self.get::<_, Json<_>>(
             &format!("{}/conversations", Self::BASE_PATH_MAIL),
             Some(options),
@@ -243,8 +243,8 @@ pub trait ProtonMail: ApiService {
         &self,
         mut options: GetMessagesOptions,
     ) -> Result<GetMessagesResponse, ApiServiceError> {
-        options.page_size = options.page_size.max(MAX_PAGE_ELEMENT_COUNT_U64);
-        options.limit = options.limit.map(|v| v.max(MAX_LIMIT_VALUE_U64));
+        options.page_size = options.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
+        options.limit = options.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
         // TODO: Document why we send as POST and override the method. For privacy?
         self.post::<_, Json<_>>(
             &format!("{}/messages", Self::BASE_PATH_MAIL),
