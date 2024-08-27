@@ -86,12 +86,9 @@ impl MailUserContext {
     pub async fn poll_event_loop(&self) -> Result<(), EventLoopError> {
         let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
         let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
-        //TODO: better way to store this.
-        // TODO: Temporarily disabled core events here - the new event handler will
-        // TODO: deal with all of this
         let subscribers: [Box<dyn Subscriber<MailEvent>>; 2] =
             [Box::new(core_subscriber), Box::new(mail_subscriber)];
-        // let subscribers: [Box<dyn Subscriber<MailEvent>>; 1] = [Box::new(mail_subscriber)];
+
         self.event_loop.poll(self, self, &subscribers).await
     }
 }

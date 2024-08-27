@@ -12,7 +12,6 @@ use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LabelId, LocalId, RemoteId,
 };
 use proton_core_common::models::{Address, ModelExtension};
-use stash::orm::Model;
 use stash::stash::{Interface, Tether};
 
 lazy_static! {

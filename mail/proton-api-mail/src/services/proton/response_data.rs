@@ -26,7 +26,8 @@
 use crate::services::proton::common::LabelType;
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::response_data::{
-    Action, Address, ApiErrorInfo, ProductUsedSpace, User, UserSettings,
+    Action, Address, ApiErrorInfo, ContactEmailEvent, ContactEvent, ProductUsedSpace, User,
+    UserSettings,
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_crypto_inbox::attachment::{
@@ -38,7 +39,7 @@ use serde::Serialize;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::{serde_as, BoolFromInt, DefaultOnError, DefaultOnNull};
+use serde_with::{serde_as, BoolFromInt, DefaultOnNull};
 use smart_default::SmartDefault;
 use std::collections::{BTreeMap, HashMap};
 
@@ -441,11 +442,13 @@ pub struct Conversation {
     pub order: u64,
 
     /// TODO: Document this field.
-    #[serde_as(deserialize_as = "DefaultOnError")]
+    #[serde(default)]
+    #[serde_as(deserialize_as = "DefaultOnNull")]
     pub recipients: Vec<MessageAddress>,
 
     /// TODO: Document this field.
-    #[serde_as(deserialize_as = "DefaultOnError")]
+    #[serde(default)]
+    #[serde_as(deserialize_as = "DefaultOnNull")]
     pub senders: Vec<MessageAddress>,
 
     /// TODO: Document this field.
@@ -636,6 +639,12 @@ pub struct MailEvent {
 
     /// TODO: Document this field.
     pub user_settings: Option<UserSettings>,
+
+    /// TODO: Document this field.
+    pub contacts: Option<Vec<ContactEvent>>,
+
+    /// TODO: Document this field.
+    pub contact_emails: Option<Vec<ContactEmailEvent>>,
 }
 
 impl GetEventResponse for MailEvent {}

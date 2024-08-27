@@ -103,12 +103,8 @@
                 "ID": "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==",
                 "Order": 675,
                 "Subject": "Testing",
-                "Senders": [
-                    {}
-                ],
-                "Recipients": [
-                    {}
-                ],
+                "Senders": [],
+                "Recipients": [],
                 "NumMessages": 5,
                 "NumUnread": 0,
                 "NumAttachments": 0,
