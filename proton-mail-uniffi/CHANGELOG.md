@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+- Added new function `DecryptedMessage::get_multipart_data` that clients have to use to check if the message is multipart and they should show attachments.
+
 ## [0.11.21] - 2024-08-28
 
 ### Added
@@ -25,7 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     * `MailSession::create`
     * `MailSession::user_context_from_session`
     * `MailSession::stored_sessions`
-
 
 ## [0.11.20] - 2024-08-27
 

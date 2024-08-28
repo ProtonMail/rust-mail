@@ -75,6 +75,7 @@ use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody};
 use proton_crypto_inbox::proton_crypto;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::UnlockedAddressKeys;
+use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedMessage;
 use smart_default::SmartDefault;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
@@ -3143,16 +3144,17 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
+    pub cc_list: MessageAddresses,
+
+    /// TODO: Document this field.
+    #[DbField]
     pub bcc_list: MessageAddresses,
 
     /// TODO: Document this field.
     pub body: String,
 
-    /// TODO: Document this field.
-    #[DbField]
-    pub cc_list: MessageAddresses,
-
-    /// TODO: Document this field.
+    /// Whether or not this message has been soft deleted. This means that this message
+    /// should no longer be displayed.
     #[DbField]
     pub deleted: bool,
 
@@ -3761,14 +3763,20 @@ impl Message {
             DecryptedBody::Plain(body) => Ok(DecryptedMessageBody {
                 metadata: encrypted_msg.metadata,
                 body,
+                pgp_attachments: None,
+                pgp_subject: None,
             }),
-            DecryptedBody::Mime(multipart) => {
-                // TODO(ET-263): Handle multipart messages.
-                Ok(DecryptedMessageBody {
-                    metadata: encrypted_msg.metadata,
-                    body: multipart.body,
-                })
-            }
+            DecryptedBody::Mime(ProcessedMessage {
+                body,
+                attachments,
+                encrypted_subject,
+                ..
+            }) => Ok(DecryptedMessageBody {
+                metadata: encrypted_msg.metadata,
+                body,
+                pgp_attachments: Some(attachments),
+                pgp_subject: encrypted_subject,
+            }),
         }
     }
 
@@ -4146,21 +4154,51 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         let key = self.local_id.expect("Message does not have a local id");
-        if let Some(mut content) = cache.get_item(&key)? {
-            let mut body = String::new();
-            content.read_to_string(&mut body)?;
-            let metadata = self
-                .get_message_body_metadata()
-                .await?
-                .ok_or(AppError::MessageBodyMetadataMissing(key))?;
-            Ok(DecryptedMessageBody { body, metadata })
-        } else {
-            let decrypted_message_body = self
-                .decrypt_from_remote(address_keys, pgp_provider, api, interface)
-                .await?;
-            cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())?;
-            Ok(decrypted_message_body)
+
+        // FIXME: https://jira.protontech.ch/projects/ET/issues/ET-1070
+        // Recover from cache issues by requesting the data again.
+        if let Some(decrypted_message_body) = self.try_fetch_message_from_cache(cache).await? {
+            return Ok(decrypted_message_body);
         }
+
+        let decrypted_message_body = self
+            .decrypt_from_remote(address_keys, pgp_provider, api, interface)
+            .await?;
+
+        // FIXME: We're not caching the fully encrypted messages
+        // https://jira.protontech.ch/projects/ET/issues/ET-1071
+        if decrypted_message_body.pgp_attachments.is_none() {
+            // Try to cache the message
+            if let Err(e) =
+                cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())
+            {
+                error!("Error writing message {key} to the cache: {e}");
+            }
+        }
+        Ok(decrypted_message_body)
+    }
+
+    async fn try_fetch_message_from_cache(
+        &self,
+        cache: &ProtonCache<CacheMessageConfig>,
+    ) -> Result<Option<DecryptedMessageBody>, AppError> {
+        let key = self.local_id.expect("Message does not have a local id");
+        let Some(mut content) = cache.get_item(&key)? else {
+            return Ok(None);
+        };
+
+        let mut body = String::new();
+        content.read_to_string(&mut body)?;
+        let Some(metadata) = self.get_message_body_metadata().await? else {
+            return Ok(None);
+        };
+
+        Ok(Some(DecryptedMessageBody {
+            body,
+            metadata,
+            pgp_attachments: None,
+            pgp_subject: None,
+        }))
     }
 
     /// Finds all messages that have expired and deletes them.

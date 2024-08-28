@@ -27,7 +27,7 @@ proton-api-core = { version = "=0.6.12", registry = "proton" }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail" }
 proton-core-common = { version = "=0.6.17", registry = "proton" }
 proton-crypto-account = { version = "=0.6.1", registry = "proton" }
-proton-crypto-inbox = { version = "=0.6.3", registry = "proton" }
+proton-crypto-inbox = { version = "=0.6.4", registry = "proton" }
 proton-event-loop = { version = "=0.7.12", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common" }
 proton-sqlite3 = { version = "=0.7.6", registry = "proton" }

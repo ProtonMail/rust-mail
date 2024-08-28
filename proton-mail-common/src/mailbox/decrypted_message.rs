@@ -3,6 +3,7 @@
 //! Everything related to processing a decrypted message.
 
 use crate::models::{MailSettings, MessageBodyMetadata};
+use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
 use proton_mail_html_transformer::Transformer;
 use serde_json::Value;
 
@@ -39,6 +40,13 @@ pub struct DecryptedMessageBody {
 
     /// Metadata associated with the message body
     pub metadata: MessageBodyMetadata,
+
+    /// Attachments that come from a multipart message.
+    pub pgp_attachments: Option<Vec<ProcessedAttachment>>,
+
+    /// The subject that comes from a multipart message.
+    // TODO: Figure this out
+    pub pgp_subject: Option<String>,
 }
 
 impl DecryptedMessageBody {
