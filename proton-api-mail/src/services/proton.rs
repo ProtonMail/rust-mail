@@ -245,7 +245,11 @@ pub trait ProtonMail: ApiService {
     ) -> Result<GetMessagesResponse, ApiServiceError> {
         options.page_size = options.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
         options.limit = options.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
-        // TODO: Document why we send as POST and override the method. For privacy?
+
+        // There can potentially be a large number of query parameters in the request.
+        // If we sent it as a GET request, the length of the URL could exceed the limit
+        // imposed by our API. To avoid this, we send as POST, with the query parameters
+        // sent in the message body.
         self.post::<_, Json<_>>(
             &format!("{}/messages", Self::BASE_PATH_MAIL),
             Some(options),
