@@ -3,7 +3,7 @@ use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged};
 use crate::core::{OSKeyChain, StoredSession};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::uniffi_async;
+use crate::{async_runtime, uniffi_async};
 use anyhow::anyhow;
 use proton_action_queue::queue::{Error as QueueError, QueuedError};
 use proton_api_core::service::ApiServiceError;
@@ -118,12 +118,12 @@ impl MailSession {
     /// TODO: An error type needs to be added for this later.
     ///
     #[uniffi::constructor]
-    pub async fn create(
+    pub fn create(
         params: MailSessionParams,
         key_chain: Box<dyn OSKeyChain>,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> MailSessionResult<Arc<Self>> {
-        uniffi_async(async move {
+        async_runtime().block_on(async move {
             let mut log_path = PathBuf::from(params.log_dir);
             std::fs::create_dir_all(&log_path)?;
             log_path.push("proton-mail-uniffi.log");
@@ -174,7 +174,6 @@ impl MailSession {
             .await?;
             Ok(Arc::new(Self { ctx: mail_ctx }))
         })
-        .await
     }
 
     /// Start new login flow.
@@ -191,31 +190,29 @@ impl MailSession {
     ///
     /// # Errors
     /// Returns error if the db query failed.
-    pub async fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
+    pub fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
         let ctx = self.ctx.clone();
-        uniffi_async(async move {
+        async_runtime().block_on(async move {
             let sessions = ctx.sessions().await?;
             Ok(sessions
                 .into_iter()
                 .map(StoredSession::new)
                 .collect::<Vec<_>>())
         })
-        .await
     }
 
     /// Create an user context from a stored session.
-    pub async fn user_context_from_session(
+    pub fn user_context_from_session(
         &self,
         session: Arc<StoredSession>,
     ) -> MailSessionResult<Arc<MailUserSession>> {
-        let ctx = self.ctx.clone();
-        uniffi_async(async move {
-            let ctx = ctx
+        async_runtime().block_on(async move {
+            let ctx = self
+                .ctx
                 .user_context_from_session(session.encrypted_session())
                 .await?;
             Ok(MailUserSession::new(ctx))
         })
-        .await
     }
 
     /// Removes a user session and deletes all associated data.
