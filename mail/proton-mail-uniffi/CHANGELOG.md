@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+ - New callback_interface `EventCallback`.
+
 ### Fixed
 
  - Sync issues on multiple login.
@@ -15,9 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
  - `StoredSession` `email` and `name` have been replaced with `name_or_address`.
  - `MailUserSession::poll_events` method now require callback_interface `EventCallback`.
+ - Changed the following methods to be sync
+    * `MailSession::create`
+    * `MailSession::user_context_from_session`
+    * `MailSession::stored_sessions`
 
-### Added
- - New callback_interface `EventCallback`.
 
 ## [0.11.20] - 2024-08-27
 
