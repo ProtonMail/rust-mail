@@ -1,5 +1,5 @@
 use crate::mail::MailUserSession;
-use crate::{uniffi_async, EventCallback};
+use crate::uniffi_async;
 use anyhow::anyhow;
 use proton_api_core::service::ApiServiceError;
 use proton_event_loop::subscriber::SubscriberError;
@@ -11,26 +11,14 @@ impl MailUserSession {
     /// Poll Event loop and apply events.
     ///
     /// *NOTE*: do not call this function concurrently.
-    ///
-    /// ## Parameters
-    ///
-    /// callback: EventCallback interface, to run in a background thread watching for updates.
-    ///
     #[allow(clippy::unused_async)]
-    pub async fn poll_events(
-        &self,
-        callback: Box<dyn EventCallback>,
-    ) -> Result<(), EventLoopError> {
+    pub async fn poll_events(&self) -> Result<(), EventLoopError> {
         let ctx = self.ctx.clone();
-        uniffi_async::<(), EventLoopError, _>(async move {
+        uniffi_async(async move {
             ctx.poll_event_loop().await?;
             Ok(())
         })
-        .await?;
-
-        callback.on_update();
-
-        Ok(())
+        .await
     }
 }
 
