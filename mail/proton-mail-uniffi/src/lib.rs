@@ -174,22 +174,6 @@ pub trait LiveQueryCallback: Send + Sync {
     fn on_update(&self);
 }
 
-/// A callback interface for events originated in event loop.
-///
-/// This interface is used to notify the client when observed data has been
-/// updated.
-///
-#[uniffi::export(callback_interface)]
-pub trait EventCallback: Send + Sync {
-    /// Notify the client that the observed data has been updated.
-    ///
-    /// This method is called when the observed data has been updated. It does
-    /// not provide any information about the update, but the client can use
-    /// this as a signal to refresh its view of the data.
-    ///
-    fn on_update(&self);
-}
-
 /// A handle to a live query.
 ///
 /// This handle can be used to disconnect from the live query.
