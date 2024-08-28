@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
  - `StoredSession` `email` and `name` have been replaced with `name_or_address`.
+ - `MailUserSession::poll_events` method now require callback_interface `EventCallback`.
+
+### Added
+ - New callback_interface `EventCallback`.
 
 ## [0.11.20] - 2024-08-27
 
