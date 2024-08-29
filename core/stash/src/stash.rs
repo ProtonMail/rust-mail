@@ -2096,15 +2096,20 @@ impl TetheredWorker {
 
 impl Drop for TetheredWorker {
     fn drop(&mut self) {
-        if self
-            .queue
-            .send(Operation::CloseConnection(Command {
-                channel: None,
-                conn_handle: None,
-            }))
-            .is_err()
-        {
-            error!("Failed to send CloseConnection operation to tethered queue");
+        if let Some(handle) = self.conn_handle.upgrade() {
+            if self
+                .queue
+                .send(Operation::CloseConnection(Command {
+                    channel: None,
+                    conn_handle: Some(Arc::clone(&handle)),
+                }))
+                .is_err()
+            {
+                error!(
+                    "{:p} Failed to send CloseConnection operation to tethered queue",
+                    Arc::as_ptr(&handle)
+                );
+            }
         }
 
         if let Some(thread_handle) = self.thread_handle.take() {
