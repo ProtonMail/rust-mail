@@ -402,7 +402,6 @@ use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
-use tokio::time::Instant;
 use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
@@ -587,6 +586,15 @@ enum Operation {
     /// not enforced.
     Instruct(Instruction),
 
+    /// Notify a transaction was commited.
+    NotifyCommitTransaction(Arc<()>),
+
+    /// Notify a transaction was rolled back.
+    NotifyRollbackTransaction(Arc<()>),
+
+    /// Notify a new transaction has started.
+    NotifyStartTransaction(Arc<()>),
+
     /// Publishes a notification of changes made to the database to all
     /// subscribers.
     Publish(Notification),
@@ -626,7 +634,11 @@ impl Operation {
             | Self::RollbackTransaction(ref mut command)
             | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
             Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
-            Self::Publish(_) | Self::Statistics(_) => {}
+            Self::Publish(_)
+            | Self::Statistics(_)
+            | Self::NotifyRollbackTransaction(_)
+            | Self::NotifyCommitTransaction(_)
+            | Self::NotifyStartTransaction(_) => {}
             Self::Query(ref mut query) => query.send_back(Err(error)),
             Self::Subscribe(ref mut subscription) => subscription.send_back(Err(error)),
         }
@@ -732,6 +744,10 @@ pub enum StashError {
     /// An attempt was made to start a transaction, but one is already active.
     #[error("Transaction already started")]
     TransactionAlreadyStarted,
+
+    /// An attempt was made to use transaction operations without a [`Tether`].
+    #[error("Transaction command without Tether")]
+    TransactionCommandWithoutTether,
 
     /// There was a problem with a transaction.
     #[error("Transaction error: {0}")]
@@ -1255,8 +1271,10 @@ impl Stash {
     ///
     #[must_use]
     pub fn connection(&self) -> Tether {
+        let handle = Arc::new(());
+        debug!("Tether ({:p}): Create", Arc::as_ptr(&handle));
         Tether {
-            handle: Arc::new(()),
+            handle,
             has_active_transaction: Arc::new(AtomicBool::new(false)),
             queue: self.queue.clone(),
             stash: self.clone(),
@@ -1784,24 +1802,27 @@ impl TetheredWorker {
                 warn!("Unexpectedly reached CloseConnection variant in TetheredWorker::handle_operation()");
             }
             Operation::CommitTransaction(mut command) => {
-                debug!(
-                    "Tether ({:p}): CommitTransaction Command",
-                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
-                );
-                if let Some(tx) = transaction.take() {
-                    command.send_back(tx.commit().map_err(StashError::TransactionError));
-                    // Notify the main worker that the transaction has been committed
-                    if queue
-                        .send(Operation::CommitTransaction(Command {
-                            channel: None,
-                            conn_handle: None,
-                        }))
-                        .is_err()
-                    {
-                        error!("Failed to send CommitTransaction operation to main queue");
+                if let Some(conn_handle) = command.conn_handle.clone() {
+                    debug!(
+                        "Tether ({:p}): CommitTransaction Command",
+                        Arc::as_ptr(&conn_handle)
+                    );
+                    if let Some(tx) = transaction.take() {
+                        command.send_back(tx.commit().map_err(StashError::TransactionError));
+                        // Notify the main worker that the transaction has been committed
+                        if queue
+                            .send(Operation::NotifyCommitTransaction(conn_handle))
+                            .is_err()
+                        {
+                            error!(
+                                "Failed to send NotifyCommitTransaction operation to main queue"
+                            );
+                        }
+                    } else {
+                        command.send_back(Err(StashError::NoActiveTransaction));
                     }
                 } else {
-                    command.send_back(Err(StashError::NoActiveTransaction));
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
             }
             Operation::Instruct(mut instruction) => {
@@ -1839,59 +1860,65 @@ impl TetheredWorker {
                 ));
             }
             Operation::RollbackTransaction(mut command) => {
-                debug!(
-                    "Tether ({:p}): RollbackTransaction Command",
-                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
-                );
-                if let Some(tx) = transaction.take() {
-                    command.send_back(tx.rollback().map_err(StashError::TransactionError));
-                    // Notify the main worker that the transaction has been rolled back.
-                    if queue
-                        .send(Operation::RollbackTransaction(Command {
-                            channel: None,
-                            conn_handle: None,
-                        }))
-                        .is_err()
-                    {
-                        error!("Failed to send RollbackTransaction operation to main queue");
+                if let Some(conn_handle) = command.conn_handle.clone() {
+                    debug!(
+                        "Tether ({:p}): RollbackTransaction Command",
+                        Arc::as_ptr(&conn_handle)
+                    );
+                    if let Some(tx) = transaction.take() {
+                        command.send_back(tx.rollback().map_err(StashError::TransactionError));
+                        // Notify the main worker that the transaction has been rolled back.
+                        if queue
+                            .send(Operation::NotifyRollbackTransaction(conn_handle))
+                            .is_err()
+                        {
+                            error!(
+                                "Failed to send NotifyRollbackTransaction operation to main queue"
+                            );
+                        }
+                    } else {
+                        command.send_back(Err(StashError::NoActiveTransaction));
                     }
                 } else {
-                    command.send_back(Err(StashError::NoActiveTransaction));
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
             }
             Operation::StartTransaction(mut command) => {
-                debug!(
-                    "Tether ({:p}): StartTransaction Command",
-                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
-                );
-                if transaction.is_none() {
-                    match connection
-                        // We call unchecked_transaction() here because transaction() requires a
-                        // mutable borrow. Being unchecked does not matter, as we perform the
-                        // necessary checks ourselves.
-                        .unchecked_transaction()
-                        .map_err(StashError::ExecutionError)
-                    {
-                        Ok(tx) => {
-                            transaction = Some(tx);
-                            command.send_back(Ok(()));
-                            // Notify the main worker that a transaction has started.
-                            if queue
-                                .send(Operation::StartTransaction(Command {
-                                    channel: None,
-                                    conn_handle: None,
-                                }))
-                                .is_err()
-                            {
-                                error!("Failed to send StartTransaction operation to main queue");
+                if let Some(conn_handle) = command.conn_handle.clone() {
+                    debug!(
+                        "Tether ({:p}): StartTransaction Command",
+                        command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                    );
+                    if transaction.is_none() {
+                        match connection
+                            // We call unchecked_transaction() here because transaction() requires a
+                            // mutable borrow. Being unchecked does not matter, as we perform the
+                            // necessary checks ourselves.
+                            .unchecked_transaction()
+                            .map_err(StashError::ExecutionError)
+                        {
+                            Ok(tx) => {
+                                transaction = Some(tx);
+                                command.send_back(Ok(()));
+                                // Notify the main worker that a transaction has started.
+                                if queue
+                                    .send(Operation::NotifyStartTransaction(conn_handle))
+                                    .is_err()
+                                {
+                                    error!(
+                                        "Failed to send NotifyStartTransaction operation to main queue"
+                                    );
+                                }
                             }
-                        }
-                        Err(error) => {
-                            command.send_back(Err(error));
-                        }
-                    };
+                            Err(error) => {
+                                command.send_back(Err(error));
+                            }
+                        };
+                    } else {
+                        command.send_back(Err(StashError::TransactionAlreadyStarted));
+                    }
                 } else {
-                    command.send_back(Err(StashError::TransactionAlreadyStarted));
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
             }
             Operation::Statistics(_) => {
@@ -1909,6 +1936,14 @@ impl TetheredWorker {
                 // global in scope and not connection-specific. We should never get here. If
                 // we do, it means there is an error in the logic of this module.
                 subscription.send_back(Err(StashError::SubscriptionError));
+            }
+
+            Operation::NotifyCommitTransaction(_)
+            | Operation::NotifyRollbackTransaction(_)
+            | Operation::NotifyStartTransaction(_) => {
+                // These should never occur in the tether work. If they do
+                // it's a bug.
+                warn!("Received unexpected transaction notification");
             }
         }
 
@@ -1996,14 +2031,17 @@ impl TetheredWorker {
                             error!("Failed to roll back transaction upon connection closure");
                         }
                         // Notify the main worker that the transaction has been rolled back.
+                        let Some(handle) = command.conn_handle else {
+                            error!("Closing connection without a handle, can not send NotifyRollbackNotification to main queue");
+                            return;
+                        };
                         if queue
-                            .send(Operation::RollbackTransaction(Command {
-                                channel: None,
-                                conn_handle: None,
-                            }))
+                            .send(Operation::NotifyRollbackTransaction(handle))
                             .is_err()
                         {
-                            error!("Failed to send RollbackTransaction operation to main queue");
+                            error!(
+                                "Failed to send NotifyRollbackTransaction operation to main queue"
+                            );
                         }
                     }
                     return;
@@ -2180,29 +2218,35 @@ impl Worker {
                 // context would not make any sense.
                 warn!("Unexpectedly reached CloseConnection variant in Worker::handle_operation()");
             }
-            Operation::CommitTransaction(command) => {
-                debug!("Stash: Publishing deferred Notification list for committed transaction");
-                if let Some(notifications) = self
-                    .notifications_buffer
-                    .remove(&command.conn_handle.as_ref().map_or(null(), Arc::as_ptr))
-                {
-                    for notification in notifications {
-                        debug!("Stash: Notification to publish (deferred)");
-                        // This is a slight trade-off - it's better to spend a small amount of time
-                        // cloning the subscribers list (which is cheap) than to block the main
-                        // thread while we loop through them. This way, we can offload the sending
-                        // as an async task, plus the subscriber list is a safe snapshot from this
-                        // point in time.
-                        let subscribers = self.subscribers.clone();
-                        drop(self.runtime.spawn(async move {
-                            for subscriber in subscribers {
+            Operation::NotifyCommitTransaction(conn_handle) => {
+                let handle = Arc::as_ptr(&conn_handle);
+                debug!(
+                    "Stash: Publishing deferred Notification list for committed transaction ({:p})",
+                    handle
+                );
+                if let Some(notifications) = self.notifications_buffer.remove(&handle) {
+                    // This is a slight trade-off - it's better to spend a small amount of time
+                    // cloning the subscribers list (which is cheap) than to block the main
+                    // thread while we loop through them. This way, we can offload the sending
+                    // as an async task, plus the subscriber list is a safe snapshot from this
+                    // point in time.
+                    let subscribers = self.subscribers.clone();
+                    let debug_string = format!(
+                        "Stash: Publishing {} from Tether {:p}",
+                        notifications.len(),
+                        handle
+                    );
+                    drop(self.runtime.spawn(async move {
+                        debug!("{}", debug_string);
+                        for notification in notifications {
+                            for subscriber in &subscribers {
                                 if subscriber.send_async(notification.clone()).await.is_err() {
                                     // In theory this should never happen, but we also can't do anything with it
                                     error!("Queue error: Failed to send a Notification to a subscriber");
                                 }
                             }
-                        }));
-                    }
+                        }
+                    }));
                 } else {
                     // In theory this should never happen, but we also can't do anything with it
                     error!(
@@ -2235,13 +2279,15 @@ impl Worker {
                 }));
             }
             Operation::Publish(notification) => {
-                if let Some(notifications) = self.notifications_buffer.get_mut(
-                    &notification
-                        .conn_handle
-                        .as_ref()
-                        .map_or(null(), Arc::as_ptr),
-                ) {
-                    debug!("Stash: Notification to publish (deferring)");
+                let handle = notification
+                    .conn_handle
+                    .as_ref()
+                    .map_or(null(), Arc::as_ptr);
+                if let Some(notifications) = self.notifications_buffer.get_mut(&handle) {
+                    debug!(
+                        "Stash: Notification to publish (deferring, tether={:p})",
+                        handle
+                    );
                     notifications.push(notification);
                     return;
                 }
@@ -2284,19 +2330,16 @@ impl Worker {
                     }
                 }));
             }
-            Operation::RollbackTransaction(command) => {
+            Operation::NotifyRollbackTransaction(conn_handle) => {
                 debug!("Stash: Clearing deferred Notification list for aborted transaction");
+                drop(self.notifications_buffer.remove(&Arc::as_ptr(&conn_handle)));
+            }
+            Operation::NotifyStartTransaction(conn_handle) => {
+                debug!("Stash: Initializing deferred Notification list for transaction");
                 drop(
                     self.notifications_buffer
-                        .remove(&command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)),
+                        .insert(Arc::as_ptr(&conn_handle), vec![]),
                 );
-            }
-            Operation::StartTransaction(command) => {
-                debug!("Stash: Initializing deferred Notification list for transaction");
-                drop(self.notifications_buffer.insert(
-                    command.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
-                    vec![],
-                ));
             }
             Operation::Statistics(mut command) => {
                 debug!("Stash: Statistics request");
@@ -2319,6 +2362,14 @@ impl Worker {
                 // as the caller might be waiting on the oneshot channel in order to
                 // continue.
                 subscription.send_back(Ok(()));
+            }
+
+            Operation::StartTransaction(_)
+            | Operation::CommitTransaction(_)
+            | Operation::RollbackTransaction(_) => {
+                // These should not be handled by the main worker. If it
+                // happens it means there is a bug.
+                warn!("Received unexpected transaction command");
             }
         };
     }
@@ -2375,8 +2426,6 @@ impl Worker {
             SqliteConnectionManager::file,
         );
         let pool = Pool::new(manager).map_err(StashError::TetherError)?;
-        let mut latest_gc = Instant::now();
-        let mut thread_creation_count = 0_usize;
 
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, and will return the results via
@@ -2400,15 +2449,22 @@ impl Worker {
             };
 
             while let Ok(operation) = receiver.recv() {
+                let mut is_connection_close = false;
                 let conn_handle = match operation {
-                    Operation::CloseConnection(ref command)
-                    | Operation::CommitTransaction(ref command)
+                    Operation::CloseConnection(ref command) => {
+                        is_connection_close = true;
+                        command.conn_handle.clone()
+                    }
+                    Operation::CommitTransaction(ref command)
                     | Operation::RollbackTransaction(ref command)
                     | Operation::StartTransaction(ref command) => command.conn_handle.clone(),
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
-                    Operation::Publish(_) | Operation::Statistics(_) | Operation::Subscribe(_) => {
-                        None
-                    }
+                    Operation::Publish(_)
+                    | Operation::Statistics(_)
+                    | Operation::Subscribe(_)
+                    | Operation::NotifyCommitTransaction(_)
+                    | Operation::NotifyRollbackTransaction(_)
+                    | Operation::NotifyStartTransaction(_) => None,
                     Operation::Query(ref query) => query.conn_handle.clone(),
                 };
                 match conn_handle {
@@ -2421,7 +2477,7 @@ impl Worker {
                     // in order to maintain the not-thread-safe PooledConnection context across
                     // the related queries, while allowing calling code to be fully async.
                     Some(handle) => {
-                        let (created, tethered_worker) = worker.get_tethered_worker(&handle);
+                        let (_, tethered_worker) = worker.get_tethered_worker(&handle);
                         if tethered_worker.queue.send(operation).is_err() {
                             // In this situation, we cannot send an error back to the caller, as the
                             // oneshot channel was sent to the queue, and is no longer available. This
@@ -2431,9 +2487,6 @@ impl Worker {
                             error!(
                                 "Queue error: Failed sending message to connection-specific worker"
                             );
-                        }
-                        if created {
-                            let _num = thread_creation_count.saturating_add(1);
                         }
                     }
                     // If no tethered connection handle was specified, it means that this is a
@@ -2445,18 +2498,12 @@ impl Worker {
                 }
 
                 // Run garbage collection
-                if latest_gc.elapsed().as_secs() > 5 || thread_creation_count > 20 {
-                    debug!(
-                        "Garbage collection starting: {} registered tethers",
-                        worker.tethers.len()
-                    );
+                if is_connection_close {
                     worker.prune_tethers();
                     debug!(
                         "Garbage collection finished: {} registered tethers",
                         worker.tethers.len()
                     );
-                    latest_gc = Instant::now();
-                    thread_creation_count = 0;
                 }
             }
         }));

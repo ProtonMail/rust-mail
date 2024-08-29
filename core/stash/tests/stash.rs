@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use futures::executor::block_on;
+use rusqlite::hooks::Action;
 use stash::params;
 use stash::stash::{Interface, Stash, Tether};
 use std::thread::spawn;
@@ -615,4 +616,77 @@ mod concurrency_mixed {
         assert_eq!(result8[0], "test1".to_owned());
         assert_eq!(result8[7], "test8".to_owned());
     }
+}
+
+#[tokio::test]
+async fn test_subscriber() {
+    let db_dir = tempfile::tempdir().unwrap();
+    let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+
+    let subscriber = stash.subscribe().await.unwrap();
+
+    // Create a table
+    stash
+        .execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
+        .await
+        .unwrap();
+
+    stash
+        .execute(r#"CREATE TABLE test_kv2 (value TEXT NOT NULL)"#, vec![])
+        .await
+        .unwrap();
+
+    stash
+        .execute(r#"CREATE TABLE test_kv3 (value TEXT NOT NULL)"#, vec![])
+        .await
+        .unwrap();
+
+    // Insert some data without transaction
+    stash
+        .execute(r#"INSERT INTO test_kv3 (value) VALUES ("test")"#, vec![])
+        .await
+        .unwrap();
+
+    // Start a transaction
+    let tx = stash
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
+
+    // Insert some data
+    tx.execute(r#"INSERT INTO test_kv (value) VALUES ("test")"#, vec![])
+        .await
+        .unwrap();
+
+    // Commit the transaction
+    tx.commit().await.expect("Failed to commit transaction");
+
+    // Start a transaction
+    let tx = stash
+        .transaction()
+        .await
+        .expect("Failed to start transaction");
+
+    // Insert some data
+    tx.execute(r#"INSERT INTO test_kv2 (value) VALUES ("test")"#, vec![])
+        .await
+        .unwrap();
+
+    // Abort the transaction
+    tx.rollback().await.expect("Failed to abort transaction");
+
+    // We should receive 2 notifications , one for test_kv3 and one for test_kv
+    // test_kv2 should not be triggered as the transaction was rolled back.
+    let notification = subscriber.recv().unwrap();
+
+    assert_eq!(notification.table, "test_kv3");
+    assert_eq!(notification.action, Action::SQLITE_INSERT);
+
+    let notification = subscriber.recv().unwrap();
+    assert_eq!(notification.table, "test_kv");
+    assert_eq!(notification.action, Action::SQLITE_INSERT);
+
+    subscriber
+        .recv_timeout(Duration::from_millis(100))
+        .expect_err("Should fail");
 }
