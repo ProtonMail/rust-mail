@@ -2,8 +2,8 @@ use crate::mail::datatypes::MailSettings;
 use crate::mail::MailUserSession;
 use crate::mail::{MailSessionError, MailSessionResult};
 use crate::uniffi_async;
+use anyhow::anyhow;
 use proton_core_common::datatypes::LightOrDarkMode;
-use std::os::unix::ffi::OsStrExt;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -22,6 +22,7 @@ impl MailUserSession {
     /// # Errors
     /// Returns errors if the API call fails, the mode value is invalid, the conversation doesn't exist, or
     /// if there's an issue with the sender that causes problems when creating the API request on our side.
+    /// Also returns errors if the path can't be converted into a string.
     #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,
@@ -32,13 +33,11 @@ impl MailUserSession {
         size: Option<u32>,
         mode: Option<String>,
         format: Option<String>,
-    ) -> MailSessionResult<Option<Vec<u8>>> {
+    ) -> MailSessionResult<Option<String>> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             let mode = light_or_dark_mode_from_string(mode)?;
-
-            //TODO (ET-208) replace when we have saving to files or uniffi supports Bytes
-            Ok(ctx
+            if let Some(path) = ctx
                 .image_for_sender(
                     &mail_settings.clone().into(),
                     address,
@@ -48,8 +47,18 @@ impl MailUserSession {
                     mode,
                     format,
                 )
-                .await
-                .map(|v| v.map(|v| v.as_os_str().as_bytes().to_vec()))?)
+                .await?
+            {
+                Ok(Some(
+                    path.to_str()
+                        .ok_or(MailSessionError::Other(anyhow!(
+                            "Can't convert image path into string"
+                        )))?
+                        .to_owned(),
+                ))
+            } else {
+                Ok(None)
+            }
         })
         .await
     }
