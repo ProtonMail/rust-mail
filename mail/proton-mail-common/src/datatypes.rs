@@ -1040,7 +1040,7 @@ impl Serialize for KeyPackets {
 
 sql_using_serde!(KeyPackets);
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct LabelColor(String);
 
 impl LabelColor {

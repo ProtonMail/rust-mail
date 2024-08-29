@@ -29,11 +29,15 @@
 
 mod message;
 mod rollback_item;
+
 #[cfg(test)]
 #[path = "tests/models.rs"]
 mod tests;
 
-use crate::actions::{ConversationAvailableAction, MessageAvailableAction};
+use crate::actions::{
+    ConversationAction, ConversationAvailableActions, MessageAction, MessageAvailableActions,
+    MoveAction,
+};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
     self, attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
@@ -2080,102 +2084,70 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     pub async fn available_actions<A>(
-        &self,
+        view: Label,
+        local_ids: Vec<LocalId>,
         interface: &A,
-    ) -> Result<Vec<ConversationAvailableAction>, AppError>
+    ) -> Result<ConversationAvailableActions, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        use crate::actions::{ConversationActionKind, LabelAction};
-        let mut actions = vec![];
-        // This should never panic due to conversation will never be loaded without a local_id.
-        let local_id = self.local_id.unwrap();
-        let conversation_labels = self.load_labels(interface).await?;
-        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_move_locations = all_system.iter().filter(|label| label.is_movable_folder());
-        let all_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
-        let all_move_actions = all_folders
-            .iter()
-            .chain(all_system_move_locations)
-            .filter(|label| !conversation_labels.contains(label))
-            .filter_map(|label| {
-                let action = ConversationAvailableAction::new(
-                    ConversationActionKind::Move {
-                        label: LabelAction::from_label(label)?,
-                    },
-                    local_id,
-                );
+        let conversations = Conversation::find(
+            format!(
+                "WHERE local_id IN ({})",
+                local_ids.iter().map(ToString::to_string).join(",")
+            ),
+            vec![],
+            interface,
+            None,
+        )
+        .await?;
 
-                Some(action)
-            });
+        let mut starred = true;
+        let mut deleted = true;
+        let mut unread = false;
 
-        actions.extend(all_move_actions);
-
-        let to_unlabel = conversation_labels
-            .iter()
-            .filter(|label| label.is_applicable_label())
-            .filter(|label| !label.is_starred())
-            .filter_map(|label| {
-                let action = ConversationAvailableAction::new(
-                    ConversationActionKind::Unlabel {
-                        label: LabelAction::from_label(label)?,
-                    },
-                    local_id,
-                );
-
-                Some(action)
-            });
-
-        actions.extend(to_unlabel);
-
-        let all_label_label = Label::find_by_kind(LabelType::Label, interface).await?;
-
-        let to_label = all_label_label
-            .iter()
-            .filter(|label| !conversation_labels.contains(label))
-            // This check may be redundant but i leave it here just in case
-            .filter(|label| label.is_applicable_label())
-            .filter_map(|label| {
-                let action = ConversationAvailableAction::new(
-                    ConversationActionKind::Label {
-                        label: LabelAction::from_label(label)?,
-                    },
-                    local_id,
-                );
-
-                Some(action)
-            });
-
-        actions.extend(to_label);
-
-        if !self.deleted {
-            actions.push(ConversationAvailableAction::new(
-                ConversationActionKind::Delete,
-                local_id,
-            ));
+        for conversion in conversations.iter() {
+            if !conversion.is_starred() {
+                starred = false;
+            }
+            if !conversion.deleted {
+                deleted = false;
+            }
+            if conversion.num_unread > 0 {
+                unread = true;
+            }
         }
 
-        actions.push(ConversationAvailableAction::new(
-            if self.is_starred() {
-                ConversationActionKind::Unstar
+        let mut conversation_actions = vec![
+            if starred {
+                ConversationAction::Unstar
             } else {
-                ConversationActionKind::Star
+                ConversationAction::Star
             },
-            local_id,
-        ));
-
-        let unread = self.num_unread > 0;
-
-        actions.push(ConversationAvailableAction::new(
             if unread {
-                ConversationActionKind::MarkRead
+                ConversationAction::MarkRead
             } else {
-                ConversationActionKind::MarkUnread
+                ConversationAction::MarkUnread
             },
-            local_id,
-        ));
+            ConversationAction::Pin, // Static for now
+        ];
 
-        Ok(actions)
+        if !deleted {
+            conversation_actions.push(ConversationAction::Delete);
+        }
+
+        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
+        let all_system_move_locations = all_system
+            .iter()
+            .filter(|label| label.is_movable_folder())
+            .filter(|label| label.local_id != view.local_id);
+
+        let move_actions = MoveAction::vec(all_system_move_locations, |_label_is_selected| false);
+
+        Ok(ConversationAvailableActions::builder()
+            .move_actions(move_actions)
+            .conversation_actions(conversation_actions)
+            .build())
     }
 
     /// Finds all of the messages from this conversation
@@ -4501,100 +4473,69 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     pub async fn available_actions<A>(
-        &self,
+        view: Label,
+        local_ids: Vec<LocalId>,
         interface: &A,
-    ) -> Result<Vec<MessageAvailableAction>, AppError>
+    ) -> Result<MessageAvailableActions, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        use crate::actions::{LabelAction, MessageActionKind};
-        let mut actions = vec![];
-        // This should never panic due to message will never be loaded without a local_id.
-        let local_id = self.local_id.unwrap();
-        let message_labels = self.all_message_labels(interface).await?;
-        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_move_locations = all_system.iter().filter(|label| label.is_movable_folder());
-        let all_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
-        let all_move_actions = all_folders
-            .iter()
-            .chain(all_system_move_locations)
-            .filter(|label| !message_labels.contains(label))
-            .filter_map(|label| {
-                let action = MessageAvailableAction::new(
-                    MessageActionKind::Move {
-                        label: LabelAction::from_label(label)?,
-                    },
-                    local_id,
-                );
+        let messages = Message::find(
+            format!(
+                "WHERE local_id IN ({})",
+                local_ids.iter().map(ToString::to_string).join(",")
+            ),
+            vec![],
+            interface,
+            None,
+        )
+        .await?;
 
-                Some(action)
-            });
+        let mut starred = true;
+        let mut deleted = true;
+        let mut unread = false;
 
-        actions.extend(all_move_actions);
-
-        let to_unlabel = message_labels
-            .iter()
-            .filter(|label| label.is_applicable_label())
-            .filter(|label| !label.is_starred())
-            .filter_map(|label| {
-                let action = MessageAvailableAction::new(
-                    MessageActionKind::Unlabel {
-                        label: LabelAction::from_label(label)?,
-                    },
-                    local_id,
-                );
-
-                Some(action)
-            });
-
-        actions.extend(to_unlabel);
-
-        let all_label_label = Label::find_by_kind(LabelType::Label, interface).await?;
-
-        let to_label = all_label_label
-            .iter()
-            .filter(|label| !message_labels.contains(label))
-            // This check may be redundant but i leave it here just in case
-            .filter(|label| label.is_applicable_label())
-            .filter_map(|label| {
-                let action = MessageAvailableAction::new(
-                    MessageActionKind::Label {
-                        label: LabelAction::from_label(label)?,
-                    },
-                    local_id,
-                );
-
-                Some(action)
-            });
-
-        actions.extend(to_label);
-
-        if !self.deleted {
-            actions.push(MessageAvailableAction::new(
-                MessageActionKind::Delete,
-                local_id,
-            ));
+        for message in messages.iter() {
+            if !message.is_starred() {
+                starred = false;
+            }
+            if !message.deleted {
+                deleted = false;
+            }
+            if message.unread {
+                unread = true;
+            }
         }
 
-        actions.push(MessageAvailableAction::new(
-            if self.is_starred() {
-                MessageActionKind::Unstar
+        let mut message_actions = vec![
+            if starred {
+                MessageAction::Unstar
             } else {
-                MessageActionKind::Star
+                MessageAction::Star
             },
-            local_id,
-        ));
-
-        actions.push(MessageAvailableAction::new(
-            if self.unread {
-                MessageActionKind::MarkRead
+            if unread {
+                MessageAction::MarkRead
             } else {
-                MessageActionKind::MarkUnread
+                MessageAction::MarkUnread
             },
-            local_id,
-        ));
+            MessageAction::Pin, // Static for now
+        ];
 
-        Ok(actions)
+        if !deleted {
+            message_actions.push(MessageAction::Delete);
+        }
+
+        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
+        let all_system_move_locations = all_system
+            .iter()
+            .filter(|label| label.is_movable_folder())
+            .filter(|label| label.local_id != view.local_id);
+        let move_actions = MoveAction::vec(all_system_move_locations, |_is_label_selected| false);
+
+        Ok(MessageAvailableActions::builder()
+            .move_actions(move_actions)
+            .message_actions(message_actions)
+            .build())
     }
 
     /// Gets the body of a message from a message id.

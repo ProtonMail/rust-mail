@@ -49,13 +49,13 @@
 //!   - [`Message::label_ids`](proton_mail_common::models::Message::label_ids)
 //!
 mod attachment;
-mod available_action;
+// mod available_action;
 pub(crate) mod labels;
 mod system_label;
 
 use crate::core::datatypes::Id;
 pub use attachment::*;
-pub use available_action::*;
+// pub use available_action::*;
 use core::fmt;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};

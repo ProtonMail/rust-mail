@@ -8,8 +8,8 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
+use super::datatypes::MimeType;
 use super::datatypes::{BlockQuote, RemoteContent};
-use super::datatypes::{MessageAvailableAction, MimeType};
 use super::{MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
@@ -428,25 +428,26 @@ pub async fn search_for_messages(
 ///
 /// Returns an error if the database query fails.
 ///
-#[uniffi::export]
-pub async fn available_actions_for_message(
-    session: Arc<MailUserSession>,
-    id: Id,
-) -> MailboxResult<Vec<MessageAvailableAction>> {
-    let stash = session.user_stash().clone();
-    uniffi_async(async move {
-        let Some(message) = RealMessage::load(id.into(), &stash).await? else {
-            return Ok(vec![]);
-        };
-        Ok(message
-            .available_actions(&stash)
-            .await?
-            .into_iter()
-            .map_into()
-            .collect())
-    })
-    .await
-}
+// #[uniffi::export]
+// pub async fn available_actions_for_message(
+//     session: Arc<MailUserSession>,
+//     id: Id,
+// ) -> MailboxResult<Vec<MessageAvailableAction>> {
+//     let stash = session.user_stash().clone();
+//     uniffi_async(async move {
+//         let Some(message) = RealMessage::load(id.into(), &stash).await? else {
+//             return Ok(vec![]);
+//         };
+//         Ok(message
+//             .available_actions(&stash)
+//             .await?
+//             .into_iter()
+//             .map_into()
+//             .collect())
+//     })
+//     .await
+// }
+
 /// Return the decrypted body of the specified message.
 ///
 /// If the message body has never been fetched before, it will be retrieved from

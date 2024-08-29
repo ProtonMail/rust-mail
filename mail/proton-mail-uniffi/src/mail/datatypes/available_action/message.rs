@@ -1,8 +1,7 @@
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::LabelColor;
 use proton_mail_common::actions::{
-    MessageActionKind as RealMessageActionKind,
-    MessageAvailableAction as RealMessageAvailabaleAction,
+    MessageAction as RealMessageActionKind, MessageAvailableAction as RealMessageAvailabaleAction,
 };
 use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
