@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.11.24] - 2024-08-29
+
 ### Changed
 
   - `image_for_sender` now return a String who is a path to the image.
