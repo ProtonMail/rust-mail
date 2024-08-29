@@ -9,7 +9,7 @@ use crate::session::Session;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{anyhow, Error as AnyhowError};
 use proton_api_core::login::Flow;
-use proton_api_core::service::{ApiService, ApiServiceError};
+use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Config as ApiConfig;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session as ApiCoreSession;
@@ -23,7 +23,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
 use tracing::{debug, error, Level};
-use url::Url;
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
@@ -104,7 +103,7 @@ impl Context {
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
-        api_url: Url,
+        api_config: ApiConfig,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
@@ -116,16 +115,9 @@ impl Context {
         let stash = Stash::new(Some(&session_db_path))?;
         migrate_session_db(&stash).await?;
 
-        let api = Proton::new(
-            ApiConfig {
-                base_url: api_url.to_string(),
-                ..Default::default()
-            },
-            None,
-            None,
-        )
-        .await
-        .map_err(ApiServiceError::from)?;
+        let api = Proton::new(api_config, None, None)
+            .await
+            .map_err(ApiServiceError::from)?;
 
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
@@ -163,15 +155,9 @@ impl Context {
             None,
         );
 
-        let session = ApiCoreSession::new(
-            ApiConfig {
-                base_url: self.api.base_url().to_string(),
-                ..Default::default()
-            },
-            Some(Box::new(auth_store)),
-        )
-        .await
-        .map_err(ApiServiceError::from)?;
+        let session = ApiCoreSession::new(self.api.config().clone(), Some(Box::new(auth_store)))
+            .await
+            .map_err(ApiServiceError::from)?;
         Ok(Flow::new(session))
     }
 
@@ -236,15 +222,9 @@ impl Context {
         );
 
         debug!("Creating session");
-        let session = ApiCoreSession::new(
-            ApiConfig {
-                base_url: self.api.base_url().to_string(),
-                ..Default::default()
-            },
-            Some(Box::new(auth_store)),
-        )
-        .await
-        .map_err(ApiServiceError::from)?;
+        let session = ApiCoreSession::new(self.api.config().clone(), Some(Box::new(auth_store)))
+            .await
+            .map_err(ApiServiceError::from)?;
         UserContext::new(session, stash, user_id, cache_path.into(), cache_size)
     }
 

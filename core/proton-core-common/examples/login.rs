@@ -25,8 +25,8 @@ async fn main() {
     key_chain.store(key).unwrap();
 
     let config = Config::default();
-    let base_url = Url::parse(&config.base_url).unwrap();
-    let context = Context::new(session_db_dir, user_db_dir, key_chain, [], base_url, None)
+    _ = Url::parse(&config.base_url).unwrap();
+    let context = Context::new(session_db_dir, user_db_dir, key_chain, [], config, None)
         .await
         .unwrap();
 
