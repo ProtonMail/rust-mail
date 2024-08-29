@@ -46,10 +46,10 @@ mod messages {
 
     type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = std::result::Result<T, E>;
 
-    #[tokio::test]
     #[test_case(MAX_PAGE_ELEMENT_COUNT_U64 - 1, MAX_PAGE_ELEMENT_COUNT_U64 - 1; "Page size smaller than limit")]
     #[test_case(MAX_PAGE_ELEMENT_COUNT_U64, MAX_PAGE_ELEMENT_COUNT_U64; "Page size equal to limit")]
     #[test_case(MAX_PAGE_ELEMENT_COUNT_U64 + 1, MAX_PAGE_ELEMENT_COUNT_U64; "Page size larger than limit")]
+    #[tokio::test]
     async fn get_messages_page_size_limit(page_size: u64, want_size: u64) -> Result<()> {
         let server = MockServer::start().await;
         let session = new_session(&server).await?;
