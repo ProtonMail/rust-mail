@@ -295,12 +295,15 @@ mod first_unread_message {
 }
 
 mod available_actions {
+    use std::sync::LazyLock;
+
     use super::*;
     use crate::{
-        actions::ConversationActionKind, actions::LabelAction, conversation,
+        actions::{ConversationAvailableActions, SystemFolderAction},
+        conversation,
+        datatypes::SystemLabel,
         db::new_test_connection,
     };
-    use itertools::Itertools;
     use pretty_assertions::assert_eq;
     use test_case::test_case;
 
@@ -320,199 +323,207 @@ mod available_actions {
     }
 
     struct TestCase {
+        view: Label,
+        conversations: Vec<ConversationWithLabels>,
+        expected: ConversationAvailableActions,
+    }
+
+    #[derive(Clone)]
+    struct ConversationWithLabels {
         conversation: Conversation,
-        converstaion_labels: Vec<&'static Label>,
-        other_labels: Vec<&'static Label>,
-        expected: Vec<ConversationAvailableAction>,
+        labels: Vec<Label>,
     }
 
-    fn move_action(name: impl AsRef<str>) -> ConversationAvailableAction {
-        ConversationAvailableAction::new(
-            ConversationActionKind::Move {
-                label: LabelAction {
-                    label_id: 0.into(),
-                    name: name.as_ref().to_owned(),
-                    color: LabelColor::black(),
-                },
-            },
-            0.into(),
-        )
-    }
-
-    fn label_action(name: impl AsRef<str>) -> ConversationAvailableAction {
-        ConversationAvailableAction::new(
-            ConversationActionKind::Label {
-                label: LabelAction {
-                    label_id: 0.into(),
-                    name: name.as_ref().to_owned(),
-                    color: LabelColor::purple(),
-                },
-            },
-            0.into(),
-        )
-    }
-
-    fn unlabel_action(name: impl AsRef<str>) -> ConversationAvailableAction {
-        ConversationAvailableAction::new(
-            ConversationActionKind::Unlabel {
-                label: LabelAction {
-                    label_id: 0.into(),
-                    name: name.as_ref().to_owned(),
-                    color: LabelColor::purple(),
-                },
-            },
-            0.into(),
-        )
-    }
-
-    lazy_static! {
-        static ref TEST1: TestCase = TestCase {
+    static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: INBOX.clone(),
+        conversations: vec![ConversationWithLabels {
             conversation: conversation!(deleted: false, num_unread: 1, remote_id: Some("test1".into())),
-            converstaion_labels: vec![&STARRED, &FOLDER],
-            other_labels: vec![],
-            expected: vec![
-                move_action("Inbox"),
-                move_action("Archive"),
-                move_action("Spam"),
-                move_action("Trash"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::MarkRead, 0.into()),
-            ],
-        };
-        static ref TEST2: TestCase = TestCase {
-            conversation: conversation!(deleted: false, remote_id: Some("test2".into())),
-            converstaion_labels: vec![&INBOX, &ALL_MAIL, &APPLICABLE_LABEL_1],
-            other_labels: vec![&APPLICABLE_LABEL_2, &FOLDER],
-            expected: vec![
-                move_action("MyFavouritesFolder"),
-                move_action("Archive"),
-                move_action("Spam"),
-                move_action("Trash"),
-                unlabel_action("Applicable Label 1"),
-                label_action("Applicable Label 2"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::Star, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
-            ],
-        };
-        static ref TEST3: TestCase = TestCase {
-            conversation: conversation!(deleted: false, remote_id: Some("test3".into())),
-            converstaion_labels: vec![&INBOX, &SPAM, &ARCHIVE, &TRASH, &FOLDER],
-            other_labels: vec![&APPLICABLE_LABEL_2],
-            expected: vec![
-                label_action("Applicable Label 2"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::Star, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
-            ],
-        };
-        static ref TEST4: TestCase = TestCase {
-            conversation: conversation!(deleted: false, remote_id: Some("test4".into())),
-            converstaion_labels: vec![&INBOX, &APPLICABLE_LABEL_1, &STARRED],
-            other_labels: vec![&APPLICABLE_LABEL_2],
-            expected: vec![
-                move_action("Archive"),
-                move_action("Spam"),
-                move_action("Trash"),
-                unlabel_action("Applicable Label 1"),
-                label_action("Applicable Label 2"),
-                ConversationAvailableAction::new(ConversationActionKind::Delete, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
-            ],
-        };
-        static ref TEST5: TestCase = TestCase {
-            conversation: conversation!(deleted: true, remote_id: Some("test5".into())),
-            converstaion_labels: vec![&INBOX, &APPLICABLE_LABEL_2, &STARRED],
-            other_labels: vec![&APPLICABLE_LABEL_1],
-            expected: vec![
-                move_action("Archive"),
-                move_action("Spam"),
-                move_action("Trash"),
-                unlabel_action("Applicable Label 2"),
-                label_action("Applicable Label 1"),
-                ConversationAvailableAction::new(ConversationActionKind::Unstar, 0.into()),
-                ConversationAvailableAction::new(ConversationActionKind::MarkUnread, 0.into()),
-            ],
-        };
-    }
+            labels: vec![STARRED.clone(), FOLDER.clone()],
+        }],
+        expected: ConversationAvailableActions::builder()
+            .move_actions(vec![
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Archive,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Spam,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Trash,
+                    is_selected: false,
+                }),
+            ])
+            .conversation_actions(vec![
+                ConversationAction::Unstar,
+                ConversationAction::MarkRead,
+                ConversationAction::Pin,
+                ConversationAction::Delete,
+            ])
+            .build(),
+    });
 
-    #[test_case(&TEST1; "TEST1: Unread, starred and in custom folder")]
-    #[test_case(&TEST2; "TEST2: Custom label, all mail and in inbox")]
-    #[test_case(&TEST3; "TEST3: All possible move locations")]
-    #[test_case(&TEST4; "TEST4: Custom label, starred and in inbox")]
-    #[test_case(&TEST5; "TEST5: Different custom label, starred and in inbox")]
+    static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: FOLDER.clone(),
+        conversations: vec![ConversationWithLabels {
+            conversation: conversation!(deleted: true, num_unread: 0, remote_id: Some("test2".into())),
+            labels: vec![FOLDER.clone()],
+        }],
+        expected: ConversationAvailableActions::builder()
+            .move_actions(vec![
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Inbox,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Archive,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Spam,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Trash,
+                    is_selected: false,
+                }),
+            ])
+            .conversation_actions(vec![
+                ConversationAction::Star,
+                ConversationAction::MarkUnread,
+                ConversationAction::Pin,
+            ])
+            .build(),
+    });
+
+    static TEST3: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: SPAM.clone(),
+        conversations: vec![ConversationWithLabels {
+            conversation: conversation!(remote_id: Some("test3".into())),
+            labels: vec![],
+        }],
+        expected: ConversationAvailableActions::builder()
+            .move_actions(vec![
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Inbox,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Archive,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Trash,
+                    is_selected: false,
+                }),
+            ])
+            .conversation_actions(vec![
+                ConversationAction::Star,
+                ConversationAction::MarkUnread,
+                ConversationAction::Pin,
+                ConversationAction::Delete,
+            ])
+            .build(),
+    });
+
+    static TEST4: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: INBOX.clone(),
+        conversations: vec![
+            ConversationWithLabels {
+                conversation: conversation!(deleted: true, num_unread: 0, remote_id: Some("test4_1".into())),
+                labels: vec![STARRED.clone()],
+            },
+            ConversationWithLabels {
+                conversation: conversation!(deleted: false, num_unread: 1, remote_id: Some("test4_2".into())),
+                labels: vec![],
+            },
+        ],
+        expected: ConversationAvailableActions::builder()
+            .move_actions(vec![
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Archive,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Spam,
+                    is_selected: false,
+                }),
+                MoveAction::SystemFolder(SystemFolderAction {
+                    local_id: 0.into(),
+                    name: SystemLabel::Trash,
+                    is_selected: false,
+                }),
+            ])
+            .conversation_actions(vec![
+                ConversationAction::Star,
+                ConversationAction::MarkRead,
+                ConversationAction::Pin,
+                ConversationAction::Delete,
+            ])
+            .build(),
+    });
+
+    #[test_case(&TEST1; "TEST1: Unread, starred in custom folder viewed from Inbox")]
+    #[test_case(&TEST2; "TEST2: Read, not starred, deleted and in custom folder viewed from Folder")]
+    #[test_case(&TEST3; "TEST3: Default, viewed from Spam")]
+    #[test_case(&TEST4; "TEST4: Two conversations, one from TEST1 and other from TEST2")]
     #[tokio::test]
     async fn test_available_actions(test_case: &TestCase) {
         let stash = new_test_connection().await;
-        let mut label_ids = vec![];
-        let mut conversation: Conversation = test_case.conversation.clone();
-        conversation.stash = Some(stash.clone());
+        let tx = stash.connection();
+        let mut conversation_ids = vec![];
 
-        let other_labels = test_case
-            .other_labels
-            .iter()
-            .filter(|label| label.label_type != LabelType::System);
-
-        for label in other_labels {
-            let tx = stash.connection();
-            let mut label: Label = (*label).clone();
-            label.stash = Some(stash.clone());
-            label.save_using(&tx).await.unwrap();
-        }
-
-        for label in test_case.converstaion_labels.iter() {
-            let mut label: Label = (*label).clone();
-            if label.label_type == LabelType::System {
-                label = Label::find_first("WHERE remote_id=?", params![label.remote_id], &stash)
-                    .await
-                    .unwrap()
-                    .unwrap();
-            } else {
-                let tx = stash.connection();
-                label.stash = Some(stash.clone());
-                label.save_using(&tx).await.unwrap();
-            }
-
-            label_ids.push(label.local_id.unwrap());
-        }
-
+        for ConversationWithLabels {
+            mut conversation,
+            labels,
+        } in test_case.conversations.clone()
         {
-            let tx = stash.connection();
-            conversation.save_using(&tx).await.unwrap();
-            let ids = vec![conversation.local_id.unwrap()];
+            conversation
+                .save_using(&tx)
+                .await
+                .expect("failed to create conversation");
 
-            for label_id in label_ids {
-                Conversation::apply_label(label_id, ids.clone(), &tx)
-                    .await
-                    .unwrap();
+            conversation_ids.push(conversation.local_id.unwrap());
+
+            for mut label in labels {
+                label.save_using(&tx).await.expect("failed to create label");
+
+                let label_id = label.local_id.unwrap();
+                let ids = vec![conversation.local_id.unwrap()];
+
+                Conversation::apply_label(label_id, ids, &tx).await.unwrap();
             }
         }
 
-        conversation = Conversation::load(conversation.local_id.unwrap(), &stash)
+        let view = Label::find_by_id(test_case.view.remote_id.clone().unwrap().into_inner(), &tx)
             .await
             .unwrap()
             .unwrap();
 
-        let mut actual = conversation.available_actions(&stash).await.unwrap();
-        actual.iter_mut().for_each(|action| match action.action {
-            ConversationActionKind::Move { ref mut label }
-            | ConversationActionKind::Label { ref mut label }
-            | ConversationActionKind::Unlabel { ref mut label } => label.label_id = 0.into(),
-            _ => {}
-        });
-        let expected = test_case
-            .expected
-            .iter()
-            .map(|action| {
-                let mut action = action.clone();
-                action.local_id = conversation.local_id.unwrap();
-                action
-            })
-            .collect_vec();
+        let mut actual = Conversation::available_actions(view, conversation_ids, &tx)
+            .await
+            .unwrap();
 
-        assert_eq!(actual, expected);
+        actual.move_actions.iter_mut().for_each(|action| {
+            if let MoveAction::SystemFolder(action) = action {
+                action.local_id = 0.into(); // To be able to compare with expected
+            }
+        });
+
+        assert_eq!(actual, test_case.expected);
     }
 }
 

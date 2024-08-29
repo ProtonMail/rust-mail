@@ -96,28 +96,28 @@ pub async fn delete_conversations(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> Result
 ///
 /// Returns an error if the database query fails.
 ///
-#[uniffi::export]
-pub async fn available_actions_for_conversation(
-    session: Arc<MailUserSession>,
-    id: Id,
-) -> Result<Vec<ConversationAvailableAction>, MailboxError> {
-    let conn = session.user_stash().connection();
-    uniffi_async(async move {
-        if let Some(conversation) = RealConversation::load(id.into(), &conn).await? {
-            let actions = conversation
-                .available_actions(session.user_stash())
-                .await?
-                .into_iter()
-                .map_into()
-                .collect();
+// #[uniffi::export]
+// pub async fn available_actions_for_conversation(
+//     session: Arc<MailUserSession>,
+//     id: Id,
+// ) -> Result<Vec<ConversationAvailableAction>, MailboxError> {
+//     let conn = session.user_stash().connection();
+//     uniffi_async(async move {
+//         if let Some(conversation) = RealConversation::load(id.into(), &conn).await? {
+//             let actions = conversation
+//                 .available_actions(session.user_stash())
+//                 .await?
+//                 .into_iter()
+//                 .map_into()
+//                 .collect();
 
-            Ok(actions)
-        } else {
-            Ok(vec![])
-        }
-    })
-    .await
-}
+//             Ok(actions)
+//         } else {
+//             Ok(vec![])
+//         }
+//     })
+//     .await
+// }
 
 /// Get a specified conversation.
 ///

@@ -1,7 +1,13 @@
-mod conversation;
+mod conversation_action;
+mod general_actions;
 mod label_action;
-mod message;
+mod message_action;
+mod move_action;
+mod reply_action;
 
-pub use self::conversation::*;
-pub use self::message::*;
+pub use conversation_action::*;
+pub use general_actions::*;
 pub use label_action::*;
+pub use message_action::*;
+pub use move_action::*;
+pub use reply_action::*;
