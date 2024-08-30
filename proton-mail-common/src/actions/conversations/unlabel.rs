@@ -1,5 +1,5 @@
-use crate::actions::conversations::ActionData;
-use crate::actions::ActionError;
+use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
@@ -9,16 +9,14 @@ use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
 
-use super::filter_conversation_responses;
-
 /// Action which removes a label from conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Unlabel(ActionData);
+pub struct Unlabel(GenericActionData<Conversation>);
 
 impl Unlabel {
     /// Create a new instance which removes `label_id` from the conversations with `ids`.
     pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
-        Self(ActionData::new(label_id, ids))
+        Self(GenericActionData::new(label_id, ids))
     }
 }
 
@@ -43,7 +41,7 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
-        Conversation::remove_label(action.0.label_id, action.0.ids.clone(), tx).await?;
+        Conversation::remove_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -52,10 +50,11 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::apply_label(action.0.label_id, action.0.ids.clone(), tx).await?;
-
-        action.0.mark_rollback_conversations(tx).await?;
-
+        Conversation::apply_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        action
+            .0
+            .mark_rollback(RollbackItemType::Conversation, tx)
+            .await?;
         Ok(())
     }
 
@@ -67,12 +66,12 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         let response = Conversation::remove_label_from_multiple_remote::<Proton>(
             action.0.remote_label_id.clone().expect("Should be set"),
-            action.0.remote_ids.clone(),
+            action.0.remote_target_ids.clone(),
             session.api(),
         )
         .await?;
 
-        let failed_ids = filter_conversation_responses(response);
+        let failed_ids = filter_responses(response);
 
         if !failed_ids.is_empty() {
             error!("Unlabel operation failed for: {:?}", failed_ids);

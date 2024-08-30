@@ -1,5 +1,4 @@
-use crate::actions::conversations::filter_conversation_responses;
-use crate::actions::ActionError;
+use crate::actions::{filter_responses, ActionError};
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
@@ -128,7 +127,7 @@ impl proton_action_queue::action::Handler for Handler {
         )
         .await?;
 
-        let failed_ids = filter_conversation_responses(responses);
+        let failed_ids = filter_responses(responses);
 
         if failed_ids.is_empty() {
             return Ok(());

@@ -520,7 +520,7 @@ pub trait ProtonMail: ApiService {
         .await
     }
 
-    /// Put a label on a message
+    /// Put a label on some messages.
     ///
     /// # Parameters
     ///
@@ -573,12 +573,12 @@ pub trait ProtonMail: ApiService {
         .await
     }
 
-    /// TODO: Document this method.
+    /// Remove a label from some messages.
     ///
     /// # Parameters
     ///
-    /// * `message_ids` - TODO: Document this parameter.
-    /// * `label_id`    - TODO: Document this parameter.
+    /// * `message_ids` - Ids of the messages.
+    /// * `label_id`    - Id of the label to remove.
     ///
     /// # Errors
     ///

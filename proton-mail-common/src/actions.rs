@@ -4,10 +4,18 @@ pub mod labels;
 pub mod messages;
 
 pub use self::available_action::*;
+use crate::datatypes::RollbackItemType;
+use crate::models::{Label, RollbackItem};
 use crate::AppError;
 use proton_action_queue::action::Factory;
 use proton_api_core::service::ApiServiceError;
-use stash::stash::StashError;
+use proton_api_mail::services::proton::response_data::OperationResult;
+use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use serde::{Deserialize, Serialize};
+use stash::orm::Model;
+use stash::stash::{StashError, Tether};
+use std::marker::PhantomData;
+use tracing::error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ActionError {
@@ -47,4 +55,105 @@ pub(crate) fn new_action_factory() -> Factory {
     factory.register::<conversations::Move>().expect(ERR_MSG);
     factory.register::<messages::label::Label>().expect(ERR_MSG);
     factory
+        .register::<messages::unlabel::Unlabel>()
+        .expect(ERR_MSG);
+    factory
+}
+
+/// Convenience type which contains data common to many actions.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct GenericActionData<T>
+where
+    T: Model,
+{
+    /// Local label id which this action applies to.
+    label_id: LocalId,
+    /// Resolved remote label id.
+    ///
+    /// Note: this is only for user with remote execution, it should be set by then.
+    remote_label_id: Option<LabelId>,
+    /// Local ids for the action to act on.
+    target_ids: Vec<LocalId>,
+    /// Resolved remote ids.
+    remote_target_ids: Vec<RemoteId>,
+    phantom: PhantomData<T>,
+}
+
+impl<T> GenericActionData<T>
+where
+    T: Model,
+{
+    /// Create a new instance with the given `label_id` and target `ids`.
+    pub fn new(label_id: LocalId, target_ids: impl IntoIterator<Item = LocalId>) -> Self {
+        Self {
+            label_id,
+            remote_label_id: None,
+            target_ids: Vec::from_iter(target_ids),
+            remote_target_ids: vec![],
+            phantom: PhantomData,
+        }
+    }
+
+    /// Resolve all remote ids.
+    ///
+    /// Resolved remote ids are stored on self.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if ids could not be resolved.
+    async fn resolve_ids(&mut self, tx: &Tether) -> Result<(), ActionError> {
+        if self.target_ids.is_empty() {
+            return Err(ActionError::NoInput);
+        }
+
+        self.remote_label_id = Some(find_remote_label_id(tx, self.label_id).await?);
+
+        let conv_ids = LocalId::counterparts::<T, _>(self.target_ids.clone(), tx)
+            .await
+            .map_err(|e| {
+                error!("Failed to resolve ids: {e}");
+                e
+            })?;
+
+        self.remote_target_ids = conv_ids;
+
+        Ok(())
+    }
+
+    /// Mark the action items to be rollback
+    async fn mark_rollback(
+        &self,
+        item_type: RollbackItemType,
+        tx: &Tether,
+    ) -> Result<(), ActionError> {
+        for remote_id in self.remote_target_ids.iter() {
+            RollbackItem::new(remote_id.clone(), item_type)
+                .save_using(tx)
+                .await?;
+        }
+
+        Ok(())
+    }
+}
+
+/// Resolve the remote id for a label with `local_id`.
+///
+/// # Errors
+///
+/// Returns error if the resolution failed.
+async fn find_remote_label_id(tether: &Tether, local_id: LocalId) -> Result<LabelId, ActionError> {
+    let Some(label_id) = local_id.counterpart::<Label, _>(tether).await? else {
+        return Err(AppError::LabelNotFound(local_id).into());
+    };
+
+    Ok(label_id.into())
+}
+
+/// Filter server response for messages on which the operation failed.
+pub fn filter_responses(responses: Vec<OperationResult>) -> Vec<RemoteId> {
+    responses
+        .into_iter()
+        .filter(|r| r.response.code != 1000)
+        .map(|r| RemoteId::from(r.id))
+        .collect::<Vec<_>>()
 }

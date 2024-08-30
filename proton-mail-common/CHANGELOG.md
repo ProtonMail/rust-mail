@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Label` and `Unlabel` actions for messages.
 - `CustomFolder` struct (like `ContextualLabel` with a children field)
 - `Sidebar::all_custom_folders` method (return all custom folders in a flat way)
 - Added a background job for expired messages.

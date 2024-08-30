@@ -431,7 +431,7 @@ pub async fn watch_messages_for_label(
 ///
 /// # Errors
 ///
-/// Returns an error if the database query fails.
+/// Returns an error if the action can not be executed.
 ///
 #[uniffi::export]
 pub async fn apply_label_to_messages(
@@ -441,8 +441,41 @@ pub async fn apply_label_to_messages(
 ) -> Result<(), MailSessionError> {
     let user_context = session.ctx();
     uniffi_async(async move {
-        RealMessage::apply_label_to_multiple_remote(
-            user_context,
+        RealMessage::action_apply_label(
+            user_context.session(),
+            user_context.queue(),
+            label_id.into(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
+    })
+    .await
+}
+
+/// Remove label from the given messages with the given label id.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to remove.
+/// * `ids`      - The local IDs of the messages to remove the label from.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn remove_label_from_messages(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::action_remove_label(
+            user_context.session(),
+            user_context.queue(),
             label_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
         )
