@@ -1,11 +1,7 @@
-use std::collections::HashSet;
 use crate::datatypes::{AttachmentMetadata, CustomLabel, ExclusiveLocation, MessageAddresses};
-use crate::models::{Conversation, ConversationLabel};
+use crate::models::Conversation;
 use proton_core_common::datatypes::{LocalId, RemoteId};
 use proton_core_common::models::ModelExtension;
-use proton_sqlite3::rusqlite::params;
-use stash::exports::ToSql;
-use stash::orm::{Model, ResultsetChange};
 use stash::stash::{AgnosticInterface, Interface, StashError};
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
@@ -135,18 +131,5 @@ impl ContextualConversation {
         };
 
         Ok(Self::new(conversation, local_label_id))
-    }
-
-    pub async fn watch<A>(ids: impl IntoIterator<Item = LocalId>, interface: &A) -> Result<flume::Receiver<()>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface
-    {
-        let mut conversation_ids = HashSet::from_iter(ids);
-        let var_args = vec!["?"; conversation_ids.len()].join(",");
-        let (conv_sender, conv_receiver) = flume::unbounded();
-        let (label_sender, label_receiver) = flume::unbounded();
-        let _ =ConversationLabel::find(format!("WHERE local_conversation_id IN ({})", var_args), conversation_ids.iter().map(|id| -> Box<dyn ToSql + Send>{
-            Box::new(id)
-        }).collect(), interface, Some(label_sender)).await?;
     }
 }
