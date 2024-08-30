@@ -62,8 +62,13 @@ impl MailUserSession {
     ///
     pub async fn fork(&self) -> Result<String, MailSessionError> {
         let ctx = self.ctx.clone();
-        uniffi_async(async move { ctx.session().fork().await.map_err(MailSessionError::from) })
-            .await
+        uniffi_async(async move {
+            ctx.session()
+                .fork_with_version("web-account-lite".to_owned())
+                .await
+                .map_err(MailSessionError::from)
+        })
+        .await
     }
 
     /// Provides a way to get the datatypes::User FFI instance.
