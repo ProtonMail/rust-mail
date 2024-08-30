@@ -997,6 +997,54 @@ impl From<ApiContactEmail> for ContactEmail {
     }
 }
 
+impl ContactEmail {
+    /// Save a contact email to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that existing conversations are updated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save a contact email to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// ensure that existing conversations are updated.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+                self.row_id = existing.row_id;
+            }
+        }
+
+        <Self as Model>::save_using(self, interface).await
+    }
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("users")]
