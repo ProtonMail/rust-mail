@@ -386,6 +386,7 @@ use crate::orm::{from_rows, perform_load, ConversionError, DbRecord, DbRecords, 
 use core::fmt::Debug;
 use core::ops::Deref;
 use core::ptr::null;
+use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicBool, Ordering};
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
@@ -587,13 +588,13 @@ enum Operation {
     Instruct(Instruction),
 
     /// Notify a transaction was commited.
-    NotifyCommitTransaction(Arc<()>),
+    NotifyCommitTransaction(Arc<AtomicU32>),
 
     /// Notify a transaction was rolled back.
-    NotifyRollbackTransaction(Arc<()>),
+    NotifyRollbackTransaction(Arc<AtomicU32>),
 
     /// Notify a new transaction has started.
-    NotifyStartTransaction(Arc<()>),
+    NotifyStartTransaction(Arc<AtomicU32>),
 
     /// Publishes a notification of changes made to the database to all
     /// subscribers.
@@ -782,7 +783,7 @@ struct Command {
     /// database connection will be created and associated if not already
     /// registered, and re-used otherwise. If [`None`], a new database
     /// connection will be created, but not registered, and used just this once.
-    conn_handle: Option<Arc<()>>,
+    conn_handle: Option<Arc<AtomicU32>>,
 }
 
 impl OperationLogic for Command {
@@ -892,7 +893,7 @@ struct Instruction {
     /// database connection will be created and associated if not already
     /// registered, and re-used otherwise. If [`None`], a new database
     /// connection will be created, but not registered, and used just this once.
-    conn_handle: Option<Arc<()>>,
+    conn_handle: Option<Arc<AtomicU32>>,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -973,7 +974,7 @@ pub struct Notification {
     /// The handle of the associated connection. This is a strong reference in
     /// order to ensure the connection is not dropped while the notification is
     /// being processed. If the query was ad-hoc, then this will be [`None`].
-    pub conn_handle: Option<Arc<()>>,
+    pub conn_handle: Option<Arc<AtomicU32>>,
 
     /// The action that has been performed on the table. This can be one of
     /// `INSERT`, `UPDATE`, or `DELETE`.
@@ -1030,7 +1031,7 @@ struct Query {
     /// database connection will be created and associated if not already
     /// registered, and re-used otherwise. If [`None`], a new database
     /// connection will be created, but not registered, and used just this once.
-    conn_handle: Option<Arc<()>>,
+    conn_handle: Option<Arc<AtomicU32>>,
 
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
@@ -1180,9 +1181,9 @@ impl OperationLogic for Query {
 #[derive(Clone, Debug)]
 pub struct Stash {
     /// A reference-counted pointer to an immutable internal handle, which is
-    /// used to identify an individual stash. The handle is simply a unit, as
-    /// the value does not matter, only the unique instance.
-    handle: Arc<()>,
+    /// used to identify an individual stash. The handle is an atomic counter,
+    /// to manually keep track of the number of instances.
+    handle: Arc<AtomicU32>,
 
     /// The sender for the stash operations. This is used to send operations to
     /// the worker thread for execution. This is the manner by which the order
@@ -1230,7 +1231,7 @@ impl Stash {
     pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
         let (sender, receiver) = flume::unbounded();
         let stash = Self {
-            handle: Arc::new(()),
+            handle: Arc::new(AtomicU32::new(1)),
             queue: sender,
         };
         Worker::start(path, receiver, stash.clone())?;
@@ -1271,7 +1272,7 @@ impl Stash {
     ///
     #[must_use]
     pub fn connection(&self) -> Tether {
-        let handle = Arc::new(());
+        let handle = Arc::new(AtomicU32::new(1));
         debug!("Tether ({:p}): Create", Arc::as_ptr(&handle));
         Tether {
             handle,
@@ -1539,13 +1540,13 @@ impl OperationLogic for Subscription {
 ///
 /// * [`Stash::connection()`]
 ///
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Tether {
     /// A reference-counted pointer to an immutable internal handle, which is
     /// used to identify and specify the associated connection when any database
-    /// operations are carried out. The handle is simply a unit, as the value
-    /// does not matter, only the unique instance.
-    handle: Arc<()>,
+    /// operations are carried out. The handle is an atomic counter, to manually
+    /// keep track of the number of instances.
+    handle: Arc<AtomicU32>,
 
     /// If a transaction has been started, this will be set to `true`. When the
     /// transaction is committed or rolled back, it will be returned to `false`.
@@ -1634,11 +1635,23 @@ impl Tether {
     }
 }
 
+impl Clone for Tether {
+    fn clone(&self) -> Self {
+        let _old_total = self.handle.fetch_add(1, Ordering::SeqCst);
+        Self {
+            handle: Arc::clone(&self.handle),
+            has_active_transaction: Arc::clone(&self.has_active_transaction),
+            queue: self.queue.clone(),
+            stash: self.stash.clone(),
+        }
+    }
+}
+
 impl Drop for Tether {
     fn drop(&mut self) {
         // If the last reference to the Tether was in this variable being dropped,
         // then we will close the connection.
-        if Arc::strong_count(&self.handle) > 1 {
+        if self.handle.fetch_sub(1, Ordering::SeqCst) > 1 {
             // There are still other references to this Tether
             return;
         }
@@ -1749,11 +1762,11 @@ impl PartialEq for Tether {
 struct TetheredWorker {
     /// A reference-counted pointer to an immutable internal handle, which is
     /// used to identify and specify the associated database connection. The
-    /// handle is simply a unit, as the value does not matter, only the unique
-    /// instance. It is stored here as a weak reference to the connection
+    /// handle is an atomic counter, to manually keep track of the number of
+    /// instances. It is stored here as a weak reference to the connection
     /// handle, so that the connection can be re-used if it is already
     /// registered, but also removed from the list if it is no longer in use.
-    conn_handle: Weak<()>,
+    conn_handle: Weak<AtomicU32>,
 
     /// The sender side of the tethered worker's queue.
     queue: QueueSender<Operation>,
@@ -1971,7 +1984,7 @@ impl TetheredWorker {
     /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
     fn start(
-        conn_handle: Weak<()>,
+        conn_handle: Weak<AtomicU32>,
         pool: Pool<SqliteConnectionManager>,
         queue: QueueSender<Operation>,
         stash: Stash,
@@ -2112,7 +2125,7 @@ struct Worker {
     /// If a transaction is active, associated notifications will be held back
     /// in this buffer until the transaction is committed or rolled back, at
     /// which point they will be sent or discarded.
-    notifications_buffer: HashMap<*const (), Vec<Notification>>,
+    notifications_buffer: HashMap<*const AtomicU32, Vec<Notification>>,
 
     /// A pool of SQLite connections. Although the pool itself is thread-safe,
     /// being `Pool<M>(Arc<SharedPool<M>>)` underneath, the connections are not.
@@ -2150,9 +2163,10 @@ struct Worker {
     /// from the list if it is no longer in use.
     ///
     /// Note that the key is the *pointer* to the weak reference, and not the
-    /// actual weak reference itself. This is because a `Weak<()>` cannot be a
-    /// [`HashMap`] key. Use of a pointer here is safe, as the pointer is unique
-    /// to the connection, and is only used for the purpose of identification.
+    /// actual weak reference itself. This is because a `Weak<AtomicU32>` cannot
+    /// be a [`HashMap`] key. Use of a pointer here is safe, as the pointer is
+    /// unique to the connection, and is only used for the purpose of
+    /// identification.
     ///
     /// The association between an actual database connection instance, i.e. a
     /// [`PooledConnection`], and a usage reference, i.e. a [`Tether`], is made
@@ -2169,7 +2183,7 @@ struct Worker {
     /// [`Tether`] is bound to the matching [`TetheredWorker`]. The clean-up is
     /// extremely quick and can happen at suitable intervals, only having to
     /// check the [`Weak`] pointers and removing any expired connections.
-    tethers: HashMap<*const (), TetheredWorker>,
+    tethers: HashMap<*const AtomicU32, TetheredWorker>,
 }
 
 impl Worker {
@@ -2560,7 +2574,7 @@ impl Worker {
     /// * [`Tether`]
     /// * [`TetheredWorker::start()`]
     ///
-    fn get_tethered_worker(&mut self, conn_handle: &Arc<()>) -> (bool, &TetheredWorker) {
+    fn get_tethered_worker(&mut self, conn_handle: &Arc<AtomicU32>) -> (bool, &TetheredWorker) {
         let weak_ref = Arc::downgrade(conn_handle);
         // This code uses the Entry API to avoid double mutable borrow of self.
         match self.tethers.entry(weak_ref.as_ptr()) {
@@ -2918,9 +2932,9 @@ pub trait Interface: Clone + Send + Sync {
     ///     operation to the queue.
     ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
     ///     connection from the pool.
-    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted)
-    ///     - A new transaction cannot be started because one is already active
-    ///       on this connection.
+    ///   - [`TransactionAlreadyStarted`](StashError::TransactionAlreadyStarted) -
+    ///     A new transaction cannot be started because one is already active on
+    ///     this connection.
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
@@ -3069,7 +3083,7 @@ trait PoolExt<M: ManageConnection> {
     fn get_and_subscribe(
         &self,
         queue: QueueSender<Operation>,
-        conn_handle: Option<Weak<()>>,
+        conn_handle: Option<Weak<AtomicU32>>,
     ) -> Result<PooledConnection<M>, StashError>;
 }
 
@@ -3077,7 +3091,7 @@ impl PoolExt<SqliteConnectionManager> for Pool<SqliteConnectionManager> {
     fn get_and_subscribe(
         &self,
         queue: QueueSender<Operation>,
-        conn_handle: Option<Weak<()>>,
+        conn_handle: Option<Weak<AtomicU32>>,
     ) -> Result<PooledConnection<SqliteConnectionManager>, StashError> {
         let connection = self.get().map_err(StashError::TetherError)?;
         connection.update_hook(Some(
@@ -3187,7 +3201,7 @@ where
 async fn perform_execute<Q: Into<String> + Send>(
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
-    conn_handle: Option<Arc<()>>,
+    conn_handle: Option<Arc<AtomicU32>>,
     queue: &QueueSender<Operation>,
 ) -> Result<usize, StashError> {
     let (that_end, this_end) = oneshot::channel();
@@ -3237,7 +3251,7 @@ async fn perform_execute<Q: Into<String> + Send>(
 async fn perform_value_query<Q, T>(
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
-    conn_handle: Option<Arc<()>>,
+    conn_handle: Option<Arc<AtomicU32>>,
     queue: &QueueSender<Operation>,
 ) -> Result<Vec<T>, StashError>
 where
@@ -3279,7 +3293,7 @@ where
 async fn perform_query<Q, T>(
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
-    conn_handle: Option<Arc<()>>,
+    conn_handle: Option<Arc<AtomicU32>>,
     queue: &QueueSender<Operation>,
 ) -> Result<Vec<T>, StashError>
 where
