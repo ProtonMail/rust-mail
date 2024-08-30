@@ -53,6 +53,21 @@ impl Session {
             .map(|r| r.selector)
     }
 
+    /// Fork the current session with a user and a version.
+    /// for more details see [`Fork`]
+    ///
+    /// # Errors
+    ///
+    /// Any of the [`ApiServiceError`] variants could be returned if there is a
+    /// problem with the HTTP request.
+    ///
+    pub async fn fork_with_version(&self, version: String) -> Result<String, ApiServiceError> {
+        self.api
+            .post_auth_sessions_forks(Some(version))
+            .await
+            .map(|r| r.selector)
+    }
+
     /// Exposes the user key secret from the auth store to unlock user keys.
     ///
     /// Returns [`None`] if the auth store is not available or no key secret is
