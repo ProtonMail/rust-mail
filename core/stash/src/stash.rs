@@ -1273,12 +1273,12 @@ impl Stash {
     pub fn connection(&self) -> Tether {
         let handle = Arc::new(());
         debug!("Tether ({:p}): Create", Arc::as_ptr(&handle));
-        Tether(Arc::new(TetherInner {
+        Tether {
             handle,
-            has_active_transaction: AtomicBool::new(false),
+            has_active_transaction: Arc::new(AtomicBool::new(false)),
             queue: self.queue.clone(),
             stash: self.clone(),
-        }))
+        }
     }
 
     /// Subscribes to notifications of changes to the database.
@@ -1540,14 +1540,7 @@ impl OperationLogic for Subscription {
 /// * [`Stash::connection()`]
 ///
 #[derive(Clone, Debug)]
-pub struct Tether(Arc<TetherInner>);
-
-/// Contains all the data associated with a tether.
-///
-/// Note: This was done to avoid a giant cascade of changes where all
-/// tether instances need to be converted to Arc<>.
-#[derive(Debug)]
-struct TetherInner {
+pub struct Tether {
     /// A reference-counted pointer to an immutable internal handle, which is
     /// used to identify and specify the associated connection when any database
     /// operations are carried out. The handle is simply a unit, as the value
@@ -1556,7 +1549,7 @@ struct TetherInner {
 
     /// If a transaction has been started, this will be set to `true`. When the
     /// transaction is committed or rolled back, it will be returned to `false`.
-    has_active_transaction: AtomicBool,
+    has_active_transaction: Arc<AtomicBool>,
 
     /// The queue for the [`Worker`] and [`Stash`] to which the [`Tether`] is
     /// associated. This is used to send queries to the worker for execution.
@@ -1564,25 +1557,6 @@ struct TetherInner {
 
     /// The associated [`Stash`] instance.
     stash: Stash,
-}
-
-impl Drop for TetherInner {
-    fn drop(&mut self) {
-        debug!("Tether ({:p}): Destroy", Arc::as_ptr(&self.handle));
-        if self
-            .queue
-            .send(Operation::CloseConnection(Command {
-                channel: None,
-                conn_handle: Some(Arc::clone(&self.handle)),
-            }))
-            .is_err()
-        {
-            error!(
-                "{:p} Failed to send CloseConnection operation to tethered queue",
-                Arc::as_ptr(&self.handle)
-            );
-        }
-    }
 }
 
 impl Tether {
@@ -1609,19 +1583,16 @@ impl Tether {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command {
             channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.0.handle)),
+            conn_handle: Some(Arc::clone(&self.handle)),
         });
-        self.0
-            .queue
+        self.queue
             .send_async(operation)
             .await
             .map_err(|err| StashError::QueueError(err.to_string()))?;
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.0
-            .has_active_transaction
-            .store(false, Ordering::Relaxed);
+        self.has_active_transaction.store(false, Ordering::Relaxed);
         Ok(())
     }
 
@@ -1649,20 +1620,38 @@ impl Tether {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::RollbackTransaction(Command {
             channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.0.handle)),
+            conn_handle: Some(Arc::clone(&self.handle)),
         });
-        self.0
-            .queue
+        self.queue
             .send_async(operation)
             .await
             .map_err(|err| StashError::QueueError(err.to_string()))?;
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.0
-            .has_active_transaction
-            .store(false, Ordering::Relaxed);
+        self.has_active_transaction.store(false, Ordering::Relaxed);
         Ok(())
+    }
+}
+
+impl Drop for Tether {
+    fn drop(&mut self) {
+        // If the last reference to the Tether was in this variable being dropped,
+        // then we will close the connection.
+        if Arc::strong_count(&self.handle) > 1 {
+            // There are still other references to this Tether
+            return;
+        }
+        if self
+            .queue
+            .send(Operation::CloseConnection(Command {
+                channel: None,
+                conn_handle: Some(Arc::clone(&self.handle)),
+            }))
+            .is_err()
+        {
+            error!("Failed to send CloseConnection operation to tethered queue");
+        }
     }
 }
 
@@ -1674,17 +1663,11 @@ impl Interface for Tether {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        perform_execute(
-            query,
-            params,
-            Some(Arc::clone(&self.0.handle)),
-            &self.0.queue,
-        )
-        .await
+        perform_execute(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
 
     fn has_active_transaction(&self) -> bool {
-        self.0.has_active_transaction.load(Ordering::Relaxed)
+        self.has_active_transaction.load(Ordering::Relaxed)
     }
 
     async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
@@ -1705,13 +1688,7 @@ impl Interface for Tether {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        perform_query(
-            query,
-            params,
-            Some(Arc::clone(&self.0.handle)),
-            &self.0.queue,
-        )
-        .await
+        perform_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
 
     async fn query_values<Q, T>(
@@ -1723,41 +1700,34 @@ impl Interface for Tether {
         Q: Into<String> + Send,
         T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
-        perform_value_query(
-            query,
-            params,
-            Some(Arc::clone(&self.0.handle)),
-            &self.0.queue,
-        )
-        .await
+        perform_value_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
     }
 
     fn stash(&self) -> &Stash {
-        &self.0.stash
+        &self.stash
     }
 
     async fn transaction(&self) -> Result<Self, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command {
             channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.0.handle)),
+            conn_handle: Some(Arc::clone(&self.handle)),
         });
-        self.0
-            .queue
+        self.queue
             .send_async(operation)
             .await
             .map_err(|err| StashError::QueueError(err.to_string()))?;
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.0.has_active_transaction.store(true, Ordering::Relaxed);
+        self.has_active_transaction.store(true, Ordering::Relaxed);
         Ok(self.clone())
     }
 }
 
 impl PartialEq for Tether {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0.handle, &other.0.handle)
+        Arc::ptr_eq(&self.handle, &other.handle)
     }
 }
 
