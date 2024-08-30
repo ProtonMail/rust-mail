@@ -520,12 +520,12 @@ pub trait ProtonMail: ApiService {
         .await
     }
 
-    /// TODO: Document this method.
+    /// Put a label on a message
     ///
     /// # Parameters
     ///
-    /// * `message_ids` - TODO: Document this parameter.
-    /// * `label_id`    - TODO: Document this parameter.
+    /// * `message_ids` - Ids of the messages.
+    /// * `label_id`    - Id of the label to set.
     /// * `spam_action` - TODO: Document this parameter.
     ///
     /// # Errors

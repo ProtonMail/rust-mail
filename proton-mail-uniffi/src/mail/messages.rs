@@ -420,3 +420,34 @@ pub async fn watch_messages_for_label(
     })
     .await
 }
+
+/// Label the given messages with the given label id.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to apply.
+/// * `ids`      - The local IDs of the messages to apply the label to.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn apply_label_to_messages(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::apply_label_to_multiple_remote(
+            user_context,
+            label_id.into(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
+    })
+    .await
+}

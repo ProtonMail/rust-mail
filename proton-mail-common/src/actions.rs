@@ -1,6 +1,7 @@
 mod available_action;
 pub mod conversations;
 pub mod labels;
+pub mod messages;
 
 pub use self::available_action::*;
 use crate::AppError;
@@ -44,5 +45,6 @@ pub(crate) fn new_action_factory() -> Factory {
         .register::<conversations::MarkUnread>()
         .expect(ERR_MSG);
     factory.register::<conversations::Move>().expect(ERR_MSG);
+    factory.register::<messages::label::Label>().expect(ERR_MSG);
     factory
 }
