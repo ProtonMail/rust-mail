@@ -12,7 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - Fork with `web-account-lite` as version argument.
+  - Excessive transactions in event loop.
   - Fixed some notifications not being tracked.
+
+### Changed
+
+  - `conversation` now returns the conversation and the messages.
+  - `conversation` may return null if the conversation is not found.
+  - `watch_conversation` now only returns on handle.
+  - `watch_conversation` may return null if the conversation is not found.
+  - `conversation` and `watch_conversation` now sync the conversation's messages at least once.
 
 ## [0.11.24] - 2024-08-29
 
