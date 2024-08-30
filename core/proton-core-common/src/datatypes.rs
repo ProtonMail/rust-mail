@@ -1747,6 +1747,43 @@ impl From<ApiTwoFa> for TwoFa {
 
 sql_using_serde!(TwoFa);
 
+/// Wrapper type around `Vec<String>` to hold the scopes of a token.
+///
+/// TODO: `HashSet`?
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct AuthScopes(Vec<String>);
+
+impl AuthScopes {
+    /// Create a new [`AuthScopes`] instance from a list of [`String`]s.
+    ///
+    /// # Parameters
+    ///
+    /// * `scopes` - The scopes to wrap.
+    ///
+    /// TODO: Might be better to have a `From<Vec<String>>` implementation.
+    ///
+    #[must_use]
+    pub fn new(scopes: Vec<String>) -> Self {
+        Self(scopes)
+    }
+
+    /// Convert the [`AuthScopes`] into the inner [`Vec`].
+    #[must_use]
+    pub fn into_inner(self) -> Vec<String> {
+        self.0
+    }
+}
+
+impl Deref for AuthScopes {
+    type Target = Vec<String>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+sql_using_serde!(AuthScopes);
+
 /// Wrapper type around [`RealUserKeys`] to implement [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UserKeys(pub RealUserKeys);

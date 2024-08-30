@@ -70,7 +70,7 @@ use crate::services::proton::responses::{
     GetAddressesResponse, GetContactResponse, GetContactsEmailsResponse, GetContactsResponse,
     GetEventResponse, GetEventsLatestResponse, GetKeysSaltsResponse, GetSettingsResponse,
     GetUsersResponse, PostAuthInfoResponse, PostAuthRefreshResponse, PostAuthResponse,
-    PostAuthSessionsForksResponse,
+    PostAuthSessionsForksResponse, PostAuthTfaResponse,
 };
 use crate::{
     DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL, DEFAULT_REDIRECT_URL,
@@ -268,7 +268,7 @@ impl ApiService for Proton {
                     auth.uid = response.uid;
                     auth.access_token = response.access_token;
                     auth.refresh_token = response.refresh_token;
-                    auth.scope = response.scope;
+                    auth.scopes = response.scopes;
                     tracing::debug!("Session has been refreshed");
                 }
                 if let Err(e) = auth_store.set(auth).await {
@@ -756,11 +756,16 @@ impl Proton {
     ///
     /// This method will return an error if the request fails.
     ///
-    pub async fn post_auth_tfa(&self, tfa_code: String) -> Result<(), ApiServiceError> {
-        self.post::<_, ()>(
+    pub async fn post_auth_tfa(
+        &self,
+        tfa_code: String,
+    ) -> Result<PostAuthTfaResponse, ApiServiceError> {
+        self.post::<_, Json<_>>(
             "auth/v4/2fa",
             PostAuthTfaRequest {
                 two_factor_code: tfa_code,
+
+                // FIXME: Why so much empty data?
                 fido2: Fido2Auth {
                     authentication_data: String::new(),
                     authentication_options: JsonValue::Null,

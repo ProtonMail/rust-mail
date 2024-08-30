@@ -8,7 +8,7 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::services::proton::Config as ApiConfig;
-use proton_core_common::datatypes::{ProductUsedSpace, RemoteId};
+use proton_core_common::datatypes::{AuthScopes, ProductUsedSpace, RemoteId};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{
@@ -125,7 +125,7 @@ impl TestContext {
             refresh_token: SecretString::new("REFRESHTOKEN".to_owned()),
             access_token: SecretString::new("ACCESSTOKEN".to_owned()),
             key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
-            scopes: String::new(),
+            scopes: AuthScopes::new(vec!["foo".to_owned(), "bar".to_owned()]),
         }
         .to_encrypted_session(&encryption_key)
         .expect("failed to generate encrypted session");
@@ -287,7 +287,7 @@ impl CoreEvent for TestCoreEvent {
         self.address.as_deref()
     }
     fn get_core_event_addresses_mut(&mut self) -> Option<&mut [Address]> {
-        self.address.as_mut().map(|vec| vec.as_mut_slice())
+        self.address.as_deref_mut()
     }
 
     fn get_core_event_used_space(&self) -> Option<i64> {
@@ -302,14 +302,14 @@ impl CoreEvent for TestCoreEvent {
         self.contacts.as_deref()
     }
     fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        self.contacts.as_mut().map(|vec| vec.as_mut_slice())
+        self.contacts.as_deref_mut()
     }
 
     fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
         self.contact_emails.as_deref()
     }
     fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        self.contact_emails.as_mut().map(|vec| vec.as_mut_slice())
+        self.contact_emails.as_deref_mut()
     }
 }
 

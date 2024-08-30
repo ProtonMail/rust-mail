@@ -153,7 +153,7 @@ impl Flow {
                 uid: auth_response.uid,
                 refresh_token: auth_response.refresh_token,
                 access_token: auth_response.access_token,
-                scope: auth_response.scope,
+                scopes: auth_response.scopes,
                 key_secret: None,
             };
 
@@ -177,7 +177,14 @@ impl Flow {
             return Err(LoginError::UnsupportedTfa);
         }
 
-        self.session.api().post_auth_tfa(code).await?;
+        let scopes = self.session.api().post_auth_tfa(code).await?.scopes;
+
+        self.session
+            .auth_store()
+            .write()
+            .await
+            .set_scopes(scopes)
+            .await?;
 
         self.next().await
     }

@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::RemoteId;
+use crate::datatypes::{AuthScopes, RemoteId};
 use crate::db::session::types::{DecryptedUserSession, SessionEncryptionKey};
 use crate::db::session::EncryptedUserSession;
 use proton_api_core::auth::UserKeySecret;
@@ -45,7 +45,7 @@ async fn test_session_store_load() {
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: "Scope".to_owned(),
+        scopes: AuthScopes::new(vec!["foo".to_owned(), "bar".to_owned()]),
     };
 
     let key = SessionEncryptionKey::random();
@@ -114,7 +114,7 @@ async fn test_session_update() {
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: "Scope".to_owned(),
+        scopes: AuthScopes::new(vec!["foo".to_owned()]),
     };
 
     let updated_session = DecryptedUserSession {
@@ -124,7 +124,7 @@ async fn test_session_update() {
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: "Scope Scope2".to_owned(),
+        scopes: AuthScopes::new(vec!["foo".to_owned(), "bar".to_owned()]),
     };
 
     let key = SessionEncryptionKey::random();
@@ -187,7 +187,7 @@ async fn test_session_delete_user_id() {
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: "Scope".to_owned(),
+        scopes: AuthScopes::new(vec!["foo".to_owned(), "bar".to_owned()]),
     };
     let key = SessionEncryptionKey::random();
     let mut encrypted_session = session
@@ -235,7 +235,7 @@ async fn test_session_delete_session_id() {
         refresh_token: SecretString::from("token".to_owned()),
         access_token: SecretString::from("access".to_owned()),
         key_secret: Some(UserKeySecret::from(vec![1, 2, 3, 4])),
-        scopes: "Scope".to_owned(),
+        scopes: AuthScopes::new(vec!["foo".to_owned(), "bar".to_owned()]),
     };
     let key = SessionEncryptionKey::random();
     let mut encrypted_session = session

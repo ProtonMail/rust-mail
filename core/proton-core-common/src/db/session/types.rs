@@ -1,4 +1,4 @@
-use crate::datatypes::RemoteId;
+use crate::datatypes::{AuthScopes, RemoteId};
 use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::Nonce;
 use aes_gcm::aes::Aes256;
@@ -15,8 +15,9 @@ use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
-use stash::sql_using_serde;
-use stash::stash::Stash;
+use stash::orm::Model;
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
+use stash::{params, sql_using_serde};
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use zeroize::Zeroize;
@@ -30,7 +31,7 @@ pub struct DecryptedUserSession {
     pub refresh_token: SecretString,
     pub access_token: SecretString,
     pub key_secret: Option<UserKeySecret>,
-    pub scopes: String,
+    pub scopes: AuthScopes,
 }
 
 impl From<Auth> for DecryptedUserSession {
@@ -42,7 +43,7 @@ impl From<Auth> for DecryptedUserSession {
             refresh_token: value.refresh_token.into(),
             access_token: value.access_token.into(),
             key_secret: value.key_secret,
-            scopes: value.scope,
+            scopes: AuthScopes::new(value.scopes),
         }
     }
 }
@@ -54,7 +55,7 @@ impl From<DecryptedUserSession> for Auth {
             name_or_addr: value.name_or_addr,
             key_secret: value.key_secret,
             refresh_token: value.refresh_token.into(),
-            scope: value.scopes,
+            scopes: value.scopes.into_inner(),
             uid: value.session_id.into(),
             user_id: value.user_id.into(),
         }
@@ -115,7 +116,7 @@ pub struct EncryptedUserSession {
     #[DbField]
     pub key_secret: Option<EncryptedKeySecret>,
     #[DbField]
-    pub scopes: String,
+    pub scopes: AuthScopes,
     #[RowIdField]
     #[serde(skip)]
     pub row_id: Option<u64>,
@@ -124,13 +125,30 @@ pub struct EncryptedUserSession {
     pub stash: Option<Stash>,
 }
 
-sql_using_serde!(EncryptedKeySecret);
-
 impl EncryptedUserSession {
+    /// Find the session with the given user ID, if it exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query failed.
+    ///
+    pub async fn find_by_user_id<A>(
+        user_id: RemoteId,
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        EncryptedUserSession::find_first("WHERE user_id=?", params![user_id.to_string()], interface)
+            .await
+    }
+
     /// Decrypt the session data so that it can be used.
     ///
     /// # Errors
+    ///
     /// Returns error if the decryption failed.
+    ///
     pub fn to_decrypted_session(
         &self,
         key: &SessionEncryptionKey,
@@ -163,6 +181,61 @@ impl EncryptedUserSession {
             key_secret: decrypted_key_secret,
             scopes: self.scopes.clone(),
         })
+    }
+}
+
+/// The state of a user session.
+#[derive(Clone, Debug, Model, Deserialize, Eq, PartialEq, Serialize)]
+#[TableName("core_session_state")]
+pub struct UserSessionState {
+    /// The unique identifier of the user.
+    #[IdField]
+    pub user_id: RemoteId,
+
+    /// Timestamp at which the session was last marked as active.
+    #[DbField]
+    pub last_active_ts: u64,
+
+    /// The row ID in the database, if known/applicable.
+    #[RowIdField]
+    #[serde(skip)]
+    pub row_id: Option<u64>,
+
+    /// Convenience reference to the stash object.
+    #[StashField]
+    #[serde(skip)]
+    pub stash: Option<Stash>,
+}
+
+impl UserSessionState {
+    /// Find the most recently active session state entry, if one exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query failed.
+    ///
+    pub async fn find_last<A>(interface: &A) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        UserSessionState::find_first(r"ORDER BY last_active_ts DESC", vec![], interface).await
+    }
+
+    /// Find the session state for the given user ID, if it exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query failed.
+    ///
+    pub async fn find_by_user_id<A>(
+        user_id: RemoteId,
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        UserSessionState::find_first("WHERE user_id=?", params![user_id.to_string()], interface)
+            .await
     }
 }
 
@@ -284,6 +357,8 @@ impl AsRef<[u8]> for EncryptedKeySecret {
         self.0.as_ref()
     }
 }
+
+sql_using_serde!(EncryptedKeySecret);
 
 //TODO: This could potentially be reused in other contexts.
 /// Encryption key for encryption of session data.

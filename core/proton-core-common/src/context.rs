@@ -3,7 +3,7 @@ use crate::auth_store::AuthStore;
 use crate::cache::CacheError;
 use crate::datatypes::RemoteId;
 use crate::db::migrations::{migrate_core_db, migrate_session_db};
-use crate::db::session::{EncryptedUserSession, SessionEncryptionKey};
+use crate::db::session::{EncryptedUserSession, SessionEncryptionKey, UserSessionState};
 use crate::os::{KeyChain, KeyChainError};
 use crate::session::Session;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
@@ -15,7 +15,7 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session as ApiCoreSession;
 use proton_sqlite3::MigratorError;
 use secrecy::{ExposeSecret, SecretString};
-use stash::orm::Model;
+use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use stash::stash::{Interface, Stash, StashError};
 use std::path::{Path, PathBuf};
@@ -134,9 +134,55 @@ impl Context {
     /// Get available sessions.
     ///
     /// # Errors
+    ///
     /// Returns error if we fail to retrieve the sessions from the db.
-    pub async fn get_sessions(&self) -> Result<Vec<EncryptedUserSession>, StashError> {
-        EncryptedUserSession::find(String::new(), vec![], &self.session_stash, None).await
+    pub async fn get_sessions(&self) -> CoreContextResult<Vec<EncryptedUserSession>> {
+        Ok(EncryptedUserSession::find(String::new(), vec![], &self.session_stash, None).await?)
+    }
+
+    /// Watch for changes to the available sessions.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the watcher cannot be registered with the database.
+    pub async fn watch_sessions(
+        &self,
+    ) -> CoreContextResult<(
+        Vec<EncryptedUserSession>,
+        flume::Receiver<ResultsetChange<EncryptedUserSession, RemoteId>>,
+    )> {
+        let (tx, rx) = flume::unbounded();
+
+        let res = EncryptedUserSession::find(String::new(), vec![], self.stash(), Some(tx)).await?;
+
+        Ok((res, rx))
+    }
+
+    /// Get available session states.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we fail to retrieve the session states from the db.
+    pub async fn get_session_states(&self) -> CoreContextResult<Vec<UserSessionState>> {
+        Ok(UserSessionState::find(String::new(), vec![], self.stash(), None).await?)
+    }
+
+    /// Watch for changes to the available session states.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the watcher cannot be registered with the database.
+    pub async fn watch_session_states(
+        &self,
+    ) -> CoreContextResult<(
+        Vec<UserSessionState>,
+        flume::Receiver<ResultsetChange<UserSessionState, RemoteId>>,
+    )> {
+        let (tx, rx) = flume::unbounded();
+
+        let res = UserSessionState::find(String::new(), vec![], self.stash(), Some(tx)).await?;
+
+        Ok((res, rx))
     }
 
     /// Create a new login flow for a new user.
@@ -158,6 +204,7 @@ impl Context {
         let session = ApiCoreSession::new(self.api.config().clone(), Some(Box::new(auth_store)))
             .await
             .map_err(ApiServiceError::from)?;
+
         Ok(Flow::new(session))
     }
 
@@ -179,11 +226,13 @@ impl Context {
         };
 
         debug!("Creating new context for user {}({})", user.email, user.id);
-        let stash = self.new_user_db_pool(&user.id.clone().into()).await?;
+        let user_stash = self.new_user_db_pool(&user.id.clone().into()).await?;
+        let session_stash = self.session_stash.clone();
 
         UserContext::new(
             login_flow.session().clone(),
-            stash,
+            user_stash,
+            session_stash,
             user.id.clone().into(),
             cache_path.into(),
             cache_size,
@@ -202,7 +251,9 @@ impl Context {
         cache_path: impl Into<PathBuf>,
         cache_size: u32,
     ) -> CoreContextResult<UserContext> {
-        let stash = self.new_user_db_pool(&session.user_id).await?;
+        let user_stash = self.new_user_db_pool(&session.user_id).await?;
+        let session_stash = self.session_stash.clone();
+
         debug!("decrypting session tokens");
         let key = self.get_encryption_key()?;
         let decrypted_session = session
@@ -225,7 +276,15 @@ impl Context {
         let session = ApiCoreSession::new(self.api.config().clone(), Some(Box::new(auth_store)))
             .await
             .map_err(ApiServiceError::from)?;
-        UserContext::new(session, stash, user_id, cache_path.into(), cache_size)
+
+        UserContext::new(
+            session,
+            user_stash,
+            session_stash,
+            user_id,
+            cache_path.into(),
+            cache_size,
+        )
     }
 
     pub fn set_network_connected(&self, value: bool) {

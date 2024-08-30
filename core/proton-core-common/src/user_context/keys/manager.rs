@@ -234,7 +234,7 @@ impl CryptoKeyManager {
         address_id: &RemoteId,
     ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
         // Load the address from the DB.
-        let address = Address::find_by_id(address_id.clone(), &user_ctx.stash)
+        let address = Address::find_by_id(address_id.clone(), &user_ctx.user_stash)
             .await?
             .ok_or(KeyHandlingError::NoAddress(address_id.clone()))?;
         // Load the user keys.
@@ -268,7 +268,7 @@ impl CryptoKeyManager {
         user_ctx: &UserContext,
     ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
         // Load the user from the DB.
-        let user = User::load(user_ctx.user_id().clone(), &user_ctx.stash)
+        let user = User::load(user_ctx.user_id().clone(), &user_ctx.user_stash)
             .await?
             .ok_or(KeyHandlingError::NoUser)?;
         // Load the user secret to unlock the key.

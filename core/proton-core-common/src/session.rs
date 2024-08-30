@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 #![allow(clippy::struct_field_names)]
 
+use crate::datatypes::AuthScopes;
 use crate::db::session::{
     DecryptedUserSession, EncryptedAccessToken, EncryptedKeySecret, EncryptedRefreshToken,
     EncryptedUserSession, SessionEncryptionKey,
@@ -232,7 +233,7 @@ fn decrypted_session_to_auth(session: DecryptedUserSession) -> Auth {
         uid: session.session_id.into(),
         refresh_token: session.refresh_token.into(),
         access_token: session.access_token.into(),
-        scope: session.scopes,
+        scopes: session.scopes.into_inner(),
         key_secret: session.key_secret,
     }
 }
@@ -251,7 +252,7 @@ fn auth_to_encrypted_session(
         refresh_token: encrypted_refresh_token,
         access_token: encrypted_access_token,
         key_secret: encrypted_key_secret,
-        scopes: auth.scope,
+        scopes: AuthScopes::new(auth.scopes),
         row_id: None,
         stash: None,
     }

@@ -170,7 +170,7 @@ pub struct PostAuthResponse {
     pub refresh_token: SecretString,
 
     /// TODO: Document this field.
-    pub scope: String,
+    pub scopes: Vec<String>,
 
     /// TODO: Document this field.
     pub server_proof: String,
@@ -203,7 +203,7 @@ pub struct PostAuthRefreshResponse {
     pub refresh_token: SecretString,
 
     /// TODO: Document this field.
-    pub scope: String,
+    pub scopes: Vec<String>,
 
     /// TODO: Document this field.
     pub token_type: Option<String>,
@@ -252,6 +252,18 @@ pub struct PostAuthSessionsForksResponse {
     /// The selector that is returned when a session is forked. It's not clear
     /// exactly what this is at present.
     pub selector: String,
+}
+
+/// Post 2FA response.
+///
+/// This returns the updated list of scopes available to the user after 2FA.
+///
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostAuthTfaResponse {
+    /// The updated list of scopes available to the user after 2FA.
+    pub scopes: Vec<String>,
 }
 
 //  TRAITS

@@ -26,7 +26,7 @@ pub struct Auth {
     pub refresh_token: SecretString,
 
     /// TODO: Document this field.
-    pub scope: String,
+    pub scopes: Vec<String>,
 
     /// The UID of the current session.
     pub uid: RemoteId,
@@ -195,6 +195,25 @@ impl CachedStore {
             store.set(auth.clone()).await?;
         }
         self.cached = Some(auth);
+        Ok(())
+    }
+
+    /// Update the scopes of the auth data.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if no auth is present or the data could not be stored.
+    pub(crate) async fn set_scopes(&mut self, scopes: Vec<String>) -> Result<(), StoreError> {
+        let Some(auth) = self.cached.as_mut() else {
+            return Err("No auth data available for scope update")?;
+        };
+
+        if let Some(store) = &mut self.store {
+            store.set(auth.to_owned()).await?;
+        }
+
+        auth.scopes = scopes;
+
         Ok(())
     }
 
