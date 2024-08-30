@@ -14,15 +14,13 @@ use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
-use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
+use crate::{async_runtime, uniffi_async, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
-use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::models::{
-    Conversation as RealConversation, Label as RealLabel, Message as RealMessage,
-};
+use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
+use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
 use stash::params;
 use std::sync::Arc;
@@ -122,28 +120,56 @@ pub async fn available_actions_for_conversation(
 ///
 /// # Parameters
 ///
-/// * `mailbox` - The mailbox to use for the request.
-/// * `id`      - The local ID of the conversation to get.
+/// * `mailbox`  - The mailbox to use for the request.
+/// * `id`       - The local ID of the conversation to get.
+///
+/// This function syncs the conversation's messages from the server at least
+/// once.
 ///
 /// # Errors
 ///
-/// Returns an error if the database query fails.
+/// Returns an error if the database query fails or the server request failed.
 ///
 #[allow(clippy::missing_panics_doc)]
 #[uniffi::export]
 pub async fn conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
-) -> Result<Option<Conversation>, MailboxError> {
+) -> Result<Option<ConversationAndMessages>, MailboxError> {
     let conn = mailbox.stash().connection();
+    let session = mailbox.mbox().user_context().session().clone();
     uniffi_async(async move {
-        Ok(ContextualConversation::new(
-            RealConversation::load(id.into(), &conn).await?.unwrap(),
-            mailbox.label_id().into(),
+        Ok(ContextualConversation::conversation_and_messages(
+            RealLocalId::from(id),
+            mailbox.mbox().label_id(),
+            &conn,
+            session.api(),
         )
+        .await?
         .map(Into::into))
     })
     .await
+}
+
+/// Results of [`conversation()`]
+#[derive(uniffi::Record)]
+pub struct ConversationAndMessages {
+    /// Conversation.
+    pub conversation: Conversation,
+    /// ID of the message that should be displayed first.
+    pub message_id_to_open: Id,
+    /// Messages which belong to the conversation.
+    pub messages: Vec<Message>,
+}
+
+impl From<ContextualConversationAndMessages> for ConversationAndMessages {
+    fn from(value: ContextualConversationAndMessages) -> Self {
+        Self {
+            conversation: value.conversation.into(),
+            message_id_to_open: value.message_id_to_open.into(),
+            messages: value.messages.into_iter().map(Into::into).collect(),
+        }
+    }
 }
 
 /// Get conversations for the given label.
@@ -442,11 +468,8 @@ pub struct WatchedConversation {
     /// The Id of the message to open.
     pub message_id_to_open: Id,
 
-    /// The handle to stop watching the conversation.
-    pub conversation_handle: Arc<WatchHandle>,
-
-    /// The handle to stop watching the conversation's messages.
-    pub messages_handle: Arc<WatchHandle>,
+    /// The handle to stop watching the conversation and messages;
+    pub handle: Arc<WatchHandle>,
 }
 
 /// Watch the given conversation.
@@ -472,49 +495,36 @@ pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
     id: Id,
     callback: Box<dyn LiveQueryCallback>,
-) -> Result<WatchedConversation, MailboxError> {
-    let stash = mailbox.stash().clone();
-    uniffi_async(async move {
-        let callback = Arc::new(callback);
-        let (conversations, conversation_handle) = watch::<_, _, RealConversation>(
-            "WHERE local_id = ? LIMIT 1",
-            params![RealLocalId::from(id)],
-            move |r| r.local_id == Some(id.into()),
-            |r| r.local_id.expect("local_id should never be None"),
-            &stash,
-            Arc::clone(&callback),
-        )
-        .await?;
-        let (messages, messages_handle) = watch::<_, _, RealMessage>(
-            "WHERE local_conversation_id = ?",
-            params![RealLocalId::from(id)],
-            move |r| r.local_conversation_id == Some(id.into()),
-            |r| r.local_id.expect("local_id should never be None"),
-            &stash,
-            callback,
-        )
-        .await?;
-        let label_id = mailbox.label_id();
-        let label = RealLabel::load(label_id.into(), &stash)
-            .await?
-            .ok_or(MailboxError::LabelNotFound(label_id))?;
-        let message_id_to_open =
-            RealConversation::message_id_to_open(id.into(), &label, messages.as_slice())?.into();
+) -> Result<Option<WatchedConversation>, MailboxError> {
+    let Some(conversation_messages) = conversation(Arc::clone(&mailbox), id).await? else {
+        return Ok(None);
+    };
 
-        Ok(WatchedConversation {
-            conversation: ContextualConversation::new(
-                conversations.into_iter().next().unwrap(),
-                mailbox.label_id().into(),
-            )
-            .unwrap()
-            .into(),
-            messages: messages.into_iter().map(Into::into).collect(),
-            message_id_to_open,
-            conversation_handle,
-            messages_handle,
-        })
-    })
-    .await
+    let receiver = ContextualConversation::watch_conversation_and_messages(
+        RealLocalId::from(id),
+        mailbox.stash(),
+    )
+    .await?;
+    let handle = Arc::new(WatchHandle::new());
+    let handle_cloned = Arc::clone(&handle);
+    async_runtime().spawn(async move {
+        loop {
+            if handle_cloned.should_stop() {
+                return;
+            }
+            if receiver.recv_async().await.is_err() {
+                return;
+            }
+            callback.on_update();
+        }
+    });
+
+    Ok(Some(WatchedConversation {
+        conversation: conversation_messages.conversation,
+        messages: conversation_messages.messages,
+        message_id_to_open: conversation_messages.message_id_to_open,
+        handle,
+    }))
 }
 
 /// Data for watched conversations.
@@ -550,37 +560,29 @@ pub async fn watch_conversations_for_label(
     label_id: Id,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversations, MailboxError> {
-    let stash = session.user_stash().clone();
     uniffi_async(async move {
-        let (conversations, handle) = watch::<_, _, RealConversation>(
-            formatdoc!(
-                "
-                JOIN conversation_labels
-                    ON conversations.local_id = conversation_labels.local_conversation_id
-                WHERE
-                    conversation_labels.local_label_id = ?
-                "
-            ),
-            params![RealLocalId::from(label_id)],
-            move |r| {
-                r.labels
-                    .iter()
-                    .any(|l| l.local_label_id == Some(label_id.into()))
-            },
-            |r| r.local_id.expect("local_id should never be None"),
-            &stash,
-            Arc::new(callback),
+        let conv = conversations_for_label(Arc::clone(&session), label_id).await?;
+        let receiver = ContextualConversation::watch_in_label(
+            RealLocalId::from(label_id),
+            session.user_stash(),
         )
         .await?;
+        let handle = Arc::new(WatchHandle::new());
+        let handle_cloned = Arc::clone(&handle);
+        tokio::spawn(async move {
+            loop {
+                if handle_cloned.should_stop() {
+                    return;
+                }
+                if receiver.recv_async().await.is_err() {
+                    return;
+                }
+                callback.on_update();
+            }
+        });
+
         Ok(WatchedConversations {
-            conversations: conversations
-                .into_iter()
-                .map(|c| {
-                    ContextualConversation::new(c, label_id.into())
-                        .unwrap()
-                        .into()
-                })
-                .collect(),
+            conversations: conv,
             handle,
         })
     })

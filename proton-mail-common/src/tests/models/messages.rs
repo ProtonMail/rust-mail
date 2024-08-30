@@ -209,6 +209,7 @@ mod available_actions {
             custom_labels: vec![],
             row_id: None,
             stash: None,
+            has_messages: false,
         };
         conversation.save_using(&tx).await.unwrap();
         let mut message: Message = test_case.message.clone();

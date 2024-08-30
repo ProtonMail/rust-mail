@@ -57,7 +57,7 @@ use proton_api_mail::services::proton::requests::{
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, Conversation as ApiConversation,
     ConversationLabel as ApiConversationLabel, Label as ApiLabel, MailSettings as ApiMailSettings,
-    Message as ApiMessage, MessageMetadata as ApiMessageMetadata, OperationResult,
+    Message as ApiMessage, MessageMetadata as ApiMessageMetadata, MessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
     GetAttachmentMetadataResponse, GetMessagesResponse,
@@ -606,6 +606,10 @@ pub struct Conversation {
     /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
 
+    /// Whether the conversation has synced its messages.
+    #[DbField]
+    pub has_messages: bool,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -646,6 +650,7 @@ impl Conversation {
             custom_labels: vec![],
             row_id: None,
             stash: None,
+            has_messages: false,
         }
     }
 
@@ -1027,9 +1032,13 @@ impl Conversation {
         local_id: LocalId,
         label: &Label,
         messages: &[Message],
-    ) -> MailboxResult<LocalId> {
-        Self::first_unread_message(label, messages)
-            .ok_or(MailboxError::ConversationHasNoMessages(local_id))
+    ) -> Result<LocalId, AppError> {
+        if messages.is_empty() {
+            return Err(AppError::ConversationHasNoMessages(local_id));
+        }
+        // If we fail to find any message, return the last message in the list.
+        Ok(Self::first_unread_message(label, messages)
+            .unwrap_or(messages.last().unwrap().local_id.unwrap()))
     }
 
     /// Retrieve in the first order the first unread message that should be displayed to the user
@@ -2126,6 +2135,72 @@ impl Conversation {
 
         Ok(())
     }
+
+    /// Sync the conversation message for `local_conversation_id` from the server.
+    ///
+    /// The messages are only synced once if `has_messages` is not set to true.
+    /// Future updates are expected to happen via the event loop.
+    ///
+    /// If `has_messages` is true, nothing is done.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries failed or if the server request failed.
+    pub async fn sync_conversation_messages<A, PM>(
+        local_conversation_id: LocalId,
+        interface: &A,
+        api: &PM,
+    ) -> Result<(), AppError>
+    where
+        PM: ProtonMail,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(conversation) = Self::find_by_id(local_conversation_id, interface).await? else {
+            return Err(AppError::ConversationNotFound(local_conversation_id));
+        };
+
+        if !conversation.has_messages {
+            let Some(rid) = conversation.remote_id else {
+                return Err(AppError::LabelDoesNotHaveRemoteId(local_conversation_id));
+            };
+            debug!("Syncing conversation messages");
+            let conversation_response = api.get_conversation(rid.into()).await.map_err(|e| {
+                error!("failed to download conversation messages: {e}");
+                AppError::from(e)
+            })?;
+
+            let tx = interface.transaction().await?;
+
+            let message_metadata: Vec<MessageMetadata> = conversation_response
+                .messages
+                .into_iter()
+                .map(Into::into)
+                .collect();
+            let mut new_conversation: Conversation = conversation_response.conversation.into();
+
+            Message::create_or_update_messages_from_metadata(message_metadata, &tx)
+                .await
+                .map_err(|e| {
+                    error!("Failed to write message metadata: {e}");
+                    e
+                })?;
+
+            new_conversation.local_id = conversation.local_id;
+            new_conversation.row_id = conversation.row_id;
+            new_conversation.has_messages = true;
+
+            new_conversation.save_using(&tx).await.map_err(|e| {
+                error!("Failed to write conversation: {e}");
+                e
+            })?;
+
+            tx.commit().await?;
+        } else {
+            debug!("Conversation messages already synced")
+        }
+
+        Ok(())
+    }
 }
 
 impl From<ApiConversation> for Conversation {
@@ -2166,6 +2241,7 @@ impl From<ApiConversation> for Conversation {
             row_id: None,
             stash: None,
             is_known: true,
+            has_messages: false,
         }
     }
 }
