@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+  - Fork with `web-account-lite` as version argument.
   - Fixed some notifications not being tracked.
 
 ## [0.11.24] - 2024-08-29
