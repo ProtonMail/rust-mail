@@ -95,6 +95,10 @@ impl MailUserContext {
         self.user_context.session()
     }
 
+    pub fn queue(&self) -> &Queue {
+        &self.action_queue
+    }
+
     /// Get the API service.
     pub fn api(&self) -> &Proton {
         self.user_context.session().api()

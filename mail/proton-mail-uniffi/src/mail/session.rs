@@ -5,7 +5,10 @@ use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async};
 use anyhow::anyhow;
-use proton_action_queue::queue::{Error as QueueError, QueuedError};
+use proton_action_queue::action::Action;
+use proton_action_queue::queue::{
+    ActionError as QueueActionError, Error as QueueError, QueuedError,
+};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
@@ -275,6 +278,18 @@ impl From<MailContextError> for MailSessionError {
             MailContextError::CacheError(e) => Self::CacheError(e),
             MailContextError::ContactError(e) => Self::ContactError(e),
             MailContextError::Other(err) => Self::Other(err),
+        }
+    }
+}
+
+impl<T> From<QueueActionError<T>> for MailSessionError
+where
+    T: Action<Error = ActionError>,
+{
+    fn from(value: QueueActionError<T>) -> Self {
+        match value {
+            QueueActionError::Action(error) => Self::Action(error),
+            QueueActionError::Queue(error) => Self::ActionQueue(error),
         }
     }
 }

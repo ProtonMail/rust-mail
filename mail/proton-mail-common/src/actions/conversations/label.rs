@@ -1,5 +1,5 @@
-use crate::actions::conversations::ActionData;
-use crate::actions::ActionError;
+use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
@@ -9,16 +9,14 @@ use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
 
-use super::filter_conversation_responses;
-
 /// Action which applies a label to conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Label(ActionData);
+pub struct Label(GenericActionData<Conversation>);
 
 impl Label {
     /// Create a new instance which applies `label_id` to the conversations with `ids`.
     pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
-        Self(ActionData::new(label_id, ids))
+        Self(GenericActionData::new(label_id, ids))
     }
 }
 
@@ -44,7 +42,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::apply_label(action.0.label_id, action.0.ids.clone(), tx).await?;
+        Conversation::apply_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -53,9 +51,11 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::remove_label(action.0.label_id, action.0.ids.clone(), tx).await?;
-
-        action.0.mark_rollback_conversations(tx).await?;
+        Conversation::remove_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        action
+            .0
+            .mark_rollback(RollbackItemType::Conversation, tx)
+            .await?;
 
         Ok(())
     }
@@ -73,13 +73,13 @@ impl proton_action_queue::action::Handler for Handler {
                 .clone()
                 .expect("Should be set")
                 .clone(),
-            action.0.remote_ids.clone(),
+            action.0.remote_target_ids.clone(),
             None,
             session.api(),
         )
         .await?;
 
-        let failed_ids = filter_conversation_responses(response);
+        let failed_ids = filter_responses(response);
 
         if !failed_ids.is_empty() {
             error!("Label operation failed for: {:?}", failed_ids);

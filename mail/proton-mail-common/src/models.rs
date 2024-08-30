@@ -27,12 +27,12 @@
 //! a specific need.
 //!
 
+mod message;
 mod rollback_item;
 #[cfg(test)]
 #[path = "tests/models.rs"]
 mod tests;
 
-use crate::actions::messages::label::Label as ActionLabel;
 use crate::actions::{ConversationAvailableAction, MessageAvailableAction};
 use crate::cache::CacheMessageConfig;
 use crate::datatypes::{
@@ -45,13 +45,10 @@ use crate::datatypes::{
     ViewMode,
 };
 use crate::decrypted_message::DecryptedMessageBody;
-use crate::{
-    AppError, MailContextError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES,
-};
+use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use bytes::Bytes;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use proton_action_queue::queue::ActionStatus;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{
@@ -91,7 +88,6 @@ use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
-use std::sync::Arc;
 use tracing::{debug, error};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
@@ -4171,7 +4167,6 @@ impl Message {
             local_id,
         ));
 
-        // TODO: Something to add here?
         Ok(actions)
     }
 
@@ -4746,50 +4741,6 @@ impl Message {
         }
 
         Ok(())
-    }
-
-    /// Label multiple messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id`    - The ID of the label to apply to the messages.
-    /// * `ids`         - The IDs of the messages to unlabel.
-    /// * `spam_action` - TODO: Document this parameter.
-    /// * `api`         - The API instance to use.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn apply_label_to_multiple_remote(
-        user_context: Arc<MailUserContext>,
-        label_id: LocalId,
-        message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, MailContextError> {
-        let action = ActionLabel::new(label_id, message_ids.into_iter().map(Into::into));
-        user_context.execute_action(action).await
-    }
-
-    /// Unlabel multiple messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id` - The ID of the label to apply to the messages.
-    /// * `ids`      - The IDs of the messages to unlabel.
-    /// * `api`      - The API instance to use.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
-    pub async fn remove_label_from_multiple_remote<PM: ProtonMail>(
-        label_id: LabelId,
-        ids: Vec<RemoteId>,
-        api: &PM,
-    ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_messages_unlabel(ids.into_iter().map(Into::into).collect(), label_id.into())
-            .await
-            .map(|r| r.responses)
     }
 }
 

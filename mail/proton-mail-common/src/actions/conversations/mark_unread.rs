@@ -1,5 +1,5 @@
-use crate::actions::conversations::ActionData;
-use crate::actions::ActionError;
+use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::services::proton::Proton;
@@ -9,17 +9,15 @@ use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
 
-use super::filter_conversation_responses;
-
 /// Action to mark conversations as unread.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MarkUnread(ActionData);
+pub struct MarkUnread(GenericActionData<Conversation>);
 
 impl MarkUnread {
     /// Create a new action which marks the conversations with `ids` as read.
     pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
         // TODO(db-tests): label_id was present in the original action, why was it used.
-        Self(ActionData::new(label_id, ids))
+        Self(GenericActionData::new(label_id, ids))
     }
 }
 
@@ -45,7 +43,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::mark_multiple_as_unread(action.0.ids.clone(), tx).await?;
+        Conversation::mark_multiple_as_unread(action.0.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -54,8 +52,11 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_multiple_as_read(action.0.ids.clone(), tx).await?;
-        action.0.mark_rollback_conversations(tx).await?;
+        Conversation::mark_multiple_as_read(action.0.target_ids.clone(), tx).await?;
+        action
+            .0
+            .mark_rollback(RollbackItemType::Conversation, tx)
+            .await?;
 
         Ok(())
     }
@@ -67,12 +68,12 @@ impl proton_action_queue::action::Handler for Handler {
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         let response = Conversation::mark_multiple_as_unread_remote::<Proton>(
-            action.0.remote_ids.clone(),
+            action.0.remote_target_ids.clone(),
             session.api(),
         )
         .await?;
 
-        let failed_ids = filter_conversation_responses(response);
+        let failed_ids = filter_responses(response);
 
         if !failed_ids.is_empty() {
             error!("Mark unread operation failed for: {:?}", failed_ids);

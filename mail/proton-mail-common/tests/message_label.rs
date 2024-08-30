@@ -9,7 +9,6 @@ use proton_api_core::services::proton::response_data::{
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_api_mail::services::proton::response_data::{
@@ -80,15 +79,14 @@ async fn label_message() {
 
     // Actions:
     //   * Apply the label to the message
-    Message::apply_label_to_multiple_remote(
-        user_context.clone(),
+    Message::action_apply_label(
+        user_context.session(),
+        user_context.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )
     .await
     .unwrap();
-
-    user_context.execute_pending_actions().await.unwrap();
 
     // Verification:
     //   * The message have the label
@@ -99,6 +97,88 @@ async fn label_message() {
     assert!(message.label_ids.contains(&label_id));
     assert_eq!(message.custom_labels.len(), 1);
     assert_eq!(message.custom_labels[0].name, "mylabel");
+}
+
+#[tokio::test]
+async fn unlabel_message() {
+    // Setup:
+    //  * Create a Label
+    //  * Create a Message with this label
+    let ctx = TestContext::new().await;
+    let user_context = ctx.user_context().await;
+    let stash = user_context.user_stash();
+
+    let label_id = LabelId::from("mylabel");
+    let label = test_label(&label_id);
+    let message = test_message();
+    let params = test_init_params_label(label);
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.mock_get_messages(message.metadata.clone()).await;
+    ctx.mock_label_messages(
+        &label_id.clone().into(),
+        vec![message.metadata.id.clone().into()],
+        None,
+        vec![],
+    )
+    .await;
+    ctx.mock_unlabel_messages(
+        &label_id.clone().into(),
+        vec![message.metadata.id.clone().into()],
+        vec![],
+    )
+    .await;
+    ctx.catch_all().await;
+
+    user_context
+        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .await
+        .expect("failed to initialize");
+
+    // Create a mailbox and sync.
+    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox.sync(10).await.unwrap();
+
+    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], stash)
+        .await
+        .unwrap()
+        .unwrap();
+    Message::action_apply_label(
+        user_context.session(),
+        user_context.queue(),
+        label.local_id.unwrap(),
+        vec![1.into()],
+    )
+    .await
+    .unwrap();
+
+    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    assert!(message.label_ids.contains(&label_id));
+    assert_eq!(message.custom_labels.len(), 1);
+    assert_eq!(message.custom_labels[0].name, "mylabel");
+
+    // Actions:
+    //   * Apply the label to the message
+    Message::action_remove_label(
+        user_context.session(),
+        user_context.queue(),
+        label.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
+
+    // Verification:
+    //   * The message have the label
+    let message = Message::load(1.into(), stash)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert!(message.custom_labels.is_empty());
+    assert!(!message.label_ids.contains(&label_id));
 }
 
 fn test_init_params_label(label: ApiLabel) -> TestParams {

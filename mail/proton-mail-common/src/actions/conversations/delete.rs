@@ -1,5 +1,5 @@
-use crate::actions::conversations::ActionData;
-use crate::actions::ActionError;
+use crate::actions::{filter_responses, ActionError, GenericActionData};
+use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
@@ -8,18 +8,16 @@ use serde::{self, Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
 
-use super::filter_conversation_responses;
-
 /// Delete conversations action.
 ///
 /// This action permanently deletes the given conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Delete(ActionData);
+pub struct Delete(GenericActionData<Conversation>);
 
 impl Delete {
     /// Create new instance.
     pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
-        Self(ActionData::new(label_id, ids))
+        Self(GenericActionData::new(label_id, ids))
     }
 }
 
@@ -45,8 +43,12 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::delete_multiple_from_label(action.0.ids.clone(), action.0.label_id, tx)
-            .await?;
+        Conversation::delete_multiple_from_label(
+            action.0.target_ids.clone(),
+            action.0.label_id,
+            tx,
+        )
+        .await?;
 
         Ok(())
     }
@@ -56,8 +58,11 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::undelete_multiple(action.0.ids.clone(), action.0.label_id, tx).await?;
-        action.0.mark_rollback_conversations(tx).await?;
+        Conversation::undelete_multiple(action.0.target_ids.clone(), action.0.label_id, tx).await?;
+        action
+            .0
+            .mark_rollback(RollbackItemType::Conversation, tx)
+            .await?;
 
         Ok(())
     }
@@ -74,7 +79,7 @@ impl proton_action_queue::action::Handler for Handler {
             .clone()
             .expect("Should not be none");
         let responses = Conversation::delete_multiple_remote(
-            action.0.remote_ids.clone(),
+            action.0.remote_target_ids.clone(),
             remote_label_id,
             session.api(),
         )
@@ -84,7 +89,7 @@ impl proton_action_queue::action::Handler for Handler {
             e
         })?;
 
-        let failed_ids = filter_conversation_responses(responses);
+        let failed_ids = filter_responses(responses);
 
         if !failed_ids.is_empty() {
             error!("Delete operation failed for: {:?}", failed_ids);
