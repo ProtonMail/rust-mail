@@ -59,6 +59,12 @@ pub enum AppError {
     RemoteLabelDoesNotExist(LabelId),
     #[error("Remote ID not found for {0} with local ID {1}")]
     RemoteIdNotFound(String, LocalId),
+    #[error("Conversation with ID {0} not found")]
+    ConversationNotFound(LocalId),
+    #[error("Conversation with ID {0} has no remote ID")]
+    ConversationHasNoRemoteId(LocalId),
+    #[error("Conversation with ID {0} has no messages")]
+    ConversationHasNoMessages(LocalId),
     #[error("Cache error: {0}")]
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]

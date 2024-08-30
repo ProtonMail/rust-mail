@@ -45,7 +45,7 @@ mod rollback_item_type;
 pub(crate) mod system_label;
 
 use crate::models::{Label, MessageBodyMetadata};
-pub use contextual_conversation::ContextualConversation;
+pub use contextual_conversation::*;
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;

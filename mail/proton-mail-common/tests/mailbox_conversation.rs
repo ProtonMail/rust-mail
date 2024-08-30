@@ -5,18 +5,17 @@ use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
-use proton_api_mail::services::proton::requests::GetMessagesOptions;
 use proton_api_mail::services::proton::response_data::{
     Label as ApiLabel, MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
 };
 use proton_core_common::datatypes::LabelId;
-use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, Message};
+use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
+use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
 use stash::orm::Model;
+use std::sync::Arc;
 
 #[tokio::test]
-#[ignore]
 async fn test_new_mailbox_sync_conversations() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::new().await;
@@ -101,14 +100,15 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
         .await;
     ctx.catch_all().await;
-    ctx.user_context()
-        .await
+    let user_context = ctx.user_context().await;
+
+    user_context
         .initialize_async(LabelId::inbox().clone(), &NullCallback {})
         .await
         .expect("failed to initialize");
 
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(ctx.user_context().await, LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(Arc::clone(&user_context), LabelId::inbox())
         .await
         .unwrap();
 
@@ -122,32 +122,31 @@ async fn test_new_mailbox_sync_conversations() {
         .unwrap();
 
     // Get the message for a conversation.
-    let messages = Message::fetch_metadata(
-        GetMessagesOptions {
-            conversation_id: conversation.remote_id.clone().map(|id| id.into()),
-            ..Default::default()
-        },
-        ctx.user_context().await.session().api(),
+
+    let result = ContextualConversation::conversation_and_messages(
+        conversation.local_id.unwrap(),
+        mailbox.label_id(),
+        user_context.user_stash(),
+        user_context.session().api(),
     )
     .await
     .unwrap()
-    .messages;
+    .unwrap();
 
-    assert_eq!(messages.len(), 2);
-    assert_eq!(messages[0].id, message_id1);
-    assert_eq!(messages[1].id, message_id2);
+    assert_eq!(result.messages.len(), 2);
+    assert_eq!(result.messages[0].remote_id, Some(message_id1.into()));
+    assert_eq!(result.messages[1].remote_id, Some(message_id2.into()));
 
     // Get messages again, but should not fire request.
-    let _ = Message::fetch_metadata(
-        GetMessagesOptions {
-            conversation_id: conversation.remote_id.map(|id| id.into()),
-            ..Default::default()
-        },
-        ctx.user_context().await.session().api(),
+    let _ = ContextualConversation::conversation_and_messages(
+        conversation.local_id.unwrap(),
+        mailbox.label_id(),
+        user_context.user_stash(),
+        user_context.session().api(),
     )
     .await
     .unwrap()
-    .messages;
+    .unwrap();
 }
 
 // #[test]

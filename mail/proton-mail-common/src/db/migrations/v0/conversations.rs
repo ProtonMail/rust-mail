@@ -18,7 +18,8 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
                 size INTEGER NOT NULL,
                 display_snooze_reminder INTEGER NOT NULL DEFAULT 0,
                 deleted INTEGER NOT NULL DEFAULT 0,
-                is_known INTEGER NOT NULL
+                is_known INTEGER NOT NULL,
+                has_messages INTEGER NOT NULL DEFAULT 0
             )
         "#,
         vec![],
