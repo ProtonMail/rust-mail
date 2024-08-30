@@ -5,7 +5,7 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_api_core::login::Flow;
 use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::Proton;
+use proton_api_core::services::proton::{Config, Proton};
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
 use proton_core_common::db::session::EncryptedUserSession;
@@ -17,7 +17,6 @@ use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
 use std::path::PathBuf;
 use std::sync::Arc;
-use url::Url;
 
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
@@ -98,7 +97,7 @@ impl MailContext {
         mail_cache_path: impl Into<PathBuf>,
         mail_cache_size: u32,
         key_chain: Arc<dyn KeyChain>,
-        api_url: Url,
+        api_config: Config,
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> Result<Self, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
@@ -108,7 +107,7 @@ impl MailContext {
             user_db_path,
             key_chain,
             initializers,
-            api_url,
+            api_config,
             network_callback,
         )
         .await?;
