@@ -74,7 +74,7 @@ impl TestContext {
             skip_srp_proof_validation: true,
             ..Default::default()
         };
-        let base_url = Url::parse(&api_config.base_url).expect("Invalid URL");
+        _ = Url::parse(&api_config.base_url).expect("Invalid URL");
 
         // Create a temporary directory for the database
         let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
@@ -96,7 +96,7 @@ impl TestContext {
             cache_path,
             100_000, // ~100kB
             keychain,
-            base_url,
+            api_config,
             None,
         )
         .await

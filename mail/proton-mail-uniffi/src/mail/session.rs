@@ -157,7 +157,6 @@ impl MailSession {
 
             // Creating client.
             let api_env_config = params.api_env_config.unwrap_or_default();
-            let api_url = api_env_config.base_url.parse().expect("Invalid API URL");
 
             debug!("Creating Context");
             let mail_ctx = MailContext::new(
@@ -166,7 +165,7 @@ impl MailSession {
                 mail_cache_path,
                 params.mail_cache_size,
                 Arc::from(FFIKeyChain::from(key_chain)),
-                api_url,
+                api_env_config.into(),
                 network_callback.map(|v| -> Box<dyn proton_core_common::NetworkStatusChanged> {
                     Box::new(FFINetworkStatusChanged::from(v))
                 }),
