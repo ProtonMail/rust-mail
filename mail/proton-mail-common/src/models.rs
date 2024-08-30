@@ -852,14 +852,11 @@ impl Conversation {
         A: Into<AgnosticInterface> + Interface,
     {
         let mut ids = Vec::with_capacity(conversations.len());
-        let tx = interface.transaction().await?;
 
         for mut conv in conversations {
-            Self::save_using(&mut conv, &tx).await?;
+            Self::save_using(&mut conv, interface).await?;
             ids.push(conv.local_id.unwrap());
         }
-
-        tx.commit().await?;
 
         Ok(ids)
     }
@@ -2540,15 +2537,18 @@ impl Label {
             .into())
     }
 
-    pub async fn create_or_update_conversation_counts(
+    pub async fn create_or_update_conversation_counts<A>(
         counts: Vec<ConversationCount>,
-        stash: &Stash,
-    ) -> Result<(), StashError> {
-        let tx = stash.transaction().await?;
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         for count in counts {
-            tx.execute(
-                formatdoc!(
-                    r"
+            interface
+                .execute(
+                    formatdoc!(
+                        r"
                     UPDATE
                         labels
                     SET
@@ -2557,24 +2557,26 @@ impl Label {
                     WHERE
                         remote_id = ?
                     "
-                ),
-                params![count.total, count.unread, count.label_id],
-            )
-            .await?;
+                    ),
+                    params![count.total, count.unread, count.label_id],
+                )
+                .await?;
         }
-        tx.commit().await?;
         Ok(())
     }
 
-    pub async fn create_or_update_message_counts(
+    pub async fn create_or_update_message_counts<A>(
         counts: Vec<MessageCount>,
-        stash: &Stash,
-    ) -> Result<(), StashError> {
-        let tx = stash.transaction().await?;
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         for count in counts {
-            tx.execute(
-                formatdoc!(
-                    r"
+            interface
+                .execute(
+                    formatdoc!(
+                        r"
                     UPDATE
                         labels
                     SET
@@ -2583,12 +2585,11 @@ impl Label {
                     WHERE
                         remote_id = ?
                     "
-                ),
-                params![count.total, count.unread, count.label_id],
-            )
-            .await?;
+                    ),
+                    params![count.total, count.unread, count.label_id],
+                )
+                .await?;
         }
-        tx.commit().await?;
         Ok(())
     }
 

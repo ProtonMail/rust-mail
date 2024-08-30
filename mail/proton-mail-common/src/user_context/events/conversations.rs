@@ -13,25 +13,22 @@ pub async fn handle_conversation_events(
     for conversation_event in conversation_events {
         match conversation_event.action {
             Action::Delete => {
-                tx.stash()
-                    .execute(
-                        "DELETE FROM conversations WHERE remote_id = ?",
-                        params![conversation_event.remote_id.clone()],
-                    )
-                    .await?;
+                tx.execute(
+                    "DELETE FROM conversations WHERE remote_id = ?",
+                    params![conversation_event.remote_id.clone()],
+                )
+                .await?;
             }
             Action::Create => {
                 if let Some(conversation) = conversation_event.conversation.clone() {
-                    Conversation::create_or_update_conversations(vec![conversation], tx.stash())
-                        .await?;
+                    Conversation::create_or_update_conversations(vec![conversation], tx).await?;
                 } else {
                     warn!("Received create without conversation");
                 }
             }
             Action::Update | Action::UpdateFlags => {
                 if let Some(conversation) = conversation_event.conversation.clone() {
-                    Conversation::create_or_update_conversations(vec![conversation], tx.stash())
-                        .await?;
+                    Conversation::create_or_update_conversations(vec![conversation], tx).await?;
                 } else {
                     warn!("Received update without conversation");
                 }
