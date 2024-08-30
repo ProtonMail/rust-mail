@@ -11,12 +11,11 @@ pub async fn handle_label_events(
     for label_event in label_events {
         match label_event.action {
             Action::Delete => {
-                tx.stash()
-                    .execute(
-                        "DELETE FROM labels WHERE remote_id = ?",
-                        params![label_event.remote_id.clone()],
-                    )
-                    .await?;
+                tx.execute(
+                    "DELETE FROM labels WHERE remote_id = ?",
+                    params![label_event.remote_id.clone()],
+                )
+                .await?;
             }
             Action::Create => {
                 if let Some(mut label) = label_event.label.clone() {

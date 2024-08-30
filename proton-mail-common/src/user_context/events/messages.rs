@@ -21,22 +21,16 @@ pub async fn handle_message_events(
             }
             Action::Create => {
                 if let Some(message) = &message_event.message {
-                    Message::create_or_update_messages_from_metadata(
-                        vec![message.clone()],
-                        tx.stash(),
-                    )
-                    .await?;
+                    Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
+                        .await?;
                 } else {
                     warn!("Received create message without message");
                 }
             }
             Action::Update | Action::UpdateFlags => {
                 if let Some(message) = &message_event.message {
-                    Message::create_or_update_messages_from_metadata(
-                        vec![message.clone()],
-                        tx.stash(),
-                    )
-                    .await?;
+                    Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
+                        .await?;
                 } else {
                     warn!("Received update message without label");
                 }

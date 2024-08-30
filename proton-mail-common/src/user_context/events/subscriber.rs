@@ -61,22 +61,18 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
                 if let Some(conversation_counts) = &event.conversation_counts {
                     debug!("Handling conversation counts");
-                    Label::create_or_update_conversation_counts(
-                        conversation_counts.clone(),
-                        tx.stash(),
-                    )
-                    .await?;
+                    Label::create_or_update_conversation_counts(conversation_counts.clone(), &tx)
+                        .await?;
                 }
 
                 if let Some(message_counts) = &event.message_counts {
                     debug!("Handling message counts");
-                    Label::create_or_update_message_counts(message_counts.clone(), tx.stash())
-                        .await?;
+                    Label::create_or_update_message_counts(message_counts.clone(), &tx).await?;
                 }
 
                 if let Some(mail_settings) = event.mail_settings.as_mut() {
                     debug!("Handling mail settings");
-                    mail_settings.save().await?;
+                    mail_settings.save_using(&tx).await?;
                 }
             }
             tx.commit().await
