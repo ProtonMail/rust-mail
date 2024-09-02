@@ -82,7 +82,7 @@ pub use rollback_item::RollbackItem;
 use smart_default::SmartDefault;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::btree_map::Entry;
@@ -4741,6 +4741,167 @@ impl Message {
         }
 
         Ok(())
+    }
+
+    /// Watch a message with `local_id` for changes.
+    ///
+    /// Returns `None` if the message could not be found.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries failed.
+    pub async fn watch_message<A>(
+        local_id: LocalId,
+        interface: &A,
+    ) -> Result<Option<(Message, flume::Receiver<()>)>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
+        let (msg_sender, msg_receiver) = flume::unbounded();
+        let (label_sender, label_receiver) = flume::unbounded();
+        let (cb_sender, cb_receiver) = flume::unbounded();
+
+        let (mut message, _) = futures::try_join!(
+            Message::find(
+                "WHERE local_id=?",
+                params![local_id],
+                interface,
+                Some(msg_sender),
+            ),
+            Label::find(
+                formatdoc!(
+                    "
+                WHERE label_type=1 AND local_id IN (
+                    SELECT local_label_id FROM message_labels WHERE local_message_id=?
+                )
+            "
+                ),
+                params![local_id],
+                interface,
+                Some(label_sender)
+            )
+        )?;
+
+        if message.is_empty() {
+            return Ok(None);
+        }
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    label_result = label_receiver.recv_async() =>  {
+                        if label_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                    msg_result = msg_receiver.recv_async() => {
+                        if msg_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(Some((message.swap_remove(0), cb_receiver)))
+    }
+
+    /// Watch all messages in the label with `local_label_id` for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries failed.
+    pub async fn watch_in_label<A>(
+        local_label_id: LocalId,
+        interface: &A,
+    ) -> Result<(Vec<Message>, flume::Receiver<()>), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
+        let (msg_sender, msg_receiver) = flume::unbounded();
+        let (label_sender, label_receiver) = flume::unbounded();
+        let (cb_sender, cb_receiver) = flume::unbounded();
+
+        let (messages, _) = futures::try_join!(
+            Message::messages_in_label(local_label_id, interface, Some(msg_sender)),
+            Label::find(
+                formatdoc!(
+                    "
+                WHERE label_type=1 AND local_id IN (
+                    SELECT local_label_id FROM message_labels WHERE local_message_id IN (
+                        SELECT local_message_id FROM message_labels WHERE local_label_id=?
+                    )
+                )
+            "
+                ),
+                params![local_label_id],
+                interface,
+                Some(label_sender)
+            )
+        )?;
+
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    label_result = label_receiver.recv_async() =>  {
+                        if label_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                    msg_result = msg_receiver.recv_async() => {
+                        if msg_result.is_err() {
+                            return;
+                        }
+                        if cb_sender.send_async(()).await.is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok((messages, cb_receiver))
+    }
+
+    /// Retrieve all the messages which are in a given label.:
+    ///
+    /// # Params
+    /// * `local_label_id` - Label where to search in
+    /// * `interface`      - Connection to the database
+    /// * `queue`          - Optional subscriber for changes.
+    pub async fn messages_in_label<A>(
+        local_label_id: LocalId,
+        interface: &A,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Message::find(
+            formatdoc!(
+                "
+                JOIN message_labels
+                    ON messages.local_id = message_labels.local_message_id
+                WHERE
+                    message_labels.local_label_id = ?
+                "
+            ),
+            params![local_label_id],
+            interface,
+            queue,
+        )
+        .await
     }
 }
 

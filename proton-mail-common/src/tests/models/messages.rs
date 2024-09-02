@@ -1859,6 +1859,50 @@ fn test_message_with_metadata(
     }
 }
 
+#[tokio::test]
+async fn watch_messages_in_label() {
+    // Label conversation with a label that was never assigned to the conversation.
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+    let mut state = new_test_label_db_state();
+    prepare_db_state_core(&tx, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
+
+    let local_msg_id1 = *state_map
+        .messages
+        .get(state.messages[0].remote_id.as_ref().unwrap())
+        .unwrap();
+
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+
+    Message::apply_label(local_label_id1, std::iter::once(local_msg_id1), &tx)
+        .await
+        .expect("failed to label");
+
+    let (_, watch_result) = Message::watch_in_label(local_msg_id1, &tx).await.unwrap();
+
+    tokio::spawn(async move {
+        //bypass model to only execute exactly 2 queries.
+        tx.execute(
+            "UPDATE messages SET unread=1 WHERE local_id=?",
+            params![local_msg_id1],
+        )
+        .await
+        .unwrap();
+        tx.execute(
+            "UPDATE labels SET color='OxFFFFFF' WHERE local_id=?",
+            params![30, local_label_id1],
+        )
+        .await
+        .unwrap();
+    });
+
+    // first update when modifying message
+    watch_result.recv_async().await.unwrap();
+    // second update when modifying the label color
+    watch_result.recv_async().await.unwrap();
+}
+
 pub(super) async fn resolve_local_ids<A>(interface: &A, message: &mut Message)
 where
     A: Into<AgnosticInterface> + Interface,
