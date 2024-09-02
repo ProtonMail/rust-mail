@@ -4,8 +4,13 @@ mod images;
 mod initialization;
 mod labels;
 
-use crate::{core::datatypes::User, mail::MailSessionError, uniffi_async};
-use proton_mail_common::MailUserContext;
+use crate::{
+    core::{datatypes::User, StoredSessionState},
+    mail::{MailSessionError, MailSessionResult},
+    uniffi_async,
+};
+use futures::TryFutureExt;
+use proton_mail_common::{MailContextError, MailUserContext};
 use stash::stash::Stash;
 use std::sync::Arc;
 
@@ -37,7 +42,7 @@ impl MailUserSession {
 #[uniffi::export]
 impl MailUserSession {
     /// Log out a session.
-    pub async fn logout(&self) -> Result<(), MailSessionError> {
+    pub async fn logout(&self) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             ctx.logout().await?;
@@ -60,7 +65,7 @@ impl MailUserSession {
     /// Any of the [`MailSessionError::Http`] possibilities could be returned if
     /// there is a problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> Result<String, MailSessionError> {
+    pub async fn fork(&self) -> MailSessionResult<String> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             ctx.session()
@@ -76,11 +81,76 @@ impl MailUserSession {
     /// # Errors
     ///
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
-    pub async fn user(&self) -> Result<User, MailSessionError> {
+    pub async fn user(&self) -> MailSessionResult<User> {
         let ctx = self.ctx.clone();
         uniffi_async(async move {
             let user = ctx.user().await?;
             Ok(user.into())
+        })
+        .await
+    }
+
+    /// Get the state of the session.
+    ///
+    /// If the session has no state (i.e. it was never marked as active), this will return `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database query fails.
+    pub async fn state(&self) -> MailSessionResult<Option<Arc<StoredSessionState>>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let Some(state) = ctx
+                .user_context()
+                .state()
+                .map_err(MailContextError::from)
+                .await?
+            else {
+                return Ok(None);
+            };
+
+            Ok(Some(StoredSessionState::new(state)))
+        })
+        .await
+    }
+
+    /// Mark this session as active.
+    ///
+    /// This updates the last active timestamp of this session in the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn set_active(&self) -> MailSessionResult<()> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            Ok(ctx
+                .user_context()
+                .set_active()
+                .map_err(MailContextError::from)
+                .await?)
+        })
+        .await
+    }
+
+    /// Return whether the session is active.
+    ///
+    /// A session is considered active if it is the most recent session for the user.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn is_active(&self) -> MailSessionResult<bool> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            Ok(ctx
+                .user_context()
+                .is_active()
+                .map_err(MailContextError::from)
+                .await?)
         })
         .await
     }

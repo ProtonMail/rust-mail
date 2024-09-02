@@ -8,12 +8,13 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::{Config, Proton};
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
-use proton_core_common::db::session::EncryptedUserSession;
+use proton_core_common::db::session::{EncryptedUserSession, UserSessionState};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{ContactError, Context, CoreContextError, KeyHandlingError};
 use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
+use stash::orm::ResultsetChange;
 use stash::stash::{Stash, StashError};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -158,12 +159,49 @@ impl MailContext {
             .await?;
         MailUserContext::new(self.clone(), ctx).await
     }
+
     /// Return the list of active session.
     ///
     /// # Errors
     /// Returns error if the db query failed.
     pub async fn sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
         Ok(self.core_context.get_sessions().await?)
+    }
+
+    /// Watch the active sessions.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
+    pub async fn watch_sessions(
+        &self,
+    ) -> MailContextResult<(
+        Vec<EncryptedUserSession>,
+        flume::Receiver<ResultsetChange<EncryptedUserSession, RemoteId>>,
+    )> {
+        Ok(self.core_context.watch_sessions().await?)
+    }
+
+    /// Get available session states.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we fail to retrieve the session states from the db.
+    pub async fn session_states(&self) -> MailContextResult<Vec<UserSessionState>> {
+        Ok(self.core_context.get_session_states().await?)
+    }
+
+    /// Watch for changes to the available session states.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the watcher cannot be registered with the database.
+    pub async fn watch_session_states(
+        &self,
+    ) -> MailContextResult<(
+        Vec<UserSessionState>,
+        flume::Receiver<ResultsetChange<UserSessionState, RemoteId>>,
+    )> {
+        Ok(self.core_context.watch_session_states().await?)
     }
 
     /// Removes a user session and deletes all associated data.
