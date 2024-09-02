@@ -53,9 +53,12 @@ pub async fn prepare_and_patch_db_state_and_skip(
     // create labels
     let mut local_label_ids = vec![];
     for label in env.labels.iter_mut() {
-        let db_label = Label::find_by_id(RemoteId::from(label.remote_id.clone().unwrap()), &stash)
-            .await
-            .expect("failed to find label");
+        let db_label = Label::find_by_id(
+            RemoteId::from(label.remote_id.clone().expect("No remote id in label")),
+            &stash,
+        )
+        .await
+        .expect("failed to find label");
         let the_label = match db_label {
             Some(ref l) => l,
             None => {

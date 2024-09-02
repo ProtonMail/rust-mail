@@ -1896,19 +1896,8 @@ async fn test_conversation_label_partially() {
         .label_ids
         .push(MY_LABEL_ID1.clone().into());
     state.conversations[0].labels.push(ConversationLabel {
-        local_id: None,
-        local_conversation_id: None,
-        local_label_id: None,
         remote_label_id: Some(MY_LABEL_ID1.clone().into()),
-        context_num_unread: 0,
-        context_num_messages: 0,
-        context_time: 0,
-        context_size: 0,
-        context_num_attachments: 0,
-        context_expiration_time: 0,
-        context_snooze_time: 0,
-        row_id: None,
-        stash: None,
+        ..Default::default()
     });
     let (state, state_map) = prepare_and_patch_db_state(&tx, state).await;
 

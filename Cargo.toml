@@ -46,6 +46,8 @@ uniffi = { version = "0.27.1", features = ["tokio"] }
 url = "2.5.0"
 velcro = "0.5.4"
 wiremock = "0.6.0"
+ctor = "0.2.8"
+color-backtrace = "0.6.1"
 
 [patch.proton]
 # proton-action-queue = { path = "../proton-api-core/proton-action-queue" }

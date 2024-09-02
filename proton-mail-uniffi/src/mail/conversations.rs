@@ -398,7 +398,7 @@ pub async fn search_for_conversations(
         .await?
         .into_iter()
         .filter_map(|c| ContextualConversation::new(c, local_label_id.into()))
-        .map(Into::into)
+        .map_into()
         .collect())
     })
     .await

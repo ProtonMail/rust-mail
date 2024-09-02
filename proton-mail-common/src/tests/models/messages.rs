@@ -1211,7 +1211,7 @@ async fn messages_mark_read() {
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
 
     let check_counters =
-        |tether: Tether, label_1_msg_diff: u64, label_1_conv_diff: u64| -> BoxFuture<'_, ()> {
+        |tether: Tether, read_message_count: u64, read_conv_count: u64| -> BoxFuture<'_, ()> {
             let state_map = &state_map;
             async move {
                 // Check conversation counts
@@ -1226,8 +1226,9 @@ async fn messages_mark_read() {
                         let label_counts = conv_counts.get(&local_label_id1).unwrap();
                         assert_eq!(
                             label_counts.unread,
-                            start_label_counts.unread - label_1_conv_diff
+                            start_label_counts.unread - read_conv_count
                         );
+
                         assert_eq!(label_counts.total, start_label_counts.total);
                     }
                     // Check conversation label2 values - should be unchanged.
@@ -1255,7 +1256,7 @@ async fn messages_mark_read() {
                         let label_counts = message_counts.get(&local_label_id1).unwrap();
                         assert_eq!(
                             label_counts.unread,
-                            start_label_counts.unread - label_1_msg_diff
+                            start_label_counts.unread - read_message_count
                         );
                         assert_eq!(label_counts.total, start_label_counts.total);
                     }
@@ -1274,7 +1275,7 @@ async fn messages_mark_read() {
             .boxed()
         };
 
-    Message::mark_read(std::iter::once(local_msg_id1), &tx)
+    Message::mark_read([local_msg_id1], &tx)
         .await
         .expect("failed to mark as read");
     let db_message = Message::find_by_id(local_msg_id1, &tx)
