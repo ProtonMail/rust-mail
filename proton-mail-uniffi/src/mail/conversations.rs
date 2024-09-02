@@ -14,7 +14,7 @@ use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
-use crate::{async_runtime, uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
@@ -496,35 +496,38 @@ pub async fn watch_conversation(
     id: Id,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedConversation>, MailboxError> {
-    let Some(conversation_messages) = conversation(Arc::clone(&mailbox), id).await? else {
-        return Ok(None);
-    };
+    uniffi_async(async move {
+        let Some(conversation_messages) = conversation(Arc::clone(&mailbox), id).await? else {
+            return Ok(None);
+        };
 
-    let receiver = ContextualConversation::watch_conversation_and_messages(
-        RealLocalId::from(id),
-        mailbox.stash(),
-    )
-    .await?;
-    let handle = Arc::new(WatchHandle::new());
-    let handle_cloned = Arc::clone(&handle);
-    async_runtime().spawn(async move {
-        loop {
-            if handle_cloned.should_stop() {
-                return;
+        let receiver = ContextualConversation::watch_conversation_and_messages(
+            RealLocalId::from(id),
+            mailbox.stash(),
+        )
+        .await?;
+        let handle = Arc::new(WatchHandle::new());
+        let handle_cloned = Arc::clone(&handle);
+        tokio::spawn(async move {
+            loop {
+                if handle_cloned.should_stop() {
+                    return;
+                }
+                if receiver.recv_async().await.is_err() {
+                    return;
+                }
+                callback.on_update();
             }
-            if receiver.recv_async().await.is_err() {
-                return;
-            }
-            callback.on_update();
-        }
-    });
+        });
 
-    Ok(Some(WatchedConversation {
-        conversation: conversation_messages.conversation,
-        messages: conversation_messages.messages,
-        message_id_to_open: conversation_messages.message_id_to_open,
-        handle,
-    }))
+        Ok(Some(WatchedConversation {
+            conversation: conversation_messages.conversation,
+            messages: conversation_messages.messages,
+            message_id_to_open: conversation_messages.message_id_to_open,
+            handle,
+        }))
+    })
+    .await
 }
 
 /// Data for watched conversations.

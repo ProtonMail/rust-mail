@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `apply_label_to_messages` who apply a label to many messages.
   - `remove_label_from_messages` who remove a label from many messages.
 
+### Fixed
+
+  - Fixed crash in `watchConversation`
+
 ## [0.11.26] - 2024-09-02
 
 ### Fixed
