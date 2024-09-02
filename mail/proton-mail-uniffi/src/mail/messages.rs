@@ -14,15 +14,14 @@ use super::{MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSessionError, MailboxError};
-use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
-use indoc::formatdoc;
+use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{Id as RealId, LabelId as RealLabelId, LocalId as RealLocalId};
+use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
-use proton_mail_common::models::{self, Label as RealLabel, MailSettings, Message as RealMessage};
+use proton_mail_common::models::{self, MailSettings, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use stash::params;
@@ -202,6 +201,72 @@ pub async fn message(
         .await
 }
 
+/// Data for watched message.
+#[derive(uniffi::Record)]
+pub struct WatchedMessage {
+    /// The message.
+    pub message: Message,
+
+    /// The handle to stop watching the messages.
+    pub handle: Arc<WatchHandle>,
+}
+
+/// Watch message for changes.
+///
+/// When the messages change, the callback will be invoked.
+///
+/// Returns `None` if the message could not be found.
+///
+/// # Parameters
+///
+/// * `session`    - The session to use for the request.
+/// * `message_id` - The local ID of the message to watch.
+/// * `callback`   - The callback to use for updates. When the specified messages
+///                change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn watch_message(
+    session: Arc<MailUserSession>,
+    message_id: Id,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<Option<WatchedMessage>, MailboxError> {
+    let stash = session.user_stash().clone();
+    let watcher = WatchHandle::default();
+    let watcher_cloned = watcher.clone();
+    uniffi_async(async move {
+        let message = if let Some((message, receiver)) =
+            RealMessage::watch_message(RealLocalId::from(message_id), &stash).await?
+        {
+            tokio::spawn(async move {
+                loop {
+                    if watcher_cloned.should_stop() {
+                        return;
+                    }
+
+                    if receiver.recv_async().await.is_err() {
+                        return;
+                    }
+
+                    callback.on_update();
+                }
+            });
+            Some(message)
+        } else {
+            None
+        };
+        Ok(message.map(|m| WatchedMessage {
+            message: m.into(),
+            handle: Arc::new(watcher),
+        }))
+    })
+    .await
+}
+
 /// Get messages for the given conversation.
 ///
 /// # Parameters
@@ -254,23 +319,13 @@ pub async fn messages_for_label(
 ) -> Result<Vec<Message>, MailboxError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Ok(RealMessage::find(
-            formatdoc!(
-                "
-                JOIN message_labels
-                    ON messages.local_id = message_labels.local_message_id
-                WHERE
-                    message_labels.local_label_id = ?
-                "
-            ),
-            params![RealLocalId::from(label_id)],
-            &stash,
-            None,
+        Ok(
+            RealMessage::messages_in_label(RealLocalId::from(label_id), &stash, None)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         )
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect())
     })
     .await
 }
@@ -390,32 +445,27 @@ pub async fn watch_messages_for_label(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedMessages, MailboxError> {
     let stash = session.user_stash().clone();
+    let watcher = WatchHandle::default();
+    let watcher_cloned = watcher.clone();
     uniffi_async(async move {
-        let remote_label_id = RealLabelId::from(
-            RealLocalId::from(label_id)
-                .counterpart::<RealLabel, _>(&stash)
-                .await?
-                .unwrap(),
-        );
-        let (messages, handle) = watch::<_, _, RealMessage>(
-            formatdoc!(
-                "
-                JOIN message_labels
-                    ON messages.local_id = message_labels.local_message_id
-                WHERE
-                    message_labels.local_label_id = ?
-                "
-            ),
-            params![RealLocalId::from(label_id)],
-            move |r| r.label_ids.contains(&remote_label_id),
-            |r| r.local_id.expect("local_id should never be None"),
-            &stash,
-            Arc::new(callback),
-        )
-        .await?;
+        let (messages, receiver) =
+            RealMessage::watch_in_label(RealLocalId::from(label_id), &stash).await?;
+        tokio::spawn(async move {
+            loop {
+                if watcher_cloned.should_stop() {
+                    return;
+                }
+
+                if receiver.recv_async().await.is_err() {
+                    return;
+                }
+
+                callback.on_update();
+            }
+        });
         Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),
-            handle,
+            handle: Arc::new(watcher),
         })
     })
     .await

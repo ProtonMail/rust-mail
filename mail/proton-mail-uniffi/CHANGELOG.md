@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+  - Add `watch_message` to watch a single message.
+
 ## [0.11.28] - 2024-09-03
 
 ### Fixed

@@ -201,10 +201,12 @@ impl ContextualConversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
         let (conv_sender, conv_receiver) = flume::unbounded();
         let (label_sender, label_receiver) = flume::unbounded();
         let (cb_sender, cb_receiver) = flume::unbounded();
         let (msg_sender, msg_receiver) = flume::unbounded();
+        let (msg_label_sender, msg_label_receiver) = flume::unbounded();
 
         futures::try_join!(
             Conversation::find(
@@ -224,6 +226,23 @@ impl ContextualConversation {
                 params![local_conversation_id],
                 interface,
                 Some(msg_sender),
+            ),
+            // Watching the message custom labels only here is enough as
+            // the conversation's custom labels are a combination of all
+            // the message labels. At this point we also have all
+            // the conversation messages, so we don't need to handle the case
+            // where they are not present.
+            Label::find(
+                formatdoc! {"
+                    WHERE label_type=1 AND label_id IN (
+                        SELECT local_label_id FROM message_labels WHERE local_message_id IN (
+                            SELECT local_id FROM messages WHERE local_conversation_id = ?
+                        )
+                    )
+                "},
+                params![local_conversation_id],
+                interface,
+                Some(msg_label_sender),
             )
         )?;
 
@@ -254,6 +273,15 @@ impl ContextualConversation {
                          return;
                      }
                  }
+                    msg_label_result = msg_label_receiver.recv_async()=> {
+                     if msg_label_result.is_err() {
+                         return;
+                     }
+                     if cb_sender.send_async(()).await.is_err() {
+                         return;
+                     }
+
+                    }
                 }
             }
         });
@@ -276,11 +304,13 @@ impl ContextualConversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
         let conversation_ids = ids.into_iter().collect::<Vec<_>>();
         let var_args = vec!["?"; conversation_ids.len()].join(",");
         let (conv_sender, conv_receiver) = flume::unbounded();
-        let (label_sender, label_receiver) = flume::unbounded();
+        let (conv_label_sender, con_label_receiver) = flume::unbounded();
         let (cb_sender, cb_receiver) = flume::unbounded();
+        let (label_sender, label_receiver) = flume::unbounded();
 
         futures::try_join!(
             ConversationLabel::find(
@@ -290,7 +320,7 @@ impl ContextualConversation {
                     .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
                     .collect(),
                 interface,
-                Some(label_sender),
+                Some(conv_label_sender),
             ),
             Conversation::find(
                 format!("WHERE local_id IN ({})", var_args),
@@ -300,12 +330,26 @@ impl ContextualConversation {
                     .collect(),
                 interface,
                 Some(conv_sender),
+            ),
+            Label::find(
+                formatdoc! {"
+                    WHERE label_type=1 AND label_id IN (
+                        SELECT local_label_id FROM conversation_labels
+                        WHERE local_conversation_id IN ({args})
+                    )
+                ", args=var_args},
+                conversation_ids
+                    .iter()
+                    .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
+                    .collect(),
+                interface,
+                Some(label_sender),
             )
         )?;
 
-        tokio::spawn(
-            async move { Self::watch_task(cb_sender, label_receiver, conv_receiver).await },
-        );
+        tokio::spawn(async move {
+            Self::watch_task(cb_sender, con_label_receiver, conv_receiver, label_receiver).await
+        });
 
         Ok(cb_receiver)
     }
@@ -325,7 +369,9 @@ impl ContextualConversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
         let (conv_sender, conv_receiver) = flume::unbounded();
+        let (conv_label_sender, conv_label_receiver) = flume::unbounded();
         let (label_sender, label_receiver) = flume::unbounded();
         let (cb_sender, cb_receiver) = flume::unbounded();
 
@@ -334,7 +380,7 @@ impl ContextualConversation {
                 "WHERE local_label_id =?",
                 params![label_id],
                 interface,
-                Some(label_sender),
+                Some(conv_label_sender),
             ),
             Conversation::find(
                 formatdoc!(
@@ -348,12 +394,32 @@ impl ContextualConversation {
                 params![label_id],
                 interface,
                 Some(conv_sender),
+            ),
+            Label::find(
+                formatdoc! {"
+                    WHERE label_type=1 AND local_id IN (
+                        SELECT local_label_id FROM conversation_labels
+                        WHERE local_conversation_id IN (
+                            SELECT local_conversation_id FROM conversation_labels
+                                WHERE local_label_id=?
+                        )
+                    )
+                "},
+                params![label_id],
+                interface,
+                Some(label_sender),
             )
         )?;
 
-        tokio::spawn(
-            async move { Self::watch_task(cb_sender, label_receiver, conv_receiver).await },
-        );
+        tokio::spawn(async move {
+            Self::watch_task(
+                cb_sender,
+                conv_label_receiver,
+                conv_receiver,
+                label_receiver,
+            )
+            .await
+        });
 
         Ok(cb_receiver)
     }
@@ -361,13 +427,22 @@ impl ContextualConversation {
     // Shared implementation to observe the labels.
     async fn watch_task(
         sender: flume::Sender<()>,
-        label_receiver: flume::Receiver<ResultsetChange<ConversationLabel, LocalId>>,
+        conv_label_receiver: flume::Receiver<ResultsetChange<ConversationLabel, LocalId>>,
         conv_receiver: flume::Receiver<ResultsetChange<Conversation, LocalId>>,
+        custom_label_receiver: flume::Receiver<ResultsetChange<Label, LocalId>>,
     ) {
         loop {
             tokio::select! {
-                label_result = label_receiver.recv_async() =>  {
-                    if label_result.is_err() {
+                conv_label_result = conv_label_receiver.recv_async() =>  {
+                    if conv_label_result.is_err() {
+                        return;
+                    }
+                    if sender.send_async(()).await.is_err() {
+                        return;
+                    }
+                }
+                custom_label_result = custom_label_receiver.recv_async() =>  {
+                    if custom_label_result.is_err() {
                         return;
                     }
                     if sender.send_async(()).await.is_err() {
