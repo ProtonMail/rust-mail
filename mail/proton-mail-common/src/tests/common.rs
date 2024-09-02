@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use crate::datatypes::{LabelColor, LabelType, SystemLabelId};
+use crate::datatypes::{LabelColor, LabelType, MessageAddress, SystemLabelId};
 use crate::models::Label;
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
@@ -222,5 +222,14 @@ pub fn test_conversation(
         display_snooze_reminder: false,
         attachments_metadata: Vec::from_iter(attachments),
         attachment_info: Default::default(),
+    }
+}
+
+impl From<&str> for MessageAddress {
+    fn from(value: &str) -> Self {
+        Self {
+            address: value.to_owned(),
+            ..Default::default()
+        }
     }
 }
