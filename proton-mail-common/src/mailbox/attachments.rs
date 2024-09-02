@@ -1,3 +1,4 @@
+use crate::cache::CacheAttachmentKey;
 use crate::datatypes::AttachmentMetadata;
 use crate::models::Attachment;
 use crate::{AppError, MailContextError, Mailbox, MailboxError, MailboxResult};
@@ -81,8 +82,9 @@ impl Mailbox {
     ) -> MailboxResult<PathBuf> {
         let user_context = self.user_context();
         let cache = user_context.attachements_cache();
+        let key = CacheAttachmentKey::new(attachment_id, &attachment.filename);
 
-        if let Some(data_path) = cache.get_item_path(&attachment_id) {
+        if let Some(data_path) = cache.get_item_path(&key) {
             Ok(data_path)
         } else {
             let pgp_provider = new_pgp_provider();
@@ -103,7 +105,7 @@ impl Mailbox {
                 .await
                 .inspect_err(|e| error!("Failed to decrypt attachment({attachment_id}): {e})"))?;
             let data_path = cache
-                .add_item(attachment_id.into(), decrypted_content.as_ref())
+                .add_item(key, decrypted_content.as_ref())
                 .inspect_err(|e| {
                     error!("Failed to add attachment({attachment_id} into cache: {e})")
                 })?;
