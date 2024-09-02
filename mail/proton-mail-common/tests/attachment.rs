@@ -5,6 +5,7 @@ use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
 use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::{Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::Mailbox;
@@ -105,9 +106,10 @@ async fn load_attachment_from_cache() {
     let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Add another value into cache
+    let key = CacheAttachmentKey::new(attachment_local_id, "foo");
     user_context
         .attachements_cache()
-        .add_item(attachment_local_id.into(), &testdata_attachment_data())
+        .add_item(key, &testdata_attachment_data())
         .unwrap();
 
     // Load and decrypt attachment.
@@ -181,9 +183,9 @@ async fn load_attachment_content_from_cache() {
     let params = TestParams::default_basic();
     let user_context = ctx.user_context().await;
     let test_attachment = params.attachments.first().unwrap();
-    let attachment_local_id = 42;
+    let attachment_local_id = 42.into();
     let attachment = get_attachment(
-        attachment_local_id.into(),
+        attachment_local_id,
         test_attachment,
         user_context.user_stash(),
     )
@@ -202,15 +204,16 @@ async fn load_attachment_content_from_cache() {
 
     ctx.catch_all().await;
 
+    let key = CacheAttachmentKey::new(attachment_local_id, &attachment.filename);
     user_context
         .attachements_cache()
-        .add_item(attachment_local_id, b"abcdef")
+        .add_item(key, b"abcdef")
         .unwrap();
 
     // Action:
     //   * Get attachment
     let data_path = mailbox
-        .get_attachment_content(attachment_local_id.into(), &attachment)
+        .get_attachment_content(attachment_local_id, &attachment)
         .await
         .unwrap();
 

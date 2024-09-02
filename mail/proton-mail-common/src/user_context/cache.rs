@@ -1,5 +1,6 @@
 use crate::MailContextResult;
 use proton_core_common::cache::{CacheConfig, ProtonCache, WeightingStrategy};
+use proton_core_common::datatypes::LocalId;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -28,14 +29,29 @@ impl Cache {
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct CacheAttachmentConfig;
 impl CacheConfig for CacheAttachmentConfig {
-    type Key = u64;
+    type Key = CacheAttachmentKey;
 
     // TODO: Cloning VerificationResult provoke a loop between Clone and ToOwned
     // type ExtraMetadata = Arc<Mutex<Option<VerificationResult>>>;
     type ExtraMetadata = ();
 
     fn key_to_filename(key: &Self::Key) -> OsString {
-        format!("{key}").into()
+        format!("{}-{}", key.attachment_id, key.filename).into()
+    }
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct CacheAttachmentKey {
+    attachment_id: u64,
+    filename: String,
+}
+
+impl CacheAttachmentKey {
+    pub fn new(attachment_id: LocalId, filename: &str) -> Self {
+        Self {
+            attachment_id: attachment_id.as_u64(),
+            filename: filename.to_owned(),
+        }
     }
 }
 
