@@ -77,7 +77,7 @@ fn initials(name: &str) -> String {
 }
 
 fn email_text(address: &str) -> String {
-    let local = match address.trim_matches(&['<', '>']).split('@').next() {
+    let local = match address.trim_matches(['<', '>']).split('@').next() {
         Some(first) => first.trim(),
         None => return "?".to_owned(),
     };

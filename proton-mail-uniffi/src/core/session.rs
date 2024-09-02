@@ -1,3 +1,4 @@
+use proton_core_common::db::session::UserSessionState;
 use proton_mail_common::proton_core_common::db::session::EncryptedUserSession;
 use std::sync::Arc;
 
@@ -52,5 +53,32 @@ impl StoredSession {
     #[must_use]
     pub fn session_id(&self) -> String {
         self.session.session_id.to_string()
+    }
+}
+
+/// Represents a session that has been stored on the device.
+#[derive(uniffi::Object)]
+pub struct StoredSessionState {
+    state: UserSessionState,
+}
+
+impl StoredSessionState {
+    pub(crate) fn new(state: UserSessionState) -> Arc<Self> {
+        Arc::new(Self { state })
+    }
+}
+
+#[uniffi::export]
+impl StoredSessionState {
+    /// Get the session state's user id.
+    #[must_use]
+    pub fn user_id(&self) -> String {
+        self.state.user_id.to_string()
+    }
+
+    /// Get the timestamp at which the session was last active.
+    #[must_use]
+    pub fn last_active_ts(&self) -> u64 {
+        self.state.last_active_ts
     }
 }

@@ -114,6 +114,10 @@ impl MailUserContext {
         &self.mail_context
     }
 
+    pub fn user_context(&self) -> &UserContext {
+        &self.user_context
+    }
+
     pub fn user_id(&self) -> &RemoteId {
         self.user_context.user_id()
     }

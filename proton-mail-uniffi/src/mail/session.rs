@@ -1,9 +1,9 @@
 use crate::core::datatypes::ApiConfig;
-use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged};
+use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged, StoredSessionState};
 use crate::core::{OSKeyChain, StoredSession};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{async_runtime, uniffi_async};
+use crate::{async_runtime, spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
 use anyhow::anyhow;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::{
@@ -194,13 +194,90 @@ impl MailSession {
     /// Returns error if the db query failed.
     pub fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
         let ctx = self.ctx.clone();
+
         async_runtime().block_on(async move {
             let sessions = ctx.sessions().await?;
-            Ok(sessions
-                .into_iter()
-                .map(StoredSession::new)
-                .collect::<Vec<_>>())
+
+            Ok(sessions.into_iter().map(StoredSession::new).collect())
         })
+    }
+
+    /// Watch the stored sessions for changes.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
+    pub async fn watch_stored_sessions(
+        &self,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> MailSessionResult<WatchedSessions> {
+        let context = self.ctx.clone();
+        let handle = WatchHandle::new();
+
+        uniffi_async(async move {
+            let (sessions, rx) = context.watch_sessions().await?;
+
+            {
+                let handle = handle.clone();
+
+                spawn_async(async move {
+                    while rx.recv_async().await.is_ok_and(|_| !handle.should_stop()) {
+                        callback.on_update();
+                    }
+                });
+            }
+
+            Ok(WatchedSessions {
+                sessions: sessions.into_iter().map(StoredSession::new).collect(),
+                handle: Arc::new(handle),
+            })
+        })
+        .await
+    }
+
+    /// Get the states of the available sessions.
+    ///
+    /// # Errors
+    /// Returns error if we fail to retrieve the session states from the db.
+    pub fn stored_session_states(&self) -> MailSessionResult<Vec<Arc<StoredSessionState>>> {
+        let ctx = self.ctx.clone();
+
+        async_runtime().block_on(async move {
+            let states = ctx.session_states().await?;
+
+            Ok(states.into_iter().map(StoredSessionState::new).collect())
+        })
+    }
+
+    /// Watch the stored session states for changes.
+    ///
+    /// # Errors
+    /// Returns error if the db query failed.
+    pub async fn watch_stored_session_states(
+        &self,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> MailSessionResult<WatchedSessionStates> {
+        let context = self.ctx.clone();
+        let handle = WatchHandle::new();
+
+        uniffi_async(async move {
+            let (states, rx) = context.watch_session_states().await?;
+
+            {
+                let handle = handle.clone();
+
+                spawn_async(async move {
+                    while rx.recv_async().await.is_ok_and(|_| !handle.should_stop()) {
+                        callback.on_update();
+                    }
+                });
+            }
+
+            Ok(WatchedSessionStates {
+                states: states.into_iter().map(StoredSessionState::new).collect(),
+                handle: Arc::new(handle),
+            })
+        })
+        .await
     }
 
     /// Create an user context from a stored session.
@@ -213,6 +290,7 @@ impl MailSession {
                 .ctx
                 .user_context_from_session(session.encrypted_session())
                 .await?;
+
             Ok(MailUserSession::new(ctx))
         })
     }
@@ -292,4 +370,24 @@ where
             QueueActionError::Queue(error) => Self::ActionQueue(error),
         }
     }
+}
+
+/// Data for watched sessions.
+#[derive(uniffi::Record)]
+pub struct WatchedSessions {
+    /// The sessions.
+    pub sessions: Vec<Arc<StoredSession>>,
+
+    /// The handle to stop watching the sessions.
+    pub handle: Arc<WatchHandle>,
+}
+
+/// Data for watched session states.
+#[derive(uniffi::Record)]
+pub struct WatchedSessionStates {
+    /// The session states.
+    pub states: Vec<Arc<StoredSessionState>>,
+
+    /// The handle to stop watching the sessions.
+    pub handle: Arc<WatchHandle>,
 }

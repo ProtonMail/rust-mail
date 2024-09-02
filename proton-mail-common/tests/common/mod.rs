@@ -12,7 +12,7 @@ use crate::common::account::{TEST_USER_KEY_ID, TEST_USER_PASSWORD};
 use proton_api_core::auth::{SecretString, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Config;
-use proton_core_common::datatypes::RemoteId;
+use proton_core_common::datatypes::{AuthScopes, RemoteId};
 use proton_core_common::db::session::{
     DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey,
 };
@@ -114,7 +114,7 @@ impl TestContext {
             refresh_token: RealSecretString::from_str("REFRESHTOKEN").unwrap(),
             access_token: RealSecretString::from_str("ACCESSTOKEN").unwrap(),
             key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
-            scopes: String::new(),
+            scopes: AuthScopes::new(vec![]),
         }
         .to_encrypted_session(&encryption_key)
         .expect("failed to generate encrypted session");

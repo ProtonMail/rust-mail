@@ -1,9 +1,7 @@
-use std::cell::Cell;
 use std::sync::LazyLock;
 
 use crate::datatypes::{
-    attachment, AttachmentMetadata, Disposition, MessageAddress, MessageAddresses,
-    SystemLabelId as _,
+    attachment, AttachmentMetadata, Disposition, MessageAddresses, SystemLabelId as _,
 };
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::tests::common::{

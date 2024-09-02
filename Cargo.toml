@@ -22,13 +22,13 @@ lazy_static = "1"
 mime = "0.3.17"
 parking_lot = "0.12.3"
 pretty_assertions = "1.4.0"
-proton-action-queue = { version = "=0.7.15", registry = "proton" }
-proton-api-core = { version = "=0.6.13", registry = "proton" }
+proton-action-queue = { version = "=0.7.16", registry = "proton" }
+proton-api-core = { version = "=0.6.14", registry = "proton" }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail" }
-proton-core-common = { version = "=0.6.20", registry = "proton" }
+proton-core-common = { version = "=0.6.21", registry = "proton" }
 proton-crypto-account = { version = "=0.6.1", registry = "proton" }
 proton-crypto-inbox = { version = "=0.6.4", registry = "proton" }
-proton-event-loop = { version = "=0.7.15", registry = "proton" }
+proton-event-loop = { version = "=0.7.16", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common" }
 proton-sqlite3 = { version = "=0.7.8", registry = "proton" }
 scraper = "0.19.0"
