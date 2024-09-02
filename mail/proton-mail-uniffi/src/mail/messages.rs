@@ -569,9 +569,9 @@ pub async fn watch_messages_for_label(
 ///
 /// # Parameters
 ///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to apply.
-/// * `ids`      - The local IDs of the messages to apply the label to.
+/// * `session`     - The session to use for the request.
+/// * `label_id`    - The local ID of the label to apply.
+/// * `message_ids` - The local IDs of the messages to apply the label to.
 ///
 /// # Errors
 ///
@@ -661,9 +661,9 @@ pub async fn unstar_messages(
 ///
 /// # Parameters
 ///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to remove.
-/// * `ids`      - The local IDs of the messages to remove the label from.
+/// * `session`     - The session to use for the request.
+/// * `label_id`    - The local ID of the label to remove.
+/// * `message_ids` - The local IDs of the messages to remove the label from.
 ///
 /// # Errors
 ///
@@ -777,6 +777,41 @@ pub async fn delete_messages(
             user_context.session(),
             user_context.queue(),
             label_id.into(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
+    })
+    .await
+}
+
+/// Move given messages from a label into another.
+///
+/// # Parameters
+///
+/// * `session`        - The session to use for the request.
+/// * `source_id`      - The local ID of the source label.
+/// * `destination_id` - The local ID of the destination label.
+/// * `message_ids`    - The local IDs of the messages to move.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn move_messages(
+    session: Arc<MailUserSession>,
+    source_id: Id,
+    destination_id: Id,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::action_move(
+            user_context.session(),
+            user_context.queue(),
+            source_id.into(),
+            destination_id.into(),
             message_ids.into_iter().map(Into::into).collect(),
         )
         .await?;

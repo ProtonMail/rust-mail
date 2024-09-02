@@ -106,7 +106,7 @@ where
             return Err(ActionError::NoInput);
         }
 
-        self.remote_label_id = Some(find_remote_label_id(tx, self.label_id).await?);
+        self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tx).await?);
 
         let conv_ids = LocalId::counterparts::<T, _>(self.target_ids.clone(), tx)
             .await
@@ -136,24 +136,66 @@ where
     }
 }
 
-/// Resolve the remote id for a label with `local_id`.
-///
-/// # Errors
-///
-/// Returns error if the resolution failed.
-async fn find_remote_label_id(tether: &Tether, local_id: LocalId) -> Result<LabelId, ActionError> {
-    let Some(label_id) = local_id.counterpart::<Label, _>(tether).await? else {
-        return Err(AppError::LabelNotFound(local_id).into());
-    };
-
-    Ok(label_id.into())
-}
-
-/// Filter server response for messages on which the operation failed.
+/// Filter server response on which the operation failed.
 pub fn filter_responses(responses: Vec<OperationResult>) -> Vec<RemoteId> {
     responses
         .into_iter()
         .filter(|r| r.response.code != 1000)
         .map(|r| RemoteId::from(r.id))
         .collect::<Vec<_>>()
+}
+
+/// Action which moves target items between two labels.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ActionMoveData<T>
+where
+    T: Model,
+{
+    /// The current label whether the items are locate.
+    source_label_id: LocalId,
+    /// The destination label where the items should move to.
+    destination_label_id: LocalId,
+    /// Resolved remote id for the destination label.
+    remote_destination_label_id: Option<LabelId>,
+    /// Local item ids that need to be moved.
+    target_ids: Vec<LocalId>,
+    /// Resolved remote conversation ids.
+    remote_target_ids: Vec<RemoteId>,
+    phantom_data: PhantomData<T>,
+}
+
+impl<T> ActionMoveData<T>
+where
+    T: Model,
+{
+    /// Create a new action which moves items with `target_ids` from `source_label_id` to
+    ///`destination_label_id`.
+    pub fn new(
+        source_label_id: LocalId,
+        destination_label_id: LocalId,
+        target_ids: impl IntoIterator<Item = LocalId>,
+    ) -> Self {
+        Self {
+            source_label_id,
+            destination_label_id,
+            remote_destination_label_id: None,
+            target_ids: Vec::from_iter(target_ids),
+            remote_target_ids: vec![],
+            phantom_data: PhantomData,
+        }
+    }
+
+    /// Resolve all remote ids
+    ///
+    /// # Errors
+    ///
+    /// * if some id can not be resolved
+    async fn resolve_ids(&mut self, tx: &Tether) -> Result<(), ActionError> {
+        self.remote_destination_label_id =
+            Some(Label::resolve_remote_label_id(self.destination_label_id, tx).await?);
+        self.remote_target_ids = LocalId::counterparts::<T, _>(self.target_ids.clone(), tx)
+            .await
+            .inspect_err(|e| error!("Failed to resolve ids: {e}"))?;
+        Ok(())
+    }
 }

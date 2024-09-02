@@ -1,6 +1,6 @@
 use crate::actions::{filter_responses, ActionError, ActionMoveData};
 use crate::datatypes::RollbackItemType;
-use crate::models::{Conversation, RollbackItem};
+use crate::models::{Message, RollbackItem};
 use itertools::Itertools;
 use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
@@ -11,12 +11,12 @@ use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
 
-/// Action which moves conversations between two labels.
+/// Action which applies a label to messages.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Move(ActionMoveData<Conversation>);
+pub struct Move(ActionMoveData<Message>);
 
 impl Move {
-    /// Create a new action which moves conversations with `ids` from `source_label_id` to
+    /// Create a new action which moves messages with `target_ids` from `source_label_id` to
     /// `destination_label_id`.
     pub fn new(
         source_label_id: LocalId,
@@ -32,7 +32,7 @@ impl Move {
 }
 
 impl Action for Move {
-    const TYPE: Type = Type("move_conversations");
+    const TYPE: Type = Type("move_messages");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
@@ -41,7 +41,7 @@ impl Action for Move {
 }
 
 #[derive(Default)]
-pub struct Handler {}
+pub struct Handler;
 
 impl ActionHandler for Handler {
     type Action = Move;
@@ -53,7 +53,7 @@ impl ActionHandler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::move_conversations(
+        Message::move_messages(
             action.0.source_label_id,
             action.0.destination_label_id,
             action.0.target_ids.clone(),
@@ -69,7 +69,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::move_conversations(
+        Message::move_messages(
             action.0.destination_label_id,
             action.0.source_label_id,
             action.0.target_ids.clone(),
@@ -78,7 +78,7 @@ impl ActionHandler for Handler {
         .await?;
 
         for remote_id in &action.0.remote_target_ids {
-            RollbackItem::new(remote_id.clone(), RollbackItemType::Conversation)
+            RollbackItem::new(remote_id.clone(), RollbackItemType::Message)
                 .save_using(tx)
                 .await?;
         }
@@ -93,7 +93,7 @@ impl ActionHandler for Handler {
         stash: &Stash,
     ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
         let api = session.api();
-        let conversation_ids = action
+        let message_ids = action
             .0
             .remote_target_ids
             .clone()
@@ -106,32 +106,27 @@ impl ActionHandler for Handler {
             .clone()
             .expect("Should be set")
             .into();
-        let responses = api
-            .put_conversations_label(conversation_ids, label_id, None)
+        let response = api
+            .put_messages_label(message_ids, label_id, None)
             .await?
             .responses;
 
-        let failed_ids = filter_responses(responses);
+        let failed_ids = filter_responses(response);
 
-        if failed_ids.is_empty() {
-            return Ok(());
+        if !failed_ids.is_empty() {
+            error!("Move messages operation failed for: {failed_ids:?}");
+
+            let tx = stash.transaction().await?;
+            let local_ids = RemoteId::counterparts::<Message, _>(failed_ids.clone(), &tx).await?;
+            Message::move_messages(
+                action.0.destination_label_id,
+                action.0.source_label_id,
+                local_ids,
+                &tx,
+            )
+            .await?;
+            tx.commit().await?;
         }
-
-        error!("Move operation failed for: {:?}", failed_ids);
-
-        let tx = stash.transaction().await?;
-        let local_ids = RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
-
-        Conversation::move_conversations(
-            action.0.destination_label_id,
-            action.0.source_label_id,
-            local_ids,
-            &tx,
-        )
-        .await?;
-
-        tx.commit().await?;
-
         Ok(())
     }
 }

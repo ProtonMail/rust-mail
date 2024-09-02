@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Move` actions for messages.
+- `Label` and `Unlabel` actions for messages.
 - The following actions for the messages:
     - `Label`: `apply_label_to_messages`
     - `Unlabel`: `remove_label_from_messages`

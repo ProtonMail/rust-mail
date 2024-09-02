@@ -59,22 +59,16 @@ impl TestContext {
     /// * `failed`      - The list of message IDs for which we want to
     ///                   simulate failure.
     ///
-    pub async fn mock_label_messages(
-        &self,
-        label_id: &ApiRemoteId,
-        message_ids: Vec<ApiRemoteId>,
-        spam_action: Option<bool>,
-        failed: Vec<ApiRemoteId>,
-    ) {
+    pub async fn mock_label_messages(&self, label_id: &ApiRemoteId, message_ids: Vec<ApiRemoteId>) {
         let ids = message_ids.to_vec();
         let request = PutMessagesLabelRequest {
             action: 1,
             ids: ids.clone(),
             label_id: label_id.clone(),
-            spam_action,
+            spam_action: None,
         };
         let response = PutMessagesLabelResponse {
-            responses: build_message_responses(&ids, failed),
+            responses: build_message_responses(&ids, vec![]),
             undo_token: None,
         };
 

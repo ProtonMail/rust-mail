@@ -2505,13 +2505,39 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
+    /// Remove all removable labels from given conversations.
+    ///
+    /// N.B.: `all_mail` label is the only not removable label.
+    async fn remove_all_labels<A>(
+        conversation_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_mail_id = LabelId::all_mail()
+            .into_inner()
+            .counterpart::<Label, _>(interface)
+            .await?
+            .expect("AllMail should be set");
+        for local_conversation_id in conversation_ids {
+            interface
+                .query_value::<_, LocalId>(
+                    "DELETE FROM conversation_labels WHERE local_conversation_id = ? AND local_label_id != ?",
+                    params![local_conversation_id, all_mail_id],
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Move conversations between two labels.
     ///
     /// # Parameters
-    /// * `source_id`      - Local label id where the conversations currently are.
-    /// * `destination_id` - Local label id where the conversations should be moved.
-    /// * `ids`            - The IDs of the conversations to move.
-    /// * `tx`             - The tether to use for the database connection.
+    /// * `source_id`        - Local label id where the conversations currently are.
+    /// * `destination_id`   - Local label id where the conversations should be moved.
+    /// * `conversation_ids` - The IDs of the conversations to move.
+    /// * `interface`        - The tether to use for the database connection.
     ///
     /// This function returns a tuple containing the source and destination remote label ids,
     /// respectively.
@@ -2523,33 +2549,22 @@ impl Conversation {
     /// # Errors
     ///
     /// Returns errors if the operation failed.
-    pub async fn move_conversations(
+    pub async fn move_conversations<A>(
         source_id: LocalId,
         destination_id: LocalId,
-        ids: Vec<LocalId>,
-        tx: &Tether,
-    ) -> Result<(LabelId, LabelId), AppError> {
-        let Some(source_label) = Label::load(source_id, tx).await? else {
-            return Err(AppError::LabelNotFound(source_id));
-        };
-
-        let is_movable_folder = source_label.is_movable_folder();
-
-        let Some(remote_source_id) = source_label.remote_id else {
-            return Err(AppError::LabelDoesNotHaveRemoteId(source_id));
-        };
-
-        let Some(remote_destination_id) = destination_id
-            .counterpart::<Label, _>(tx)
-            .await?
-            .map(LabelId::from)
-        else {
-            return Err(AppError::LabelDoesNotHaveRemoteId(destination_id));
-        };
+        conversation_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let remote_source_id = Label::resolve_remote_label_id(source_id, interface).await?;
+        let remote_destination_id =
+            Label::resolve_remote_label_id(destination_id, interface).await?;
 
         // If moving to trash, mark conversations as read.
         if remote_destination_id == LabelId::trash() {
-            Conversation::mark_read(ids.clone(), tx)
+            Conversation::mark_read(conversation_ids.clone(), interface)
                 .await
                 .map_err(|e| {
                     error!("Failed to mark conversations as read when moving to trash: {e}");
@@ -2559,53 +2574,32 @@ impl Conversation {
 
         // When moving in Trash or Spam, remove all labels (but AllMail)
         if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
-            let all_mail_id = RemoteId::from(LabelId::all_mail())
-                .counterpart::<Label, _>(&AgnosticInterface::Tether(tx.to_owned()))
-                .await?;
-            let all_mail_local_id = all_mail_id
-                .ok_or_else(|| AppError::RemoteLabelDoesNotExist(LabelId::all_mail()))?;
-
-            for &local_conversation_id in &ids {
-                let label_ids =
-                    ConversationLabel::labels_ids_for_conversation(local_conversation_id, tx)
-                        .await?;
-                for label_id in label_ids.into_iter().filter(|id| *id != all_mail_local_id) {
-                    Conversation::remove_label(
-                        label_id,
-                        vec![local_conversation_id],
-                        tx,
-                    )
-                        .await.map_err(|e| {
-                        error!("Failed to remove label {label_id} from conv {local_conversation_id} when moving into spam/trash:{e}");
-                        e
-                    })?;
-                }
-            }
-            // When moving out of Trash or Spam, add AlmostAllMail label
-        } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
-            let almost_all_mail_id = RemoteId::from(LabelId::almost_all_mail())
-                .counterpart::<Label, _>(&AgnosticInterface::Tether(tx.to_owned()))
-                .await?;
-            let almost_all_mail_local_id = almost_all_mail_id
-                .ok_or_else(|| AppError::RemoteLabelDoesNotExist(LabelId::almost_all_mail()))?;
-
-            Conversation::apply_label(almost_all_mail_local_id, ids.clone(), tx)
+            Conversation::remove_all_labels(conversation_ids.clone(), interface)
                 .await
-                .map_err(|e| {
+                .inspect_err(|e| error!("Failed to remove labels: {e}"))?;
+        } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
+            // When moving out of Trash or Spam, add AlmostAllMail label
+            let almost_all_mail =
+                Label::resolve_local_label_id(LabelId::almost_all_mail(), interface).await?;
+            Conversation::apply_label(almost_all_mail, conversation_ids.clone(), interface)
+                .await
+                .inspect_err(|e| {
                     error!(
                         "Failed to apply almost all mail label when moving out of spam/trash:{e}"
-                    );
-                    e
+                    )
                 })?;
         }
 
-        if is_movable_folder {
-            Conversation::remove_label(source_id, ids.clone(), tx).await?
+        let Some(source) = Label::load(source_id, interface).await? else {
+            return Err(AppError::LabelNotFound(source_id));
+        };
+        if source.is_movable_folder() {
+            Conversation::remove_label(source_id, conversation_ids.clone(), interface).await?
         }
 
-        Conversation::apply_label(destination_id, ids.clone(), tx).await?;
+        Conversation::apply_label(destination_id, conversation_ids.clone(), interface).await?;
 
-        Ok((remote_source_id, remote_destination_id))
+        Ok(())
     }
 
     /// Get the available actions for conversations excluding move to current view
@@ -3090,7 +3084,7 @@ impl Conversation {
 
             let tx = interface.transaction().await?;
 
-            let message_metadata: Vec<MessageMetadata> = conversation_response
+            let message_metadata: Vec<ApiMessageMetadata> = conversation_response
                 .messages
                 .into_iter()
                 .map(Into::into)
@@ -4046,6 +4040,43 @@ impl Label {
         }
 
         Ok(Some((labels.swap_remove(0), receiver)))
+    }
+
+    /// Resolve the remote id for a label with `local_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the resolution failed.
+    pub async fn resolve_remote_label_id<A>(
+        local_id: LocalId,
+        interface: &A,
+    ) -> Result<LabelId, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(label_id) = local_id.counterpart::<Label, _>(interface).await? else {
+            return Err(AppError::LabelNotFound(local_id));
+        };
+
+        Ok(label_id.into())
+    }
+
+    /// Resolve the local id for a label with `label_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the resolution failed.
+    pub async fn resolve_local_label_id<A>(
+        label_id: LabelId,
+        interface: &A,
+    ) -> Result<LocalId, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(label_id) = label_id.counterpart::<Label, _>(interface).await? else {
+            return Err(AppError::RemoteLabelDoesNotExist(label_id));
+        };
+        Ok(label_id)
     }
 }
 

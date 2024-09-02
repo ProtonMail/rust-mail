@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Bring back soft delete for messages.
 
 ### Added
+  - `move_messages` which moves many messages from a label into another.
   - Expose actions to star and unstar messages.
 
 ### Changed

@@ -52,13 +52,8 @@ async fn label_message() {
 
     // Initialize Mocking
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
-    ctx.mock_label_messages(
-        &label_id.clone().into(),
-        vec![message.metadata.id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_messages(&label_id.clone().into(), vec![message.metadata.id.clone()])
+        .await;
     ctx.catch_all().await;
 
     ctx.init_user(user_ctx.clone()).await;
@@ -116,13 +111,8 @@ async fn unlabel_message() {
 
     // Initialize Mocking
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
-    ctx.mock_label_messages(
-        &label_id.clone().into(),
-        vec![message.metadata.id.clone()],
-        None,
-        vec![],
-    )
-    .await;
+    ctx.mock_label_messages(&label_id.clone().into(), vec![message.metadata.id.clone()])
+        .await;
     ctx.mock_unlabel_messages(
         &label_id.clone().into(),
         vec![message.metadata.id.clone()],
