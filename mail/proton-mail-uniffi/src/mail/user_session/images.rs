@@ -7,7 +7,7 @@ use proton_core_common::datatypes::LightOrDarkMode;
 
 #[uniffi::export]
 impl MailUserSession {
-    /// Get the sender image for a list of senders.
+    /// Get a path to the sender image.
     ///
     /// # Parameters
     /// * `address`: Email address of the sender.
@@ -17,7 +17,7 @@ impl MailUserSession {
     /// * `mode`: Can be used to select if the "light" or "dark" mode of the image is desired (default is light).
     /// * `format`: Desired image format, if none is specified the default format of the image will be used.
     ///
-    /// Returns `None` if no image needs to be displayed.
+    /// Returns a path toward the image file or `None` if no image needs to be displayed.
     ///
     /// # Errors
     /// Returns errors if the API call fails, the mode value is invalid, the conversation doesn't exist, or
