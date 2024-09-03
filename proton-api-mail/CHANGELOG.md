@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+- Use Get with query parameters for message metadata.
+
 ## [0.3.13] - 2024-07-02
 
 ### Fixed

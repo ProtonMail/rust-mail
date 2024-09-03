@@ -42,7 +42,6 @@ use proton_api_core::service::{ApiService, ApiServiceError, Json, NO_PARAMS};
 use proton_api_core::services::proton::common::RemoteId;
 use proton_api_core::services::proton::Proton;
 use requests::GetLabelsByIdsOptions;
-use velcro::hash_map;
 
 pub trait ProtonMail: ApiService {
     const BASE_PATH_CORE: &'static str = "core/v4";
@@ -274,16 +273,15 @@ pub trait ProtonMail: ApiService {
         options.page_size = options.page_size.min(MAX_PAGE_ELEMENT_COUNT_U64);
         options.limit = options.limit.map(|v| v.min(MAX_LIMIT_VALUE_U64));
 
-        // There can potentially be a large number of query parameters in the request.
-        // If we sent it as a GET request, the length of the URL could exceed the limit
-        // imposed by our API. To avoid this, we send as POST, with the query parameters
-        // sent in the message body.
-        self.post::<_, Json<_>>(
+        // There can potentially be a large number of query parameters in this request.
+        // The length of the URL could eventually exceed the limit imposed by our API.
+        // To avoid this, we can send as POST, with the query parameters sent in the message body.
+        // In this case, add this as a header: `X-HTTP-Method-Override`: `GET`
+        // Mobile needs this to be `get` so they can run their tests through the proxy.
+        self.get::<_, Json<_>>(
             &format!("{}/messages", Self::BASE_PATH_MAIL),
             Some(options),
-            Some(hash_map! {
-                "X-HTTP-Method-Override".to_owned(): "GET".to_owned(),
-            }),
+            None,
         )
         .await
     }
