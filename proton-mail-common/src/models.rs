@@ -35,8 +35,8 @@ mod rollback_item;
 mod tests;
 
 use crate::actions::{
-    ConversationAction, ConversationAvailableActions, MessageAction, MessageAvailableActions,
-    MoveAction,
+    ConversationAction, ConversationAvailableActions, LabelAsAction, MessageAction,
+    MessageAvailableActions, MoveAction,
 };
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
@@ -2129,7 +2129,9 @@ impl Conversation {
             } else {
                 ConversationAction::MarkUnread
             },
-            ConversationAction::Pin, // Static for now
+            // Statics
+            ConversationAction::Pin,
+            ConversationAction::LabelAs,
         ];
 
         if !deleted {
@@ -2148,6 +2150,40 @@ impl Conversation {
             .move_actions(move_actions)
             .conversation_actions(conversation_actions)
             .build())
+    }
+
+    pub async fn available_label_as_actions<A>(
+        local_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<Vec<LabelAsAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
+        let conversations = Conversation::find(
+            format!(
+                "WHERE local_id IN ({})",
+                local_ids.iter().map(ToString::to_string).join(",")
+            ),
+            vec![],
+            interface,
+            None,
+        )
+        .await?;
+        let all_label_as_actions = conversations
+            .iter()
+            .flat_map(|conversation| {
+                LabelAsAction::vec(all_label_as.iter(), |label| {
+                    conversation
+                        .custom_labels
+                        .iter()
+                        .map(|label| Some(label.local_id))
+                        .contains(&label.local_id)
+                })
+            })
+            .collect_vec();
+
+        Ok(LabelAsAction::finalize(all_label_as_actions))
     }
 
     /// Finds all of the messages from this conversation
@@ -4518,7 +4554,9 @@ impl Message {
             } else {
                 MessageAction::MarkUnread
             },
-            MessageAction::Pin, // Static for now
+            // Statics
+            MessageAction::Pin,
+            MessageAction::LabelAs,
         ];
 
         if !deleted {
@@ -4536,6 +4574,41 @@ impl Message {
             .move_actions(move_actions)
             .message_actions(message_actions)
             .build())
+    }
+
+    // TODO: docs
+    pub async fn available_label_as_actions<A>(
+        local_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<Vec<LabelAsAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
+        let messages = Message::find(
+            format!(
+                "WHERE local_id IN ({})",
+                local_ids.iter().map(ToString::to_string).join(",")
+            ),
+            vec![],
+            interface,
+            None,
+        )
+        .await?;
+        let all_label_as_actions = messages
+            .iter()
+            .flat_map(|message| {
+                LabelAsAction::vec(all_label_as.iter(), |label| {
+                    message
+                        .custom_labels
+                        .iter()
+                        .map(|label| Some(label.local_id))
+                        .contains(&label.local_id)
+                })
+            })
+            .collect_vec();
+
+        Ok(LabelAsAction::finalize(all_label_as_actions))
     }
 
     /// Gets the body of a message from a message id.

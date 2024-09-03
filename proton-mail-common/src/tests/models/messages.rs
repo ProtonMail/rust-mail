@@ -42,7 +42,7 @@ mod available_actions {
     use super::*;
     use crate::{
         actions::SystemFolderAction, conversation, datatypes::SystemLabel, db::new_test_connection,
-        label, message,
+        label, message, rid,
     };
     use pretty_assertions::assert_eq;
     use test_case::test_case;
@@ -53,13 +53,6 @@ mod available_actions {
         static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
         static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
         static ref SPAM: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black());
-        static ref ARCHIVE: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::archive()), name: "Archive".to_owned(), color: LabelColor::black());
-        static ref TRASH: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::trash()), name: "Trash".to_owned(), color: LabelColor::black());
-        static ref ALL_MAIL: Label =
-            label!(label_type: LabelType::System, remote_id: Some(LabelId::all_mail()));
-        static ref APPLICABLE_LABEL_1: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_1".into()), name: "Applicable Label 1".to_owned(), color: LabelColor::purple());
-        static ref APPLICABLE_LABEL_2: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_2".into()), name: "Applicable Label 2".to_owned(), color: LabelColor::purple());
-        static ref APPLICABLE_LABEL_3: Label = label!(label_type: LabelType::Label, remote_id: Some("applicable_label_3".into()), name: "Applicable Label 3".to_owned(), color: LabelColor::purple());
     }
 
     struct TestCase {
@@ -77,7 +70,7 @@ mod available_actions {
     static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         messages: vec![MessageWithLabels {
-            message: message!(deleted: false, unread: true, remote_id: Some("test1".into())),
+            message: message!(deleted: false, unread: true, remote_id: rid!("test1")),
             labels: vec![STARRED.clone(), FOLDER.clone()],
         }],
         expected: MessageAvailableActions::builder()
@@ -102,6 +95,7 @@ mod available_actions {
                 MessageAction::Unstar,
                 MessageAction::MarkRead,
                 MessageAction::Pin,
+                MessageAction::LabelAs,
                 MessageAction::Delete,
             ])
             .build(),
@@ -140,6 +134,7 @@ mod available_actions {
                 MessageAction::Star,
                 MessageAction::MarkUnread,
                 MessageAction::Pin,
+                MessageAction::LabelAs,
             ])
             .build(),
     });
@@ -172,6 +167,7 @@ mod available_actions {
                 MessageAction::Star,
                 MessageAction::MarkUnread,
                 MessageAction::Pin,
+                MessageAction::LabelAs,
                 MessageAction::Delete,
             ])
             .build(),
@@ -211,6 +207,7 @@ mod available_actions {
                 MessageAction::Star,
                 MessageAction::MarkRead,
                 MessageAction::Pin,
+                MessageAction::LabelAs,
                 MessageAction::Delete,
             ])
             .build(),
@@ -273,6 +270,153 @@ mod available_actions {
         });
 
         assert_eq!(actual, test_case.expected);
+    }
+}
+
+mod available_label_as_actions {
+    use super::*;
+    use crate::{conversation, db::new_test_connection, label, lrid, message, rid};
+    use test_case::test_case;
+
+    struct MessageWithLabels {
+        message: Message,
+        labels: Vec<Label>,
+    }
+
+    #[test_case(vec![], vec![], &[]; "TEST1: empty")]
+    #[test_case(
+        vec![
+            MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![] },
+            MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![] },
+        ],
+        vec![
+            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+        ],
+        &[
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                is_selected: Some( false )
+            },
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                is_selected: Some( false )
+            }
+        ]; "TEST2: messages without labels")]
+    #[test_case(
+        vec![
+            MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![
+                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            ] },
+            MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![
+                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            ] },
+        ],
+        vec![
+            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+        ],
+        &[
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                is_selected: Some( true )
+            },
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                is_selected: Some( true )
+            }
+        ]; "TEST3: messages with all labels")]
+    #[test_case(
+        vec![
+            MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![
+                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            ] },
+            MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![
+                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            ] },
+        ],
+        vec![
+            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+        ],
+        &[
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                is_selected: None,
+            },
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                is_selected: None,
+            }
+        ]; "TEST4: each message with different label")]
+    #[tokio::test]
+    async fn test_label_as_actions(
+        messages: Vec<MessageWithLabels>,
+        labels: Vec<Label>,
+        expected: &[LabelAsAction],
+    ) {
+        let stash = new_test_connection().await;
+        let tx = stash.connection();
+        let address = create_address(&tx).await;
+        let mut conversation = conversation!(remote_id: rid!("conversation"));
+        conversation.save_using(&tx).await.unwrap();
+
+        for mut label in labels {
+            label.save_using(&tx).await.expect("failed to create label");
+        }
+
+        let mut message_ids = vec![];
+
+        for MessageWithLabels {
+            mut message,
+            labels: message_labels,
+        } in messages
+        {
+            message.local_address_id = address.local_id.unwrap();
+            message.remote_address_id = address.remote_id.clone().unwrap();
+            message.local_conversation_id = conversation.local_id;
+            message.remote_conversation_id = conversation.remote_id.clone();
+
+            message
+                .save_using(&tx)
+                .await
+                .expect("failed to create message");
+
+            message_ids.push(message.local_id.unwrap());
+
+            for mut label in message_labels {
+                label.save_using(&tx).await.expect("failed to create label");
+
+                let label_id = label.local_id.unwrap();
+                let ids = vec![message.local_id.unwrap()];
+
+                Message::apply_label(label_id, ids, &tx).await.unwrap();
+            }
+        }
+
+        let mut actual = Message::available_label_as_actions(message_ids, &tx)
+            .await
+            .unwrap();
+
+        actual.iter_mut().for_each(|action| {
+            action.label_id = 0.into(); // To be able to compare with expected
+        });
+
+        assert_eq!(actual, expected);
     }
 }
 
