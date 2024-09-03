@@ -30,7 +30,7 @@ pub fn damp_with_duration(callback: Box<dyn LiveQueryCallback>, duration: Durati
         }
     });
 
-    move || must_update_clone.store(false, Ordering::Relaxed)
+    move || must_update_clone.store(true, Ordering::Relaxed)
 }
 
 /// Reduces how often the given notification callback gets called to max once per 5 seconds.
