@@ -2270,3 +2270,28 @@ async fn test_conversation_watcher() {
     // second update when modifying conversation
     watch_result.recv_async().await.unwrap();
 }
+
+#[tokio::test]
+async fn test_contextual_conversation_messages() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let tx = stash.connection();
+    let mut state = new_test_label_db_state();
+    prepare_db_state_core(&tx, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state_and_skip(&tx, state.clone(), true).await;
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
+
+    let watch_result = ContextualConversation::watch_conversation_and_messages(local_conv_id, &tx)
+        .await
+        .unwrap();
+
+    Conversation::apply_label(local_label_id1, vec![local_conv_id], &tx)
+        .await
+        .expect("failed to label");
+
+    watch_result.recv_async().await.unwrap();
+}
