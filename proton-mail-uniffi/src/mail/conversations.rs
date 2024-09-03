@@ -492,8 +492,8 @@ pub async fn watch_conversation(
             mailbox.stash(),
         )
         .await?;
-        let handle = Arc::new(WatchHandle::new());
-        let handle_cloned = Arc::clone(&handle);
+        let handle = WatchHandle::new();
+        let handle_cloned = handle.clone();
         tokio::spawn(async move {
             loop {
                 if handle_cloned.should_stop() {
@@ -510,7 +510,7 @@ pub async fn watch_conversation(
             conversation: conversation_messages.conversation,
             messages: conversation_messages.messages,
             message_id_to_open: conversation_messages.message_id_to_open,
-            handle,
+            handle: Arc::new(handle),
         }))
     })
     .await
