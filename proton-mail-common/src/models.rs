@@ -4806,12 +4806,12 @@ impl Message {
             Label::find(
                 formatdoc!(
                     "
-                WHERE label_type=1 AND local_id IN (
+                WHERE label_type=? AND local_id IN (
                     SELECT local_label_id FROM message_labels WHERE local_message_id=?
                 )
             "
                 ),
-                params![local_id],
+                params![LabelType::Label, local_id],
                 interface,
                 Some(label_sender)
             )
@@ -4869,14 +4869,14 @@ impl Message {
             Label::find(
                 formatdoc!(
                     "
-                WHERE label_type=1 AND local_id IN (
+                WHERE label_type=? AND local_id IN (
                     SELECT local_label_id FROM message_labels WHERE local_message_id IN (
                         SELECT local_message_id FROM message_labels WHERE local_label_id=?
                     )
                 )
             "
                 ),
-                params![local_label_id],
+                params![LabelType::Label, local_label_id],
                 interface,
                 Some(label_sender)
             )

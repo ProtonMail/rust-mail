@@ -1,4 +1,6 @@
-use crate::datatypes::{AttachmentMetadata, CustomLabel, ExclusiveLocation, MessageAddresses};
+use crate::datatypes::{
+    AttachmentMetadata, CustomLabel, ExclusiveLocation, LabelType, MessageAddresses,
+};
 use crate::models::{Conversation, ConversationLabel, Label, Message};
 use crate::AppError;
 use indoc::formatdoc;
@@ -242,13 +244,13 @@ impl ContextualConversation {
             // where they are not present.
             Label::find(
                 formatdoc! {"
-                    WHERE label_type=1 AND label_id IN (
+                    WHERE label_type=? AND label_id IN (
                         SELECT local_label_id FROM message_labels WHERE local_message_id IN (
                             SELECT local_id FROM messages WHERE local_conversation_id = ?
                         )
                     )
                 "},
-                params![local_conversation_id],
+                params![LabelType::Label, local_conversation_id],
                 interface,
                 Some(msg_label_sender),
             )
@@ -341,14 +343,17 @@ impl ContextualConversation {
             ),
             Label::find(
                 formatdoc! {"
-                    WHERE label_type=1 AND label_id IN (
+                    WHERE label_type=? AND label_id IN (
                         SELECT local_label_id FROM conversation_labels
                         WHERE local_conversation_id IN ({args})
                     )
                 ", args=var_args},
-                conversation_ids
-                    .iter()
-                    .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
+                std::iter::once(Box::new(LabelType::Label) as Box<dyn ToSql + Send>)
+                    .chain(
+                        conversation_ids
+                            .iter()
+                            .map(|id| -> Box<dyn ToSql + Send> { Box::new(*id) })
+                    )
                     .collect(),
                 interface,
                 Some(label_sender),
@@ -393,7 +398,7 @@ impl ContextualConversation {
             Conversation::in_label(label_id, interface, Some(conv_sender),),
             Label::find(
                 formatdoc! {"
-                    WHERE label_type=1 AND local_id IN (
+                    WHERE label_type=? AND local_id IN (
                         SELECT local_label_id FROM conversation_labels
                         WHERE local_conversation_id IN (
                             SELECT local_conversation_id FROM conversation_labels
@@ -401,7 +406,7 @@ impl ContextualConversation {
                         )
                     )
                 "},
-                params![label_id],
+                params![LabelType::Label, label_id],
                 interface,
                 Some(label_sender),
             )
