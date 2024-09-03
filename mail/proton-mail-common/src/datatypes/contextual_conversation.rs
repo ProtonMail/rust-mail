@@ -139,6 +139,25 @@ impl ContextualConversation {
         Ok(Self::new(conversation, local_label_id))
     }
 
+    /// Retrieve all the conversations which are the label with `local_label_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn in_label<A>(
+        local_label_id: LocalId,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(Conversation::in_label(local_label_id, interface, None)
+            .await?
+            .into_iter()
+            .filter_map(|c| Self::new(c, local_label_id))
+            .collect())
+    }
+
     /// Retrieve the conversation with `local_conversation_id` in the
     /// context of `local_label_id` and its respective messages.
     ///
@@ -168,13 +187,7 @@ impl ContextualConversation {
         else {
             return Ok(None);
         };
-        let messages = Message::find(
-            "WHERE local_conversation_id=?",
-            params![local_conversation_id],
-            interface,
-            None,
-        )
-        .await?;
+        let messages = Message::in_conversation(local_conversation_id, interface, None).await?;
         let id_to_open =
             Conversation::message_id_to_open(local_conversation_id, &label, &messages)?;
 
@@ -201,7 +214,7 @@ impl ContextualConversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
+        //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
         let (conv_sender, conv_receiver) = flume::unbounded();
         let (label_sender, label_receiver) = flume::unbounded();
         let (cb_sender, cb_receiver) = flume::unbounded();
@@ -221,12 +234,7 @@ impl ContextualConversation {
                 interface,
                 Some(label_sender),
             ),
-            Message::find(
-                "WHERE local_conversation_id=?",
-                params![local_conversation_id],
-                interface,
-                Some(msg_sender),
-            ),
+            Message::in_conversation(local_conversation_id, interface, Some(msg_sender)),
             // Watching the message custom labels only here is enough as
             // the conversation's custom labels are a combination of all
             // the message labels. At this point we also have all
@@ -304,7 +312,7 @@ impl ContextualConversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
+        //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
         let conversation_ids = ids.into_iter().collect::<Vec<_>>();
         let var_args = vec!["?"; conversation_ids.len()].join(",");
         let (conv_sender, conv_receiver) = flume::unbounded();
@@ -365,36 +373,24 @@ impl ContextualConversation {
     pub async fn watch_in_label<A>(
         label_id: LocalId,
         interface: &A,
-    ) -> Result<flume::Receiver<()>, StashError>
+    ) -> Result<(Vec<ContextualConversation>, flume::Receiver<()>), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        //TODO(ET-1088): Return ResultSetChange<Message> instead of ()
+        //TODO(ET-1088): Return ResultSetChange<ContextualConversation> instead of ()
         let (conv_sender, conv_receiver) = flume::unbounded();
         let (conv_label_sender, conv_label_receiver) = flume::unbounded();
         let (label_sender, label_receiver) = flume::unbounded();
         let (cb_sender, cb_receiver) = flume::unbounded();
 
-        futures::try_join!(
+        let (_, conversations, _) = futures::try_join!(
             ConversationLabel::find(
                 "WHERE local_label_id =?",
                 params![label_id],
                 interface,
                 Some(conv_label_sender),
             ),
-            Conversation::find(
-                formatdoc!(
-                    "
-                JOIN conversation_labels
-                    ON conversations.local_id = conversation_labels.local_conversation_id
-                WHERE
-                    conversation_labels.local_label_id = ?
-                "
-                ),
-                params![label_id],
-                interface,
-                Some(conv_sender),
-            ),
+            Conversation::in_label(label_id, interface, Some(conv_sender),),
             Label::find(
                 formatdoc! {"
                     WHERE label_type=1 AND local_id IN (
@@ -421,7 +417,12 @@ impl ContextualConversation {
             .await
         });
 
-        Ok(cb_receiver)
+        let conversations = conversations
+            .into_iter()
+            .filter_map(|c| ContextualConversation::new(c, label_id))
+            .collect();
+
+        Ok((conversations, cb_receiver))
     }
 
     // Shared implementation to observe the labels.

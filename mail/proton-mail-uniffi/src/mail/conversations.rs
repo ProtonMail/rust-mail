@@ -15,14 +15,12 @@ use crate::mail::datatypes::{
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
 use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
-use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
 use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
-use stash::params;
 use std::sync::Arc;
 
 /// Label the given conversations with the given label id.
@@ -191,27 +189,13 @@ pub async fn conversations_for_label(
 ) -> Result<Vec<Conversation>, MailboxError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Ok(RealConversation::find(
-            formatdoc!(
-                "
-                JOIN conversation_labels
-                    ON conversations.local_id = conversation_labels.local_conversation_id
-                WHERE
-                    conversation_labels.local_label_id = ?
-                "
-            ),
-            params![RealLocalId::from(label_id)],
-            &stash,
-            None,
+        Ok(
+            ContextualConversation::in_label(RealLocalId::from(label_id), &stash)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         )
-        .await?
-        .into_iter()
-        .map(|c| {
-            ContextualConversation::new(c, label_id.into())
-                .unwrap()
-                .into()
-        })
-        .collect())
     })
     .await
 }
@@ -564,8 +548,7 @@ pub async fn watch_conversations_for_label(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversations, MailboxError> {
     uniffi_async(async move {
-        let conv = conversations_for_label(Arc::clone(&session), label_id).await?;
-        let receiver = ContextualConversation::watch_in_label(
+        let (conversations, receiver) = ContextualConversation::watch_in_label(
             RealLocalId::from(label_id),
             session.user_stash(),
         )
@@ -585,7 +568,7 @@ pub async fn watch_conversations_for_label(
         });
 
         Ok(WatchedConversations {
-            conversations: conv,
+            conversations: conversations.into_iter().map(Into::into).collect(),
             handle,
         })
     })

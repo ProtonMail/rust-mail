@@ -2248,7 +2248,7 @@ async fn test_conversation_watcher() {
         .await
         .expect("failed to label");
 
-    let watch_result = ContextualConversation::watch_in_label(local_label_id1, &tx)
+    let (_, watch_result) = ContextualConversation::watch_in_label(local_label_id1, &tx)
         .await
         .unwrap();
 
