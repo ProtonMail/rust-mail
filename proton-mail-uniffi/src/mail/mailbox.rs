@@ -174,7 +174,7 @@ impl Mailbox {
                 move |r| r.local_id == Some(label_id),
                 |r| r.local_id.expect("local_id should never be None"),
                 &stash,
-                Arc::new(callback),
+                callback,
             )
             .await?;
             Ok(handle)

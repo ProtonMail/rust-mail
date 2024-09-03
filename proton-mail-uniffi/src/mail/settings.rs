@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{spawn_async, uniffi_async, utils::damp, LiveQueryCallback, WatchHandle};
 use proton_mail_common::models::MailSettings as RealSettings;
 use stash::orm::Model;
 use tokio::task::JoinError;
@@ -32,10 +32,11 @@ pub struct SettingsWatcher {
 #[uniffi::export]
 pub async fn watch_mail_settings(
     ctx: &MailUserSession,
-    on_update: Box<dyn LiveQueryCallback>,
+    callback: Box<dyn LiveQueryCallback>,
 ) -> Result<SettingsWatcher, MailSessionError> {
     let db = ctx.ctx().user_stash().clone();
     uniffi_async(async move {
+        let callback = damp(callback);
         let (tx, rx) = flume::unbounded();
         let settings = RealSettings::find("", vec![], &db, Some(tx))
             .await?
@@ -52,7 +53,7 @@ pub async fn watch_mail_settings(
                     if watch_handle.should_stop() {
                         break;
                     }
-                    on_update.on_update();
+                    callback();
                 }
             }
         });
