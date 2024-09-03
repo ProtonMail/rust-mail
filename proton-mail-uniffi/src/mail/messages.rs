@@ -24,7 +24,6 @@ use proton_mail_common::decrypted_message::{
 use proton_mail_common::models::{self, MailSettings, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
-use stash::params;
 use std::sync::Arc;
 use tokio::task::JoinError;
 
@@ -286,16 +285,13 @@ pub async fn messages_for_conversation(
 ) -> Result<Vec<Message>, MailboxError> {
     let stash = session.user_stash().clone();
     uniffi_async(async move {
-        Ok(RealMessage::find(
-            "WHERE local_conversation_id = ?",
-            params![RealLocalId::from(conversation_id)],
-            &stash,
-            None,
+        Ok(
+            RealMessage::in_conversation(RealLocalId::from(conversation_id), &stash, None)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect(),
         )
-        .await?
-        .into_iter()
-        .map(Into::into)
-        .collect())
     })
     .await
 }
@@ -320,7 +316,7 @@ pub async fn messages_for_label(
     let stash = session.user_stash().clone();
     uniffi_async(async move {
         Ok(
-            RealMessage::messages_in_label(RealLocalId::from(label_id), &stash, None)
+            RealMessage::in_label(RealLocalId::from(label_id), &stash, None)
                 .await?
                 .into_iter()
                 .map(Into::into)

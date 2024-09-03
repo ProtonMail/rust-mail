@@ -2202,6 +2202,40 @@ impl Conversation {
 
         Ok(())
     }
+
+    /// Retrieve all the conversation which are in a given label.
+    ///
+    /// # Params
+    /// * `local_label_id` - Label where to search in
+    /// * `interface`      - Connection to the database
+    /// * `queue`          - Optional subscriber for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn in_label<A>(
+        local_label_id: LocalId,
+        interface: &A,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Conversation::find(
+            formatdoc!(
+                "
+                JOIN conversation_labels
+                    ON conversations.local_id = conversation_labels.local_conversation_id
+                WHERE
+                    conversation_labels.local_label_id = ?
+                "
+            ),
+            params![local_label_id],
+            interface,
+            queue,
+        )
+        .await
+    }
 }
 
 impl From<ApiConversation> for Conversation {
@@ -4831,7 +4865,7 @@ impl Message {
         let (cb_sender, cb_receiver) = flume::unbounded();
 
         let (messages, _) = futures::try_join!(
-            Message::messages_in_label(local_label_id, interface, Some(msg_sender)),
+            Message::in_label(local_label_id, interface, Some(msg_sender)),
             Label::find(
                 formatdoc!(
                     "
@@ -4874,13 +4908,18 @@ impl Message {
         Ok((messages, cb_receiver))
     }
 
-    /// Retrieve all the messages which are in a given label.:
+    /// Retrieve all the messages which are in a given label.
     ///
     /// # Params
+    ///
     /// * `local_label_id` - Label where to search in
     /// * `interface`      - Connection to the database
     /// * `queue`          - Optional subscriber for changes.
-    pub async fn messages_in_label<A>(
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn in_label<A>(
         local_label_id: LocalId,
         interface: &A,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
@@ -4898,6 +4937,36 @@ impl Message {
                 "
             ),
             params![local_label_id],
+            interface,
+            queue,
+        )
+        .await
+    }
+
+    /// Get all messages which belong to the conversation with
+    /// `local_conversation_id`.
+    ///
+    /// # Params
+    ///
+    /// * `local_conversation_id` - Conversation id to which the messages belong
+    ///                             to.
+    /// * `interface`             - Connection to the database.
+    /// * `queue`                 - Optional subscriber for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed
+    pub async fn in_conversation<A>(
+        local_conversation_id: LocalId,
+        interface: &A,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Message::find(
+            "WHERE local_conversation_id = ?",
+            params![local_conversation_id],
             interface,
             queue,
         )
