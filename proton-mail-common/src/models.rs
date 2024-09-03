@@ -2186,6 +2186,52 @@ impl Conversation {
         Ok(LabelAsAction::finalize(all_label_as_actions))
     }
 
+    // TODO: docs
+    pub async fn available_move_to_actions<A>(
+        view: Label,
+        local_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<Vec<MoveAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
+        let all_system_move_locations = all_system
+            .iter()
+            .filter(|label| label.is_movable_folder())
+            .filter(|label| label.local_id != view.local_id);
+        let all_custom_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
+        let conversations = Conversation::find(
+            format!(
+                "WHERE local_id IN ({})",
+                local_ids.iter().map(ToString::to_string).join(",")
+            ),
+            vec![],
+            interface,
+            None,
+        )
+        .await?;
+        let all_move_to_actions = conversations
+            .iter()
+            .flat_map(|conversation| {
+                MoveAction::vec(
+                    all_system_move_locations
+                        .clone()
+                        .chain(all_custom_folders.iter()),
+                    |label| {
+                        conversation
+                            .labels
+                            .iter()
+                            .map(|conv_label| conv_label.local_label_id)
+                            .contains(&label.local_id)
+                    },
+                )
+            })
+            .collect_vec();
+
+        Ok(MoveAction::finalize(all_move_to_actions))
+    }
+
     /// Finds all of the messages from this conversation
     pub async fn load_messages<A>(&self, interface: &A) -> Result<Vec<Message>, StashError>
     where
@@ -4609,6 +4655,52 @@ impl Message {
             .collect_vec();
 
         Ok(LabelAsAction::finalize(all_label_as_actions))
+    }
+
+    // TODO: docs
+    pub async fn available_move_to_actions<A>(
+        view: Label,
+        local_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<Vec<MoveAction>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_system = Label::find_by_kind(LabelType::System, interface).await?;
+        let all_system_move_locations = all_system
+            .iter()
+            .filter(|label| label.is_movable_folder())
+            .filter(|label| label.local_id != view.local_id);
+        let all_custom_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
+        let messages = Message::find(
+            format!(
+                "WHERE local_id IN ({})",
+                local_ids.iter().map(ToString::to_string).join(",")
+            ),
+            vec![],
+            interface,
+            None,
+        )
+        .await?;
+        let all_move_to_actions = messages
+            .iter()
+            .flat_map(|message| {
+                MoveAction::vec(
+                    all_system_move_locations
+                        .clone()
+                        .chain(all_custom_folders.iter()),
+                    |label| {
+                        message
+                            .label_ids
+                            .iter()
+                            .map(Some)
+                            .contains(&label.remote_id.as_ref())
+                    },
+                )
+            })
+            .collect_vec();
+
+        Ok(MoveAction::finalize(all_move_to_actions))
     }
 
     /// Gets the body of a message from a message id.
