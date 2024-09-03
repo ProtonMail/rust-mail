@@ -446,6 +446,7 @@ pub async fn watch_messages_for_label(
     let watcher = WatchHandle::default();
     let watcher_cloned = watcher.clone();
     uniffi_async(async move {
+        let callback = damp(callback);
         let (messages, receiver) =
             RealMessage::watch_in_label(RealLocalId::from(label_id), &stash).await?;
         tokio::spawn(async move {
@@ -458,7 +459,7 @@ pub async fn watch_messages_for_label(
                     return;
                 }
 
-                callback.on_update();
+                callback();
             }
         });
         Ok(WatchedMessages {
