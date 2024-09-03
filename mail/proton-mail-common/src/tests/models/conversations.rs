@@ -362,6 +362,7 @@ mod available_actions {
                 ConversationAction::Unstar,
                 ConversationAction::MarkRead,
                 ConversationAction::Pin,
+                ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
             .build(),
@@ -400,6 +401,7 @@ mod available_actions {
                 ConversationAction::Star,
                 ConversationAction::MarkUnread,
                 ConversationAction::Pin,
+                ConversationAction::LabelAs,
             ])
             .build(),
     });
@@ -432,6 +434,7 @@ mod available_actions {
                 ConversationAction::Star,
                 ConversationAction::MarkUnread,
                 ConversationAction::Pin,
+                ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
             .build(),
@@ -471,6 +474,7 @@ mod available_actions {
                 ConversationAction::Star,
                 ConversationAction::MarkRead,
                 ConversationAction::Pin,
+                ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
             .build(),
@@ -524,6 +528,146 @@ mod available_actions {
         });
 
         assert_eq!(actual, test_case.expected);
+    }
+}
+
+mod available_label_as_actions {
+    use super::*;
+    use crate::{conversation, db::new_test_connection, label, lrid, rid};
+    use pretty_assertions::assert_eq;
+    use test_case::test_case;
+
+    struct ConversationWithLabels {
+        conversation: Conversation,
+        labels: Vec<Label>,
+    }
+
+    #[test_case(vec![], vec![], &[]; "TEST1: empty")]
+    #[test_case(
+        vec![
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![] },
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![] },
+        ],
+        vec![
+            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+        ],
+        &[
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                is_selected: Some( false )
+            },
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                is_selected: Some( false )
+            }
+        ]; "TEST2: conversations without labels")]
+    #[test_case(
+        vec![
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![
+                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            ] },
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![
+                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            ] },
+        ],
+        vec![
+            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+        ],
+        &[
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                is_selected: Some( true )
+            },
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                is_selected: Some( true )
+            }
+        ]; "TEST3: conversations with all labels")]
+    #[test_case(
+        vec![
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![
+                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            ] },
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![
+                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            ] },
+        ],
+        vec![
+            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+        ],
+        &[
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                is_selected: None,
+            },
+            LabelAsAction {
+                label_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                is_selected: None,
+            }
+        ]; "TEST4: each conversation with different label")]
+    #[tokio::test]
+    async fn test_label_as_actions(
+        conversations: Vec<ConversationWithLabels>,
+        labels: Vec<Label>,
+        expected: &[LabelAsAction],
+    ) {
+        let stash = new_test_connection().await;
+        let tx = stash.connection();
+
+        for mut label in labels {
+            label.save_using(&tx).await.expect("failed to create label");
+        }
+
+        let mut conversation_ids = vec![];
+
+        for ConversationWithLabels {
+            mut conversation,
+            labels: message_labels,
+        } in conversations
+        {
+            conversation
+                .save_using(&tx)
+                .await
+                .expect("failed to create message");
+
+            conversation_ids.push(conversation.local_id.unwrap());
+
+            for mut label in message_labels {
+                label.save_using(&tx).await.expect("failed to create label");
+
+                let label_id = label.local_id.unwrap();
+                let ids = vec![conversation.local_id.unwrap()];
+
+                Conversation::apply_label(label_id, ids, &tx).await.unwrap();
+            }
+        }
+
+        let mut actual = Conversation::available_label_as_actions(conversation_ids, &tx)
+            .await
+            .unwrap();
+
+        actual.iter_mut().for_each(|action| {
+            action.label_id = 0.into(); // To be able to compare with expected
+        });
+
+        assert_eq!(actual, expected);
     }
 }
 

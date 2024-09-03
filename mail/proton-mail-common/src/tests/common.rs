@@ -23,12 +23,36 @@ lazy_static! {
 }
 
 #[macro_export]
+macro_rules! lid {
+    ($id:expr) => {{
+        use proton_core_common::datatypes::LocalId;
+        Some(LocalId::from($id))
+    }};
+}
+
+#[macro_export]
+macro_rules! rid {
+    ($id:expr) => {{
+        use proton_core_common::datatypes::RemoteId;
+        Some(RemoteId::from($id))
+    }};
+}
+
+#[macro_export]
+macro_rules! lrid {
+    ($id:expr) => {{
+        use proton_core_common::datatypes::LabelId;
+        Some(LabelId::from($id))
+    }};
+}
+
+#[macro_export]
 macro_rules! label {
-    ($($field:tt)*) => {
+    ($($field:tt)*) => {{
         Label {
             $($field)*,
             ..Default::default()
-        }
+        }}
     };
 }
 

@@ -1,5 +1,4 @@
 use super::{GeneralActions, MoveAction, ReplyAction};
-use proton_core_common::datatypes::LocalId;
 use typed_builder::TypedBuilder;
 
 /// Struct to reflect what kind of actions
