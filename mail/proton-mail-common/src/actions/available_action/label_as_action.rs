@@ -2,13 +2,12 @@
 #[path = "../../tests/actions/available_actions/label_as_action.rs"]
 mod tests;
 
-use std::collections::BTreeMap;
-
 use crate::{
     datatypes::{LabelColor, LabelType},
     models::Label,
 };
 use proton_core_common::datatypes::LocalId;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LabelAsAction {
@@ -47,22 +46,22 @@ impl LabelAsAction {
     }
 }
 
-pub struct LabelAsActionMap {
+struct LabelAsActionMap {
     map: BTreeMap<LocalId, Vec<LabelAsAction>>,
 }
 
 impl LabelAsActionMap {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             map: BTreeMap::new(),
         }
     }
 
-    pub fn insert(&mut self, label_id: LocalId, action: LabelAsAction) {
+    fn insert(&mut self, label_id: LocalId, action: LabelAsAction) {
         self.map.entry(label_id).or_default().push(action);
     }
 
-    pub fn drain(self) -> Vec<LabelAsAction> {
+    fn drain(self) -> Vec<LabelAsAction> {
         self.map
             .into_iter()
             .filter_map(|(_, mut actions)| {

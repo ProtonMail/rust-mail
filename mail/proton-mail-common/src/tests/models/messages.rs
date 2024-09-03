@@ -78,17 +78,17 @@ mod available_actions {
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Archive,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Spam,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Trash,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
             ])
             .message_actions(vec![
@@ -112,22 +112,22 @@ mod available_actions {
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Inbox,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Archive,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Spam,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Trash,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
             ])
             .message_actions(vec![
@@ -150,17 +150,17 @@ mod available_actions {
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Inbox,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Archive,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Trash,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
             ])
             .message_actions(vec![
@@ -190,17 +190,17 @@ mod available_actions {
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Archive,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Spam,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
                 MoveAction::SystemFolder(SystemFolderAction {
                     local_id: 0.into(),
                     name: SystemLabel::Trash,
-                    is_selected: false,
+                    is_selected: Some(false),
                 }),
             ])
             .message_actions(vec![
@@ -275,7 +275,7 @@ mod available_actions {
 
 mod available_label_as_actions {
     use super::*;
-    use crate::{conversation, db::new_test_connection, label, lrid, message, rid};
+    use crate::{conversation, db::new_test_connection, label, message, rid};
     use test_case::test_case;
 
     struct MessageWithLabels {
@@ -290,8 +290,8 @@ mod available_label_as_actions {
             MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![] },
         ],
         vec![
-            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: rid!("label2"), label_type: LabelType::Label),
         ],
         &[
             LabelAsAction {
@@ -310,17 +310,17 @@ mod available_label_as_actions {
     #[test_case(
         vec![
             MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![
-                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+                label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: rid!("label2"), label_type: LabelType::Label),
             ] },
             MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![
-                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+                label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: rid!("label2"), label_type: LabelType::Label),
             ] },
         ],
         vec![
-            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: rid!("label2"), label_type: LabelType::Label),
         ],
         &[
             LabelAsAction {
@@ -339,15 +339,15 @@ mod available_label_as_actions {
     #[test_case(
         vec![
             MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![
-                label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+                label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
             ] },
             MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![
-                label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+                label!(remote_id: rid!("label2"), label_type: LabelType::Label),
             ] },
         ],
         vec![
-            label!(remote_id: lrid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: lrid!("label2"), label_type: LabelType::Label),
+            label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: rid!("label2"), label_type: LabelType::Label),
         ],
         &[
             LabelAsAction {
@@ -414,6 +414,211 @@ mod available_label_as_actions {
 
         actual.iter_mut().for_each(|action| {
             action.label_id = 0.into(); // To be able to compare with expected
+        });
+
+        assert_eq!(actual, expected);
+    }
+}
+
+mod available_move_to_actions {
+    use pretty_assertions::assert_eq;
+    use std::sync::LazyLock;
+
+    use super::*;
+    use crate::{
+        actions::{CustomFolderAction, SystemFolderAction},
+        conversation,
+        db::new_test_connection,
+        label, message, rid,
+    };
+    use test_case::test_case;
+
+    struct MessageWithLabels {
+        message: Message,
+        labels: Vec<Label>,
+    }
+
+    static INBOX: LazyLock<Label> = LazyLock::new(
+        || label!(label_type: LabelType::System, remote_id: rid!(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black()),
+    );
+
+    static OUTBOX: LazyLock<Label> = LazyLock::new(
+        || label!(label_type: LabelType::System, remote_id: rid!(LabelId::outbox()), name: "Outbox".to_owned(), color: LabelColor::black()),
+    );
+
+    static STARRED: LazyLock<Label> = LazyLock::new(
+        || label!(label_type: LabelType::System, remote_id: rid!(LabelId::starred()), name: "Starred".to_owned(), color: LabelColor::black()),
+    );
+
+    #[test_case(&INBOX, vec![], vec![], &[]; "TEST1: empty")]
+    #[test_case(
+        &INBOX,
+        vec![
+            MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![] },
+            MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![] },
+        ],
+        vec![
+            label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: rid!("label2"), label_type: LabelType::Folder),
+        ],
+        &[
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Archive,
+                is_selected: Some(false),
+            }),
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Spam,
+                is_selected: Some(false),
+            }),
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Trash,
+                is_selected: Some(false),
+            }),
+            MoveAction::CustomFolder(CustomFolderAction {
+                local_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                parent: None,
+                is_selected: Some( false )
+            }),
+            MoveAction::CustomFolder(CustomFolderAction {
+                local_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                parent: None,
+                is_selected: Some( false )
+            }),
+        ]; "TEST2: messages without labels")]
+    #[test_case(
+        &INBOX,
+        vec![
+            MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![INBOX.clone()] },
+            MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![label!(remote_id: rid!("label2"), label_type: LabelType::Folder)] },
+        ],
+        vec![
+            label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+            label!(remote_id: rid!("label2"), label_type: LabelType::Folder),
+        ],
+        &[
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Archive,
+                is_selected: Some(false),
+            }),
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Spam,
+                is_selected: Some(false),
+            }),
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Trash,
+                is_selected: Some(false),
+            }),
+            MoveAction::CustomFolder(CustomFolderAction {
+                local_id: 0.into(),
+                name: "label1".into(),
+                color: LabelColor::purple(),
+                parent: None,
+                is_selected: Some( false )
+            }),
+            MoveAction::CustomFolder(CustomFolderAction {
+                local_id: 0.into(),
+                name: "".into(),
+                color: Default::default(),
+                parent: None,
+                is_selected: None
+            }),
+        ]; "TEST3: One message in inbox, other in folder")]
+    #[test_case(
+        &STARRED,
+        vec![
+            MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![OUTBOX.clone()] },
+            MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![INBOX.clone()] },
+        ],
+        vec![],
+        &[
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Inbox,
+                is_selected: None,
+            }),
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Archive,
+                is_selected: Some(false),
+            }),
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Spam,
+                is_selected: Some(false),
+            }),
+            MoveAction::SystemFolder(SystemFolderAction {
+                local_id: 0.into(),
+                name: SystemLabel::Trash,
+                is_selected: Some(false),
+            }),
+        ]; "TEST4: One message in Inbox, other in Outbox when view is STARRED")]
+    #[tokio::test]
+    async fn test_move_to_actions(
+        view: &Label,
+        messages: Vec<MessageWithLabels>,
+        labels: Vec<Label>,
+        expected: &[MoveAction],
+    ) {
+        let stash = new_test_connection().await;
+        let tx = stash.connection();
+        let address = create_address(&tx).await;
+        let mut conversation = conversation!(remote_id: rid!("conversation"));
+        conversation.save_using(&tx).await.unwrap();
+
+        for mut label in labels {
+            label.save_using(&tx).await.expect("failed to create label");
+        }
+
+        let mut message_ids = vec![];
+
+        for MessageWithLabels {
+            mut message,
+            labels: message_labels,
+        } in messages
+        {
+            message.local_address_id = address.local_id.unwrap();
+            message.remote_address_id = address.remote_id.clone().unwrap();
+            message.local_conversation_id = conversation.local_id;
+            message.remote_conversation_id = conversation.remote_id.clone();
+
+            message
+                .save_using(&tx)
+                .await
+                .expect("failed to create message");
+
+            message_ids.push(message.local_id.unwrap());
+
+            for mut label in message_labels {
+                label.save_using(&tx).await.expect("failed to create label");
+
+                let label_id = label.local_id.unwrap();
+                let ids = vec![message.local_id.unwrap()];
+
+                Message::apply_label(label_id, ids, &tx).await.unwrap();
+            }
+        }
+
+        let view = Label::find_by_id(view.remote_id.clone().unwrap().into_inner(), &tx)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let mut actual = Message::available_move_to_actions(view, message_ids, &tx)
+            .await
+            .unwrap();
+
+        actual.iter_mut().for_each(|action| {
+            action.set_local_id(0.into()); // To be able to compare with expected
         });
 
         assert_eq!(actual, expected);
