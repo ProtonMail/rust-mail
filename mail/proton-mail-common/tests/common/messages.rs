@@ -36,7 +36,7 @@ impl TestContext {
             total: 1,
         };
 
-        Mock::given(method("POST"))
+        Mock::given(method("GET"))
             .and(path("/api/mail/v4/messages".to_string()))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)

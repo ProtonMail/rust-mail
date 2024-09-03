@@ -35,7 +35,7 @@ mod basic {
 mod messages {
     use super::*;
 
-    use serde_json::{json, Value};
+    use serde_json::json;
     use test_case::test_case;
     use wiremock::matchers::path_regex;
 
@@ -54,7 +54,7 @@ mod messages {
         let server = MockServer::start().await;
         let session = new_session(&server).await?;
 
-        Mock::given(method("POST"))
+        Mock::given(method("GET"))
             .and(path_regex("mail/v4/messages"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "Messages": [],
@@ -72,17 +72,19 @@ mod messages {
             })
             .await?;
 
-        let have_size = server
-            .received_requests()
-            .await
-            .ok_or("no requests received")?
-            .last()
-            .ok_or("request list is empty")?
-            .body_json::<Value>()?
-            .get("PageSize")
-            .ok_or("PageSize not found")?
-            .as_u64()
-            .ok_or("PageSize is not a number")?;
+        let result = server.received_requests().await.unwrap();
+        let last = result.last().unwrap();
+        let have_size = last
+            .url
+            .query_pairs()
+            .find_map(|(k, v)| {
+                if k == "PageSize" {
+                    Some(v.parse::<u64>().unwrap())
+                } else {
+                    None
+                }
+            })
+            .unwrap();
 
         assert_eq!(have_size, want_size);
 
