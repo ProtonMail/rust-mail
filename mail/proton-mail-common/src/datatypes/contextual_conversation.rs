@@ -244,7 +244,7 @@ impl ContextualConversation {
             // where they are not present.
             Label::find(
                 formatdoc! {"
-                    WHERE label_type=? AND label_id IN (
+                    WHERE label_type=? AND local_id IN (
                         SELECT local_label_id FROM message_labels WHERE local_message_id IN (
                             SELECT local_id FROM messages WHERE local_conversation_id = ?
                         )
