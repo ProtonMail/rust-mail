@@ -14,6 +14,7 @@ use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
+use crate::utils::damp;
 use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
@@ -481,6 +482,7 @@ pub async fn watch_conversation(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedConversation>, MailboxError> {
     uniffi_async(async move {
+        let callback = damp(callback);
         let Some(conversation_messages) = conversation(Arc::clone(&mailbox), id).await? else {
             return Ok(None);
         };
@@ -500,7 +502,7 @@ pub async fn watch_conversation(
                 if receiver.recv_async().await.is_err() {
                     return;
                 }
-                callback.on_update();
+                callback();
             }
         });
 
@@ -548,6 +550,7 @@ pub async fn watch_conversations_for_label(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversations, MailboxError> {
     uniffi_async(async move {
+        let callback = damp(callback);
         let (conversations, receiver) = ContextualConversation::watch_in_label(
             RealLocalId::from(label_id),
             session.user_stash(),
@@ -563,7 +566,7 @@ pub async fn watch_conversations_for_label(
                 if receiver.recv_async().await.is_err() {
                     return;
                 }
-                callback.on_update();
+                callback();
             }
         });
 

@@ -10,6 +10,7 @@ use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
 use crate::mail::{MailSessionError, MailUserSession};
+use crate::utils::damp;
 use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::LabelType as RealLabelType;
@@ -188,6 +189,7 @@ impl Sidebar {
             let stop_flag_clone = Arc::clone(&stop_flag);
 
             spawn_async(async move {
+                let callback = damp(callback);
                 while let Ok(change) = receiver.recv_async().await {
                     if stop_flag_clone.load(Ordering::SeqCst) {
                         debug!("Stop flag set, stopping watch");
@@ -199,7 +201,7 @@ impl Sidebar {
                                 debug!("Received new label for watched label type ({label_type})");
                                 // Unwrapping is safe here, as we will always have the local ID
                                 ids.push(label.local_id.unwrap());
-                                callback.on_update();
+                                callback();
                             } else {
                                 debug!("Received new label for different label type ({} instead of {label_type})", label.label_type);
                             }
@@ -207,7 +209,7 @@ impl Sidebar {
                         ResultsetChange::Updated(label) => {
                             if label.label_type == label_type.into() {
                                 debug!("Received updated label for watched label type ({label_type})");
-                                callback.on_update();
+                                callback();
                             } else {
                                 debug!("Received updated label for different label type ({} instead of {label_type})", label.label_type);
                             }
@@ -215,7 +217,7 @@ impl Sidebar {
                         ResultsetChange::Deleted(local_label_id) => {
                             if ids.contains(&local_label_id) {
                                 debug!("Received deleted label for watched label type ({label_type})");
-                                callback.on_update();
+                                callback();
                             } else {
                                 debug!("Received deleted label for different label type (unknown instead of {label_type})");
                             }

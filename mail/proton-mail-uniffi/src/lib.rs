@@ -151,10 +151,12 @@ use std::sync::{Arc, LazyLock};
 use tokio::runtime::Runtime;
 use tokio::task::JoinError;
 use tracing::{debug, warn};
+use utils::damp;
 
 pub mod core;
 mod log;
 pub mod mail;
+mod utils;
 
 uniffi::setup_scaffolding!();
 
@@ -265,7 +267,7 @@ pub async fn watch<Q, A, T>(
     check_record: impl Fn(&T) -> bool + Send + Sync + 'static,
     get_local_id: impl Fn(&T) -> RealLocalId + Send + Sync + 'static,
     interface: &A,
-    callback: Arc<Box<dyn LiveQueryCallback>>,
+    callback: Box<dyn LiveQueryCallback>,
 ) -> Result<(Vec<T>, Arc<WatchHandle>), StashError>
 where
     Q: Into<String> + Send,
@@ -281,6 +283,7 @@ where
     let stop_flag_clone = Arc::clone(&stop_flag);
 
     spawn_async(async move {
+        let callback = damp(callback);
         while let Ok(change) = receiver.recv_async().await {
             if stop_flag_clone.load(Ordering::SeqCst) {
                 debug!("Stop flag set, stopping watch");
@@ -291,7 +294,7 @@ where
                     if check_record(&record) {
                         debug!("Received new record for watched set");
                         ids.push(get_local_id(&record));
-                        callback.on_update();
+                        callback();
                     } else {
                         debug!("Received new record not related to set");
                     }
@@ -299,7 +302,7 @@ where
                 ResultsetChange::Updated(record) => {
                     if check_record(&record) {
                         debug!("Received updated record for watched set");
-                        callback.on_update();
+                        callback();
                     } else {
                         debug!("Received updated record not related to set");
                     }
@@ -307,7 +310,7 @@ where
                 ResultsetChange::Deleted(record_id) => {
                     if ids.contains(&record_id) {
                         debug!("Received deleted record for watched set");
-                        callback.on_update();
+                        callback();
                     } else {
                         debug!("Received deleted record not related to set");
                     }

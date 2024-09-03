@@ -14,6 +14,7 @@ use super::{MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSessionError, MailboxError};
+use crate::utils::damp;
 use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
@@ -238,6 +239,7 @@ pub async fn watch_message(
     let watcher = WatchHandle::default();
     let watcher_cloned = watcher.clone();
     uniffi_async(async move {
+        let callback = damp(callback);
         let message = if let Some((message, receiver)) =
             RealMessage::watch_message(RealLocalId::from(message_id), &stash).await?
         {
@@ -251,7 +253,7 @@ pub async fn watch_message(
                         return;
                     }
 
-                    callback.on_update();
+                    callback();
                 }
             });
             Some(message)

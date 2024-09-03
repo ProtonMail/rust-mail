@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Add `watch_message` to watch a single message.
 
+### Fixed
+
+  - Reduced how often callbacks get called.
+
 ## [0.11.28] - 2024-09-03
 
 ### Fixed
