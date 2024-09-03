@@ -13,15 +13,21 @@ use crate::LiveQueryCallback;
 // This returns a function that updates the boolean flag of whether we should send an update which
 // gets checked every `duration`.
 /// Like [`damp`] but takes a custom duration.
-pub fn damp_with_duration(callback: Box<dyn LiveQueryCallback>, duration: Duration) -> impl Fn() {
+pub fn damp_with_duration(
+    callback: Box<dyn LiveQueryCallback>,
+    duration: Duration,
+) -> impl Fn() + Clone {
     let must_update = Arc::new(AtomicBool::new(false));
-    let must_update_clone = must_update.clone();
+    let must_update_weak = Arc::downgrade(&must_update);
 
     tokio::spawn(async move {
         let mut interval = interval(duration);
 
         loop {
             interval.tick().await;
+            let Some(must_update) = must_update_weak.upgrade() else {
+                return;
+            };
             // If there's something in there we call on_update and set false
             // If there isn't we set false either way
             if must_update.swap(false, Ordering::Relaxed) {
@@ -30,12 +36,12 @@ pub fn damp_with_duration(callback: Box<dyn LiveQueryCallback>, duration: Durati
         }
     });
 
-    move || must_update_clone.store(true, Ordering::Relaxed)
+    move || must_update.store(true, Ordering::Relaxed)
 }
 
 /// Reduces how often the given notification callback gets called to max once per 5 seconds.
 /// Returns the function you must use to actually notify the client, which you can call as often as
 /// you want.
-pub fn damp(callback: Box<dyn LiveQueryCallback>) -> impl Fn() {
+pub fn damp(callback: Box<dyn LiveQueryCallback>) -> impl Fn() + Clone {
     damp_with_duration(callback, Duration::from_secs(5))
 }
