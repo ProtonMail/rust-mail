@@ -7,13 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.11.29] - 2024-09-03
+
 ### Added
 
   - Add `watch_message` to watch a single message.
+  - Multi-account support added with session state management.
+    - `MailSession::watch_stored_sessions()`
+    - `MailSession::stored_session_states()`
+    - `MailSession::watch_stored_session_states()`
 
 ### Fixed
 
   - Reduced how often callbacks get called.
+  - Use `GET` for fetching messages.
 
 ## [0.11.28] - 2024-09-03
 
