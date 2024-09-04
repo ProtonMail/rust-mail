@@ -611,9 +611,6 @@ enum Operation {
     /// Starts a new transaction.
     StartTransaction(Command),
 
-    /// Requests statistics about the database usage and current status.
-    Statistics(Information),
-
     /// Subscribes to notifications of changes made to the database.
     Subscribe(Subscription),
 }
@@ -636,7 +633,6 @@ impl Operation {
             | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
             Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
             Self::Publish(_)
-            | Self::Statistics(_)
             | Self::NotifyRollbackTransaction(_)
             | Self::NotifyCommitTransaction(_)
             | Self::NotifyStartTransaction(_) => {}
@@ -834,63 +830,6 @@ impl OperationLogic for Command {
     ///
     fn run(&self, _connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<(), StashError> {
         Ok(())
-    }
-}
-
-/// An information request to be executed by the worker.
-///
-/// This is used for system-defined information requests (i.e. those where the
-/// user does not control the types) such obtaining statistics.
-///
-/// At present the only possible response is [`Stats`], but this will be
-/// expanded in future.
-///
-/// # See also
-///
-/// * [`Command`]
-/// * [`Instruction`]
-/// * [`Notification`]
-/// * [`Operation`]
-/// * [`Query`]
-/// * [`Subscription`]
-///
-struct Information {
-    /// The communication channel used to send the result of the operation back
-    /// to the caller.
-    channel: Option<OneshotSender<Result<Stats, StashError>>>,
-}
-
-impl OperationLogic for Information {
-    type Output = Stats;
-
-    fn channel(&mut self) -> Option<OneshotSender<Result<Self::Output, StashError>>> {
-        self.channel.take()
-    }
-
-    /// Carries out a command.
-    ///
-    /// **Note: This function does not actually do anything, as the operational
-    /// context for information requests is the [`Operation`] variant they are
-    /// wrapped in.**
-    ///
-    /// # Parameters
-    ///
-    /// * `connection` - The database connection to use for the operation.
-    /// * `stash`      - The associated [`Stash`] instance for the operation.
-    ///
-    /// # Errors
-    ///
-    /// None.
-    ///
-    fn run(
-        &self,
-        _connection: &AgnosticConnection<'_>,
-        _stash: Stash,
-    ) -> Result<Stats, StashError> {
-        // This is fake and is never actually called. It's here to obey the trait
-        // interface, which might be changed in future to separate runnable and
-        // non-runnable operations.
-        Ok(Stats::default())
     }
 }
 
@@ -1418,28 +1357,6 @@ impl Stash {
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
         Ok(receiver)
-    }
-
-    /// Gets statistics about the current state of the [`Stash`] instance.
-    ///
-    /// # Errors
-    ///
-    /// Technically, the only errors that can occur will come from interaction
-    /// with the queues, either the worker queue or one-shot channel. Neither of
-    /// these should fail under normal circumstances.
-    ///
-    pub async fn stats(&self) -> Result<Stats, StashError> {
-        let (that_end, this_end) = oneshot::channel();
-        let info = Operation::Statistics(Information {
-            channel: Some(that_end),
-        });
-        self.queue
-            .send_async(info)
-            .await
-            .map_err(|err| StashError::QueueError(err.to_string()))?;
-        this_end
-            .await
-            .map_err(|err| StashError::OneShotError(err.to_string()))?
     }
 }
 
@@ -2033,16 +1950,6 @@ impl TetheredWorker {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
             }
-            Operation::Statistics(_) => {
-                // Technically, these cannot occur here, as information requests are global
-                // in scope and not connection-specific. We should never get here. If we do,
-                // it means there is an error in the logic of this module. Note that we
-                // cannot return an error to the original caller, as there is no oneshot
-                // channel for notifications, plus the context would not make any sense.
-                warn!(
-                    "Unexpectedly reached Statistics variant in TetheredWorker::handle_operation()"
-                );
-            }
             Operation::Subscribe(mut subscription) => {
                 // Technically, these cannot occur here, as subscription operations are
                 // global in scope and not connection-specific. We should never get here. If
@@ -2459,20 +2366,6 @@ impl Worker {
                         .insert(Arc::as_ptr(&conn_handle), vec![]),
                 );
             }
-            Operation::Statistics(mut command) => {
-                debug!("Stash: Statistics request");
-                command.send_back(Ok(Stats {
-                    active_subscriber_count: self.subscribers.len(),
-                    active_tether_count: self.tethers.len(),
-                    active_tethers: self.tethers.keys().map(|&ptr| ptr as usize).collect(),
-                    // TODO
-                    total_commands_run: 0,
-                    // TODO
-                    total_notifications_sent: 0,
-                    // TODO
-                    total_queries_run: 0,
-                }));
-            }
             Operation::Subscribe(mut subscription) => {
                 debug!("Stash: Subscription request");
                 self.subscribers.push(subscription.queue.clone());
@@ -2578,7 +2471,6 @@ impl Worker {
                     | Operation::StartTransaction(ref command) => command.conn_handle.clone(),
                     Operation::Instruct(ref instruction) => instruction.conn_handle.clone(),
                     Operation::Publish(_)
-                    | Operation::Statistics(_)
                     | Operation::Subscribe(_)
                     | Operation::NotifyCommitTransaction(_)
                     | Operation::NotifyRollbackTransaction(_)
