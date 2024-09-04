@@ -1183,7 +1183,7 @@ pub struct Stash {
     /// A reference-counted pointer to an immutable internal handle, which is
     /// used to identify an individual stash. The handle is an atomic counter,
     /// to manually keep track of the number of instances.
-    handle: Arc<AtomicU32>,
+    handle: Arc<()>,
 
     /// The sender for the stash operations. This is used to send operations to
     /// the worker thread for execution. This is the manner by which the order
@@ -1231,7 +1231,7 @@ impl Stash {
     pub fn new(path: Option<&Path>) -> Result<Self, StashError> {
         let (sender, receiver) = flume::unbounded();
         let stash = Self {
-            handle: Arc::new(AtomicU32::new(1)),
+            handle: Arc::new(()),
             queue: sender,
         };
         Worker::start(path, receiver, stash.clone())?;
