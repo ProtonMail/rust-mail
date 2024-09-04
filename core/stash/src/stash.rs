@@ -388,6 +388,7 @@ use core::ops::Deref;
 use core::ptr::null;
 use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::time::Duration;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -402,6 +403,7 @@ use std::thread::{spawn, JoinHandle};
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
+use tokio::sync::Mutex;
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
@@ -1246,6 +1248,9 @@ pub struct Stash {
     /// of operations is maintained, and how connections are managed and made
     /// thread-safe.
     queue: QueueSender<Operation>,
+
+    /// Statistics gathered over the lifetime of the [`Stash`].
+    stats: Arc<Mutex<Stats>>,
 }
 
 impl Stash {
@@ -1289,6 +1294,7 @@ impl Stash {
         let stash = Self {
             handle: Arc::new(()),
             queue: sender,
+            stats: Arc::new(Mutex::new(Stats::default())),
         };
         Worker::start(path, receiver, stash.clone())?;
         Ok(stash)
@@ -1376,6 +1382,11 @@ impl Stash {
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
         Ok(receiver)
     }
+
+    /// Gets statistics gathered about the [`Stash`] instance.
+    pub async fn stats(&self) -> Stats {
+        self.stats.lock().await.clone()
+    }
 }
 
 impl Eq for Stash {}
@@ -1446,14 +1457,27 @@ impl PartialEq for Stash {
 #[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 #[non_exhaustive]
 pub struct Stats {
+    /// The number of active commands, that is, commands sent and waiting for a
+    /// reply.
+    pub active_command_count: u32,
+
+    /// The number of active queries, that is, queries sent and waiting for a
+    /// reply.
+    pub active_query_count: u32,
+
     /// The number of active subscribers to database change notifications.
-    pub active_subscriber_count: usize,
+    pub active_subscriber_count: u32,
 
     /// The number of active tethers, i.e. database connections. Note that these
     /// may or may not be technically active. It includes those created and not
     /// yet used, as well as those used and finished with and not yet
     /// cleaned-up.
-    pub active_tether_count: usize,
+    pub active_tether_count: u32,
+
+    /// The number of active transactions. Note that these may or may not be
+    /// technically active, because they may have been started and are yet to do
+    /// anything.
+    pub active_transaction_count: u32,
 
     /// A list of the pointers to [`Weak`] references to the active tethers.
     /// These pointers may or may not be valid by the time they are read, as the
@@ -1466,16 +1490,87 @@ pub struct Stats {
     /// stored as [`usize`] instead of `*const ()`.
     pub active_tethers: Vec<usize>,
 
+    /// The average amount of time that a command has taken to run.
+    pub average_command_runtime: Duration,
+
+    /// The average amount of time that a query has taken to run.
+    pub average_query_runtime: Duration,
+
+    /// The average amount of time that a tether has existed for.
+    pub average_tether_lifetime: Duration,
+
+    /// The average amount of time that a transaction has been open for.
+    pub average_transaction_lifetime: Duration,
+
+    /// The highest number of concurrent commands.
+    pub max_command_count: u32,
+
+    /// The longest amount of time that a command has taken to run, and the
+    /// command ID responsible.
+    pub max_command_runtime: (Duration, u32),
+
+    /// The highest number of concurrent queries.
+    pub max_query_count: u32,
+
+    /// The longest amount of time that a query has taken to run, and the query
+    /// ID responsible.
+    pub max_query_runtime: (Duration, u32),
+
+    /// The highest number of concurrent subscribers.
+    pub max_subscriber_count: u32,
+
+    /// The highest number of concurrent tethers.
+    pub max_tether_count: u32,
+
+    /// The longest amount of time that a tether has existed for, and the tether
+    /// ID responsible.
+    pub max_tether_lifetime: (Duration, u32),
+
+    /// The highest number of concurrent transactions.
+    pub max_transaction_count: u32,
+
+    /// The longest amount of time that a transaction has been open for, and the
+    /// tether ID responsible.
+    pub max_transaction_lifetime: (Duration, u32),
+
     /// The number of commands executed since the [`Stash`] instance was
     /// created.
-    pub total_commands_run: usize,
+    pub total_commands_run: u32,
+
+    /// The total time spent executing commands since the [`Stash`] instance was
+    /// created.
+    pub total_command_time: Duration,
 
     /// The number of notifications sent to subscribers since the [`Stash`]
     /// instance was created.
-    pub total_notifications_sent: usize,
+    pub total_notifications_sent: u32,
 
     /// The number of queries executed since the [`Stash`] instance was created.
-    pub total_queries_run: usize,
+    pub total_queries_run: u32,
+
+    /// The total time spent executing queries since the [`Stash`] instance was
+    /// created.
+    pub total_query_time: Duration,
+
+    /// The total number of subscribers created since the [`Stash`] instance was
+    /// created.
+    pub total_subscribers_created: u32,
+
+    /// The total number of tethers created since the [`Stash`] instance was
+    /// created.
+    pub total_tethers_created: u32,
+
+    /// The total time spent executing tethers since the [`Stash`] instance was
+    /// created.
+    pub total_tether_time: Duration,
+
+    /// The total number of transactions started since the [`Stash`] instance
+    /// was created.
+    pub total_transactions_started: u32,
+
+    /// The total time spent executing transactions since the [`Stash`] instance
+    /// was created.
+    pub total_transaction_time: Duration,
 }
 
 /// A subscription operation to be executed by the worker.
