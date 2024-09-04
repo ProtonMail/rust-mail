@@ -5040,7 +5040,7 @@ pub struct MessageBodyMetadata {
     /// within the set of all records of this type, and is important for
     /// relating local records. It has no relationship to the centrally-stored
     /// API ID, and never leaves the local system.
-    #[IdField(autoincrement)]
+    #[IdField(optional)]
     pub local_message_id: Option<LocalId>,
 
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
@@ -5072,6 +5072,63 @@ pub struct MessageBodyMetadata {
     /// present for convenience.
     #[StashField]
     pub stash: Option<Stash>,
+}
+
+impl MessageBodyMetadata {
+    /// Save or update the `MessageBodyMetadata` in the database.
+    ///
+    /// It's imperative to call this function rather than [`Model::save()`] to make sure that the
+    /// `MessageBodyMetadata` and it's corresponding `Message` share the same `id`.
+    ///
+    /// There is currently no way to handle this in stash directly, so we have
+    /// to manually perform this check.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query failed.
+    ///
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save or update the `MessageBodyMetadata` in the database.
+    ///
+    /// It's imperative to call this function rather than [`Model::save_using()`] to make sure that
+    /// the `MessageBodyMetadata` and it's corresponding `Message` share the same `id`.
+    ///
+    /// There is currently no way to handle this in stash directly, so we have
+    /// to manually perform this check.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query failed.
+    ///
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if self.local_message_id.is_none() {
+            if let Some(remote_id) = self.remote_message_id.clone() {
+                let message =
+                    Message::find_first("WHERE remote_id = ?", params![remote_id], interface)
+                        .await?;
+                if let Some(message) = message {
+                    self.local_message_id = message.local_id;
+                }
+            }
+        }
+
+        <Self as Model>::save_using(self, interface).await
+    }
 }
 
 /// Calculates the combined information for a list of message that belong to a given

@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grouped `total_conv` and `total_msg` from `ContextualLabel` as `total`.
 - Grouped `unread_conv` and `unread_msg` from `ContextualLabel` as `unread`.
 
+### Fixed
+
+- `MessageBodyMetadata` local_id is the same as the one from `Message`
+
 ### Removed
 
 - Removed `initialized_conv` and `initialized_msg` from `ContextualLabel` 
