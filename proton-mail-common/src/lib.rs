@@ -1,14 +1,13 @@
 //! Everything Proton Mailbox related.
 
 pub mod actions;
-mod context;
-pub mod db;
-mod mailbox;
-
 pub mod avatar;
-
+mod context;
 pub mod datatypes;
+pub mod db;
+pub mod errors;
 mod events;
+mod mailbox;
 pub mod models;
 mod proton_color;
 pub mod sidebar;

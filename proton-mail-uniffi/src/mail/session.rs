@@ -1,6 +1,7 @@
 use crate::core::datatypes::ApiConfig;
 use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged, StoredSessionState};
 use crate::core::{OSKeyChain, StoredSession};
+use crate::errors::login_flow::UserLoginFlowArcLoginFlowResult;
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -17,6 +18,7 @@ use proton_core_common::ContactError;
 use proton_event_loop::EventLoopError;
 use proton_mail_common::actions::ActionError;
 use proton_mail_common::db::DBMigrationError;
+use proton_mail_common::errors::login_flow::UserLoginFlowError as RealUserLoginFlowError;
 use proton_mail_common::MailContextError;
 use proton_mail_common::{AppError, MailContext};
 use stash::stash::{Stash, StashError};
@@ -179,13 +181,17 @@ impl MailSession {
     }
 
     /// Start new login flow.
-    pub async fn new_login_flow(&self) -> MailSessionResult<Arc<LoginFlow>> {
+    pub async fn new_login_flow(&self) -> UserLoginFlowArcLoginFlowResult {
         let ctx = self.ctx.clone();
-        uniffi_async(async move {
-            let flow = ctx.new_login_flow().await?;
+        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
+            let flow = ctx
+                .new_login_flow()
+                .await
+                .map_err(RealUserLoginFlowError::from)?;
             Ok(LoginFlow::new(flow, ctx))
         })
         .await
+        .into()
     }
 
     /// Return the list of active session.
