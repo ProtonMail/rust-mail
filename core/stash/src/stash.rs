@@ -780,6 +780,9 @@ struct Command {
     /// registered, and re-used otherwise. If [`None`], a new database
     /// connection will be created, but not registered, and used just this once.
     conn_handle: Option<Arc<AtomicU32>>,
+
+    /// The associated [`Stash`] instance for the operation.
+    stash: Stash,
 }
 
 impl Command {
@@ -787,6 +790,7 @@ impl Command {
     ///
     /// # Parameters
     ///
+    /// * `stash`       - The associated [`Stash`] instance for the operation.
     /// * `channel`     - The communication channel used to send the result of
     ///                   the operation back to the caller.
     /// * `conn_handle` - The unique handle of the connection to use for the
@@ -797,12 +801,14 @@ impl Command {
     ///                   used just this once.
     ///
     const fn new(
+        stash: Stash,
         channel: Option<OneshotSender<Result<(), StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
     ) -> Self {
         Self {
             channel,
             conn_handle,
+            stash,
         }
     }
 }
@@ -867,6 +873,9 @@ struct Instruction {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+
+    /// The associated [`Stash`] instance for the operation.
+    stash: Stash,
 }
 
 impl Instruction {
@@ -874,6 +883,7 @@ impl Instruction {
     ///
     /// # Parameters
     ///
+    /// * `stash`       - The associated [`Stash`] instance for the operation.
     /// * `channel`     - The communication channel used to send the result of
     ///                   the operation back to the caller.
     /// * `conn_handle` - The unique handle of the connection to use for the
@@ -888,6 +898,7 @@ impl Instruction {
     ///                   trait objects that implement the [`ToSql`] trait, and
     ///                   are `Send` so that they can be sent between threads.
     fn new(
+        stash: Stash,
         channel: Option<OneshotSender<Result<usize, StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
         query: String,
@@ -898,6 +909,7 @@ impl Instruction {
             conn_handle,
             params,
             query,
+            stash,
         }
     }
 }
@@ -1044,6 +1056,9 @@ struct Query {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+
+    /// The associated [`Stash`] instance for the operation.
+    stash: Stash,
 }
 
 impl Query {
@@ -1051,6 +1066,7 @@ impl Query {
     ///
     /// # Parameters
     ///
+    /// * `stash`       - The associated [`Stash`] instance for the operation.
     /// * `channel`     - The communication channel used to send the result of
     ///                   the operation back to the caller.
     /// * `conn_handle` - The unique handle of the connection to use for the
@@ -1071,6 +1087,7 @@ impl Query {
     ///
     #[allow(clippy::type_complexity)]
     fn new(
+        stash: Stash,
         channel: Option<OneshotSender<Result<DbRecords, StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
         query: String,
@@ -1083,6 +1100,7 @@ impl Query {
             converter,
             params,
             query,
+            stash,
         }
     }
 }
@@ -1368,7 +1386,7 @@ impl Interface for Stash {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        perform_execute(query, params, None, &self.queue).await
+        perform_execute(self.clone(), query, params, None).await
     }
 
     fn has_active_transaction(&self) -> bool {
@@ -1393,7 +1411,7 @@ impl Interface for Stash {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        perform_query(query, params, None, &self.queue).await
+        perform_query(self.clone(), query, params, None).await
     }
 
     async fn query_values<Q, T>(
@@ -1405,7 +1423,7 @@ impl Interface for Stash {
         Q: Into<String> + Send,
         T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
-        perform_value_query(query, params, None, &self.queue).await
+        perform_value_query(self.clone(), query, params, None).await
     }
 
     fn stash(&self) -> &Stash {
@@ -1599,6 +1617,7 @@ impl Tether {
     pub async fn commit(&self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command::new(
+            self.stash.clone(),
             Some(that_end),
             Some(Arc::clone(&self.handle)),
         ));
@@ -1636,6 +1655,7 @@ impl Tether {
     pub async fn rollback(&self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::RollbackTransaction(Command::new(
+            self.stash.clone(),
             Some(that_end),
             Some(Arc::clone(&self.handle)),
         ));
@@ -1674,6 +1694,7 @@ impl Drop for Tether {
         if self
             .queue
             .send(Operation::CloseConnection(Command::new(
+                self.stash.clone(),
                 None,
                 Some(Arc::clone(&self.handle)),
             )))
@@ -1692,7 +1713,13 @@ impl Interface for Tether {
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<usize, StashError> {
-        perform_execute(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
+        perform_execute(
+            self.stash.clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.handle)),
+        )
+        .await
     }
 
     fn has_active_transaction(&self) -> bool {
@@ -1717,7 +1744,13 @@ impl Interface for Tether {
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
-        perform_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
+        perform_query(
+            self.stash.clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.handle)),
+        )
+        .await
     }
 
     async fn query_values<Q, T>(
@@ -1729,7 +1762,13 @@ impl Interface for Tether {
         Q: Into<String> + Send,
         T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
-        perform_value_query(query, params, Some(Arc::clone(&self.handle)), &self.queue).await
+        perform_value_query(
+            self.stash.clone(),
+            query,
+            params,
+            Some(Arc::clone(&self.handle)),
+        )
+        .await
     }
 
     fn stash(&self) -> &Stash {
@@ -1739,6 +1778,7 @@ impl Interface for Tether {
     async fn transaction(&self) -> Result<Self, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command::new(
+            self.stash.clone(),
             Some(that_end),
             Some(Arc::clone(&self.handle)),
         ));
@@ -1786,6 +1826,9 @@ struct TetheredWorker {
 
     /// The sender side of the tethered worker's queue.
     queue: QueueSender<Operation>,
+
+    /// The associated [`Stash`] instance.
+    stash: Stash,
 
     /// The join handle for the thread in which the tethered worker runs.
     thread_handle: Option<JoinHandle<()>>,
@@ -1997,6 +2040,7 @@ impl TetheredWorker {
     ) -> Self {
         let conn_handle_clone = Weak::clone(&conn_handle);
         let (sender, receiver) = flume::unbounded::<Operation>();
+        let stash_clone = stash.clone();
 
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, on a persistent connection, and will
@@ -2028,7 +2072,7 @@ impl TetheredWorker {
                     operation,
                     connection.as_ref().unwrap(),
                     transaction,
-                    stash.clone(),
+                    stash_clone.clone(),
                     &queue,
                 );
             } else {
@@ -2069,7 +2113,7 @@ impl TetheredWorker {
                     operation,
                     connection.as_ref().unwrap(),
                     transaction,
-                    stash.clone(),
+                    stash_clone.clone(),
                     &queue,
                 );
             }
@@ -2078,6 +2122,7 @@ impl TetheredWorker {
         Self {
             conn_handle,
             queue: sender,
+            stash,
             thread_handle: Some(thread_handle),
         }
     }
@@ -2089,6 +2134,7 @@ impl Drop for TetheredWorker {
             if self
                 .queue
                 .send(Operation::CloseConnection(Command::new(
+                    self.stash.clone(),
                     None,
                     Some(Arc::clone(&handle)),
                 )))
@@ -3174,10 +3220,10 @@ where
 ///
 /// # Parameters
 ///
+/// * `stash`       - The [`Stash`] instance to use for the query.
 /// * `query`       - The query to execute.
 /// * `params`      - The parameters to pass to the query.
 /// * `conn_handle` - The handle of the connection to use for the query.
-/// * `queue`       - The queue to send the query to.
 ///
 /// # Errors
 ///
@@ -3190,19 +3236,21 @@ where
 /// * [`params!`](crate::utils::params)
 ///
 async fn perform_execute<Q: Into<String> + Send>(
+    stash: Stash,
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
     conn_handle: Option<Arc<AtomicU32>>,
-    queue: &QueueSender<Operation>,
 ) -> Result<usize, StashError> {
     let (that_end, this_end) = oneshot::channel();
     let operation = Operation::Instruct(Instruction::new(
+        stash.clone(),
         Some(that_end),
         conn_handle,
         query.into(),
         params,
     ));
-    queue
+    stash
+        .queue
         .send_async(operation)
         .await
         .map_err(|err| StashError::QueueError(err.to_string()))?;
@@ -3224,10 +3272,10 @@ async fn perform_execute<Q: Into<String> + Send>(
 ///
 /// # Parameters
 ///
+/// * `stash`       - The [`Stash`] instance to use for the query.
 /// * `query`       - The query to execute.
 /// * `params`      - The parameters to pass to the query.
 /// * `conn_handle` - The handle of the connection to use for the query.
-/// * `queue`       - The queue to send the query to.
 ///
 /// # Errors
 ///
@@ -3240,16 +3288,16 @@ async fn perform_execute<Q: Into<String> + Send>(
 /// * [`params!`](crate::utils::params)
 ///
 async fn perform_value_query<Q, T>(
+    stash: Stash,
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
     conn_handle: Option<Arc<AtomicU32>>,
-    queue: &QueueSender<Operation>,
 ) -> Result<Vec<T>, StashError>
 where
     Q: Into<String> + Send,
     T: Clone + Debug + FromSql + ToSql + Send + Sync + PartialEq + 'static,
 {
-    perform_query::<_, ValueRecord<T>>(query, params, conn_handle, queue)
+    perform_query::<_, ValueRecord<T>>(stash, query, params, conn_handle)
         .await
         .map(|values| values.into_iter().map(|v| v.value).collect())
 }
@@ -3266,10 +3314,10 @@ where
 ///
 /// # Parameters
 ///
+/// * `stash`       - The [`Stash`] instance to use for the query.
 /// * `query`       - The query to execute.
 /// * `params`      - The parameters to pass to the query.
 /// * `conn_handle` - The handle of the connection to use for the query.
-/// * `queue`       - The queue to send the query to.
 ///
 /// # Errors
 ///
@@ -3282,10 +3330,10 @@ where
 /// * [`params!`](crate::utils::params)
 ///
 async fn perform_query<Q, T>(
+    stash: Stash,
     query: Q,
     params: Vec<Box<dyn ToSql + Send>>,
     conn_handle: Option<Arc<AtomicU32>>,
-    queue: &QueueSender<Operation>,
 ) -> Result<Vec<T>, StashError>
 where
     Q: Into<String> + Send,
@@ -3294,6 +3342,7 @@ where
 {
     let (that_end, this_end) = oneshot::channel();
     let operation = Operation::Query(Query::new(
+        stash.clone(),
         Some(that_end),
         conn_handle,
         query.into(),
@@ -3303,7 +3352,8 @@ where
         // desired type.
         Box::new(converter::<T>),
     ));
-    queue
+    stash
+        .queue
         .send_async(operation)
         .await
         .map_err(|err| StashError::QueueError(err.to_string()))?;
