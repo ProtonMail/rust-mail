@@ -786,6 +786,31 @@ struct Command {
     conn_handle: Option<Arc<AtomicU32>>,
 }
 
+impl Command {
+    /// Creates a new command operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `channel`     - The communication channel used to send the result of
+    ///                   the operation back to the caller.
+    /// * `conn_handle` - The unique handle of the connection to use for the
+    ///                   query. If [`Some`] a database connection will be
+    ///                   created and associated if not already registered, and
+    ///                   re-used otherwise. If [`None`], a new database
+    ///                   connection will be created, but not registered, and
+    ///                   used just this once.
+    ///
+    const fn new(
+        channel: Option<OneshotSender<Result<(), StashError>>>,
+        conn_handle: Option<Arc<AtomicU32>>,
+    ) -> Self {
+        Self {
+            channel,
+            conn_handle,
+        }
+    }
+}
+
 impl OperationLogic for Command {
     type Output = ();
 
@@ -903,6 +928,39 @@ struct Instruction {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+}
+
+impl Instruction {
+    /// Creates a new command operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `channel`     - The communication channel used to send the result of
+    ///                   the operation back to the caller.
+    /// * `conn_handle` - The unique handle of the connection to use for the
+    ///                   query. If [`Some`] a database connection will be
+    ///                   created and associated if not already registered, and
+    ///                   re-used otherwise. If [`None`], a new database
+    ///                   connection will be created, but not registered, and
+    ///                   used just this once.
+    /// * `query`       - The query to execute. This is in raw SQL format ready
+    ///                   for parameter substitution.
+    /// * `params`      - The parameters to pass to the query. These are boxed
+    ///                   trait objects that implement the [`ToSql`] trait, and
+    ///                   are `Send` so that they can be sent between threads.
+    fn new(
+        channel: Option<OneshotSender<Result<usize, StashError>>>,
+        conn_handle: Option<Arc<AtomicU32>>,
+        query: String,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Self {
+        Self {
+            channel,
+            conn_handle,
+            params,
+            query,
+        }
+    }
 }
 
 impl OperationLogic for Instruction {
@@ -1047,6 +1105,47 @@ struct Query {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+}
+
+impl Query {
+    /// Creates a new command operation.
+    ///
+    /// # Parameters
+    ///
+    /// * `channel`     - The communication channel used to send the result of
+    ///                   the operation back to the caller.
+    /// * `conn_handle` - The unique handle of the connection to use for the
+    ///                   query. If [`Some`] a database connection will be
+    ///                   created and associated if not already registered, and
+    ///                   re-used otherwise. If [`None`], a new database
+    ///                   connection will be created, but not registered, and
+    ///                   used just this once.
+    /// * `query`       - The query to execute. This is in raw SQL format ready
+    ///                   for parameter substitution.
+    /// * `params`      - The parameters to pass to the query. These are boxed
+    ///                   trait objects that implement the [`ToSql`] trait, and
+    ///                   are `Send` so that they can be sent between threads.
+    /// * `converter`   - The deserialisation function to use to convert the
+    ///                   query results into the desired type. This is necessary
+    ///                   because the [`Rows`] type returned by the [`rusqlite`]
+    ///                   library is not thread-safe.
+    ///
+    #[allow(clippy::type_complexity)]
+    fn new(
+        channel: Option<OneshotSender<Result<DbRecords, StashError>>>,
+        conn_handle: Option<Arc<AtomicU32>>,
+        query: String,
+        params: Vec<Box<dyn ToSql + Send>>,
+        converter: Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>,
+    ) -> Self {
+        Self {
+            channel,
+            conn_handle,
+            converter,
+            params,
+            query,
+        }
+    }
 }
 
 impl OperationLogic for Query {
@@ -1582,10 +1681,10 @@ impl Tether {
     ///
     pub async fn commit(&self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::CommitTransaction(Command {
-            channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.handle)),
-        });
+        let operation = Operation::CommitTransaction(Command::new(
+            Some(that_end),
+            Some(Arc::clone(&self.handle)),
+        ));
         self.queue
             .send_async(operation)
             .await
@@ -1619,10 +1718,10 @@ impl Tether {
     ///
     pub async fn rollback(&self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::RollbackTransaction(Command {
-            channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.handle)),
-        });
+        let operation = Operation::RollbackTransaction(Command::new(
+            Some(that_end),
+            Some(Arc::clone(&self.handle)),
+        ));
         self.queue
             .send_async(operation)
             .await
@@ -1657,10 +1756,10 @@ impl Drop for Tether {
         }
         if self
             .queue
-            .send(Operation::CloseConnection(Command {
-                channel: None,
-                conn_handle: Some(Arc::clone(&self.handle)),
-            }))
+            .send(Operation::CloseConnection(Command::new(
+                None,
+                Some(Arc::clone(&self.handle)),
+            )))
             .is_err()
         {
             error!("Failed to send CloseConnection operation to tethered queue");
@@ -1722,10 +1821,10 @@ impl Interface for Tether {
 
     async fn transaction(&self) -> Result<Self, StashError> {
         let (that_end, this_end) = oneshot::channel();
-        let operation = Operation::StartTransaction(Command {
-            channel: Some(that_end),
-            conn_handle: Some(Arc::clone(&self.handle)),
-        });
+        let operation = Operation::StartTransaction(Command::new(
+            Some(that_end),
+            Some(Arc::clone(&self.handle)),
+        ));
         self.queue
             .send_async(operation)
             .await
@@ -2082,10 +2181,10 @@ impl Drop for TetheredWorker {
         if let Some(handle) = self.conn_handle.upgrade() {
             if self
                 .queue
-                .send(Operation::CloseConnection(Command {
-                    channel: None,
-                    conn_handle: Some(Arc::clone(&handle)),
-                }))
+                .send(Operation::CloseConnection(Command::new(
+                    None,
+                    Some(Arc::clone(&handle)),
+                )))
                 .is_err()
             {
                 error!(
@@ -3205,12 +3304,12 @@ async fn perform_execute<Q: Into<String> + Send>(
     queue: &QueueSender<Operation>,
 ) -> Result<usize, StashError> {
     let (that_end, this_end) = oneshot::channel();
-    let operation = Operation::Instruct(Instruction {
-        channel: Some(that_end),
+    let operation = Operation::Instruct(Instruction::new(
+        Some(that_end),
         conn_handle,
-        query: query.into(),
+        query.into(),
         params,
-    });
+    ));
     queue
         .send_async(operation)
         .await
@@ -3302,16 +3401,16 @@ where
     DbRecords: FromIterator<Box<T>>,
 {
     let (that_end, this_end) = oneshot::channel();
-    let operation = Operation::Query(Query {
-        channel: Some(that_end),
+    let operation = Operation::Query(Query::new(
+        Some(that_end),
         conn_handle,
-        query: query.into(),
+        query.into(),
         params,
         // The converter function picks up the nature of the generic T here, which
         // allows Worker.query() to perform the deserialisation and return the
         // desired type.
-        converter: Box::new(converter::<T>),
-    });
+        Box::new(converter::<T>),
+    ));
     queue
         .send_async(operation)
         .await
