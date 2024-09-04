@@ -1,14 +1,11 @@
-use crate::mail::{MailSessionResult, MailUserSession};
+use crate::errors::login_flow::{UserLoginFlowArcMailUserSessionResult, UserLoginFlowVoidResult};
+use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
-use proton_api_core::auth::{ExposeSecret, SecretString, StoreError};
+use proton_api_core::auth::{ExposeSecret, SecretString};
 use proton_api_core::login::Flow as CoreLoginFlow;
-use proton_api_core::login::LoginError as RealLoginFlowError;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::response_data::HumanVerificationChallenge;
+use proton_mail_common::errors::login_flow::UserLoginFlowError as RealUserLoginFlowError;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tokio::task::JoinError;
-use uniffi::deps::anyhow::anyhow;
 
 /// Flow through the required steps to authenticate and login a user.
 ///
@@ -32,39 +29,6 @@ pub struct LoginFlow {
     ctx: proton_mail_common::MailContext,
 }
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
-#[uniffi(flat_error)]
-pub enum LoginFlowError {
-    #[error("{0}")]
-    Request(#[source] ApiServiceError),
-    #[error("Server SRP proof verification failed: {0}")]
-    ServerProof(String),
-    #[error("Account 2FA method is not supported")]
-    UnsupportedTfa,
-    #[error("Human Verification Required'")]
-    HumanVerificationRequired(HumanVerificationChallenge),
-    #[error("Failed to calculate SRP Proof: {0}")]
-    SrpProof(String),
-    #[error("Operation is not valid in the current state")]
-    InvalidState,
-    #[error("Failed to derive the key secret from the password: {0}")]
-    KeySecretDerivation(anyhow::Error),
-    #[error("Failed to fetch salt to derive the key secret: {0}")]
-    KeySecretSaltFetch(#[from] ApiServiceError),
-    #[error("Failed to store the key secret in the authentication state: {0}")]
-    KeySecretAuthUpdate(String),
-    #[error("Failed to decrypt a user key with the derived client secret")]
-    KeySecretDecryption,
-    #[error("Wrong mailbox password provided")]
-    WrongMailboxPassword,
-    #[error("Authentication Store error: {0}")]
-    AuthStore(#[from] StoreError),
-    #[error("Other: {0}")]
-    Other(anyhow::Error),
-}
-
-pub type LoginFlowResult<T> = Result<T, LoginFlowError>;
-
 impl LoginFlow {
     pub(crate) fn new(flow: CoreLoginFlow, ctx: proton_mail_common::MailContext) -> Arc<Self> {
         Arc::new(Self {
@@ -79,39 +43,49 @@ pub enum LoginResult {}
 #[uniffi::export]
 impl LoginFlow {
     /// Login with user and password.
-    pub async fn login(&self, email: String, password: String) -> LoginFlowResult<()> {
+    pub async fn login(&self, email: String, password: String) -> UserLoginFlowVoidResult {
         let flow = self.flow.clone();
         let password = SecretString::from(password);
-        uniffi_async::<_, LoginFlowError, _>(async move {
+        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
             let mut guard = flow.lock().await;
             Ok(guard
                 .login(email, password.expose_secret().clone(), None)
-                .await?)
+                .await
+                .map_err(RealUserLoginFlowError::from))
         })
-        .await?;
-        Ok(())
+        .await
+        .into()
     }
 
     /// Submit 2FA totp code.
-    pub async fn submit_totp(&self, code: String) -> LoginFlowResult<()> {
+    pub async fn submit_totp(&self, code: String) -> UserLoginFlowVoidResult {
         let flow = self.flow.clone();
-        uniffi_async::<_, LoginFlowError, _>(async move {
+        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
             let mut guard = flow.lock().await;
-            Ok(guard.submit_totp(code).await?)
+            guard
+                .submit_totp(code)
+                .await
+                .map_err(RealUserLoginFlowError::from)
         })
-        .await?;
-        Ok(())
+        .await
+        .into()
     }
 
     /// Submit mailbox password.
-    pub async fn submit_mailbox_password(&self, mailbox_password: String) -> LoginFlowResult<()> {
+    pub async fn submit_mailbox_password(
+        &self,
+        mailbox_password: String,
+    ) -> UserLoginFlowVoidResult {
         let flow = self.flow.clone();
-        uniffi_async::<_, LoginFlowError, _>(async move {
+        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
             let mut guard = flow.lock().await;
-            Ok(guard.submit_mailbox_password(&mailbox_password).await?)
+            guard
+                .submit_mailbox_password(&mailbox_password)
+                .await
+                .map_err(RealUserLoginFlowError::from)
         })
-        .await?;
-        Ok(())
+        .await
+        .into()
     }
 
     /// Check whether the login flow has completed.
@@ -133,40 +107,18 @@ impl LoginFlow {
     }
 
     /// When the flow is considered logged in, transform it into a `MailUserContext`.
-    pub fn to_user_context(&self) -> MailSessionResult<Arc<MailUserSession>> {
-        async_runtime().block_on(async {
-            let guard = self.flow.lock().await;
-            let user_ctx = self.ctx.user_context_from_login_flow(&guard).await?;
-            Ok(MailUserSession::new(user_ctx))
-        })
-    }
-}
-
-impl From<RealLoginFlowError> for LoginFlowError {
-    fn from(value: RealLoginFlowError) -> Self {
-        match value {
-            RealLoginFlowError::UnsupportedTfa => LoginFlowError::UnsupportedTfa,
-            RealLoginFlowError::HumanVerificationRequired(e) => {
-                LoginFlowError::HumanVerificationRequired(e)
-            }
-            RealLoginFlowError::ServerProof(e) | RealLoginFlowError::SrpProof(e) => {
-                LoginFlowError::ServerProof(e)
-            }
-            RealLoginFlowError::InvalidState => LoginFlowError::InvalidState,
-            RealLoginFlowError::KeySecretDerivation(e) => {
-                LoginFlowError::KeySecretDerivation(anyhow!("{e}"))
-            }
-            RealLoginFlowError::KeySecretSaltFetch(e) => LoginFlowError::KeySecretSaltFetch(e),
-            RealLoginFlowError::KeySecretAuthUpdate(e) => LoginFlowError::KeySecretAuthUpdate(e),
-            RealLoginFlowError::KeySecretDecryption => LoginFlowError::KeySecretDecryption,
-            RealLoginFlowError::WrongMailboxPassword => LoginFlowError::WrongMailboxPassword,
-            RealLoginFlowError::AuthStore(e) => LoginFlowError::AuthStore(e),
-        }
-    }
-}
-
-impl From<JoinError> for LoginFlowError {
-    fn from(value: JoinError) -> Self {
-        LoginFlowError::Other(anyhow::Error::new(value))
+    #[must_use]
+    pub fn to_user_context(&self) -> UserLoginFlowArcMailUserSessionResult {
+        async_runtime()
+            .block_on(async {
+                let guard = self.flow.lock().await;
+                let user_ctx = self
+                    .ctx
+                    .user_context_from_login_flow(&guard)
+                    .await
+                    .map_err(RealUserLoginFlowError::from)?;
+                Ok::<_, RealUserLoginFlowError>(MailUserSession::new(user_ctx))
+            })
+            .into()
     }
 }
