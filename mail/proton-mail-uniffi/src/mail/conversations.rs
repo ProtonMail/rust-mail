@@ -556,8 +556,8 @@ pub async fn watch_conversations_for_label(
             session.user_stash(),
         )
         .await?;
-        let handle = Arc::new(WatchHandle::new());
-        let handle_cloned = Arc::clone(&handle);
+        let handle = WatchHandle::new();
+        let handle_cloned = handle.clone();
         tokio::spawn(async move {
             loop {
                 if handle_cloned.should_stop() {
@@ -572,7 +572,7 @@ pub async fn watch_conversations_for_label(
 
         Ok(WatchedConversations {
             conversations: conversations.into_iter().map(Into::into).collect(),
-            handle,
+            handle: Arc::new(handle),
         })
     })
     .await
