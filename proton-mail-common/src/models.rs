@@ -5007,7 +5007,7 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         Message::find(
-            "WHERE local_conversation_id = ?",
+            "WHERE local_conversation_id = ? ORDER BY time ASC, display_order ASC",
             params![local_conversation_id],
             interface,
             queue,
