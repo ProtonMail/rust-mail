@@ -821,6 +821,9 @@ impl Command {
         let mut stats = stash.stats.lock();
         stats.active_command_count = stats.active_command_count.saturating_add(1);
         stats.total_commands_run = stats.total_commands_run.saturating_add(1);
+        if stats.active_command_count > stats.max_command_count {
+            stats.max_command_count = stats.active_command_count;
+        }
         let id = stats.total_commands_run;
         drop(stats);
 
@@ -939,6 +942,9 @@ impl Instruction {
         let mut stats = stash.stats.lock();
         stats.active_query_count = stats.active_query_count.saturating_add(1);
         stats.total_queries_run = stats.total_queries_run.saturating_add(1);
+        if stats.active_query_count > stats.max_query_count {
+            stats.max_query_count = stats.active_query_count;
+        }
         let id = stats.total_queries_run;
         drop(stats);
 
@@ -1146,6 +1152,9 @@ impl Query {
         let mut stats = stash.stats.lock();
         stats.active_query_count = stats.active_query_count.saturating_add(1);
         stats.total_queries_run = stats.total_queries_run.saturating_add(1);
+        if stats.active_query_count > stats.max_query_count {
+            stats.max_query_count = stats.active_query_count;
+        }
         let id = stats.total_queries_run;
         drop(stats);
 
@@ -1398,6 +1407,9 @@ impl Stash {
         let mut stats = self.stats.lock();
         stats.active_tether_count = stats.active_tether_count.saturating_add(1);
         stats.total_tethers_created = stats.total_tethers_created.saturating_add(1);
+        if stats.active_tether_count > stats.max_tether_count {
+            stats.max_tether_count = stats.active_tether_count;
+        }
         drop(stats);
         Tether {
             handle,
@@ -2177,6 +2189,9 @@ impl TetheredWorker {
                                 stats.active_transaction_count.saturating_add(1);
                             stats.total_transactions_started =
                                 stats.total_transactions_started.saturating_add(1);
+                            if stats.active_transaction_count > stats.max_transaction_count {
+                                stats.max_transaction_count = stats.active_transaction_count;
+                            }
                         };
                         match connection
                             // We call unchecked_transaction() here because transaction() requires a
