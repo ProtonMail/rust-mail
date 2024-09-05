@@ -15,7 +15,7 @@ use crate::core::datatypes::Id;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSessionError, MailboxError};
 use crate::utils::damp;
-use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
@@ -443,28 +443,13 @@ pub async fn watch_messages_for_label(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedMessages, MailboxError> {
     let stash = session.user_stash().clone();
-    let watcher = WatchHandle::default();
-    let watcher_cloned = watcher.clone();
     uniffi_async(async move {
-        let callback = damp(callback);
         let (messages, receiver) =
             RealMessage::watch_in_label(RealLocalId::from(label_id), &stash).await?;
-        tokio::spawn(async move {
-            loop {
-                if watcher_cloned.should_stop() {
-                    return;
-                }
-
-                if receiver.recv_async().await.is_err() {
-                    return;
-                }
-
-                callback();
-            }
-        });
+        let watcher = watch_channel(receiver, callback);
         Ok(WatchedMessages {
             messages: messages.into_iter().map(Into::into).collect(),
-            handle: Arc::new(watcher),
+            handle: watcher,
         })
     })
     .await

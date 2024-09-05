@@ -14,8 +14,7 @@ use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
-use crate::utils::damp;
-use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
@@ -482,7 +481,6 @@ pub async fn watch_conversation(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<Option<WatchedConversation>, MailboxError> {
     uniffi_async(async move {
-        let callback = damp(callback);
         let Some(conversation_messages) = conversation(Arc::clone(&mailbox), id).await? else {
             return Ok(None);
         };
@@ -492,25 +490,14 @@ pub async fn watch_conversation(
             mailbox.stash(),
         )
         .await?;
-        let handle = WatchHandle::new();
-        let handle_cloned = handle.clone();
-        tokio::spawn(async move {
-            loop {
-                if handle_cloned.should_stop() {
-                    return;
-                }
-                if receiver.recv_async().await.is_err() {
-                    return;
-                }
-                callback();
-            }
-        });
+
+        let watcher = watch_channel(receiver, callback);
 
         Ok(Some(WatchedConversation {
             conversation: conversation_messages.conversation,
             messages: conversation_messages.messages,
             message_id_to_open: conversation_messages.message_id_to_open,
-            handle: Arc::new(handle),
+            handle: watcher,
         }))
     })
     .await
@@ -550,29 +537,15 @@ pub async fn watch_conversations_for_label(
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<WatchedConversations, MailboxError> {
     uniffi_async(async move {
-        let callback = damp(callback);
         let (conversations, receiver) = ContextualConversation::watch_in_label(
             RealLocalId::from(label_id),
             session.user_stash(),
         )
         .await?;
-        let handle = WatchHandle::new();
-        let handle_cloned = handle.clone();
-        tokio::spawn(async move {
-            loop {
-                if handle_cloned.should_stop() {
-                    return;
-                }
-                if receiver.recv_async().await.is_err() {
-                    return;
-                }
-                callback();
-            }
-        });
-
+        let watcher = watch_channel(receiver, callback);
         Ok(WatchedConversations {
             conversations: conversations.into_iter().map(Into::into).collect(),
-            handle: Arc::new(handle),
+            handle: watcher,
         })
     })
     .await
