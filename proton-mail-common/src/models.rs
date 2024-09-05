@@ -2896,6 +2896,43 @@ impl Label {
     {
         Label::find("WHERE label_type = ?", params![kind], interface, None).await
     }
+
+    /// Watch a label with the given `local_id` for changes.
+    ///
+    /// When a change occurs a message is produced in the returned receiver.
+    ///
+    /// Returns `None` if the label was not found.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn watch<A>(
+        local_id: LocalId,
+        interface: &A,
+    ) -> Result<
+        Option<(
+            Self,
+            flume::Receiver<ResultsetChange<Self, <Self as Model>::IdType>>,
+        )>,
+        AppError,
+    >
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let (sender, receiver) = flume::unbounded();
+        let mut labels = Label::find(
+            "WHERE local_id=?",
+            params![local_id],
+            interface,
+            Some(sender),
+        )
+        .await?;
+        if labels.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some((labels.swap_remove(0), receiver)))
+    }
 }
 
 impl From<ApiLabel> for Label {

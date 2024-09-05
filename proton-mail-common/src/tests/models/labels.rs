@@ -435,6 +435,42 @@ async fn test_mark_labels_as_initialized() {
     assert!(new_label.initialized_msg);
 }
 
+#[tokio::test]
+async fn test_watch_label() {
+    let stash = new_test_connection().await;
+    let tx = stash.connection();
+
+    let mut label: Label = ApiLabel {
+        id: ApiRemoteId::from("label_id"),
+        parent_id: None,
+        name: "MyLabel".to_owned(),
+        path: None,
+        color: "#ffffff".to_owned(),
+        label_type: ApiLabelType::Label,
+        notify: false,
+        display: true,
+        sticky: false,
+        expanded: true,
+        order: 0,
+    }
+    .into();
+
+    label.set_stash(&stash);
+    label.save_using(&tx).await.unwrap();
+
+    let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(db_label, label);
+
+    label.display_order = 10;
+    label.save_using(&tx).await.unwrap();
+
+    watcher.recv_async().await.unwrap();
+}
+
 async fn compare_remote_labels_with_local(stash: &Stash, remote_labels: Vec<ApiLabel>) {
     let local_labels = Label::all(stash, None).await.expect("failed to get labels");
 
