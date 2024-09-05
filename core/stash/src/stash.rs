@@ -1424,7 +1424,7 @@ impl Stash {
             queue: self.queue.clone(),
             start_time: Arc::new(Instant::now()),
             stash: self.clone(),
-            transaction_start_time: Arc::new(Mutex::new(None)),
+            transaction_info: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -1785,8 +1785,9 @@ pub struct Tether {
     /// The associated [`Stash`] instance.
     stash: Stash,
 
-    /// The time at which the transaction started, if there is one.
-    transaction_start_time: Arc<Mutex<Option<Instant>>>,
+    /// If there is an active transaction, this tuple will contain the unique
+    /// transaction ID, and the time at which the transaction started.
+    transaction_info: Arc<Mutex<Option<(u32, Instant)>>>,
 }
 
 impl Tether {
@@ -1825,7 +1826,7 @@ impl Tether {
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
         self.has_active_transaction.store(false, Ordering::Relaxed);
-        let _: Option<Instant> = self.transaction_start_time.lock().take();
+        let _: Option<(u32, Instant)> = self.transaction_info.lock().take();
         Ok(())
     }
 
@@ -1865,7 +1866,7 @@ impl Tether {
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
         self.has_active_transaction.store(false, Ordering::Relaxed);
-        let _: Option<Instant> = self.transaction_start_time.lock().take();
+        let _: Option<(u32, Instant)> = self.transaction_info.lock().take();
         Ok(())
     }
 }
@@ -1879,7 +1880,7 @@ impl Clone for Tether {
             queue: self.queue.clone(),
             start_time: Arc::clone(&self.start_time),
             stash: self.stash.clone(),
-            transaction_start_time: Arc::clone(&self.transaction_start_time),
+            transaction_info: Arc::clone(&self.transaction_info),
         }
     }
 }
@@ -2004,8 +2005,6 @@ impl Interface for Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.has_active_transaction.store(true, Ordering::Relaxed);
-        let _: Option<Instant> = self.transaction_start_time.lock().replace(Instant::now());
         Ok(self.clone())
     }
 }
@@ -2139,9 +2138,10 @@ impl TetheredWorker {
                         command
                             .tether
                             .unwrap()
-                            .transaction_start_time
+                            .transaction_info
                             .lock()
                             .unwrap()
+                            .1
                             .elapsed(),
                     );
                     stats.average_transaction_lifetime = stats
@@ -2262,9 +2262,10 @@ impl TetheredWorker {
                         command
                             .tether
                             .unwrap()
-                            .transaction_start_time
+                            .transaction_info
                             .lock()
                             .unwrap()
+                            .1
                             .elapsed(),
                     );
                     stats.average_transaction_lifetime = stats
@@ -2291,6 +2292,14 @@ impl TetheredWorker {
                             if stats.active_transaction_count > stats.max_transaction_count {
                                 stats.max_transaction_count = stats.active_transaction_count;
                             }
+                            command
+                                .tether
+                                .clone()
+                                .unwrap()
+                                .has_active_transaction
+                                .store(true, Ordering::Relaxed);
+                            *command.tether.clone().unwrap().transaction_info.lock() =
+                                Some((stats.total_transactions_started, Instant::now()));
                         };
                         match connection
                             // We call unchecked_transaction() here because transaction() requires a
