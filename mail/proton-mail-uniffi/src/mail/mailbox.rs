@@ -3,7 +3,8 @@ mod attachments;
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::ViewMode;
 use crate::mail::{MailSessionError, MailUserSession};
-use crate::{uniffi_async, watch, LiveQueryCallback, WatchHandle};
+use crate::utils::damp;
+use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
 use anyhow::anyhow;
 use proton_action_queue::queue::Error as QueueError;
 use proton_api_core::service::ApiServiceError;
@@ -13,7 +14,6 @@ use proton_core_common::datatypes::LabelId as RealLabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label as RealLabel;
 use proton_mail_common::{AppError, MailboxError as RealMailboxError};
-use stash::params;
 use stash::stash::{Stash, StashError};
 use std::sync::Arc;
 use tokio::task::JoinError;
@@ -168,16 +168,27 @@ impl Mailbox {
         let label_id = self.mbox.label_id();
         let stash = self.mbox.user_context().user_stash().clone();
         uniffi_async(async move {
-            let (_, handle) = watch::<_, _, RealLabel>(
-                "WHERE local_label_id=?",
-                params![label_id],
-                move |r| r.local_id == Some(label_id),
-                |r| r.local_id.expect("local_id should never be None"),
-                &stash,
-                callback,
-            )
-            .await?;
-            Ok(handle)
+            let Some((_, receiver)) = RealLabel::watch(label_id, &stash).await? else {
+                return Err(MailboxError::LabelNotFound(Id::from(label_id)));
+            };
+
+            let handle = WatchHandle::new();
+            let handle_cloned = handle.clone();
+            let callback = damp(callback);
+            tokio::spawn(async move {
+                loop {
+                    if handle_cloned.should_stop() {
+                        return;
+                    }
+
+                    if receiver.recv_async().await.is_err() {
+                        return;
+                    }
+
+                    callback();
+                }
+            });
+            Ok(Arc::new(handle))
         })
         .await
     }
