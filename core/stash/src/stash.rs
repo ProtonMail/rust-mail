@@ -1825,7 +1825,7 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.has_active_transaction.store(false, Ordering::Relaxed);
+        self.has_active_transaction.store(false, Ordering::SeqCst);
         let _: Option<(u32, Instant)> = self.transaction_info.lock().take();
         Ok(())
     }
@@ -1865,7 +1865,7 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.has_active_transaction.store(false, Ordering::Relaxed);
+        self.has_active_transaction.store(false, Ordering::SeqCst);
         let _: Option<(u32, Instant)> = self.transaction_info.lock().take();
         Ok(())
     }
@@ -1938,7 +1938,7 @@ impl Interface for Tether {
     }
 
     fn has_active_transaction(&self) -> bool {
-        self.has_active_transaction.load(Ordering::Relaxed)
+        self.has_active_transaction.load(Ordering::SeqCst)
     }
 
     async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
@@ -2291,7 +2291,7 @@ impl TetheredWorker {
                                 .clone()
                                 .unwrap()
                                 .has_active_transaction
-                                .store(true, Ordering::Relaxed);
+                                .store(true, Ordering::SeqCst);
                             *command.tether.clone().unwrap().transaction_info.lock() =
                                 Some((stats.total_transactions_started, Instant::now()));
                         };
