@@ -390,6 +390,7 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::time::Duration;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
+use parking_lot::Mutex;
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
@@ -400,10 +401,10 @@ use std::collections::{hash_map::Entry, HashMap};
 use std::path::Path;
 use std::sync::{Arc, Weak};
 use std::thread::{spawn, JoinHandle};
+use std::time::Instant;
 use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
-use tokio::sync::Mutex;
 use tokio::task::spawn_blocking;
 use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
@@ -773,6 +774,10 @@ pub enum StashError {
 /// * [`Subscription`]
 ///
 struct Command {
+    /// The unique global identifier of the command, relative to the [`Stash`]
+    /// instance it is associated with.
+    id: u32,
+
     /// The communication channel used to send the result of the operation back
     /// to the caller.
     channel: Option<OneshotSender<Result<(), StashError>>>,
@@ -782,6 +787,9 @@ struct Command {
     /// registered, and re-used otherwise. If [`None`], a new database
     /// connection will be created, but not registered, and used just this once.
     conn_handle: Option<Arc<AtomicU32>>,
+
+    /// The time at which the operation started.
+    start_time: Instant,
 
     /// The associated [`Stash`] instance for the operation.
     stash: Stash,
@@ -802,14 +810,22 @@ impl Command {
     ///                   connection will be created, but not registered, and
     ///                   used just this once.
     ///
-    const fn new(
+    fn new(
         stash: Stash,
         channel: Option<OneshotSender<Result<(), StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
     ) -> Self {
+        let mut stats = stash.stats.lock();
+        stats.active_command_count = stats.active_command_count.saturating_add(1);
+        stats.total_commands_run = stats.total_commands_run.saturating_add(1);
+        let id = stats.total_commands_run;
+        drop(stats);
+
         Self {
+            id,
             channel,
             conn_handle,
+            start_time: Instant::now(),
             stash,
         }
     }
@@ -839,6 +855,10 @@ impl OperationLogic for Command {
     fn run(&self, _connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<(), StashError> {
         Ok(())
     }
+
+    fn start_time(&self) -> Instant {
+        self.start_time
+    }
 }
 
 /// An operation to be executed by the worker, which does not return any data.
@@ -857,6 +877,10 @@ impl OperationLogic for Command {
 /// * [`Subscription`]
 ///
 struct Instruction {
+    /// The unique global identifier of the instruction, relative to the
+    /// [`Stash`] instance it is associated with.
+    id: u32,
+
     /// The communication channel used to send the result of the operation back
     /// to the caller.
     channel: Option<OneshotSender<Result<usize, StashError>>>,
@@ -875,6 +899,9 @@ struct Instruction {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+
+    /// The time at which the operation started.
+    start_time: Instant,
 
     /// The associated [`Stash`] instance for the operation.
     stash: Stash,
@@ -906,11 +933,19 @@ impl Instruction {
         query: String,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Self {
+        let mut stats = stash.stats.lock();
+        stats.active_query_count = stats.active_query_count.saturating_add(1);
+        stats.total_queries_run = stats.total_queries_run.saturating_add(1);
+        let id = stats.total_queries_run;
+        drop(stats);
+
         Self {
+            id,
             channel,
             conn_handle,
             params,
             query,
+            start_time: Instant::now(),
             stash,
         }
     }
@@ -966,6 +1001,10 @@ impl OperationLogic for Instruction {
             debug!("Query: {query}");
         }
         Ok(affected)
+    }
+
+    fn start_time(&self) -> Instant {
+        self.start_time
     }
 }
 
@@ -1034,6 +1073,10 @@ impl PartialEq for Notification {
 /// * [`Subscription`]
 ///
 struct Query {
+    /// The unique global identifier of the query, relative to the [`Stash`]
+    /// instance it is associated with.
+    id: u32,
+
     /// The communication channel used to send the result of the operation back
     /// to the caller.
     channel: Option<OneshotSender<Result<DbRecords, StashError>>>,
@@ -1058,6 +1101,9 @@ struct Query {
     /// The query to execute. This is in raw SQL format ready for parameter
     /// substitution.
     query: String,
+
+    /// The time at which the operation started.
+    start_time: Instant,
 
     /// The associated [`Stash`] instance for the operation.
     stash: Stash,
@@ -1096,12 +1142,20 @@ impl Query {
         params: Vec<Box<dyn ToSql + Send>>,
         converter: Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>,
     ) -> Self {
+        let mut stats = stash.stats.lock();
+        stats.active_query_count = stats.active_query_count.saturating_add(1);
+        stats.total_queries_run = stats.total_queries_run.saturating_add(1);
+        let id = stats.total_queries_run;
+        drop(stats);
+
         Self {
+            id,
             channel,
             conn_handle,
             converter,
             params,
             query,
+            start_time: Instant::now(),
             stash,
         }
     }
@@ -1171,6 +1225,10 @@ impl OperationLogic for Query {
             debug!("Rows: {}", records.0.len());
         }
         rows.map_err(StashError::DeserializationError)
+    }
+
+    fn start_time(&self) -> Instant {
+        self.start_time
     }
 }
 
@@ -1384,8 +1442,9 @@ impl Stash {
     }
 
     /// Gets statistics gathered about the [`Stash`] instance.
-    pub async fn stats(&self) -> Stats {
-        self.stats.lock().await.clone()
+    #[must_use]
+    pub fn stats(&self) -> Stats {
+        self.stats.lock().clone()
     }
 }
 
@@ -1534,7 +1593,8 @@ pub struct Stats {
     pub max_transaction_lifetime: (Duration, u32),
 
     /// The number of commands executed since the [`Stash`] instance was
-    /// created.
+    /// created. This is also used to give each command a unique ID for tracking
+    /// purposes.
     pub total_commands_run: u32,
 
     /// The total time spent executing commands since the [`Stash`] instance was
@@ -1546,6 +1606,7 @@ pub struct Stats {
     pub total_notifications_sent: u32,
 
     /// The number of queries executed since the [`Stash`] instance was created.
+    /// This is also used to give each query a unique ID for tracking purposes.
     pub total_queries_run: u32,
 
     /// The total time spent executing queries since the [`Stash`] instance was
@@ -1565,7 +1626,8 @@ pub struct Stats {
     pub total_tether_time: Duration,
 
     /// The total number of transactions started since the [`Stash`] instance
-    /// was created.
+    /// was created. This is also used to give each transaction a unique ID for
+    /// tracking purposes.
     pub total_transactions_started: u32,
 
     /// The total time spent executing transactions since the [`Stash`] instance
@@ -1623,6 +1685,12 @@ impl OperationLogic for Subscription {
     ///
     fn run(&self, _connection: &AgnosticConnection<'_>, _stash: Stash) -> Result<(), StashError> {
         Ok(())
+    }
+
+    fn start_time(&self) -> Instant {
+        // TODO: This may or may not be useful to implement. For now it satisfies
+        // TODO: the trait requirements.
+        Instant::now()
     }
 }
 
@@ -3170,6 +3238,9 @@ trait OperationLogic {
             error!("Oneshot error: Sender already used");
         }
     }
+
+    /// When the operation was started, i.e. created.
+    fn start_time(&self) -> Instant;
 }
 
 /// Extension trait for the connection pool.
