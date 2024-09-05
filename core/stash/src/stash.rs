@@ -2055,12 +2055,21 @@ impl TetheredWorker {
                                 "Failed to send NotifyCommitTransaction operation to main queue"
                             );
                         }
+                        {
+                            let mut stats = stash.stats.lock();
+                            stats.active_transaction_count =
+                                stats.active_transaction_count.saturating_sub(1);
+                        };
                     } else {
                         command.send_back(Err(StashError::NoActiveTransaction));
                     }
                 } else {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
+                {
+                    let mut stats = stash.stats.lock();
+                    stats.active_command_count = stats.active_command_count.saturating_sub(1);
+                };
             }
             Operation::Instruct(mut instruction) => {
                 debug!(
@@ -2069,13 +2078,18 @@ impl TetheredWorker {
                     instruction.id,
                     instruction.start_time().elapsed().as_micros(),
                 );
+                // Note: The query count got incremented when the Instruction was created.
                 instruction.send_back(instruction.run(
                     &transaction.as_ref().map_or(
                         AgnosticConnection::Unbound(connection),
                         AgnosticConnection::Engaged,
                     ),
-                    stash,
+                    stash.clone(),
                 ));
+                {
+                    let mut stats = stash.stats.lock();
+                    stats.active_query_count = stats.active_query_count.saturating_sub(1);
+                }
             }
             Operation::Publish(_) => {
                 // Technically, these cannot occur here, as subscription operations are
@@ -2092,13 +2106,18 @@ impl TetheredWorker {
                     query.id,
                     query.start_time().elapsed().as_micros(),
                 );
+                // Note: The query count got incremented when the Query was created.
                 query.send_back(query.run(
                     &transaction.as_ref().map_or(
                         AgnosticConnection::Unbound(connection),
                         AgnosticConnection::Engaged,
                     ),
-                    stash,
+                    stash.clone(),
                 ));
+                {
+                    let mut stats = stash.stats.lock();
+                    stats.active_query_count = stats.active_query_count.saturating_sub(1);
+                }
             }
             Operation::RollbackTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
@@ -2119,12 +2138,21 @@ impl TetheredWorker {
                                 "Failed to send NotifyRollbackTransaction operation to main queue"
                             );
                         }
+                        {
+                            let mut stats = stash.stats.lock();
+                            stats.active_transaction_count =
+                                stats.active_transaction_count.saturating_sub(1);
+                        };
                     } else {
                         command.send_back(Err(StashError::NoActiveTransaction));
                     }
                 } else {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
+                {
+                    let mut stats = stash.stats.lock();
+                    stats.active_command_count = stats.active_command_count.saturating_sub(1);
+                };
             }
             Operation::StartTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
@@ -2135,6 +2163,13 @@ impl TetheredWorker {
                         command.start_time().elapsed().as_micros(),
                     );
                     if transaction.is_none() {
+                        {
+                            let mut stats = stash.stats.lock();
+                            stats.active_transaction_count =
+                                stats.active_transaction_count.saturating_add(1);
+                            stats.total_transactions_started =
+                                stats.total_transactions_started.saturating_add(1);
+                        };
                         match connection
                             // We call unchecked_transaction() here because transaction() requires a
                             // mutable borrow. Being unchecked does not matter, as we perform the
@@ -2165,6 +2200,10 @@ impl TetheredWorker {
                 } else {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
+                {
+                    let mut stats = stash.stats.lock();
+                    stats.active_command_count = stats.active_command_count.saturating_sub(1);
+                };
             }
             Operation::Subscribe(mut subscription) => {
                 // Technically, these cannot occur here, as subscription operations are
@@ -2511,10 +2550,16 @@ impl Worker {
                             // rusqlite is synchronous, so we need to tell the Tokio runtime that
                             // this task will block.
                             spawn_blocking(move || {
+                                // Note: The query count got incremented when the Instruction was created.
                                 instruction.send_back(
                                     instruction
                                         .run(&AgnosticConnection::Unbound(&connection), stash),
                                 );
+                                {
+                                    let mut stats = instruction.stash.stats.lock();
+                                    stats.active_query_count =
+                                        stats.active_query_count.saturating_sub(1);
+                                }
                             })
                             .await
                             .unwrap_or_else(|err| {
@@ -2568,9 +2613,15 @@ impl Worker {
                             // rusqlite is synchronous, so we need to tell the Tokio runtime that
                             // this task will block.
                             spawn_blocking(move || {
+                                // Note: The query count got incremented when the Query was created.
                                 query.send_back(
                                     query.run(&AgnosticConnection::Unbound(&connection), stash),
                                 );
+                                {
+                                    let mut stats = query.stash.stats.lock();
+                                    stats.active_query_count =
+                                        stats.active_query_count.saturating_sub(1);
+                                }
                             })
                             .await
                             .unwrap_or_else(|err| {
