@@ -40,6 +40,7 @@ use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 use bytes::Bytes;
 use proton_api_core::service::{ApiService, ApiServiceError, Json, NO_PARAMS};
 use proton_api_core::services::proton::common::RemoteId;
+use proton_api_core::services::proton::responses::GetAddressesResponse;
 use proton_api_core::services::proton::Proton;
 use requests::GetLabelsByIdsOptions;
 
