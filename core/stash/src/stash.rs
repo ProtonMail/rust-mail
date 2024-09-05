@@ -2031,7 +2031,7 @@ impl TetheredWorker {
         operation: Operation,
         connection: &'tx PooledConnection<SqliteConnectionManager>,
         mut transaction: Option<Transaction<'tx>>,
-        stash: Stash,
+        stash: &Stash,
         queue: &QueueSender<Operation>,
     ) -> Option<Transaction<'tx>> {
         match operation {
@@ -2291,7 +2291,7 @@ impl TetheredWorker {
                     operation,
                     connection.as_ref().unwrap(),
                     transaction,
-                    stash_clone.clone(),
+                    &stash_clone,
                     &queue,
                 );
             } else {
@@ -2332,7 +2332,7 @@ impl TetheredWorker {
                     operation,
                     connection.as_ref().unwrap(),
                     transaction,
-                    stash_clone.clone(),
+                    &stash_clone,
                     &queue,
                 );
             }
