@@ -170,6 +170,7 @@ impl ContextualConversation {
     ///
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(interface,api))]
     pub async fn conversation_and_messages<A, PM>(
         local_conversation_id: LocalId,
         local_label_id: LocalId,

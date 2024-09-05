@@ -176,6 +176,7 @@ impl Mailbox {
     ///
     /// # Errors
     /// Returns error if API request or database changes failed.
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, count))]
     pub async fn sync(&self, count: usize) -> MailboxResult<()> {
         let ctx = self.user_ctx.clone();
         let Some(mut label) = Label::load(self.label_id, ctx.user_stash()).await? else {

@@ -4256,6 +4256,7 @@ impl Message {
     /// - if the db query failed
     /// - if the message body could not be written to the cache
     /// - if a message with the given id could not be found
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
     pub async fn message_body(
         user_context: &MailUserContext,
         id: LocalId,
