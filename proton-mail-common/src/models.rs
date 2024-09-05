@@ -2139,15 +2139,14 @@ impl Conversation {
         }
 
         let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_move_locations = all_system
+        let all_system_excluding_view = all_system
             .iter()
-            .filter(|label| label.is_movable_folder())
             .filter(|label| label.local_id != view.local_id);
 
-        let move_actions = MoveAction::vec(all_system_move_locations, |_label_is_selected| false);
+        let move_actions = MoveAction::vec(all_system_excluding_view, |_label_is_selected| false);
 
         Ok(ConversationAvailableActions::builder()
-            .move_actions(move_actions)
+            .move_actions(MoveAction::system(move_actions))
             .conversation_actions(conversation_actions)
             .build())
     }
@@ -2196,9 +2195,8 @@ impl Conversation {
         A: Into<AgnosticInterface> + Interface,
     {
         let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_move_locations = all_system
+        let all_system_excluding_view = all_system
             .iter()
-            .filter(|label| label.is_movable_folder())
             .filter(|label| label.local_id != view.local_id);
         let all_custom_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
         let conversations = Conversation::find(
@@ -2215,7 +2213,7 @@ impl Conversation {
             .iter()
             .flat_map(|conversation| {
                 MoveAction::vec(
-                    all_system_move_locations
+                    all_system_excluding_view
                         .clone()
                         .chain(all_custom_folders.iter()),
                     |label| {
@@ -4610,14 +4608,13 @@ impl Message {
         }
 
         let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_move_locations = all_system
+        let all_system_excluding_view = all_system
             .iter()
-            .filter(|label| label.is_movable_folder())
             .filter(|label| label.local_id != view.local_id);
-        let move_actions = MoveAction::vec(all_system_move_locations, |_is_label_selected| false);
+        let move_actions = MoveAction::vec(all_system_excluding_view, |_is_label_selected| false);
 
         Ok(MessageAvailableActions::builder()
-            .move_actions(move_actions)
+            .move_actions(MoveAction::system(move_actions))
             .message_actions(message_actions)
             .build())
     }
@@ -4667,9 +4664,8 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         let all_system = Label::find_by_kind(LabelType::System, interface).await?;
-        let all_system_move_locations = all_system
+        let all_system_excluding_view = all_system
             .iter()
-            .filter(|label| label.is_movable_folder())
             .filter(|label| label.local_id != view.local_id);
         let all_custom_folders = Label::find_by_kind(LabelType::Folder, interface).await?;
         let messages = Message::find(
@@ -4686,7 +4682,7 @@ impl Message {
             .iter()
             .flat_map(|message| {
                 MoveAction::vec(
-                    all_system_move_locations
+                    all_system_excluding_view
                         .clone()
                         .chain(all_custom_folders.iter()),
                     |label| {

@@ -24,7 +24,7 @@ impl MoveAction {
             .filter_map(|label| match label.label_type {
                 LabelType::System => Some(MoveAction::SystemFolder(SystemFolderAction {
                     local_id: label.local_id?,
-                    name: SystemLabel::new(label)?,
+                    name: SystemLabel::new(label).filter(|sl| sl.is_movable_folder())?,
                     is_selected: Some(is_selected(label)),
                 })),
 
@@ -57,6 +57,16 @@ impl MoveAction {
         map.drain()
     }
 
+    pub fn system(actions: impl IntoIterator<Item = MoveAction>) -> Vec<SystemFolderAction> {
+        actions
+            .into_iter()
+            .filter_map(|action| match action {
+                MoveAction::SystemFolder(action) => Some(action),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn is_selected(&self) -> Option<bool> {
         match self {
             MoveAction::SystemFolder(action) => action.is_selected,
@@ -84,6 +94,17 @@ impl MoveAction {
 pub struct SystemFolderAction {
     pub local_id: LocalId,
     pub name: SystemLabel,
+
+    /// This field is used to determine if the folder is selected or not
+    /// for given list of messages or conversations.
+    ///
+    /// Option<bool> is used to represent three states:
+    /// * Some(true) - All of the folder occurences across all of messages/conversations have them assigned.
+    /// * Some(false) - None of the folder occurences across all of messages/conversations have them assigned.
+    /// * None - Some of the folder occurences across all messages/conversations have them assigned and some don't.
+    ///
+    /// Option type was chosen over dedicated enum to make it easier to calculate the final state of the folder.
+    /// Due to the fact algorithm calculate this value multiple times and then modify already existing fields.
     pub is_selected: Option<bool>,
 }
 
@@ -93,6 +114,11 @@ pub struct CustomFolderAction {
     pub name: String,
     pub color: LabelColor,
     pub parent: Option<LocalId>,
+
+    /// This field is used to determine if the folder is selected or not
+    /// for given list of messages or conversations.
+    ///
+    /// For more information check the documentation of analaogical field in [SystemFolderAction].
     pub is_selected: Option<bool>,
 }
 

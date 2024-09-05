@@ -12,9 +12,10 @@
 use crate::core::datatypes::Id;
 use crate::core::paginator::ConversationPaginator;
 use crate::mail::datatypes::{
-    Conversation, ConversationAvailableActions, ConversationSearchOptions, Message,
+    Conversation, ConversationAvailableActions, ConversationSearchOptions, LabelAsAction, Message,
+    MoveAction,
 };
-use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
+use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError, MailboxResult};
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -100,9 +101,8 @@ pub async fn available_actions_for_conversations(
     view: Id,
     ids: Vec<Id>,
 ) -> Result<ConversationAvailableActions, MailboxError> {
-    let conn = session.user_stash().connection();
     uniffi_async(async move {
-        let view = RealLabel::load(view.into(), &conn)
+        let view = RealLabel::load(view.into(), session.user_stash())
             .await?
             .ok_or_else(|| MailboxError::LabelNotFound(view))?;
         let actions = RealConversation::available_actions(
@@ -113,6 +113,76 @@ pub async fn available_actions_for_conversations(
         .await?;
 
         Ok(ConversationAvailableActions::from(actions))
+    })
+    .await
+}
+
+/// Returns available label_as actions for conversations.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session` - The session to use for the request.
+/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn available_label_as_actions_for_conversations(
+    session: Arc<MailUserSession>,
+    ids: Vec<Id>,
+) -> MailboxResult<Vec<LabelAsAction>> {
+    uniffi_async(async move {
+        let actions = RealConversation::available_label_as_actions(
+            ids.into_iter().map_into().collect(),
+            session.user_stash(),
+        )
+        .await?
+        .into_iter()
+        .map_into()
+        .collect_vec();
+
+        Ok(actions)
+    })
+    .await
+}
+
+// Returns available move_to actions for conversations.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session` - The session to use for the request.
+/// * `view`    - The local ID of the label which conversations are viewed in.
+/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn available_move_to_actions_for_conversations(
+    session: Arc<MailUserSession>,
+    view: Id,
+    ids: Vec<Id>,
+) -> MailboxResult<Vec<MoveAction>> {
+    uniffi_async(async move {
+        let view = RealLabel::load(view.into(), session.user_stash())
+            .await?
+            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+        let actions = RealConversation::available_move_to_actions(
+            view,
+            ids.into_iter().map_into().collect(),
+            session.user_stash(),
+        )
+        .await?
+        .into_iter()
+        .map_into()
+        .collect_vec();
+
+        Ok(actions)
     })
     .await
 }

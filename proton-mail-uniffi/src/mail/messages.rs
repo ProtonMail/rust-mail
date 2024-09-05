@@ -9,7 +9,7 @@
 //!
 
 use super::datatypes::{BlockQuote, RemoteContent};
-use super::datatypes::{MessageAvailableActions, MimeType};
+use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
@@ -433,9 +433,8 @@ pub async fn available_actions_for_messages(
     view: Id,
     ids: Vec<Id>,
 ) -> MailboxResult<MessageAvailableActions> {
-    let stash = session.user_stash().clone();
     uniffi_async(async move {
-        let view = RealLabel::load(view.into(), &stash)
+        let view = RealLabel::load(view.into(), session.user_stash())
             .await?
             .ok_or_else(|| MailboxError::LabelNotFound(view))?;
         let actions = RealMessage::available_actions(
@@ -446,6 +445,76 @@ pub async fn available_actions_for_messages(
         .await?;
 
         Ok(MessageAvailableActions::from(actions))
+    })
+    .await
+}
+
+/// Returns available label_as actions for messages.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session` - The session to use for the request.
+/// * `ids`     - The local IDs of the messages to calcualte available actions for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn available_label_as_actions_for_messages(
+    session: Arc<MailUserSession>,
+    ids: Vec<Id>,
+) -> MailboxResult<Vec<LabelAsAction>> {
+    uniffi_async(async move {
+        let actions = RealMessage::available_label_as_actions(
+            ids.into_iter().map_into().collect(),
+            session.user_stash(),
+        )
+        .await?
+        .into_iter()
+        .map_into()
+        .collect_vec();
+
+        Ok(actions)
+    })
+    .await
+}
+
+/// Returns available move_to actions for messages.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session` - The session to use for the request.
+/// * `view`    - The local ID of the label which messages are viewed in.
+/// * `ids`     - The local IDs of the messages to calcualte available actions for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn available_move_to_actions_for_messages(
+    session: Arc<MailUserSession>,
+    view: Id,
+    ids: Vec<Id>,
+) -> MailboxResult<Vec<MoveAction>> {
+    uniffi_async(async move {
+        let view = RealLabel::load(view.into(), session.user_stash())
+            .await?
+            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+        let actions = RealMessage::available_move_to_actions(
+            view,
+            ids.into_iter().map_into().collect(),
+            session.user_stash(),
+        )
+        .await?
+        .into_iter()
+        .map_into()
+        .collect_vec();
+
+        Ok(actions)
     })
     .await
 }

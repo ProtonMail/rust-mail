@@ -22,6 +22,7 @@ lazy_static! {
     pub static ref MY_CONVERSATION_ID: ApiRemoteId = ApiRemoteId::from("MyConversationID");
 }
 
+/// Macro wrapping u64 into Option<LocalId> for easier model definition.
 #[macro_export]
 macro_rules! lid {
     ($id:expr) => {{
@@ -30,6 +31,8 @@ macro_rules! lid {
     }};
 }
 
+/// Macro wrapping &str into Option<RemoteId> for easier model definition.
+/// Since it calls .into() on the RemoteId, it allows creation of Option<LabelId> as well.
 #[macro_export]
 macro_rules! rid {
     ($id:expr) => {{

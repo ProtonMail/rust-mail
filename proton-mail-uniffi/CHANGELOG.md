@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - Errors for login flow are now returned as contextual Enums
+  - `mark_conversations_as_unread` now expects a `Mailbox` rather than `MailUserSession`
+  - Renamed `available_actions_for_conversation` to `available_actions_for_conversations`
+    - Paramters changed from Id of the conversation to Vec<Id> of conversations and include view - Id of the Label
+  - Renamed `available_actions_for_message` to `available_actions_for_messages`
+    - Paramters changed from Id of the message to Vec<Id> of messages and include view - Id of the Label
+  - Reimagined `ConversationAvailableAction` to contain each actions section representing final view.
+    - renamed to `ConversationAvailableActions`
+  - Reimagined `MessageAvailableAction` to contain each actions section representing final view.
+    - renamed to `MessageAvailableActions`
+
+### Added
+
+  - `available_label_as_actions_for_messages` & `available_label_as_actions_for_conversations` methods exposing label_as actions
+  - `available_move_to_actions_for_messages` & `available_move_to_actions_for_conversations` methods exposing move_to actions
+  - `GeneralActions` enum representing static actions on message handled by FE.
+  - `ReplyActions` enum respresenting reply options.
+  - `IsSelected` enum representing selection state for Move & LabelAs actions.
+  - `MoveAction` enum representing folder (either system or custom) to which item can be moved to.
+  - `LabelAsAction` enum representing user applicable labels
+
 ## [0.11.43] - 2024-09-12
 
 ### Fixed
