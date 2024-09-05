@@ -2064,6 +2064,9 @@ impl TetheredWorker {
     /// * `queue`       - The main operations queue for the central worker.
     ///
     #[allow(clippy::too_many_lines)]
+    // This is infallible in this location
+    #[allow(clippy::unwrap_in_result)]
+    #[allow(clippy::unwrap_used)]
     fn handle_operation<'tx>(
         operation: Operation,
         connection: &'tx PooledConnection<SqliteConnectionManager>,
@@ -2118,6 +2121,19 @@ impl TetheredWorker {
                     stats.average_command_runtime = stats
                         .total_command_time
                         .checked_div(stats.total_commands_run)
+                        .unwrap_or_default();
+                    stats.total_transaction_time = stats.total_transaction_time.saturating_add(
+                        command
+                            .tether
+                            .unwrap()
+                            .transaction_start_time
+                            .lock()
+                            .unwrap()
+                            .elapsed(),
+                    );
+                    stats.average_transaction_lifetime = stats
+                        .total_transaction_time
+                        .checked_div(stats.total_transactions_started)
                         .unwrap_or_default();
                 };
             }
@@ -2219,6 +2235,19 @@ impl TetheredWorker {
                     stats.average_command_runtime = stats
                         .total_command_time
                         .checked_div(stats.total_commands_run)
+                        .unwrap_or_default();
+                    stats.total_transaction_time = stats.total_transaction_time.saturating_add(
+                        command
+                            .tether
+                            .unwrap()
+                            .transaction_start_time
+                            .lock()
+                            .unwrap()
+                            .elapsed(),
+                    );
+                    stats.average_transaction_lifetime = stats
+                        .total_transaction_time
+                        .checked_div(stats.total_transactions_started)
                         .unwrap_or_default();
                 };
             }
