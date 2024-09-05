@@ -1609,7 +1609,7 @@ pub struct Stats {
 
     /// The longest amount of time that a tether has existed for, and the tether
     /// ID responsible.
-    pub max_tether_lifetime: (Duration, u32),
+    pub max_tether_lifetime: (Duration, usize),
 
     /// The highest number of concurrent transactions.
     pub max_transaction_count: u32,
@@ -1892,15 +1892,17 @@ impl Drop for Tether {
             // There are still other references to this Tether
             return;
         }
+        let time = self.start_time.elapsed();
         let mut stats = self.stash.stats.lock();
         stats.active_tether_count = stats.active_tether_count.saturating_sub(1);
-        stats.total_tether_time = stats
-            .total_tether_time
-            .saturating_add(self.start_time.elapsed());
+        stats.total_tether_time = stats.total_tether_time.saturating_add(time);
         stats.average_tether_lifetime = stats
             .total_tether_time
             .checked_div(stats.total_tethers_created)
             .unwrap_or_default();
+        if time > stats.max_tether_lifetime.0 {
+            stats.max_tether_lifetime = (time, Arc::downgrade(&self.handle).as_ptr() as usize);
+        }
         drop(stats);
         if self
             .queue
@@ -2071,6 +2073,7 @@ impl TetheredWorker {
     /// * `queue`       - The main operations queue for the central worker.
     ///
     #[allow(clippy::too_many_lines)]
+    #[allow(clippy::cognitive_complexity)]
     // This is infallible in this location
     #[allow(clippy::unwrap_in_result)]
     #[allow(clippy::unwrap_used)]
@@ -2129,6 +2132,9 @@ impl TetheredWorker {
                         .total_command_time
                         .checked_div(stats.total_commands_run)
                         .unwrap_or_default();
+                    if time > stats.max_command_runtime.0 {
+                        stats.max_command_runtime = (time, command.id);
+                    }
                     stats.total_transaction_time = stats.total_transaction_time.saturating_add(
                         command
                             .tether
@@ -2168,6 +2174,9 @@ impl TetheredWorker {
                         .total_query_time
                         .checked_div(stats.total_queries_run)
                         .unwrap_or_default();
+                    if time > stats.max_query_runtime.0 {
+                        stats.max_query_runtime = (time, instruction.id);
+                    }
                 }
             }
             Operation::Publish(_) => {
@@ -2202,6 +2211,9 @@ impl TetheredWorker {
                         .total_query_time
                         .checked_div(stats.total_queries_run)
                         .unwrap_or_default();
+                    if time > stats.max_query_runtime.0 {
+                        stats.max_query_runtime = (time, query.id);
+                    }
                 }
             }
             Operation::RollbackTransaction(mut command) => {
@@ -2243,6 +2255,9 @@ impl TetheredWorker {
                         .total_command_time
                         .checked_div(stats.total_commands_run)
                         .unwrap_or_default();
+                    if time > stats.max_command_runtime.0 {
+                        stats.max_command_runtime = (time, command.id);
+                    }
                     stats.total_transaction_time = stats.total_transaction_time.saturating_add(
                         command
                             .tether
@@ -2316,6 +2331,9 @@ impl TetheredWorker {
                         .total_command_time
                         .checked_div(stats.total_commands_run)
                         .unwrap_or_default();
+                    if time > stats.max_command_runtime.0 {
+                        stats.max_command_runtime = (time, command.id);
+                    }
                 };
             }
             Operation::Subscribe(mut subscription) => {
@@ -2680,6 +2698,9 @@ impl Worker {
                                         .total_query_time
                                         .checked_div(stats.total_queries_run)
                                         .unwrap_or_default();
+                                    if time > stats.max_query_runtime.0 {
+                                        stats.max_query_runtime = (time, instruction.id);
+                                    }
                                 }
                             })
                             .await
@@ -2749,6 +2770,9 @@ impl Worker {
                                         .total_query_time
                                         .checked_div(stats.total_queries_run)
                                         .unwrap_or_default();
+                                    if time > stats.max_query_runtime.0 {
+                                        stats.max_query_runtime = (time, query.id);
+                                    }
                                 }
                             })
                             .await
