@@ -2087,8 +2087,14 @@ impl TetheredWorker {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
                 {
+                    let time = command.start_time().elapsed();
                     let mut stats = stash.stats.lock();
                     stats.active_command_count = stats.active_command_count.saturating_sub(1);
+                    stats.total_command_time = stats.total_command_time.saturating_add(time);
+                    stats.average_command_runtime = stats
+                        .total_command_time
+                        .checked_div(stats.total_commands_run)
+                        .unwrap_or_default();
                 };
             }
             Operation::Instruct(mut instruction) => {
@@ -2107,8 +2113,14 @@ impl TetheredWorker {
                     stash.clone(),
                 ));
                 {
+                    let time = instruction.start_time().elapsed();
                     let mut stats = stash.stats.lock();
                     stats.active_query_count = stats.active_query_count.saturating_sub(1);
+                    stats.total_query_time = stats.total_query_time.saturating_add(time);
+                    stats.average_query_runtime = stats
+                        .total_query_time
+                        .checked_div(stats.total_queries_run)
+                        .unwrap_or_default();
                 }
             }
             Operation::Publish(_) => {
@@ -2135,8 +2147,14 @@ impl TetheredWorker {
                     stash.clone(),
                 ));
                 {
+                    let time = query.start_time().elapsed();
                     let mut stats = stash.stats.lock();
                     stats.active_query_count = stats.active_query_count.saturating_sub(1);
+                    stats.total_query_time = stats.total_query_time.saturating_add(time);
+                    stats.average_query_runtime = stats
+                        .total_query_time
+                        .checked_div(stats.total_queries_run)
+                        .unwrap_or_default();
                 }
             }
             Operation::RollbackTransaction(mut command) => {
@@ -2170,8 +2188,14 @@ impl TetheredWorker {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
                 {
+                    let time = command.start_time().elapsed();
                     let mut stats = stash.stats.lock();
                     stats.active_command_count = stats.active_command_count.saturating_sub(1);
+                    stats.total_command_time = stats.total_command_time.saturating_add(time);
+                    stats.average_command_runtime = stats
+                        .total_command_time
+                        .checked_div(stats.total_commands_run)
+                        .unwrap_or_default();
                 };
             }
             Operation::StartTransaction(mut command) => {
@@ -2224,8 +2248,14 @@ impl TetheredWorker {
                     command.send_back(Err(StashError::TransactionCommandWithoutTether));
                 }
                 {
+                    let time = command.start_time().elapsed();
                     let mut stats = stash.stats.lock();
                     stats.active_command_count = stats.active_command_count.saturating_sub(1);
+                    stats.total_command_time = stats.total_command_time.saturating_add(time);
+                    stats.average_command_runtime = stats
+                        .total_command_time
+                        .checked_div(stats.total_commands_run)
+                        .unwrap_or_default();
                 };
             }
             Operation::Subscribe(mut subscription) => {
@@ -2579,9 +2609,16 @@ impl Worker {
                                         .run(&AgnosticConnection::Unbound(&connection), stash),
                                 );
                                 {
+                                    let time = instruction.start_time().elapsed();
                                     let mut stats = instruction.stash.stats.lock();
                                     stats.active_query_count =
                                         stats.active_query_count.saturating_sub(1);
+                                    stats.total_query_time =
+                                        stats.total_query_time.saturating_add(time);
+                                    stats.average_query_runtime = stats
+                                        .total_query_time
+                                        .checked_div(stats.total_queries_run)
+                                        .unwrap_or_default();
                                 }
                             })
                             .await
@@ -2641,9 +2678,16 @@ impl Worker {
                                     query.run(&AgnosticConnection::Unbound(&connection), stash),
                                 );
                                 {
+                                    let time = query.start_time().elapsed();
                                     let mut stats = query.stash.stats.lock();
                                     stats.active_query_count =
                                         stats.active_query_count.saturating_sub(1);
+                                    stats.total_query_time =
+                                        stats.total_query_time.saturating_add(time);
+                                    stats.average_query_runtime = stats
+                                        .total_query_time
+                                        .checked_div(stats.total_queries_run)
+                                        .unwrap_or_default();
                                 }
                             })
                             .await
