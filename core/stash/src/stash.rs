@@ -410,6 +410,9 @@ use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
 
+/// A type alias for a field convertor function.
+type Convertor = Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>;
+
 /// A dual-nature connection wrapper.
 ///
 /// This enum allows transparent handling of a connection, whether or not a
@@ -1090,8 +1093,7 @@ struct Query {
     /// The deserialisation function to use to convert the query results into
     /// the desired type. This is necessary because the [`Rows`] type returned
     /// by the [`rusqlite`] library is not thread-safe.
-    #[allow(clippy::type_complexity)]
-    converter: Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>,
+    converter: Convertor,
 
     /// The parameters to pass to the query. These are boxed trait objects that
     /// implement the [`ToSql`] trait, and are `Send` so that they can be sent
@@ -1133,14 +1135,13 @@ impl Query {
     ///                   because the [`Rows`] type returned by the [`rusqlite`]
     ///                   library is not thread-safe.
     ///
-    #[allow(clippy::type_complexity)]
     fn new(
         stash: Stash,
         channel: Option<OneshotSender<Result<DbRecords, StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
         query: String,
         params: Vec<Box<dyn ToSql + Send>>,
-        converter: Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>,
+        converter: Convertor,
     ) -> Self {
         let mut stats = stash.stats.lock();
         stats.active_query_count = stats.active_query_count.saturating_add(1);
