@@ -29,11 +29,11 @@ impl TestContext {
     }
 
     /// Generate new mock expectation for batch messages request
-    pub async fn mock_get_messages(&self, message: MessageMetadata) {
+    pub async fn mock_get_messages(&self, messages: Vec<MessageMetadata>) {
         let resp = GetMessagesResponse {
-            messages: vec![message],
+            total: messages.len() as u64,
+            messages,
             stale: false,
-            total: 1,
         };
 
         Mock::given(method("GET"))

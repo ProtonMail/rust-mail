@@ -48,7 +48,7 @@ async fn label_message() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(message.metadata.clone()).await;
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.mock_label_messages(
         &label_id.clone().into(),
         vec![message.metadata.id.clone().into()],
@@ -115,7 +115,7 @@ async fn unlabel_message() {
     ctx.setup_user(params.clone()).await;
 
     // Initialize Mocking
-    ctx.mock_get_messages(message.metadata.clone()).await;
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.mock_label_messages(
         &label_id.clone().into(),
         vec![message.metadata.id.clone().into()],
