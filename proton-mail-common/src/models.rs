@@ -1654,15 +1654,17 @@ impl Conversation {
             response.conversations.len(),
             response.total
         );
+        let tx = stash.transaction().await?;
         Self::create_or_update_conversations(
             response
                 .conversations
                 .into_iter()
                 .map(Conversation::from)
                 .collect(),
-            stash,
+            &tx,
         )
         .await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -4011,7 +4013,9 @@ impl Message {
             response.total
         );
 
-        Self::create_or_update_messages_from_metadata(response.messages, stash).await?;
+        let tx = stash.transaction().await?;
+        Self::create_or_update_messages_from_metadata(response.messages, &tx).await?;
+        tx.commit().await?;
         Ok(())
     }
 
