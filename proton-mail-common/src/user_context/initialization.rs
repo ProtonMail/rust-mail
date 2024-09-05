@@ -1,7 +1,6 @@
 use crate::models::{Conversation, Label, MailSettings};
 use crate::{MailContextError, MailUserContext};
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::LabelId;
 use proton_core_common::models::{Address, User};
 use tracing::{debug, error, Level};
 
@@ -22,12 +21,8 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 
 impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self, cb), fields(user_id=?self.user_id()))]
-    pub async fn initialize(
-        &self,
-        label_id: LabelId,
-        cb: Box<dyn MailUserContextInitializationCallback>,
-    ) {
-        if let Err((stage, err)) = self.initialize_async(label_id, cb.as_ref()).await {
+    pub async fn initialize(&self, cb: Box<dyn MailUserContextInitializationCallback>) {
+        if let Err((stage, err)) = self.initialize_async(cb.as_ref()).await {
             cb.on_stage_err(stage, err);
         }
     }
@@ -35,7 +30,6 @@ impl MailUserContext {
     #[tracing::instrument(level = Level::DEBUG, skip(self, cb), fields(user_id=?self.user_id()))]
     pub async fn initialize_async(
         &self,
-        label_id: LabelId,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
         let ctx = self;

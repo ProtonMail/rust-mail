@@ -103,7 +103,7 @@ async fn test_new_mailbox_sync_conversations() {
     let user_context = ctx.user_context().await;
 
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 

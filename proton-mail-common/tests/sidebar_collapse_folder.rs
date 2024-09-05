@@ -27,10 +27,7 @@ async fn folder_expansion() {
 
     let user_ctx = ctx.user_context().await;
     let stash = user_ctx.user_stash();
-    user_ctx
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-        .await
-        .unwrap();
+    user_ctx.initialize_async(&NullCallback {}).await.unwrap();
     let sidebar = Sidebar::new(user_ctx.clone());
 
     let folder = get_folder("foo", stash).await;
@@ -62,10 +59,7 @@ async fn folder_collapse() {
 
     let user_ctx = ctx.user_context().await;
     let stash = user_ctx.user_stash();
-    user_ctx
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-        .await
-        .unwrap();
+    user_ctx.initialize_async(&NullCallback {}).await.unwrap();
     let sidebar = Sidebar::new(user_ctx.clone());
 
     let folder = get_folder("foo", stash).await;

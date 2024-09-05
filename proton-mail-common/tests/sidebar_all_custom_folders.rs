@@ -31,10 +31,7 @@ async fn sidebar_all_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], 
     ctx.catch_all().await;
 
     let user_ctx = ctx.user_context().await;
-    user_ctx
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
-        .await
-        .unwrap();
+    user_ctx.initialize_async(&NullCallback {}).await.unwrap();
     let sidebar = Sidebar::new(user_ctx.clone());
 
     // Action

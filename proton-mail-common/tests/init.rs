@@ -20,7 +20,7 @@ async fn test_init_after_login() {
     let cb = NullCallback {};
     ctx.setup_user(init_params).await;
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
 }
@@ -33,11 +33,11 @@ async fn test_double_init_does_not_fail() {
     let cb = NullCallback {};
     ctx.setup_user_repeated(init_params, 2).await;
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
 }

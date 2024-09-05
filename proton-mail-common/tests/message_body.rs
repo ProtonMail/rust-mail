@@ -49,7 +49,7 @@ async fn mailbox_message_body_simple() {
     ctx.mock_get_messages(message.metadata.clone()).await;
     ctx.catch_all().await;
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 

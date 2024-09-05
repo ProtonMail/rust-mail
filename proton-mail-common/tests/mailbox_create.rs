@@ -41,7 +41,7 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.catch_all().await;
     ctx.user_context()
         .await
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -137,7 +137,7 @@ async fn test_new_mailbox_sync_messages() {
     ctx.catch_all().await;
     ctx.user_context()
         .await
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -235,7 +235,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     ctx.catch_all().await;
     ctx.user_context()
         .await
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
