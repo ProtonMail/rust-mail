@@ -46,7 +46,7 @@ async fn mailbox_message_body_simple() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
-    ctx.mock_get_messages(message.metadata.clone()).await;
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.catch_all().await;
     user_context
         .initialize_async(&NullCallback {})

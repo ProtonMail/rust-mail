@@ -1,10 +1,11 @@
 #![allow(unused)]
 
 pub mod account;
+pub mod addresses;
 pub mod attachment;
 pub mod conversations;
 pub mod init;
-mod labels;
+pub mod labels;
 mod messages;
 
 use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
