@@ -2134,20 +2134,17 @@ impl TetheredWorker {
                     if time > stats.max_command_runtime.0 {
                         stats.max_command_runtime = (time, command.id);
                     }
-                    stats.total_transaction_time = stats.total_transaction_time.saturating_add(
-                        command
-                            .tether
-                            .unwrap()
-                            .transaction_info
-                            .lock()
-                            .unwrap()
-                            .1
-                            .elapsed(),
-                    );
+                    let info = command.tether.unwrap().transaction_info.lock().unwrap();
+                    let t_time = info.1.elapsed();
+                    stats.total_transaction_time =
+                        stats.total_transaction_time.saturating_add(t_time);
                     stats.average_transaction_lifetime = stats
                         .total_transaction_time
                         .checked_div(stats.total_transactions_started)
                         .unwrap_or_default();
+                    if t_time > stats.max_transaction_lifetime.0 {
+                        stats.max_transaction_lifetime = (t_time, info.0);
+                    }
                 };
             }
             Operation::Instruct(mut instruction) => {
@@ -2258,20 +2255,17 @@ impl TetheredWorker {
                     if time > stats.max_command_runtime.0 {
                         stats.max_command_runtime = (time, command.id);
                     }
-                    stats.total_transaction_time = stats.total_transaction_time.saturating_add(
-                        command
-                            .tether
-                            .unwrap()
-                            .transaction_info
-                            .lock()
-                            .unwrap()
-                            .1
-                            .elapsed(),
-                    );
+                    let info = command.tether.unwrap().transaction_info.lock().unwrap();
+                    let t_time = info.1.elapsed();
+                    stats.total_transaction_time =
+                        stats.total_transaction_time.saturating_add(t_time);
                     stats.average_transaction_lifetime = stats
                         .total_transaction_time
                         .checked_div(stats.total_transactions_started)
                         .unwrap_or_default();
+                    if t_time > stats.max_transaction_lifetime.0 {
+                        stats.max_transaction_lifetime = (t_time, info.0);
+                    }
                 };
             }
             Operation::StartTransaction(mut command) => {
