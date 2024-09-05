@@ -1394,6 +1394,10 @@ impl Stash {
     pub fn connection(&self) -> Tether {
         let handle = Arc::new(AtomicU32::new(1));
         debug!("Tether ({:p}): Create", Arc::as_ptr(&handle));
+        let mut stats = self.stats.lock();
+        stats.active_tether_count = stats.active_tether_count.saturating_add(1);
+        stats.total_tethers_created = stats.total_tethers_created.saturating_add(1);
+        drop(stats);
         Tether {
             handle,
             has_active_transaction: Arc::new(AtomicBool::new(false)),
@@ -1854,6 +1858,9 @@ impl Drop for Tether {
             // There are still other references to this Tether
             return;
         }
+        let mut stats = self.stash.stats.lock();
+        stats.active_tether_count = stats.active_tether_count.saturating_sub(1);
+        drop(stats);
         if self
             .queue
             .send(Operation::CloseConnection(Command::new(
