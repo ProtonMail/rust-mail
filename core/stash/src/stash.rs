@@ -2039,8 +2039,10 @@ impl TetheredWorker {
             Operation::CommitTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
                     debug!(
-                        "Tether ({:p}): CommitTransaction Command",
-                        Arc::as_ptr(&conn_handle)
+                        "Tether ({:p}): CommitTransaction Command (id: {}, waiting: {}µs)",
+                        Arc::as_ptr(&conn_handle),
+                        command.id,
+                        command.start_time().elapsed().as_micros(),
                     );
                     if let Some(tx) = transaction.take() {
                         command.send_back(tx.commit().map_err(StashError::TransactionError));
@@ -2062,8 +2064,10 @@ impl TetheredWorker {
             }
             Operation::Instruct(mut instruction) => {
                 debug!(
-                    "Tether ({:p}): Instruction to execute",
-                    instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                    "Tether ({:p}): Instruction to execute (id: {}, waiting: {}µs)",
+                    instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                    instruction.id,
+                    instruction.start_time().elapsed().as_micros(),
                 );
                 instruction.send_back(instruction.run(
                     &transaction.as_ref().map_or(
@@ -2083,8 +2087,10 @@ impl TetheredWorker {
             }
             Operation::Query(mut query) => {
                 debug!(
-                    "Tether ({:p}): Query to run",
-                    query.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                    "Tether ({:p}): Query to run (id: {}, waiting: {}µs)",
+                    query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                    query.id,
+                    query.start_time().elapsed().as_micros(),
                 );
                 query.send_back(query.run(
                     &transaction.as_ref().map_or(
@@ -2097,8 +2103,10 @@ impl TetheredWorker {
             Operation::RollbackTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
                     debug!(
-                        "Tether ({:p}): RollbackTransaction Command",
-                        Arc::as_ptr(&conn_handle)
+                        "Tether ({:p}): RollbackTransaction Command (id: {}, waiting: {}µs)",
+                        Arc::as_ptr(&conn_handle),
+                        command.id,
+                        command.start_time().elapsed().as_micros(),
                     );
                     if let Some(tx) = transaction.take() {
                         command.send_back(tx.rollback().map_err(StashError::TransactionError));
@@ -2121,8 +2129,10 @@ impl TetheredWorker {
             Operation::StartTransaction(mut command) => {
                 if let Some(conn_handle) = command.conn_handle.clone() {
                     debug!(
-                        "Tether ({:p}): StartTransaction Command",
-                        command.conn_handle.as_ref().map_or(null(), Arc::as_ptr)
+                        "Tether ({:p}): StartTransaction Command (id: {}, waiting: {}µs)",
+                        command.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                        command.id,
+                        command.start_time().elapsed().as_micros(),
                     );
                     if transaction.is_none() {
                         match connection
@@ -2489,7 +2499,11 @@ impl Worker {
                 }
             }
             Operation::Instruct(mut instruction) => {
-                debug!("Stash (ad-hoc conn): Instruction to execute");
+                debug!(
+                    "Stash (ad-hoc conn): Instruction to execute (id: {}, waiting: {}µs)",
+                    instruction.id,
+                    instruction.start_time().elapsed().as_micros(),
+                );
                 drop(self.runtime.spawn(async move {
                     match pool.get_and_subscribe(queue, None) {
                         Ok(connection) => {
@@ -2542,7 +2556,11 @@ impl Worker {
                 }));
             }
             Operation::Query(mut query) => {
-                debug!("Stash (ad-hoc conn): Query to run");
+                debug!(
+                    "Stash (ad-hoc conn): Query to run (id: {}, waiting: {}µs)",
+                    query.id,
+                    query.start_time().elapsed().as_micros(),
+                );
                 drop(self.runtime.spawn(async move {
                     match pool.get_and_subscribe(queue, None) {
                         Ok(connection) => {
