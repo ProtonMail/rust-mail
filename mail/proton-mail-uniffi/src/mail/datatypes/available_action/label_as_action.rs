@@ -1,0 +1,23 @@
+use super::IsSelected;
+use crate::mail::datatypes::{Id, LabelColor};
+use crate::UniffiRecord;
+use proton_mail_common::actions::LabelAsAction as RealLabelAsAction;
+
+#[derive(Debug, Clone, PartialEq, UniffiRecord)]
+pub struct LabelAsAction {
+    pub label_id: Id,
+    pub name: String,
+    pub color: LabelColor,
+    pub is_selected: IsSelected,
+}
+
+impl From<RealLabelAsAction> for LabelAsAction {
+    fn from(value: RealLabelAsAction) -> Self {
+        LabelAsAction {
+            label_id: value.label_id.into(),
+            name: value.name.clone(),
+            color: value.color.into(),
+            is_selected: IsSelected::new(value.is_selected),
+        }
+    }
+}

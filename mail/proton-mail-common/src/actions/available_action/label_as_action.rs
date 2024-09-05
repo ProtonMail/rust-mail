@@ -14,6 +14,17 @@ pub struct LabelAsAction {
     pub label_id: LocalId,
     pub name: String,
     pub color: LabelColor,
+
+    /// This field is used to determine if the label is selected or not
+    /// for given list of messages or conversations.
+    ///
+    /// Option<bool> is used to represent three states:
+    /// * Some(true) - All of the label occurences across all of messages/conversations have them assigned.
+    /// * Some(false) - None of the label occurences across all of messages/conversations have them assigned.
+    /// * None - Some of the label occurences across all messages/conversations have them assigned and some don't.
+    ///
+    /// Option type was chosen over dedicated enum to make it easier to calculate the final state of the label.
+    /// Due to the fact algorithm calculate this value multiple times and then modify already existing fields.
     pub is_selected: Option<bool>,
 }
 

@@ -1,18 +1,15 @@
-use super::{GeneralActions, MoveAction, ReplyAction};
+use super::{GeneralActions, ReplyAction, SystemFolderAction};
 use typed_builder::TypedBuilder;
 
 /// Struct to reflect what kind of actions
-/// could be taken upon the message.
+/// could be taken upon the conversation.
 ///
 #[derive(Debug, Clone, PartialEq, TypedBuilder)]
 pub struct ConversationAvailableActions {
-    /// Conversation::local_id field
-    // pub local_ids: Vec<LocalId>,
-
     #[builder(default = ReplyAction::all())]
-    pub reply_actions: Vec<ReplyAction>,
+    pub reply_actions: Vec<ReplyAction>, // TODO: check reply_all field
     pub conversation_actions: Vec<ConversationAction>,
-    pub move_actions: Vec<MoveAction>,
+    pub move_actions: Vec<SystemFolderAction>,
     #[builder(default = GeneralActions::all())]
     pub general_actions: Vec<GeneralActions>,
 }
@@ -28,11 +25,3 @@ pub enum ConversationAction {
     MarkUnread,
     Delete,
 }
-
-// impl ConversationAction {
-//     pub fn vec<'a>(iter: impl IntoIterator<Item = LabelAction>) -> Vec<Self> {
-//         iter.into_iter()
-//             .map(|label| ConversationAction::Label(label))
-//             .collect()
-//     }
-// }

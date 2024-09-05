@@ -1,4 +1,4 @@
-use super::{GeneralActions, MoveAction, ReplyAction};
+use super::{GeneralActions, ReplyAction, SystemFolderAction};
 use crate::{UniffiEnum, UniffiRecord};
 use itertools::Itertools;
 use proton_mail_common::actions::MessageAction as RealMessageAction;
@@ -11,7 +11,7 @@ use proton_mail_common::actions::MessageAvailableActions as RealMessageAvailable
 pub struct MessageAvailableActions {
     pub reply_actions: Vec<ReplyAction>,
     pub message_actions: Vec<MessageAction>,
-    pub move_actions: Vec<MoveAction>,
+    pub move_actions: Vec<SystemFolderAction>,
     pub general_actions: Vec<GeneralActions>,
 }
 

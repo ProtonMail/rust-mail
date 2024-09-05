@@ -6,6 +6,8 @@ use proton_mail_common::actions::{
 use crate::mail::datatypes::{Id, LabelColor, SystemLabel};
 use crate::{UniffiEnum, UniffiRecord};
 
+use super::IsSelected;
+
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum MoveAction {
     SystemFolder(SystemFolderAction),
@@ -25,7 +27,7 @@ impl From<RealMoveAction> for MoveAction {
 pub struct SystemFolderAction {
     pub local_id: Id,
     pub name: SystemLabel,
-    pub is_selected: Option<bool>,
+    pub is_selected: IsSelected,
 }
 
 impl From<RealSystemFolderAction> for SystemFolderAction {
@@ -33,7 +35,7 @@ impl From<RealSystemFolderAction> for SystemFolderAction {
         SystemFolderAction {
             local_id: value.local_id.into(),
             name: value.name.into(),
-            is_selected: value.is_selected,
+            is_selected: IsSelected::new(value.is_selected),
         }
     }
 }
@@ -44,17 +46,17 @@ pub struct CustomFolderAction {
     pub name: String,
     pub color: LabelColor,
     pub parent: Option<Id>, // TODO: This should be a reference to a custom folder
-    pub is_selected: Option<bool>,
+    pub is_selected: IsSelected,
 }
 
 impl From<RealCustomFolderAction> for CustomFolderAction {
     fn from(value: RealCustomFolderAction) -> Self {
         CustomFolderAction {
             local_id: value.local_id.into(),
-            name: value.name.to_owned(),
+            name: value.name.clone(),
             color: value.color.into(),
-            parent: value.parent.map(|id| id.into()),
-            is_selected: value.is_selected,
+            parent: value.parent.map(Into::into),
+            is_selected: IsSelected::new(value.is_selected),
         }
     }
 }
