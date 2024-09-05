@@ -4,7 +4,7 @@ pub mod decrypted_message;
 
 use crate::datatypes::ViewMode;
 use crate::models::{Conversation, Label, Message};
-use crate::{AppError, MailContextError, MailUserContext, MailUserContextInitializationCallback};
+use crate::{AppError, MailContextError, MailUserContext};
 pub use attachments::DecryptedAttachment;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
@@ -152,21 +152,6 @@ impl Mailbox {
 
     pub fn label_id(&self) -> LocalId {
         self.label_id
-    }
-
-    pub async fn refresh(
-        &self,
-        init_cb: Box<dyn MailUserContextInitializationCallback>,
-    ) -> MailboxResult<()> {
-        let Some(label) = Label::load(self.label_id, self.user_ctx.user_stash()).await? else {
-            return Err(MailboxError::LabelNotFound(self.label_id));
-        };
-        let Some(rid) = label.remote_id else {
-            return Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id));
-        };
-
-        self.user_ctx.initialize(rid, init_cb).await;
-        Ok(())
     }
 
     /// Sync the label's messages or conversations.

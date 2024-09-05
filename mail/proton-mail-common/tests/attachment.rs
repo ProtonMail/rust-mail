@@ -31,7 +31,7 @@ async fn test_load_attachment_buffer() {
         .await;
     ctx.catch_all().await;
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
     // Create a mailbox
@@ -87,7 +87,7 @@ async fn load_attachment_from_cache() {
         .await;
     ctx.catch_all().await;
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
     // Create a mailbox
@@ -143,7 +143,7 @@ async fn load_attachment_content_first_time() {
         .await;
     ctx.catch_all().await;
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -194,7 +194,7 @@ async fn load_attachment_content_from_cache() {
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 

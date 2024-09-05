@@ -1,7 +1,5 @@
 use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
 use crate::uniffi_async;
-use proton_core_common::datatypes::LabelId;
-use proton_mail_common::datatypes::SystemLabelId;
 
 #[uniffi::export]
 impl MailUserSession {
@@ -17,7 +15,7 @@ impl MailUserSession {
         uniffi_async(async move {
             let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
             let cb_ref = cb.as_ref();
-            if let Err((_, e)) = ctx.initialize_async(LabelId::inbox().clone(), cb_ref).await {
+            if let Err((_, e)) = ctx.initialize_async(cb_ref).await {
                 return Err(MailSessionError::from(e));
             }
             Ok(())

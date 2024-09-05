@@ -45,7 +45,7 @@ async fn test_label_custom_label() {
     ctx.catch_all().await;
     let cb = NullCallback {};
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
 
@@ -132,7 +132,7 @@ async fn test_label_starred() {
     ctx.catch_all().await;
     let cb = NullCallback {};
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
 
@@ -206,7 +206,7 @@ async fn test_label_fails_when_labelling_folders() {
     ctx.catch_all().await;
     let cb = NullCallback {};
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
 

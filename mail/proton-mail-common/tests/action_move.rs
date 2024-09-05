@@ -66,7 +66,7 @@ async fn test_move_between_folders() {
     ctx.catch_all().await;
     let cb = NullCallback {};
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
 
@@ -177,7 +177,7 @@ async fn test_move_from_label_does_not_unlabel() {
     ctx.catch_all().await;
     let cb = NullCallback {};
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &cb)
+        .initialize_async(&cb)
         .await
         .expect("failed to initialize");
 
@@ -283,7 +283,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
 
     ctx.catch_all().await;
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -413,7 +413,7 @@ async fn test_move_into_spam_remove_labels() {
 
     ctx.catch_all().await;
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -500,7 +500,7 @@ async fn move_out_of_trash_set_almost_all_mail() {
 
     ctx.catch_all().await;
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -585,7 +585,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
 
     ctx.catch_all().await;
     user_ctx
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 

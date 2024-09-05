@@ -59,7 +59,7 @@ async fn label_message() {
     ctx.catch_all().await;
 
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -132,7 +132,7 @@ async fn unlabel_message() {
     ctx.catch_all().await;
 
     user_context
-        .initialize_async(LabelId::inbox().clone(), &NullCallback {})
+        .initialize_async(&NullCallback {})
         .await
         .expect("failed to initialize");
 
