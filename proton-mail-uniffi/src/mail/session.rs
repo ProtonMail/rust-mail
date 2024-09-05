@@ -3,7 +3,7 @@ use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged, St
 use crate::core::{OSKeyChain, StoredSession};
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
-use crate::{async_runtime, spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use anyhow::anyhow;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::{
@@ -211,24 +211,15 @@ impl MailSession {
         callback: Box<dyn LiveQueryCallback>,
     ) -> MailSessionResult<WatchedSessions> {
         let context = self.ctx.clone();
-        let handle = WatchHandle::new();
 
         uniffi_async(async move {
             let (sessions, rx) = context.watch_sessions().await?;
 
-            {
-                let handle = handle.clone();
-
-                spawn_async(async move {
-                    while rx.recv_async().await.is_ok_and(|_| !handle.should_stop()) {
-                        callback.on_update();
-                    }
-                });
-            }
+            let watcher = watch_channel(rx, callback);
 
             Ok(WatchedSessions {
                 sessions: sessions.into_iter().map(StoredSession::new).collect(),
-                handle: Arc::new(handle),
+                handle: watcher,
             })
         })
         .await
@@ -257,24 +248,15 @@ impl MailSession {
         callback: Box<dyn LiveQueryCallback>,
     ) -> MailSessionResult<WatchedSessionStates> {
         let context = self.ctx.clone();
-        let handle = WatchHandle::new();
 
         uniffi_async(async move {
             let (states, rx) = context.watch_session_states().await?;
 
-            {
-                let handle = handle.clone();
-
-                spawn_async(async move {
-                    while rx.recv_async().await.is_ok_and(|_| !handle.should_stop()) {
-                        callback.on_update();
-                    }
-                });
-            }
+            let watcher = watch_channel(rx, callback);
 
             Ok(WatchedSessionStates {
                 states: states.into_iter().map(StoredSessionState::new).collect(),
-                handle: Arc::new(handle),
+                handle: watcher,
             })
         })
         .await

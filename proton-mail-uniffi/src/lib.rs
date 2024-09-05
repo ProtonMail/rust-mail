@@ -361,3 +361,33 @@ where
     let handle = async_runtime().spawn(future);
     handle.await?
 }
+
+/// Watch a notification channel for changes and trigger the callback
+/// once a message has been received.
+///
+/// The callback is "dampened" to avoid excessive invocations to the callback.
+///
+#[must_use]
+pub fn watch_channel<T: Send + 'static>(
+    channel: flume::Receiver<T>,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Arc<WatchHandle> {
+    let callback = damp(callback);
+    let watcher = WatchHandle::new();
+    let watcher_cloned = watcher.clone();
+    spawn_async(async move {
+        loop {
+            if watcher_cloned.should_stop() {
+                return;
+            }
+
+            if channel.recv_async().await.is_err() {
+                return;
+            }
+
+            callback();
+        }
+    });
+
+    Arc::new(watcher)
+}

@@ -3,8 +3,7 @@ mod attachments;
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::ViewMode;
 use crate::mail::{MailSessionError, MailUserSession};
-use crate::utils::damp;
-use crate::{uniffi_async, LiveQueryCallback, WatchHandle};
+use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use anyhow::anyhow;
 use proton_action_queue::queue::Error as QueueError;
 use proton_api_core::service::ApiServiceError;
@@ -172,23 +171,8 @@ impl Mailbox {
                 return Err(MailboxError::LabelNotFound(Id::from(label_id)));
             };
 
-            let handle = WatchHandle::new();
-            let handle_cloned = handle.clone();
-            let callback = damp(callback);
-            tokio::spawn(async move {
-                loop {
-                    if handle_cloned.should_stop() {
-                        return;
-                    }
-
-                    if receiver.recv_async().await.is_err() {
-                        return;
-                    }
-
-                    callback();
-                }
-            });
-            Ok(Arc::new(handle))
+            let watcher = watch_channel(receiver, callback);
+            Ok(watcher)
         })
         .await
     }
