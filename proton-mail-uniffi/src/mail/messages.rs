@@ -8,8 +8,8 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::MimeType;
 use super::datatypes::{BlockQuote, RemoteContent};
+use super::datatypes::{MessageAvailableActions, MimeType};
 use super::{MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
@@ -24,7 +24,7 @@ use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
-use proton_mail_common::models::{self, Message as RealMessage};
+use proton_mail_common::models::{self, Label as RealLabel, MailSettings, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use stash::paginator::{Paginator as RealPaginator, Param};
@@ -414,39 +414,41 @@ pub async fn search_for_messages(
     .await
 }
 
-/// Returns available actions for message
-/// Any action returned here should impact current state of the message
-/// and also should be available for the user to perform.
-/// There is no need for any additional calculations before executing them.
+/// Returns available actions for messages.
+/// Any action returned here should reflect the display needs.
 ///
 /// # Parameters
 ///
 /// * `session` - The session to use for the request.
-/// * `id`      - The local ID of the message to retrieve.
+/// * `view`    - The local ID of the label which messages are viewed in.
+/// * `ids`     - The local IDs of the messages to calcualte available actions for.
 ///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
 ///
-// #[uniffi::export]
-// pub async fn available_actions_for_message(
-//     session: Arc<MailUserSession>,
-//     id: Id,
-// ) -> MailboxResult<Vec<MessageAvailableAction>> {
-//     let stash = session.user_stash().clone();
-//     uniffi_async(async move {
-//         let Some(message) = RealMessage::load(id.into(), &stash).await? else {
-//             return Ok(vec![]);
-//         };
-//         Ok(message
-//             .available_actions(&stash)
-//             .await?
-//             .into_iter()
-//             .map_into()
-//             .collect())
-//     })
-//     .await
-// }
+#[uniffi::export]
+pub async fn available_actions_for_messages(
+    session: Arc<MailUserSession>,
+    view: Id,
+    ids: Vec<Id>,
+) -> MailboxResult<MessageAvailableActions> {
+    let stash = session.user_stash().clone();
+    uniffi_async(async move {
+        let view = RealLabel::load(view.into(), &stash)
+            .await?
+            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+        let actions = RealMessage::available_actions(
+            view,
+            ids.into_iter().map_into().collect(),
+            session.user_stash(),
+        )
+        .await?;
+
+        Ok(MessageAvailableActions::from(actions))
+    })
+    .await
+}
 
 /// Return the decrypted body of the specified message.
 ///

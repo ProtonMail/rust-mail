@@ -1,80 +1,54 @@
-use crate::core::datatypes::Id;
-use crate::mail::datatypes::LabelColor;
-use proton_mail_common::actions::{
-    MessageAction as RealMessageActionKind, MessageAvailableAction as RealMessageAvailabaleAction,
-};
-use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
+use super::{GeneralActions, MoveAction, ReplyAction};
+use crate::{UniffiEnum, UniffiRecord};
+use itertools::Itertools;
+use proton_mail_common::actions::MessageAction as RealMessageAction;
+use proton_mail_common::actions::MessageAvailableActions as RealMessageAvailableActions;
 
 /// Struct to reflect what kind of actions
 /// could be taken upon the message.
 ///
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct MessageAvailableAction {
-    /// Enum based action describer
-    pub action: MessageActionKind,
-    /// Message::local_id field
-    pub local_id: Id,
-    /// Identificator for FE
-    pub static_id: String,
+#[derive(Debug, Clone, PartialEq, UniffiRecord)]
+pub struct MessageAvailableActions {
+    pub reply_actions: Vec<ReplyAction>,
+    pub message_actions: Vec<MessageAction>,
+    pub move_actions: Vec<MoveAction>,
+    pub general_actions: Vec<GeneralActions>,
 }
 
-impl From<RealMessageAvailabaleAction> for MessageAvailableAction {
-    fn from(value: RealMessageAvailabaleAction) -> Self {
-        MessageAvailableAction {
-            action: value.action.into(),
-            local_id: value.local_id.into(),
-            static_id: value.static_id.to_owned(),
+impl From<RealMessageAvailableActions> for MessageAvailableActions {
+    fn from(value: RealMessageAvailableActions) -> Self {
+        MessageAvailableActions {
+            reply_actions: value.reply_actions.into_iter().map_into().collect(),
+            message_actions: value.message_actions.into_iter().map_into().collect(),
+            move_actions: value.move_actions.into_iter().map_into().collect(),
+            general_actions: value.general_actions.into_iter().map_into().collect(),
         }
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
-pub enum MessageActionKind {
-    Move {
-        label_id: Id,
-        name: String,
-        color: LabelColor,
-    },
-    Label {
-        label_id: Id,
-        name: String,
-        color: LabelColor,
-    },
-    Unlabel {
-        label_id: Id,
-        name: String,
-        color: LabelColor,
-    },
-    MarkRead,
-    MarkUnread,
+#[derive(Debug, Clone, PartialEq, UniffiEnum)]
+pub enum MessageAction {
     Star,
     Unstar,
+    Pin,
+    Unpin,
+    LabelAs,
+    MarkRead,
+    MarkUnread,
     Delete,
 }
 
-impl From<RealMessageActionKind> for MessageActionKind {
-    fn from(value: RealMessageActionKind) -> Self {
+impl From<RealMessageAction> for MessageAction {
+    fn from(value: RealMessageAction) -> Self {
         match value {
-            RealMessageActionKind::Delete => MessageActionKind::Delete,
-            RealMessageActionKind::MarkRead => MessageActionKind::MarkRead,
-            RealMessageActionKind::MarkUnread => MessageActionKind::MarkUnread,
-            RealMessageActionKind::Star => MessageActionKind::Star,
-            RealMessageActionKind::Unstar => MessageActionKind::Unstar,
-            RealMessageActionKind::Move { label } => MessageActionKind::Move {
-                label_id: label.label_id.into(),
-                name: label.name,
-                color: label.color.into(),
-            },
-            RealMessageActionKind::Label { label } => MessageActionKind::Label {
-                label_id: label.label_id.into(),
-                name: label.name,
-                color: label.color.into(),
-            },
-            RealMessageActionKind::Unlabel { label } => MessageActionKind::Unlabel {
-                label_id: label.label_id.into(),
-                name: label.name,
-                color: label.color.into(),
-            },
+            RealMessageAction::Star => MessageAction::Star,
+            RealMessageAction::Unstar => MessageAction::Unstar,
+            RealMessageAction::Pin => MessageAction::Pin,
+            RealMessageAction::Unpin => MessageAction::Unpin,
+            RealMessageAction::LabelAs => MessageAction::LabelAs,
+            RealMessageAction::MarkRead => MessageAction::MarkRead,
+            RealMessageAction::MarkUnread => MessageAction::MarkUnread,
+            RealMessageAction::Delete => MessageAction::Delete,
         }
     }
 }
