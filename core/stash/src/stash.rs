@@ -1894,6 +1894,13 @@ impl Drop for Tether {
         }
         let mut stats = self.stash.stats.lock();
         stats.active_tether_count = stats.active_tether_count.saturating_sub(1);
+        stats.total_tether_time = stats
+            .total_tether_time
+            .saturating_add(self.start_time.elapsed());
+        stats.average_tether_lifetime = stats
+            .total_tether_time
+            .checked_div(stats.total_tethers_created)
+            .unwrap_or_default();
         drop(stats);
         if self
             .queue
