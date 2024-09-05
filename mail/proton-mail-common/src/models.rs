@@ -1613,8 +1613,8 @@ impl Conversation {
         let conversation_counts = Conversation::fetch_counts(api).await?;
         let message_counts = Message::fetch_counts(api).await?;
         let tx = stash.transaction().await?;
-        Label::create_or_update_conversation_counts(conversation_counts, tx.stash()).await?;
-        Label::create_or_update_message_counts(message_counts, tx.stash()).await?;
+        Label::create_or_update_conversation_counts(conversation_counts, &tx).await?;
+        Label::create_or_update_message_counts(message_counts, &tx).await?;
         tx.commit().await?;
         Ok(())
     }
