@@ -141,6 +141,9 @@
 //! crates that are the subject of the translations.*
 //!
 
+// Reexport renamed items from the `uniffi` crate.
+pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
+
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use stash::exports::ToSql;
 use stash::orm::{Model, ResultsetChange};

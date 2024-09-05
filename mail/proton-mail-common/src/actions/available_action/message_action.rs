@@ -28,34 +28,3 @@ pub enum MessageAction {
     MarkUnread,
     Delete,
 }
-
-// impl MessageAction {
-//     pub fn validate(actions: &[MessageAction]) -> bool {
-//         for one in actions {
-//             for other in actions {
-//                 match (one, other) {
-//                     (MessageAction::Star, MessageAction::Unstar)
-//                     | (MessageAction::Pin, MessageAction::Unpin)
-//                     | (MessageAction::MarkRead, MessageAction::MarkUnread) => return false,
-//                     _ => (),
-//                 }
-//             }
-//         }
-
-//         true
-//     }
-// }
-
-// macro_rules! message_actions {
-//     ($($action: tt),*) => {{
-//         vec![$(MessageAction::$action),*]
-//     }};
-// }
-
-// impl MessageAction {
-//     pub fn vec<'a>(iter: impl IntoIterator<Item = LabelAction>) -> Vec<Self> {
-//         iter.into_iter()
-//             .map(|label| MessageAction::Label(label))
-//             .collect()
-//     }
-// }

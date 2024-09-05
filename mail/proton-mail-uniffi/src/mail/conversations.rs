@@ -12,7 +12,7 @@
 use crate::core::datatypes::Id;
 use crate::core::paginator::ConversationPaginator;
 use crate::mail::datatypes::{
-    Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
+    Conversation, ConversationAvailableActions, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -21,7 +21,7 @@ use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
-use proton_mail_common::models::Conversation as RealConversation;
+use proton_mail_common::models::{Conversation as RealConversation, Label as RealLabel};
 use stash::orm::Model;
 use stash::paginator::{Paginator as RealPaginator, Param};
 use std::num::NonZeroU32;
@@ -81,43 +81,41 @@ pub async fn delete_conversations(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> Result
     .await
 }
 
-/// Returns available actions for conversation.
-///
-/// Any action returned here should impact current state of the conversation
-/// and also should be available for the user to perform.
-/// There is no need for any additional calculations before executing them.
+/// Returns available actions for conversations.
+/// Any action returned here should reflect the display needs.
 ///
 /// # Parameters
 ///
 /// * `session` - The session to use for the request.
-/// * `id`      - The local ID of the conversation to retrieve.
+/// * `view`    - The local ID of the label which conversations are viewed in.
+/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
 ///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
 ///
-// #[uniffi::export]
-// pub async fn available_actions_for_conversation(
-//     session: Arc<MailUserSession>,
-//     id: Id,
-// ) -> Result<Vec<ConversationAvailableAction>, MailboxError> {
-//     let conn = session.user_stash().connection();
-//     uniffi_async(async move {
-//         if let Some(conversation) = RealConversation::load(id.into(), &conn).await? {
-//             let actions = conversation
-//                 .available_actions(session.user_stash())
-//                 .await?
-//                 .into_iter()
-//                 .map_into()
-//                 .collect();
+#[uniffi::export]
+pub async fn available_actions_for_conversations(
+    session: Arc<MailUserSession>,
+    view: Id,
+    ids: Vec<Id>,
+) -> Result<ConversationAvailableActions, MailboxError> {
+    let conn = session.user_stash().connection();
+    uniffi_async(async move {
+        let view = RealLabel::load(view.into(), &conn)
+            .await?
+            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+        let actions = RealConversation::available_actions(
+            view,
+            ids.into_iter().map_into().collect(),
+            session.user_stash(),
+        )
+        .await?;
 
-//             Ok(actions)
-//         } else {
-//             Ok(vec![])
-//         }
-//     })
-//     .await
-// }
+        Ok(ConversationAvailableActions::from(actions))
+    })
+    .await
+}
 
 /// Get a specified conversation.
 ///
