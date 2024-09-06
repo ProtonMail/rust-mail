@@ -410,6 +410,11 @@ use tracing::{debug, error, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
 
+/// Set a timeout for a specified amount of time when a table is locked. This
+/// defaults to 5,000 milliseconds in the underlying libraries, but can be
+/// overridden here if necessary.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// A type alias for a field convertor function.
 type Convertor = Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>;
 
@@ -2389,6 +2394,16 @@ impl TetheredWorker {
                         .execute_batch("PRAGMA journal_mode = WAL")
                         .inspect_err(|err| {
                             error!("Failed to set WAL mode on connection: {:?}", err);
+                        }),
+                );
+                // Set busy timeout
+                drop(
+                    connection
+                        .as_ref()
+                        .unwrap()
+                        .busy_timeout(BUSY_TIMEOUT)
+                        .inspect_err(|err| {
+                            error!("Failed to set busy timeout on connection: {:?}", err);
                         }),
                 );
                 transaction = Self::handle_operation(
