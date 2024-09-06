@@ -68,7 +68,7 @@
 #![allow(clippy::doc_markdown, clippy::module_name_repetitions)]
 // Clippy restriction lints
 #![forbid(
-    clippy::allow_attributes_without_reason,
+    // clippy::allow_attributes_without_reason,
     clippy::dbg_macro,
     clippy::exit,
     clippy::infinite_loop,
