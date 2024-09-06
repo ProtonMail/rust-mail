@@ -2381,6 +2381,16 @@ impl TetheredWorker {
                         return;
                     }
                 };
+                // Set WAL mode
+                drop(
+                    connection
+                        .as_ref()
+                        .unwrap()
+                        .execute_batch("PRAGMA journal_mode = WAL")
+                        .inspect_err(|err| {
+                            error!("Failed to set WAL mode on connection: {:?}", err);
+                        }),
+                );
                 transaction = Self::handle_operation(
                     operation,
                     connection.as_ref().unwrap(),
