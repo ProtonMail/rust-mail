@@ -237,6 +237,7 @@ impl Context {
             cache_path.into(),
             cache_size,
         )
+        .await
     }
 
     /// Get a user context from an existing session.
@@ -285,6 +286,7 @@ impl Context {
             cache_path.into(),
             cache_size,
         )
+        .await
     }
 
     pub fn set_network_connected(&self, value: bool) {

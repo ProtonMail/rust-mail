@@ -36,7 +36,7 @@ proton-crypto-account = { version = "=0.6.1", registry = "proton", features = ["
 proton-event-loop = { version = "=0.7.18", path = "proton-event-loop", registry = "proton" }
 proton-sqlite3 = { version = "=0.7.9", path = "proton-sqlite3", registry = "proton" }
 proton-vcard = { version = "=0.1.1", path = "proton-vcard", registry = "proton" }
-quick_cache = "0.5"
+quick_cache = "0.6"
 rand = "0.8"
 regex = "1.10.5"
 regex_static = "0.1"

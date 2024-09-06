@@ -27,6 +27,8 @@
 //! a specific need.
 //!
 
+pub mod sender_image_cache;
+
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, AgnosticId,
     ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, HighSecurity, Id,

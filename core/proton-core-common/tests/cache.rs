@@ -1,30 +1,44 @@
-use proton_core_common::cache::{CacheConfig, ProtonCache, WeightingStrategy};
+use proton_core_common::cache::{
+    CacheConfig, CacheKey, CacheResult, ProtonCache, WeightingStrategy,
+};
 use std::ffi::OsString;
 use std::fs::{read_dir, File};
 use std::io::Read;
 use tempdir::TempDir;
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-struct TestConfig;
+struct TestKey(OsString);
+impl CacheKey for TestKey {}
 
-impl CacheConfig for TestConfig {
-    type Key = OsString;
-    type ExtraMetadata = ();
+impl From<&str> for TestKey {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
 
-    fn key_to_filename(key: &Self::Key) -> OsString {
-        key.clone()
+impl From<String> for TestKey {
+    fn from(value: String) -> Self {
+        Self(value.into())
     }
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-struct TestAdditionalMetadata;
+struct TestConfig;
 
-impl CacheConfig for TestAdditionalMetadata {
-    type Key = OsString;
-    type ExtraMetadata = String;
+impl CacheConfig for TestConfig {
+    type Key = TestKey;
 
+    type Init = Vec<TestKey>;
+
+    async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
+        Ok(init)
+    }
+
+    async fn handle_failed(_failed: Vec<TestKey>) -> CacheResult<()> {
+        Ok(())
+    }
     fn key_to_filename(key: &Self::Key) -> OsString {
-        key.clone()
+        key.0.clone()
     }
 }
 
@@ -32,11 +46,19 @@ impl CacheConfig for TestAdditionalMetadata {
 struct TestWeightlessKey;
 
 impl CacheConfig for TestWeightlessKey {
-    type Key = OsString;
-    type ExtraMetadata = ();
+    type Key = TestKey;
+    type Init = Vec<TestKey>;
+
+    async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
+        Ok(init)
+    }
+
+    async fn handle_failed(_failed: Vec<TestKey>) -> CacheResult<()> {
+        Ok(())
+    }
 
     fn key_to_filename(key: &Self::Key) -> OsString {
-        key.clone()
+        key.0.clone()
     }
 
     fn weighting_strategy() -> WeightingStrategy {
@@ -50,8 +72,8 @@ fn get_content(mut file: impl Read) -> Vec<u8> {
     content
 }
 
-#[test]
-fn create_cache() {
+#[tokio::test]
+async fn create_cache() {
     // Setup:
     //   * Create a temporary directory for cache
     let dir = TempDir::new("test").unwrap();
@@ -59,23 +81,54 @@ fn create_cache() {
 
     // Action 1:
     //   * Create the cache
-    let _cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000).unwrap();
+    let _cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000, vec![])
+        .await
+        .unwrap();
 
     // Validate:
     //   * Directory exist and is empty (+1 for cache data)
     let dir = read_dir(dir).unwrap();
-    assert_eq!(dir.count(), 1);
+    assert_eq!(dir.count(), 0);
 }
 
-#[test]
-fn add_get_cache_item() {
+#[tokio::test]
+async fn reload_cache() {
+    // Setup:
+    //   * Create a temporary directory for cache
+    //   * Create some files to load
+    let dir = TempDir::new("test").unwrap();
+    let dir = dir.into_path();
+    let existing = vec![
+        TestKey("key1".into()),
+        TestKey("key2".into()),
+        TestKey("key3".into()),
+    ];
+    File::create_new(dir.join("key1")).unwrap();
+    File::create_new(dir.join("key3")).unwrap();
+
+    // Action 1:
+    //   * Reload the cache
+    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000, existing)
+        .await
+        .unwrap();
+
+    // Validate:
+    //   * Cache contains the items
+    //   * File that don't exist are in failed
+    assert_eq!(cache.len(), 2);
+}
+
+#[tokio::test]
+async fn add_get_cache_item() {
     // Setup:
     //   * Create a cache
     let dir = TempDir::new("test").unwrap();
     let dir = dir.into_path();
-    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000).unwrap();
+    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000, vec![])
+        .await
+        .unwrap();
     let value = "A very big file".as_bytes();
-    let key: OsString = "Key".into();
+    let key = TestKey("Key".into());
 
     // Actions:
     //   * Add an item into cache
@@ -93,7 +146,7 @@ fn add_get_cache_item() {
     assert_eq!(path1, Some(path));
     assert!(path2.is_none());
     let dir = read_dir(dir).unwrap();
-    assert_eq!(dir.count(), 2);
+    assert_eq!(dir.count(), 1);
     let file = cache.path_from_key(&key);
     let mut file = File::open(file).unwrap();
     let mut content = Vec::new();
@@ -101,16 +154,18 @@ fn add_get_cache_item() {
     assert_eq!(content, value);
 }
 
-#[test]
-fn add_item_twice() {
+#[tokio::test]
+async fn add_item_twice() {
     // Setup:
     //   * Create a cache
     let dir = TempDir::new("test").unwrap();
     let dir = dir.into_path();
-    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000).unwrap();
+    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000, vec![])
+        .await
+        .unwrap();
     let value = "A very big file".as_bytes();
     let other_value = "Another very big file".as_bytes();
-    let key: OsString = "Key".into();
+    let key = TestKey("Key".into());
 
     // Actions:
     //   * Add two different items with same key
@@ -118,9 +173,9 @@ fn add_item_twice() {
     cache.add_item(key.clone(), other_value).unwrap();
 
     // Validation:
-    //   * Only one file on disk (+1 for cache data)
+    //   * Only one file on disk
     let dir = read_dir(dir).unwrap();
-    assert_eq!(dir.count(), 2);
+    assert_eq!(dir.count(), 1);
     let file = cache.path_from_key(&key);
     let mut file = File::open(file).unwrap();
     let mut content = Vec::new();
@@ -128,36 +183,15 @@ fn add_item_twice() {
     assert_eq!(content, other_value);
 }
 
-#[test]
-fn item_with_additional_metadata() {
+#[tokio::test]
+async fn eviction() {
     // Setup:
     //   * Create a cache
     let dir = TempDir::new("test").unwrap();
     let dir = dir.into_path();
-    let cache = ProtonCache::<TestAdditionalMetadata>::new(dir.clone(), 1000).unwrap();
-    let value = "A very big file".as_bytes();
-    let additional = "Foo".to_owned();
-    let key: OsString = "Key".into();
-
-    // Actions:
-    //   * Add an item with some metadata
-    cache
-        .add_item_with_extra_metadata(key.clone(), value, additional.clone())
+    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 100, vec![])
+        .await
         .unwrap();
-
-    // Validation:
-    //   * Retrieve stored metadata
-    let stored = cache.get_item_metadata(&key);
-    assert_eq!(stored, Some(additional));
-}
-
-#[test]
-fn eviction() {
-    // Setup:
-    //   * Create a cache
-    let dir = TempDir::new("test").unwrap();
-    let dir = dir.into_path();
-    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 100).unwrap();
     let value = "A very big file".as_bytes(); // 15 bytes
     let to_create = 100;
 
@@ -172,17 +206,19 @@ fn eviction() {
     let dir = read_dir(dir).unwrap();
     let file_count = dir.count();
     let cache_count = cache.len();
-    assert_eq!(file_count, cache_count + 1);
+    assert_eq!(file_count, cache_count);
     assert_eq!(cache_count, 6); // (6+1) * 15 = 105 => maximum 6 values of 15 bytes
 }
 
-#[test]
-fn weightless() {
+#[tokio::test]
+async fn weightless() {
     // Setup:
     //   * Create a cache
     let dir = TempDir::new("test").unwrap();
     let dir = dir.into_path();
-    let cache = ProtonCache::<TestWeightlessKey>::new(dir.clone(), 100).unwrap();
+    let cache = ProtonCache::<TestWeightlessKey>::new(dir.clone(), 100, vec![])
+        .await
+        .unwrap();
     let value = "A very big file".as_bytes(); // 15 bytes
     let to_create = 100;
 
@@ -197,17 +233,19 @@ fn weightless() {
     let dir = read_dir(dir).unwrap();
     let file_count = dir.count();
     let cache_count = cache.len();
-    assert_eq!(file_count, cache_count + 1);
+    assert_eq!(file_count, cache_count);
     assert_eq!(cache_count, 100);
 }
 
-#[test]
-fn remove() {
+#[tokio::test]
+async fn remove() {
     // Setup:
     //   * Create a cache with a value
     let dir = TempDir::new("test").unwrap();
     let dir = dir.into_path();
-    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000).unwrap();
+    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000, vec![])
+        .await
+        .unwrap();
     let value = "A very big file".as_bytes(); // 15 bytes
     cache.add_item("key1".into(), value).unwrap();
     cache.add_item("key2".into(), value).unwrap();
@@ -222,5 +260,5 @@ fn remove() {
     let dir = read_dir(dir).unwrap();
     let file_count = dir.count();
     assert_eq!(cache.len(), 2);
-    assert_eq!(file_count, 3);
+    assert_eq!(file_count, 2);
 }

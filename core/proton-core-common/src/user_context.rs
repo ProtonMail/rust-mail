@@ -2,7 +2,7 @@ pub use self::keys::*;
 use crate::cache::ProtonCache;
 use crate::datatypes::RemoteId;
 use crate::db::session::UserSessionState;
-use crate::user_context::images_logo::Key;
+use crate::models::sender_image_cache::SenderImage;
 use crate::CoreContextResult;
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
@@ -34,7 +34,7 @@ pub struct UserContext {
     session_stash: Stash,
     user_id: RemoteId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
-    pub images_logo_cache: Arc<ProtonCache<Key>>,
+    pub images_logo_cache: Arc<ProtonCache<SenderImage>>,
 }
 
 impl Debug for UserContext {
@@ -44,23 +44,35 @@ impl Debug for UserContext {
 }
 
 impl UserContext {
-    pub(crate) fn new(
+    pub(crate) async fn new(
         session: Session,
         user_stash: Stash,
         session_stash: Stash,
         user_id: RemoteId,
-        mut cache_path: PathBuf,
+        cache_path: PathBuf,
         cache_size: u32,
     ) -> CoreContextResult<Self> {
-        cache_path.push("images_logo_cache");
+        let images_logo_cache =
+            Self::init_sender_image_cache(cache_path, cache_size, &user_stash).await?;
         Ok(Self {
             session,
             user_stash,
             session_stash,
             user_id,
             key_manager: Arc::new(CryptoKeyManager::new()),
-            images_logo_cache: Arc::new(ProtonCache::new(cache_path, cache_size)?),
+            images_logo_cache,
         })
+    }
+
+    async fn init_sender_image_cache(
+        mut cache_path: PathBuf,
+        cache_size: u32,
+        user_stash: &Stash,
+    ) -> CoreContextResult<Arc<ProtonCache<SenderImage>>> {
+        cache_path.push("images_logo_cache");
+        Ok(Arc::new(
+            ProtonCache::new(cache_path, cache_size, user_stash.clone()).await?,
+        ))
     }
 
     /// Get the network session.

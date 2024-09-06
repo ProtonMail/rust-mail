@@ -3,8 +3,10 @@ use stash::stash::{StashError, Tether};
 
 mod addresses;
 mod contacts;
+mod sender_image_cache;
 mod user;
 mod user_settings;
+
 pub struct V0 {}
 
 impl Migration for V0 {
@@ -17,6 +19,7 @@ impl Migration for V0 {
         user_settings::create_tables(tx)?;
         user::create_tables(tx)?;
         contacts::create_tables(tx)?;
+        sender_image_cache::create_tables(tx)?;
         Ok(())
     }
 }
