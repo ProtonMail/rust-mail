@@ -415,6 +415,10 @@ use crate as stash;
 /// overridden here if necessary.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// The maximum number of simultaneous connections allowed to the database. This
+/// defaults to 10.
+const MAX_CONNECTIONS: u32 = 100;
+
 /// A type alias for a field convertor function.
 type Convertor = Box<dyn Fn(Rows<'_>, Stash) -> Result<DbRecords, ConversionError> + Send>;
 
@@ -2860,7 +2864,10 @@ impl Worker {
             SqliteConnectionManager::memory,
             SqliteConnectionManager::file,
         );
-        let pool = Pool::new(manager).map_err(StashError::TetherError)?;
+        let pool = Pool::builder()
+            .max_size(MAX_CONNECTIONS)
+            .build(manager)
+            .map_err(StashError::TetherError)?;
 
         // Spawn a thread to run the worker. This thread will execute the queries
         // sequentially, as they are received, and will return the results via
