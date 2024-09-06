@@ -406,7 +406,8 @@ use thiserror::Error;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tokio::task::spawn_blocking;
-use tracing::{debug, error, warn};
+use tokio::time::interval;
+use tracing::{debug, error, info, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
 
@@ -2933,9 +2934,24 @@ impl Worker {
                 queue: stash.queue.clone(),
                 runtime,
                 subscribers: Vec::new(),
-                stash,
+                stash: stash.clone(),
                 tethers: HashMap::new(),
             };
+
+            let _handle = worker.runtime.spawn(async move {
+                let mut last_stats = None;
+                let mut stats_interval = interval(Duration::from_secs(1));
+                #[allow(clippy::infinite_loop)]
+                #[allow(clippy::let_underscore_untyped)]
+                loop {
+                    let _ = stats_interval.tick().await;
+                    let current_stats = stash.stats();
+                    if last_stats.as_ref() != Some(&current_stats) {
+                        info!("Statistics: {:?}", current_stats);
+                        last_stats = Some(current_stats);
+                    }
+                }
+            });
 
             while let Ok(operation) = receiver.recv() {
                 let mut is_connection_close = false;
