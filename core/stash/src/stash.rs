@@ -793,12 +793,6 @@ struct Command {
 
     /// The time at which the operation started.
     start_time: Instant,
-
-    /// The associated [`Stash`] instance for the operation.
-    stash: Stash,
-
-    /// The associated [`Tether`] instance for the operation.
-    tether: Option<Tether>,
 }
 
 impl Command {
@@ -807,8 +801,6 @@ impl Command {
     /// # Parameters
     ///
     /// * `stash`       - The associated [`Stash`] instance for the operation.
-    /// * `tether`      - The associated [`Tether`] instance for the operation,
-    ///                   if there is one.
     /// * `channel`     - The communication channel used to send the result of
     ///                   the operation back to the caller.
     /// * `conn_handle` - The unique handle of the connection to use for the
@@ -819,8 +811,7 @@ impl Command {
     ///                   used just this once.
     ///
     fn new(
-        stash: Stash,
-        tether: Option<Tether>,
+        stash: &Stash,
         channel: Option<OneshotSender<Result<(), StashError>>>,
         conn_handle: Option<Arc<AtomicU32>>,
     ) -> Self {
@@ -838,8 +829,6 @@ impl Command {
             channel,
             conn_handle,
             start_time: Instant::now(),
-            stash,
-            tether,
         }
     }
 }
@@ -1798,8 +1787,7 @@ impl Tether {
     pub async fn commit(&self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::CommitTransaction(Command::new(
-            self.stash.clone(),
-            Some(self.clone()),
+            &self.stash,
             Some(that_end),
             Some(Arc::clone(&self.handle)),
         ));
@@ -1836,8 +1824,7 @@ impl Tether {
     pub async fn rollback(&self) -> Result<(), StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::RollbackTransaction(Command::new(
-            self.stash.clone(),
-            Some(self.clone()),
+            &self.stash,
             Some(that_end),
             Some(Arc::clone(&self.handle)),
         ));
@@ -1887,8 +1874,7 @@ impl Drop for Tether {
         if self
             .queue
             .send(Operation::CloseConnection(Command::new(
-                self.stash.clone(),
-                None,
+                &self.stash,
                 None,
                 Some(Arc::clone(&self.handle)),
             )))
@@ -1976,8 +1962,7 @@ impl Interface for Tether {
     async fn transaction(&self) -> Result<Self, StashError> {
         let (that_end, this_end) = oneshot::channel();
         let operation = Operation::StartTransaction(Command::new(
-            self.stash.clone(),
-            Some(self.clone()),
+            &self.stash,
             Some(that_end),
             Some(Arc::clone(&self.handle)),
         ));
@@ -2462,8 +2447,7 @@ impl Drop for TetheredWorker {
             if self
                 .queue
                 .send(Operation::CloseConnection(Command::new(
-                    self.stash.clone(),
-                    None,
+                    &self.stash,
                     None,
                     Some(Arc::clone(&handle)),
                 )))
