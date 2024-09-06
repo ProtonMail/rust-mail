@@ -383,9 +383,7 @@ pub trait ApiService {
         Q: Serialize + Debug,
         T: ApiResponse,
     {
-        dbg!(&params);
-        let query = params.and_then(|p| dbg!(to_query_string(&p)).ok());
-        dbg!(&query);
+        let query = params.and_then(|p| to_query_string(&p).ok());
         self.perform_request::<_, T>(Request::<()> {
             headers,
             url: self.get_url(endpoint, query.as_deref()),
