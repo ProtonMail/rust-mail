@@ -1880,6 +1880,11 @@ impl Drop for Tether {
             stats.max_tether_lifetime = (time, Arc::downgrade(&self.handle).as_ptr() as usize);
         }
         drop(stats);
+        debug!(
+            "Tether ({:p}): Drop (lived for {}µs)",
+            Arc::as_ptr(&self.handle),
+            time.as_micros(),
+        );
         if self
             .queue
             .send(Operation::CloseConnection(Command::new(
@@ -2102,6 +2107,13 @@ impl TetheredWorker {
                                 if t_time > stats.max_transaction_lifetime.0 {
                                     stats.max_transaction_lifetime = (t_time, info.0);
                                 }
+                                drop(stats);
+                                debug!(
+                                    "Tether ({:p}): Transaction comitted (id: {}, lived for {}µs)",
+                                    conn_handle.as_ptr(),
+                                    info.0,
+                                    t_time.as_micros(),
+                                );
                             }
                         };
                     } else {
@@ -2151,6 +2163,13 @@ impl TetheredWorker {
                     if time > stats.max_query_runtime.0 {
                         stats.max_query_runtime = (time, instruction.id);
                     }
+                    drop(stats);
+                    debug!(
+                        "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
+                        instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                        instruction.id,
+                        time.as_micros(),
+                    );
                 }
             }
             Operation::Publish(_) => {
@@ -2188,6 +2207,13 @@ impl TetheredWorker {
                     if time > stats.max_query_runtime.0 {
                         stats.max_query_runtime = (time, query.id);
                     }
+                    drop(stats);
+                    debug!(
+                        "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
+                        query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                        query.id,
+                        time.as_micros(),
+                    );
                 }
             }
             Operation::RollbackTransaction(mut command) => {
@@ -2225,6 +2251,13 @@ impl TetheredWorker {
                                 if t_time > stats.max_transaction_lifetime.0 {
                                     stats.max_transaction_lifetime = (t_time, info.0);
                                 }
+                                drop(stats);
+                                debug!(
+                                    "Tether ({:p}): Transaction rolled back (id: {}, lived for {}µs)",
+                                    conn_handle.as_ptr(),
+                                    info.0,
+                                    t_time.as_micros(),
+                                );
                             }
                         };
                     } else {
@@ -2699,6 +2732,13 @@ impl Worker {
                                     if time > stats.max_query_runtime.0 {
                                         stats.max_query_runtime = (time, instruction.id);
                                     }
+                                    drop(stats);
+                                    debug!(
+                                        "Tether ({:p}): Instruction finished (id: {}, ran for {}µs)",
+                                        instruction.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                                        instruction.id,
+                                        time.as_micros(),
+                                    );
                                 }
                             })
                             .await
@@ -2771,6 +2811,13 @@ impl Worker {
                                     if time > stats.max_query_runtime.0 {
                                         stats.max_query_runtime = (time, query.id);
                                     }
+                                    drop(stats);
+                                    debug!(
+                                        "Tether ({:p}): Query finished (id: {}, ran for {}µs)",
+                                        query.conn_handle.as_ref().map_or(null(), Arc::as_ptr),
+                                        query.id,
+                                        time.as_micros(),
+                                    );
                                 }
                             })
                             .await
