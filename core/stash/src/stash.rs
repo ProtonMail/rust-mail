@@ -387,7 +387,7 @@ use core::fmt::Debug;
 use core::ops::Deref;
 use core::ptr::null;
 use core::sync::atomic::AtomicU32;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::Ordering;
 use core::time::Duration;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
 use parking_lot::Mutex;
@@ -1420,11 +1420,9 @@ impl Stash {
         drop(stats);
         Tether {
             handle,
-            has_active_transaction: Arc::new(AtomicBool::new(false)),
             queue: self.queue.clone(),
             start_time: Arc::new(Instant::now()),
             stash: self.clone(),
-            transaction_info: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -1539,7 +1537,7 @@ impl PartialEq for Stash {
 }
 
 /// Statistics about the current state of the [`Stash`] instance.
-#[derive(Clone, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct Stats {
     /// The number of active commands, that is, commands sent and waiting for a
@@ -1559,21 +1557,16 @@ pub struct Stats {
     /// cleaned-up.
     pub active_tether_count: u32,
 
-    /// The number of active transactions. Note that these may or may not be
-    /// technically active, because they may have been started and are yet to do
-    /// anything.
-    pub active_transaction_count: u32,
-
-    /// A list of the pointers to [`Weak`] references to the active tethers.
-    /// These pointers may or may not be valid by the time they are read, as the
-    /// tethers may have been dropped. If the [`Weak`]s were stored here, then
-    /// if they are dropped by the time they are read it becomes impossible to
-    /// report their value, making it hard to match against logs. Therefore, the
+    /// A list of the currently-active transactions, with their unique IDs and
+    /// the time they were started in a tuple, stored against the tether handle.
+    /// This is used to track the lifetime of transactions. The tether handle
     /// pointer values are stored here for matching purposes, but not actually
     /// used for memory interaction (which would be unsafe, and require some
     /// additional tracking). Note that to be thread-safe, the pointers are
-    /// stored as [`usize`] instead of `*const ()`.
-    pub active_tethers: Vec<usize>,
+    /// stored as [`usize`] instead of `*const ()`. Note that the transactions
+    /// may or may not be technically active, because they may have been started
+    /// and are yet to do anything.
+    pub active_transactions: HashMap<usize, (u32, Instant)>,
 
     /// The average amount of time that a command has taken to run.
     pub average_command_runtime: Duration,
@@ -1771,10 +1764,6 @@ pub struct Tether {
     /// keep track of the number of instances.
     handle: Arc<AtomicU32>,
 
-    /// If a transaction has been started, this will be set to `true`. When the
-    /// transaction is committed or rolled back, it will be returned to `false`.
-    has_active_transaction: Arc<AtomicBool>,
-
     /// The queue for the [`Worker`] and [`Stash`] to which the [`Tether`] is
     /// associated. This is used to send queries to the worker for execution.
     queue: QueueSender<Operation>,
@@ -1784,10 +1773,6 @@ pub struct Tether {
 
     /// The associated [`Stash`] instance.
     stash: Stash,
-
-    /// If there is an active transaction, this tuple will contain the unique
-    /// transaction ID, and the time at which the transaction started.
-    transaction_info: Arc<Mutex<Option<(u32, Instant)>>>,
 }
 
 impl Tether {
@@ -1825,8 +1810,6 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.has_active_transaction.store(false, Ordering::SeqCst);
-        let _: Option<(u32, Instant)> = self.transaction_info.lock().take();
         Ok(())
     }
 
@@ -1865,8 +1848,6 @@ impl Tether {
         this_end
             .await
             .map_err(|err| StashError::OneShotError(err.to_string()))??;
-        self.has_active_transaction.store(false, Ordering::SeqCst);
-        let _: Option<(u32, Instant)> = self.transaction_info.lock().take();
         Ok(())
     }
 }
@@ -1876,11 +1857,9 @@ impl Clone for Tether {
         let _old_total = self.handle.fetch_add(1, Ordering::SeqCst);
         Self {
             handle: Arc::clone(&self.handle),
-            has_active_transaction: Arc::clone(&self.has_active_transaction),
             queue: self.queue.clone(),
             start_time: Arc::clone(&self.start_time),
             stash: self.stash.clone(),
-            transaction_info: Arc::clone(&self.transaction_info),
         }
     }
 }
@@ -1938,7 +1917,11 @@ impl Interface for Tether {
     }
 
     fn has_active_transaction(&self) -> bool {
-        self.has_active_transaction.load(Ordering::SeqCst)
+        self.stash
+            .stats
+            .lock()
+            .active_transactions
+            .contains_key(&(Arc::downgrade(&self.handle).as_ptr() as usize))
     }
 
     async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
@@ -2104,7 +2087,7 @@ impl TetheredWorker {
                         command.send_back(tx.commit().map_err(StashError::TransactionError));
                         // Notify the main worker that the transaction has been committed
                         if queue
-                            .send(Operation::NotifyCommitTransaction(conn_handle))
+                            .send(Operation::NotifyCommitTransaction(Arc::clone(&conn_handle)))
                             .is_err()
                         {
                             error!(
@@ -2112,9 +2095,20 @@ impl TetheredWorker {
                             );
                         }
                         {
+                            let handle_id = Arc::downgrade(&conn_handle).as_ptr() as usize;
                             let mut stats = stash.stats.lock();
-                            stats.active_transaction_count =
-                                stats.active_transaction_count.saturating_sub(1);
+                            if let Some(info) = stats.active_transactions.remove(&handle_id) {
+                                let t_time = info.1.elapsed();
+                                stats.total_transaction_time =
+                                    stats.total_transaction_time.saturating_add(t_time);
+                                stats.average_transaction_lifetime = stats
+                                    .total_transaction_time
+                                    .checked_div(stats.total_transactions_started)
+                                    .unwrap_or_default();
+                                if t_time > stats.max_transaction_lifetime.0 {
+                                    stats.max_transaction_lifetime = (t_time, info.0);
+                                }
+                            }
                         };
                     } else {
                         command.send_back(Err(StashError::NoActiveTransaction));
@@ -2133,17 +2127,6 @@ impl TetheredWorker {
                         .unwrap_or_default();
                     if time > stats.max_command_runtime.0 {
                         stats.max_command_runtime = (time, command.id);
-                    }
-                    let info = command.tether.unwrap().transaction_info.lock().unwrap();
-                    let t_time = info.1.elapsed();
-                    stats.total_transaction_time =
-                        stats.total_transaction_time.saturating_add(t_time);
-                    stats.average_transaction_lifetime = stats
-                        .total_transaction_time
-                        .checked_div(stats.total_transactions_started)
-                        .unwrap_or_default();
-                    if t_time > stats.max_transaction_lifetime.0 {
-                        stats.max_transaction_lifetime = (t_time, info.0);
                     }
                 };
             }
@@ -2225,7 +2208,9 @@ impl TetheredWorker {
                         command.send_back(tx.rollback().map_err(StashError::TransactionError));
                         // Notify the main worker that the transaction has been rolled back.
                         if queue
-                            .send(Operation::NotifyRollbackTransaction(conn_handle))
+                            .send(Operation::NotifyRollbackTransaction(Arc::clone(
+                                &conn_handle,
+                            )))
                             .is_err()
                         {
                             error!(
@@ -2233,9 +2218,20 @@ impl TetheredWorker {
                             );
                         }
                         {
+                            let handle_id = Arc::downgrade(&conn_handle).as_ptr() as usize;
                             let mut stats = stash.stats.lock();
-                            stats.active_transaction_count =
-                                stats.active_transaction_count.saturating_sub(1);
+                            if let Some(info) = stats.active_transactions.remove(&handle_id) {
+                                let t_time = info.1.elapsed();
+                                stats.total_transaction_time =
+                                    stats.total_transaction_time.saturating_add(t_time);
+                                stats.average_transaction_lifetime = stats
+                                    .total_transaction_time
+                                    .checked_div(stats.total_transactions_started)
+                                    .unwrap_or_default();
+                                if t_time > stats.max_transaction_lifetime.0 {
+                                    stats.max_transaction_lifetime = (t_time, info.0);
+                                }
+                            }
                         };
                     } else {
                         command.send_back(Err(StashError::NoActiveTransaction));
@@ -2255,17 +2251,6 @@ impl TetheredWorker {
                     if time > stats.max_command_runtime.0 {
                         stats.max_command_runtime = (time, command.id);
                     }
-                    let info = command.tether.unwrap().transaction_info.lock().unwrap();
-                    let t_time = info.1.elapsed();
-                    stats.total_transaction_time =
-                        stats.total_transaction_time.saturating_add(t_time);
-                    stats.average_transaction_lifetime = stats
-                        .total_transaction_time
-                        .checked_div(stats.total_transactions_started)
-                        .unwrap_or_default();
-                    if t_time > stats.max_transaction_lifetime.0 {
-                        stats.max_transaction_lifetime = (t_time, info.0);
-                    }
                 };
             }
             Operation::StartTransaction(mut command) => {
@@ -2278,22 +2263,19 @@ impl TetheredWorker {
                     );
                     if transaction.is_none() {
                         {
+                            let handle_id = Arc::downgrade(&conn_handle).as_ptr() as usize;
                             let mut stats = stash.stats.lock();
-                            stats.active_transaction_count =
-                                stats.active_transaction_count.saturating_add(1);
                             stats.total_transactions_started =
                                 stats.total_transactions_started.saturating_add(1);
-                            if stats.active_transaction_count > stats.max_transaction_count {
-                                stats.max_transaction_count = stats.active_transaction_count;
+                            let info = (stats.total_transactions_started, Instant::now());
+                            let _: Option<(u32, Instant)> =
+                                stats.active_transactions.insert(handle_id, info);
+                            #[allow(clippy::cast_possible_truncation)]
+                            if stats.active_transactions.len() as u32 > stats.max_transaction_count
+                            {
+                                stats.max_transaction_count =
+                                    stats.active_transactions.len() as u32;
                             }
-                            command
-                                .tether
-                                .clone()
-                                .unwrap()
-                                .has_active_transaction
-                                .store(true, Ordering::SeqCst);
-                            *command.tether.clone().unwrap().transaction_info.lock() =
-                                Some((stats.total_transactions_started, Instant::now()));
                         };
                         match connection
                             // We call unchecked_transaction() here because transaction() requires a
