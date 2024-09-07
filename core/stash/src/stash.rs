@@ -396,7 +396,7 @@ use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
-use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction};
+use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
 use stash_macros::DbRecord;
 use std::collections::{hash_map::Entry, HashMap};
 use std::path::Path;
@@ -2314,12 +2314,53 @@ impl TetheredWorker {
                                     stats.active_transactions.len() as u32;
                             }
                         };
-                        match connection
-                            // We call unchecked_transaction() here because transaction() requires a
-                            // mutable borrow. Being unchecked does not matter, as we perform the
-                            // necessary checks ourselves.
-                            .unchecked_transaction()
-                            .map_err(StashError::ExecutionError)
+                        // We call new_unchecked() here because new() requires a mutable borrow.
+                        // Being unchecked does not matter, as we perform the necessary checks
+                        // ourselves.
+                        match Transaction::new_unchecked(
+                            connection,
+                            // This is not well-documented, but is significant. The behaviour mode of
+                            // the transaction affects when a lock is acquired - this part is obvious
+                            // and IS documented. For reference:
+                            //
+                            //  - https://docs.rs/rusqlite/0.31.0/rusqlite/enum.TransactionBehavior.html
+                            //
+                            // A summary of the behaviour:
+                            //
+                            //  - DEFERRED means that the transaction does not actually start until the
+                            //    database is first accessed.
+                            //  - IMMEDIATE cause the database connection to start a new write
+                            //    immediately, without waiting for a writes statement.
+                            //  - EXCLUSIVE prevents other database connections from reading the
+                            //    database while the transaction is underway.
+                            //
+                            // So far, so good. The implication is that we can leave this to DEFERRED
+                            // (the default) and it will establish a higher level of locking as and when
+                            // needed. This is how things are documented in SQLite and rusqlite.
+                            //
+                            // However, what is not mentioned (and could be considered a bug? or at
+                            // least unexpected behaviour) is that if a transaction is started in
+                            // DEFERRED mode and then performs a read query before a write query, then
+                            // when the lock is upgraded the busy handler will not be triggered. This
+                            // then leads to concurrent operations being rejected with a "database is
+                            // locked" message, which does not happen under other circumstances.
+                            //
+                            // To state that again so that it's very clear: the busy timeout will be
+                            // respected as documented and expected for all instances where there are
+                            // multiple concurrent connections, transactions, queries, etc. and handle
+                            // them just fine, BUT it will have NO EFFECT if there is a read query
+                            // before a write query in a transaction.
+                            //
+                            // In order to work around this, we start the transaction in IMMEDIATE mode,
+                            // which registers our intent to write. Even if we don't actually end up
+                            // writing (and it is entirely valid to have transactions that only read),
+                            // this is necessary in order to have the busy timeout respected, and other
+                            // concurrent operations handled gracefully. This is why this appears to be
+                            // a bug, or at least behaviour that is undesirable and not in keeping with
+                            // the generally-described behaviour of these features.
+                            TransactionBehavior::Immediate,
+                        )
+                        .map_err(StashError::ExecutionError)
                         {
                             Ok(tx) => {
                                 transaction = Some(tx);
