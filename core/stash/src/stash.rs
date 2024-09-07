@@ -390,6 +390,7 @@ use core::sync::atomic::AtomicU32;
 use core::sync::atomic::Ordering;
 use core::time::Duration;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender};
+use indoc::formatdoc;
 use parking_lot::Mutex;
 use r2d2::{Error as PoolError, ManageConnection, Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -2437,19 +2438,16 @@ impl TetheredWorker {
                     connection
                         .as_ref()
                         .unwrap()
-                        .execute_batch("PRAGMA journal_mode = WAL")
+                        .execute_batch(&formatdoc!("
+                            PRAGMA journal_mode = WAL;         -- Better write-concurrency
+                            PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
+                            PRAGMA wal_autocheckpoint = 1000;  -- Write WAL changes back every 1000 pages, approx. 1MB
+                            PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
+                            PRAGMA busy_timeout = {};          -- Wait if the database is busy/locked
+                            PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
+                        ", BUSY_TIMEOUT.as_millis()))
                         .inspect_err(|err| {
-                            error!("Failed to set WAL mode on connection: {:?}", err);
-                        }),
-                );
-                // Set busy timeout
-                drop(
-                    connection
-                        .as_ref()
-                        .unwrap()
-                        .busy_timeout(BUSY_TIMEOUT)
-                        .inspect_err(|err| {
-                            error!("Failed to set busy timeout on connection: {:?}", err);
+                            error!("Failed to set configuration on connection: {:?}", err);
                         }),
                 );
                 transaction = Self::handle_operation(
