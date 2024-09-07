@@ -640,20 +640,21 @@ impl Operation {
     /// # Parameters
     ///
     /// * `error` - The error to send back to the caller.
+    /// * `stash`  - The associated [`Stash`] instance for the operation.
     ///
-    fn send_back_error(&mut self, error: StashError) {
+    fn send_back_error(&mut self, error: StashError, stash: &Stash) {
         match *self {
             Self::CloseConnection(ref mut command)
             | Self::CommitTransaction(ref mut command)
             | Self::RollbackTransaction(ref mut command)
-            | Self::StartTransaction(ref mut command) => command.send_back(Err(error)),
-            Self::Instruct(ref mut instruction) => instruction.send_back(Err(error)),
+            | Self::StartTransaction(ref mut command) => command.send_back(Err(error), stash),
+            Self::Instruct(ref mut instruction) => instruction.send_back(Err(error), stash),
             Self::Publish(_)
             | Self::NotifyRollbackTransaction(_)
             | Self::NotifyCommitTransaction(_)
             | Self::NotifyStartTransaction(_) => {}
-            Self::Query(ref mut query) => query.send_back(Err(error)),
-            Self::Subscribe(ref mut subscription) => subscription.send_back(Err(error)),
+            Self::Query(ref mut query) => query.send_back(Err(error), stash),
+            Self::Subscribe(ref mut subscription) => subscription.send_back(Err(error), stash),
         }
     }
 }
@@ -2084,7 +2085,7 @@ impl TetheredWorker {
                         command.start_time().elapsed().as_micros(),
                     );
                     if let Some(tx) = transaction.take() {
-                        command.send_back(tx.commit().map_err(StashError::TransactionError));
+                        command.send_back(tx.commit().map_err(StashError::TransactionError), stash);
                         // Notify the main worker that the transaction has been committed
                         if queue
                             .send(Operation::NotifyCommitTransaction(Arc::clone(&conn_handle)))
@@ -2118,10 +2119,10 @@ impl TetheredWorker {
                             }
                         };
                     } else {
-                        command.send_back(Err(StashError::NoActiveTransaction));
+                        command.send_back(Err(StashError::NoActiveTransaction), stash);
                     }
                 } else {
-                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
                 }
                 {
                     let time = command.start_time().elapsed();
@@ -2145,13 +2146,16 @@ impl TetheredWorker {
                     instruction.start_time().elapsed().as_micros(),
                 );
                 // Note: The query count got incremented when the Instruction was created.
-                instruction.send_back(instruction.run(
-                    &transaction.as_ref().map_or(
-                        AgnosticConnection::Unbound(connection),
-                        AgnosticConnection::Engaged,
+                instruction.send_back(
+                    instruction.run(
+                        &transaction.as_ref().map_or(
+                            AgnosticConnection::Unbound(connection),
+                            AgnosticConnection::Engaged,
+                        ),
+                        stash.clone(),
                     ),
-                    stash.clone(),
-                ));
+                    stash,
+                );
                 {
                     let time = instruction.start_time().elapsed();
                     let mut stats = stash.stats.lock();
@@ -2189,13 +2193,16 @@ impl TetheredWorker {
                     query.start_time().elapsed().as_micros(),
                 );
                 // Note: The query count got incremented when the Query was created.
-                query.send_back(query.run(
-                    &transaction.as_ref().map_or(
-                        AgnosticConnection::Unbound(connection),
-                        AgnosticConnection::Engaged,
+                query.send_back(
+                    query.run(
+                        &transaction.as_ref().map_or(
+                            AgnosticConnection::Unbound(connection),
+                            AgnosticConnection::Engaged,
+                        ),
+                        stash.clone(),
                     ),
-                    stash.clone(),
-                ));
+                    stash,
+                );
                 {
                     let time = query.start_time().elapsed();
                     let mut stats = stash.stats.lock();
@@ -2226,7 +2233,8 @@ impl TetheredWorker {
                         command.start_time().elapsed().as_micros(),
                     );
                     if let Some(tx) = transaction.take() {
-                        command.send_back(tx.rollback().map_err(StashError::TransactionError));
+                        command
+                            .send_back(tx.rollback().map_err(StashError::TransactionError), stash);
                         // Notify the main worker that the transaction has been rolled back.
                         if queue
                             .send(Operation::NotifyRollbackTransaction(Arc::clone(
@@ -2262,10 +2270,10 @@ impl TetheredWorker {
                             }
                         };
                     } else {
-                        command.send_back(Err(StashError::NoActiveTransaction));
+                        command.send_back(Err(StashError::NoActiveTransaction), stash);
                     }
                 } else {
-                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
                 }
                 {
                     let time = command.start_time().elapsed();
@@ -2314,7 +2322,7 @@ impl TetheredWorker {
                         {
                             Ok(tx) => {
                                 transaction = Some(tx);
-                                command.send_back(Ok(()));
+                                command.send_back(Ok(()), stash);
                                 // Notify the main worker that a transaction has started.
                                 if queue
                                     .send(Operation::NotifyStartTransaction(conn_handle))
@@ -2326,14 +2334,14 @@ impl TetheredWorker {
                                 }
                             }
                             Err(error) => {
-                                command.send_back(Err(error));
+                                command.send_back(Err(error), stash);
                             }
                         };
                     } else {
-                        command.send_back(Err(StashError::TransactionAlreadyStarted));
+                        command.send_back(Err(StashError::TransactionAlreadyStarted), stash);
                     }
                 } else {
-                    command.send_back(Err(StashError::TransactionCommandWithoutTether));
+                    command.send_back(Err(StashError::TransactionCommandWithoutTether), stash);
                 }
                 {
                     let time = command.start_time().elapsed();
@@ -2353,7 +2361,7 @@ impl TetheredWorker {
                 // Technically, these cannot occur here, as subscription operations are
                 // global in scope and not connection-specific. We should never get here. If
                 // we do, it means there is an error in the logic of this module.
-                subscription.send_back(Err(StashError::SubscriptionError));
+                subscription.send_back(Err(StashError::SubscriptionError), stash);
             }
 
             Operation::NotifyCommitTransaction(_)
@@ -2420,7 +2428,7 @@ impl TetheredWorker {
                 connection = match pool.get_and_subscribe(queue.clone(), Some(conn_handle_clone)) {
                     Ok(conn) => Some(conn),
                     Err(error) => {
-                        operation.send_back_error(error);
+                        operation.send_back_error(error, &stash_clone);
                         return;
                     }
                 };
@@ -2717,7 +2725,7 @@ impl Worker {
                                 // Note: The query count got incremented when the Instruction was created.
                                 instruction.send_back(
                                     instruction
-                                        .run(&AgnosticConnection::Unbound(&connection), stash),
+                                        .run(&AgnosticConnection::Unbound(&connection), stash.clone()), &stash,
                                 );
                                 {
                                     let time = instruction.start_time().elapsed();
@@ -2748,7 +2756,7 @@ impl Worker {
                                 error!("Thread error: Failed to spawn blocking task: {err:?}");
                             });
                         }
-                        Err(err) => instruction.send_back(Err(err)),
+                        Err(err) => instruction.send_back(Err(err), &stash),
                     }
                 }));
             }
@@ -2796,7 +2804,11 @@ impl Worker {
                             spawn_blocking(move || {
                                 // Note: The query count got incremented when the Query was created.
                                 query.send_back(
-                                    query.run(&AgnosticConnection::Unbound(&connection), stash),
+                                    query.run(
+                                        &AgnosticConnection::Unbound(&connection),
+                                        stash.clone(),
+                                    ),
+                                    &stash,
                                 );
                                 {
                                     let time = query.start_time().elapsed();
@@ -2827,7 +2839,7 @@ impl Worker {
                                 error!("Thread error: Failed to spawn blocking task: {err:?}");
                             });
                         }
-                        Err(err) => query.send_back(Err(err)),
+                        Err(err) => query.send_back(Err(err), &stash),
                     }
                 }));
             }
@@ -2848,7 +2860,7 @@ impl Worker {
                 // Although this operation is infallible, a response still needs to be sent,
                 // as the caller might be waiting on the oneshot channel in order to
                 // continue.
-                subscription.send_back(Ok(()));
+                subscription.send_back(Ok(()), &stash);
             }
 
             Operation::StartTransaction(_)
@@ -3510,8 +3522,12 @@ trait OperationLogic {
     /// # Parameters
     ///
     /// * `result` - The result to send back to the caller.
+    /// * `stash`  - The associated [`Stash`] instance for the operation.
     ///
-    fn send_back(&mut self, result: Result<Self::Output, StashError>) {
+    fn send_back(&mut self, result: Result<Self::Output, StashError>, stash: &Stash) {
+        if result.is_err() {
+            error!("Stats at time of error: {:?}", stash.stats());
+        }
         if let Some(channel) = self.channel().take() {
             // If sending down the oneshot channel fails, send() returns the message to
             // us. It's not particularly interesting what that message is, as we never
