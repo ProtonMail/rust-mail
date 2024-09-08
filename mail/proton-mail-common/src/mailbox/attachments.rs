@@ -145,9 +145,9 @@ impl Mailbox {
         data: impl Read,
     ) -> MailboxResult<(Vec<u8>, VerificationResult)> {
         let Some(remote_address_id) = &attachment_info.remote_address_id else {
-            return Err(MailboxError::AppError(AppError::Other(
-                "Attachment has no address id".to_owned(),
-            )));
+            Err(AppError::Other(anyhow::anyhow!(
+                "Attachment has no address id"
+            )))?
         };
 
         let user_context = self.user_context();

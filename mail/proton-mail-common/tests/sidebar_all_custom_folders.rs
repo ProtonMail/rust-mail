@@ -52,7 +52,7 @@ fn sidebar_test_params(labels: &[(&str, Option<&str>, &str, u32)]) -> TestParams
 fn create_label((id, parent_id, name, order): &(&str, Option<&str>, &str, u32)) -> ApiLabel {
     ApiLabel {
         id: ApiRemoteId::from(*id),
-        parent_id: parent_id.map(|p| ApiRemoteId::from(p)),
+        parent_id: parent_id.map(ApiRemoteId::from),
         color: "".to_string(),
         display: false,
         expanded: false,

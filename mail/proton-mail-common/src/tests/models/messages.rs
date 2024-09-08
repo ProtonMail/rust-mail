@@ -341,7 +341,7 @@ async fn test_create_message_without_synced_conversation() {
     test_create_message_dependencies_core(&tx).await;
     create_labels(&tx).await;
 
-    let api_metadata = test_message_metadata([MY_LABEL_ID1.clone().into()], []);
+    let api_metadata = test_message_metadata([MY_LABEL_ID1.clone()], []);
     let remote_id = api_metadata.id.clone();
     Message::create_or_update_messages_from_metadata(vec![api_metadata], &tx)
         .await
