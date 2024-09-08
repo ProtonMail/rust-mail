@@ -99,6 +99,6 @@ mod messages {
             ..Default::default()
         };
 
-        Ok(Session::new(config, None).await?)
+        Session::new(config, None).await
     }
 }

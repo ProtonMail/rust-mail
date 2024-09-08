@@ -246,7 +246,7 @@ mod first_unread_message {
             .iter()
             .enumerate()
             .map(|(id, (flags, unread, labels))| {
-                message_metadata_with_flags((id as u64).into(), *flags, *unread, *labels)
+                message_metadata_with_flags((id as u64).into(), *flags, *unread, labels)
             })
             .collect::<Vec<_>>();
 

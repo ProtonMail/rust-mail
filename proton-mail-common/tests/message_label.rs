@@ -51,7 +51,7 @@ async fn label_message() {
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.mock_label_messages(
         &label_id.clone().into(),
-        vec![message.metadata.id.clone().into()],
+        vec![message.metadata.id.clone()],
         None,
         vec![],
     )
@@ -118,14 +118,14 @@ async fn unlabel_message() {
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.mock_label_messages(
         &label_id.clone().into(),
-        vec![message.metadata.id.clone().into()],
+        vec![message.metadata.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_messages(
         &label_id.clone().into(),
-        vec![message.metadata.id.clone().into()],
+        vec![message.metadata.id.clone()],
         vec![],
     )
     .await;
@@ -185,7 +185,8 @@ fn test_init_params_label(label: ApiLabel) -> TestParams {
     let labels = hash_map! {
         ApiLabelType::Label: vec![label],
     };
-    let params = TestParams {
+
+    TestParams {
         last_event_id: None,
         user_info: Some(test_user_info()),
         user_settings: None,
@@ -196,8 +197,7 @@ fn test_init_params_label(label: ApiLabel) -> TestParams {
         attachments: vec![],
         conversation_count: vec![],
         message_count: vec![],
-    };
-    params
+    }
 }
 
 fn test_mail_settings() -> ApiMailSettings {

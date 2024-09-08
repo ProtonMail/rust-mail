@@ -116,7 +116,7 @@ async fn test_store_and_delete_remote_items(
         item.save().await.unwrap();
     }
 
-    let expected = expected.unwrap_or_else(|| input);
+    let expected = expected.unwrap_or(input);
     let actual = RollbackItem::all(&stash, None).await.unwrap();
 
     assert_eq!(expected, actual);
@@ -179,7 +179,7 @@ async fn messages(
     let items = RollbackItem::find_by_kind(RollbackItemType::Message, tx)
         .await
         .unwrap();
-    let address = create_address(&tx).await;
+    let address = create_address(tx).await;
 
     items
         .into_iter()
@@ -189,7 +189,7 @@ async fn messages(
                 stash: item.stash,
                 local_address_id: address.local_id.unwrap(),
                 remote_address_id: address.remote_id.clone().unwrap(),
-                local_conversation_id: local_conversation_id,
+                local_conversation_id,
                 remote_conversation_id: remote_conversation_id.clone()
             )
         })
@@ -234,7 +234,7 @@ async fn start_server(stash: &Stash) -> (MockServer, Proton) {
             dbg!(&item);
             match item.item_type {
                 RollbackItemType::Conversation => mock_get_conversation(&mock_server, &item).await,
-                RollbackItemType::Message => mock_get_message(&mock_server, &item, &stash).await,
+                RollbackItemType::Message => mock_get_message(&mock_server, &item, stash).await,
                 RollbackItemType::Label => mock_label(&mock_server, &item).await,
             }
         }
@@ -248,7 +248,7 @@ async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
     let api_conversation = api_conversation!(id: remote_id.clone().into());
 
     Mock::given(method("GET"))
-        .and(path(format!("/api/mail/v4/conversations")))
+        .and(path("/api/mail/v4/conversations".to_string()))
         .and(query_param_contains("ID[0]", remote_id.to_string()))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
@@ -294,7 +294,7 @@ async fn mock_label(mock_server: &MockServer, item: &RollbackItem) {
     let api_label = api_label!(id: remote_id.clone().into());
 
     Mock::given(method("POST"))
-        .and(path(format!("/api/core/v4/labels/by-ids")))
+        .and(path("/api/core/v4/labels/by-ids".to_string()))
         .and(body_json(GetLabelsByIdsOptions {
             label_ids: vec![remote_id.clone().into()],
         }))
