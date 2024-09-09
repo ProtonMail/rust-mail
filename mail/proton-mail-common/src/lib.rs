@@ -60,8 +60,11 @@ pub enum AppError {
     RemoteIdNotFound(String, LocalId),
     #[error("Conversation with ID {0} not found")]
     ConversationNotFound(LocalId),
+
     #[error("Conversation with ID {0} has no remote ID")]
     ConversationHasNoRemoteId(LocalId),
+    #[error("Message with ID {0} has no remote ID")]
+    MessageHasNoRemoteId(LocalId),
     #[error("Conversation with ID {0} has no messages")]
     ConversationHasNoMessages(LocalId),
     #[error("Cache error: {0}")]

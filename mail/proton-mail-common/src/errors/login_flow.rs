@@ -149,7 +149,7 @@ impl From<AppError> for UserLoginFlowError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::ConversationNotFound(_local_id) => Self::Unexpected(Unexpected::Database),
-            AppError::ConversationHasNoRemoteId(_local_id) => {
+            AppError::ConversationHasNoRemoteId(_) | AppError::MessageHasNoRemoteId(_) => {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::ConversationHasNoMessages(_local_id) => {
