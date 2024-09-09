@@ -22,6 +22,16 @@ impl TestContext {
             .await;
     }
 
+    pub async fn mock_get_labels_by_ids(&self, labels: Vec<ApiLabel>) {
+        let response = GetLabelsResponse { labels };
+
+        Mock::given(method("POST"))
+            .and(path("/api/core/v4/labels/by-ids"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .mount(self.mock_server())
+            .await;
+    }
+
     pub async fn mock_patch_label(&self, label_id: LabelId, expand: bool) {
         let request = PatchLabelRequest {
             expanded: Some(expand),

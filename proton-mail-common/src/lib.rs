@@ -71,5 +71,5 @@ pub enum AppError {
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
     #[error("Other error: {0}")]
-    Other(String),
+    Other(#[from] anyhow::Error),
 }

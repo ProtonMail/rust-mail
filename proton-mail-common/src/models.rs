@@ -46,10 +46,12 @@ use crate::datatypes::{
 };
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
+use anyhow::Context;
 use bytes::Bytes;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::Proton;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::requests::{
     GetConversationsOptions, GetMessagesOptions, PatchLabelRequest, PostLabelsRequest,
@@ -90,7 +92,7 @@ use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
 use std::vec;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
 
@@ -1707,35 +1709,43 @@ impl Conversation {
     /// conversation cannot be loaded, although this would indicate a
     /// significant problem.
     ///
-    pub async fn search<PM: ProtonMail>(
+    pub async fn search(
         options: GetConversationsOptions,
-        api: &PM,
+        api: &Proton,
         stash: &Stash,
     ) -> Result<Vec<Conversation>, AppError> {
-        let ids = Self::create_or_update_conversations(
-            api.get_conversations(options)
-                .await?
-                .conversations
-                .into_iter()
-                .map(Conversation::from)
-                .collect(),
-            stash,
-        )
-        .await?
-        .into_iter()
-        .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
-        .collect_vec();
+        // Fetch all the conversations from the API
+        let mut conversations = api
+            .get_conversations(options)
+            .await
+            .context("Error fetching the conversations from the API")?
+            .conversations
+            .into_iter()
+            .map(Conversation::from)
+            .collect_vec();
 
-        let conversations = Conversation::find(
-            format!(
-                "WHERE local_id IN ({}) ORDER BY display_order DESC",
-                vec!["?"; ids.len()].join(",")
-            ),
-            ids,
-            stash,
-            None,
-        )
-        .await?;
+        let mut missing_labels = vec![];
+        for conv in &conversations {
+            for label in &conv.labels {
+                if let Some(ref rid) = label.remote_label_id {
+                    let api_rid = rid.clone().into_inner();
+                    if (Label::find_by_id(api_rid.clone(), stash)).await?.is_none() {
+                        missing_labels.push(api_rid.into());
+                    }
+                }
+            }
+        }
+
+        if !missing_labels.is_empty() {
+            info!(
+                "{} label(s) were in a conversations but not locally, synchronizing...",
+                missing_labels.len()
+            );
+            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
+        }
+
+        Self::create_or_update_conversations(conversations.clone(), stash).await?;
+        conversations.sort_unstable_by(|x, y| x.display_order.cmp(&y.display_order).reverse());
 
         Ok(conversations)
     }
@@ -2617,9 +2627,9 @@ impl ConversationLabel {
         let Some(local_label) =
             Label::find_by_id(RemoteId::from(remote_label_id.clone()), interface).await?
         else {
-            return Err(StashError::Custom(
-                "Missing remote local label id".to_owned(),
-            ));
+            return Err(StashError::Custom(format!(
+                "Can't find label with the remote id {remote_label_id}"
+            )));
         };
 
         self.local_label_id = local_label.local_id;
@@ -2917,7 +2927,7 @@ impl Label {
             })
     }
 
-    /// TODO: Document this function.
+    /// Fetches all labels from the API and stores them in the database.
     ///
     /// # Parameters
     ///
@@ -2929,7 +2939,10 @@ impl Label {
     /// Returns an error if the API request failed, or the data could not be
     /// written to the database.
     ///
-    pub async fn sync_labels<PM: ProtonMail>(api: &PM, stash: &Stash) -> Result<(), AppError> {
+    pub async fn sync_labels<PM: ProtonMail, A>(api: &PM, interface: &A) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let mut all_labels: Vec<Label> = Vec::with_capacity(64);
         for category in ALL_LABEL_TYPES {
             debug!("Fetching labels ({:?})", category);
@@ -2938,18 +2951,52 @@ impl Label {
                     .await?
                     .labels
                     .into_iter()
-                    .map(|l| l.into()),
+                    .map_into(),
             );
         }
 
         debug!("Storing labels into database");
-
-        let tx = stash.transaction().await?;
-
+        let tx = interface.transaction().await?;
         for mut label in all_labels {
+            label.save_using(&tx).await?;
+        }
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    /// Fetches the given labels from the API and stores them in the database.
+    ///
+    /// # Parameters
+    ///
+    /// * `api`   - The API instance to use.
+    /// * `stash` - The stash to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed, or the data could not be
+    /// written to the database.
+    ///
+    pub async fn sync_labels_by_ids<PM: ProtonMail, A>(
+        api: &PM,
+        interface: &A,
+        ids: Vec<proton_api_core::services::proton::common::RemoteId>,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let labels = api
+            .get_labels_by_ids(ids)
+            .await?
+            .labels
+            .into_iter()
+            .map_into::<Self>();
+
+        debug!("Storing labels into database");
+        let tx = interface.transaction().await?;
+        for mut label in labels {
             Self::save_using(&mut label, &tx).await?;
         }
-
         tx.commit().await?;
 
         Ok(())
@@ -3688,23 +3735,11 @@ impl Message {
 
         <Self as Model>::save_using(self, interface).await
     }
-    /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `metadata`  - TODO: Document this parameter.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for accessing the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
-    ///
-    pub async fn create_or_update_messages_from_metadata<A>(
+
+    pub async fn create_or_update_messages_from_metadata_vec<A>(
         metadata: Vec<ApiMessageMetadata>,
         interface: &A,
-    ) -> Result<Vec<LocalId>, AppError>
+    ) -> Result<Vec<Message>, AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -3730,7 +3765,7 @@ impl Message {
                     .map(AttachmentMetadata::from)
                     .collect(),
                 bcc_list: MessageAddresses {
-                    value: metadata.bcc_list.into_iter().map(|v| v.into()).collect(),
+                    value: metadata.bcc_list.into_iter().map_into().collect(),
                 },
                 body: "".to_owned(),
                 cc_list: MessageAddresses {
@@ -3746,7 +3781,7 @@ impl Message {
                 is_replied: metadata.is_replied,
                 is_replied_all: metadata.is_replied_all,
                 exclusive_location: None,
-                label_ids: metadata.label_ids.into_iter().map(|v| v.into()).collect(),
+                label_ids: metadata.label_ids.into_iter().map_into().collect(),
                 local_conversation_id: None,
                 mime_type: MimeType::TextPlain,
                 num_attachments: metadata.num_attachments,
@@ -3773,9 +3808,38 @@ impl Message {
 
             Self::save_using(&mut message, interface).await?;
 
-            ids.push(message.local_id.unwrap());
+            ids.push(message);
         }
         Ok(ids)
+    }
+
+    /// TODO: Document this method.
+    ///
+    /// # Parameters
+    ///
+    /// * `metadata`  - TODO: Document this parameter.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for accessing the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed, or the data could not be
+    /// written to the database.
+    ///
+    pub async fn create_or_update_messages_from_metadata<A>(
+        metadata: Vec<ApiMessageMetadata>,
+        interface: &A,
+    ) -> Result<Vec<LocalId>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(
+            Self::create_or_update_messages_from_metadata_vec(metadata, interface)
+                .await?
+                .into_iter()
+                .filter_map(|x| x.local_id)
+                .collect(),
+        )
     }
 
     /// Delete multiple messages.
@@ -4109,9 +4173,11 @@ impl Message {
         // TODO: Verify signature.
         let (decrypted_body, _) = encrypted_msg
             .decrypt(&pgp_provider, &address_keys)
-            .map_err(|e| {
-                error!("Failed to decrypt message ({:?}): {e}", self.local_id);
-                AppError::Other("e".to_owned())
+            .with_context(|| {
+                format!(
+                    "Failed to decrypt message for localid ({:?})",
+                    self.local_id
+                )
             })?;
 
         match decrypted_body {
@@ -4153,30 +4219,70 @@ impl Message {
     /// written to the database. Can also return an error if the found message
     /// cannot be loaded, although this would indicate a significant problem.
     ///
-    pub async fn search<PM: ProtonMail>(
+    pub async fn search(
         options: GetMessagesOptions,
-        api: &PM,
+        api: &Proton,
         stash: &Stash,
     ) -> Result<Vec<Message>, AppError> {
-        let ids = Self::create_or_update_messages_from_metadata(
-            Self::fetch_metadata(options, api).await?.messages,
-            stash,
-        )
-        .await?
-        .into_iter()
-        .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
-        .collect_vec();
+        let messages = api
+            .get_messages(options)
+            .await
+            .context("Error fetching the messages from the API")?
+            .messages
+            .into_iter()
+            .collect_vec();
 
-        let messages = Message::find(
-            format!(
-                "WHERE local_id in ({}) ORDER BY time ASC, display_order ASC",
-                vec!["?"; ids.len()].join(",")
-            ),
-            ids,
-            stash,
-            None,
-        )
-        .await?;
+        // First we load the addresses because the addresses need to exist before the messages get
+        // loaded.
+        for msg in &messages {
+            if (Address::find_by_id(RemoteId::from(msg.address_id.to_owned()), stash).await?)
+                .is_none()
+            {
+                debug!("Address not found, syncing...");
+                let addresses = api
+                    .get_addresses()
+                    .await?
+                    .addresses
+                    .into_iter()
+                    .map(Address::from);
+
+                let tx = stash.transaction().await?;
+                for mut addr in addresses {
+                    addr.save_using(&tx).await?;
+                }
+                tx.commit().await?;
+                break;
+            }
+        }
+
+        let mut missing_labels = vec![];
+        for msg in &messages {
+            for rid in &msg.label_ids {
+                // let api_rid = rid.to_owned().into();
+                if (Label::find_by_id(RemoteId::from(rid.as_str()), stash))
+                    .await?
+                    .is_none()
+                {
+                    missing_labels.push(rid.clone());
+                }
+            }
+        }
+
+        if !missing_labels.is_empty() {
+            info!(
+                "{} label(s) were in a conversations but not locally, synchronizing...",
+                missing_labels.len()
+            );
+            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
+        }
+
+        let mut messages =
+            Self::create_or_update_messages_from_metadata_vec(messages, stash).await?;
+        messages.sort_unstable_by(|x, y| {
+            x.time
+                .cmp(&y.time)
+                .then(x.display_order.cmp(&y.display_order).reverse())
+        });
 
         Ok(messages)
     }
@@ -4335,9 +4441,10 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         // metadata is not there it is either missing or the message does not exist.
-        let remote_id = self.remote_id.clone().ok_or(AppError::Other(
-            "MailboxError::MessageDoesNotHaveRemoteId(self.local_id)".to_owned(),
-        ))?;
+        let remote_id = self
+            .remote_id
+            .clone()
+            .context("MailboxError::MessageDoesNotHaveRemoteId(self.local_id)")?;
         // sync the message body
         Message::from_api_data(
             api.get_message(remote_id.into()).await.map(|v| v.message)?,
@@ -4746,12 +4853,7 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let label_ids: Vec<LabelId> = value
-            .metadata
-            .label_ids
-            .into_iter()
-            .map(|v| v.into())
-            .collect();
+        let label_ids: Vec<LabelId> = value.metadata.label_ids.into_iter().map_into().collect();
 
         Ok(Self {
             local_id: None,

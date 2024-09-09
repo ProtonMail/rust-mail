@@ -438,7 +438,7 @@ async fn test_mark_labels_as_initialized() {
 #[tokio::test]
 async fn test_watch_label() {
     let stash = new_test_connection().await;
-    let tx = stash.connection();
+    // let tx = stash.connection();
 
     let mut label: Label = ApiLabel {
         id: ApiRemoteId::from("label_id"),
@@ -456,9 +456,9 @@ async fn test_watch_label() {
     .into();
 
     label.set_stash(&stash);
-    label.save_using(&tx).await.unwrap();
+    label.save_using(&stash).await.unwrap();
 
-    let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &tx)
+    let (db_label, watcher) = Label::watch(label.local_id.unwrap(), &stash)
         .await
         .unwrap()
         .unwrap();
@@ -466,7 +466,7 @@ async fn test_watch_label() {
     assert_eq!(db_label, label);
 
     label.display_order = 10;
-    label.save_using(&tx).await.unwrap();
+    label.save_using(&stash).await.unwrap();
 
     watcher.recv_async().await.unwrap();
 }
