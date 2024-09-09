@@ -33,8 +33,6 @@ impl MailUserContext {
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
         let ctx = self;
-        let stash = self.user_stash();
-        let api = self.session().api();
 
         debug!("Syncing event id");
         cb.on_stage(MailUserContextLoadingStage::Events);

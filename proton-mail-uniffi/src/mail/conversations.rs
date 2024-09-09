@@ -78,6 +78,7 @@ pub async fn delete_conversations(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> Result
 }
 
 /// Returns available actions for conversation.
+///
 /// Any action returned here should impact current state of the conversation
 /// and also should be available for the user to perform.
 /// There is no need for any additional calculations before executing them.
