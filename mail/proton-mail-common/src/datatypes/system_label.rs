@@ -102,6 +102,10 @@ impl SystemLabel {
     pub fn is_starred(&self) -> bool {
         *self == Self::Starred
     }
+
+    pub fn label_id(&self) -> LabelId {
+        LabelId::from(self.to_string())
+    }
 }
 
 impl Display for SystemLabel {

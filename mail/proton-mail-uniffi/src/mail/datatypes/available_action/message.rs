@@ -26,6 +26,10 @@ impl From<RealMessageAvailableActions> for MessageAvailableActions {
     }
 }
 
+/// Actions that can be taken on a message.
+/// It reflects with low granularity what can be done.
+/// Each of the options are meant to display a button.
+///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum MessageAction {
     Star,

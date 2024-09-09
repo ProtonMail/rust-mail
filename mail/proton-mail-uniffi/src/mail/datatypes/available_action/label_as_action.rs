@@ -3,6 +3,8 @@ use crate::mail::datatypes::{Id, LabelColor};
 use crate::UniffiRecord;
 use proton_mail_common::actions::LabelAsAction as RealLabelAsAction;
 
+/// This struct represents a label that can be used as an action.
+///
 #[derive(Debug, Clone, PartialEq, UniffiRecord)]
 pub struct LabelAsAction {
     pub label_id: Id,

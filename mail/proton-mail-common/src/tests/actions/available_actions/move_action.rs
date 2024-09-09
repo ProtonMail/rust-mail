@@ -2,6 +2,7 @@ use super::{CustomFolderAction, MoveAction, SystemFolderAction};
 use crate::datatypes::{LabelType, SystemLabel};
 use crate::models::Label;
 use crate::{label, lid, rid};
+use itertools::Itertools;
 use test_case::test_case;
 
 #[test_case(&[], |_| false, &[]; "TEST1: empty")]
@@ -61,9 +62,8 @@ use test_case::test_case;
     &[MoveAction::CustomFolder(CustomFolderAction {
         local_id: 0.into(),
         name: "name".into(),
-        color: Default::default(),
-        parent: None,
-        is_selected: None
+        is_selected: None,
+        ..Default::default()
     })]; "TEST7: custom folder partially selected")]
 #[test_case(
     &[
@@ -74,22 +74,22 @@ use test_case::test_case;
     &[MoveAction::CustomFolder(CustomFolderAction {
         local_id: 0.into(),
         name: Default::default(),
-        color: Default::default(),
-        parent: None,
         is_selected: Some(false),
+        ..Default::default()
     }), MoveAction::CustomFolder(CustomFolderAction {
         local_id: 1.into(),
         name: "name".into(),
-        color: Default::default(),
         parent: Some(0.into()),
         is_selected: Some(true),
+        ..Default::default()
     })]; "TEST8: custom folder selected with parent")]
 pub fn test_is_selected(
     labels: &[Label],
     is_selected: impl Fn(&Label) -> bool,
     expected: &[MoveAction],
 ) {
-    let result = MoveAction::finalize(MoveAction::vec(labels, is_selected));
+    let result =
+        MoveAction::calculate_selection(MoveAction::vec(labels, is_selected)).collect_vec();
 
     assert_eq!(result, expected);
 }

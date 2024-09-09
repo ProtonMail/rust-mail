@@ -10,9 +10,16 @@ use proton_core_common::datatypes::LocalId;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// This struct represents a label that can be used as an action.
+///
 pub struct LabelAsAction {
+    /// The database id of the label.
     pub label_id: LocalId,
+
+    /// The name of the label.
     pub name: String,
+
+    /// The color of the label.
     pub color: LabelColor,
 
     /// This field is used to determine if the label is selected or not
@@ -29,6 +36,16 @@ pub struct LabelAsAction {
 }
 
 impl LabelAsAction {
+    /// Create a vector of `LabelAsAction` from a vector of `Label`.
+    /// It is meant to be called for each item for which action is calculated.
+    /// After which all those vectors joined together should be passed to `finalize` method.
+    /// In order to properly calculate the `is_selected` field.
+    ///
+    /// # Arguments
+    ///
+    /// * `iter` - An iterator over the labels. Expected to be sorted by `display_order`.
+    /// * `is_selected` - A function that determines if the label is selected for the given item.
+    ///
     pub fn vec<'a>(
         iter: impl IntoIterator<Item = &'a Label>,
         is_selected: impl Fn(&Label) -> bool,
@@ -46,6 +63,9 @@ impl LabelAsAction {
             .collect()
     }
 
+    /// Method ustilzes map to calculate the final state of the label.
+    /// It requires all of the duplicated labels to be present from the `vec` method.
+    ///
     pub fn finalize(actions: impl IntoIterator<Item = LabelAsAction>) -> Vec<Self> {
         let mut map = LabelAsActionMap::new();
 
