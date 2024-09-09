@@ -97,18 +97,18 @@ pub async fn delete_conversations(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> Result
 ///
 #[uniffi::export]
 pub async fn available_actions_for_conversations(
-    session: Arc<MailUserSession>,
-    view: Id,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
 ) -> Result<ConversationAvailableActions, MailboxError> {
     uniffi_async(async move {
-        let view = RealLabel::load(view.into(), session.user_stash())
+        let view = mailbox.mbox().label_id();
+        let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+            .ok_or_else(|| MailboxError::LabelNotFound(view.into()))?;
         let actions = RealConversation::available_actions(
             view,
             ids.into_iter().map_into().collect(),
-            session.user_stash(),
+            mailbox.stash(),
         )
         .await?;
 
@@ -131,13 +131,13 @@ pub async fn available_actions_for_conversations(
 ///
 #[uniffi::export]
 pub async fn available_label_as_actions_for_conversations(
-    session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
 ) -> MailboxResult<Vec<LabelAsAction>> {
     uniffi_async(async move {
         let actions = RealConversation::available_label_as_actions(
             ids.into_iter().map_into().collect(),
-            session.user_stash(),
+            mailbox.stash(),
         )
         .await?
         .into_iter()
@@ -164,18 +164,18 @@ pub async fn available_label_as_actions_for_conversations(
 ///
 #[uniffi::export]
 pub async fn available_move_to_actions_for_conversations(
-    session: Arc<MailUserSession>,
-    view: Id,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
 ) -> MailboxResult<Vec<MoveAction>> {
     uniffi_async(async move {
-        let view = RealLabel::load(view.into(), session.user_stash())
+        let view = mailbox.mbox().label_id();
+        let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+            .ok_or_else(|| MailboxError::LabelNotFound(view.into()))?;
         let actions = RealConversation::available_move_to_actions(
             view,
             ids.into_iter().map_into().collect(),
-            session.user_stash(),
+            mailbox.stash(),
         )
         .await?
         .into_iter()

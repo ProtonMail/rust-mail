@@ -24,7 +24,7 @@ use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
-use proton_mail_common::models::{self, Label as RealLabel, MailSettings, Message as RealMessage};
+use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use stash::paginator::{Paginator as RealPaginator, Param};
@@ -429,18 +429,18 @@ pub async fn search_for_messages(
 ///
 #[uniffi::export]
 pub async fn available_actions_for_messages(
-    session: Arc<MailUserSession>,
-    view: Id,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
 ) -> MailboxResult<MessageAvailableActions> {
     uniffi_async(async move {
-        let view = RealLabel::load(view.into(), session.user_stash())
+        let view = mailbox.mbox().label_id();
+        let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+            .ok_or_else(|| MailboxError::LabelNotFound(view.into()))?;
         let actions = RealMessage::available_actions(
             view,
             ids.into_iter().map_into().collect(),
-            session.user_stash(),
+            mailbox.stash(),
         )
         .await?;
 
@@ -463,13 +463,13 @@ pub async fn available_actions_for_messages(
 ///
 #[uniffi::export]
 pub async fn available_label_as_actions_for_messages(
-    session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
 ) -> MailboxResult<Vec<LabelAsAction>> {
     uniffi_async(async move {
         let actions = RealMessage::available_label_as_actions(
             ids.into_iter().map_into().collect(),
-            session.user_stash(),
+            mailbox.stash(),
         )
         .await?
         .into_iter()
@@ -496,18 +496,18 @@ pub async fn available_label_as_actions_for_messages(
 ///
 #[uniffi::export]
 pub async fn available_move_to_actions_for_messages(
-    session: Arc<MailUserSession>,
-    view: Id,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
 ) -> MailboxResult<Vec<MoveAction>> {
     uniffi_async(async move {
-        let view = RealLabel::load(view.into(), session.user_stash())
+        let view = mailbox.mbox().label_id();
+        let view = RealLabel::load(view, mailbox.stash())
             .await?
-            .ok_or_else(|| MailboxError::LabelNotFound(view))?;
+            .ok_or_else(|| MailboxError::LabelNotFound(view.into()))?;
         let actions = RealMessage::available_move_to_actions(
             view,
             ids.into_iter().map_into().collect(),
-            session.user_stash(),
+            mailbox.stash(),
         )
         .await?
         .into_iter()

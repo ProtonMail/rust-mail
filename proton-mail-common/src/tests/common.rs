@@ -9,9 +9,10 @@ use proton_api_mail::services::proton::response_data::{
     ConversationLabel as ApiConversationLabel, MessageAddress as ApiMessageAddress,
 };
 use proton_core_common::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LabelId, LocalId, RemoteId,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, Id, LabelId, LocalId, RemoteId,
 };
 use proton_core_common::models::{Address, ModelExtension};
+use stash::orm::Model;
 use stash::stash::{Interface, Tether};
 
 lazy_static! {
@@ -117,6 +118,15 @@ macro_rules! api_conversation {
             ..Default::default()
         }
     }};
+}
+
+pub async fn remote_counterpart<T: Model>(id: LocalId, tx: &Tether) -> RemoteId {
+    id.counterpart::<T, _>(tx).await.unwrap().unwrap()
+}
+
+#[allow(dead_code)]
+pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
+    id.counterpart::<T, _>(tx).await.unwrap().unwrap()
 }
 
 pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {

@@ -36,7 +36,7 @@ mod tests;
 
 use crate::actions::{
     ConversationAction, ConversationAvailableActions, LabelAsAction, MessageAction,
-    MessageAvailableActions, MoveAction,
+    MessageAvailableActions, MoveAction, ReplyAction,
 };
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
@@ -2077,12 +2077,18 @@ impl Conversation {
         Ok((remote_source_id, remote_destination_id))
     }
 
-    /// Get the available actions for the conversation excluding labels which are applied to
-    /// the conversation already.
+    /// Get the available actions for conversations excluding move to current view
+    ///
+    /// # Parameters
+    ///
+    /// * `view` - The label from which conversation is viewed.
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns error if the database request fail.
+    ///
     pub async fn available_actions<A>(
         view: Label,
         local_ids: Vec<LocalId>,
@@ -2105,16 +2111,20 @@ impl Conversation {
         let mut starred = true;
         let mut deleted = true;
         let mut unread = false;
+        let mut reply_all = false;
 
-        for conversion in conversations.iter() {
-            if !conversion.is_starred() {
+        for conversation in conversations.iter() {
+            if !conversation.is_starred() {
                 starred = false;
             }
-            if !conversion.deleted {
+            if !conversation.deleted {
                 deleted = false;
             }
-            if conversion.num_unread > 0 {
+            if conversation.num_unread > 0 {
                 unread = true;
+            }
+            if conversation.recipients.value.len() > 1 {
+                reply_all = true;
             }
         }
 
@@ -2142,15 +2152,42 @@ impl Conversation {
         let all_system_excluding_view = all_system
             .iter()
             .filter(|label| label.local_id != view.local_id);
-
-        let move_actions = MoveAction::vec(all_system_excluding_view, |_label_is_selected| false);
+        let move_actions = conversations
+            .iter()
+            .flat_map(|conversation| {
+                MoveAction::vec(all_system_excluding_view.clone(), |label| {
+                    conversation
+                        .labels
+                        .iter()
+                        .map(|conv_label| conv_label.local_label_id)
+                        .contains(&label.local_id)
+                })
+            })
+            .collect_vec();
+        let reply_actions = if reply_all {
+            ReplyAction::all()
+        } else {
+            ReplyAction::single_address()
+        };
 
         Ok(ConversationAvailableActions::builder()
             .move_actions(MoveAction::system(move_actions))
+            .reply_actions(reply_actions)
             .conversation_actions(conversation_actions)
             .build())
     }
 
+    /// Get the available `label as` actions for conversations
+    ///
+    /// # Parameters
+    ///
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
     pub async fn available_label_as_actions<A>(
         local_ids: Vec<LocalId>,
         interface: &A,
@@ -2185,7 +2222,18 @@ impl Conversation {
         Ok(LabelAsAction::finalize(all_label_as_actions))
     }
 
-    // TODO: docs
+    /// Get the available move actions for conversations
+    ///
+    /// # Parameters
+    ///
+    /// * `view` - The label from which conversation is viewed.
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
     pub async fn available_move_to_actions<A>(
         view: Label,
         local_ids: Vec<LocalId>,
@@ -2227,7 +2275,7 @@ impl Conversation {
             })
             .collect_vec();
 
-        Ok(MoveAction::finalize(all_move_to_actions))
+        MoveAction::finalize(all_move_to_actions, interface).await
     }
 
     /// Finds all of the messages from this conversation
@@ -4546,12 +4594,18 @@ impl Message {
         Ok(api.get_message(remote_id.into()).await.map(|v| v.message)?)
     }
 
-    /// Get the available actions for the message excluding labels which are applied to
-    /// the message already.
+    /// Get the available actions for messages excluding move to the current view.
+    ///
+    /// # Parameters
+    ///
+    /// * `view` - The label from which conversation is viewed.
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns error if the database request fail.
+    ///
     pub async fn available_actions<A>(
         view: Label,
         local_ids: Vec<LocalId>,
@@ -4574,6 +4628,7 @@ impl Message {
         let mut starred = true;
         let mut deleted = true;
         let mut unread = false;
+        let mut reply_all = false;
 
         for message in messages.iter() {
             if !message.is_starred() {
@@ -4584,6 +4639,9 @@ impl Message {
             }
             if message.unread {
                 unread = true;
+            }
+            if message.reply_tos.value.len() > 1 {
+                reply_all = true;
             }
         }
 
@@ -4612,14 +4670,30 @@ impl Message {
             .iter()
             .filter(|label| label.local_id != view.local_id);
         let move_actions = MoveAction::vec(all_system_excluding_view, |_is_label_selected| false);
+        let reply_actions = if reply_all {
+            ReplyAction::all()
+        } else {
+            ReplyAction::single_address()
+        };
 
         Ok(MessageAvailableActions::builder()
             .move_actions(MoveAction::system(move_actions))
+            .reply_actions(reply_actions)
             .message_actions(message_actions)
             .build())
     }
 
-    // TODO: docs
+    /// Get the available `label as` actions for conversations
+    ///
+    /// # Parameters
+    ///
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
     pub async fn available_label_as_actions<A>(
         local_ids: Vec<LocalId>,
         interface: &A,
@@ -4654,7 +4728,18 @@ impl Message {
         Ok(LabelAsAction::finalize(all_label_as_actions))
     }
 
-    // TODO: docs
+    /// Get the available move actions for messages.
+    ///
+    /// # Parameters
+    ///
+    /// * `view` - The label from which conversation is viewed.
+    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the database request fail.
+    ///
     pub async fn available_move_to_actions<A>(
         view: Label,
         local_ids: Vec<LocalId>,
@@ -4696,7 +4781,7 @@ impl Message {
             })
             .collect_vec();
 
-        Ok(MoveAction::finalize(all_move_to_actions))
+        MoveAction::finalize(all_move_to_actions, interface).await
     }
 
     /// Gets the body of a message from a message id.

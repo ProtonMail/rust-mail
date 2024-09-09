@@ -73,7 +73,7 @@ async fn mailbox_message_body_simple() {
 
     // Decrypt the message body.
     let pgp_provider = new_pgp_provider();
-    let local_id = saved_message.local_id.unwrap();
+    let _local_id = saved_message.local_id.unwrap();
     let address_id = saved_message.remote_address_id.clone();
     let address_keys = user_context
         .unlocked_address_keys(&pgp_provider, &address_id)

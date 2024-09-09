@@ -64,13 +64,13 @@ impl CustomFolder {
     /// * `label`     - the original [`Label`].
     /// * `interface` - a connexion to the database
     ///
-    pub async fn new<A>(label: &Label, interface: &A) -> Result<Self, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let color = color_to_display(label, interface).await?;
+    pub fn new(
+        label: &Label,
+        color: Option<LabelColor>,
+        unread: u64,
+        total: u64,
+    ) -> Result<Self, AppError> {
         let label_description = LabelDescription::new(label);
-        let (unread, total) = messages_counts(label, interface).await?;
         Ok(Self {
             local_id: label.local_id.expect("Should be set"),
             parent_id: label.local_parent_id,
@@ -101,8 +101,11 @@ impl CustomFolder {
         A: Into<AgnosticInterface> + Interface,
     {
         let mut result = Vec::with_capacity(labels.len());
+
         for label in labels {
-            let label = Self::new(label, interface).await?;
+            let color = color_to_display(label, interface).await?;
+            let (unread, total) = messages_counts(label, interface).await?;
+            let label = Self::new(label, color, unread, total)?;
             result.push(label);
         }
         Ok(result)

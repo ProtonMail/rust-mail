@@ -6,6 +6,7 @@ use stash::stash::{AgnosticInterface, Interface};
 
 pub mod custom_folder;
 pub mod custom_labels;
+pub mod hierarchy;
 pub mod system_labels;
 
 /// Get the the counts (first unread, second total) depending on the [`ViewMode`].
@@ -16,7 +17,7 @@ pub mod system_labels;
 /// * `inteface` - The database interface, i.e. [`Stash`] or [`Tether`], to
 ///                use for finding the records.
 ///
-async fn messages_counts<A>(label: &Label, interface: &A) -> Result<(u64, u64), AppError>
+pub async fn messages_counts<A>(label: &Label, interface: &A) -> Result<(u64, u64), AppError>
 where
     A: Into<AgnosticInterface> + Interface,
 {
@@ -40,7 +41,10 @@ where
 ///
 /// If there is no [`MailSettings`] in the [`Stash`]
 ///
-async fn color_to_display<A>(value: &Label, interface: &A) -> Result<Option<LabelColor>, AppError>
+pub async fn color_to_display<A>(
+    value: &Label,
+    interface: &A,
+) -> Result<Option<LabelColor>, AppError>
 where
     A: Into<AgnosticInterface> + Interface,
 {

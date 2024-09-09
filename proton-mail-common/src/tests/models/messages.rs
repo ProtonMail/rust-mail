@@ -419,17 +419,93 @@ mod available_label_as_actions {
 }
 
 mod available_move_to_actions {
-    use pretty_assertions::assert_eq;
-    use std::sync::LazyLock;
-
     use super::*;
     use crate::{
-        actions::{CustomFolderAction, SystemFolderAction},
-        conversation,
-        db::new_test_connection,
-        label, message, rid,
+        conversation, db::new_test_connection, label, message, rid,
+        tests::common::remote_counterpart,
     };
+    use futures::stream::{self, StreamExt};
+    use pretty_assertions::assert_eq;
+    use std::sync::LazyLock;
     use test_case::test_case;
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum ExpectedMoveAction {
+        SystemFolder(ExpectedSystemFolder),
+        CustomFolder(ExpectedCustomFolder),
+    }
+
+    impl ExpectedMoveAction {
+        async fn new(action: MoveAction, tx: &Tether) -> Self {
+            match action {
+                MoveAction::SystemFolder(_) => {
+                    ExpectedMoveAction::SystemFolder(ExpectedSystemFolder::new(action, tx).await)
+                }
+                MoveAction::CustomFolder(_) => {
+                    ExpectedMoveAction::CustomFolder(ExpectedCustomFolder::new(action, tx).await)
+                }
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct ExpectedSystemFolder {
+        label_id: LabelId,
+        name: SystemLabel,
+        is_selected: Option<bool>,
+    }
+
+    impl ExpectedSystemFolder {
+        async fn new(action: MoveAction, tx: &Tether) -> Self {
+            match action {
+                MoveAction::SystemFolder(action) => ExpectedSystemFolder {
+                    label_id: remote_counterpart::<Label>(action.local_id, tx)
+                        .await
+                        .into(),
+                    name: action.name,
+                    is_selected: action.is_selected,
+                },
+                _ => panic!("ExpectedSystemFolder::new called with non-SystemFolder action"),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
+    struct ExpectedCustomFolder {
+        label_id: LabelId,
+        name: String,
+        is_selected: Option<bool>,
+        children: Vec<ExpectedCustomFolder>,
+    }
+
+    impl ExpectedCustomFolder {
+        async fn new(action: MoveAction, tx: &Tether) -> Self {
+            match action {
+                MoveAction::CustomFolder(action) => ExpectedCustomFolder {
+                    label_id: action
+                        .local_id
+                        .counterpart::<Label, _>(tx)
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .into(),
+                    name: action.name,
+                    is_selected: action.is_selected,
+                    children: stream::iter(action.children)
+                        .then(|child| async move {
+                            Box::pin(ExpectedCustomFolder::new(
+                                MoveAction::CustomFolder(child),
+                                tx,
+                            ))
+                            .await
+                        })
+                        .collect::<Vec<_>>()
+                        .await,
+                },
+                _ => panic!("ExpectedCustomFolder::new called with non-CustomFolder action"),
+            }
+        }
+    }
 
     struct MessageWithLabels {
         message: Message,
@@ -464,34 +540,32 @@ mod available_move_to_actions {
             label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
         ],
         &[
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Spam.label_id(),
                 name: SystemLabel::Spam,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Trash.label_id(),
                 name: SystemLabel::Trash,
                 is_selected: Some(false),
             }),
-            MoveAction::CustomFolder(CustomFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                label_id: "label1".into(),
                 name: "label1".into(),
-                color: LabelColor::purple(),
-                parent: None,
-                is_selected: Some( false )
+                is_selected: Some(false),
+                children: vec![],
             }),
-            MoveAction::CustomFolder(CustomFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                label_id: "label2".into(),
                 name: "label2".into(),
-                color: Default::default(),
-                parent: None,
-                is_selected: Some( false )
+                is_selected: Some(false),
+                children: vec![]
             }),
         ]; "TEST2: messages without labels")]
     #[test_case(
@@ -505,34 +579,32 @@ mod available_move_to_actions {
             label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
         ],
         &[
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Spam.label_id(),
                 name: SystemLabel::Spam,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Trash.label_id(),
                 name: SystemLabel::Trash,
                 is_selected: Some(false),
             }),
-            MoveAction::CustomFolder(CustomFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                label_id: "label1".into(),
                 name: "label1".into(),
-                color: LabelColor::purple(),
-                parent: None,
-                is_selected: Some( false )
+                is_selected: Some(false),
+                children: vec![],
             }),
-            MoveAction::CustomFolder(CustomFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                label_id: "label2".into(),
                 name: "label2".into(),
-                color: Default::default(),
-                parent: None,
-                is_selected: None
+                is_selected: None,
+                children: vec![],
             }),
         ]; "TEST3: One message in inbox, other in folder")]
     #[test_case(
@@ -543,90 +615,173 @@ mod available_move_to_actions {
         ],
         vec![],
         &[
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Inbox.label_id(),
                 name: SystemLabel::Inbox,
                 is_selected: None,
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Spam.label_id(),
                 name: SystemLabel::Spam,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Trash.label_id(),
                 name: SystemLabel::Trash,
                 is_selected: Some(false),
             }),
         ]; "TEST4: One message in Inbox, other in Outbox when view is STARRED")]
     #[test_case(
-        &CUSTOM_FOLDER,
+            &CUSTOM_FOLDER,
+            vec![
+                MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![CUSTOM_FOLDER.clone()] },
+            ],
+            vec![
+                label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
+                CUSTOM_FOLDER.clone(),
+            ],
+            &[
+                ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                    label_id: SystemLabel::Inbox.label_id(),
+                    name: SystemLabel::Inbox,
+                    is_selected: Some(false),
+                }),
+                ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                    label_id: SystemLabel::Archive.label_id(),
+                    name: SystemLabel::Archive,
+                    is_selected: Some(false),
+                }),
+                ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                    label_id: SystemLabel::Spam.label_id(),
+                    name: SystemLabel::Spam,
+                    is_selected: Some(false),
+                }),
+                ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                    label_id: SystemLabel::Trash.label_id(),
+                    name: SystemLabel::Trash,
+                    is_selected: Some(false),
+                }),
+                ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                    label_id: "label1".into(),
+                    name: "label1".into(),
+                    is_selected: Some(false),
+                    children: vec![]
+                }),
+                ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                    label_id: "0123".into(),
+                    name: "My custom folder".into(),
+                    is_selected: Some(true),
+                    children: vec![],
+                }),
+            ]; "TEST5: Message in custom folder when viewed from custom folder")]
+    #[test_case(
+        &INBOX,
         vec![
-            MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![CUSTOM_FOLDER.clone()] },
+            MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![
+                label!(
+                    remote_id: rid!("folder2"),
+                    remote_parent_id: rid!("folder1"),
+                    name: "folder2".to_string(),
+                    label_type: LabelType::Folder
+                )
+            ] },
         ],
         vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
-            CUSTOM_FOLDER.clone(),
+            label!(
+                remote_id: rid!("folder1"),
+                name: "folder1".to_string(),
+                label_type: LabelType::Folder
+            ),
+            label!(
+                remote_id: rid!("folder2"),
+                remote_parent_id: rid!("folder1"),
+                name: "folder2".to_string(),
+                label_type: LabelType::Folder
+            ),
+            label!(
+                remote_id: rid!("folder3"),
+                remote_parent_id: rid!("folder2"),
+                name: "folder3".to_string(),
+                label_type: LabelType::Folder
+            ),
+            label!(
+                remote_id: rid!("folder4"),
+                remote_parent_id: rid!("folder3"),
+                name: "folder4".to_string(),
+                label_type: LabelType::Folder
+            )
         ],
         &[
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
-                name: SystemLabel::Inbox,
-                is_selected: Some(false),
-            }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Spam.label_id(),
                 name: SystemLabel::Spam,
                 is_selected: Some(false),
             }),
-            MoveAction::SystemFolder(SystemFolderAction {
-                local_id: 0.into(),
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Trash.label_id(),
                 name: SystemLabel::Trash,
                 is_selected: Some(false),
             }),
-            MoveAction::CustomFolder(CustomFolderAction {
-                local_id: 0.into(),
-                name: "label1".into(),
-                color: LabelColor::purple(),
-                parent: None,
-                is_selected: Some(false)
+            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
+                label_id: "folder1".into(),
+                name: "folder1".into(),
+                is_selected: Some(false),
+                children: vec![
+                    ExpectedCustomFolder {
+                        label_id: "folder2".into(),
+                        name: "folder2".into(),
+                        is_selected: Some(true),
+                        children: vec![
+                            ExpectedCustomFolder {
+                                label_id: "folder3".into(),
+                                name: "folder3".into(),
+                                is_selected: Some(false),
+                                children: vec![
+                                    ExpectedCustomFolder {
+                                        label_id: "folder4".into(),
+                                        name: "folder4".into(),
+                                        is_selected: Some(false),
+                                        children: vec![]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
             }),
-            MoveAction::CustomFolder(CustomFolderAction {
-                local_id: 0.into(),
-                name: "My custom folder".into(),
-                color: LabelColor::purple(),
-                parent: None,
-                is_selected: Some(true)
-            }),
-        ]; "TEST5: Message in custom folder when viewed from custom folder")]
+        ]; "TEST6: Message in nested custom folder")]
     #[tokio::test]
     async fn test_move_to_actions(
         view: &Label,
         messages: Vec<MessageWithLabels>,
         labels: Vec<Label>,
-        expected: &[MoveAction],
+        expected: &[ExpectedMoveAction],
     ) {
         let stash = new_test_connection().await;
         let tx = stash.connection();
+        let fun_tx = || tx.clone();
         let address = create_address(&tx).await;
         let mut conversation = conversation!(remote_id: rid!("conversation"));
         conversation.save_using(&tx).await.unwrap();
 
+        let mut settings = MailSettings::default();
+        settings.save_using(&tx).await.unwrap();
+
+        let mut message_ids = vec![];
+
         for mut label in labels {
             label.save_using(&tx).await.expect("failed to create label");
         }
-
-        let mut message_ids = vec![];
 
         for MessageWithLabels {
             mut message,
@@ -660,13 +815,16 @@ mod available_move_to_actions {
             .unwrap()
             .unwrap();
 
-        let mut actual = Message::available_move_to_actions(view, message_ids, &tx)
+        let actual = Message::available_move_to_actions(view, message_ids, &tx)
             .await
             .unwrap();
 
-        actual.iter_mut().for_each(|action| {
-            action.set_local_id(0.into()); // To be able to compare with expected
-        });
+        let actual = stream::iter(actual.into_iter())
+            .then(|action| async move { ExpectedMoveAction::new(action, &fun_tx()).await })
+            .collect::<Vec<_>>()
+            .await;
+
+        dbg!(&actual);
 
         assert_eq!(actual, expected);
     }

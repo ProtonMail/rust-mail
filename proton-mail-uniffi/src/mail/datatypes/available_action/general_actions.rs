@@ -1,6 +1,10 @@
 use crate::UniffiEnum;
 use proton_mail_common::actions::GeneralActions as RealGeneralActions;
 
+/// General actions that can be performed on a message.
+/// These actions are a hardcoded options to show on the edit panel.
+/// It was agreed that they will be unified on the rust side.
+///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum GeneralActions {
     ViewMessageInLightMode,

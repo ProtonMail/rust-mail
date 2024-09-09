@@ -8,9 +8,14 @@ use crate::{UniffiEnum, UniffiRecord};
 
 use super::IsSelected;
 
+/// This enum represents the action of moving a message or conversation to a folder.
+///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum MoveAction {
+    /// Move to a sysem folder (e.g. Inbox, Sent, Archive, Trash).
     SystemFolder(SystemFolderAction),
+
+    /// Move to a custom folder.
     CustomFolder(CustomFolderAction),
 }
 
@@ -23,6 +28,8 @@ impl From<RealMoveAction> for MoveAction {
     }
 }
 
+/// This struct represents a system folder that can be used as an action.
+///
 #[derive(Debug, Clone, PartialEq, UniffiRecord)]
 pub struct SystemFolderAction {
     pub local_id: Id,
@@ -40,12 +47,21 @@ impl From<RealSystemFolderAction> for SystemFolderAction {
     }
 }
 
+/// This struct represents a custom folder that can be used as an action.
+///
 #[derive(Debug, Clone, PartialEq, UniffiRecord)]
 pub struct CustomFolderAction {
     pub local_id: Id,
+
     pub name: String,
-    pub color: LabelColor,
-    pub parent: Option<Id>, // TODO: This should be a reference to a custom folder
+
+    /// Folder color is calculated based on user settings.
+    /// None means the folder colors are disabled.
+    pub color: Option<LabelColor>,
+
+    /// It holds folder structure as self reference within vector.
+    pub children: Vec<CustomFolderAction>,
+
     pub is_selected: IsSelected,
 }
 
@@ -54,8 +70,8 @@ impl From<RealCustomFolderAction> for CustomFolderAction {
         CustomFolderAction {
             local_id: value.local_id.into(),
             name: value.name.clone(),
-            color: value.color.into(),
-            parent: value.parent.map(Into::into),
+            color: value.color.map(Into::into),
+            children: value.children.into_iter().map(Into::into).collect(),
             is_selected: IsSelected::new(value.is_selected),
         }
     }
