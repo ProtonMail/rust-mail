@@ -166,7 +166,9 @@ async fn unsynced_messages() {
     let api = user_context.session().api();
 
     ctx.mock_get_labels_by_ids(ctx.get_test_labels()).await;
-    ctx.mock_get_all_addresses(ctx.get_test_addrs()).await;
+    let addrs = ctx.get_test_addrs();
+    ctx.mock_get_address(addrs[0].clone()).await;
+    ctx.mock_get_address(addrs[1].clone()).await;
     ctx.mock_get_messages(ctx.get_test_msgs()).await;
 
     let options = GetMessagesOptions::default();

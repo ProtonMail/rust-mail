@@ -4245,6 +4245,7 @@ impl Message {
             .into_iter()
             .collect_vec();
 
+        let mut addrs = vec![];
         // First we load the addresses because the addresses need to exist before the messages get
         // loaded.
         for msg in &messages {
@@ -4252,21 +4253,19 @@ impl Message {
                 .is_none()
             {
                 debug!("Address not found, syncing...");
-                let addresses = api
-                    .get_addresses()
+                let addr = api
+                    .get_address_by_id(msg.address_id.to_owned())
                     .await?
-                    .addresses
-                    .into_iter()
-                    .map(Address::from);
-
-                let tx = stash.transaction().await?;
-                for mut addr in addresses {
-                    addr.save_using(&tx).await?;
-                }
-                tx.commit().await?;
-                break;
+                    .address;
+                addrs.push(Address::from(addr));
             }
         }
+
+        let tx = stash.transaction().await?;
+        for mut addr in addrs {
+            addr.save_using(&tx).await?;
+        }
+        tx.commit().await?;
 
         let mut missing_labels = vec![];
         for msg in &messages {
