@@ -3736,6 +3736,19 @@ impl Message {
         <Self as Model>::save_using(self, interface).await
     }
 
+    /// Given a vec of message metadatas tries to create them in the database
+    ///
+    /// # Parameters
+    ///
+    /// * `metadata`  - The message metadata returned from the API
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for accessing the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed, or the data could not be
+    /// written to the database.
+    ///
     pub async fn create_or_update_messages_from_metadata_vec<A>(
         metadata: Vec<ApiMessageMetadata>,
         interface: &A,
@@ -3813,11 +3826,11 @@ impl Message {
         Ok(ids)
     }
 
-    /// TODO: Document this method.
+    /// Given a message metadata tries to create it in the database
     ///
     /// # Parameters
     ///
-    /// * `metadata`  - TODO: Document this parameter.
+    /// * `metadata`  - The message metadata returned from the API
     /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
     ///                 use for accessing the database.
     ///
