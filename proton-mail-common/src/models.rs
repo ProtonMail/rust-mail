@@ -4456,7 +4456,9 @@ impl Message {
         let remote_id = self
             .remote_id
             .clone()
-            .context("MailboxError::MessageDoesNotHaveRemoteId(self.local_id)")?;
+            .ok_or(AppError::MessageHasNoRemoteId(
+                self.local_id.unwrap_or(LocalId::from(0)),
+            ))?;
         // sync the message body
         Message::from_api_data(
             api.get_message(remote_id.into()).await.map(|v| v.message)?,
