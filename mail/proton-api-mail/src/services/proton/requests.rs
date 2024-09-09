@@ -121,6 +121,7 @@ pub struct GetLabelsOptions {
 }
 
 /// Represents `POST /labels/by-ids` request body.
+///
 /// Name refers to the fact it actually gets labels by their IDs.
 /// But due to the fact GET requests are not supposed to have a body
 /// The struct is used with the POST method instead.
