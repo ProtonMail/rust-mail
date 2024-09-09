@@ -50,6 +50,15 @@ pub struct GetAddressesResponse {
     pub addresses: Vec<Address>,
 }
 
+/// The response containing an address.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetAddressResponse {
+    /// The list of addresses.
+    pub address: Address,
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]

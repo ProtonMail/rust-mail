@@ -81,6 +81,7 @@ use parking_lot::RwLock;
 use proton_crypto_account::keys::APIPublicAddressKeys;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use reqwest::{Client, Method, Url};
+use responses::GetAddressResponse;
 use secrecy::ExposeSecret;
 use serde::{Deserialize, Serialize};
 use serde_json::{Error as JsonError, Value as JsonValue};
@@ -399,6 +400,24 @@ impl Proton {
     pub async fn get_addresses(&self) -> Result<GetAddressesResponse, ApiServiceError> {
         self.get::<_, Json<_>>(&format!("{}/addresses", Self::BASE_PATH), NO_PARAMS, None)
             .await
+    }
+
+    /// GET a single address
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    pub async fn get_address_by_id(
+        &self,
+        id: RemoteId,
+    ) -> Result<GetAddressResponse, ApiServiceError> {
+        self.get::<_, Json<_>>(
+            &format!("{}/addresses/{id}", Self::BASE_PATH),
+            NO_PARAMS,
+            None,
+        )
+        .await
     }
 
     /// GETs Captcha details.
