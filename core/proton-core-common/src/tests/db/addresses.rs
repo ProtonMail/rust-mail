@@ -19,7 +19,10 @@ async fn test_address_create() {
         .await
         .expect("Failed to start transaction");
     let mut address = create_test_address(&conn);
-    address.save().await.expect("failed to create address");
+    address
+        .save_using(&tx)
+        .await
+        .expect("failed to create address");
     let db_address = Address::load(address.local_id.unwrap(), &tx)
         .await
         .expect("failed to get address")
@@ -36,9 +39,15 @@ async fn test_address_update() {
         .await
         .expect("Failed to start transaction");
     let mut address = create_test_address(&conn);
-    address.save().await.expect("failed to create address");
+    address
+        .save_using(&tx)
+        .await
+        .expect("failed to create address");
     let mut address2 = create_test_address_updated(&conn);
-    address2.save().await.expect("failed to create duplicate");
+    address2
+        .save_using(&tx)
+        .await
+        .expect("failed to create duplicate");
     let db_address = Address::load(address.local_id.unwrap(), &tx)
         .await
         .expect("failed to get address")
@@ -55,7 +64,10 @@ async fn test_address_delete() {
         .await
         .expect("Failed to start transaction");
     let mut address = create_test_address(&conn);
-    address.save().await.expect("failed to create address");
+    address
+        .save_using(&tx)
+        .await
+        .expect("failed to create address");
     tx.execute(
         "DELETE FROM addresses WHERE remote_id=?",
         params![address.remote_id.clone()],
