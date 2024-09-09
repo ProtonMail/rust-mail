@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fixed
+
+  - Database locked error
+
 ### Changed
 
   - Errors for login flow are now returned as contextual Enums
