@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fixed
+
+  - Result types were not exported as enum.
+
 ## [0.11.35] - 2024-09-09
 
 ### Fixed

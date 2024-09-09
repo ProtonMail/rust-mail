@@ -128,7 +128,7 @@ impl From<RealHumanVerificationType> for HumanVerificationType {
 macro_rules! result_builder {
     ($name:ident, $type:ty) => {
         #[allow(clippy::large_enum_variant)]
-        #[derive(uniffi::Object)]
+        #[derive(uniffi::Enum)]
         pub enum $name {
             Ok($type),
             Error(UserLoginFlowError),
