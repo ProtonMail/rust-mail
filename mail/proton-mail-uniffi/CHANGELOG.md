@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fixed
+
+- Login should now fail on wrong password
+
 ## [0.11.36] - 2024-09-09
 
 ### Fixed

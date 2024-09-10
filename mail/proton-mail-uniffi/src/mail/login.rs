@@ -48,10 +48,10 @@ impl LoginFlow {
         let password = SecretString::from(password);
         uniffi_async::<_, RealUserLoginFlowError, _>(async move {
             let mut guard = flow.lock().await;
-            Ok(guard
+            guard
                 .login(email, password.expose_secret().clone(), None)
                 .await
-                .map_err(RealUserLoginFlowError::from))
+                .map_err(RealUserLoginFlowError::from)
         })
         .await
         .into()
