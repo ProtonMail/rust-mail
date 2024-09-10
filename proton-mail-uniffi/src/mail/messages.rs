@@ -12,10 +12,12 @@ use super::datatypes::{BlockQuote, RemoteContent};
 use super::datatypes::{MessageAvailableAction, MimeType};
 use super::{MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
+use crate::core::paginator::MessagePaginator;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSessionError, MailboxError};
 use crate::utils::damp;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
@@ -25,6 +27,8 @@ use proton_mail_common::decrypted_message::{
 use proton_mail_common::models::{self, MailSettings, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
+use stash::paginator::{Paginator as RealPaginator, Param};
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use tokio::task::JoinError;
 
@@ -324,6 +328,58 @@ pub async fn messages_for_label(
                 .map(Into::into)
                 .collect(),
         )
+    })
+    .await
+}
+
+/// Paginate messages for the given label.
+///
+/// Gets a paginator for messages belonging to the specified label, which allows
+/// navigation through the messages by page/window, and watches for changes.
+/// When the messages change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to watch.
+/// * `callback` - The callback to use for updates. When the specified messages
+///                change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn paginate_messages_for_label(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<MessagePaginator, MailboxError> {
+    let stash = session.user_stash().clone();
+    let (msg_sender, msg_receiver) = flume::unbounded();
+    uniffi_async(async move {
+        #[allow(clippy::cast_possible_wrap)]
+        let real_paginator = RealPaginator::new(
+            formatdoc!(
+                "
+                WHERE label_type=1 AND local_id IN (
+                    SELECT local_label_id FROM message_labels WHERE local_message_id IN (
+                        SELECT local_message_id FROM message_labels WHERE local_label_id=?
+                    )
+                )
+                "
+            ),
+            vec![Param::Integer(label_id.as_u64() as i64)],
+            &stash,
+            NonZeroU32::new(50).unwrap(),
+            Some(msg_sender),
+        )
+        .await?;
+        Ok(MessagePaginator {
+            real_paginator,
+            handle: watch_channel(msg_receiver, callback),
+        })
     })
     .await
 }
