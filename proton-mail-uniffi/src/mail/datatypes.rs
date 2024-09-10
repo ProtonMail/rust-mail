@@ -79,7 +79,7 @@ use proton_mail_common::datatypes::{
     NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
     PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
     ShowMoved as RealShowMoved, SpamAction as RealSpamAction, SwipeAction as RealSwipeAction,
-    SystemLabel as RealSystemLabel, ViewLayout as RealViewLayout, ViewMode as RealViewMode,
+    ViewLayout as RealViewLayout, ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -253,13 +253,10 @@ impl From<RealDisposition> for Disposition {
 
 #[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
 pub enum ExclusiveLocation {
-    Inbox,
-    Trash,
-    Archive,
-    Spam,
-    Snoozed,
-    Scheduled,
-    Outbox,
+    System {
+        name: SystemLabel,
+        id: Id,
+    },
     Custom {
         name: String,
         id: Id,
@@ -270,15 +267,10 @@ pub enum ExclusiveLocation {
 impl From<ExclusiveLocation> for RealExclusiveLocation {
     fn from(value: ExclusiveLocation) -> Self {
         match value {
-            ExclusiveLocation::Inbox => RealExclusiveLocation::System(RealSystemLabel::Inbox),
-            ExclusiveLocation::Trash => RealExclusiveLocation::System(RealSystemLabel::Trash),
-            ExclusiveLocation::Archive => RealExclusiveLocation::System(RealSystemLabel::Archive),
-            ExclusiveLocation::Spam => RealExclusiveLocation::System(RealSystemLabel::Spam),
-            ExclusiveLocation::Snoozed => RealExclusiveLocation::System(RealSystemLabel::Snoozed),
-            ExclusiveLocation::Scheduled => {
-                RealExclusiveLocation::System(RealSystemLabel::Scheduled)
-            }
-            ExclusiveLocation::Outbox => RealExclusiveLocation::System(RealSystemLabel::Outbox),
+            ExclusiveLocation::System { name, id } => RealExclusiveLocation::System {
+                name: name.into(),
+                local_id: id.into(),
+            },
             ExclusiveLocation::Custom { name, id, color } => RealExclusiveLocation::Custom {
                 name,
                 local_id: id.into(),
@@ -291,15 +283,10 @@ impl From<ExclusiveLocation> for RealExclusiveLocation {
 impl From<RealExclusiveLocation> for ExclusiveLocation {
     fn from(value: RealExclusiveLocation) -> Self {
         match value {
-            RealExclusiveLocation::System(RealSystemLabel::Inbox) => ExclusiveLocation::Inbox,
-            RealExclusiveLocation::System(RealSystemLabel::Trash) => ExclusiveLocation::Trash,
-            RealExclusiveLocation::System(RealSystemLabel::Archive) => ExclusiveLocation::Archive,
-            RealExclusiveLocation::System(RealSystemLabel::Spam) => ExclusiveLocation::Spam,
-            RealExclusiveLocation::System(RealSystemLabel::Snoozed) => ExclusiveLocation::Snoozed,
-            RealExclusiveLocation::System(RealSystemLabel::Scheduled) => {
-                ExclusiveLocation::Scheduled
-            }
-            RealExclusiveLocation::System(RealSystemLabel::Outbox) => ExclusiveLocation::Outbox,
+            RealExclusiveLocation::System { name, local_id } => ExclusiveLocation::System {
+                name: name.into(),
+                id: local_id.into(),
+            },
             RealExclusiveLocation::Custom {
                 name,
                 local_id,
@@ -309,7 +296,6 @@ impl From<RealExclusiveLocation> for ExclusiveLocation {
                 id: local_id.into(),
                 color: color.into(),
             },
-            RealExclusiveLocation::System(_) => unreachable!(),
         }
     }
 }

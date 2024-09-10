@@ -11,7 +11,10 @@ use proton_core_common::datatypes::LocalId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExclusiveLocation {
-    System(SystemLabel),
+    System {
+        name: SystemLabel,
+        local_id: LocalId,
+    },
     Custom {
         name: String,
         local_id: LocalId,
@@ -65,7 +68,10 @@ impl ExclusiveLocation {
                 let system_label = SystemLabel::new(label)?;
 
                 if system_label.is_exclusive_location() {
-                    Some(ExclusiveLocation::System(system_label))
+                    Some(ExclusiveLocation::System {
+                        name: system_label,
+                        local_id: label.local_id?,
+                    })
                 } else {
                     None
                 }
