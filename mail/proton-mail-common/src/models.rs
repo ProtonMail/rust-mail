@@ -89,6 +89,7 @@ use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
+use std::vec;
 use tracing::{debug, error};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
@@ -1116,13 +1117,23 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let mut labels = Vec::new();
+        let ids = self
+            .labels
+            .iter()
+            .filter_map(|label| label.local_label_id)
+            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+            .collect_vec();
 
-        for id in self.labels.iter().filter_map(|label| label.local_label_id) {
-            if let Some(label) = Label::load(id, interface).await? {
-                labels.push(label);
-            }
-        }
+        let labels = Label::find(
+            format!(
+                "WHERE local_id IN ({}) ORDER BY display_order ASC",
+                vec!["?"; ids.len()].join(",")
+            ),
+            ids,
+            interface,
+            None,
+        )
+        .await?;
 
         Ok(labels)
     }
@@ -1710,15 +1721,22 @@ impl Conversation {
                 .collect(),
             stash,
         )
+        .await?
+        .into_iter()
+        .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+        .collect_vec();
+
+        let conversations = Conversation::find(
+            format!(
+                "WHERE local_id IN ({}) ORDER BY display_order DESC",
+                vec!["?"; ids.len()].join(",")
+            ),
+            ids,
+            stash,
+            None,
+        )
         .await?;
-        let mut conversations = vec![];
-        for id in ids {
-            conversations.push(
-                Self::load(id, stash)
-                    .await?
-                    .ok_or(AppError::Other("Conversation not found".to_owned()))?,
-            );
-        }
+
         Ok(conversations)
     }
 
@@ -2125,10 +2143,7 @@ impl Conversation {
         A: Into<AgnosticInterface> + Interface,
     {
         Message::find(
-            r"
-        WHERE
-          local_conversation_id == ?
-        ",
+            "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
             params![self.local_id.unwrap()],
             interface,
             None,
@@ -2404,6 +2419,8 @@ impl Conversation {
                     ON conversations.local_id = conversation_labels.local_conversation_id
                 WHERE
                     conversation_labels.local_label_id = ?
+                ORDER BY
+                    conversations.display_order DESC
                 "
             ),
             params![local_label_id],
@@ -3070,7 +3087,13 @@ impl Label {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        Label::find("WHERE label_type = ?", params![kind], interface, None).await
+        Label::find(
+            "WHERE label_type = ? ORDER BY display_order ASC",
+            params![kind],
+            interface,
+            None,
+        )
+        .await
     }
 
     /// Watch a label with the given `local_id` for changes.
@@ -3861,7 +3884,7 @@ impl Message {
             r#"
             WHERE local_id IN (
                 SELECT local_label_id FROM message_labels WHERE local_message_id = ?
-            )
+            ) ORDER BY display_order ASC
             "#,
             params![self.local_id],
             interface,
@@ -4139,15 +4162,22 @@ impl Message {
             Self::fetch_metadata(options, api).await?.messages,
             stash,
         )
+        .await?
+        .into_iter()
+        .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+        .collect_vec();
+
+        let messages = Message::find(
+            format!(
+                "WHERE local_id in ({}) ORDER BY time ASC, display_order ASC",
+                vec!["?"; ids.len()].join(",")
+            ),
+            ids,
+            stash,
+            None,
+        )
         .await?;
-        let mut messages = vec![];
-        for id in ids {
-            messages.push(
-                Self::load(id, stash)
-                    .await?
-                    .ok_or(AppError::Other("Message not found".to_owned()))?,
-            );
-        }
+
         Ok(messages)
     }
 
@@ -5089,7 +5119,7 @@ impl Message {
                     SELECT local_label_id FROM message_labels WHERE local_message_id IN (
                         SELECT local_message_id FROM message_labels WHERE local_label_id=?
                     )
-                )
+                ) ORDER BY display_order ASC
             "
                 ),
                 params![LabelType::Label, local_label_id],
@@ -5150,6 +5180,7 @@ impl Message {
                     ON messages.local_id = message_labels.local_message_id
                 WHERE
                     message_labels.local_label_id = ?
+                ORDER BY messages.time ASC, messages.display_order ASC
                 "
             ),
             params![local_label_id],
