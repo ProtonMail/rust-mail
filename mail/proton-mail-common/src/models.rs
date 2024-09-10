@@ -1707,7 +1707,7 @@ impl Conversation {
     async fn sync_dependencies<A>(
         conversations: &[ApiConversation],
         api: &Proton,
-        stash: &A,
+        interface: &A,
     ) -> Result<(), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -1716,7 +1716,7 @@ impl Conversation {
         for conv in conversations {
             for label in &conv.labels {
                 let rid: RemoteId = label.id.clone().into();
-                if (Label::find_by_id(rid, stash)).await?.is_none() {
+                if (Label::find_by_id(rid, interface)).await?.is_none() {
                     missing_labels.push(label.id.clone());
                 }
             }
@@ -1727,7 +1727,7 @@ impl Conversation {
                 "{} label(s) were in a conversations but not locally, synchronizing...",
                 missing_labels.len()
             );
-            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
+            Label::sync_labels_by_ids(api, interface, missing_labels).await?;
         }
         Ok(())
     }
@@ -4257,7 +4257,7 @@ impl Message {
     async fn sync_dependencies_from_metadata<A>(
         messages: &[MessageMetadata],
         api: &Proton,
-        stash: &A,
+        interface: &A,
     ) -> Result<(), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -4266,10 +4266,10 @@ impl Message {
         // First we load the addresses because the addresses need to exist before the messages get
         // loaded.
         for msg in messages {
-            if (Address::find_by_id(RemoteId::from(msg.address_id.to_owned()), stash).await?)
+            if (Address::find_by_id(RemoteId::from(msg.address_id.to_owned()), interface).await?)
                 .is_none()
             {
-                debug!("Address not found, syncing...");
+                debug!("Address {} not found, syncing...", msg.address_id);
                 let addr = api
                     .get_address_by_id(msg.address_id.to_owned())
                     .await?
@@ -4278,7 +4278,7 @@ impl Message {
             }
         }
 
-        let tx = stash.transaction().await?;
+        let tx = interface.transaction().await?;
         for mut addr in addrs {
             addr.save_using(&tx).await?;
         }
@@ -4288,7 +4288,7 @@ impl Message {
         for msg in messages {
             for rid in &msg.label_ids {
                 // let api_rid = rid.to_owned().into();
-                if (Label::find_by_id(RemoteId::from(rid.as_str()), stash))
+                if (Label::find_by_id(RemoteId::from(rid.as_str()), interface))
                     .await?
                     .is_none()
                 {
@@ -4302,7 +4302,7 @@ impl Message {
                 "{} label(s) were in a conversations but not locally, synchronizing...",
                 missing_labels.len()
             );
-            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
+            Label::sync_labels_by_ids(api, interface, missing_labels).await?;
         }
 
         Ok(())
