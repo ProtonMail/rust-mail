@@ -1,4 +1,4 @@
-image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
 
 include:
   - project: "rust/shared/registry"
@@ -48,7 +48,7 @@ build:
   script:
     - !reference [.script-config-git, script]
     - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo build
-    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo test
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo nextest run --color=never
 
 build-macos:
   tags:
@@ -171,7 +171,7 @@ publish-ios:
 
 deploy-proton-api-mail:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   tags:
@@ -183,7 +183,7 @@ deploy-proton-api-mail:
 
 deploy-proton-mail-message-detector:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   variables:
@@ -193,7 +193,7 @@ deploy-proton-mail-message-detector:
 
 deploy-proton-mail-html-transformer:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   variables:
@@ -203,7 +203,7 @@ deploy-proton-mail-html-transformer:
 
 deploy-proton-mail-common:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   rules:
     - if: $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
   tags:
