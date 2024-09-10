@@ -1689,6 +1689,48 @@ impl Conversation {
         .map(|r| r.responses)
     }
 
+    /// Given a list of conversations check if there are any missing dependencies like undownloaded
+    /// labels.
+    ///
+    ///
+    /// # Parameters
+    ///
+    /// * `conversations` - The conversations to check.
+    /// * `api`           - The API instance to use.
+    /// * `stash`         - The stash to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database.
+    ///
+    async fn sync_dependencies<A>(
+        conversations: &[ApiConversation],
+        api: &Proton,
+        stash: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut missing_labels = vec![];
+        for conv in conversations {
+            for label in &conv.labels {
+                let rid: RemoteId = label.id.clone().into();
+                if (Label::find_by_id(rid, stash)).await?.is_none() {
+                    missing_labels.push(label.id.clone());
+                }
+            }
+        }
+
+        if !missing_labels.is_empty() {
+            info!(
+                "{} label(s) were in a conversations but not locally, synchronizing...",
+                missing_labels.len()
+            );
+            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
+        }
+        Ok(())
+    }
     /// Search for conversations.
     ///
     /// This function accepts search options and calls the API to find any
@@ -1715,35 +1757,18 @@ impl Conversation {
         stash: &Stash,
     ) -> Result<Vec<Conversation>, AppError> {
         // Fetch all the conversations from the API
-        let mut conversations = api
+        let conversations = api
             .get_conversations(options)
             .await
             .context("Error fetching the conversations from the API")?
-            .conversations
+            .conversations;
+
+        Self::sync_dependencies(&conversations, api, stash).await?;
+
+        let mut conversations = conversations
             .into_iter()
             .map(Conversation::from)
             .collect_vec();
-
-        let mut missing_labels = vec![];
-        for conv in &conversations {
-            for label in &conv.labels {
-                if let Some(ref rid) = label.remote_label_id {
-                    let api_rid = rid.clone().into_inner();
-                    if (Label::find_by_id(api_rid.clone(), stash)).await?.is_none() {
-                        missing_labels.push(api_rid.into());
-                    }
-                }
-            }
-        }
-
-        if !missing_labels.is_empty() {
-            info!(
-                "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels.len()
-            );
-            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
-        }
-
         Self::create_or_update_conversations(conversations.clone(), stash).await?;
         conversations.sort_unstable_by(|x, y| x.display_order.cmp(&y.display_order).reverse());
 
@@ -4214,6 +4239,75 @@ impl Message {
         }
     }
 
+    /// Given a list of message metadata check if there are any missing dependencies like
+    /// undownloaded labels or addresses.
+    ///
+    ///
+    /// # Parameters
+    ///
+    /// * `messages`  - The messages to check.
+    /// * `api`       - The API instance to use.
+    /// * `stash`     - The stash to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed or the data could not be
+    /// written to the database.
+    ///
+    async fn sync_dependencies_from_metadata<A>(
+        messages: &[MessageMetadata],
+        api: &Proton,
+        stash: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut addrs = vec![];
+        // First we load the addresses because the addresses need to exist before the messages get
+        // loaded.
+        for msg in messages {
+            if (Address::find_by_id(RemoteId::from(msg.address_id.to_owned()), stash).await?)
+                .is_none()
+            {
+                debug!("Address not found, syncing...");
+                let addr = api
+                    .get_address_by_id(msg.address_id.to_owned())
+                    .await?
+                    .address;
+                addrs.push(Address::from(addr));
+            }
+        }
+
+        let tx = stash.transaction().await?;
+        for mut addr in addrs {
+            addr.save_using(&tx).await?;
+        }
+        tx.commit().await?;
+
+        let mut missing_labels = vec![];
+        for msg in messages {
+            for rid in &msg.label_ids {
+                // let api_rid = rid.to_owned().into();
+                if (Label::find_by_id(RemoteId::from(rid.as_str()), stash))
+                    .await?
+                    .is_none()
+                {
+                    missing_labels.push(rid.clone());
+                }
+            }
+        }
+
+        if !missing_labels.is_empty() {
+            info!(
+                "{} label(s) were in a conversations but not locally, synchronizing...",
+                missing_labels.len()
+            );
+            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
+        }
+
+        Ok(())
+    }
+
     /// Search for messages.
     ///
     /// This function accepts search options and calls the API to find any
@@ -4245,48 +4339,9 @@ impl Message {
             .into_iter()
             .collect_vec();
 
-        let mut addrs = vec![];
         // First we load the addresses because the addresses need to exist before the messages get
         // loaded.
-        for msg in &messages {
-            if (Address::find_by_id(RemoteId::from(msg.address_id.to_owned()), stash).await?)
-                .is_none()
-            {
-                debug!("Address not found, syncing...");
-                let addr = api
-                    .get_address_by_id(msg.address_id.to_owned())
-                    .await?
-                    .address;
-                addrs.push(Address::from(addr));
-            }
-        }
-
-        let tx = stash.transaction().await?;
-        for mut addr in addrs {
-            addr.save_using(&tx).await?;
-        }
-        tx.commit().await?;
-
-        let mut missing_labels = vec![];
-        for msg in &messages {
-            for rid in &msg.label_ids {
-                // let api_rid = rid.to_owned().into();
-                if (Label::find_by_id(RemoteId::from(rid.as_str()), stash))
-                    .await?
-                    .is_none()
-                {
-                    missing_labels.push(rid.clone());
-                }
-            }
-        }
-
-        if !missing_labels.is_empty() {
-            info!(
-                "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels.len()
-            );
-            Label::sync_labels_by_ids(api, stash, missing_labels).await?;
-        }
+        Self::sync_dependencies_from_metadata(&messages, api, stash).await?;
 
         let mut messages =
             Self::create_or_update_messages_from_metadata_vec(messages, stash).await?;
