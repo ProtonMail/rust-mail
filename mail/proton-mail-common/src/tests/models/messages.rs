@@ -17,7 +17,7 @@ use crate::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
     prepare_db_state_core,
 };
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, Remote};
 use futures::FutureExt;
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
@@ -317,7 +317,12 @@ async fn test_create_message() {
     resolve_local_ids(&tx, &mut expected).await;
     expected.local_id = Some(1.into());
     expected.row_id = Some(1_u64);
-    expected.exclusive_location = Some(ExclusiveLocation::System(SystemLabel::Inbox));
+    expected.exclusive_location = ExclusiveLocation::new(
+        &Label::find_by_id(LabelId::inbox().into_inner(), &stash)
+            .await
+            .unwrap()
+            .unwrap(),
+    );
     expected.custom_labels = vec![CustomLabel {
         local_id: label.local_id.unwrap(),
         name: label.name,

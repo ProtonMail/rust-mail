@@ -10,7 +10,7 @@ use proton_core_common::datatypes::LabelId;
 use test_case::test_case;
 
 #[test_case(&[] => None; "TEST1 - empty")]
-#[test_case(&[(&SystemLabel::Inbox.into(), System )] => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST2 - only inbox")]
+#[test_case(&[(&SystemLabel::Inbox.into(), System )] => Some(ExclusiveLocation::System { name: SystemLabel::Inbox, local_id: 0.into()}); "TEST2 - only inbox")]
 #[test_case(&[
         (&SystemLabel::Snoozed.into(), System),
         (&SystemLabel::AlmostAllMail.into(), System),
@@ -26,19 +26,19 @@ use test_case::test_case;
         (&SystemLabel::AllSent.into(), System),
         (&SystemLabel::AllDrafts.into(), System),
         (&SystemLabel::Inbox.into(), System),
-    ] => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST3 - all system labels"
+    ] => Some(ExclusiveLocation::System { name: SystemLabel::Inbox, local_id: 13.into() }); "TEST3 - all system labels"
 )]
 #[test_case(
     &[
         (&SystemLabel::Outbox.into(), System),
         (&SystemLabel::Trash.into(), System)
-    ] => Some(ExclusiveLocation::System(SystemLabel::Trash)); "TEST4 - outbox and trash"
+    ] => Some(ExclusiveLocation::System { name: SystemLabel::Trash, local_id: 1.into() }); "TEST4 - outbox and trash"
 )]
 #[test_case(
     &[
         (&SystemLabel::Inbox.into(), System),
         (&SystemLabel::Outbox.into(), System)
-] => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST5 - message sent to themself")]
+] => Some(ExclusiveLocation::System { name: SystemLabel::Inbox, local_id: 0.into() }); "TEST5 - message sent to themself")]
 #[test_case(&[(&LabelId::starred(), System)]
     => None; "TEST6 - message is starred and does not belong to any exclusive location"
 )]
@@ -75,7 +75,7 @@ use test_case::test_case;
         (&LabelId::from("custom_folder"), Folder),
         (&SystemLabel::Inbox.into(), System)
     ]
-    => Some(ExclusiveLocation::System(SystemLabel::Inbox)); "TEST13 - in custom folder and inbox"
+    => Some(ExclusiveLocation::System { name: SystemLabel::Inbox, local_id: 1.into() }); "TEST13 - in custom folder and inbox"
 )]
 #[test_case(&[
         (&LabelId::drafts(), System),

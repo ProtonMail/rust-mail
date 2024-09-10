@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - `ExclusiveLocation` enum now instead of listing all system exclusive locations, wraps them
+    in `System { name: SystemLabel, id: Id }`
+
 ## [0.11.37] - 2024-09-09
 
 ### Fixed

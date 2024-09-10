@@ -58,3 +58,29 @@ impl From<RealSystemLabel> for SystemLabel {
         }
     }
 }
+
+impl From<SystemLabel> for RealSystemLabel {
+    fn from(label: SystemLabel) -> Self {
+        match label {
+            SystemLabel::Inbox => RealSystemLabel::Inbox,
+            SystemLabel::AllDrafts => RealSystemLabel::AllDrafts,
+            SystemLabel::AllSent => RealSystemLabel::AllSent,
+            SystemLabel::Trash => RealSystemLabel::Trash,
+            SystemLabel::Spam => RealSystemLabel::Spam,
+            SystemLabel::AllMail => RealSystemLabel::AllMail,
+            SystemLabel::Archive => RealSystemLabel::Archive,
+            SystemLabel::Sent => RealSystemLabel::Sent,
+            SystemLabel::Drafts => RealSystemLabel::Drafts,
+            SystemLabel::Outbox => RealSystemLabel::Outbox,
+            SystemLabel::Starred => RealSystemLabel::Starred,
+            SystemLabel::Scheduled => RealSystemLabel::Scheduled,
+            SystemLabel::AlmostAllMail => RealSystemLabel::AlmostAllMail,
+            SystemLabel::Snoozed => RealSystemLabel::Snoozed,
+            SystemLabel::CategorySocial => RealSystemLabel::CategorySocial,
+            SystemLabel::CategoryPromotions => RealSystemLabel::CategoryPromotions,
+            SystemLabel::CatergoryUpdates => RealSystemLabel::CatergoryUpdates,
+            SystemLabel::CategoryForums => RealSystemLabel::CategoryForums,
+            SystemLabel::CategoryDefault => RealSystemLabel::CategoryDefault,
+        }
+    }
+}
