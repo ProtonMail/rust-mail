@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 #![allow(clippy::needless_raw_string_hashes)]
+
 use crate::Transformer;
 #[test]
 fn inject_style() {
