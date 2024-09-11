@@ -53,12 +53,12 @@ build:
 build-macos:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.80.0"
+  image: "inbox-rust:1.81.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
     - cargo build
-    - cargo test
+    - cargo nextest run --color=never
 
 build-wasm:
   stage: build
@@ -76,7 +76,7 @@ build-wasm:
 build-ios:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.80.0"
+  image: "inbox-rust:1.81.0"
   stage: build
   script:
     - !reference [.script-config-git, script]
