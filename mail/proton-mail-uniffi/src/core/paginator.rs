@@ -30,6 +30,7 @@ pub struct MessagePaginator {
     pub(crate) handle: Arc<WatchHandle>,
 }
 
+#[uniffi::export]
 impl MessagePaginator {
     /// Retrieves the results of the current page.
     ///
