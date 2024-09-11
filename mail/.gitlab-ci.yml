@@ -56,7 +56,6 @@ build-macos:
   image: "inbox-rust:1.80.0"
   stage: build
   script:
-    - which go
     - !reference [.script-config-git, script]
     - cargo build
     - cargo test
