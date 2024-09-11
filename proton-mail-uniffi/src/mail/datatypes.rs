@@ -969,11 +969,17 @@ pub struct Conversation {
     /// Number of attachments in this conversation.
     pub num_attachments: u64,
 
-    /// Number of messages in this conversation.
+    /// Number of messages in this context.
     pub num_messages: u64,
 
-    /// Number of unread messages in this conversation.
+    /// Number of unread messages in this context.
     pub num_unread: u64,
+
+    /// Number of messages in this conversation.
+    pub total_messages: u64,
+
+    /// Number of unread messages in this conversation.
+    pub total_unread: u64,
 
     /// Display order in the list.
     pub display_order: u64,
@@ -1015,6 +1021,8 @@ impl From<ContextualConversation> for Conversation {
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
             num_unread: value.num_unread,
+            total_unread: value.total_unread,
+            total_messages: value.total_messages,
             recipients: value
                 .recipients
                 .value
