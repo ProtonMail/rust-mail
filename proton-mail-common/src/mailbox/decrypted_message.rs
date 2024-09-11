@@ -2,6 +2,7 @@
 
 //! Everything related to processing a decrypted message.
 
+use crate::datatypes::MimeType;
 use crate::models::{MailSettings, MessageBodyMetadata};
 use crate::{MailUserContext, MailboxError};
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
@@ -116,6 +117,7 @@ impl DecryptedMessageBody {
             block_quote,
             &mail_settings,
             user_session_id,
+            self.metadata.mime_type,
         );
         Ok(BodyOutput {
             body,
@@ -147,13 +149,19 @@ pub fn transform_html(
     blockquote: BlockQuote,
     mail_settings: &MailSettings,
     user_session_id: &str,
+    mime_type: MimeType,
 ) -> BodyOutput {
     let mut transformer = Transformer::new(html);
     let tags_stripped = transformer.strip_whitelist();
     let utm_stripped = transformer.strip_utm();
 
     transformer.add_noreferrer();
-    transformer.insert_links();
+
+    // Only insert links if message is of type text.
+    if mime_type == MimeType::TextPlain {
+        transformer.insert_links();
+    }
+
     transformer.inject_style();
 
     if mail_settings.image_proxy | 2 == 2 {
