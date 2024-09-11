@@ -52,9 +52,11 @@ use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
+use futures::future::try_join_all;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::{
@@ -96,6 +98,7 @@ use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
+use std::future::Future;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
@@ -848,13 +851,15 @@ impl Conversation {
         spam_action: Option<bool>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_conversations_label(
-            ids.into_iter().map(|id| id.into()).collect(),
-            label_id.into(),
-            spam_action,
-        )
-        .await
-        .map(|r| r.responses)
+        let c = |ids: Vec<ApiRemoteId>| {
+            let label_id = label_id.clone();
+            async {
+                api.put_conversations_label(ids, label_id.into(), spam_action)
+                    .await
+                    .map(|r| r.responses)
+            }
+        };
+        split_requests_serially(ids, c).await
     }
 
     /// TODO: Document this method.
@@ -1005,12 +1010,15 @@ impl Conversation {
         label_id: LabelId,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_conversations_delete(
-            ids.into_iter().map(|id| id.into()).collect(),
-            label_id.into(),
-        )
-        .await
-        .map(|r| r.responses)
+        let c = |ids: Vec<ApiRemoteId>| {
+            let label_id = label_id.clone();
+            async {
+                api.put_conversations_delete(ids, label_id.into())
+                    .await
+                    .map(|r| r.responses)
+            }
+        };
+        split_requests_with(ids, 1, c).await
     }
 
     /// Get the conversation counts.
@@ -1435,9 +1443,10 @@ impl Conversation {
         ids: Vec<RemoteId>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_conversations_read(ids.into_iter().map(|id| id.into()).collect())
-            .await
-            .map(|r| r.responses)
+        let c = |ids: Vec<ApiRemoteId>| async {
+            api.put_conversations_read(ids).await.map(|r| r.responses)
+        };
+        split_requests_serially(ids, c).await
     }
 
     /// Mark multiple conversations as unread.
@@ -1574,9 +1583,10 @@ impl Conversation {
         ids: Vec<RemoteId>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_conversations_unread(ids.into_iter().map(|id| id.into()).collect())
-            .await
-            .map(|r| r.responses)
+        let c = |ids: Vec<ApiRemoteId>| async {
+            api.put_conversations_unread(ids).await.map(|r| r.responses)
+        };
+        split_requests_serially(ids, c).await
     }
 
     /// Unlabel multiple conversations.
@@ -1695,12 +1705,15 @@ impl Conversation {
         ids: Vec<RemoteId>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_conversations_unlabel(
-            ids.into_iter().map(|id| id.into()).collect(),
-            label_id.into(),
-        )
-        .await
-        .map(|r| r.responses)
+        let c = |ids: Vec<ApiRemoteId>| {
+            let label_id = label_id.clone();
+            async {
+                api.put_conversations_unlabel(ids, label_id.into())
+                    .await
+                    .map(|r| r.responses)
+            }
+        };
+        split_requests_serially(ids, c).await
     }
 
     /// Given a list of conversations check if there are any missing dependencies like undownloaded
@@ -1972,12 +1985,15 @@ impl Conversation {
         label_id: LabelId,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_conversations_delete(
-            ids.into_iter().map(|id| id.into()).collect(),
-            label_id.into(),
-        )
-        .await
-        .map(|r| r.responses)
+        let c = |ids: Vec<ApiRemoteId>| {
+            let label_id = label_id.clone();
+            async {
+                api.put_conversations_delete(ids, label_id.into())
+                    .await
+                    .map(|r| r.responses)
+            }
+        };
+        split_requests_serially(ids, c).await
     }
 
     /// Move conversations between two labels.
@@ -3216,7 +3232,7 @@ impl Label {
     pub async fn sync_labels_by_ids<PM: ProtonMail, A>(
         api: &PM,
         interface: &A,
-        ids: Vec<proton_api_core::services::proton::common::RemoteId>,
+        ids: Vec<ApiRemoteId>,
     ) -> Result<(), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -4109,12 +4125,15 @@ impl Message {
         label_id: LabelId,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        api.put_messages_delete(
-            ids.into_iter().map(|id| id.into()).collect(),
-            Some(label_id.into()),
-        )
-        .await
-        .map(|r| r.responses)
+        let c = |ids: Vec<ApiRemoteId>| {
+            let label_id = label_id.clone();
+            async {
+                api.put_messages_delete(ids, Some(label_id.into()))
+                    .await
+                    .map(|r| r.responses)
+            }
+        };
+        split_requests(ids, c).await
     }
 
     /// Delete multiple messages
@@ -6306,4 +6325,45 @@ impl DataSource for MessageDataSource {
         tx.commit().await?;
         Ok(result)
     }
+}
+
+/// Repeatedly calls `endpoint` in batches of `limit` in parallel.
+async fn split_requests_with<F, Fut, R>(
+    ids: impl IntoIterator<Item = R>,
+    limit: usize,
+    endpoint: F,
+) -> Result<Vec<OperationResult>, ApiServiceError>
+where
+    F: Fn(Vec<ApiRemoteId>) -> Fut,
+    Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
+    R: Into<ApiRemoteId>,
+{
+    let chunks = ids.into_iter().map(R::into).chunks(limit);
+    let ids = chunks.into_iter().map(|ids| endpoint(ids.collect_vec()));
+
+    Ok(try_join_all(ids).await?.into_iter().flatten().collect())
+}
+
+/// Repeatedly calls `endpoint` in batches of 150 in parallel.
+async fn split_requests<F, Fut>(
+    ids: impl IntoIterator<Item = RemoteId>,
+    endpoint: F,
+) -> Result<Vec<OperationResult>, ApiServiceError>
+where
+    F: Fn(Vec<ApiRemoteId>) -> Fut,
+    Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
+{
+    split_requests_with(ids, 150, endpoint).await
+}
+
+/// Repeatedly calls `endpoint` one by one (in parallel).
+async fn split_requests_serially<F, Fut>(
+    ids: impl IntoIterator<Item = RemoteId>,
+    endpoint: F,
+) -> Result<Vec<OperationResult>, ApiServiceError>
+where
+    F: Fn(Vec<ApiRemoteId>) -> Fut,
+    Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
+{
+    split_requests_with(ids, 1, endpoint).await
 }
