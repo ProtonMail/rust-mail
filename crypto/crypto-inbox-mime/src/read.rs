@@ -3,12 +3,14 @@ use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::ops::Range;
 use std::path::Path;
+use std::str::FromStr;
 
 use mail_parser::{Header, MimeHeaders};
 use mail_parser::{Message, MessageParser};
 use rand::RngCore;
 
 use crate::constants::mime_extensions;
+use crate::Disposition;
 
 /// Mime processing errors.
 #[derive(Debug, thiserror::Error)]
@@ -24,6 +26,14 @@ pub trait ProcessMime {
     /// Processes a decrypted mime body to a Proton inbox messages.
     ///
     /// Extracts the message body, extracts/normalizes the attachments, and collects the signatures.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_id`      - The message ID that should be assigned to the output message.
+    /// * `decrypted_body`  - The raw decrypted body of a `PGP/MIME` message.
+    ///
+    /// # Errors
+    /// A [`ProcessMimeError`] if parsing error occurs or if no body and attachments are found.
     fn process_mime(message_id: &str, decrypted_body: &[u8]) -> ProcessedMimeResult;
 }
 
@@ -32,16 +42,24 @@ pub trait ProcessMime {
 pub struct ProcessedAttachment {
     /// Unique id across all attachments in an inbox.
     pub id: String,
+
     /// Content id extracted from mime.
     pub content_id: String,
+
+    /// Content disposition.
+    pub disposition: Disposition,
+
     /// File name of the attachment.
     pub name: String,
+
     /// The size of the attachment in bytes.
     pub size: usize,
+
     /// The content type of the attachment.
     ///
     /// Is an empty string if no content type was found.
     pub mime_type: String,
+
     /// The attachment data.
     pub data: Vec<u8>,
 }
@@ -51,10 +69,13 @@ pub struct ProcessedAttachment {
 pub struct ProcessedMessage {
     /// The message body.
     pub body: String,
+
     /// The extracted attachments.
     pub attachments: Vec<ProcessedAttachment>,
+
     /// An extracted subject if any.
     pub encrypted_subject: Option<String>,
+
     /// The mime type of the extracted body.
     pub mime_body_type: ProcessedBodyType,
 }
@@ -62,8 +83,13 @@ pub struct ProcessedMessage {
 /// Represents a processed message body from a mime message.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
 pub enum ProcessedBodyType {
+    /// Utf-8 encoded text body,
     Text,
+
+    /// HTML body.
     Html,
+
+    /// Empty body.
     Empty,
 }
 
@@ -84,11 +110,15 @@ impl ProcessedBodyType {
 /// the signatures has to be verified against.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct MimeSignatureVerifier {
+    /// The range of the raw data that is signed.
     verify_data_range: Range<usize>,
+
+    /// The `OpenPGP` signature of the data.
     pub pgp_signature: String,
 }
 
 impl MimeSignatureVerifier {
+    /// Returns the a slice of the content that should be verified in `raw_data`.
     pub fn data_to_verify<'a>(&self, raw_data: &'a [u8]) -> &'a [u8] {
         &raw_data[self.verify_data_range.clone()]
     }
@@ -160,15 +190,26 @@ fn process_attachments(message_id: &str, parsed_message: &Message<'_>) -> Vec<Pr
                 attachment_name_counter.insert(generated_filename.clone(), 1);
             }
 
-            // Use the exisiting content id or generate a random id.
+            // Use the existing content id or generate a random id.
             let content_id = attachment
                 .content_id()
                 .map_or_else(random_content_id, ToString::to_string);
+
+            // Try to find disposition or default to attachment.
+            let disposition =
+                attachment
+                    .content_disposition()
+                    .map_or(Disposition::Attachment, |content_type| {
+                        Disposition::from_str(content_type.ctype())
+                            .unwrap_or(Disposition::Attachment)
+                    });
+
             let data = attachment.contents().to_vec();
 
             Some(ProcessedAttachment {
                 id: mime_attachment_id(message_id, &content_id, idx),
                 content_id,
+                disposition,
                 name: generated_filename,
                 size: data.len(),
                 mime_type: content_type_option.unwrap_or(String::default()),

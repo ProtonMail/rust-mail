@@ -1,5 +1,6 @@
 use proton_crypto::crypto::*;
 use proton_crypto::new_pgp_provider;
+use proton_crypto_inbox_mime::Disposition;
 use proton_crypto_inbox_mime::{MimeProcessor, ProcessMime};
 
 const TEST_GO_MIME_ENCRYPTED: &str = "-----BEGIN PGP MESSAGE-----
@@ -415,4 +416,8 @@ fn test_mime_process_message() {
         assert!(attachment.id.contains(MESSAGE_ID));
         assert!(attachment.content_id.contains(expected_id));
     }
+    let inline_attachment = processed_message.attachments.first().unwrap();
+    assert_eq!(inline_attachment.disposition, Disposition::Inline);
+    let normal_attachment = processed_message.attachments.get(1).unwrap();
+    assert_eq!(normal_attachment.disposition, Disposition::Attachment);
 }

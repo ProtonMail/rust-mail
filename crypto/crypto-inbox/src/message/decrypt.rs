@@ -30,6 +30,7 @@ impl DecryptedBody {
     pub fn body(&self) -> &str {
         self.as_ref()
     }
+
     /// Consumes the type and returns the body of the message.
     pub fn into_string(self) -> String {
         match self {
@@ -37,6 +38,7 @@ impl DecryptedBody {
             DecryptedBody::Mime(mime_body) => mime_body.body,
         }
     }
+
     /// Returns whether this decryption result is from an encrypted mime message.
     pub fn is_mime(&self) -> bool {
         matches!(self, DecryptedBody::Mime(_))

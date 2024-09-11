@@ -21,15 +21,14 @@
 //!   - **Attachment**
 //!
 //! NOTE: There is no streaming API at the moment.
-use std::{
-    fmt::{self, Display, Formatter},
-    io::{self, Write},
-};
+use std::io::{self, Write};
 
 use mail_builder::{
     headers::content_type::ContentType,
     mime::{BodyPart, MimePart},
 };
+
+use crate::Disposition;
 
 const FILENAME: &str = "filename";
 const NAME: &str = "name";
@@ -41,25 +40,6 @@ const MIME_TYPE_PLAIN: &str = "text/plain";
 const MIME_TYPE_HTML: &str = "text/html";
 const BODY_PLAIN_TRANSFER_ENCODING: &str = "quoted-printable";
 const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
-
-/// Possible dispositions of an attachment in the MIME builder.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
-enum Disposition {
-    /// A regular attachment.
-    Attachment,
-
-    // An inline/embedded attachment.
-    Inline,
-}
-
-impl Display for Disposition {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        match self {
-            Disposition::Attachment => f.write_str("attachment"),
-            Disposition::Inline => f.write_str("inline"),
-        }
-    }
-}
 
 /// A builder for constructing multipart MIME message bodies for PGP/MIME.
 ///
