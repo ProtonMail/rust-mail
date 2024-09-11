@@ -3,15 +3,13 @@ source: proton-mail-html-transformer/src/tests/transforms.rs
 expression: html
 ---
 <html><head>
-   <html>
-<style>
-  body {
+   <style style="text/css">
+body {
     background-color: Canvas;
     color: CanvasText;
     color-scheme: light dark;
-  }
-</style>
-</html></head>
+}
+</style></head>
    <body>
    
 

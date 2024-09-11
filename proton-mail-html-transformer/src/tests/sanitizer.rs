@@ -33,3 +33,13 @@ fn email_privacy_tester() {
     let html = t.to_string();
     insta::assert_snapshot!(html);
 }
+#[test]
+fn style_elements_and_tags_are_preserved() {
+    let html = include_str!("../../tests/htmls/styled.html");
+
+    let mut t = Transformer::new(html);
+    t.strip_whitelist();
+
+    let html = t.to_string();
+    insta::assert_snapshot!(html);
+}

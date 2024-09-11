@@ -49,7 +49,7 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
     rem.len() as u64
 }
 
-pub const ATTRS: [&str; 112] = [
+pub const ATTRS: [&str; 113] = [
     "proton-src",
     "target",
     "accept",
@@ -150,6 +150,7 @@ pub const ATTRS: [&str; 112] = [
     "start",
     "src",
     "step",
+    "style",
     "summary",
     "tabindex",
     "title",
@@ -164,7 +165,7 @@ pub const ATTRS: [&str; 112] = [
     "slot",
 ];
 
-pub const TAGS: [&str; 116] = [
+pub const TAGS: [&str; 117] = [
     "proton-src",
     "a",
     "abbr",
@@ -261,6 +262,7 @@ pub const TAGS: [&str; 116] = [
     "span",
     "strike",
     "strong",
+    "style",
     "sub",
     "summary",
     "sup",

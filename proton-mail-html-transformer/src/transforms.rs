@@ -3,33 +3,66 @@
 mod tests;
 
 use html5ever::{namespace_url, tendril::TendrilSink, LocalName, QualName};
-use kuchikiki::{iter::NodeEdge, Attribute, ExpandedName, NodeData, NodeRef};
+use kuchikiki::{
+    iter::NodeEdge, Attribute, Attributes, ElementData, ExpandedName, NodeData, NodeRef,
+};
+use std::cell::RefCell;
 use url::Url;
 
 use crate::utm::strip_from_url;
 
 fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
-    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from(tag));
+    let qual_name = QualName::new(None, html5ever::ns!(), LocalName::from(tag));
     kuchikiki::parse_fragment(qual_name, vec![]).one(html)
 }
 
 /// This function adds dark mode support. This fails if the html doesn't have a head tag.
+///
+/// This function will inject the following HTML snippet into the `head` tag
+/// of the document:
+/// ```html
+/// <style>
+///   body {
+///     background-color: Canvas;
+///     color: CanvasText;
+///     color-scheme: light dark;
+///   }
+/// </style>
+/// ```
 #[allow(clippy::missing_panics_doc)]
 pub fn inject_style(document: NodeRef) {
     let element = document.select_first("head").unwrap(); // kuckikiki always adds it
 
-    let style = "
-<style>
-  body {
+    let style_text = "
+body {
     background-color: Canvas;
     color: CanvasText;
     color-scheme: light dark;
-  }
-</style>
+}
 ";
-    let style = node_ref_from_str(style, "head");
+    let qual_name = QualName::new(None, html5ever::ns!(), LocalName::from("style"));
 
-    element.as_node().append(style);
+    #[allow(clippy::default_trait_access)]
+    let element_data = ElementData {
+        name: qual_name,
+        attributes: RefCell::new(Attributes {
+            map: Default::default(),
+        }),
+        template_contents: None,
+    };
+
+    element_data
+        .attributes
+        .borrow_mut()
+        .insert("style", "text/css".to_owned());
+
+    let style_node = NodeRef::new(NodeData::Element(element_data));
+
+    let text_node = NodeRef::new(NodeData::Text(RefCell::new(style_text.to_owned())));
+
+    style_node.append(text_node);
+
+    element.as_node().append(style_node);
 }
 
 #[allow(clippy::missing_panics_doc)] // The select is well formed.
