@@ -10,6 +10,7 @@ kuchikiki = "=0.8.2"
 lazy_static = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
+velcro = { workspace = true }
 
 [lints]
 workspace = true
