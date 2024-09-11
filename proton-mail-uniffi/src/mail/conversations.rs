@@ -10,17 +10,21 @@
 //!
 
 use crate::core::datatypes::Id;
+use crate::core::paginator::ConversationPaginator;
 use crate::mail::datatypes::{
     Conversation, ConversationAvailableAction, ConversationSearchOptions, Message,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError};
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
 use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
+use stash::paginator::{Paginator as RealPaginator, Param};
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 /// Label the given conversations with the given label id.
@@ -313,6 +317,61 @@ pub async fn move_conversations(
         )
         .await?;
         Ok(())
+    })
+    .await
+}
+
+/// Paginate conversations for the given label.
+///
+/// Gets a paginator for conversations belonging to the specified label, which
+/// allows navigation through the conversations by page/window, and watches for
+/// changes. When the conversations change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to watch.
+/// * `callback` - The callback to use for updates. When the specified
+///                conversations change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn paginate_conversations_for_label(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<ConversationPaginator, MailboxError> {
+    let stash = session.user_stash().clone();
+    let (msg_sender, msg_receiver) = flume::unbounded();
+    uniffi_async(async move {
+        #[allow(clippy::cast_possible_wrap)]
+        let real_paginator = RealPaginator::new(
+            formatdoc!(
+                "
+                JOIN conversation_labels
+                    ON conversations.local_id = conversation_labels.local_conversation_id
+                WHERE
+                    conversation_labels.local_label_id = ?
+                ORDER BY
+                    conversation_labels.context_time DESC,
+                    conversations.display_order DESC
+                "
+            ),
+            vec![Param::Integer(label_id.as_u64() as i64)],
+            &stash,
+            NonZeroU32::new(50).unwrap(),
+            Some(msg_sender),
+        )
+        .await?;
+        Ok(ConversationPaginator {
+            real_paginator,
+            handle: watch_channel(msg_receiver, callback),
+            label_id,
+        })
     })
     .await
 }
