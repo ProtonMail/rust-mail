@@ -358,11 +358,13 @@ pub async fn paginate_messages_for_label(
         let real_paginator = RealPaginator::new(
             formatdoc!(
                 "
-                WHERE label_type=1 AND local_id IN (
-                    SELECT local_label_id FROM message_labels WHERE local_message_id IN (
-                        SELECT local_message_id FROM message_labels WHERE local_label_id=?
-                    )
-                )
+                JOIN message_labels
+                    ON messages.local_id = message_labels.local_message_id
+                WHERE
+                    message_labels.local_label_id = ?
+                ORDER BY
+                    messages.time DESC,
+                    messages.display_order DESC
                 "
             ),
             vec![Param::Integer(label_id.as_u64() as i64)],
