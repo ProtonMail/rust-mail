@@ -55,11 +55,17 @@ pub struct ContextualConversation {
     /// Number of attachments on the conversation.
     pub num_attachments: u64,
 
-    /// Number of messages in this conversation.
+    /// Number of messages in this context.
     pub num_messages: u64,
 
-    /// Number of unread messages in this conversation.
+    /// Number of unread messages in this context.
     pub num_unread: u64,
+
+    /// Number of messages in this conversation.
+    pub total_messages: u64,
+
+    /// Number of unread messages in this conversation.
+    pub total_unread: u64,
 
     /// Address of the recipients of the messages contained within.
     pub recipients: MessageAddresses,
@@ -106,7 +112,9 @@ impl ContextualConversation {
             is_starred,
             num_attachments: label.context_num_attachments,
             num_messages: label.context_num_messages,
+            total_messages: conversation.num_messages,
             num_unread: label.context_num_unread,
+            total_unread: conversation.num_unread,
             recipients: conversation.recipients,
             senders: conversation.senders,
             size: label.context_size,
