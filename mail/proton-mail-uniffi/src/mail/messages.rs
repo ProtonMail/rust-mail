@@ -24,13 +24,12 @@ use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
-use proton_mail_common::models::{self, MailSettings, Message as RealMessage};
+use proton_mail_common::models::{self, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use stash::paginator::{Paginator as RealPaginator, Param};
 use std::num::NonZeroU32;
 use std::sync::Arc;
-use tokio::task::JoinError;
 
 /// Which transform options to apply to the html.
 ///
@@ -66,6 +65,17 @@ pub struct BodyOutput {
     pub utm_stripped: u64,
 }
 
+impl From<RealBodyOutput> for BodyOutput {
+    fn from(value: RealBodyOutput) -> Self {
+        Self {
+            body: value.body,
+            had_blockquote: value.had_blockquote,
+            tags_stripped: value.tags_stripped,
+            utm_stripped: value.utm_stripped,
+        }
+    }
+}
+
 #[uniffi::export]
 impl DecryptedMessage {
     /// Gets the message body as an HTML. This does all of the transformations that are
@@ -80,35 +90,20 @@ impl DecryptedMessage {
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    pub async fn body(&self, opts: TransformOpts) -> Result<BodyOutput, MailboxError> {
-        let user_ctx = self.ctx.clone();
-        let mail_settings = uniffi_async::<_, JoinError, _>(async move {
-            let mail_settings = MailSettings::get(&user_ctx.user_stash().into())
-                .await
-                .unwrap_or_default()
-                .unwrap_or_default();
-            Ok(mail_settings)
+    pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, MailboxError> {
+        let cloned = Arc::clone(&self);
+        uniffi_async(async move {
+            Ok(cloned
+                .body
+                .transformed(
+                    &cloned.ctx,
+                    opts.remote_content.into(),
+                    opts.block_quote.into(),
+                )
+                .await?
+                .into())
         })
-        .await?;
-        let user_session_id = self.ctx.user_id();
-        let RealBodyOutput {
-            body,
-            had_blockquote,
-            tags_stripped,
-            utm_stripped,
-        } = decrypted_message::transform_html(
-            &self.body.body,
-            opts.remote_content.into(),
-            opts.block_quote.into(),
-            &mail_settings,
-            user_session_id,
-        );
-        Ok(BodyOutput {
-            body,
-            had_blockquote,
-            tags_stripped,
-            utm_stripped,
-        })
+        .await
     }
 
     #[must_use]

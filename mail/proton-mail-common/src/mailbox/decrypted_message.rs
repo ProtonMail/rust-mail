@@ -3,6 +3,7 @@
 //! Everything related to processing a decrypted message.
 
 use crate::models::{MailSettings, MessageBodyMetadata};
+use crate::{MailUserContext, MailboxError};
 use proton_crypto_inbox::proton_crypto_inbox_mime::ProcessedAttachment;
 use proton_mail_html_transformer::Transformer;
 use serde_json::Value;
@@ -77,6 +78,51 @@ impl DecryptedMessageBody {
                 None
             }
         }
+    }
+
+    /// Gets the message body as an HTML. This does all of the transformations that are
+    /// required based on the options and the user settings.
+    ///
+    /// # Parameters
+    ///
+    /// * `ctx`            - Active mail user context.
+    /// * `remote_content` - Controls behavior of remote content filtering.
+    /// * `block_quote`    - Controls block quote behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the network request, the database query, reading/writing
+    /// the body to the cache, or decrypting the body fails,
+    /// or if the message doesn't exist.
+    pub async fn transformed(
+        &self,
+        ctx: &MailUserContext,
+        remote_content: RemoteContent,
+        block_quote: BlockQuote,
+    ) -> Result<BodyOutput, MailboxError> {
+        let mail_settings = MailSettings::get(&ctx.user_stash().into())
+            .await
+            .unwrap_or_default()
+            .unwrap_or_default();
+        let user_session_id = ctx.user_id();
+        let BodyOutput {
+            body,
+            had_blockquote,
+            tags_stripped,
+            utm_stripped,
+        } = transform_html(
+            &self.body,
+            remote_content,
+            block_quote,
+            &mail_settings,
+            user_session_id,
+        );
+        Ok(BodyOutput {
+            body,
+            had_blockquote,
+            tags_stripped,
+            utm_stripped,
+        })
     }
 }
 
