@@ -2455,6 +2455,7 @@ impl Conversation {
                 WHERE
                     conversation_labels.local_label_id = ?
                 ORDER BY
+                    conversation_labels.context_time DESC,
                     conversations.display_order DESC
                 "
             ),
