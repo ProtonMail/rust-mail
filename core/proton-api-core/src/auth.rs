@@ -1,4 +1,8 @@
+#![allow(clippy::module_name_repetitions)]
+
 use crate::services::proton::common::RemoteId;
+use crate::services::proton::response_data::{PasswordMode, TfaStatus};
+use crate::services::proton::responses::PostAuthResponse;
 use crate::X_PM_UID_HEADER;
 use futures::future::BoxFuture;
 use parking_lot::RwLock;
@@ -11,28 +15,95 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 /// Authentication session data.
+///
+/// This type holds data pertaining to a single authenticated API session:
+/// - The UID of the session (uniquely identifies the session across the API),
+/// - The ID of the user who is authenticated,
+/// - The access token granted by the API to authenticate requests,
+/// - The refresh token used to refresh the access token when it expires,
+/// - The API scopes the tokens grant access to,
+/// - The state of the auth session (whether a second factor is required, etc).
+///
+/// Notably, this type does not hold the user's key secret, as this is not tied
+/// to a specific session; instead, it is stored in the [`AuthSecrets`] type.
 #[derive(Clone)]
-pub struct Auth {
-    /// The authentication token for the current session.
-    pub access_token: SecretString,
-
-    /// The name or address of the user, whatever was used to authenticate.
-    pub name_or_addr: String,
-
-    /// A [`KeySecret`] to unlock the user's keys.
-    pub key_secret: Option<UserKeySecret>,
-
-    /// TODO: Document this field.
-    pub refresh_token: SecretString,
-
-    /// TODO: Document this field.
-    pub scopes: Vec<String>,
-
+pub struct AuthSession {
     /// The UID of the current session.
     pub uid: RemoteId,
 
     /// The remote ID of the current user.
     pub user_id: RemoteId,
+
+    /// The name or address of the user, whatever was used to authenticate.
+    pub name_or_addr: String,
+
+    /// The second factor mode used by the account when the session was created.
+    pub second_factor_mode: TfaStatus,
+
+    /// The password mode used by the account when the session was created.
+    pub password_mode: PasswordMode,
+
+    /// The access token for the current session.
+    pub access_token: SecretString,
+
+    /// The refresh token, used to refresh the access token.
+    pub refresh_token: SecretString,
+
+    /// The API scopes to which the tokens grant access.
+    pub auth_scope: Vec<String>,
+
+    /// The state of the auth session.
+    pub auth_state: AuthState,
+}
+
+impl AuthSession {
+    #[must_use]
+    pub fn from_response(name_or_addr: String, res: PostAuthResponse) -> Self {
+        let auth_state = if res.tfa.enabled == TfaStatus::None {
+            AuthState::Ready
+        } else {
+            AuthState::TwoFA
+        };
+
+        Self {
+            uid: res.uid,
+            name_or_addr,
+            user_id: res.user_id,
+            second_factor_mode: res.tfa.enabled,
+            password_mode: res.password_mode,
+            access_token: res.access_token,
+            refresh_token: res.refresh_token,
+            auth_scope: res.scopes,
+            auth_state,
+        }
+    }
+}
+
+/// Secrets associated with a user.
+///
+/// This type holds the user's key secret, which is used to unlock the user's PGP key(s).
+/// Unlike the [`AuthSession`] type, this type is not tied to a specific session.
+#[derive(Clone)]
+pub struct UserSecrets {
+    /// The secret used to unlock user keys.
+    pub key_secret: UserKeySecret,
+}
+
+impl UserSecrets {
+    #[must_use]
+    pub fn new(key_secret: UserKeySecret) -> Self {
+        Self { key_secret }
+    }
+}
+
+/// The state of the auth (whether a second factor must still be completed).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthState {
+    /// The auth session requires 2FA to be completed.
+    TwoFA,
+
+    /// The auth session is ready to be used.
+    Ready,
 }
 
 /// TODO: Document this struct.
@@ -111,25 +182,41 @@ impl<T: Into<Vec<u8>>> From<T> for UserKeySecret {
 
 pub type StoreError = Box<dyn Error + Send + Sync>;
 
-/// Authentication storage abstraction trait in order to store or load [`Auth`] data.
+/// Authentication storage abstraction trait in order to store or load auth data.
 pub trait Store: Send + Sync {
-    /// Update the `auth` value in the store.
-    ///
-    /// If no value exists, one should be created.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the operation failed.
-    fn set(&mut self, auth: Auth) -> BoxFuture<'_, Result<(), StoreError>>;
-
-    /// Retrieve the auth data from the store.
+    /// Retrieve the auth session data from the store.
     ///
     /// If no value exists, return `None`.
     ///
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    fn get(&self) -> BoxFuture<'_, Result<Option<Auth>, StoreError>>;
+    fn get_session(&self) -> BoxFuture<'_, Result<Option<AuthSession>, StoreError>>;
+
+    /// Retrieve the secrets from the store.
+    ///
+    /// If no value exists, return `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the operation failed.
+    fn get_secrets(&self) -> BoxFuture<'_, Result<Option<UserSecrets>, StoreError>>;
+
+    /// Update the auth session data in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the operation failed.
+    fn set_session(&mut self, auth: AuthSession) -> BoxFuture<'_, Result<(), StoreError>>;
+
+    /// Update the secrets in the store.
+    ///
+    /// If no value exists, one should be created.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the operation failed.
+    fn set_secrets(&mut self, secrets: UserSecrets) -> BoxFuture<'_, Result<(), StoreError>>;
 
     /// Remove the auth data from the store.
     ///
@@ -144,7 +231,8 @@ pub trait Store: Send + Sync {
 /// In memory cache of the auth data which can optionally be backed by an authentication [`Store`].
 pub(crate) struct CachedStore {
     headers: Arc<RwLock<HeaderMap>>,
-    cached: Option<Auth>,
+    session: Option<AuthSession>,
+    secrets: Option<UserSecrets>,
     store: Option<Box<dyn Store>>,
 }
 
@@ -161,59 +249,59 @@ impl CachedStore {
         store: Option<Box<dyn Store>>,
         headers: Arc<RwLock<HeaderMap>>,
     ) -> Result<Self, StoreError> {
-        let auth = if let Some(store) = &store {
-            store.get().await?
+        let (session, secrets) = if let Some(store) = &store {
+            (store.get_session().await?, store.get_secrets().await?)
         } else {
-            None
+            (None, None)
         };
 
-        if let Some(auth) = &auth {
+        if let Some(auth) = &session {
             update_auth_headers(&headers, auth)?;
         }
 
         Ok(Self {
-            cached: auth,
-            store,
             headers,
+            session,
+            secrets,
+            store,
         })
     }
 
-    /// Get the auth data, if available.
-    pub(crate) fn get(&self) -> Option<&Auth> {
-        self.cached.as_ref()
+    /// Get the auth session data, if available.
+    pub(crate) fn get_session(&self) -> Option<&AuthSession> {
+        self.session.as_ref()
     }
 
-    /// Update the auth data.
+    /// Get the auth secrets, if available.
+    pub(crate) fn get_secrets(&self) -> Option<&UserSecrets> {
+        self.secrets.as_ref()
+    }
+
+    /// Update the auth session data.
     ///
     /// # Errors
     ///
     /// Returns error if the data could not be stored.
-    pub(crate) async fn set(&mut self, auth: Auth) -> Result<(), StoreError> {
+    pub(crate) async fn set_session(&mut self, auth: AuthSession) -> Result<(), StoreError> {
         // Update auth headers.
         update_auth_headers(&self.headers, &auth)?;
         if let Some(store) = &mut self.store {
-            store.set(auth.clone()).await?;
+            store.set_session(auth.clone()).await?;
         }
-        self.cached = Some(auth);
+        self.session = Some(auth);
         Ok(())
     }
 
-    /// Update the scopes of the auth data.
+    /// Update the auth secrets.
     ///
     /// # Errors
     ///
-    /// Returns error if no auth is present or the data could not be stored.
-    pub(crate) async fn set_scopes(&mut self, scopes: Vec<String>) -> Result<(), StoreError> {
-        let Some(auth) = self.cached.as_mut() else {
-            return Err("No auth data available for scope update")?;
-        };
-
+    /// Returns error if the data could not be stored.
+    pub(crate) async fn set_secrets(&mut self, secrets: UserSecrets) -> Result<(), StoreError> {
         if let Some(store) = &mut self.store {
-            store.set(auth.to_owned()).await?;
+            store.set_secrets(secrets.clone()).await?;
         }
-
-        auth.scopes = scopes;
-
+        self.secrets = Some(secrets);
         Ok(())
     }
 
@@ -222,17 +310,22 @@ impl CachedStore {
     /// # Errors
     ///
     /// Returns error if the data could not cleared.
-    pub(crate) async fn clear(&mut self) -> Result<Option<Auth>, StoreError> {
+    pub(crate) async fn clear(
+        &mut self,
+    ) -> Result<(Option<AuthSession>, Option<UserSecrets>), StoreError> {
         // Remove auth headers.
         remove_auth_headers(&self.headers);
         if let Some(store) = &mut self.store {
             store.clear().await?;
         }
-        Ok(self.cached.take())
+        Ok((self.session.take(), self.secrets.take()))
     }
 }
 
-fn update_auth_headers(header_map: &Arc<RwLock<HeaderMap>>, auth: &Auth) -> Result<(), StoreError> {
+fn update_auth_headers(
+    header_map: &Arc<RwLock<HeaderMap>>,
+    auth: &AuthSession,
+) -> Result<(), StoreError> {
     let mut guard = header_map.write();
     guard.insert(
         X_PM_UID_HEADER,

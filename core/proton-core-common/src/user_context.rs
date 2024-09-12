@@ -1,18 +1,14 @@
 pub use self::keys::*;
 use crate::cache::ProtonCache;
 use crate::datatypes::RemoteId;
-use crate::db::session::UserSessionState;
 use crate::models::sender_image_cache::SenderImage;
-use crate::CoreContextResult;
+use crate::{Context, CoreContextResult};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
-use stash::orm::Model;
 use stash::stash::Stash;
 use std::fmt::{Debug, Formatter};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::SystemTime;
-use tracing::debug;
 
 pub mod images_logo;
 mod keys;
@@ -24,15 +20,24 @@ pub trait UserDatabaseInitializer: Send + Sync {
     /// # Errors
     /// Return error if the migration failed.
     fn initialize(&self, stash: &Stash) -> Result<(), MigratorError>;
+
+    /// A helper to return a boxed trait object.
+    fn boxed(self) -> Box<dyn UserDatabaseInitializer>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
 }
 
 /// Contains all the relevant information to an initialize user session.
 #[derive(Clone)]
 pub struct UserContext {
+    context: Arc<Context>,
     session: Session,
     user_stash: Stash,
-    session_stash: Stash,
     user_id: RemoteId,
+    session_id: RemoteId,
     pub(self) key_manager: Arc<CryptoKeyManager>,
     pub images_logo_cache: Arc<ProtonCache<SenderImage>>,
 }
@@ -45,34 +50,41 @@ impl Debug for UserContext {
 
 impl UserContext {
     pub(crate) async fn new(
+        context: Arc<Context>,
         session: Session,
         user_stash: Stash,
-        session_stash: Stash,
         user_id: RemoteId,
+        session_id: RemoteId,
         cache_path: PathBuf,
         cache_size: u32,
     ) -> CoreContextResult<Self> {
         let images_logo_cache =
             Self::init_sender_image_cache(cache_path, cache_size, &user_stash).await?;
+
         Ok(Self {
+            context,
             session,
             user_stash,
-            session_stash,
             user_id,
+            session_id,
             key_manager: Arc::new(CryptoKeyManager::new()),
             images_logo_cache,
         })
     }
 
     async fn init_sender_image_cache(
-        mut cache_path: PathBuf,
+        cache_path: PathBuf,
         cache_size: u32,
         user_stash: &Stash,
     ) -> CoreContextResult<Arc<ProtonCache<SenderImage>>> {
-        cache_path.push("images_logo_cache");
-        Ok(Arc::new(
-            ProtonCache::new(cache_path, cache_size, user_stash.clone()).await?,
-        ))
+        let cache = ProtonCache::new(
+            cache_path.join("images_logo_cache"),
+            cache_size,
+            user_stash.to_owned(),
+        )
+        .await?;
+
+        Ok(Arc::new(cache))
     }
 
     /// Get the network session.
@@ -99,62 +111,18 @@ impl UserContext {
         &self.user_id
     }
 
-    /// Get the state of the session.
-    ///
-    /// If the session has no state (i.e. it was never marked as active), this will return `None`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
-    pub async fn state(&self) -> CoreContextResult<Option<UserSessionState>> {
-        Ok(UserSessionState::find_by_user_id(self.user_id.clone(), &self.session_stash).await?)
+    /// Get the session id of this context.
+    #[must_use]
+    pub fn session_id(&self) -> &RemoteId {
+        &self.session_id
     }
 
-    /// Mark this session as active.
-    ///
-    /// This updates the last active timestamp of this session in the database.
+    /// Set this user as the primary user.
     ///
     /// # Errors
     ///
     /// Returns an error if the database operation fails.
-    pub async fn set_active(&self) -> CoreContextResult<()> {
-        let now = SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs())
-            .unwrap_or_default();
-
-        let mut state = UserSessionState {
-            user_id: self.user_id.clone(),
-            last_active_ts: now,
-            row_id: None,
-            stash: None,
-        };
-
-        if let Some(existing) = self.state().await? {
-            debug!("updating existing session state");
-            state.row_id = existing.row_id;
-        } else {
-            debug!("creating new session state");
-            debug_assert!(state.row_id.is_none());
-        }
-
-        state.save_using(&self.session_stash).await?;
-
-        Ok(())
-    }
-
-    /// Return whether the session is active.
-    ///
-    /// A session is considered active if it is the most recent session for the user.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
-    pub async fn is_active(&self) -> CoreContextResult<bool> {
-        if let Some(last) = UserSessionState::find_last(&self.session_stash).await? {
-            Ok(last.user_id == self.user_id)
-        } else {
-            Ok(false)
-        }
+    pub async fn set_primary(&self) -> CoreContextResult<()> {
+        self.context.set_primary_account(self.user_id.clone()).await
     }
 }

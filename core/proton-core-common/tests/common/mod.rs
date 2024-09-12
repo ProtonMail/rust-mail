@@ -1,6 +1,6 @@
 use account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use futures::executor::block_on;
-use proton_api_core::auth::UserKeySecret;
+use proton_api_core::auth::{AuthSession, AuthState};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Action as ApiAction, Address as ApiAddress, ContactEmailEvent as ApiContactEmailEvent,
@@ -8,11 +8,12 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::services::proton::responses::GetEventResponse;
 use proton_api_core::services::proton::Config as ApiConfig;
-use proton_core_common::datatypes::{AuthScopes, ProductUsedSpace, RemoteId};
+use proton_core_common::datatypes::{PasswordMode, ProductUsedSpace, RemoteId, TfaStatus};
+use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
-use proton_core_common::models::{Address, User, UserSettings};
+use proton_core_common::models::{Address, ModelExtension, User, UserSettings};
 use proton_core_common::{
-    db::session::{DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey},
+    db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain},
     Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
     UserDatabaseInitializer,
@@ -21,7 +22,6 @@ use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
 use secrecy::SecretString;
 use serde::Deserialize;
-use stash::orm::Model;
 use stash::stash::Stash;
 use std::io::stdout;
 use std::sync::{Arc, Weak};
@@ -39,7 +39,7 @@ pub mod account;
 pub mod contacts;
 mod images_logo;
 
-struct TestCoreDatabaseInitializer {}
+struct TestCoreDatabaseInitializer;
 
 impl UserDatabaseInitializer for TestCoreDatabaseInitializer {
     fn initialize(&self, _stash: &Stash) -> Result<(), MigratorError> {
@@ -52,18 +52,45 @@ impl UserDatabaseInitializer for TestCoreDatabaseInitializer {
 /// This struct provides a test context with a handcrafted new session, so that
 /// we can bypass authentication. It also spins up a mock server.
 ///
+#[allow(unused)]
 pub struct TestContext {
     this: Weak<Self>,
     context: Arc<Context>,
     mock_server: MockServer,
-    _tmp_dir: TempDir,
-    encrypted_user_session: EncryptedUserSession,
+    tmp_dir: TempDir,
+    core_account: CoreAccount,
+    core_session: CoreSession,
 }
 
 impl TestContext {
     /// Generate a test UID.
     fn test_uid() -> RemoteId {
         RemoteId::from("TEST_UID")
+    }
+
+    /// Generate a test user ID.
+    fn test_user_id() -> RemoteId {
+        RemoteId::from(TEST_USER_ID)
+    }
+
+    /// Generate a test user name or address.
+    fn test_user_mail() -> String {
+        TEST_USER_MAIL.to_owned()
+    }
+
+    /// Generate a test access token.
+    fn test_acctok() -> SecretString {
+        SecretString::from("ACCESSTOKEN".to_owned())
+    }
+
+    /// Generate a test refresh token.
+    fn test_reftok() -> SecretString {
+        SecretString::from("REFRESHTOKEN".to_owned())
+    }
+
+    /// Generate test scopes.
+    fn test_scopes() -> Vec<String> {
+        vec!["foo".to_owned(), "bar".to_owned()]
     }
 
     /// Create and initialize test context.
@@ -73,8 +100,6 @@ impl TestContext {
                 .with(EnvFilter::new("debug,stash=debug"))
                 .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
         ));
-        let user_key_secret: Option<UserKeySecret> = None;
-        let user_id: Option<RemoteId> = None;
         let mock_server = MockServer::start().await;
 
         // Create client with the mock server as the base URL
@@ -91,7 +116,7 @@ impl TestContext {
         let keychain = Arc::new(InMemoryKeyChain::default());
 
         let cache_path = tmp_dir.path().join("core-cache");
-        std::fs::create_dir_all(cache_path).expect("failed to create mail cache dir");
+        std::fs::create_dir_all(&cache_path).expect("failed to create mail cache dir");
 
         // Generate a random encryption key and store it in the keychain
         let encryption_key = SessionEncryptionKey::random();
@@ -100,13 +125,11 @@ impl TestContext {
             .expect("failed to store in keychain");
 
         // Create a core context
-        let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
-            vec![Box::new(TestCoreDatabaseInitializer {})];
-        let core_context = Context::new(
+        let context = Context::new(
             tmp_dir.path(),
             tmp_dir.path(),
             keychain,
-            initializers,
+            [TestCoreDatabaseInitializer.boxed()],
             api_env_config,
             None,
         )
@@ -114,33 +137,56 @@ impl TestContext {
         .expect("failed to create context");
 
         // Generate a fake session and write it to the database
-        let path = tmp_dir.path().join("session.db");
-        let stash = Stash::new(Some(&path)).expect("failed to create stash");
+        let (core_account, core_session) = {
+            // Create a temporary stash just to insert the fake data.
+            let path = tmp_dir.path().join("account.db");
+            let stash = Stash::new(Some(&path)).expect("failed to create stash");
 
-        // Create a fake session
-        let mut session = DecryptedUserSession {
-            session_id: Self::test_uid(),
-            user_id: user_id.unwrap_or(RemoteId::from(TEST_USER_ID)),
-            name_or_addr: TEST_USER_MAIL.to_owned(),
-            refresh_token: SecretString::new("REFRESHTOKEN".to_owned()),
-            access_token: SecretString::new("ACCESSTOKEN".to_owned()),
-            key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
-            scopes: AuthScopes::new(vec!["foo".to_owned(), "bar".to_owned()]),
-        }
-        .to_encrypted_session(&encryption_key)
-        .expect("failed to generate encrypted session");
-        session.set_stash(&stash);
-        session
-            .save()
+            // Create a fake account.
+            let account = CoreAccount::new(
+                Self::test_user_id(),
+                Self::test_user_mail(),
+                TfaStatus::None,
+                PasswordMode::One,
+            )
+            .with_stash(&stash)
+            .with_save()
             .await
-            .expect("failed to make changes to session db");
+            .expect("fake account should save");
+
+            // Create a auth session.
+            let auth = AuthSession {
+                uid: Self::test_uid().into(),
+                name_or_addr: Self::test_user_mail(),
+                user_id: Self::test_user_id().into(),
+                second_factor_mode: TfaStatus::None.into(),
+                password_mode: PasswordMode::One.into(),
+                access_token: Self::test_acctok().into(),
+                refresh_token: Self::test_reftok().into(),
+                auth_scope: Self::test_scopes(),
+                auth_state: AuthState::Ready,
+            };
+
+            // Create a fake session.
+            let session = CoreSession::new(auth, &encryption_key)
+                .expect("session should be created")
+                .with_key_secret(&testdata_user_secret(), &encryption_key)
+                .expect("key secret should be set")
+                .with_stash(&stash)
+                .with_save()
+                .await
+                .expect("fake session should save");
+
+            (account, session)
+        };
 
         Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mock_server,
-            context: core_context,
-            _tmp_dir: tmp_dir,
-            encrypted_user_session: session,
+            context,
+            tmp_dir,
+            core_account,
+            core_session,
         })
     }
 
@@ -189,10 +235,10 @@ impl TestContext {
 
     /// Get the test user context.
     pub async fn user_context(&self) -> UserContext {
-        let cache_path = self._tmp_dir.path().join("image_cache");
+        let cache_path = self.tmp_dir.path().join("image_cache");
         self.context
             .user_context_from_session(
-                &self.encrypted_user_session,
+                &self.core_session,
                 cache_path,
                 100_000, // ~100kB
             )

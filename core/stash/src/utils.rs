@@ -20,7 +20,7 @@ use serde_json::{from_str as from_json, to_string as to_json};
 #[macro_export]
 macro_rules! params {
     ($($param:expr),+) => {
-        vec![$(Box::new($param)),+]
+        vec![$(Box::new($param) as _),+]
     };
 }
 

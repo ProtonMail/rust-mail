@@ -267,6 +267,8 @@ pub struct PostAuthSessionsForksResponse {
 ///
 /// This returns the updated list of scopes available to the user after 2FA.
 ///
+/// TODO: Use a `HashSet`?
+///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]

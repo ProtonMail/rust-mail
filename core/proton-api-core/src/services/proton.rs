@@ -228,7 +228,7 @@ impl ApiService for Proton {
                 // We take the auth details, and put them back later. Meanwhile, if the
                 // refresh attempt fails, we're not logged in anyway, and so clearing the
                 // auth value at this stage is the right thing to do.
-                let Some(mut auth) = auth_store.clear().await? else {
+                let (Some(mut auth), _) = auth_store.clear().await? else {
                     error!("Token refresh was requested, but there is no auth token");
                     // Return the original error, i.e. a 401 Unauthorized, if there is no token.
                     return Err(error);
@@ -269,10 +269,10 @@ impl ApiService for Proton {
                     auth.uid = response.uid;
                     auth.access_token = response.access_token;
                     auth.refresh_token = response.refresh_token;
-                    auth.scopes = response.scopes;
+                    auth.auth_scope = response.scopes;
                     tracing::debug!("Session has been refreshed");
                 }
-                if let Err(e) = auth_store.set(auth).await {
+                if let Err(e) = auth_store.set_session(auth).await {
                     error!("Failed to update authentication in store: {e}");
                 }
                 drop(auth_store);

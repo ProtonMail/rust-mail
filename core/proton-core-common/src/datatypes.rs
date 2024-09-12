@@ -39,6 +39,9 @@
 
 use core::fmt;
 use indoc::formatdoc;
+use itertools::Itertools;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use proton_api_core::auth::AuthState as ApiAuthState;
 use proton_api_core::services::proton::common::{
     LightOrDarkMode as ApiLightOrDarkMode, RemoteId as ApiRemoteId,
 };
@@ -47,13 +50,14 @@ use proton_api_core::services::proton::response_data::{
     AddressType as ApiAddressType, ContactSendingPreferences as ApiContactSendingPreferences,
     DateFormat as ApiDateFormat, Density as ApiDensity, EarlyAccess as ApiEarlyAccess,
     Email as ApiEmail, FidoKey as ApiFidoKey, Flags as ApiFlags, HighSecurity as ApiHighSecurity,
-    LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
-    ProductUsedSpace as ApiProductUsedSpace, Referral as ApiReferral,
+    LogAuth as ApiLogAuth, Password as ApiPassword, PasswordMode as ApiPasswordMode,
+    Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace, Referral as ApiReferral,
     SettingsFlags as ApiSettingsFlags, TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat,
     TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
     WeekStart as ApiWeekStart,
 };
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
+use proton_sqlite3::rusqlite::Error as SqlError;
 use secrecy::{CloneableSecret, DebugSecret};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
@@ -67,6 +71,7 @@ use stash::utils::sql_using_serde;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::repeat;
 use std::ops::Deref;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::warn;
 use zeroize::Zeroize;
 
@@ -562,6 +567,17 @@ impl From<ApiTfaStatus> for TfaStatus {
             ApiTfaStatus::Totp => Self::Totp,
             ApiTfaStatus::Fido2 => Self::Fido2,
             ApiTfaStatus::TotpOrFido2 => Self::TotpOrFido2,
+        }
+    }
+}
+
+impl From<TfaStatus> for ApiTfaStatus {
+    fn from(value: TfaStatus) -> Self {
+        match value {
+            TfaStatus::None => Self::None,
+            TfaStatus::Totp => Self::Totp,
+            TfaStatus::Fido2 => Self::Fido2,
+            TfaStatus::TotpOrFido2 => Self::TotpOrFido2,
         }
     }
 }
@@ -1765,14 +1781,14 @@ impl From<ApiTwoFa> for TwoFa {
 
 sql_using_serde!(TwoFa);
 
-/// Wrapper type around `Vec<String>` to hold the scopes of a token.
+/// Wrapper type around `Vec<String>` to hold the auth scope(s) of a session.
 ///
-/// TODO: `HashSet`?
+/// TODO: Use a `HashSet`?
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct AuthScopes(Vec<String>);
+pub struct AuthScope(Vec<String>);
 
-impl AuthScopes {
-    /// Create a new [`AuthScopes`] instance from a list of [`String`]s.
+impl AuthScope {
+    /// Create a new [`AuthScope`] instance from a list of [`String`]s.
     ///
     /// # Parameters
     ///
@@ -1781,26 +1797,120 @@ impl AuthScopes {
     /// TODO: Might be better to have a `From<Vec<String>>` implementation.
     ///
     #[must_use]
-    pub fn new(scopes: Vec<String>) -> Self {
-        Self(scopes)
+    pub fn new(scopes: impl IntoIterator<Item: Into<String>>) -> Self {
+        Self(scopes.into_iter().map_into().collect())
     }
 
-    /// Convert the [`AuthScopes`] into the inner [`Vec`].
+    /// Convert the [`AuthScope`] into the inner [`Vec`].
     #[must_use]
     pub fn into_inner(self) -> Vec<String> {
         self.0
     }
 }
 
-impl Deref for AuthScopes {
-    type Target = Vec<String>;
+sql_using_serde!(AuthScope);
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+/// A compat type for the [`proton_api_core::auth::AuthState`] enum,
+/// enabling it to be used within the database.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum AuthState {
+    TwoFA,
+    Ready,
+}
+
+impl From<ApiAuthState> for AuthState {
+    fn from(value: ApiAuthState) -> Self {
+        match value {
+            ApiAuthState::TwoFA => Self::TwoFA,
+            ApiAuthState::Ready => Self::Ready,
+        }
     }
 }
 
-sql_using_serde!(AuthScopes);
+impl From<AuthState> for ApiAuthState {
+    fn from(value: AuthState) -> Self {
+        match value {
+            AuthState::TwoFA => ApiAuthState::TwoFA,
+            AuthState::Ready => ApiAuthState::Ready,
+        }
+    }
+}
+
+impl ToSql for AuthState {
+    fn to_sql(&self) -> Result<ToSqlOutput, SqlError> {
+        Ok(u8::from(self.to_owned()).into())
+    }
+}
+
+impl FromSql for AuthState {
+    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
+        let ValueRef::Integer(value) = value else {
+            return Err(FromSqlError::InvalidType);
+        };
+
+        let Ok(value) = u8::try_from(value) else {
+            return Err(FromSqlError::InvalidType);
+        };
+
+        let Ok(value) = Self::try_from(value) else {
+            return Err(FromSqlError::InvalidType);
+        };
+
+        Ok(value)
+    }
+}
+
+/// A compat type for the [`ApiPasswordMode`] enum, enabling it to be used
+/// within the database.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
+#[repr(u8)]
+pub enum PasswordMode {
+    One = 1,
+    Two = 2,
+}
+
+impl From<ApiPasswordMode> for PasswordMode {
+    fn from(value: ApiPasswordMode) -> Self {
+        match value {
+            ApiPasswordMode::One => Self::One,
+            ApiPasswordMode::Two => Self::Two,
+        }
+    }
+}
+
+impl From<PasswordMode> for ApiPasswordMode {
+    fn from(value: PasswordMode) -> Self {
+        match value {
+            PasswordMode::One => ApiPasswordMode::One,
+            PasswordMode::Two => ApiPasswordMode::Two,
+        }
+    }
+}
+
+impl ToSql for PasswordMode {
+    fn to_sql(&self) -> Result<ToSqlOutput, SqlError> {
+        Ok(u8::from(self.to_owned()).into())
+    }
+}
+
+impl FromSql for PasswordMode {
+    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
+        let ValueRef::Integer(value) = value else {
+            return Err(FromSqlError::InvalidType);
+        };
+
+        let Ok(value) = u8::try_from(value) else {
+            return Err(FromSqlError::InvalidType);
+        };
+
+        let Ok(value) = Self::try_from(value) else {
+            return Err(FromSqlError::InvalidType);
+        };
+
+        Ok(value)
+    }
+}
 
 /// Wrapper type around [`RealUserKeys`] to implement [`FromSql`] and [`ToSql`].
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1845,3 +1955,38 @@ impl Serialize for UserKeys {
 }
 
 sql_using_serde!(UserKeys);
+
+/// A simple wrapper around a [`u64`] to represent a timestamp.
+///
+/// Represents the number of seconds since the Unix epoch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Timestamp(u64);
+
+impl Timestamp {
+    /// Create a new [`Timestamp`] at the current time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the system time is before the Unix epoch.
+    #[must_use]
+    pub fn now() -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_secs();
+
+        Self(now)
+    }
+}
+
+impl FromSql for Timestamp {
+    fn column_result(value: ValueRef) -> FromSqlResult<Self> {
+        u64::column_result(value).map(Timestamp)
+    }
+}
+
+impl ToSql for Timestamp {
+    fn to_sql(&self) -> Result<ToSqlOutput, SqliteError> {
+        u64::to_sql(&self.0)
+    }
+}

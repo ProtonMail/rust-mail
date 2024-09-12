@@ -260,6 +260,46 @@ pub trait ModelExtension: Model {
             .map(|r| r.id)
             .collect())
     }
+
+    /// Deletes a record by its remote ID.
+    ///
+    /// This method is a convenience method for deleting a record by its remote ID.
+    /// It assumes the model has a `remote_id` field; if it does not, the stash
+    /// will return an error.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of rows deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to delete the account from the db.
+    async fn delete_by_remote_id<A>(remote_id: RemoteId, interface: &A) -> Result<usize, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let table = Self::table_name();
+        let query = format!("DELETE FROM {table} WHERE remote_id = ?");
+
+        interface.execute(query, params![remote_id]).await
+    }
+
+    /// Sets the stash, returning the updated model.
+    #[must_use]
+    fn with_stash(mut self, stash: &Stash) -> Self {
+        self.set_stash(stash);
+        self
+    }
+
+    /// Saves the model by value, returning the updated model.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    async fn with_save(mut self) -> Result<Self, StashError> {
+        self.save().await?;
+        Ok(self)
+    }
 }
 
 impl<T: Model> ModelExtension for T {}

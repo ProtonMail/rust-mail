@@ -1,4 +1,3 @@
-use crate::datatypes::{AuthScopes, RemoteId};
 use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::Nonce;
 use aes_gcm::aes::Aes256;
@@ -8,234 +7,210 @@ use aes_gcm::{
 };
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use proton_api_core::auth::{Auth, UserKeySecret};
+use proton_api_core::auth::{AuthSession, SecretString, UserKeySecret};
 use proton_sqlite3::rusqlite::types::{FromSql, FromSqlResult, ToSql, ToSqlOutput, ValueRef};
 use secrecy::ExposeSecret;
-use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use stash::exports::SqliteError;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use stash::{params, sql_using_serde};
+use std::ops::Deref;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 use zeroize::Zeroize;
 
-/// Contains the session authentication in a decrypted state, ready to be used by the
-/// http client.
-pub struct DecryptedUserSession {
-    pub session_id: RemoteId,
-    pub user_id: RemoteId,
+use crate::datatypes::{AuthScope, AuthState, PasswordMode, RemoteId, TfaStatus, Timestamp};
+use crate::db::ChangeSender;
+
+#[derive(Debug, Clone, PartialEq, Eq, Model)]
+#[TableName("core_accounts")]
+pub struct CoreAccount {
+    /// Remote ID of the account (i.e. the API User ID).
+    #[IdField]
+    pub remote_id: RemoteId,
+
+    /// The account's username or email address (used for login).
+    #[DbField]
     pub name_or_addr: String,
-    pub refresh_token: SecretString,
-    pub access_token: SecretString,
-    pub key_secret: Option<UserKeySecret>,
-    pub scopes: AuthScopes,
+
+    /// The second factor auth mode of the account.
+    #[DbField]
+    pub second_factor_mode: TfaStatus,
+
+    /// The mailbox password mode of the account.
+    #[DbField]
+    pub password_mode: PasswordMode,
+
+    /// Timestamp of when the account was last set as the primary account.
+    #[DbField]
+    pub primary_at: Option<Timestamp>,
+
+    #[RowIdField]
+    pub row_id: Option<u64>,
+
+    #[StashField]
+    pub stash: Option<Stash>,
 }
 
-impl From<Auth> for DecryptedUserSession {
-    fn from(value: Auth) -> Self {
+impl CoreAccount {
+    /// Create a new account.
+    #[must_use]
+    pub fn new(
+        remote_id: RemoteId,
+        name_or_addr: String,
+        tfa_mode: TfaStatus,
+        mbp_mode: PasswordMode,
+    ) -> Self {
         Self {
-            session_id: value.uid.into(),
-            user_id: value.user_id.into(),
-            name_or_addr: value.name_or_addr,
-            refresh_token: value.refresh_token.into(),
-            access_token: value.access_token.into(),
-            key_secret: value.key_secret,
-            scopes: AuthScopes::new(value.scopes),
+            remote_id,
+            name_or_addr,
+            password_mode: mbp_mode,
+            second_factor_mode: tfa_mode,
+
+            // --- Optional fields ---
+            primary_at: None,
+            row_id: None,
+            stash: None,
         }
     }
-}
 
-impl From<DecryptedUserSession> for Auth {
-    fn from(value: DecryptedUserSession) -> Self {
-        Auth {
-            access_token: value.access_token.into(),
-            name_or_addr: value.name_or_addr,
-            key_secret: value.key_secret,
-            refresh_token: value.refresh_token.into(),
-            scopes: value.scopes.into_inner(),
-            uid: value.session_id.into(),
-            user_id: value.user_id.into(),
-        }
-    }
-}
-
-impl DecryptedUserSession {
-    /// Encrypt the session data so that it can be stored securely.
+    /// Find the primary account.
+    ///
+    /// This simply retrieves the account with the most recent `primary_at` timestamp.
     ///
     /// # Errors
-    /// Returns error if the encryption failed.
-    pub fn to_encrypted_session(
-        &self,
-        key: &SessionEncryptionKey,
-    ) -> Result<EncryptedUserSession, aes_gcm::Error> {
-        let encrypted_access_token = key
-            .encrypt(self.access_token.expose_secret().as_bytes())
-            .map(EncryptedAccessToken)?;
-        let encrypted_refresh_token = key
-            .encrypt(self.refresh_token.expose_secret().as_bytes())
-            .map(EncryptedRefreshToken)?;
+    ///
+    /// Returns error if we fail to retrieve the primary account from the db.
+    pub async fn find_primary(
+        interface: &(impl Into<AgnosticInterface> + Interface),
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first("ORDER BY primary_at DESC", vec![], interface).await
+    }
 
-        let encrypted_key_secret = self
-            .key_secret
-            .as_ref()
-            .map(|key_secret| key.encrypt(key_secret.expose_secret().as_bytes()))
-            .transpose()?
-            .map(EncryptedKeySecret);
+    /// Update the primary timestamp to now.
+    #[must_use]
+    pub fn with_primary_now(self) -> Self {
+        Self {
+            primary_at: Some(Timestamp::now()),
 
-        Ok(EncryptedUserSession {
-            session_id: self.session_id.clone(),
-            user_id: self.user_id.clone(),
-            name_or_addr: self.name_or_addr.clone(),
-            refresh_token: encrypted_refresh_token,
-            access_token: encrypted_access_token,
-            key_secret: encrypted_key_secret,
-            scopes: self.scopes.clone(),
+            // --- preserve ---
+            ..self
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Model)]
+#[TableName("core_sessions")]
+pub struct CoreSession {
+    /// Remote ID of the session (i.e. the API Auth UID).
+    #[IdField]
+    pub remote_id: RemoteId,
+
+    /// Account ID the session is associated with (i.e. the API User ID).
+    #[DbField]
+    pub account_id: RemoteId,
+
+    /// Access token for the session.
+    #[DbField]
+    pub access_token: EncryptedAccessToken,
+
+    /// Refresh token for the session.
+    #[DbField]
+    pub refresh_token: EncryptedRefreshToken,
+
+    /// The scope(s) the session has access to.
+    #[DbField]
+    pub auth_scope: AuthScope,
+
+    /// The state of the session's auth.
+    #[DbField]
+    pub auth_state: AuthState,
+
+    /// Secret used for unlocking the account's PGP key (once derived).
+    #[DbField]
+    pub key_secret: Option<EncryptedKeySecret>,
+
+    #[RowIdField]
+    pub row_id: Option<u64>,
+
+    #[StashField]
+    pub stash: Option<Stash>,
+}
+
+impl CoreSession {
+    /// Retrieves all sessions associated with the given account ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we fail to retrieve the sessions from the db.
+    pub async fn find_by_user_id(
+        user_id: RemoteId,
+        interface: &(impl Into<AgnosticInterface> + Interface),
+        queue: Option<ChangeSender<Self>>,
+    ) -> Result<Vec<Self>, StashError> {
+        Self::find("WHERE account_id = ?", params![user_id], interface, queue).await
+    }
+
+    /// Create a new session for the given account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the encryption fails.
+    pub fn new(auth: AuthSession, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
+        Ok(Self {
+            remote_id: RemoteId::from(auth.uid),
+            account_id: RemoteId::from(auth.user_id),
+            access_token: EncryptedAccessToken::new(&auth.access_token, key)?,
+            refresh_token: EncryptedRefreshToken::new(&auth.refresh_token, key)?,
+            auth_scope: AuthScope::new(auth.auth_scope),
+            auth_state: AuthState::from(auth.auth_state),
+
+            // --- Optional fields ---
+            key_secret: None,
             row_id: None,
             stash: None,
         })
     }
-}
 
-/// Encrypted session authentication data, can safely be stored on disk.
-#[derive(Clone, Debug, Model, Deserialize, Eq, PartialEq, Serialize)]
-#[TableName("core_sessions")]
-pub struct EncryptedUserSession {
-    #[DbField]
-    pub session_id: RemoteId,
-    #[IdField]
-    pub user_id: RemoteId,
-    #[DbField]
-    pub name_or_addr: String,
-    #[DbField]
-    pub refresh_token: EncryptedRefreshToken,
-    #[DbField]
-    pub access_token: EncryptedAccessToken,
-    #[DbField]
-    pub key_secret: Option<EncryptedKeySecret>,
-    #[DbField]
-    pub scopes: AuthScopes,
-    #[RowIdField]
-    #[serde(skip)]
-    pub row_id: Option<u64>,
-    #[StashField]
-    #[serde(skip)]
-    pub stash: Option<Stash>,
-}
-
-impl EncryptedUserSession {
-    /// Find the session with the given user ID, if it exists.
+    /// Update the auth tokens.
     ///
     /// # Errors
     ///
-    /// Returns an error if the database query failed.
-    ///
-    pub async fn find_by_user_id<A>(
-        user_id: RemoteId,
-        interface: &A,
-    ) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        EncryptedUserSession::find_first("WHERE user_id=?", params![user_id.to_string()], interface)
-            .await
-    }
-
-    /// Decrypt the session data so that it can be used.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the decryption failed.
-    ///
-    pub fn to_decrypted_session(
-        &self,
+    /// Returns an error if the encryption fails.
+    pub fn with_auth(
+        self,
+        auth: &AuthSession,
         key: &SessionEncryptionKey,
-    ) -> Result<DecryptedUserSession, DecryptionError> {
-        let decrypted_access_token = key
-            .decrypt(&self.access_token.0)
-            .map_err(|_| DecryptionError::Decryption)?;
-        let decrypted_access_token = SecretString::from(String::from_utf8(decrypted_access_token)?);
+    ) -> Result<Self, aes_gcm::Error> {
+        Ok(Self {
+            access_token: EncryptedAccessToken::new(&auth.access_token, key)?,
+            refresh_token: EncryptedRefreshToken::new(&auth.refresh_token, key)?,
+            auth_scope: AuthScope::new(&auth.auth_scope),
+            auth_state: AuthState::from(auth.auth_state),
 
-        let decrypted_refresh_token = key
-            .decrypt(&self.refresh_token.0)
-            .map_err(|_| DecryptionError::Decryption)?;
-        let decrypted_refresh_token =
-            SecretString::from(String::from_utf8(decrypted_refresh_token)?);
-
-        let decrypted_key_secret = self
-            .key_secret
-            .as_ref()
-            .map(|secret_key| key.decrypt(&secret_key.0))
-            .transpose()
-            .map_err(|_| DecryptionError::Decryption)?
-            .map(UserKeySecret::from);
-
-        Ok(DecryptedUserSession {
-            session_id: self.session_id.clone(),
-            user_id: self.user_id.clone(),
-            name_or_addr: self.name_or_addr.clone(),
-            refresh_token: decrypted_refresh_token,
-            access_token: decrypted_access_token,
-            key_secret: decrypted_key_secret,
-            scopes: self.scopes.clone(),
+            // --- preserve ---
+            ..self
         })
     }
-}
 
-/// The state of a user session.
-#[derive(Clone, Debug, Model, Deserialize, Eq, PartialEq, Serialize)]
-#[TableName("core_session_state")]
-pub struct UserSessionState {
-    /// The unique identifier of the user.
-    #[IdField]
-    pub user_id: RemoteId,
-
-    /// Timestamp at which the session was last marked as active.
-    #[DbField]
-    pub last_active_ts: u64,
-
-    /// The row ID in the database, if known/applicable.
-    #[RowIdField]
-    #[serde(skip)]
-    pub row_id: Option<u64>,
-
-    /// Convenience reference to the stash object.
-    #[StashField]
-    #[serde(skip)]
-    pub stash: Option<Stash>,
-}
-
-impl UserSessionState {
-    /// Find the most recently active session state entry, if one exists.
+    /// Update the key secret.
     ///
     /// # Errors
     ///
-    /// Returns an error if the database query failed.
-    ///
-    pub async fn find_last<A>(interface: &A) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        UserSessionState::find_first(r"ORDER BY last_active_ts DESC", vec![], interface).await
-    }
+    /// Returns an error if the secret encryption fails.
+    pub fn with_key_secret(
+        self,
+        key_secret: &UserKeySecret,
+        key: &SessionEncryptionKey,
+    ) -> Result<Self, aes_gcm::Error> {
+        Ok(Self {
+            key_secret: Some(EncryptedKeySecret::new(key_secret, key)?),
 
-    /// Find the session state for the given user ID, if it exists.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query failed.
-    ///
-    pub async fn find_by_user_id<A>(
-        user_id: RemoteId,
-        interface: &A,
-    ) -> Result<Option<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        UserSessionState::find_first("WHERE user_id=?", params![user_id.to_string()], interface)
-            .await
+            // --- preserve ---
+            ..self
+        })
     }
 }
 
@@ -263,6 +238,13 @@ impl EncryptedAccessToken {
     /// Returns error if the encryption failed.
     pub fn new(token: &SecretString, key: &SessionEncryptionKey) -> Result<Self, aes_gcm::Error> {
         key.encrypt(token.expose_secret().as_bytes()).map(Self)
+    }
+}
+impl Deref for EncryptedAccessToken {
+    type Target = EncryptedData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 impl AsRef<[u8]> for EncryptedAccessToken {
@@ -297,6 +279,13 @@ impl EncryptedRefreshToken {
     }
 }
 
+impl Deref for EncryptedRefreshToken {
+    type Target = EncryptedData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 impl AsRef<[u8]> for EncryptedRefreshToken {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
@@ -349,6 +338,14 @@ impl EncryptedKeySecret {
         key: &SessionEncryptionKey,
     ) -> Result<Self, aes_gcm::Error> {
         key.encrypt(key_secret.expose_secret().as_bytes()).map(Self)
+    }
+}
+
+impl Deref for EncryptedKeySecret {
+    type Target = EncryptedData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -420,8 +417,10 @@ impl SessionEncryptionKey {
     ///
     /// # Errors
     /// Returns errors if the decryption failed.
-
-    pub fn decrypt(&self, data: &EncryptedData) -> Result<Vec<u8>, aes_gcm::Error> {
+    pub fn decrypt<D>(&self, data: D) -> Result<Vec<u8>, aes_gcm::Error>
+    where
+        D: Deref<Target = EncryptedData>,
+    {
         const NONCE_LENGTH: usize = 12;
         if data.ciphertext_nonce.len() < NONCE_LENGTH {
             return Err(aes_gcm::Error);

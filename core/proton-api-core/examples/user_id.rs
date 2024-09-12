@@ -103,8 +103,9 @@ async fn main() {
         };
     }
 
-    let user = login_flow.reset_and_take_user().unwrap();
-    println!("User ID is {}", user.id);
+    let (user_id, session_id) = login_flow.reset_and_take_ids();
+    println!("User ID is {}", user_id.unwrap());
+    println!("Session ID is {}", session_id.unwrap());
 
     let settings = session.api().get_settings().await.unwrap();
     println!("User settings is {:?}", settings);

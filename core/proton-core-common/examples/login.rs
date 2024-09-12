@@ -1,5 +1,5 @@
 use proton_api_core::services::proton::Config;
-use proton_core_common::db::session::SessionEncryptionKey;
+use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_core_common::Context;
 use std::sync::Arc;

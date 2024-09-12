@@ -1,7 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
-use crate::auth::{Auth, StoreError, UserKeySecret};
+use crate::auth::{AuthSession, AuthState, StoreError, UserKeySecret, UserSecrets};
 use crate::service::{ApiServiceError, ServiceError};
+use crate::services::proton::common::RemoteId;
 use crate::services::proton::request_data::HumanVerificationData;
 use crate::services::proton::requests::PostAuthRequest;
 use crate::services::proton::response_data::{
@@ -10,6 +11,7 @@ use crate::services::proton::response_data::{
 use crate::session::{CoreSession, Session};
 use core::fmt;
 use proton_crypto_account::keys::{DecryptedUserKey, KeyId, LockedKey, UnlockResult};
+use proton_crypto_account::proton_crypto;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync as PgpProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider as SrpProvider;
 use proton_crypto_account::salts::{KeySalt, KeySecret, Salt, Salts};
@@ -69,11 +71,11 @@ impl ServiceError for LoginError {}
 
 /// Handle all the possible states that are required to transition through in order to become
 /// authenticated.
-
 pub struct Flow {
     session: Session,
     state: LoginState,
-    user: Option<User>,
+    user_id: Option<RemoteId>,
+    session_id: Option<RemoteId>,
     mailbox_password: Option<SecretVec<u8>>,
     password_mode: Option<PasswordMode>,
     tfa_status: Option<TfaStatus>,
@@ -85,9 +87,53 @@ impl Flow {
         Self {
             session,
             state: LoginState::LoggedOut,
-            user: None,
+            user_id: None,
+            session_id: None,
             mailbox_password: None,
             password_mode: None,
+            tfa_status: None,
+        }
+    }
+
+    /// Resume the login flow at the 2FA step.
+    #[must_use]
+    pub fn resume_second_factor(
+        session: Session,
+        user_id: RemoteId,
+        session_id: RemoteId,
+        password_mode: PasswordMode,
+        tfa_status: TfaStatus,
+    ) -> Self {
+        Self {
+            session,
+            state: LoginState::AwaitingTfa(tfa_status),
+            user_id: Some(user_id),
+            session_id: Some(session_id),
+            mailbox_password: None,
+            password_mode: Some(password_mode),
+
+            // This is `None` because we are resuming the flow at the TFA step;
+            // the `tfa_status` is moved from here to the `LoginState::AwaitingTfa` variant
+            // during the first step of the flow.
+            tfa_status: None,
+        }
+    }
+
+    /// Resume the login flow at the mailbox password step.
+    #[must_use]
+    pub fn resume_mailbox_password(
+        session: Session,
+        user_id: RemoteId,
+        session_id: RemoteId,
+        password_mode: PasswordMode,
+    ) -> Self {
+        Self {
+            session,
+            state: LoginState::AwaitingMailboxPassword,
+            user_id: Some(user_id),
+            session_id: Some(session_id),
+            mailbox_password: None,
+            password_mode: Some(password_mode),
             tfa_status: None,
         }
     }
@@ -112,7 +158,7 @@ impl Flow {
 
         let auth_resp = { self.session.api().post_auth_info(username.clone()).await }?;
 
-        let srp_provider = proton_crypto_account::proton_crypto::new_srp_provider();
+        let srp_provider = proton_crypto::new_srp_provider();
         let proof = srp_provider
             .generate_client_proof(
                 &username,
@@ -146,21 +192,19 @@ impl Flow {
             ));
         }
 
-        {
-            let auth = Auth {
-                name_or_addr: username,
-                user_id: auth_response.user_id,
-                uid: auth_response.uid,
-                refresh_token: auth_response.refresh_token,
-                access_token: auth_response.access_token,
-                scopes: auth_response.scopes,
-                key_secret: None,
-            };
+        // Save the newly acquired auth session in the auth store.
+        self.session
+            .auth_store()
+            .write()
+            .await
+            .set_session(AuthSession::from_response(username, auth_response.clone()))
+            .await?;
 
-            self.session.auth_store().write().await.set(auth).await?;
-        }
         self.tfa_status = Some(auth_response.tfa.enabled);
         self.password_mode = Some(auth_response.password_mode);
+        self.user_id = Some(auth_response.user_id);
+        self.session_id = Some(auth_response.uid);
+
         self.next().await
     }
 
@@ -177,14 +221,24 @@ impl Flow {
             return Err(LoginError::UnsupportedTfa);
         }
 
-        let scopes = self.session.api().post_auth_tfa(code).await?.scopes;
+        let auth_tfa_resp = self.session.api().post_auth_tfa(code).await?;
 
-        self.session
-            .auth_store()
-            .write()
-            .await
-            .set_scopes(scopes)
-            .await?;
+        {
+            let mut store = self.session.auth_store().write().await;
+
+            // Get the current auth session from the auth store.
+            let mut auth = store
+                .get_session()
+                .cloned()
+                .ok_or(LoginError::InvalidState)?;
+
+            // Update the auth session with the new scope and state.
+            auth.auth_scope = auth_tfa_resp.scopes;
+            auth.auth_state = AuthState::Ready;
+
+            // Save the updated auth session in the auth store.
+            store.set_session(auth).await?;
+        }
 
         self.next().await
     }
@@ -238,18 +292,32 @@ impl Flow {
         matches!(self.state, LoginState::AwaitingMailboxPassword)
     }
 
-    /// Get the user info from a logged-in session and reset the internal state.
-    pub fn reset_and_take_user(&mut self) -> Option<User> {
+    /// Reset the internal state of the login flow, returning the user and session ids.
+    pub fn reset_and_take_ids(&mut self) -> (Option<RemoteId>, Option<RemoteId>) {
         self.state = LoginState::LoggedOut;
         self.password_mode = None;
         self.tfa_status = None;
         self.mailbox_password = None;
-        self.user.take()
+
+        (self.user_id.take(), self.session_id.take())
     }
 
-    #[must_use]
-    pub fn user(&self) -> Option<&User> {
-        self.user.as_ref()
+    /// Get the ID of the user that has been (or is about to be) logged in.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the user ID is not yet known.
+    pub fn user_id(&self) -> Result<&RemoteId, LoginError> {
+        self.user_id.as_ref().ok_or(LoginError::InvalidState)
+    }
+
+    /// Get the ID of the session that has been (or is about to be) established.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the session ID is not yet known.
+    pub fn session_id(&self) -> Result<&RemoteId, LoginError> {
+        self.session_id.as_ref().ok_or(LoginError::InvalidState)
     }
 
     #[must_use]
@@ -302,21 +370,18 @@ impl Flow {
 
     /// Finalize the login by fetching the user and deriving the key secret.
     async fn finalize_login(&mut self) -> Result<(), LoginError> {
-        // Fetch user info at least once, some accounts trigger HV after login with first
-        // API call.
+        // Fetch user info at least once
+        // (some accounts trigger HV after login with first API call).
         let user = self.session.api().get_users().await?.user;
-        self.derive_key_secret(&user).await?;
-        self.user = Some(user);
-        Ok(())
-    }
 
-    /// Derive the key secret to unlock user keys.
-    async fn derive_key_secret(&mut self, user: &User) -> Result<(), LoginError> {
-        let srp_provider = proton_crypto_account::proton_crypto::new_srp_provider();
-        let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
+        // We need a mailbox password by this point.
         let Some(password) = self.mailbox_password.as_mut() else {
             return Err(LoginError::InvalidState);
         };
+
+        // Initialize the crypto providers.
+        let srp_provider = proton_crypto::new_srp_provider();
+        let pgp_provider = proton_crypto::new_pgp_provider();
 
         // Fetch the salts to derive the key password.
         let salts = Salts::new(
@@ -334,26 +399,29 @@ impl Flow {
         );
 
         // Derive the key secret to unlock the user keys.
-        let key_secret = Self::salt_password(user, &srp_provider, &salts, password.expose_secret())
-            .map(UserKeySecret)
-            .map_err(LoginError::KeySecretDerivation)?;
+        let key_secret =
+            Self::salt_password(&user, &srp_provider, &salts, password.expose_secret())
+                .map(UserKeySecret)
+                .map_err(LoginError::KeySecretDerivation)?;
 
         // Check that the key works
         let unlock_result =
-            Self::unlock_encryption_keys(user, &pgp_provider, key_secret.expose_secret());
+            Self::unlock_encryption_keys(&user, &pgp_provider, key_secret.expose_secret());
         if unlock_result.unlocked_keys.is_empty() {
             return Err(LoginError::KeySecretDecryption);
         }
 
-        // Update the auth state with the derived user secret.
-        let mut guard = self.session.auth_store().write().await;
-        if let Some(mut auth) = guard.get().cloned() {
-            auth.key_secret = Some(key_secret);
-            guard.set(auth).await?;
-        }
+        // Save the derived user secret in the auth store.
+        self.session
+            .auth_store()
+            .write()
+            .await
+            .set_secrets(UserSecrets::new(key_secret))
+            .await?;
 
         // The password is no longer needed, erase it.
         self.mailbox_password = None;
+
         Ok(())
     }
 

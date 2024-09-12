@@ -5,12 +5,15 @@ use crate::service::ApiServiceError;
 use crate::services::proton::{Config as ApiConfig, Proton};
 use tokio::sync::RwLock as AsyncRwLock;
 
+/// Core session trait which provides access to the API.
+///
+/// TODO: Rename this to simply `Api`?
 pub trait CoreSession {
     #[must_use]
     fn api(&self) -> &Proton;
 }
 
-/// Authenticated Session from which one can access data/functionality restricted to authenticated
+/// Authenticated API session from which one can access data/functionality restricted to authenticated
 /// users.
 #[derive(Clone)]
 pub struct Session {
@@ -77,8 +80,8 @@ impl Session {
         self.auth_store()
             .read()
             .await
-            .get()
-            .and_then(|auth| auth.key_secret.clone())
+            .get_secrets()
+            .map(|secrets| secrets.key_secret.clone())
     }
 
     /// Logout the user and invalidate the current session.

@@ -1,23 +1,25 @@
-//! Core context contains all the necessary information to retrieve or create new sessions.
-use crate::auth_store::AuthStore;
+//! Core context contains all the necessary information to retrieve or create new accounts and sessions.
+use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
-use crate::datatypes::RemoteId;
-use crate::db::migrations::{migrate_core_db, migrate_session_db};
-use crate::db::session::{EncryptedUserSession, SessionEncryptionKey, UserSessionState};
+use crate::datatypes::{AuthState, RemoteId};
+use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
+use crate::db::migrations::{migrate_account_db, migrate_core_db};
+use crate::db::ChangeReceiver;
+use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainError};
-use crate::session::Session;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{anyhow, Error as AnyhowError};
-use proton_api_core::login::Flow;
+use futures::TryFutureExt;
+use itertools::Itertools;
+use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Config as ApiConfig;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session as ApiCoreSession;
 use proton_sqlite3::MigratorError;
 use secrecy::{ExposeSecret, SecretString};
-use stash::orm::{Model, ResultsetChange};
-use stash::params;
-use stash::stash::{Interface, Stash, StashError};
+use stash::orm::Model;
+use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
@@ -26,6 +28,8 @@ use tracing::{debug, error, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
+    #[error("Login error: {0}")]
+    Login(#[from] LoginError),
     #[error("API error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("A Cryptography error occurred")]
@@ -60,6 +64,52 @@ pub enum ContactError {
     FullContactNotFound(String),
 }
 
+/// Represents the state of an account.
+#[derive(Debug)]
+pub enum CoreAccountState {
+    /// The account has at least one fully logged-in session;
+    /// the variant holds the (remote) IDs of the fullly logged-in sessions.
+    LoggedIn(Vec<RemoteId>),
+
+    /// The account has authenticated sessions but they are missing the key secret.
+    /// The variant holds the (remote) IDs of the sessions that are missing the key secret.
+    NeedMbp(Vec<RemoteId>),
+
+    /// The account has partially authenticated sessions that require a second factor.
+    /// The variant holds the (remote) IDs of the sessions that require a second factor.
+    NeedTfa(Vec<RemoteId>),
+
+    /// The account has no active sessions.
+    LoggedOut,
+}
+
+/// Represents the state of a session.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub enum CoreSessionState {
+    /// The session is fully authenticated and ready to use.
+    Ready,
+
+    /// The session has authenticated but is missing the key secret.
+    NeedMbp,
+
+    /// The session has partially authenticated and requires a second factor.
+    NeedTfa,
+}
+
+impl CoreSessionState {
+    fn of(session: &CoreSession) -> Self {
+        let AuthState::Ready = session.auth_state else {
+            return CoreSessionState::NeedTfa;
+        };
+
+        let Some(_) = &session.key_secret else {
+            return CoreSessionState::NeedMbp;
+        };
+
+        CoreSessionState::Ready
+    }
+}
+
 /// Callback when the status of the network changes.
 pub trait NetworkStatusChanged: Send + Sync {
     fn on_network_status_changed(&self, online: bool);
@@ -74,7 +124,7 @@ pub struct Context {
     this: Weak<Self>,
     network_connected: AtomicBool,
     user_db_path: PathBuf,
-    session_stash: Stash,
+    stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
     api: Proton,
@@ -82,13 +132,13 @@ pub struct Context {
 }
 
 impl Context {
-    /// Create a new context by specifying the `session_db_path` where the session database will be created,
+    /// Create a new context by specifying the `account_db_path` where the account database will be created,
     /// an `user_db_path` for user databases, a`key_chain` implementation and a list of `initializers`
     /// for the user database.
     ///
     /// # Params
     /// * `async_runtime`: Instance of a multithreaded async runtime.
-    /// * `session_db_path`: Path where the session db will be written.
+    /// * `account_db_path`: Path where the account db will be written.
     /// * `user_db_path`: Path where each user db will be written.
     /// * `key_chain`: Implementation of a keychain store.
     /// * `initializers`: List of user database initializers that should be called.
@@ -96,10 +146,10 @@ impl Context {
     /// * `network_callback`: Callback to be notified of network status changes.
     ///
     /// # Errors
-    /// Returns error if the context failed to initialize correctly.
+    /// Returns an error if the context failed to initialize correctly.
     ///
     pub async fn new(
-        session_db_path: impl Into<PathBuf>,
+        account_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
@@ -107,13 +157,13 @@ impl Context {
         network_callback: Option<Box<dyn NetworkStatusChanged>>,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
-        let session_db_path = session_db_path.into();
+        let account_db_path = account_db_path.into();
         let user_db_path = user_db_path.into();
-        std::fs::create_dir_all(&session_db_path)?;
+        std::fs::create_dir_all(&account_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
-        let session_db_path = get_session_db_path(session_db_path);
-        let stash = Stash::new(Some(&session_db_path))?;
-        migrate_session_db(&stash).await?;
+        let account_db_path = get_account_db_path(account_db_path);
+        let stash = Stash::new(Some(&account_db_path))?;
+        migrate_account_db(&stash).await?;
 
         let api = Proton::new(api_config, None, None)
             .await
@@ -124,117 +174,271 @@ impl Context {
             network_connected: AtomicBool::new(true),
             user_db_path,
             key_chain,
-            session_stash: stash,
+            stash,
             user_db_initializers: initializers,
             network_callback,
             api,
         }))
     }
 
-    /// Get available sessions.
+    /// Get all available accounts.
+    ///
+    /// An account is an entity representing a Proton account known to the system.
+    /// When a user first authenticates via the login flow, a new account is created,
+    /// and all subsequent sessions are associated with that account.
     ///
     /// # Errors
     ///
-    /// Returns error if we fail to retrieve the sessions from the db.
-    pub async fn get_sessions(&self) -> CoreContextResult<Vec<EncryptedUserSession>> {
-        Ok(EncryptedUserSession::find(String::new(), vec![], &self.session_stash, None).await?)
+    /// Returns an error if we fail to retrieve the accounts from the db.
+    pub async fn get_accounts(&self) -> CoreContextResult<Vec<CoreAccount>> {
+        Ok(CoreAccount::all(&self.stash, None).await?)
     }
 
-    /// Watch for changes to the available sessions.
+    /// Watch the accounts for changes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the initial list of accounts and a receiver for changes.
+    /// The receiver is a channel over which change events are sent, such as when a new account is created,
+    /// an existing account is updated, or an account is deleted.
     ///
     /// # Errors
     ///
-    /// Returns error if the watcher cannot be registered with the database.
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_accounts(
+        &self,
+    ) -> CoreContextResult<(Vec<CoreAccount>, ChangeReceiver<CoreAccount>)> {
+        let (tx, rx) = flume::unbounded();
+
+        let res = CoreAccount::all(&self.stash, Some(tx)).await?;
+
+        Ok((res, rx))
+    }
+
+    /// Get a single account by its remote (user) ID.
+    ///
+    /// This is a convenience method that enables retrieving a single account without requiring
+    /// the full set of accounts to be loaded first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_account(&self, user_id: RemoteId) -> CoreContextResult<Option<CoreAccount>> {
+        Ok(CoreAccount::find_by_id(user_id, &self.stash).await?)
+    }
+
+    /// Get all API sessions associated with a given account.
+    ///
+    /// A session represents an authenticated session with the Proton API for a given account,
+    /// including the authentication tokens granted by the API, the state of the session,
+    /// and the user's key passphrase (once known).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    pub async fn get_sessions(&self, user_id: RemoteId) -> CoreContextResult<Vec<CoreSession>> {
+        Ok(CoreSession::find_by_user_id(user_id, &self.stash, None).await?)
+    }
+
+    /// Watch an account's API sessions for changes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the initial list of sessions and a receiver for changes.
+    /// The receiver is a channel over which change events are sent, such as when a new session is created,
+    /// an existing session is updated, or a session is deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(
         &self,
-    ) -> CoreContextResult<(
-        Vec<EncryptedUserSession>,
-        flume::Receiver<ResultsetChange<EncryptedUserSession, RemoteId>>,
-    )> {
+        user_id: RemoteId,
+    ) -> CoreContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
         let (tx, rx) = flume::unbounded();
 
-        let res = EncryptedUserSession::find(String::new(), vec![], self.stash(), Some(tx)).await?;
+        let res = CoreSession::find_by_user_id(user_id, &self.stash, Some(tx)).await?;
 
         Ok((res, rx))
     }
 
-    /// Get available session states.
+    /// Get a single API session by its associated account and session ID.
+    ///
+    /// This is a convenience method that enables retrieving a single session without requiring
+    /// the full set of sessions to be loaded first.
     ///
     /// # Errors
     ///
-    /// Returns error if we fail to retrieve the session states from the db.
-    pub async fn get_session_states(&self) -> CoreContextResult<Vec<UserSessionState>> {
-        Ok(UserSessionState::find(String::new(), vec![], self.stash(), None).await?)
-    }
-
-    /// Watch for changes to the available session states.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the watcher cannot be registered with the database.
-    pub async fn watch_session_states(
+    /// Returns an error if the database operation fails.
+    pub async fn get_session(
         &self,
-    ) -> CoreContextResult<(
-        Vec<UserSessionState>,
-        flume::Receiver<ResultsetChange<UserSessionState, RemoteId>>,
-    )> {
-        let (tx, rx) = flume::unbounded();
+        session_id: RemoteId,
+    ) -> CoreContextResult<Option<CoreSession>> {
+        Ok(CoreSession::find_by_id(session_id, &self.stash).await?)
+    }
 
-        let res = UserSessionState::find(String::new(), vec![], self.stash(), Some(tx)).await?;
+    /// Get the login state of an account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_account_state(
+        &self,
+        user_id: RemoteId,
+    ) -> CoreContextResult<Option<CoreAccountState>> {
+        let Some(account) = CoreAccount::find_by_id(user_id, &self.stash).await? else {
+            return Ok(None);
+        };
 
-        Ok((res, rx))
+        let mut sessions = CoreSession::find_by_user_id(account.remote_id, &self.stash, None)
+            .await?
+            .into_iter()
+            .map(|session| (CoreSessionState::of(&session), session.remote_id))
+            .into_group_map();
+
+        let state = if let Some(sessions) = sessions.remove(&CoreSessionState::Ready) {
+            CoreAccountState::LoggedIn(sessions)
+        } else if let Some(sessions) = sessions.remove(&CoreSessionState::NeedMbp) {
+            CoreAccountState::NeedMbp(sessions)
+        } else if let Some(sessions) = sessions.remove(&CoreSessionState::NeedTfa) {
+            CoreAccountState::NeedTfa(sessions)
+        } else {
+            CoreAccountState::LoggedOut
+        };
+
+        Ok(Some(state))
+    }
+
+    /// Get the login state of a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_session_state(
+        &self,
+        session_id: RemoteId,
+    ) -> CoreContextResult<Option<CoreSessionState>> {
+        Ok(CoreSession::find_by_id(session_id, &self.stash)
+            .map_ok(|session| session.map(|session| CoreSessionState::of(&session)))
+            .await?)
+    }
+
+    /// Get the account considered to be the primary account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
+        Ok(CoreAccount::find_primary(&self.stash).await?)
+    }
+
+    /// Set the account considered to be the primary account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the account is not found.
+    pub async fn set_primary_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
+        CoreAccount::find_by_id(user_id, &self.stash)
+            .await?
+            .ok_or(CoreContextError::Other(anyhow!("account not found")))?
+            .with_primary_now()
+            .save()
+            .await?;
+
+        Ok(())
     }
 
     /// Create a new login flow for a new user.
     ///
     /// # Errors
     ///
-    /// Returns error if there is no encryption key in the keychain.
+    /// Returns an error if there is no encryption key in the keychain.
     pub async fn new_login_flow(&self) -> CoreContextResult<Flow> {
-        // Check if we have an encryption key
+        // Ensure we have an encryption key
         let _ = self.get_encryption_key()?;
-        let _core_session = Session::new(None, self.session_stash.clone(), self.key_chain.clone());
 
-        let auth_store = AuthStore::new(
-            self.session_stash.clone(),
-            Arc::clone(&self.key_chain),
-            None,
-        );
+        // Create a new API session
+        let session = self.new_api_session(None).await?;
 
-        let session = ApiCoreSession::new(self.api.config().clone(), Some(Box::new(auth_store)))
-            .await
-            .map_err(ApiServiceError::from)?;
-
+        // Create a new login flow
         Ok(Flow::new(session))
     }
 
-    /// Create a user context from a login flow. This will fail if the flow is not in the
-    /// logged in state.
-    #[tracing::instrument(level=Level::DEBUG, skip(self, login_flow, cache_path, cache_size))]
+    /// Create a new login flow for an existing user.
+    ///
+    /// This can be used to resume a login flow that was interrupted.
+    /// For instance, if the user has already entered their login credentials,
+    /// but the flow was interrupted while waiting for a second factor,
+    /// the flow can be resumed by calling this method with the user and session IDs.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if there is no encryption key in the keychain
+    /// or if no session with the given IDs is able to be resumed.
+    pub async fn resume_login_flow(
+        &self,
+        user_id: RemoteId,
+        session_id: RemoteId,
+    ) -> CoreContextResult<Flow> {
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.stash).await? else {
+            return Err(CoreContextError::Other(anyhow!("account not found")));
+        };
+
+        let Some(session) = CoreSession::find_by_id(session_id.clone(), &self.stash).await? else {
+            return Err(CoreContextError::Other(anyhow!("session not found")));
+        };
+
+        match CoreSessionState::of(&session) {
+            CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
+                self.new_api_session(Some(&session)).await?,
+                user_id.into(),
+                session_id.into(),
+                account.password_mode.into(),
+                account.second_factor_mode.into(),
+            )),
+
+            CoreSessionState::NeedMbp => Ok(Flow::resume_mailbox_password(
+                self.new_api_session(Some(&session)).await?,
+                user_id.into(),
+                session_id.into(),
+                account.password_mode.into(),
+            )),
+
+            CoreSessionState::Ready => Err(CoreContextError::Other(anyhow!(
+                "session is already logged in"
+            ))),
+        }
+    }
+
+    /// Create a user context from a login flow.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the flow is not in the logged in state or if the user
+    /// context could not be created.
+    #[tracing::instrument(level=Level::DEBUG, skip(self, flow, cache_path, cache_size))]
     pub async fn user_context_from_login_flow(
         &self,
-        login_flow: &Flow,
-        cache_path: impl Into<PathBuf>,
+        flow: &Flow,
+        cache_path: PathBuf,
         cache_size: u32,
     ) -> CoreContextResult<UserContext> {
-        if !login_flow.is_logged_in() {
+        if !flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
         }
 
-        let Some(user) = login_flow.user() else {
-            return Err(CoreContextError::Other(anyhow!("invalid login state")));
-        };
-
-        debug!("Creating new context for user {}({})", user.email, user.id);
-        let user_stash = self.new_user_db_pool(&user.id.clone().into()).await?;
-        let session_stash = self.session_stash.clone();
+        let user_id: RemoteId = flow.user_id()?.to_owned().into();
+        let session_id: RemoteId = flow.session_id()?.to_owned().into();
+        let session = flow.session().to_owned();
+        let stash = self.new_user_db_pool(&user_id).await?;
 
         UserContext::new(
-            login_flow.session().clone(),
-            user_stash,
-            session_stash,
-            user.id.clone().into(),
-            cache_path.into(),
+            self.this(),
+            session,
+            stash,
+            user_id,
+            session_id,
+            cache_path,
             cache_size,
         )
         .await
@@ -248,45 +452,60 @@ impl Context {
     ///
     pub async fn user_context_from_session(
         &self,
-        session: &EncryptedUserSession,
-        cache_path: impl Into<PathBuf>,
+        session: &CoreSession,
+        cache_path: PathBuf,
         cache_size: u32,
     ) -> CoreContextResult<UserContext> {
-        let user_stash = self.new_user_db_pool(&session.user_id).await?;
-        let session_stash = self.session_stash.clone();
-
-        debug!("decrypting session tokens");
+        // Ensure we have an encryption key
         let key = self.get_encryption_key()?;
-        let decrypted_session = session
-            .to_decrypted_session(&key)
-            .map_err(|_| CoreContextError::Crypto)?;
-        let user_id = session.user_id.clone();
-        let _core_session = Session::new(
-            Some(decrypted_session),
-            self.session_stash.clone(),
-            self.key_chain.clone(),
-        );
 
-        let auth_store = AuthStore::new(
-            self.session_stash.clone(),
-            Arc::clone(&self.key_chain),
-            Some(user_id.clone()),
-        );
+        // Ensure the key can be used to decrypt the access token
+        let _ = session
+            .access_token
+            .decrypt_to_string(&key)
+            .or(Err(CoreContextError::Crypto))?;
 
-        debug!("Creating session");
-        let session = ApiCoreSession::new(self.api.config().clone(), Some(Box::new(auth_store)))
-            .await
-            .map_err(ApiServiceError::from)?;
+        // Ensure the key can be used to decrypt the refresh token
+        let _ = session
+            .refresh_token
+            .decrypt_to_string(&key)
+            .or(Err(CoreContextError::Crypto))?;
+
+        let user_id = session.account_id.clone();
+        let session_id = session.remote_id.clone();
+        let session = self.new_api_session(Some(session)).await?;
+        let stash = self.new_user_db_pool(&user_id).await?;
 
         UserContext::new(
+            self.this(),
             session,
-            user_stash,
-            session_stash,
+            stash,
             user_id,
-            cache_path.into(),
+            session_id,
+            cache_path,
             cache_size,
         )
         .await
+    }
+
+    /// Removes an account, deleting all associated sessions and data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if data can not be removed or the db operation failed.
+    pub async fn delete_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
+        tokio::fs::remove_file(get_user_db_path(&self.user_db_path, &user_id))
+            .map_err(|e| CoreContextError::Other(anyhow!("Failed to erase user database: {e}")))
+            .inspect_err(|e| error!("{e}"))
+            .await?;
+
+        // TODO(ET-231): User cache paths.
+
+        CoreAccount::delete_by_remote_id(user_id, &self.stash)
+            .inspect_err(|e| error!("Failed to delete account from db: {e}"))
+            .await?;
+
+        Ok(())
     }
 
     pub fn set_network_connected(&self, value: bool) {
@@ -297,34 +516,6 @@ impl Context {
                 cb.on_network_status_changed(value);
             }
         }
-    }
-
-    /// Removes a user session and deletes all associated data.
-    ///
-    /// # Errors
-    /// Returns error if data can not be removed or the db operation failed.
-    pub async fn delete_session(&self, session: &EncryptedUserSession) -> CoreContextResult<()> {
-        let db_path = get_user_db_path(&self.user_db_path, &session.user_id);
-        std::fs::remove_file(db_path).map_err(|e| {
-            let e = anyhow!("Failed to erase user database: {e}");
-            error!("{e}");
-            CoreContextError::Other(e)
-        })?;
-
-        //TODO(ET-231): User cache paths.
-
-        self.session_stash
-            .execute(
-                "DELETE FROM core_sessions WHERE user_id =?",
-                params![session.user_id.clone()],
-            )
-            .await
-            .map_err(|e| {
-                error!("Failed to delete session from db: {e}");
-                e
-            })?;
-
-        Ok(())
     }
 
     /// Check whether a network connection is available.
@@ -346,6 +537,7 @@ impl Context {
         let stash = Stash::new(Some(&user_db_path))?;
         debug!("initializing core database");
         // initialize core db
+        migrate_account_db(&stash).await?;
         migrate_core_db(&stash).await?;
         debug!("initializing user ");
         // initialize user db
@@ -356,6 +548,23 @@ impl Context {
         Ok(stash)
     }
 
+    /// Initializes a new API session, optionally pre-configured to use a specific core session.
+    async fn new_api_session(
+        &self,
+        session: Option<&CoreSession>,
+    ) -> CoreContextResult<ApiCoreSession> {
+        let user_id = session.map(|s| &s.account_id).cloned();
+        let session_id = session.map(|s| &s.remote_id).cloned();
+        let stash = self.stash.clone();
+        let keychain = Arc::clone(&self.key_chain);
+        let store = AuthStore::new(stash, keychain, user_id, session_id);
+        let config = self.api.config().to_owned();
+
+        Ok(ApiCoreSession::new(config, Some(Box::new(store)))
+            .map_err(ApiServiceError::from)
+            .await?)
+    }
+
     /// Get the API service
     pub fn api(&self) -> &Proton {
         &self.api
@@ -363,12 +572,21 @@ impl Context {
 
     /// Get the stash in use
     pub fn stash(&self) -> &Stash {
-        &self.session_stash
+        &self.stash
+    }
+
+    /// Get an arc to this context
+    ///
+    /// # Panics
+    ///
+    /// Panics if the weak reference to this context is invalid.
+    pub fn this(&self) -> Arc<Self> {
+        self.this.upgrade().expect("context should exist")
     }
 }
 
-fn get_session_db_path(path: impl AsRef<Path>) -> PathBuf {
-    path.as_ref().join("session.db")
+fn get_account_db_path(path: impl AsRef<Path>) -> PathBuf {
+    path.as_ref().join("account.db")
 }
 
 fn get_user_db_path(path: impl AsRef<Path>, user_id: &RemoteId) -> PathBuf {
