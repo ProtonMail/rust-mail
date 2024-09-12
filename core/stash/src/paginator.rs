@@ -321,10 +321,7 @@ impl<T: Model> Paginator<T> {
         A: Into<AgnosticInterface> + Interface,
     {
         let initial_records = perform_find(
-            format!(
-                "SELECT * FROM {} LIMIT {}",
-                self.query_logic, self.page_size,
-            ),
+            format!("{} LIMIT {}", self.query_logic, self.page_size,),
             convert_params(&self.params),
             &interface.clone().into(),
             self.queue.clone(),
@@ -445,18 +442,16 @@ impl<T: Model> Paginator<T> {
                 // Re-run the query to check if the cursor position needs to change. This
                 // gets the first record at the offset of the cursor, and if doesn't have
                 // the same ID as the current cursor record, we need to adjust the cursor.
-                let cursor_record: Option<T> = T::find_first(
+                let cursor_record: Option<T> = perform_find(
                     #[allow(clippy::unwrap_used)]
-                    &paging_query(
-                        T::table_name(),
-                        query_logic,
-                        *cursor_index,
-                        NonZeroU32::new(1).unwrap(),
-                    ),
+                    &paging_query(query_logic, *cursor_index, NonZeroU32::new(1).unwrap()),
                     convert_params(&params),
-                    &stash.clone(),
+                    &stash.clone().into(),
+                    None,
                 )
-                .await?;
+                .await?
+                .into_iter()
+                .next();
 
                 match cursor_record {
                     Some(record) => {
@@ -513,7 +508,6 @@ impl<T: Model> Paginator<T> {
     pub async fn current_page(&self) -> Result<Vec<T>, StashError> {
         perform_find(
             paging_query(
-                T::table_name(),
                 &self.query_logic,
                 *self.cursor_index.lock().await,
                 self.page_size,
@@ -597,31 +591,19 @@ impl<T: Model> Paginator<T> {
 ///
 /// # Parameters
 ///
-/// * `tablename`    - The name of the table to query.
 /// * `query_logic`  - The query logic to use for finding the records.
 /// * `cursor_index` - The current cursor position in the result set.
 /// * `page_size`    - The number of records per page.
 ///
-fn paging_query(
-    tablename: &str,
-    query_logic: &str,
-    cursor_index: u32,
-    page_size: NonZeroU32,
-) -> String {
+fn paging_query(query_logic: &str, cursor_index: u32, page_size: NonZeroU32) -> String {
     formatdoc!(
         "
-            SELECT
-                {}.rowid AS rowid, *
-            FROM
-                {}
             {}
             OFFSET
                 {}
             LIMIT
                 {}
         ",
-        tablename,
-        tablename,
         query_logic,
         cursor_index,
         page_size,
