@@ -1,4 +1,4 @@
-image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
 
 include:
   - project: "rust/shared/registry"
@@ -44,7 +44,7 @@ build:
   script:
     - !reference [ .script-config-git, script ]
     - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo build
-    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo test
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo nextest run --color=never
 
 build-android:
   stage: build
@@ -55,17 +55,17 @@ build-android:
 build-macos:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.80.0"
+  image: "inbox-rust:1.81.0"
   stage: build
   script:
     - !reference [ .script-config-git, script ]
     - cargo build --release
-    - cargo test
+    - cargo nextest run --color=never
 
 build-ios:
   tags:
     - inbox-tart
-  image: "inbox-rust:1.80.0"
+  image: "inbox-rust:1.81.0"
   stage: build
   script:
     - !reference [ .script-config-git, script ]
@@ -78,7 +78,7 @@ build-ios:
 
 deploy-proton-sqlite3:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-sqlite3/Cargo.toml"
     CARGO_MANIFEST_OPTIONS: "--manifest-path proton-sqlite3/Cargo.toml"
@@ -88,7 +88,7 @@ deploy-proton-api-core:
   extends: .deploy_to_protonvpn_repository
   tags:
     - shared-medium
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   variables:
     CARGO_PACKAGE_OPTIONS: "--manifest-path proton-api-core/Cargo.toml"
     CARGO_MANIFEST_OPTIONS: "--manifest-path proton-api-core/Cargo.toml"
@@ -96,7 +96,7 @@ deploy-proton-api-core:
 
 deploy-proton-action-queue:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   tags:
     - shared-medium
   variables:
@@ -106,7 +106,7 @@ deploy-proton-action-queue:
 
 deploy-proton-event-loop:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   tags:
     - shared-medium
   variables:
@@ -116,7 +116,7 @@ deploy-proton-event-loop:
 
 deploy-proton-core-common:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   tags:
     - shared-medium
   variables:
@@ -126,7 +126,7 @@ deploy-proton-core-common:
 
 deploy-stash-macros:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   tags:
     - shared-medium
   variables:
@@ -136,7 +136,7 @@ deploy-stash-macros:
 
 deploy-proton-vcard:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   tags:
     - shared-medium
   variables:
@@ -146,7 +146,7 @@ deploy-proton-vcard:
 
 deploy-stash:
   extends: .deploy_to_protonvpn_repository
-  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.80.0
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
   tags:
     - shared-medium
   variables:

@@ -15,6 +15,7 @@
 use crate::datatypes::QueryResultIdPair;
 use crate::stash::{AgnosticInterface, Interface, Notification, Stash, StashError};
 use core::any::Any;
+use core::error::Error;
 use core::fmt::{Debug, Display};
 use core::future::Future;
 use core::iter::once;
@@ -31,7 +32,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::error::Error;
 use std::vec::IntoIter;
 use thiserror::Error;
 use tokio::spawn as spawn_async;
