@@ -23,6 +23,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
 };
 use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
+use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
 use proton_mail_common::Mailbox;
@@ -94,8 +95,9 @@ async fn mailbox_message_body_simple() {
 
     // Now a message is cached and it's the right one
     assert_eq!(cache.len(), 1);
+    let key = CacheMessageKey::from_message(&saved_message, user_context.user_stash());
     let item = cache
-        .get_item(&local_id)
+        .get_item(&key)
         .unwrap()
         .map(|f| read_to_string(f).unwrap());
     assert_eq!(item, Some(TEST_MESSAGE_BODY_DECRYPTED.to_owned()));

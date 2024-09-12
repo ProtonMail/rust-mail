@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Sidebar::all_custom_folders` method (return all custom folders in a flat way)
 - Added a background job for expired messages.
 - New error targeting end users (Login flow only)
+- `MessageBody` and `Attachment` cache persistence.
 
 ### Changed
 

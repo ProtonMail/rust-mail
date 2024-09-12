@@ -44,6 +44,10 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
 pub enum AppError {
     #[error("API error: {0}")]
     API(#[from] ApiServiceError),
+    #[error("Attachment missing in database for local_id {0}")]
+    AttachmentMissing(LocalId),
+    #[error("Conversation with ID {0} not found")]
+    ConversationNotFound(LocalId),
     #[error("Label with local id {0} does not have remote id")]
     LabelDoesNotHaveRemoteId(LocalId),
     #[error("Label with local id {0} not found")]
@@ -54,12 +58,12 @@ pub enum AppError {
     InvalidMimeType(String),
     #[error("MessageBodyMetadata missing in database for message {0}")]
     MessageBodyMetadataMissing(LocalId),
+    #[error("Message missing in database for local_id {0}")]
+    MessageMissing(LocalId),
     #[error("Could not find remote label {0}")]
     RemoteLabelDoesNotExist(LabelId),
     #[error("Remote ID not found for {0} with local ID {1}")]
     RemoteIdNotFound(String, LocalId),
-    #[error("Conversation with ID {0} not found")]
-    ConversationNotFound(LocalId),
 
     #[error("Conversation with ID {0} has no remote ID")]
     ConversationHasNoRemoteId(LocalId),

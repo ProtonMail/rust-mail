@@ -34,7 +34,7 @@ mod rollback_item;
 mod tests;
 
 use crate::actions::{ConversationAvailableAction, MessageAvailableAction};
-use crate::cache::CacheMessageConfig;
+use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
     attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
     AttachmentSignature, ComposerDirection, ComposerMode, ConversationCount, CustomLabel,
@@ -221,6 +221,10 @@ pub struct Attachment {
     #[DbField]
     pub size: u64,
 
+    /// True if this Attachment is cached
+    #[DbField]
+    pub cached: bool,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -254,6 +258,7 @@ impl From<AttachmentMetadata> for Attachment {
             sender: None,
             signature: None,
             size: value.size,
+            cached: false,
             row_id: None,
             stash: None,
         }
@@ -508,6 +513,7 @@ impl From<ApiAttachment> for Attachment {
             sender: value.sender.map(|v| v.into()),
             signature: value.signature.map(|v| v.into()),
             size: value.size,
+            cached: false,
             row_id: None,
             stash: None,
         }
@@ -3683,6 +3689,10 @@ pub struct Message {
     /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
 
+    /// True when message body is in cache.
+    #[DbField]
+    pub cached: bool,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -3841,6 +3851,7 @@ impl Message {
                 },
                 custom_labels: vec![],
                 unread: metadata.unread,
+                cached: false,
                 row_id: None,
                 stash: None,
             };
@@ -4695,11 +4706,13 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let key = self.local_id.expect("Message does not have a local id");
+        let key = CacheMessageKey::from_message(self, interface);
 
         // FIXME: https://jira.protontech.ch/projects/ET/issues/ET-1070
         // Recover from cache issues by requesting the data again.
-        if let Some(decrypted_message_body) = self.try_fetch_message_from_cache(cache).await? {
+        if let Some(decrypted_message_body) =
+            self.try_fetch_message_from_cache(cache, interface).await?
+        {
             return Ok(decrypted_message_body);
         }
 
@@ -4712,19 +4725,24 @@ impl Message {
         if decrypted_message_body.pgp_attachments.is_none() {
             // Try to cache the message
             if let Err(e) =
-                cache.add_item(key.into(), decrypted_message_body.body.clone().as_bytes())
+                cache.add_item(key.clone(), decrypted_message_body.body.clone().as_bytes())
             {
-                error!("Error writing message {key} to the cache: {e}");
+                error!("Error writing message {key:?} into the cache: {e}");
             }
+            key.set_cached().await?;
         }
         Ok(decrypted_message_body)
     }
 
-    async fn try_fetch_message_from_cache(
+    async fn try_fetch_message_from_cache<A>(
         &self,
         cache: &ProtonCache<CacheMessageConfig>,
-    ) -> Result<Option<DecryptedMessageBody>, AppError> {
-        let key = self.local_id.expect("Message does not have a local id");
+        interface: &A,
+    ) -> Result<Option<DecryptedMessageBody>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let key = CacheMessageKey::from_message(self, interface);
         let Some(mut content) = cache.get_item(&key)? else {
             return Ok(None);
         };
@@ -5001,6 +5019,7 @@ impl Message {
                     .collect(),
             },
             unread: value.metadata.unread,
+            cached: false,
             row_id: None,
             stash: None,
             custom_labels: vec![],
@@ -5433,6 +5452,7 @@ mod default_message {
                 time: Default::default(),
                 to_list: Default::default(),
                 unread: Default::default(),
+                cached: false,
                 custom_labels: Default::default(),
                 row_id: Default::default(),
                 stash: Default::default(),
