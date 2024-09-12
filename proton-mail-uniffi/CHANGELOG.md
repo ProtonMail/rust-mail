@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.11.40] - 2024-09-12
 
+### Fixed
+
+  - Message display order in message views.
+
 ### Added
 
     - Added `total_messages` and `total_unread` to `Conversation`

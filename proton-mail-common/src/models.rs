@@ -5352,7 +5352,7 @@ impl Message {
                     ON messages.local_id = message_labels.local_message_id
                 WHERE
                     message_labels.local_label_id = ?
-                ORDER BY messages.time ASC, messages.display_order ASC
+                ORDER BY messages.time DESC, display_order DESC
                 "
             ),
             params![local_label_id],
