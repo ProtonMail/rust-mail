@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fixed
+
+- Custom folders order are no more random.
+- 
 ## [0.11.44] - 2024-09-12
 
 ### Changed
