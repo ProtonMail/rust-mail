@@ -599,14 +599,14 @@ fn paging_query(query_logic: &str, cursor_index: u32, page_size: NonZeroU32) -> 
     formatdoc!(
         "
             {}
-            OFFSET
-                {}
             LIMIT
+                {}
+            OFFSET
                 {}
         ",
         query_logic,
-        cursor_index,
         page_size,
+        cursor_index,
     )
 }
 
