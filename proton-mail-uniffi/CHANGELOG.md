@@ -7,19 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
-## [0.11.40] - 2024-09-12
+## [0.11.41] - 2024-09-12
+
+### Added
+
+  - `paginate_conversations_for_label`.
 
 ### Fixed
 
   - Message display order in message views.
+  - Message pagination query
+
+## [0.11.40] - 2024-09-12
 
 ### Added
 
-    - Added `total_messages` and `total_unread` to `Conversation`
+  - Added `total_messages` and `total_unread` to `Conversation`
 
 ### Fixed
 
-    - HTML formatting
+  - HTML formatting
 
 ## [0.11.39] - 2024-09-11
 
