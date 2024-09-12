@@ -22,21 +22,21 @@ lazy_static = "1"
 mime = "0.3.17"
 parking_lot = "0.12.3"
 pretty_assertions = "1.4.0"
-proton-action-queue = { version = "=0.7.18", registry = "proton" }
-proton-api-core = { version = "=0.6.16", registry = "proton" }
+proton-action-queue = { version = "=0.7.19", registry = "proton" }
+proton-api-core = { version = "=0.6.17", registry = "proton" }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail" }
-proton-core-common = { version = "=0.6.23", registry = "proton" }
-proton-crypto-account = { version = "=0.6.1", registry = "proton" }
-proton-crypto-inbox = { version = "=0.6.4", registry = "proton" }
-proton-event-loop = { version = "=0.7.18", registry = "proton" }
+proton-core-common = { version = "=0.6.24", registry = "proton" }
+proton-crypto-account = { version = "=0.6.2", registry = "proton" }
+proton-crypto-inbox = { version = "=0.6.5", registry = "proton" }
+proton-event-loop = { version = "=0.7.19", registry = "proton" }
 proton-mail-common = { path = "proton-mail-common" }
-proton-sqlite3 = { version = "=0.7.9", registry = "proton" }
+proton-sqlite3 = { version = "=0.7.10", registry = "proton" }
 scraper = "0.19.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.117"
 serde_repr = "0.1"
 smart-default = "0.7.1"
-stash = { version = "=0.1.9", registry = "proton" }
+stash = { version = "=0.1.10", registry = "proton" }
 test-case = "3.3.1"
 thiserror = "1.0.61"
 tokio = { version = "1", features = ["full"] }

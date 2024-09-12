@@ -106,7 +106,11 @@ async fn load_attachment_from_cache() {
     let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Add another value into cache
-    let key = CacheAttachmentKey::new(attachment_local_id, "foo");
+    let key = CacheAttachmentKey::new(
+        attachment_local_id,
+        "foo",
+        user_context.user_stash().clone(),
+    );
     user_context
         .attachements_cache()
         .add_item(key, &testdata_attachment_data())
@@ -125,7 +129,6 @@ async fn load_attachment_from_cache() {
 }
 
 #[tokio::test]
-// TODO: work with https://gitlab.protontech.ch/rust/proton-api-core/-/merge_requests/92
 async fn load_attachment_content_first_time() {
     // Setup
     //   * Create an attachment
@@ -135,13 +138,14 @@ async fn load_attachment_content_first_time() {
     let user_context = ctx.user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
-    let attachment_local_id = 42;
-    attachment.local_id = Some(attachment_local_id.into());
+    attachment
+        .save_using(user_context.user_stash())
+        .await
+        .unwrap();
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
         .await;
-    ctx.catch_all().await;
     user_context
         .initialize_async(&NullCallback {})
         .await
@@ -157,10 +161,7 @@ async fn load_attachment_content_first_time() {
 
     // Action:
     //   * Get attachment
-    let data_path = mailbox
-        .get_attachment_content(attachment_local_id.into(), &attachment)
-        .await
-        .unwrap();
+    let data_path = mailbox.get_attachment_content(&attachment).await.unwrap();
 
     // Validate:
     //   * attachment is the decrypted one
@@ -174,7 +175,6 @@ async fn load_attachment_content_first_time() {
 }
 
 #[tokio::test]
-// TODO: work with https://gitlab.protontech.ch/rust/proton-api-core/-/merge_requests/92
 async fn load_attachment_content_from_cache() {
     // Setup
     //   * Create an attachment
@@ -204,7 +204,11 @@ async fn load_attachment_content_from_cache() {
 
     ctx.catch_all().await;
 
-    let key = CacheAttachmentKey::new(attachment_local_id, &attachment.filename);
+    let key = CacheAttachmentKey::new(
+        attachment_local_id,
+        &attachment.filename,
+        user_context.user_stash().clone(),
+    );
     user_context
         .attachements_cache()
         .add_item(key, b"abcdef")
@@ -212,10 +216,7 @@ async fn load_attachment_content_from_cache() {
 
     // Action:
     //   * Get attachment
-    let data_path = mailbox
-        .get_attachment_content(attachment_local_id, &attachment)
-        .await
-        .unwrap();
+    let data_path = mailbox.get_attachment_content(&attachment).await.unwrap();
 
     // Validate:
     //   * attachment is the same as the one in cache
@@ -257,6 +258,7 @@ where
         sender: None,
         signature: None,
         size: attachment.size,
+        cached: false,
         row_id: None,
         stash: None,
     }

@@ -159,6 +159,8 @@ impl From<AppError> for UserLoginFlowError {
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),
             AppError::Other(_string) => Self::Unexpected(Unexpected::Unknown),
+            AppError::AttachmentMissing(_local_id) => Self::Unexpected(Unexpected::Internal),
+            AppError::MessageMissing(_local_id) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

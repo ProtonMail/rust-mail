@@ -47,7 +47,14 @@ impl MailUserContext {
 
         Ok(Some(
             self.user_context
-                .image_for_sender(&address, bimi_selector, format, mode, size)
+                .image_for_sender(
+                    &address,
+                    bimi_selector,
+                    format,
+                    mode,
+                    size,
+                    self.user_stash(),
+                )
                 .await?,
         ))
     }

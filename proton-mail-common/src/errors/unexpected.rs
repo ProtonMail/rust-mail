@@ -108,6 +108,7 @@ impl From<CacheError> for Unexpected {
         match error {
             CacheError::IO(io_error) => Self::from(io_error),
             CacheError::QuickCache(anyhow) => Self::from(anyhow),
+            CacheError::Callback(anyhow) => Self::from(anyhow),
         }
     }
 }

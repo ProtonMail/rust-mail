@@ -56,9 +56,7 @@ impl Mailbox {
         attachment_id: LocalId,
     ) -> MailboxResult<DecryptedAttachment> {
         let attachment = self.sync_attachment(attachment_id).await?;
-        let data_path = self
-            .get_attachment_content(attachment_id, &attachment)
-            .await?;
+        let data_path = self.get_attachment_content(&attachment).await?;
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
                 local_id: Some(attachment_id),
@@ -75,18 +73,15 @@ impl Mailbox {
     /// Get decrypted attachment content
     ///
     /// Content is cached in file system
-    pub async fn get_attachment_content(
-        &self,
-        attachment_id: LocalId,
-        attachment: &Attachment,
-    ) -> MailboxResult<PathBuf> {
+    pub async fn get_attachment_content(&self, attachment: &Attachment) -> MailboxResult<PathBuf> {
         let user_context = self.user_context();
         let cache = user_context.attachements_cache();
-        let key = CacheAttachmentKey::new(attachment_id, &attachment.filename);
+        let key = CacheAttachmentKey::from_attachment(attachment, user_context.user_stash());
 
         if let Some(data_path) = cache.get_item_path(&key) {
             Ok(data_path)
         } else {
+            let attachment_id = attachment.local_id.expect("Should be set");
             let pgp_provider = new_pgp_provider();
             let remote_attachment_id = attachment
                 .remote_id
@@ -105,10 +100,11 @@ impl Mailbox {
                 .await
                 .inspect_err(|e| error!("Failed to decrypt attachment({attachment_id}): {e})"))?;
             let data_path = cache
-                .add_item(key, decrypted_content.as_ref())
+                .add_item(key.clone(), decrypted_content.as_ref())
                 .inspect_err(|e| {
                     error!("Failed to add attachment({attachment_id} into cache: {e})")
                 })?;
+            key.set_cached().await?;
             Ok(data_path)
         }
     }
