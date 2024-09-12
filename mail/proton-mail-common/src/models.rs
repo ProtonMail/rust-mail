@@ -2900,7 +2900,7 @@ impl From<ApiConversationLabel> for ConversationLabel {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
-#[ModelActions(on_save)]
+#[ModelActions(on_load, on_save)]
 #[TableName("labels")]
 pub struct Label {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -3044,6 +3044,7 @@ impl Label {
 
         <Self as Model>::save_using(self, interface).await
     }
+
     /// TODO: Document this function.
     ///
     /// # Parameters
@@ -3225,6 +3226,19 @@ impl Label {
         }
         tx.commit().await?;
 
+        Ok(())
+    }
+
+    async fn on_load(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+        if self.remote_parent_id.is_some() && self.local_parent_id.is_none() {
+            self.local_parent_id = self
+                .remote_parent_id
+                .clone()
+                .expect("Should be set")
+                .counterpart::<Self, _>(interface)
+                .await?;
+        }
+        // TODO: https://jira.protontech.ch/browse/ET-1169 ensure that local_remote_id are resolve for Label
         Ok(())
     }
 
