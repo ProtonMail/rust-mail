@@ -3,8 +3,6 @@ use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
-use proton_core_common::datatypes::LabelId;
-use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::Sidebar;
 use test_case::test_case;
 use velcro::hash_map;
