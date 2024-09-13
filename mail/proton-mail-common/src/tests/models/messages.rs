@@ -1149,6 +1149,7 @@ async fn test_create_message_and_body_with_attachments() {
         .await
         .expect("failed to get message")
         .expect("must have a value");
+
     let mut metadata = MessageBodyMetadata {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),

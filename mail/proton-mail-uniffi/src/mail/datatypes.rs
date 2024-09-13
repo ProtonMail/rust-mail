@@ -1578,9 +1578,6 @@ pub struct Message {
     pub expiration_time: u64,
 
     /// TODO: Document this field.
-    pub header: String,
-
-    /// TODO: Document this field.
     pub flags: MessageFlags,
 
     /// TODO: Document this field.
@@ -1659,7 +1656,6 @@ impl From<RealMessage> for Message {
                 .collect(),
             exclusive_location: value.exclusive_location.map(Into::into),
             expiration_time: value.expiration_time,
-            header: value.header,
             flags: value.flags.into(),
             is_forwarded: value.is_forwarded,
             is_replied: value.is_replied,
