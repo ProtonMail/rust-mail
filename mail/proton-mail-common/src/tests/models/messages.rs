@@ -994,9 +994,11 @@ async fn test_create_message_and_body() {
     let mut metadata = MessageBodyMetadata {
         local_message_id: None,
         remote_message_id: db_message.remote_id.clone(),
-        header: db_message.header.clone(),
-        parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type,
+        header: message.header.clone(),
+        parsed_headers: datatypes::ParsedHeaders {
+            headers: message.parsed_headers.clone(),
+        },
+        mime_type: message.mime_type.into(),
         row_id: None,
         stash: Some(stash.clone()),
     };
@@ -1017,9 +1019,11 @@ async fn test_create_message_and_body() {
     let expected = MessageBodyMetadata {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
-        header: db_message.header.clone(),
-        parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type,
+        header: message.header.clone(),
+        parsed_headers: datatypes::ParsedHeaders {
+            headers: message.parsed_headers.clone(),
+        },
+        mime_type: message.mime_type.into(),
         row_id: Some(1),
         stash: Some(stash.clone()),
     };
@@ -1163,13 +1167,14 @@ async fn test_create_message_and_body_with_attachments() {
         .await
         .expect("failed to get message")
         .expect("must have a value");
-
     let mut metadata = MessageBodyMetadata {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
-        header: db_message.header.clone(),
-        parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type,
+        header: message.header.clone(),
+        parsed_headers: datatypes::ParsedHeaders {
+            headers: message.parsed_headers.clone(),
+        },
+        mime_type: message.mime_type.into(),
         row_id: db_message.row_id,
         stash: Some(stash.clone()),
     };
