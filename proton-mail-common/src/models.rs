@@ -3590,9 +3590,6 @@ pub struct Message {
     #[DbField]
     pub bcc_list: MessageAddresses,
 
-    /// TODO: Document this field.
-    pub body: String,
-
     /// Whether or not this message has been soft deleted. This means that this message
     /// should no longer be displayed.
     #[DbField]
@@ -3617,9 +3614,6 @@ pub struct Message {
     pub external_id: Option<RemoteId>,
 
     /// TODO: Document this field.
-    pub header: String,
-
-    /// TODO: Document this field.
     #[DbField]
     pub flags: MessageFlags,
 
@@ -3639,20 +3633,12 @@ pub struct Message {
     pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
-    pub mime_type: MimeType,
-
-    /// TODO: Document this field.
     #[DbField]
     pub num_attachments: u32,
 
     /// TODO: Document this field.
     #[DbField]
     pub display_order: u64,
-
-    /// TODO: Document this field.
-    // Unfortunately, some values returned in this struct are either
-    // arrays or strings.
-    pub parsed_headers: ParsedHeaders,
 
     /// TODO: Document this field.
     #[DbField]
@@ -3816,7 +3802,6 @@ impl Message {
                 bcc_list: MessageAddresses {
                     value: metadata.bcc_list.into_iter().map_into().collect(),
                 },
-                body: "".to_owned(),
                 cc_list: MessageAddresses {
                     value: metadata.cc_list.into_iter().map(|v| v.into()).collect(),
                 },
@@ -3825,18 +3810,13 @@ impl Message {
                 expiration_time: metadata.expiration_time,
                 external_id: metadata.external_id.map(|v| v.into()),
                 flags: metadata.flags.into(),
-                header: "".to_owned(),
                 is_forwarded: metadata.is_forwarded,
                 is_replied: metadata.is_replied,
                 is_replied_all: metadata.is_replied_all,
                 exclusive_location: None,
                 label_ids: metadata.label_ids.into_iter().map_into().collect(),
                 local_conversation_id: None,
-                mime_type: MimeType::TextPlain,
                 num_attachments: metadata.num_attachments,
-                parsed_headers: ParsedHeaders {
-                    headers: HashMap::new(),
-                },
                 remote_conversation_id: Some(metadata.conversation_id.into()),
                 reply_tos: MessageAddresses {
                     value: metadata.reply_tos.into_iter().map(|v| v.into()).collect(),
@@ -4026,18 +4006,6 @@ impl Message {
             .iter()
             .map(|l| l.remote_id.clone().unwrap())
             .collect();
-
-        if let Some(body) = MessageBodyMetadata::find_first(
-            "WHERE local_message_id = ?",
-            params![self.local_id],
-            interface,
-        )
-        .await?
-        {
-            self.header = body.header;
-            self.mime_type = body.mime_type;
-            self.parsed_headers = body.parsed_headers;
-        }
 
         self.custom_labels = labels
             .into_iter()
@@ -4463,9 +4431,7 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let Some(conn) = self.stash() else {
-            return Err(StashError::NoStashAvailable.into());
-        };
+        let conn = self.stash().ok_or(StashError::NoStashAvailable)?;
 
         if let Some(metadata) = self.get_message_body_metadata().await? {
             Ok((metadata, None))
@@ -4972,7 +4938,6 @@ impl Message {
                     .map(|v| v.into())
                     .collect(),
             },
-            body: value.body,
             cc_list: MessageAddresses {
                 value: value
                     .metadata
@@ -4985,18 +4950,13 @@ impl Message {
             display_order: value.metadata.order,
             expiration_time: value.metadata.expiration_time,
             external_id: value.metadata.external_id.map(|v| v.into()),
-            header: value.header,
             flags: value.metadata.flags.into(),
             is_forwarded: value.metadata.is_forwarded,
             is_replied: value.metadata.is_replied,
             is_replied_all: value.metadata.is_replied_all,
             exclusive_location: None,
             label_ids,
-            mime_type: value.mime_type.into(),
             num_attachments: value.metadata.num_attachments,
-            parsed_headers: ParsedHeaders {
-                headers: value.parsed_headers,
-            },
             reply_tos: MessageAddresses {
                 value: value
                     .metadata
@@ -5429,21 +5389,17 @@ mod default_message {
                 remote_conversation_id: Default::default(),
                 attachments_metadata: Default::default(),
                 bcc_list: Default::default(),
-                body: Default::default(),
                 cc_list: Default::default(),
                 deleted: Default::default(),
                 expiration_time: Default::default(),
                 external_id: Default::default(),
-                header: Default::default(),
                 is_forwarded: Default::default(),
                 is_replied: Default::default(),
                 is_replied_all: Default::default(),
                 label_ids: Default::default(),
                 exclusive_location: Default::default(),
-                mime_type: Default::default(),
                 num_attachments: Default::default(),
                 display_order: Default::default(),
-                parsed_headers: Default::default(),
                 reply_tos: Default::default(),
                 sender: Default::default(),
                 size: Default::default(),
