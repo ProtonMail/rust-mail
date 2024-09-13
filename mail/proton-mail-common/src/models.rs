@@ -1881,7 +1881,7 @@ impl Conversation {
                 desc: Some(true),
                 label_id: Some(label_id.into()),
                 page: 0,
-                page_size: count.max(MAX_PAGE_ELEMENT_COUNT) as u64,
+                page_size: count.min(MAX_PAGE_ELEMENT_COUNT) as u64,
                 ..Default::default()
             })
             .await?;
@@ -4504,7 +4504,7 @@ impl Message {
                 desc: Some(true),
                 label_id: Some(vec![label_id.into()]),
                 page: 0,
-                page_size: count.max(MAX_PAGE_ELEMENT_COUNT) as u64,
+                page_size: count.min(MAX_PAGE_ELEMENT_COUNT) as u64,
                 ..Default::default()
             })
             .await?;
