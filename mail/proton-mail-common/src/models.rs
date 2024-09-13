@@ -4433,8 +4433,8 @@ impl Message {
     {
         let conn = self.stash().ok_or(StashError::NoStashAvailable)?;
 
-        if let Some(metadata) = self.get_message_body_metadata().await? {
-            Ok((metadata, None))
+        let mut mdata = if let Some(metadata) = self.get_message_body_metadata().await? {
+            (metadata, None)
         } else {
             let message = self.get_api_message(api).await?;
 
@@ -4454,8 +4454,11 @@ impl Message {
                 .save()
                 .await
                 .inspect_err(|e| error!("Failed to store message body metadata in db: {e}"))?;
-            Ok((metadata, Some(message.body)))
-        }
+            (metadata, Some(message.body))
+        };
+
+        mdata.0.save_using(interface).await?;
+        Ok(mdata)
     }
 
     /// Get message body metadata from DB.
@@ -4972,7 +4975,7 @@ impl Message {
             unread: value.metadata.unread,
             cached: false,
             row_id: None,
-            stash: None,
+            stash: Some(interface.stash().to_owned()),
             custom_labels: vec![],
         })
     }
