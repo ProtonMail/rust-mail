@@ -36,7 +36,7 @@ mod tests;
 use crate::actions::{ConversationAvailableAction, MessageAvailableAction};
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
+    self, attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
     AttachmentSignature, ComposerDirection, ComposerMode, ConversationCount, CustomLabel,
     Disposition, EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType,
     MessageAddress, MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount,
@@ -4402,7 +4402,7 @@ impl Message {
         let encrypted_body = if let Some(body) = body {
             body
         } else {
-            self.get_message_from_remote(api, interface).await?.body
+            self.get_api_message(api).await?.body
         };
         Ok(EncryptedMessageBody {
             encrypted_body,
@@ -4436,15 +4436,17 @@ impl Message {
         if let Some(metadata) = self.get_message_body_metadata().await? {
             Ok((metadata, None))
         } else {
-            let message = self.get_message_from_remote(api, interface).await?;
+            let message = self.get_api_message(api).await?;
 
             // create message in the database and store body in the cache.
             let mut metadata = MessageBodyMetadata {
-                local_message_id: message.local_id,
-                remote_message_id: message.remote_id.clone(),
+                local_message_id: self.local_id,
+                remote_message_id: self.remote_id.clone(),
                 header: message.header.clone(),
-                parsed_headers: message.parsed_headers,
-                mime_type: message.mime_type,
+                parsed_headers: datatypes::ParsedHeaders {
+                    headers: message.parsed_headers,
+                },
+                mime_type: message.mime_type.into(),
                 row_id: None,
                 stash: Some(conn.clone()),
             };
@@ -4477,14 +4479,7 @@ impl Message {
     }
 
     /// Get message from remote
-    async fn get_message_from_remote<PM: ProtonMail, A>(
-        &self,
-        api: &PM,
-        interface: &A,
-    ) -> Result<Message, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    async fn get_api_message(&self, api: &impl ProtonMail) -> Result<ApiMessage, AppError> {
         // metadata is not there it is either missing or the message does not exist.
         let remote_id = self
             .remote_id
@@ -4493,11 +4488,7 @@ impl Message {
                 self.local_id.unwrap_or(LocalId::from(0)),
             ))?;
         // sync the message body
-        Message::from_api_data(
-            api.get_message(remote_id.into()).await.map(|v| v.message)?,
-            interface,
-        )
-        .await
+        Ok(api.get_message(remote_id.into()).await.map(|v| v.message)?)
     }
 
     /// Get the available actions for the message excluding labels which are applied to
