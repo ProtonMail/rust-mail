@@ -6,7 +6,7 @@
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::{Conversation, Message};
 use crate::mail::MailboxError;
-use crate::WatchHandle;
+use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
@@ -45,15 +45,18 @@ impl ConversationPaginator {
     /// Returns an error if the current page could not be fetched from the
     /// database.
     ///
-    pub async fn current_page(&self) -> Result<Vec<Conversation>, MailboxError> {
-        Ok(self
-            .real_paginator
-            .current_page()
-            .await?
-            .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, self.label_id.into()))
-            .map_into()
-            .collect())
+    pub async fn current_page(self: Arc<Self>) -> Result<Vec<Conversation>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .current_page()
+                .await?
+                .into_iter()
+                .filter_map(|c| ContextualConversation::new(c, self.label_id.into()))
+                .map_into()
+                .collect())
+        })
+        .await
     }
 
     /// Retrieves the handle to stop watching the data.
@@ -69,15 +72,18 @@ impl ConversationPaginator {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
-    pub async fn next_page(&self) -> Result<Vec<Conversation>, MailboxError> {
-        Ok(self
-            .real_paginator
-            .next_page()
-            .await?
-            .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, self.label_id.into()))
-            .map_into()
-            .collect())
+    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Conversation>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .next_page()
+                .await?
+                .into_iter()
+                .filter_map(|c| ContextualConversation::new(c, self.label_id.into()))
+                .map_into()
+                .collect())
+        })
+        .await
     }
 
     /// Moves to the previous page and retrieves its results.
@@ -87,40 +93,48 @@ impl ConversationPaginator {
     /// Returns an error if the page before the previous page could not be
     /// fetched from the database.
     ///
-    pub async fn previous_page(&self) -> Result<Vec<Conversation>, MailboxError> {
-        Ok(self
-            .real_paginator
-            .previous_page()
-            .await?
-            .into_iter()
-            .filter_map(|c| ContextualConversation::new(c, self.label_id.into()))
-            .map_into()
-            .collect())
+    pub async fn previous_page(self: Arc<Self>) -> Result<Vec<Conversation>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .previous_page()
+                .await?
+                .into_iter()
+                .filter_map(|c| ContextualConversation::new(c, self.label_id.into()))
+                .map_into()
+                .collect())
+        })
+        .await
     }
 
     /// Retrieves the total number of records in the result set.
-    pub async fn result_count(&self) -> u32 {
-        self.real_paginator.result_count().await
+    #[must_use]
+    pub fn result_count(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.result_count().await })
     }
 
     /// Retrieves the current page number.
-    pub async fn current_page_number(&self) -> u32 {
-        self.real_paginator.current_page_number().await
+    #[must_use]
+    pub fn current_page_number(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.current_page_number().await })
     }
 
     /// Retrieves the total number of pages.
-    pub async fn page_count(&self) -> u32 {
-        self.real_paginator.page_count().await
+    #[must_use]
+    pub fn page_count(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.page_count().await })
     }
 
     /// Checks if there is a next page available.
-    pub async fn has_next_page(&self) -> bool {
-        self.real_paginator.has_next_page().await
+    #[must_use]
+    pub fn has_next_page(&self) -> bool {
+        async_runtime().block_on(async { self.real_paginator.has_next_page().await })
     }
 
     /// Checks if there is a previous page available.
-    pub async fn has_previous_page(&self) -> bool {
-        self.real_paginator.has_previous_page().await
+    #[must_use]
+    pub fn has_previous_page(&self) -> bool {
+        async_runtime().block_on(async { self.real_paginator.has_previous_page().await })
     }
 }
 
@@ -153,14 +167,17 @@ impl MessagePaginator {
     /// Returns an error if the current page could not be fetched from the
     /// database.
     ///
-    pub async fn current_page(&self) -> Result<Vec<Message>, MailboxError> {
-        Ok(self
-            .real_paginator
-            .current_page()
-            .await?
-            .iter()
-            .map(|m| m.clone().into())
-            .collect())
+    pub async fn current_page(self: Arc<Self>) -> Result<Vec<Message>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .current_page()
+                .await?
+                .iter()
+                .map(|m| m.clone().into())
+                .collect())
+        })
+        .await
     }
 
     /// Retrieves the handle to stop watching the data.
@@ -176,14 +193,17 @@ impl MessagePaginator {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
-    pub async fn next_page(&self) -> Result<Vec<Message>, MailboxError> {
-        Ok(self
-            .real_paginator
-            .next_page()
-            .await?
-            .iter()
-            .map(|m| m.clone().into())
-            .collect())
+    pub async fn next_page(self: Arc<Self>) -> Result<Vec<Message>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .next_page()
+                .await?
+                .iter()
+                .map(|m| m.clone().into())
+                .collect())
+        })
+        .await
     }
 
     /// Moves to the previous page and retrieves its results.
@@ -193,38 +213,46 @@ impl MessagePaginator {
     /// Returns an error if the page before the previous page could not be
     /// fetched from the database.
     ///
-    pub async fn previous_page(&self) -> Result<Vec<Message>, MailboxError> {
-        Ok(self
-            .real_paginator
-            .previous_page()
-            .await?
-            .iter()
-            .map(|m| m.clone().into())
-            .collect())
+    pub async fn previous_page(self: Arc<Self>) -> Result<Vec<Message>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .previous_page()
+                .await?
+                .iter()
+                .map(|m| m.clone().into())
+                .collect())
+        })
+        .await
     }
 
     /// Retrieves the total number of records in the result set.
-    pub async fn result_count(&self) -> u32 {
-        self.real_paginator.result_count().await
+    #[must_use]
+    pub fn result_count(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.result_count().await })
     }
 
     /// Retrieves the current page number.
-    pub async fn current_page_number(&self) -> u32 {
-        self.real_paginator.current_page_number().await
+    #[must_use]
+    pub fn current_page_number(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.current_page_number().await })
     }
 
     /// Retrieves the total number of pages.
-    pub async fn page_count(&self) -> u32 {
-        self.real_paginator.page_count().await
+    #[must_use]
+    pub fn page_count(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.page_count().await })
     }
 
     /// Checks if there is a next page available.
-    pub async fn has_next_page(&self) -> bool {
-        self.real_paginator.has_next_page().await
+    #[must_use]
+    pub fn has_next_page(&self) -> bool {
+        async_runtime().block_on(async { self.real_paginator.has_next_page().await })
     }
 
     /// Checks if there is a previous page available.
-    pub async fn has_previous_page(&self) -> bool {
-        self.real_paginator.has_previous_page().await
+    #[must_use]
+    pub fn has_previous_page(&self) -> bool {
+        async_runtime().block_on(async { self.real_paginator.has_previous_page().await })
     }
 }
