@@ -2,8 +2,6 @@ mod common;
 
 use common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
-use proton_core_common::datatypes::LabelId;
-use proton_mail_common::datatypes::SystemLabelId;
 
 use ctor::ctor;
 
