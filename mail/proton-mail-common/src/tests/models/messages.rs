@@ -17,7 +17,7 @@ use crate::tests::utils::{
     conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
     prepare_db_state_core,
 };
-use futures::future::{BoxFuture, Remote};
+use futures::future::BoxFuture;
 use futures::FutureExt;
 use lazy_static::lazy_static;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
@@ -31,6 +31,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_core_common::datatypes::{Id, LabelId, RemoteId};
 use proton_crypto_inbox::attachment::KeyPackets;
+use serde_json::json;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use velcro::hash_map;
@@ -1043,12 +1044,15 @@ async fn test_update_message_and_body() {
         mime_type: ApiMimeType::TextPlain,
         attachments: vec![],
     };
-    let id = Message::create_or_update_messages_from_metadata(vec![message.metadata], tx.stash())
-        .await
-        .expect("failed to create message")
-        .into_iter()
-        .next()
-        .unwrap();
+    let id = Message::create_or_update_messages_from_metadata(
+        vec![message.metadata.clone()],
+        tx.stash(),
+    )
+    .await
+    .expect("failed to create message")
+    .into_iter()
+    .next()
+    .unwrap();
 
     let db_message = Message::load(id, tx.stash())
         .await
@@ -1057,9 +1061,11 @@ async fn test_update_message_and_body() {
     let mut metadata = MessageBodyMetadata {
         local_message_id: None,
         remote_message_id: db_message.remote_id.clone(),
-        header: db_message.header.clone(),
-        parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type,
+        header: message.header.clone(),
+        parsed_headers: datatypes::ParsedHeaders {
+            headers: message.parsed_headers.clone(),
+        },
+        mime_type: message.mime_type.into(),
         row_id: None,
         stash: Some(stash.clone()),
     };
@@ -1069,13 +1075,19 @@ async fn test_update_message_and_body() {
         .expect("failed to store message body metadata in db");
 
     // Update the body
-    message.parsed_headers.insert(
-        "marco".to_owned(),
-        serde_json::Value::String("polo".to_owned()),
-    );
+    message
+        .parsed_headers
+        .insert("marco".to_owned(), json!("polo"));
     message.header = "new header".to_owned();
     message.body = "new body type".to_owned();
     message.mime_type = ApiMimeType::TextHtml;
+
+    Message::from_api_data(message.clone(), &stash)
+        .await
+        .unwrap()
+        .save()
+        .await
+        .unwrap();
 
     let db_message_body = MessageBodyMetadata::load(id, tx.stash())
         .await
@@ -1085,9 +1097,11 @@ async fn test_update_message_and_body() {
     let expected = MessageBodyMetadata {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
-        header: db_message.header.clone(),
-        parsed_headers: db_message.parsed_headers.clone(),
-        mime_type: db_message.mime_type,
+        header: message.header.clone(),
+        parsed_headers: datatypes::ParsedHeaders {
+            headers: message.parsed_headers.clone(),
+        },
+        mime_type: message.mime_type.into(),
         row_id: Some(1),
         stash: Some(stash.clone()),
     };
