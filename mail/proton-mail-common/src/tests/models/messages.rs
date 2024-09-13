@@ -58,7 +58,7 @@ mod available_actions {
     struct TestCase {
         view: Label,
         messages: Vec<MessageWithLabels>,
-        expected: MessageAvailableActions,
+        expected: Result<MessageAvailableActions, AppError>,
     }
 
     #[derive(Clone)]
@@ -67,13 +67,19 @@ mod available_actions {
         labels: Vec<Label>,
     }
 
+    static TEST0: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: INBOX.clone(),
+        messages: vec![],
+        expected: Err(AppError::EmptyListOfMessages),
+    });
+
     static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         messages: vec![MessageWithLabels {
             message: message!(deleted: false, unread: true, remote_id: rid!("test1")),
             labels: vec![STARRED.clone(), FOLDER.clone()],
         }],
-        expected: MessageAvailableActions::builder()
+        expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -98,7 +104,7 @@ mod available_actions {
                 MessageAction::LabelAs,
                 MessageAction::Delete,
             ])
-            .build(),
+            .build()),
     });
 
     static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
@@ -107,7 +113,7 @@ mod available_actions {
             message: message!(deleted: true, unread: false, remote_id: Some("test2".into())),
             labels: vec![FOLDER.clone()],
         }],
-        expected: MessageAvailableActions::builder()
+        expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -136,7 +142,7 @@ mod available_actions {
                 MessageAction::Pin,
                 MessageAction::LabelAs,
             ])
-            .build(),
+            .build()),
     });
 
     static TEST3: LazyLock<TestCase> = LazyLock::new(|| TestCase {
@@ -145,7 +151,7 @@ mod available_actions {
             message: message!(remote_id: Some("test3".into())),
             labels: vec![],
         }],
-        expected: MessageAvailableActions::builder()
+        expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -170,7 +176,7 @@ mod available_actions {
                 MessageAction::LabelAs,
                 MessageAction::Delete,
             ])
-            .build(),
+            .build()),
     });
 
     static TEST4: LazyLock<TestCase> = LazyLock::new(|| TestCase {
@@ -185,7 +191,7 @@ mod available_actions {
                 labels: vec![],
             },
         ],
-        expected: MessageAvailableActions::builder()
+        expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -210,9 +216,10 @@ mod available_actions {
                 MessageAction::LabelAs,
                 MessageAction::Delete,
             ])
-            .build(),
+            .build()),
     });
 
+    #[test_case(&TEST0; "TEST0: empty")]
     #[test_case(&TEST1; "TEST1: Unread, starred in custom folder viewed from Inbox")]
     #[test_case(&TEST2; "TEST2: Read, not starred, deleted and in custom folder viewed from Folder")]
     #[test_case(&TEST3; "TEST3: Default, viewed from Spam")]
@@ -259,15 +266,23 @@ mod available_actions {
             .unwrap()
             .unwrap();
 
-        let mut actual = Message::available_actions(view, message_ids, &tx)
-            .await
-            .unwrap();
+        let result = Message::available_actions(view, message_ids, &tx).await;
 
-        actual.move_actions.iter_mut().for_each(|action| {
-            action.local_id = 0.into(); // To be able to compare with expected
-        });
+        match result {
+            Ok(mut actual) => {
+                actual.move_actions.iter_mut().for_each(|action| {
+                    action.local_id = 0.into(); // To be able to compare with expected
+                });
 
-        assert_eq!(actual, test_case.expected);
+                assert_eq!(&actual, test_case.expected.as_ref().unwrap());
+            }
+            Err(err) => {
+                assert_eq!(
+                    err.to_string(),
+                    test_case.expected.as_ref().unwrap_err().to_string()
+                );
+            }
+        }
     }
 }
 
@@ -281,7 +296,7 @@ mod available_label_as_actions {
         labels: Vec<Label>,
     }
 
-    #[test_case(vec![], vec![], &[]; "TEST1: empty")]
+    #[test_case(vec![], vec![], Err(AppError::EmptyListOfMessages); "TEST1: empty")]
     #[test_case(
         vec![
             MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![] },
@@ -291,7 +306,7 @@ mod available_label_as_actions {
             label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
             label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
         ],
-        &[
+        Ok(&[
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label1".into(),
@@ -304,7 +319,7 @@ mod available_label_as_actions {
                 color: Default::default(),
                 is_selected: Some( false )
             }
-        ]; "TEST2: messages without labels")]
+        ]); "TEST2: messages without labels")]
     #[test_case(
         vec![
             MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![
@@ -316,11 +331,8 @@ mod available_label_as_actions {
                 label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
             ] },
         ],
-        vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
-        ],
-        &[
+        vec![],
+        Ok(&[
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label1".into(),
@@ -333,7 +345,7 @@ mod available_label_as_actions {
                 color: Default::default(),
                 is_selected: Some( true )
             }
-        ]; "TEST3: messages with all labels")]
+        ]); "TEST3: messages with all labels")]
     #[test_case(
         vec![
             MessageWithLabels { message: message!(remote_id: rid!("message_1")), labels: vec![
@@ -343,11 +355,8 @@ mod available_label_as_actions {
                 label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
             ] },
         ],
-        vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
-        ],
-        &[
+        vec![],
+        Ok(&[
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label1".into(),
@@ -360,12 +369,12 @@ mod available_label_as_actions {
                 color: Default::default(),
                 is_selected: None,
             }
-        ]; "TEST4: each message with different label")]
+        ]); "TEST4: each message with different label")]
     #[tokio::test]
     async fn test_label_as_actions(
         messages: Vec<MessageWithLabels>,
         labels: Vec<Label>,
-        expected: &[LabelAsAction],
+        expected: Result<&[LabelAsAction], AppError>,
     ) {
         let stash = new_test_connection().await;
         let tx = stash.connection();
@@ -406,15 +415,20 @@ mod available_label_as_actions {
             }
         }
 
-        let mut actual = Message::available_label_as_actions(message_ids, &tx)
-            .await
-            .unwrap();
+        let result = Message::available_label_as_actions(message_ids, &tx).await;
 
-        actual.iter_mut().for_each(|action| {
-            action.label_id = 0.into(); // To be able to compare with expected
-        });
+        match result {
+            Ok(mut actual) => {
+                actual.iter_mut().for_each(|action| {
+                    action.label_id = 0.into(); // To be able to compare with expected
+                });
 
-        assert_eq!(actual, expected);
+                assert_eq!(actual, expected.unwrap());
+            }
+            Err(err) => {
+                assert_eq!(err.to_string(), expected.unwrap_err().to_string());
+            }
+        }
     }
 }
 
@@ -528,7 +542,7 @@ mod available_move_to_actions {
         || label!(label_type: LabelType::Folder, remote_id: rid!("0123"), name: "My custom folder".to_owned(), color: LabelColor::purple()),
     );
 
-    #[test_case(&INBOX, vec![], vec![], &[]; "TEST1: empty")]
+    #[test_case(&INBOX, vec![], vec![], Err(AppError::EmptyListOfMessages); "TEST1: empty")]
     #[test_case(
         &INBOX,
         vec![
@@ -539,7 +553,7 @@ mod available_move_to_actions {
             label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
             label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
         ],
-        &[
+        Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
@@ -567,7 +581,7 @@ mod available_move_to_actions {
                 is_selected: Some(false),
                 children: vec![]
             }),
-        ]; "TEST2: messages without labels")]
+        ]); "TEST2: messages without labels")]
     #[test_case(
         &INBOX,
         vec![
@@ -576,9 +590,8 @@ mod available_move_to_actions {
         ],
         vec![
             label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
         ],
-        &[
+        Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
@@ -606,7 +619,7 @@ mod available_move_to_actions {
                 is_selected: None,
                 children: vec![],
             }),
-        ]; "TEST3: One message in inbox, other in folder")]
+        ]); "TEST3: One message in inbox, other in folder")]
     #[test_case(
         &STARRED,
         vec![
@@ -614,7 +627,7 @@ mod available_move_to_actions {
             MessageWithLabels { message: message!(remote_id: rid!("message_2")), labels: vec![INBOX.clone()] },
         ],
         vec![],
-        &[
+        Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Inbox.label_id(),
                 name: SystemLabel::Inbox,
@@ -635,7 +648,7 @@ mod available_move_to_actions {
                 name: SystemLabel::Trash,
                 is_selected: Some(false),
             }),
-        ]; "TEST4: One message in Inbox, other in Outbox when view is STARRED")]
+        ]); "TEST4: One message in Inbox, other in Outbox when view is STARRED")]
     #[test_case(
             &CUSTOM_FOLDER,
             vec![
@@ -645,7 +658,7 @@ mod available_move_to_actions {
                 label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
                 CUSTOM_FOLDER.clone(),
             ],
-            &[
+            Ok(&[
                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                     label_id: SystemLabel::Inbox.label_id(),
                     name: SystemLabel::Inbox,
@@ -678,7 +691,7 @@ mod available_move_to_actions {
                     is_selected: Some(true),
                     children: vec![],
                 }),
-            ]; "TEST5: Message in custom folder when viewed from custom folder")]
+            ]); "TEST5: Message in custom folder when viewed from custom folder")]
     #[test_case(
         &INBOX,
         vec![
@@ -716,7 +729,7 @@ mod available_move_to_actions {
                 label_type: LabelType::Folder
             )
         ],
-        &[
+        Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
@@ -759,13 +772,13 @@ mod available_move_to_actions {
                     }
                 ]
             }),
-        ]; "TEST6: Message in nested custom folder")]
+        ]); "TEST6: Message in nested custom folder")]
     #[tokio::test]
     async fn test_move_to_actions(
         view: &Label,
         messages: Vec<MessageWithLabels>,
         labels: Vec<Label>,
-        expected: &[ExpectedMoveAction],
+        expected: Result<&[ExpectedMoveAction], AppError>,
     ) {
         let stash = new_test_connection().await;
         let tx = stash.connection();
@@ -815,18 +828,21 @@ mod available_move_to_actions {
             .unwrap()
             .unwrap();
 
-        let actual = Message::available_move_to_actions(view, message_ids, &tx)
-            .await
-            .unwrap();
+        let result = Message::available_move_to_actions(view, message_ids, &tx).await;
 
-        let actual = stream::iter(actual.into_iter())
-            .then(|action| async move { ExpectedMoveAction::new(action, &fun_tx()).await })
-            .collect::<Vec<_>>()
-            .await;
+        match result {
+            Ok(actual) => {
+                let actual = stream::iter(actual.into_iter())
+                    .then(|action| async move { ExpectedMoveAction::new(action, &fun_tx()).await })
+                    .collect::<Vec<_>>()
+                    .await;
 
-        dbg!(&actual);
-
-        assert_eq!(actual, expected);
+                assert_eq!(actual, expected.unwrap());
+            }
+            Err(err) => {
+                assert_eq!(err.to_string(), expected.unwrap_err().to_string());
+            }
+        }
     }
 }
 
