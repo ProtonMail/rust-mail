@@ -1037,6 +1037,7 @@ async fn test_update_message_and_body() {
     let tx = stash.connection();
     test_create_message_dependencies_core(&tx).await;
     test_create_message_dependencies(&tx).await;
+
     let mut message = ApiMessage {
         metadata: test_message_metadata(vec![MY_LABEL_ID1.clone()], vec![]),
         header: "my headers".to_owned(),
@@ -1078,20 +1079,21 @@ async fn test_update_message_and_body() {
         .await
         .expect("failed to store message body metadata in db");
 
-    // Update the body
     message
         .parsed_headers
         .insert("marco".to_owned(), json!("polo"));
-    message.header = "new header".to_owned();
-    message.body = "new body type".to_owned();
-    message.mime_type = ApiMimeType::TextHtml;
 
-    Message::from_api_data(message.clone(), &stash)
-        .await
-        .unwrap()
-        .save()
-        .await
-        .unwrap();
+    MessageBodyMetadata {
+        parsed_headers: datatypes::ParsedHeaders {
+            headers: message.parsed_headers.clone(),
+        },
+        mime_type: MimeType::TextHtml,
+        header: "new header".to_string(),
+        ..metadata
+    }
+    .save()
+    .await
+    .unwrap();
 
     let db_message_body = MessageBodyMetadata::load(id, tx.stash())
         .await
@@ -1101,11 +1103,11 @@ async fn test_update_message_and_body() {
     let expected = MessageBodyMetadata {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
-        header: message.header.clone(),
+        header: "new header".to_string(),
         parsed_headers: datatypes::ParsedHeaders {
-            headers: message.parsed_headers.clone(),
+            headers: message.parsed_headers,
         },
-        mime_type: message.mime_type.into(),
+        mime_type: MimeType::TextHtml,
         row_id: Some(1),
         stash: Some(stash.clone()),
     };
