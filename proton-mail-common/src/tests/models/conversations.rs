@@ -303,6 +303,7 @@ mod available_actions {
         conversation,
         datatypes::SystemLabel,
         db::new_test_connection,
+        rid,
     };
     use pretty_assertions::assert_eq;
     use test_case::test_case;
@@ -325,7 +326,7 @@ mod available_actions {
     struct TestCase {
         view: Label,
         conversations: Vec<ConversationWithLabels>,
-        expected: ConversationAvailableActions,
+        expected: Result<ConversationAvailableActions, AppError>,
     }
 
     #[derive(Clone)]
@@ -334,13 +335,31 @@ mod available_actions {
         labels: Vec<Label>,
     }
 
+    static TEST0: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: INBOX.clone(),
+        conversations: vec![],
+        expected: Err(AppError::EmptyListOfConversations),
+    });
+
     static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         conversations: vec![ConversationWithLabels {
-            conversation: conversation!(deleted: false, num_unread: 1, remote_id: Some("test1".into())),
+            conversation: conversation!(deleted: false, num_unread: 1, remote_id: rid!("conversation1")),
             labels: vec![STARRED.clone(), FOLDER.clone()],
         }],
-        expected: ConversationAvailableActions::builder()
+        expected: Err(AppError::ConversationDoesNotHaveLabel(
+            1.into(),
+            "Inbox".to_string(),
+        )),
+    });
+
+    static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: INBOX.clone(),
+        conversations: vec![ConversationWithLabels {
+            conversation: conversation!(deleted: false, num_unread: 1, remote_id: rid!("conversation_1")),
+            labels: vec![STARRED.clone(), INBOX.clone()],
+        }],
+        expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -365,16 +384,16 @@ mod available_actions {
                 ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
-            .build(),
+            .build()),
     });
 
-    static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+    static TEST3: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: FOLDER.clone(),
         conversations: vec![ConversationWithLabels {
             conversation: conversation!(deleted: true, num_unread: 0, remote_id: Some("test2".into())),
             labels: vec![FOLDER.clone()],
         }],
-        expected: ConversationAvailableActions::builder()
+        expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -403,16 +422,16 @@ mod available_actions {
                 ConversationAction::Pin,
                 ConversationAction::LabelAs,
             ])
-            .build(),
+            .build()),
     });
 
-    static TEST3: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+    static TEST4: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: SPAM.clone(),
         conversations: vec![ConversationWithLabels {
             conversation: conversation!(remote_id: Some("test3".into())),
-            labels: vec![],
+            labels: vec![SPAM.clone()],
         }],
-        expected: ConversationAvailableActions::builder()
+        expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -437,22 +456,22 @@ mod available_actions {
                 ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
-            .build(),
+            .build()),
     });
 
-    static TEST4: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+    static TEST5: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
         conversations: vec![
             ConversationWithLabels {
                 conversation: conversation!(deleted: true, num_unread: 0, remote_id: Some("test4_1".into())),
-                labels: vec![STARRED.clone()],
+                labels: vec![STARRED.clone(), INBOX.clone()],
             },
             ConversationWithLabels {
                 conversation: conversation!(deleted: false, num_unread: 1, remote_id: Some("test4_2".into())),
-                labels: vec![],
+                labels: vec![INBOX.clone()],
             },
         ],
-        expected: ConversationAvailableActions::builder()
+        expected: Ok(ConversationAvailableActions::builder()
             .move_actions(vec![
                 SystemFolderAction {
                     local_id: 0.into(),
@@ -477,13 +496,15 @@ mod available_actions {
                 ConversationAction::LabelAs,
                 ConversationAction::Delete,
             ])
-            .build(),
+            .build()),
     });
 
+    #[test_case(&TEST0; "TEST0: empty")]
     #[test_case(&TEST1; "TEST1: Unread, starred in custom folder viewed from Inbox")]
-    #[test_case(&TEST2; "TEST2: Read, not starred, deleted and in custom folder viewed from Folder")]
-    #[test_case(&TEST3; "TEST3: Default, viewed from Spam")]
-    #[test_case(&TEST4; "TEST4: Two conversations, one from TEST1 and other from TEST2")]
+    #[test_case(&TEST2; "TEST2: Unread, starred in Inbox viewed from Inbox")]
+    #[test_case(&TEST3; "TEST3: Read, not starred, deleted and in custom folder viewed from Folder")]
+    #[test_case(&TEST4; "TEST4: Default, viewed from Spam")]
+    #[test_case(&TEST5; "TEST5: Two conversations, one from TEST1 and other from TEST2")]
     #[tokio::test]
     async fn test_available_actions(test_case: &TestCase) {
         let stash = new_test_connection().await;
@@ -517,15 +538,23 @@ mod available_actions {
             .unwrap()
             .unwrap();
 
-        let mut actual = Conversation::available_actions(view, conversation_ids, &tx)
-            .await
-            .unwrap();
+        let result = Conversation::available_actions(view, conversation_ids, &tx).await;
 
-        actual.move_actions.iter_mut().for_each(|action| {
-            action.local_id = 0.into(); // To be able to compare with expected
-        });
+        match result {
+            Ok(mut actual) => {
+                actual.move_actions.iter_mut().for_each(|action| {
+                    action.local_id = 0.into(); // To be able to compare with expected
+                });
 
-        assert_eq!(actual, test_case.expected);
+                assert_eq!(&actual, test_case.expected.as_ref().unwrap());
+            }
+            Err(err) => {
+                assert_eq!(
+                    err.to_string(),
+                    test_case.expected.as_ref().unwrap_err().to_string()
+                );
+            }
+        }
     }
 }
 
@@ -540,7 +569,7 @@ mod available_label_as_actions {
         labels: Vec<Label>,
     }
 
-    #[test_case(vec![], vec![], &[]; "TEST1: empty")]
+    #[test_case(vec![], vec![], Err(AppError::EmptyListOfConversations); "TEST1: empty")]
     #[test_case(
         vec![
             ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![] },
@@ -550,7 +579,7 @@ mod available_label_as_actions {
             label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
             label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
         ],
-        &[
+        Ok(&[
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label1".into(),
@@ -563,7 +592,7 @@ mod available_label_as_actions {
                 color: Default::default(),
                 is_selected: Some( false )
             }
-        ]; "TEST2: conversations without labels")]
+        ]); "TEST2: conversations without labels")]
     #[test_case(
         vec![
             ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![
@@ -575,11 +604,8 @@ mod available_label_as_actions {
                 label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
             ] },
         ],
-        vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
-        ],
-        &[
+        vec![],
+        Ok(&[
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label1".into(),
@@ -592,7 +618,7 @@ mod available_label_as_actions {
                 color: Default::default(),
                 is_selected: Some( true )
             }
-        ]; "TEST3: conversations with all labels")]
+        ]); "TEST3: conversations with all labels")]
     #[test_case(
         vec![
             ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![
@@ -602,11 +628,8 @@ mod available_label_as_actions {
                 label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
             ] },
         ],
-        vec![
-            label!(remote_id: rid!("label1"), label_type: LabelType::Label, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: rid!("label2"), label_type: LabelType::Label, name: "label2".to_string()),
-        ],
-        &[
+        vec![],
+        Ok(&[
             LabelAsAction {
                 label_id: 0.into(),
                 name: "label1".into(),
@@ -619,12 +642,12 @@ mod available_label_as_actions {
                 color: Default::default(),
                 is_selected: None,
             }
-        ]; "TEST4: each conversation with different label")]
+        ]); "TEST4: each conversation with different label")]
     #[tokio::test]
     async fn test_label_as_actions(
         conversations: Vec<ConversationWithLabels>,
         labels: Vec<Label>,
-        expected: &[LabelAsAction],
+        expected: Result<&[LabelAsAction], AppError>,
     ) {
         let stash = new_test_connection().await;
         let tx = stash.connection();
@@ -657,15 +680,20 @@ mod available_label_as_actions {
             }
         }
 
-        let mut actual = Conversation::available_label_as_actions(conversation_ids, &tx)
-            .await
-            .unwrap();
+        let result = Conversation::available_label_as_actions(conversation_ids, &tx).await;
 
-        actual.iter_mut().for_each(|action| {
-            action.label_id = 0.into(); // To be able to compare with expected
-        });
+        match result {
+            Ok(mut actual) => {
+                actual.iter_mut().for_each(|action| {
+                    action.label_id = 0.into(); // To be able to compare with expected
+                });
 
-        assert_eq!(actual, expected);
+                assert_eq!(actual, expected.unwrap());
+            }
+            Err(err) => {
+                assert_eq!(err.to_string(), expected.unwrap_err().to_string());
+            }
+        }
     }
 }
 
@@ -779,18 +807,18 @@ mod available_move_to_actions {
         || label!(label_type: LabelType::Folder, remote_id: rid!("1234"), name: "My custom folder".to_owned(), color: LabelColor::purple()),
     );
 
-    #[test_case(&INBOX, vec![], vec![], &[]; "TEST1: empty")]
+    #[test_case(&INBOX, vec![], vec![], Err(AppError::EmptyListOfConversations); "TEST1: empty")]
     #[test_case(
         &INBOX,
         vec![
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![] },
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![] },
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![INBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![INBOX.clone()] },
         ],
         vec![
             label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
             label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
         ],
-        &[
+        Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
@@ -818,7 +846,7 @@ mod available_move_to_actions {
                 is_selected: Some(false),
                 children: vec![]
             }),
-        ]; "TEST2: conversations without labels")]
+        ]); "TEST2: conversations without labels")]
     #[test_case(
         &INBOX,
         vec![
@@ -827,45 +855,17 @@ mod available_move_to_actions {
         ],
         vec![
             label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
-            label!(remote_id: rid!("label2"), label_type: LabelType::Folder, name: "label2".to_string()),
         ],
-        &[
-            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
-                label_id: SystemLabel::Archive.label_id(),
-                name: SystemLabel::Archive,
-                is_selected: Some(false),
-            }),
-            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
-                label_id: SystemLabel::Spam.label_id(),
-                name: SystemLabel::Spam,
-                is_selected: Some(false),
-            }),
-            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
-                label_id: SystemLabel::Trash.label_id(),
-                name: SystemLabel::Trash,
-                is_selected: Some(false),
-            }),
-            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
-                label_id: "label1".into(),
-                name: "label1".into(),
-                is_selected: Some(false),
-                children: vec![],
-            }),
-            ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
-                label_id: "label2".into(),
-                name: "label2".into(),
-                is_selected: None,
-                children: vec![],
-            }),
-        ]; "TEST3: One conversation in inbox, other in folder")]
+        Err(AppError::ConversationDoesNotHaveLabel(2.into(), "Inbox".to_string()));
+        "TEST3: One conversation in inbox, other in folder")]
     #[test_case(
         &STARRED,
         vec![
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![OUTBOX.clone()] },
-            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![INBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![STARRED.clone(), OUTBOX.clone()] },
+            ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_2")), labels: vec![STARRED.clone(), INBOX.clone()] },
         ],
         vec![],
-        &[
+        Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Inbox.label_id(),
                 name: SystemLabel::Inbox,
@@ -886,7 +886,7 @@ mod available_move_to_actions {
                 name: SystemLabel::Trash,
                 is_selected: Some(false),
             }),
-        ]; "TEST4: One conversation in Inbox, other in Outbox when view is STARRED")]
+        ]); "TEST4: One conversation in Inbox, other in Outbox when view is STARRED")]
     #[test_case(
         &CUSTOM_FOLDER,
         vec![
@@ -896,7 +896,7 @@ mod available_move_to_actions {
             label!(remote_id: rid!("label1"), label_type: LabelType::Folder, name: "label1".to_string(), color: LabelColor::purple()),
             CUSTOM_FOLDER.clone(),
         ],
-        &[
+        Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Inbox.label_id(),
                 name: SystemLabel::Inbox,
@@ -929,9 +929,14 @@ mod available_move_to_actions {
                 is_selected: Some(true),
                 children: vec![],
             }),
-        ]; "TEST5: Conversation in custom folder, when viewed from custom folder")]
+        ]); "TEST5: Conversation in custom folder, when viewed from custom folder")]
     #[test_case(
-        &INBOX,
+        &label!(
+            remote_id: rid!("folder2"),
+            remote_parent_id: rid!("folder1"),
+            name: "folder2".to_string(),
+            label_type: LabelType::Folder
+        ),
         vec![
             ConversationWithLabels { conversation: conversation!(remote_id: rid!("conversation_1")), labels: vec![
                 label!(
@@ -967,7 +972,12 @@ mod available_move_to_actions {
                 label_type: LabelType::Folder
             )
         ],
-        &[
+        Ok(&[
+            ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
+                label_id: SystemLabel::Inbox.label_id(),
+                name: SystemLabel::Inbox,
+                is_selected: Some(false),
+            }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
                 name: SystemLabel::Archive,
@@ -1010,13 +1020,13 @@ mod available_move_to_actions {
                     }
                 ]
             }),
-        ]; "TEST6: Message in nested custom folder")]
+        ]); "TEST6: Message in nested custom folder")]
     #[tokio::test]
     async fn test_move_to_actions(
         view: &Label,
         conversations: Vec<ConversationWithLabels>,
         labels: Vec<Label>,
-        expected: &[ExpectedMoveAction],
+        expected: Result<&[ExpectedMoveAction], AppError>,
     ) {
         let stash = new_test_connection().await;
         let tx = stash.connection();
@@ -1058,16 +1068,21 @@ mod available_move_to_actions {
             .unwrap()
             .unwrap();
 
-        let actual = Conversation::available_move_to_actions(view, conversation_ids, &tx)
-            .await
-            .unwrap();
+        let result = Conversation::available_move_to_actions(view, conversation_ids, &tx).await;
 
-        let actual = stream::iter(actual.into_iter())
-            .then(|action| async move { ExpectedMoveAction::new(action, &fun_tx()).await })
-            .collect::<Vec<_>>()
-            .await;
+        match result {
+            Ok(actual) => {
+                let actual = stream::iter(actual.into_iter())
+                    .then(|action| async move { ExpectedMoveAction::new(action, &fun_tx()).await })
+                    .collect::<Vec<_>>()
+                    .await;
 
-        assert_eq!(actual, expected);
+                assert_eq!(actual, expected.unwrap());
+            }
+            Err(err) => {
+                assert_eq!(err.to_string(), expected.unwrap_err().to_string());
+            }
+        }
     }
 }
 

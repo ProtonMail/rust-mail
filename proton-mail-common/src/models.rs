@@ -2087,7 +2087,11 @@ impl Conversation {
     ///
     /// # Errors
     ///
-    /// Returns error if the database request fail.
+    /// Returns error if
+    ///
+    /// * the database request fail,
+    /// * empty list of conversations is provided
+    /// * conversation is not in the view
     ///
     pub async fn available_actions<A>(
         view: Label,
@@ -2097,6 +2101,10 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfConversations);
+        }
+
         let conversations = Conversation::find(
             format!(
                 "WHERE local_id IN ({})",
@@ -2125,6 +2133,17 @@ impl Conversation {
             }
             if conversation.recipients.value.len() > 1 {
                 reply_all = true;
+            }
+            let is_conversation_in_view = conversation
+                .labels
+                .iter()
+                .any(|label| label.local_label_id == view.local_id);
+
+            if !is_conversation_in_view {
+                return Err(AppError::ConversationDoesNotHaveLabel(
+                    conversation.local_id.unwrap(),
+                    view.name,
+                ));
             }
         }
 
@@ -2195,6 +2214,10 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfConversations);
+        }
+
         let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
         let conversations = Conversation::find(
             format!(
@@ -2242,6 +2265,10 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfConversations);
+        }
+
         let all_system = Label::find_by_kind(LabelType::System, interface).await?;
         let all_system_excluding_view = all_system
             .iter()
@@ -2257,6 +2284,24 @@ impl Conversation {
             None,
         )
         .await?;
+
+        conversations.iter().try_for_each(|conversation| {
+            let is_conversation_in_view = conversation
+                .labels
+                .iter()
+                .map(|conv_label| conv_label.local_label_id)
+                .any(|local_id| local_id == view.local_id);
+
+            if is_conversation_in_view {
+                Ok(())
+            } else {
+                Err(AppError::ConversationDoesNotHaveLabel(
+                    conversation.local_id.unwrap(),
+                    view.name.clone(),
+                ))
+            }
+        })?;
+
         let all_move_to_actions = conversations
             .iter()
             .flat_map(|conversation| {
@@ -4614,6 +4659,10 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfMessages);
+        }
+
         let messages = Message::find(
             format!(
                 "WHERE local_id IN ({})",
@@ -4701,6 +4750,10 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfMessages);
+        }
+
         let all_label_as = Label::find_by_kind(LabelType::Label, interface).await?;
         let messages = Message::find(
             format!(
@@ -4748,6 +4801,10 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        if local_ids.is_empty() {
+            return Err(AppError::EmptyListOfMessages);
+        }
+
         let all_system = Label::find_by_kind(LabelType::System, interface).await?;
         let all_system_excluding_view = all_system
             .iter()

@@ -71,6 +71,12 @@ pub enum AppError {
     MessageHasNoRemoteId(LocalId),
     #[error("Conversation with ID {0} has no messages")]
     ConversationHasNoMessages(LocalId),
+    #[error("Empty list of conversations, expected at least one")]
+    EmptyListOfConversations,
+    #[error("Empty list of messages, expected at least one")]
+    EmptyListOfMessages,
+    #[error("Conversation with ID {0} is not in given view {1}")]
+    ConversationDoesNotHaveLabel(LocalId, String),
     #[error("Cache error: {0}")]
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]
