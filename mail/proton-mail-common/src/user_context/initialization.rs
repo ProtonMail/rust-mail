@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use crate::models::{Conversation, Label, MailSettings};
-use crate::{MailContextError, MailUserContext};
+use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_core::session::CoreSession;
 use proton_core_common::models::{Address, User};
 use tracing::{debug, error, Level};
@@ -20,72 +22,139 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 }
 
 impl MailUserContext {
-    #[tracing::instrument(level = Level::DEBUG, skip(self, cb), fields(user_id=?self.user_id()))]
-    pub async fn initialize(&self, cb: Box<dyn MailUserContextInitializationCallback>) {
-        if let Err((stage, err)) = self.initialize_async(cb.as_ref()).await {
-            cb.on_stage_err(stage, err);
-        }
-    }
-
-    #[tracing::instrument(level = Level::DEBUG, skip(self, cb), fields(user_id=?self.user_id()))]
+    /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
+    /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The mail user context to initialize, it is vital to have it as Arc, as it will be cloned multiple times, and passed to the tokio::task.
+    /// * `cb` - The callback to notify the caller about the progress of the initialization.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - If the initialization is successful.
+    /// * `Err((MailUserContextLoadingStage, MailContextError))` - If the initialization fails at any stage, it will return the stage at which it failed and the error.
+    ///
+    #[tracing::instrument(level = Level::DEBUG, skip(ctx, cb), fields(user_id=?ctx.user_id()))]
     pub async fn initialize_async(
-        &self,
+        ctx: Arc<Self>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-        let ctx = self;
-
-        debug!("Syncing event id");
-        cb.on_stage(MailUserContextLoadingStage::Events);
-        if let Err(e) = ctx.event_loop.initialize(ctx, ctx).await {
-            error!("Failed to sync event id:{e}");
-            return Err((MailUserContextLoadingStage::Events, e.into()));
-        }
-
-        debug!("Syncing User settings");
-        cb.on_stage(MailUserContextLoadingStage::User);
-        if let Err(e) = User::sync_user_and_settings(ctx.session().api(), ctx.user_stash()).await {
-            error!("Failed to sync user settings: {e}");
-            return Err((MailUserContextLoadingStage::User, e.into()));
-        }
-
-        debug!("Syncing Mail settings");
-        cb.on_stage(MailUserContextLoadingStage::MailSettings);
-        if let Err(e) =
-            MailSettings::sync_mail_settings(ctx.session().api(), ctx.user_stash()).await
-        {
-            error!("Failed to sync user settings: {e}");
-            return Err((MailUserContextLoadingStage::MailSettings, e.into()));
-        }
-
-        debug!("Syncing Addresses");
-        cb.on_stage(MailUserContextLoadingStage::Addresses);
-        if let Err(e) = Address::sync(ctx.session().api(), ctx.user_stash()).await {
-            error!("Failed to sync addresses :{e}");
-            return Err((MailUserContextLoadingStage::Addresses, e.into()));
-        }
-
-        // load labels
-        debug!("Syncing labels");
-        cb.on_stage(MailUserContextLoadingStage::Labels);
-        if let Err(e) = Label::sync_labels(ctx.session().api(), ctx.user_stash()).await {
-            error!("Failed to sync labels: {e}");
-            return Err((MailUserContextLoadingStage::Labels, e.into()));
-        }
-
-        // load conversation counters
-        debug!("Syncing conversation and message counts");
-        cb.on_stage(MailUserContextLoadingStage::Counters);
-        if let Err(e) = Conversation::sync_conversation_and_message_counts(
+        let ctx_clone = ctx.clone();
+        let event_loop_handle = tokio::spawn(async move {
+            debug!("Syncing event id");
+            ctx_clone
+                .event_loop
+                .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
+                .await
+        });
+        let ctx_clone = ctx.clone();
+        let user_settings_handle = tokio::spawn(async move {
+            debug!("Syncing User settings");
+            User::sync_user_and_settings(ctx_clone.session().api(), ctx_clone.user_stash()).await
+        });
+        let ctx_clone = ctx.clone();
+        let mail_settings_handle = tokio::spawn(async move {
+            debug!("Syncing Mail settings");
+            MailSettings::sync_mail_settings(ctx_clone.session().api(), ctx_clone.user_stash())
+                .await
+        });
+        let ctx_clone = ctx.clone();
+        let addresses_handle = tokio::spawn(async move {
+            debug!("Syncing Addresses");
+            Address::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
+        });
+        let ctx_clone = ctx.clone();
+        let labels_handle = tokio::spawn(async move {
+            debug!("Syncing labels");
+            Label::sync_labels(ctx_clone.session().api(), ctx_clone.user_stash()).await
+        });
+        let (
+            event_loop_handle,
+            user_settings_handle,
+            mail_settings_handle,
+            addresses_handle,
+            labels_handle,
+        ) = tokio::join!(
+            event_loop_handle,
+            user_settings_handle,
+            mail_settings_handle,
+            addresses_handle,
+            labels_handle,
+        );
+        let sync_count_result = Conversation::sync_conversation_and_message_counts(
             ctx.session().api(),
             ctx.user_stash(),
         )
-        .await
+        .await;
+
+        fn map_err<T, E1, E2>(res: Result<Result<T, E1>, E2>) -> MailContextResult<T>
+        where
+            E1: Into<MailContextError>,
+            E2: Into<MailContextError>,
         {
+            res.map_err(|e| e.into())
+                .and_then(|r| r.map_err(|e| e.into()))
+        }
+
+        let (
+            sync_event_loop_result,
+            sync_user_settings_result,
+            sync_mail_settings_result,
+            sync_addresses_result,
+            sync_labels_result,
+        ) = (
+            map_err(event_loop_handle),
+            map_err(user_settings_handle),
+            map_err(mail_settings_handle),
+            map_err(addresses_handle),
+            map_err(labels_handle),
+        );
+
+        debug!("Syncing Complete");
+        debug!("Validate event id");
+        cb.on_stage(MailUserContextLoadingStage::Events);
+        if let Err(e) = sync_event_loop_result {
+            error!("Failed to sync event id:{e}");
+            return Err((MailUserContextLoadingStage::Events, e));
+        }
+
+        debug!("Validate user settings");
+        cb.on_stage(MailUserContextLoadingStage::User);
+        if let Err(e) = sync_user_settings_result {
+            error!("Failed to sync user settings: {e}");
+            return Err((MailUserContextLoadingStage::User, e));
+        }
+
+        debug!("Validate mail settings");
+        cb.on_stage(MailUserContextLoadingStage::MailSettings);
+        if let Err(e) = sync_mail_settings_result {
+            error!("Failed to sync user settings: {e}");
+            return Err((MailUserContextLoadingStage::MailSettings, e));
+        }
+
+        debug!("Validate addresses");
+        cb.on_stage(MailUserContextLoadingStage::Addresses);
+        if let Err(e) = sync_addresses_result {
+            error!("Failed to sync addresses :{e}");
+            return Err((MailUserContextLoadingStage::Addresses, e));
+        }
+
+        debug!("Validate labels");
+        cb.on_stage(MailUserContextLoadingStage::Labels);
+        if let Err(e) = sync_labels_result {
+            error!("Failed to sync labels: {e}");
+            return Err((MailUserContextLoadingStage::Labels, e));
+        }
+
+        debug!("Validate conversation and message counts");
+        cb.on_stage(MailUserContextLoadingStage::Counters);
+        if let Err(e) = sync_count_result {
             error!("Failed to sync conversation and messages counter: {e}");
             return Err((MailUserContextLoadingStage::Counters, e.into()));
         }
 
-        debug!("Syncing Complete");
+        debug!("Validation complete");
         cb.on_stage(MailUserContextLoadingStage::Finished);
         Ok(())
     }

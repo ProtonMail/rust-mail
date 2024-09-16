@@ -1,6 +1,6 @@
 mod common;
 
-use common::init::{NullCallback, Params as TestParams};
+use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -64,11 +64,7 @@ async fn test_move_between_folders() {
     )
     .await;
     ctx.catch_all().await;
-    let cb = NullCallback {};
-    user_ctx
-        .initialize_async(&cb)
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -175,11 +171,7 @@ async fn test_move_from_label_does_not_unlabel() {
     )
     .await;
     ctx.catch_all().await;
-    let cb = NullCallback {};
-    user_ctx
-        .initialize_async(&cb)
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -282,10 +274,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     .await;
 
     ctx.catch_all().await;
-    user_ctx
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -412,10 +401,7 @@ async fn test_move_into_spam_remove_labels() {
     .await;
 
     ctx.catch_all().await;
-    user_ctx
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -499,10 +485,7 @@ async fn move_out_of_trash_set_almost_all_mail() {
     .await;
 
     ctx.catch_all().await;
-    user_ctx
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -584,10 +567,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     .await;
 
     ctx.catch_all().await;
-    user_ctx
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await

@@ -1,7 +1,7 @@
 mod common;
 
 use crate::common::attachment::{testdata_attachment_data, testdata_expected_attachment_decrypted};
-use common::init::{NullCallback, Params as TestParams};
+use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
 use proton_core_common::datatypes::{LabelId, LocalId};
@@ -18,7 +18,7 @@ use std::fs;
 async fn test_load_attachment_buffer() {
     let ctx = TestContext::new().await;
     let params = TestParams::default_basic();
-    let user_context = ctx.user_context().await;
+    let user_ctx = ctx.user_context().await;
 
     // Api mock.
     let conversations = params.conversations.clone();
@@ -30,12 +30,9 @@ async fn test_load_attachment_buffer() {
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
         .await;
     ctx.catch_all().await;
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
 
@@ -43,7 +40,7 @@ async fn test_load_attachment_buffer() {
     mailbox.sync(1).await.expect("mailbox sync failed");
 
     // Get default conversation with the default attachment.
-    let local_conversation = Conversation::find_first("", vec![], user_context.user_stash())
+    let local_conversation = Conversation::find_first("", vec![], user_ctx.user_stash())
         .await
         .expect("failed to load conversation")
         .unwrap();
@@ -51,7 +48,7 @@ async fn test_load_attachment_buffer() {
     let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Cache is empty
-    assert!(user_context.attachements_cache().is_empty());
+    assert!(user_ctx.attachements_cache().is_empty());
 
     // Load and decrypt attachment.
     let decryption_result = mailbox
@@ -63,12 +60,12 @@ async fn test_load_attachment_buffer() {
         testdata_expected_attachment_decrypted(),
         "attachments should be equal"
     );
-    assert_eq!(user_context.attachements_cache().len(), 1);
+    assert_eq!(user_ctx.attachements_cache().len(), 1);
     mailbox
         .get_attachment(attachment_local_id)
         .await
         .expect("decryption should not fail");
-    assert_eq!(user_context.attachements_cache().len(), 1);
+    assert_eq!(user_ctx.attachements_cache().len(), 1);
 }
 
 #[tokio::test]
@@ -76,7 +73,7 @@ async fn test_load_attachment_buffer() {
 async fn load_attachment_from_cache() {
     let ctx = TestContext::new().await;
     let params = TestParams::default_basic();
-    let user_context = ctx.user_context().await;
+    let user_ctx = ctx.user_context().await;
 
     // Api mock.
     let conversations = params.conversations.clone();
@@ -86,12 +83,9 @@ async fn load_attachment_from_cache() {
     ctx.mock_get_attachment_metadata(test_attachment.clone())
         .await;
     ctx.catch_all().await;
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
 
@@ -99,19 +93,15 @@ async fn load_attachment_from_cache() {
     mailbox.sync(1).await.expect("mailbox sync failed");
 
     // Get default conversation with the default attachment.
-    let local_conversation = Conversation::find_first("", vec![], user_context.user_stash())
+    let local_conversation = Conversation::find_first("", vec![], user_ctx.user_stash())
         .await
         .expect("failed to load conversation")
         .unwrap();
     let attachment_local_id = local_conversation.local_id.unwrap();
 
     // Add another value into cache
-    let key = CacheAttachmentKey::new(
-        attachment_local_id,
-        "foo",
-        user_context.user_stash().clone(),
-    );
-    user_context
+    let key = CacheAttachmentKey::new(attachment_local_id, "foo", user_ctx.user_stash().clone());
+    user_ctx
         .attachements_cache()
         .add_item(key, &testdata_attachment_data())
         .unwrap();
@@ -135,29 +125,23 @@ async fn load_attachment_content_first_time() {
     //   * Check cache is empty
     let ctx = TestContext::new().await;
     let params = TestParams::default_basic();
-    let user_context = ctx.user_context().await;
+    let user_ctx = ctx.user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
-    attachment
-        .save_using(user_context.user_stash())
-        .await
-        .unwrap();
+    attachment.save_using(user_ctx.user_stash()).await.unwrap();
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data())
         .await;
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
 
     ctx.catch_all().await;
 
-    assert!(user_context.attachements_cache().is_empty());
+    assert!(user_ctx.attachements_cache().is_empty());
 
     // Action:
     //   * Get attachment
@@ -171,7 +155,7 @@ async fn load_attachment_content_first_time() {
         testdata_expected_attachment_decrypted(),
         "attachments should be equal"
     );
-    assert_eq!(user_context.attachements_cache().len(), 1);
+    assert_eq!(user_ctx.attachements_cache().len(), 1);
 }
 
 #[tokio::test]
@@ -181,24 +165,17 @@ async fn load_attachment_content_from_cache() {
     //   * Add attachment data into cache
     let ctx = TestContext::new().await;
     let params = TestParams::default_basic();
-    let user_context = ctx.user_context().await;
+    let user_ctx = ctx.user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let attachment_local_id = 42.into();
-    let attachment = get_attachment(
-        attachment_local_id,
-        test_attachment,
-        user_context.user_stash(),
-    )
-    .await;
+    let attachment =
+        get_attachment(attachment_local_id, test_attachment, user_ctx.user_stash()).await;
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
 
@@ -207,9 +184,9 @@ async fn load_attachment_content_from_cache() {
     let key = CacheAttachmentKey::new(
         attachment_local_id,
         &attachment.filename,
-        user_context.user_stash().clone(),
+        user_ctx.user_stash().clone(),
     );
-    user_context
+    user_ctx
         .attachements_cache()
         .add_item(key, b"abcdef")
         .unwrap();

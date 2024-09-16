@@ -1,3 +1,5 @@
+use proton_mail_common::MailUserContext;
+
 use crate::mail::{MailSessionError, MailSessionResult, MailUserSession};
 use crate::uniffi_async;
 
@@ -15,7 +17,7 @@ impl MailUserSession {
         uniffi_async(async move {
             let cb = Box::new(FFIMailUserInitializationCallback::from(cb));
             let cb_ref = cb.as_ref();
-            if let Err((_, e)) = ctx.initialize_async(cb_ref).await {
+            if let Err((_, e)) = MailUserContext::initialize_async(ctx, cb_ref).await {
                 return Err(MailSessionError::from(e));
             }
             Ok(())

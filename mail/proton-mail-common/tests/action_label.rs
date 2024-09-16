@@ -1,6 +1,6 @@
 mod common;
 
-use common::init::{NullCallback, Params as TestParams};
+use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -43,11 +43,7 @@ async fn test_label_custom_label() {
     )
     .await;
     ctx.catch_all().await;
-    let cb = NullCallback {};
-    user_ctx
-        .initialize_async(&cb)
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -130,11 +126,7 @@ async fn test_label_starred() {
     )
     .await;
     ctx.catch_all().await;
-    let cb = NullCallback {};
-    user_ctx
-        .initialize_async(&cb)
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
@@ -204,11 +196,7 @@ async fn test_label_fails_when_labelling_folders() {
     ctx.setup_user(init_params).await;
     ctx.mock_get_conversations(conversations, 1).await;
     ctx.catch_all().await;
-    let cb = NullCallback {};
-    user_ctx
-        .initialize_async(&cb)
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await

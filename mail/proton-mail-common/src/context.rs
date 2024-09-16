@@ -18,6 +18,7 @@ use stash::orm::ResultsetChange;
 use stash::stash::{Stash, StashError};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::task::JoinError;
 
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
@@ -81,6 +82,12 @@ impl<T: Action<Error = ActionError>> From<QueueActionError<T>> for MailContextEr
             QueueActionError::Action(e) => Self::Action(e),
             QueueActionError::Queue(e) => Self::ActionQueue(e),
         }
+    }
+}
+
+impl From<JoinError> for MailContextError {
+    fn from(value: JoinError) -> Self {
+        Self::Other(anyhow::Error::new(value))
     }
 }
 #[derive(Clone)]

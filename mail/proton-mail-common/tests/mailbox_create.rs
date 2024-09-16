@@ -1,6 +1,6 @@
 mod common;
 
-use common::init::{NullCallback, Params as TestParams};
+use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -39,11 +39,7 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(conversations, 2_u64).await;
     ctx.catch_all().await;
-    ctx.user_context()
-        .await
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(ctx.user_context().await).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
@@ -135,11 +131,7 @@ async fn test_new_mailbox_sync_messages() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
     ctx.catch_all().await;
-    ctx.user_context()
-        .await
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(ctx.user_context().await).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
@@ -233,11 +225,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_message_metadata(messages, 2_u64).await;
     ctx.catch_all().await;
-    ctx.user_context()
-        .await
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(ctx.user_context().await).await;
 
     // Create a drafts mailbox
     let mailbox_drafts = Mailbox::with_remote_id(ctx.user_context().await, LabelId::drafts())

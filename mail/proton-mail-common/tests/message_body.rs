@@ -1,6 +1,6 @@
 mod common;
 
-use common::init::{NullCallback, Params as TestParams};
+use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
@@ -40,7 +40,7 @@ async fn mailbox_message_body_simple() {
     )
     .await;
     let params = message_body_test_params();
-    let user_context = ctx.user_context().await;
+    let user_ctx = ctx.user_context().await;
 
     let message = message_body_test_message_simple();
 
@@ -49,44 +49,41 @@ async fn mailbox_message_body_simple() {
         .await;
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.catch_all().await;
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
     mailbox.sync(10).await.unwrap();
 
     // Resolve local id.
-    let saved_message = Message::load(1.into(), user_context.user_stash())
+    let saved_message = Message::load(1.into(), user_ctx.user_stash())
         .await
         .unwrap()
         .expect("failed to load message");
     assert_eq!(saved_message.remote_id, Some(message.metadata.id.into()));
 
     // No message cached
-    let cache = user_context.messages_cache();
+    let cache = user_ctx.messages_cache();
     assert!(cache.is_empty());
 
     // Decrypt the message body.
     let pgp_provider = new_pgp_provider();
     let _local_id = saved_message.local_id.unwrap();
     let address_id = saved_message.remote_address_id.clone();
-    let address_keys = user_context
+    let address_keys = user_ctx
         .unlocked_address_keys(&pgp_provider, &address_id)
         .await
         .unwrap();
-    let api = user_context.session().api();
+    let api = user_ctx.session().api();
     let decrypted_body = saved_message
         .fetch_message_body(
             cache,
             address_keys.clone(),
             pgp_provider,
             api,
-            user_context.user_stash(),
+            user_ctx.user_stash(),
         )
         .await
         .unwrap();
@@ -95,7 +92,7 @@ async fn mailbox_message_body_simple() {
 
     // Now a message is cached and it's the right one
     assert_eq!(cache.len(), 1);
-    let key = CacheMessageKey::from_message(&saved_message, user_context.user_stash());
+    let key = CacheMessageKey::from_message(&saved_message, user_ctx.user_stash());
     let item = cache
         .get_item(&key)
         .unwrap()
@@ -110,7 +107,7 @@ async fn mailbox_message_body_simple() {
             address_keys,
             pgp_provider,
             api,
-            user_context.user_stash(),
+            user_ctx.user_stash(),
         )
         .await
         .unwrap();

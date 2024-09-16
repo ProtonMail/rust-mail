@@ -1,6 +1,6 @@
 mod common;
 
-use crate::common::init::{NullCallback, Params as TestParams};
+use crate::common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::{
@@ -66,7 +66,7 @@ async fn sidebar_system_labels(
     ctx.catch_all().await;
 
     let user_ctx = ctx.user_context().await;
-    user_ctx.initialize_async(&NullCallback {}).await.unwrap();
+    ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 
     // Action

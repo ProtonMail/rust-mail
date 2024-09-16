@@ -1,6 +1,5 @@
 mod common;
 
-use crate::common::init::NullCallback;
 use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
@@ -18,7 +17,7 @@ async fn get_sender_image() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
-    let user_context = ctx.user_context().await;
+    let user_ctx = ctx.user_context().await;
     params
         .labels
         .get_mut(&ApiLabelType::Label)
@@ -43,28 +42,25 @@ async fn get_sender_image() {
     ctx.mock_get_image_for_conversation(b"abcdef".to_vec())
         .await;
     ctx.catch_all().await;
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
 
     mailbox.sync(1).await.expect("mailbox sync failed");
-    let local_conversation = Conversation::find_first("", vec![], user_context.user_stash())
+    let local_conversation = Conversation::find_first("", vec![], user_ctx.user_stash())
         .await
         .unwrap()
         .unwrap();
     let sender = &local_conversation.senders.value.first().unwrap();
-    let mail_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), user_context.user_stash())
+    let mail_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), user_ctx.user_stash())
         .await
         .expect("failed to load mail settings")
         .unwrap();
 
-    let image_path = user_context
+    let image_path = user_ctx
         .image_for_sender(
             &mail_settings,
             sender.address.clone(),
