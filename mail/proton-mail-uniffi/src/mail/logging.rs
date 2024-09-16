@@ -22,9 +22,16 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<()> {
 }
 
 pub fn app_tracing_env_filter_default() -> EnvFilter {
+    // TODO: once stash statistics can be disabled, remove stash=error
     EnvFilter::builder()
-        .with_default_directive(LevelFilter::INFO.into())
-        .parse_lossy("info")
+        .with_default_directive(LevelFilter::DEBUG.into())
+        .parse_lossy(
+            "info,proton_mail_uniffi=debug,proton_sqlite3=debug,\
+                    proton_core_common=debug,proton_mail_common=debug,\
+                    proton_event_loop=debug,proton_api_core=debug,\
+                    proton_action_queue=trace,proton_api_mail=debug,\
+                    stash=error",
+        )
 }
 
 pub fn app_tracing_env_filter_debug() -> EnvFilter {
