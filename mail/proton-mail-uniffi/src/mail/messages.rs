@@ -17,7 +17,6 @@ use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSessionError, MailboxError};
 use crate::utils::damp;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
-use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
@@ -27,8 +26,6 @@ use proton_mail_common::decrypted_message::{
 use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
-use stash::paginator::{Paginator as RealPaginator, Param};
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 /// Which transform options to apply to the html.
@@ -354,22 +351,10 @@ pub async fn paginate_messages_for_label(
     let stash = session.user_stash().clone();
     let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
-        #[allow(clippy::cast_possible_wrap)]
-        let real_paginator = RealPaginator::new(
-            formatdoc!(
-                "
-                JOIN message_labels
-                    ON messages.local_id = message_labels.local_message_id
-                WHERE
-                    message_labels.local_label_id = ?
-                ORDER BY
-                    messages.time DESC,
-                    messages.display_order DESC
-                "
-            ),
-            vec![Param::Integer(label_id.as_u64() as i64)],
+        let real_paginator = RealMessage::paginate_in_label(
+            RealLocalId::from(label_id),
+            50,
             &stash,
-            NonZeroU32::new(50).unwrap(),
             Some(msg_sender),
         )
         .await?;

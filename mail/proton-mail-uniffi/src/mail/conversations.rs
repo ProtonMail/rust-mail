@@ -17,15 +17,12 @@ use crate::mail::datatypes::{
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError, MailboxResult};
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
-use indoc::formatdoc;
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
 use proton_mail_common::models::{Conversation as RealConversation, Label as RealLabel};
 use stash::orm::Model;
-use stash::paginator::{Paginator as RealPaginator, Param};
-use std::num::NonZeroU32;
 use std::sync::Arc;
 
 /// Label the given conversations with the given label id.
@@ -416,22 +413,10 @@ pub async fn paginate_conversations_for_label(
     let stash = session.user_stash().clone();
     let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
-        #[allow(clippy::cast_possible_wrap)]
-        let real_paginator = RealPaginator::new(
-            formatdoc!(
-                "
-                JOIN conversation_labels
-                    ON conversations.local_id = conversation_labels.local_conversation_id
-                WHERE
-                    conversation_labels.local_label_id = ?
-                ORDER BY
-                    conversation_labels.context_time DESC,
-                    conversations.display_order DESC
-                "
-            ),
-            vec![Param::Integer(label_id.as_u64() as i64)],
+        let real_paginator = RealConversation::paginate_in_label(
+            RealLocalId::from(label_id),
+            50,
             &stash,
-            NonZeroU32::new(50).unwrap(),
             Some(msg_sender),
         )
         .await?;
