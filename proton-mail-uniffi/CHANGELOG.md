@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - renamed to `ConversationAvailableActions`
   - Reimagined `MessageAvailableAction` to contain each actions section representing final view.
     - renamed to `MessageAvailableActions`
+  - Logs now always contain debug info, except for database debug logs.
+  - When `MailSessionParams::log_debug` is set to true, database debug logs are also included.
 
 ### Added
 
