@@ -851,7 +851,7 @@ impl Conversation {
         spam_action: Option<bool>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let c = |ids: Vec<ApiRemoteId>| {
+        let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
                 api.put_conversations_label(ids, label_id.into(), spam_action)
@@ -859,7 +859,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_conversation_request(ids, c).await
+        split_conversation_request(ids, request).await
     }
 
     /// TODO: Document this method.
@@ -1010,7 +1010,7 @@ impl Conversation {
         label_id: LabelId,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let c = |ids: Vec<ApiRemoteId>| {
+        let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
                 api.put_conversations_delete(ids, label_id.into())
@@ -1018,7 +1018,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_conversation_request(ids, c).await
+        split_conversation_request(ids, request).await
     }
 
     /// Get the conversation counts.
@@ -1443,10 +1443,10 @@ impl Conversation {
         ids: Vec<RemoteId>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let c = |ids: Vec<ApiRemoteId>| async {
+        let request = |ids: Vec<ApiRemoteId>| async {
             api.put_conversations_read(ids).await.map(|r| r.responses)
         };
-        split_conversation_request(ids, c).await
+        split_conversation_request(ids, request).await
     }
 
     /// Mark multiple conversations as unread.
@@ -1583,10 +1583,10 @@ impl Conversation {
         ids: Vec<RemoteId>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let c = |ids: Vec<ApiRemoteId>| async {
+        let request = |ids: Vec<ApiRemoteId>| async {
             api.put_conversations_unread(ids).await.map(|r| r.responses)
         };
-        split_conversation_request(ids, c).await
+        split_conversation_request(ids, request).await
     }
 
     /// Unlabel multiple conversations.
@@ -1705,7 +1705,7 @@ impl Conversation {
         ids: Vec<RemoteId>,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let c = |ids: Vec<ApiRemoteId>| {
+        let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
                 api.put_conversations_unlabel(ids, label_id.into())
@@ -1713,7 +1713,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_conversation_request(ids, c).await
+        split_conversation_request(ids, request).await
     }
 
     /// Given a list of conversations check if there are any missing dependencies like undownloaded
@@ -1985,7 +1985,7 @@ impl Conversation {
         label_id: LabelId,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let c = |ids: Vec<ApiRemoteId>| {
+        let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
                 api.put_conversations_delete(ids, label_id.into())
@@ -1993,7 +1993,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_conversation_request(ids, c).await
+        split_conversation_request(ids, request).await
     }
 
     /// Move conversations between two labels.
@@ -4125,7 +4125,7 @@ impl Message {
         label_id: LabelId,
         api: &PM,
     ) -> Result<Vec<OperationResult>, ApiServiceError> {
-        let c = |ids: Vec<ApiRemoteId>| {
+        let request = |ids: Vec<ApiRemoteId>| {
             let label_id = label_id.clone();
             async {
                 api.put_messages_delete(ids, Some(label_id.into()))
@@ -4133,7 +4133,7 @@ impl Message {
                     .map(|r| r.responses)
             }
         };
-        split_message_request(ids, c).await
+        split_message_request(ids, request).await
     }
 
     /// Delete multiple messages
@@ -6345,7 +6345,7 @@ where
 }
 
 /// This fn should be called for conversation endpoints.
-/// Repeatedly calls `endpoint` in batches of 150 in parallel.
+/// Repeatedly calls `endpoint` in batches of 1 in parallel.
 async fn split_conversation_request<F, Fut>(
     ids: impl IntoIterator<Item = RemoteId>,
     endpoint: F,
@@ -6354,11 +6354,11 @@ where
     F: Fn(Vec<ApiRemoteId>) -> Fut,
     Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
 {
-    split_request(ids, 150, endpoint).await
+    split_request(ids, 1, endpoint).await
 }
 
 /// This fn should be called for message endpoints.
-/// Repeatedly calls `endpoint` in batches of 1 in parallel.
+/// Repeatedly calls `endpoint` in batches of 150 in parallel.
 async fn split_message_request<F, Fut>(
     ids: impl IntoIterator<Item = RemoteId>,
     endpoint: F,
@@ -6367,5 +6367,5 @@ where
     F: Fn(Vec<ApiRemoteId>) -> Fut,
     Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
 {
-    split_request(ids, 1, endpoint).await
+    split_request(ids, 150, endpoint).await
 }
