@@ -1,6 +1,6 @@
 mod common;
 
-use crate::common::init::{NullCallback, Params as TestParams};
+use crate::common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -38,8 +38,8 @@ async fn label_message() {
     //  * Create a Label
     //  * Create a Message
     let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
-    let stash = user_context.user_stash();
+    let user_ctx = ctx.user_context().await;
+    let stash = user_ctx.user_stash();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -58,13 +58,10 @@ async fn label_message() {
     .await;
     ctx.catch_all().await;
 
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
     mailbox.sync(10).await.unwrap();
@@ -80,8 +77,8 @@ async fn label_message() {
     // Actions:
     //   * Apply the label to the message
     Message::action_apply_label(
-        user_context.session(),
-        user_context.queue(),
+        user_ctx.session(),
+        user_ctx.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )
@@ -105,8 +102,8 @@ async fn unlabel_message() {
     //  * Create a Label
     //  * Create a Message with this label
     let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
-    let stash = user_context.user_stash();
+    let user_ctx = ctx.user_context().await;
+    let stash = user_ctx.user_stash();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -130,14 +127,10 @@ async fn unlabel_message() {
     )
     .await;
     ctx.catch_all().await;
-
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox and sync.
-    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
         .await
         .unwrap();
     mailbox.sync(10).await.unwrap();
@@ -147,8 +140,8 @@ async fn unlabel_message() {
         .unwrap()
         .unwrap();
     Message::action_apply_label(
-        user_context.session(),
-        user_context.queue(),
+        user_ctx.session(),
+        user_ctx.queue(),
         label.local_id.unwrap(),
         vec![1.into()],
     )
@@ -163,8 +156,8 @@ async fn unlabel_message() {
     // Actions:
     //   * Apply the label to the message
     Message::action_remove_label(
-        user_context.session(),
-        user_context.queue(),
+        user_ctx.session(),
+        user_ctx.queue(),
         label.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )

@@ -1849,8 +1849,10 @@ impl Conversation {
         api: &PM,
         stash: &Stash,
     ) -> Result<(), AppError> {
-        let conversation_counts = Conversation::fetch_counts(api).await?;
-        let message_counts = Message::fetch_counts(api).await?;
+        let (conversation_counts, message_counts) =
+            futures::join!(Conversation::fetch_counts(api), Message::fetch_counts(api));
+        let (conversation_counts, message_counts) = (conversation_counts?, message_counts?);
+
         let tx = stash.transaction().await?;
         Label::create_or_update_conversation_counts(conversation_counts, &tx).await?;
         Label::create_or_update_message_counts(message_counts, &tx).await?;
@@ -3169,22 +3171,28 @@ impl Label {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let mut all_labels: Vec<Label> = Vec::with_capacity(64);
-        for category in ALL_LABEL_TYPES {
-            debug!("Fetching labels ({:?})", category);
-            all_labels.extend(
+        let label_requests =
+            futures::future::join_all(ALL_LABEL_TYPES.into_iter().map(|category| {
+                debug!("Fetching labels ({:?})", category);
                 api.get_labels(category.into())
-                    .await?
-                    .labels
-                    .into_iter()
-                    .map_into(),
-            );
-        }
+            }))
+            .await;
 
         debug!("Storing labels into database");
         let tx = interface.transaction().await?;
-        for mut label in all_labels {
-            label.save_using(&tx).await?;
+        for labels in label_requests {
+            match labels {
+                Err(e) => {
+                    error!("Failed to fetch labels: {e}");
+                    tx.commit().await?;
+                    return Err(AppError::from(e));
+                }
+                Ok(labels) => {
+                    for mut label in labels.labels.into_iter().map_into::<Self>() {
+                        label.save_using(&tx).await?;
+                    }
+                }
+            }
         }
         tx.commit().await?;
 
@@ -3692,7 +3700,10 @@ impl MailSettings {
         let mut settings = MailSettings::from(api.get_settings().await.map(|r| r.mail_settings)?);
         debug!("Storing labels into database");
         settings.set_stash(stash);
-        settings.save().await?;
+
+        let tx = stash.transaction().await?;
+        settings.save_using(&tx).await?;
+        tx.commit().await?;
         Ok(())
     }
 

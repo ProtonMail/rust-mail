@@ -7,7 +7,7 @@ use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::{
-    MailContext, MailContextError, MailUserContextInitializationCallback,
+    MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage, Mailbox,
 };
 use std::sync::Arc;
@@ -75,7 +75,9 @@ async fn main() {
 
     // Sync initial data
     let cb = InitCallback;
-    user_ctx.initialize_async(&cb).await.unwrap();
+    MailUserContext::initialize_async(user_ctx.clone(), &cb)
+        .await
+        .unwrap();
 
     let mailbox = Mailbox::with_remote_id(Arc::clone(&user_ctx), LabelId::inbox())
         .await

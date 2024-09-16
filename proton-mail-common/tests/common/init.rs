@@ -45,10 +45,11 @@ use proton_mail_common::models::{
     Attachment, Conversation, ConversationLabel, Label, MailSettings,
 };
 use proton_mail_common::{
-    MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
-    ALL_LABEL_TYPES,
+    MailContextError, MailUserContext, MailUserContextInitializationCallback,
+    MailUserContextLoadingStage, ALL_LABEL_TYPES,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
@@ -202,6 +203,20 @@ impl TestContext {
     ///
     pub async fn setup_user(&self, mut params: Params) {
         self.setup_user_repeated(params, 1).await;
+    }
+
+    /// Initialize user context.
+    ///
+    /// # Parameters
+    ///
+    /// * `params` - The parameters to use for the setup.
+    ///
+    pub async fn init_user(&self, user_ctx: Arc<MailUserContext>) {
+        let cb = NullCallback {};
+
+        MailUserContext::initialize_async(user_ctx, &cb)
+            .await
+            .expect("failed to initialize");
     }
 
     /// Set up basic user data.

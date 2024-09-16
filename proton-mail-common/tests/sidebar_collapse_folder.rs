@@ -1,5 +1,5 @@
 use crate::common::init::Params;
-use crate::common::init::{NullCallback, Params as TestParams};
+use crate::common::init::Params as TestParams;
 use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
@@ -26,7 +26,7 @@ async fn folder_expansion() {
 
     let user_ctx = ctx.user_context().await;
     let stash = user_ctx.user_stash();
-    user_ctx.initialize_async(&NullCallback {}).await.unwrap();
+    ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 
     let folder = get_folder("foo", stash).await;
@@ -58,7 +58,7 @@ async fn folder_collapse() {
 
     let user_ctx = ctx.user_context().await;
     let stash = user_ctx.user_stash();
-    user_ctx.initialize_async(&NullCallback {}).await.unwrap();
+    ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 
     let folder = get_folder("foo", stash).await;

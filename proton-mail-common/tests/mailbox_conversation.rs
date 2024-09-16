@@ -1,6 +1,6 @@
 mod common;
 
-use common::init::{NullCallback, Params as TestParams};
+use common::init::Params as TestParams;
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::session::CoreSession;
@@ -100,15 +100,12 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.mock_get_conversation_messages(params.conversations[0].clone(), messages, 1_u64)
         .await;
     ctx.catch_all().await;
-    let user_context = ctx.user_context().await;
+    let user_ctx = ctx.user_context().await;
 
-    user_context
-        .initialize_async(&NullCallback {})
-        .await
-        .expect("failed to initialize");
+    ctx.init_user(user_ctx.clone()).await;
 
     // Create a mailbox
-    let mailbox = Mailbox::with_remote_id(Arc::clone(&user_context), LabelId::inbox())
+    let mailbox = Mailbox::with_remote_id(Arc::clone(&user_ctx), LabelId::inbox())
         .await
         .unwrap();
 
@@ -126,8 +123,8 @@ async fn test_new_mailbox_sync_conversations() {
     let result = ContextualConversation::conversation_and_messages(
         conversation.local_id.unwrap(),
         mailbox.label_id(),
-        user_context.user_stash(),
-        user_context.session().api(),
+        user_ctx.user_stash(),
+        user_ctx.session().api(),
     )
     .await
     .unwrap()
@@ -141,8 +138,8 @@ async fn test_new_mailbox_sync_conversations() {
     let _ = ContextualConversation::conversation_and_messages(
         conversation.local_id.unwrap(),
         mailbox.label_id(),
-        user_context.user_stash(),
-        user_context.session().api(),
+        user_ctx.user_stash(),
+        user_ctx.session().api(),
     )
     .await
     .unwrap()
