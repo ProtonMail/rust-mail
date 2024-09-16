@@ -12,7 +12,6 @@ crate-type = ["staticlib", "cdylib"]
 anyhow = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-indoc = { workspace = true }
 itertools = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }

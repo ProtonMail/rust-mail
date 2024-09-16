@@ -89,12 +89,14 @@ use smart_default::SmartDefault;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
+use stash::paginator::{Paginator, Param};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::io::Read;
+use std::num::NonZeroU32;
 use std::vec;
 use tracing::{debug, error, info};
 
@@ -2583,6 +2585,7 @@ impl Conversation {
     /// Retrieve all the conversation which are in a given label.
     ///
     /// # Params
+    ///
     /// * `local_label_id` - Label where to search in
     /// * `interface`      - Connection to the database
     /// * `queue`          - Optional subscriber for changes.
@@ -2612,6 +2615,52 @@ impl Conversation {
             ),
             params![local_label_id],
             interface,
+            queue,
+        )
+        .await
+    }
+
+    /// Create a paginator for conversations in a given label.
+    ///
+    /// # Params
+    ///
+    /// * `local_label_id` - Label where to paginate in.
+    /// * `page_count`     - Number of elements per page.
+    /// * `interface`      - Connection to the database.
+    /// * `queue`          - Optional subscriber for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn paginate_in_label<A>(
+        local_label_id: LocalId,
+        page_count: u32,
+        interface: &A,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+    ) -> Result<Paginator<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Paginator::new(
+            formatdoc!(
+                "
+                JOIN conversation_labels
+                    ON conversations.local_id = conversation_labels.local_conversation_id
+                WHERE
+                    conversation_labels.local_label_id = ?
+                ORDER BY
+                    conversation_labels.context_time DESC,
+                    conversations.display_order DESC
+                "
+            ),
+            vec![Param::Integer(
+                i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                    StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
+                })?,
+            )],
+            interface,
+            NonZeroU32::new(page_count)
+                .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
             queue,
         )
         .await
@@ -5604,6 +5653,52 @@ impl Message {
             "WHERE local_conversation_id = ? ORDER BY time ASC, display_order ASC",
             params![local_conversation_id],
             interface,
+            queue,
+        )
+        .await
+    }
+
+    /// Create a paginator for messages in a given label.
+    ///
+    /// # Params
+    ///
+    /// * `local_label_id` - Label where to paginate in.
+    /// * `page_count`     - Number of elements per page.
+    /// * `interface`      - Connection to the database.
+    /// * `queue`          - Optional subscriber for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn paginate_in_label<A>(
+        local_label_id: LocalId,
+        page_count: u32,
+        interface: &A,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+    ) -> Result<Paginator<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Paginator::new(
+            formatdoc!(
+                "
+                JOIN message_labels
+                    ON messages.local_id = message_labels.local_message_id
+                WHERE
+                    message_labels.local_label_id = ?
+                ORDER BY
+                    messages.time DESC,
+                    messages.display_order DESC
+                "
+            ),
+            vec![Param::Integer(
+                i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                    StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
+                })?,
+            )],
+            interface,
+            NonZeroU32::new(page_count)
+                .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
             queue,
         )
         .await
