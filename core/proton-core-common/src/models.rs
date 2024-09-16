@@ -408,16 +408,19 @@ impl Address {
     /// TODO: Document the errors.
     ///
     pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
-        for mut address in api
+        let addresses = api
             .get_addresses()
             .await?
             .addresses
             .into_iter()
-            .map(Address::from)
-        {
+            .map(Address::from);
+
+        let tx = stash.transaction().await?;
+        for mut address in addresses {
             address.set_stash(stash);
-            address.save().await?;
+            address.save_using(&tx).await?;
         }
+        tx.commit().await?;
 
         Ok(())
     }
@@ -1256,8 +1259,10 @@ impl User {
         settings.remote_id.clone_from(&user.remote_id);
         user.set_stash(stash);
         settings.set_stash(stash);
-        user.save().await?;
-        settings.save().await?;
+        let tx = stash.transaction().await?;
+        user.save_using(&tx).await?;
+        settings.save_using(&tx).await?;
+        tx.commit().await?;
         Ok(())
     }
 }
