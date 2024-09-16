@@ -859,7 +859,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_requests_serially(ids, c).await
+        split_conversation_request(ids, c).await
     }
 
     /// TODO: Document this method.
@@ -1018,7 +1018,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_requests_with(ids, 1, c).await
+        split_conversation_request(ids, c).await
     }
 
     /// Get the conversation counts.
@@ -1446,7 +1446,7 @@ impl Conversation {
         let c = |ids: Vec<ApiRemoteId>| async {
             api.put_conversations_read(ids).await.map(|r| r.responses)
         };
-        split_requests_serially(ids, c).await
+        split_conversation_request(ids, c).await
     }
 
     /// Mark multiple conversations as unread.
@@ -1586,7 +1586,7 @@ impl Conversation {
         let c = |ids: Vec<ApiRemoteId>| async {
             api.put_conversations_unread(ids).await.map(|r| r.responses)
         };
-        split_requests_serially(ids, c).await
+        split_conversation_request(ids, c).await
     }
 
     /// Unlabel multiple conversations.
@@ -1713,7 +1713,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_requests_serially(ids, c).await
+        split_conversation_request(ids, c).await
     }
 
     /// Given a list of conversations check if there are any missing dependencies like undownloaded
@@ -1993,7 +1993,7 @@ impl Conversation {
                     .map(|r| r.responses)
             }
         };
-        split_requests_serially(ids, c).await
+        split_conversation_request(ids, c).await
     }
 
     /// Move conversations between two labels.
@@ -4133,7 +4133,7 @@ impl Message {
                     .map(|r| r.responses)
             }
         };
-        split_requests(ids, c).await
+        split_message_request(ids, c).await
     }
 
     /// Delete multiple messages
@@ -6328,7 +6328,7 @@ impl DataSource for MessageDataSource {
 }
 
 /// Repeatedly calls `endpoint` in batches of `limit` in parallel.
-async fn split_requests_with<F, Fut, R>(
+async fn split_request<F, Fut, R>(
     ids: impl IntoIterator<Item = R>,
     limit: usize,
     endpoint: F,
@@ -6344,8 +6344,9 @@ where
     Ok(try_join_all(ids).await?.into_iter().flatten().collect())
 }
 
+/// This fn should be called for conversation endpoints.
 /// Repeatedly calls `endpoint` in batches of 150 in parallel.
-async fn split_requests<F, Fut>(
+async fn split_conversation_request<F, Fut>(
     ids: impl IntoIterator<Item = RemoteId>,
     endpoint: F,
 ) -> Result<Vec<OperationResult>, ApiServiceError>
@@ -6353,11 +6354,12 @@ where
     F: Fn(Vec<ApiRemoteId>) -> Fut,
     Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
 {
-    split_requests_with(ids, 150, endpoint).await
+    split_request(ids, 150, endpoint).await
 }
 
-/// Repeatedly calls `endpoint` one by one (in parallel).
-async fn split_requests_serially<F, Fut>(
+/// This fn should be called for message endpoints.
+/// Repeatedly calls `endpoint` in batches of 1 in parallel.
+async fn split_message_request<F, Fut>(
     ids: impl IntoIterator<Item = RemoteId>,
     endpoint: F,
 ) -> Result<Vec<OperationResult>, ApiServiceError>
@@ -6365,5 +6367,5 @@ where
     F: Fn(Vec<ApiRemoteId>) -> Fut,
     Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
 {
-    split_requests_with(ids, 1, endpoint).await
+    split_request(ids, 1, endpoint).await
 }
