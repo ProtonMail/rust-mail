@@ -2,10 +2,40 @@
 
 use stash::orm::Model;
 use stash::orm::ResultsetChange;
-use stash::paginator::{Paginator, Param};
-use stash::stash::{Interface, Stash};
+use stash::paginator::{DataSource, Paginator, Param};
+use stash::stash::{Interface, Stash, StashError};
 use stash_macros::Model;
+use std::future::Future;
 use std::num::NonZeroU32;
+
+struct NullDataSource {}
+
+impl DataSource for NullDataSource {
+    type Item = TestModel;
+    type Error = StashError;
+
+    fn total(&self, _: &Stash) -> impl Future<Output = Result<usize, Self::Error>> + Send {
+        std::future::ready(Ok(0))
+    }
+
+    fn sync_first_page(
+        &self,
+        _: NonZeroU32,
+        _: &Stash,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        std::future::ready(Ok(()))
+    }
+
+    fn sync_page_after(
+        &self,
+        _: u32,
+        _: NonZeroU32,
+        _: Vec<Self::Item>,
+        _: &Stash,
+    ) -> impl Future<Output = Result<(), Self::Error>> + Send {
+        std::future::ready(Ok(()))
+    }
+}
 
 async fn create_table(stash: &Stash) {
     stash
@@ -35,15 +65,17 @@ async fn create_records(stash: &Stash) {
 pub async fn paginate_test_models(
     stash: &Stash,
 ) -> (
-    Paginator<TestModel>,
+    Paginator<TestModel, NullDataSource>,
     flume::Receiver<ResultsetChange<TestModel, u64>>,
 ) {
     let (msg_sender, msg_receiver) = flume::unbounded();
+    let data_source = NullDataSource {};
     let paginator = Paginator::new(
         "WHERE number > ? ORDER BY number ASC",
         vec![Param::Integer(250)],
         stash,
         NonZeroU32::new(50).unwrap(),
+        data_source,
         Some(msg_sender),
     )
     .await
@@ -94,11 +126,13 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(250)],
             &stash,
             NonZeroU32::new(50).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -116,11 +150,13 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "ORDER BY number ASC",
             vec![],
             &stash,
             NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -151,11 +187,13 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(250)],
             &stash,
             NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -186,11 +224,13 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(250)],
             &stash,
             NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -222,11 +262,13 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(350)],
             &stash,
             NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -265,11 +307,13 @@ mod extended_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(500)],
             &stash,
             NonZeroU32::new(10).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -373,11 +417,13 @@ mod extended_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(600)],
             &stash,
             NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -448,11 +494,13 @@ mod extended_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(600)],
             &stash,
             NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -536,11 +584,13 @@ mod changes_during_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
-        let paginator: Paginator<TestModel> = Paginator::new(
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(100)],
             &stash,
             NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
