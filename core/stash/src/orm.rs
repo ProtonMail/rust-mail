@@ -434,17 +434,17 @@ where
     /// * [`Stash::query()`]
     /// * [`params!`](crate::utils::params)
     ///
-    async fn find<Q, A>(
+    fn find<Q, A>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
         interface: &A,
         queue: Option<QueueSender<ResultsetChange<Self, Self::IdType>>>,
-    ) -> Result<Vec<Self>, StashError>
+    ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send
     where
         Q: Into<String> + Send,
         A: Into<AgnosticInterface> + Interface,
     {
-        perform_find(query_logic, params, &interface.clone().into(), queue).await
+        async move { perform_find(query_logic, params, &interface.clone().into(), queue).await }
     }
 
     /// Finds the first record in a result set using specific query logic.

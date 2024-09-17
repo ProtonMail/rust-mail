@@ -364,6 +364,163 @@ mod extended_pagination {
             ]
         );
     }
+
+    #[tokio::test]
+    async fn reload_after_navigating_forwards() {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        create_table(&stash).await;
+        create_records(&stash).await;
+
+        let (msg_sender, _msg_receiver) = flume::unbounded();
+        let paginator: Paginator<TestModel> = Paginator::new(
+            "WHERE number > ? ORDER BY number ASC",
+            vec![Param::Integer(600)],
+            &stash,
+            NonZeroU32::new(5).unwrap(),
+            Some(msg_sender),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(paginator.current_page_number().await, 1);
+        let page1 = paginator.current_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        assert_eq!(page1.len(), 5);
+
+        let page2 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        assert_eq!(page2.len(), 5);
+
+        let page3 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 3);
+        assert_eq!(page3.len(), 5);
+
+        let page4 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 4);
+        assert_eq!(page4.len(), 5);
+
+        let page5 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 5);
+        assert_eq!(page5.len(), 5);
+
+        let reloaded = paginator.reload().await.unwrap();
+        assert_eq!(
+            reloaded
+                .into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #601".to_owned(), 601),
+                ("Test model #602".to_owned(), 602),
+                ("Test model #603".to_owned(), 603),
+                ("Test model #604".to_owned(), 604),
+                ("Test model #605".to_owned(), 605),
+                ("Test model #606".to_owned(), 606),
+                ("Test model #607".to_owned(), 607),
+                ("Test model #608".to_owned(), 608),
+                ("Test model #609".to_owned(), 609),
+                ("Test model #610".to_owned(), 610),
+                ("Test model #611".to_owned(), 611),
+                ("Test model #612".to_owned(), 612),
+                ("Test model #613".to_owned(), 613),
+                ("Test model #614".to_owned(), 614),
+                ("Test model #615".to_owned(), 615),
+                ("Test model #616".to_owned(), 616),
+                ("Test model #617".to_owned(), 617),
+                ("Test model #618".to_owned(), 618),
+                ("Test model #619".to_owned(), 619),
+                ("Test model #620".to_owned(), 620),
+                ("Test model #621".to_owned(), 621),
+                ("Test model #622".to_owned(), 622),
+                ("Test model #623".to_owned(), 623),
+                ("Test model #624".to_owned(), 624),
+                ("Test model #625".to_owned(), 625),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn reload_after_navigating_forward_then_back() {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        create_table(&stash).await;
+        create_records(&stash).await;
+
+        let (msg_sender, _msg_receiver) = flume::unbounded();
+        let paginator: Paginator<TestModel> = Paginator::new(
+            "WHERE number > ? ORDER BY number ASC",
+            vec![Param::Integer(600)],
+            &stash,
+            NonZeroU32::new(5).unwrap(),
+            Some(msg_sender),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(paginator.current_page_number().await, 1);
+        let page1 = paginator.current_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        assert_eq!(page1.len(), 5);
+
+        let page2 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        assert_eq!(page2.len(), 5);
+
+        let page3 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 3);
+        assert_eq!(page3.len(), 5);
+
+        let page4 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 4);
+        assert_eq!(page4.len(), 5);
+
+        let page5 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 5);
+        assert_eq!(page5.len(), 5);
+
+        let _page6 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 6);
+        assert_eq!(page5.len(), 5);
+
+        let page5b = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 5);
+        assert_eq!(page5b.len(), 5);
+
+        let page4b = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 4);
+        assert_eq!(page4b.len(), 5);
+
+        let reloaded = paginator.reload().await.unwrap();
+        assert_eq!(
+            reloaded
+                .into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #601".to_owned(), 601),
+                ("Test model #602".to_owned(), 602),
+                ("Test model #603".to_owned(), 603),
+                ("Test model #604".to_owned(), 604),
+                ("Test model #605".to_owned(), 605),
+                ("Test model #606".to_owned(), 606),
+                ("Test model #607".to_owned(), 607),
+                ("Test model #608".to_owned(), 608),
+                ("Test model #609".to_owned(), 609),
+                ("Test model #610".to_owned(), 610),
+                ("Test model #611".to_owned(), 611),
+                ("Test model #612".to_owned(), 612),
+                ("Test model #613".to_owned(), 613),
+                ("Test model #614".to_owned(), 614),
+                ("Test model #615".to_owned(), 615),
+                ("Test model #616".to_owned(), 616),
+                ("Test model #617".to_owned(), 617),
+                ("Test model #618".to_owned(), 618),
+                ("Test model #619".to_owned(), 619),
+                ("Test model #620".to_owned(), 620),
+            ]
+        );
+    }
 }
 
 #[cfg(test)]

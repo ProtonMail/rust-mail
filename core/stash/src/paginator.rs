@@ -551,6 +551,37 @@ impl<T: Model> Paginator<T> {
         self.current_page().await
     }
 
+    /// Reloads all data up to the cursor.
+    ///
+    /// Grabs **ALL** the rows that have been seen so far, without any kind of
+    /// limit or pagination, from the start right up to the current cursor
+    /// position.
+    ///
+    /// This does not attempt to prefetch anything, and does not update any
+    /// pagination state data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be fetched from the database.
+    ///
+    #[allow(clippy::missing_panics_doc)]
+    pub async fn reload(&self) -> Result<Vec<T>, StashError> {
+        #[allow(clippy::unwrap_used)]
+        T::find(
+            paging_query(
+                &self.query_logic,
+                0,
+                NonZeroU32::new(*self.cursor_index.lock().await)
+                    .unwrap()
+                    .saturating_add(self.page_size.into()),
+            ),
+            convert_params(&self.params),
+            &self.stash.clone(),
+            None,
+        )
+        .await
+    }
+
     /// Retrieves the total number of records in the result set.
     pub async fn result_count(&self) -> u32 {
         *self.row_count.lock().await
