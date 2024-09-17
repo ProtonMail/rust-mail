@@ -4134,6 +4134,36 @@ impl Message {
             .await
     }
 
+    /// Marks multiple messages as not deleted
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`        - The IDs of the conversations to undelete.
+    /// * `interface`  - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    pub async fn undelete_multiple<A>(ids: Vec<LocalId>, interface: &A) -> Result<usize, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        interface
+            .execute(
+                r"
+            UPDATE
+                messages
+            SET
+                deleted = 0
+            WHERE
+                local_id IN (?)
+            ",
+                params![ids.iter().map(ToString::to_string).collect_vec().join(",")],
+            )
+            .await
+    }
+
     /// Get the message counts.
     ///
     /// # Parameters
