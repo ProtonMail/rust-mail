@@ -1,7 +1,8 @@
+use crate::cache::{CacheError, CacheResult};
 use crate::datatypes::LightOrDarkMode;
 use crate::models::sender_image_cache::SenderImage;
 use crate::{CoreContextResult, UserContext};
-use proton_api_core::services::proton::requests::GetImagesLogoOptions;
+use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
 use stash::stash::{AgnosticInterface, Interface};
 use std::path::PathBuf;
@@ -44,7 +45,7 @@ impl UserContext {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let options = GetImagesLogoOptions {
+        let mut key = SenderImage {
             address: Some(address.to_owned()),
             bimi_selector: bimi_selector.map(ToOwned::to_owned),
             format,
@@ -53,17 +54,21 @@ impl UserContext {
             ..Default::default()
         };
 
-        let mut key: SenderImage = (&options).into();
+        // if record exist, get local_id else create record
         key.save_using(interface).await?;
-        if let Some(file) = self.images_logo_cache.get_item_path(&key) {
-            Ok(file)
-        } else {
-            let user_image = self
-                .session()
-                .api()
-                .get_images_logo(options.clone())
-                .await?;
-            Ok(self.images_logo_cache.add_item(key, user_image.as_ref())?)
-        }
+
+        Ok(self
+            .images_logo_cache
+            .get_path_or_insert(&key.clone(), self.get_images_logo(key))
+            .await?)
+    }
+
+    async fn get_images_logo(&self, key: SenderImage) -> CacheResult<Vec<u8>> {
+        self.session()
+            .api()
+            .get_images_logo(key.into())
+            .await
+            .map(|v| v.to_vec())
+            .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 }

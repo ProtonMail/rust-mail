@@ -32,6 +32,10 @@ use tracing::{error, warn};
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::module_name_repetitions)]
 pub enum CacheError {
+    /// Error from `QuickCache`
+    #[error("Insert in cache failed for key {0}")]
+    InsertFailed(String),
+
     /// Error from IO
     #[error("IO Error: {0}")]
     IO(#[from] std::io::Error),
@@ -276,7 +280,10 @@ where
         Ok(cache)
     }
 
-    /// Add an item to the cache
+    /// Add an item to the cache.
+    ///
+    /// Concurrent insert using this method can fail.
+    /// Use `get_path_or_insert` to prevent insert collision.
     ///
     /// # Params:
     /// * `key`: unique identifier for the item
@@ -286,23 +293,8 @@ where
     /// * Can't create file on disk
     /// * Can't write value in file
     pub fn add_item(&self, key: Config::Key, value: &[u8]) -> CacheResult<PathBuf> {
-        let file_path = self.path_from_key(&key);
-        // ToDo: ET-296 Do windows counterpart
-        let mut file = if cfg!(unix) {
-            OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .mode(0o600)
-                .open(file_path.clone())?
-        } else {
-            File::create(file_path.clone())?
-        };
-        file.write_all(value)?;
-        let metadata = Metadata {
-            file_path: file_path.clone(),
-            size: value.len() as u64,
-        };
+        let metadata = self.create_file(&key, value)?;
+        let file_path = metadata.file_path.clone();
         self.cache.insert(key, metadata);
         Ok(file_path)
     }
@@ -352,6 +344,36 @@ where
         self.cache.get(key).map(|v| v.file_path)
     }
 
+    /// Try to get the cached value, if it's not exist, insert it using the given function.
+    ///
+    /// # params:
+    /// * `key`  - unique identifier for the item.
+    /// * `with` - function to call to get the value to insert.
+    ///
+    /// # Errors
+    /// * if `with` call failed.
+    /// * if file can't be created.
+    /// * if insert in inner cache failed.
+    ///
+    pub async fn get_path_or_insert(
+        &self,
+        key: &Config::Key,
+        with: impl Future<Output = CacheResult<Vec<u8>>>,
+    ) -> CacheResult<PathBuf> {
+        match self.cache.get_value_or_guard_async(key).await {
+            Ok(metadata) => Ok(metadata.file_path),
+            Err(guard) => {
+                let value = with.await?;
+                let metadata = self.create_file(key, &value)?;
+                let file_path = metadata.file_path.clone();
+                guard
+                    .insert(metadata)
+                    .map_err(|_| CacheError::InsertFailed(format!("{key:?}")))?;
+                Ok(file_path)
+            }
+        }
+    }
+
     /// Remove a value from cache
     ///
     /// # params:
@@ -386,5 +408,26 @@ where
     pub fn path_from_key(&self, key: &Config::Key) -> PathBuf {
         let filename = Config::key_to_filename(key);
         self.cache_buf.clone().join(filename)
+    }
+
+    // Create file and return corresponding metadata
+    fn create_file(&self, key: &Config::Key, value: &[u8]) -> CacheResult<Metadata> {
+        let file_path = self.path_from_key(key);
+        // ToDo: ET-296 Do windows counterpart
+        let mut file = if cfg!(unix) {
+            OpenOptions::new()
+                .create(true)
+                .truncate(true)
+                .write(true)
+                .mode(0o600)
+                .open(file_path.clone())?
+        } else {
+            File::create(file_path.clone())?
+        };
+        file.write_all(value)?;
+        Ok(Metadata {
+            file_path,
+            size: value.len() as u64,
+        })
     }
 }

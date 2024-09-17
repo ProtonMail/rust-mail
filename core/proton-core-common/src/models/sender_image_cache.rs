@@ -99,7 +99,8 @@ impl SenderImage {
     }
 
     /// Create a query to request a `SenderImage`
-    fn build_query(&self) -> (String, Vec<Box<dyn ToSql + Send>>) {
+    #[must_use]
+    pub fn build_query(&self) -> (String, Vec<Box<dyn ToSql + Send>>) {
         fn build_field<T>(field: &Option<T>, name: &str) -> String {
             if field.is_some() {
                 format!("{name} = ?")
@@ -183,19 +184,23 @@ impl SenderImage {
             self.set_stash(interface.stash());
         }
 
-        let mut values = Self::find(query, params, interface, None).await?;
-        let value = match values.len() {
-            0 => return <Self as Model>::save_using(self, interface).await,
-            1 => values.get_mut(0).expect("One item present").clone(),
+        let transaction = interface.transaction().await?;
+        let mut values = Self::find(query, params, &transaction, None).await?;
+        match values.len() {
+            0 => <Self as Model>::save_using(self, &transaction).await?,
+            1 => {
+                let value = values.get_mut(0).expect("One item present").clone();
+                self.local_id = value.local_id;
+                self.stash.clone_from(&value.stash);
+                self.row_id = value.row_id;
+            }
             _ => {
                 return Err(StashError::Custom(
                     "Custom Unique constraint for SenderImage failed".to_owned(),
                 ))
             }
-        };
-        self.local_id = value.local_id;
-        self.stash.clone_from(&value.stash);
-        self.row_id = value.row_id;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 }
@@ -223,6 +228,20 @@ impl From<&GetImagesLogoOptions> for SenderImage {
             mode: value.mode.map(Into::into),
             size: value.size,
             ..Default::default()
+        }
+    }
+}
+
+impl From<SenderImage> for GetImagesLogoOptions {
+    fn from(value: SenderImage) -> Self {
+        Self {
+            address: value.address.clone(),
+            bimi_selector: value.bimi_selector.clone(),
+            domain: value.domain.clone(),
+            format: value.format.clone(),
+            max_scale_up_factor: value.max_scale_up_factor,
+            mode: value.mode.map(Into::into),
+            size: value.size,
         }
     }
 }

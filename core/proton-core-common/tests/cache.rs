@@ -1,9 +1,12 @@
+use futures::future::join_all;
 use proton_core_common::cache::{
     CacheConfig, CacheKey, CacheResult, ProtonCache, WeightingStrategy,
 };
 use std::ffi::OsString;
 use std::fs::{read_dir, File};
 use std::io::Read;
+use std::sync::Arc;
+use std::thread::spawn;
 use tempdir::TempDir;
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
@@ -37,6 +40,7 @@ impl CacheConfig for TestConfig {
     async fn handle_failed(_failed: Vec<TestKey>) -> CacheResult<()> {
         Ok(())
     }
+
     fn key_to_filename(key: &Self::Key) -> OsString {
         key.0.clone()
     }
@@ -261,4 +265,78 @@ async fn remove() {
     let file_count = dir.count();
     assert_eq!(cache.len(), 2);
     assert_eq!(file_count, 2);
+}
+
+#[tokio::test]
+async fn concurrent_insert_same() {
+    // Setup:
+    //   * Create a cache
+    let dir = TempDir::new("test").unwrap();
+    let dir = dir.into_path();
+    let cache = ProtonCache::<TestConfig>::new(dir.clone(), 1000, vec![])
+        .await
+        .unwrap();
+    let value = "A very big file".as_bytes();
+    let key = TestKey("Key".into());
+
+    // Actions:
+    //   * Add same items in a concurrent way
+    let mut tasks = vec![];
+    for _ in 0..10 {
+        let task = cache.get_path_or_insert(&key, async { Ok(value.to_vec()) });
+        tasks.push(task);
+    }
+
+    // Validation:
+    //   * No error happened
+    //   * Content value is as expected
+    for result in join_all(tasks).await {
+        let file = result.unwrap();
+        let mut file = File::open(file).unwrap();
+        let mut content = Vec::new();
+        file.read_to_end(&mut content).unwrap();
+        assert_eq!(content, value);
+    }
+}
+
+#[tokio::test]
+async fn concurrent_insert_different() {
+    // Setup:
+    //   * Create a cache
+    let dir = TempDir::new("test").unwrap();
+    let dir = dir.into_path();
+    let cache = Arc::new(
+        ProtonCache::<TestConfig>::new(dir.clone(), 1000, vec![])
+            .await
+            .unwrap(),
+    );
+
+    // Actions:
+    //   * Add same items in a concurrent way
+    let mut threads = vec![];
+    for i in 0..10 {
+        let cache = cache.clone();
+        let value = format!("{i}").as_bytes().to_owned();
+        let key = TestKey(format!("{i}").into());
+        let thread = spawn(move || cache.add_item(key.clone(), &value));
+        threads.push(thread);
+    }
+
+    // Validation:
+    //   * No error happened
+    //   * Content value is as expected
+    for path in threads.into_iter().map(|t| t.join().unwrap()) {
+        let path = path.unwrap();
+        let value = path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .as_bytes()
+            .to_owned();
+        let mut file = File::open(path).unwrap();
+        let mut content = Vec::new();
+        file.read_to_end(&mut content).unwrap();
+        assert_eq!(content, value);
+    }
 }
