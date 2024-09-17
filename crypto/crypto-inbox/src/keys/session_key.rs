@@ -41,6 +41,13 @@ crate::string_id! {
     SessionKeyExposed
 }
 
+impl SessionKeyExposed {
+    /// Decodes the session key and exposes it.
+    pub fn decode(&self) -> Result<Vec<u8>, DecodeError> {
+        BASE_64.decode(&self.0).map_err(Into::into)
+    }
+}
+
 impl ZeroizeOnDrop for SessionKeyExposed {}
 
 impl Drop for SessionKeyExposed {

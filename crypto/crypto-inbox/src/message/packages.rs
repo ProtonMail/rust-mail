@@ -9,7 +9,7 @@ use proton_crypto_account::{
 
 use crate::keys::InboxSessionKey;
 
-use super::MessageError;
+use super::{EncryptedMessageBody, MessageError, SessionKeyAndDataPacketsExtractable};
 
 const MEGABYTE: usize = 1024 * 1024;
 
@@ -40,13 +40,48 @@ impl From<EmailMimeType> for PackageMimeType {
 pub struct EncryptedPackageBody {
     /// The mime type of the package.
     pub mime_type: PackageMimeType,
+
     /// The message session key with which the package is encrypted.
     ///
     /// Provides methods to re-encrypt the message for new recipients
     /// or to expose the session key.
     pub session_key: InboxSessionKey,
+
     /// The encrypted body of the package in byte format.
-    pub encrypted_body: Vec<u8>, // TODO: Use new type from Rob's MR.
+    pub encrypted_body: EncryptedMessageBody,
+}
+
+impl EncryptedPackageBody {
+    /// Creates an [`EncryptedPackageBody`] from an existing draft.
+    ///
+    /// This function attempts to extract the session key from the provided draft using the given `decryption_keys`.
+    /// If successful, it constructs an [`EncryptedPackageBody`] with the specified `mime_type`.
+    ///
+    /// # Parameters
+    ///
+    /// * `provider` - The PGP implementation providing the functions required for message importing, separation, and decryption.
+    /// * `draft`: A reference to a type that implements the [`SessionKeyAndDataPacketsExtractable`] trait. This draft contains the PGP message from which the session key and data packets will be extracted.
+    /// * `mime_type`: The MIME type of the package to be created.
+    /// * `decryption_keys`: A slice of `OpenPGP `decryption private keys. These keys are used to attempt decryption of the session key contained within the draft.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`MessageError`] if the PGP message may not be imported (if it is malformed), or if decrypting the session key packet
+    /// fails.
+    pub fn with_draft<Provider: PGPProviderSync, Draft: SessionKeyAndDataPacketsExtractable>(
+        provider: &Provider,
+        draft: &Draft,
+        mime_type: PackageMimeType,
+        decryption_keys: &[impl AsRef<Provider::PrivateKey>],
+    ) -> Result<Self, MessageError> {
+        let (session_key, encrypted_body) =
+            draft.extract_session_key_and_data_packets(provider, decryption_keys)?;
+        Ok(Self {
+            mime_type,
+            session_key,
+            encrypted_body,
+        })
+    }
 }
 
 pub trait EncryptablePackage {
@@ -105,7 +140,7 @@ pub trait EncryptablePackage {
         Ok(EncryptedPackageBody {
             mime_type: self.package_mime_type(),
             session_key: InboxSessionKey::import_from_pgp_provider(&session_key)?,
-            encrypted_body,
+            encrypted_body: EncryptedMessageBody::from(encrypted_body),
         })
     }
 }

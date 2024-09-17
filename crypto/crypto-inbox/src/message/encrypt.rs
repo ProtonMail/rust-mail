@@ -1,4 +1,4 @@
-use crate::message::errors::MessageError;
+use crate::{keys::InboxSessionKey, message::errors::MessageError};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use proton_crypto_account::{
     keys::UnlockedAddressKey,
@@ -28,6 +28,12 @@ impl AsRef<[u8]> for EncryptedMessageBody {
 impl From<Vec<u8>> for EncryptedMessageBody {
     fn from(value: Vec<u8>) -> Self {
         Self(value)
+    }
+}
+
+impl From<EncryptedMessageBody> for Vec<u8> {
+    fn from(body: EncryptedMessageBody) -> Vec<u8> {
+        body.0
     }
 }
 
@@ -89,7 +95,7 @@ pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
         &self,
         provider: &Provider,
         decryption_keys: &[impl AsRef<Provider::PrivateKey>],
-    ) -> Result<(Provider::SessionKey, EncryptedMessageBody), MessageError> {
+    ) -> Result<(InboxSessionKey, EncryptedMessageBody), MessageError> {
         let message = provider
             .pgp_message_import(self.pgp_message(), DataEncoding::Armor)
             .map_err(MessageError::ImportProblem)?;
@@ -104,7 +110,7 @@ pub trait SessionKeyAndDataPacketsExtractable: GettablePGPMessage {
             .map_err(MessageError::Decryption)?;
 
         Ok((
-            decrypted_session_key,
+            InboxSessionKey::import_from_pgp_provider(&decrypted_session_key)?,
             EncryptedMessageBody::from(data_packets),
         ))
     }

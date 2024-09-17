@@ -81,7 +81,7 @@ fn test_package_with_key_packets_create() {
         .expect("key packet create must succeed");
     for (key_packet, recipient_key) in key_packets.iter().zip(recipients_priv.iter()) {
         let mut message = key_packet.decode().expect("decode must succeed");
-        message.extend(encrypted_package.encrypted_body.iter());
+        message.extend(encrypted_package.encrypted_body.as_ref().iter());
         let dec_result = pgp_provider
             .new_decryptor()
             .with_decryption_key(recipient_key)
@@ -105,5 +105,5 @@ fn test_package_create_mime_large_compression() {
     let encrypted_package = plain_package
         .package_body_encrypt(&pgp_provider, &address_key)
         .expect("should encrypt");
-    assert!(plain_package.content.len() > encrypted_package.encrypted_body.len());
+    assert!(plain_package.content.len() > encrypted_package.encrypted_body.as_ref().len());
 }

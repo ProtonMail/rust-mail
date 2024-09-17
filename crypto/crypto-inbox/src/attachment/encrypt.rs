@@ -11,7 +11,7 @@ use proton_crypto_account::proton_crypto::{
     CryptoError,
 };
 
-use crate::keys::{InboxSessionKey, SessionKeyError};
+use crate::keys::{InboxSessionKey, KeyPacket, SessionKeyError};
 
 use super::{AttachmentEncryptedSignature, AttachmentSignature, DecryptableAttachment, KeyPackets};
 
@@ -506,6 +506,29 @@ pub struct ExtractedAttachmentInfo {
 }
 
 impl ExtractedAttachmentInfo {
+    /// Creates a key packet for the provided recipient public key.
+    ///
+    /// Encrypts the internal symmetric session key with the provided public key
+    /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as a key packet in the Proton context).
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
+    /// * `recipient_key` - The recipient public key to encrypt the key packet to.
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
+    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
+    pub fn encrypt_session_key_to_recipient<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        recipient_key: &impl AsPublicKeyRef<Provider::PublicKey>,
+    ) -> Result<KeyPacket, SessionKeyError> {
+        self.session_key
+            .encrypt_to_recipient(pgp_provider, recipient_key)
+    }
+
     /// Encrypts the internal signature towards a new recipient if present.
     ///
     /// # Parameters

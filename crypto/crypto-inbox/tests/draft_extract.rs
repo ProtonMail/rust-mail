@@ -1,6 +1,9 @@
+use core::str;
+
+use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
 use proton_crypto_inbox::message::{GettablePGPMessage, SessionKeyAndDataPacketsExtractable};
 use proton_crypto_inbox::proton_crypto::crypto::{
-    DataEncoding, Decryptor, DecryptorSync, Encryptor, EncryptorSync, PGPProviderSync, SessionKey,
+    DataEncoding, Decryptor, DecryptorSync, Encryptor, EncryptorSync, PGPProviderSync,
     SessionKeyAlgorithm, VerifiedData,
 };
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
@@ -69,20 +72,26 @@ fn test_extract_keys_and_data_from_draft() {
         String::from_utf8(draft_data).expect("encoding to string should not fail"),
     );
 
-    let (key_packets, data_packets) = encrypted_draft
+    let (session_key, data_packets) = encrypted_draft
         .extract_session_key_and_data_packets(&pgp_provider, &[&private_key])
         .expect("extracting packets should not fail");
 
-    let exported_key = key_packets.export().as_ref().to_owned();
-
     assert_eq!(
-        String::from_utf8(exported_key).expect("string conversion should not fail"),
+        String::from_utf8(
+            BASE_64
+                .decode(session_key.expose_secret().as_ref())
+                .unwrap()
+        )
+        .expect("string conversion should not fail"),
         "Never gonna give/let you up/down"
     );
 
+    let session_key_provider = session_key
+        .export_to_pgp_provider(&pgp_provider)
+        .expect("Failed to export session key to provider");
     let decrypted_data = pgp_provider
         .new_decryptor()
-        .with_session_key(key_packets)
+        .with_session_key(session_key_provider)
         .decrypt(data_packets.as_ref(), DataEncoding::Bytes)
         .expect("decryption is not expected to fail");
 

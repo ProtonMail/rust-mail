@@ -51,7 +51,7 @@ pub struct ComposerPreference {
 }
 
 /// All possible encryption types as requested by the Proton API.
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Hash)]
 pub enum PackageCryptoType {
     /// Encrypted using `ProtonMail`'s native encryption.
     ProtonMail,
@@ -60,6 +60,7 @@ pub enum PackageCryptoType {
     EncryptedOutside,
 
     /// Message is not encrypted and is in plain text.
+    #[default]
     Cleartext,
 
     /// PGP encryption using inline PGP format.
