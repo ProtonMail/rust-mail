@@ -5,7 +5,7 @@ use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::LocalId;
+use proton_core_common::datatypes::{Id, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Interface, Stash, Tether};
 use tracing::error;
@@ -89,8 +89,9 @@ impl ActionHandler for Handler {
             error!("Delete messages operation failed for: {failed_ids:?}");
 
             let tx = stash.transaction().await?;
+            let local_ids = RemoteId::counterparts::<Message, _>(failed_ids.clone(), &tx).await?;
 
-            Message::undelete_multiple(failed_ids, &tx)
+            Message::undelete_multiple(local_ids, &tx)
                 .await
                 .inspect_err(|e| error!("Failed to rollback delete on messages: {e}"))?;
             tx.commit().await?;
