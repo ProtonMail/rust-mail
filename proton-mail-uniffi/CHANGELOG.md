@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Custom folders order are no more random.
-- 
+- The CSS for the html mails has been patched
+
 ## [0.11.44] - 2024-09-12
 
 ### Changed
