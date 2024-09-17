@@ -179,14 +179,14 @@ pub struct APIPublicKey {
     /// `OpenPGP` armored public key.
     pub public_key: String,
 }
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct APIPublicAddressKeyGroup {
     pub keys: Vec<APIPublicKey>,
     pub signed_key_list: Option<SignedKeyList>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct APIUnverifiedPublicAddressKeyGroup {
     pub keys: Vec<APIPublicKey>,
