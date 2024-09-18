@@ -181,6 +181,144 @@ async fn unlabel_message() {
     assert!(!message.label_ids.contains(&label_id));
 }
 
+#[tokio::test]
+async fn message_action_read_unread() {
+    // Setup:
+    //  * Create a Label
+    //  * Create a Message
+    let ctx = TestContext::new().await;
+    let user_context = ctx.user_context().await;
+    let stash = user_context.user_stash();
+
+    let label_id = LabelId::from("mylabel");
+    let label = test_label(&label_id);
+    let message = test_message();
+
+    let params = test_init_params_label(label);
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_messages_ok().await;
+    ctx.catch_all().await;
+
+    user_context
+        .initialize_async(&NullCallback {})
+        .await
+        .expect("failed to initialize");
+
+    // Create a mailbox and sync.
+    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox.sync(10).await.unwrap();
+
+    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], stash)
+        .await
+        .unwrap()
+        .unwrap();
+    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+
+    // This message starts as read
+    assert!(!message.unread);
+
+    // Actions:
+    //   * Mark message unread
+    Message::action_mark_unread(
+        user_context.session(),
+        user_context.queue(),
+        label.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
+
+    // Verification:
+    //   * The message is unread
+    let message = Message::load(1.into(), stash)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert!(message.unread);
+
+    // Actions:
+    //   * Mark message read
+    Message::action_mark_read(
+        user_context.session(),
+        user_context.queue(),
+        label.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
+
+    // Verification:
+    //   * The message is read
+    let message = Message::load(1.into(), stash)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert!(!message.unread);
+}
+
+#[tokio::test]
+async fn message_action_delete() {
+    // Setup:
+    //  * Create a Label
+    //  * Create a Message
+    let ctx = TestContext::new().await;
+    let user_context = ctx.user_context().await;
+    let stash = user_context.user_stash();
+
+    let label_id = LabelId::from("mylabel");
+    let label = test_label(&label_id);
+    let message = test_message();
+    let params = test_init_params_label(label);
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.mock_messages_ok().await;
+    ctx.catch_all().await;
+
+    user_context
+        .initialize_async(&NullCallback {})
+        .await
+        .expect("failed to initialize");
+
+    // Create a mailbox and sync.
+    let mailbox = Mailbox::with_remote_id(user_context.clone(), LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox.sync(10).await.unwrap();
+
+    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], stash)
+        .await
+        .unwrap()
+        .unwrap();
+    let message = Message::load(1.into(), stash).await.unwrap().unwrap();
+    assert!(!message.deleted);
+
+    // Actions:
+    //   * delete message
+    Message::action_delete(
+        user_context.session(),
+        user_context.queue(),
+        label.local_id.unwrap(),
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
+
+    // Verification:
+    //   * The message is marked as deleted
+    let message = Message::load(1.into(), stash)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert!(message.deleted);
+}
+
 fn test_init_params_label(label: ApiLabel) -> TestParams {
     let labels = hash_map! {
         ApiLabelType::Label: vec![label],
