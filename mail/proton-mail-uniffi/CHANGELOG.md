@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.11.45] - 2024-09-18
+
 ### Added
 
   - Added the following APIs: `delete_messages`, `mark_messages_read`, `mark_messages_unread`.
