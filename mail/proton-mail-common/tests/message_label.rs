@@ -1,6 +1,6 @@
 mod common;
 
-use crate::common::init::Params as TestParams;
+use crate::common::init::{NullCallback, Params as TestParams};
 use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -22,9 +22,10 @@ use proton_crypto_account::keys::{
 };
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Label, Message};
-use proton_mail_common::Mailbox;
+use proton_mail_common::{MailUserContext, Mailbox};
 use stash::orm::Model;
 use stash::params;
+use std::sync::Arc;
 use velcro::hash_map;
 
 const TEST_USER_ID: &str =
@@ -195,8 +196,7 @@ async fn message_action_read_unread() {
     ctx.mock_messages_ok().await;
     ctx.catch_all().await;
 
-    user_context
-        .initialize_async(&NullCallback {})
+    MailUserContext::initialize_async(Arc::clone(&user_context), &NullCallback {})
         .await
         .expect("failed to initialize");
 
@@ -274,8 +274,7 @@ async fn message_action_delete() {
     ctx.mock_messages_ok().await;
     ctx.catch_all().await;
 
-    user_context
-        .initialize_async(&NullCallback {})
+    MailUserContext::initialize_async(Arc::clone(&user_context), &NullCallback {})
         .await
         .expect("failed to initialize");
 
