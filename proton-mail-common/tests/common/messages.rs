@@ -2,13 +2,15 @@ use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::{
-    PutMessagesLabelRequest, PutMessagesUnlabelRequest,
+    PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
+    PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
-    GetMessageResponse, GetMessagesResponse, PutMessagesLabelResponse, PutMessagesUnlabelResponse,
+    GetMessageResponse, GetMessagesResponse, PutMessagesDeleteResponse, PutMessagesLabelResponse,
+    PutMessagesReadResponse, PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use proton_core_common::datatypes::RemoteId;
 use std::collections::HashSet;
@@ -81,6 +83,35 @@ impl TestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    pub async fn mock_messages_ok(&self) {
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/messages/delete"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(PutMessagesDeleteResponse { responses: vec![] }),
+            )
+            .mount(self.mock_server())
+            .await;
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/messages/read"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(PutMessagesReadResponse { responses: vec![] }),
+            )
+            .mount(self.mock_server())
+            .await;
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/messages/unread"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(PutMessagesUnreadResponse { responses: vec![] }),
+            )
             .mount(self.mock_server())
             .await;
     }
