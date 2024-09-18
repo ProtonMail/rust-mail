@@ -166,8 +166,8 @@ Sent with Proton Mail secure email.";
     let mut data = Vec::new();
     InboxMimeBuilder::new()
         .text_body(text)
-        .begin_html(html.as_bytes())
-        .end_html()
+        .begin_html_body(html.as_bytes())
+        .end_html_body()
         .inline_attachment(
             "36ff9cd9@proton.me",
             "proton_logo.png",
@@ -216,14 +216,14 @@ fn test_write_html() {
     let mut data = Vec::new();
     InboxMimeBuilder::new()
         .text_body(text)
-        .begin_html(html)
+        .begin_html_body(html)
         .inline_attachment(
             "inline_html",
             "inline_html_logo.png",
             Some("image/png"),
             b"inline_html",
         )
-        .end_html()
+        .end_html_body()
         .inline_attachment(
             "inline_attachment",
             "inline_attachment_logo.png",

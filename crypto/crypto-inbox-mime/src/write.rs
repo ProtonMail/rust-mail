@@ -18,7 +18,6 @@
 //!       - **Inline Image**: HTML only
 //!   - **Inline Image**: Relevant for all cases
 //!   - **Attachment**
-//!   - **Attachment**
 //!
 //! NOTE: There is no streaming API at the moment.
 use std::io::{self, Write};
@@ -66,7 +65,7 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 ///     .text_body("This is the plain text body of the email.")
 ///
 ///     // Begin the HTML part of the email
-///     .begin_html(br#"<html><body><h1>Hello</h1><img src="cid:image1"></body></html>"#)
+///     .begin_html_body(br#"<html><body><h1>Hello</h1><img src="cid:image1"></body></html>"#)
 ///     
 ///     // Add an inline attachment (an image in this case)
 ///     // The image only belongs to the html body part and will not be considered in
@@ -78,7 +77,7 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 ///         b"PNG image data"           // Content of the image
 ///     )
 ///     // Finalize the HTML part and return to the main builder
-///     .end_html()
+///     .end_html_body()
 ///     
 ///     //Add an attachment (a PDF file in this case)
 ///     .attachment(
@@ -87,7 +86,9 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 ///         b"%PDF-1.4 example data"    // Content of the file
 ///     )
 ///     
-///     // Add an inline attachment (an image in this case)
+///     // Add an inline attachment (an image in this case).
+///     // Inline attachments do not need to be added exclusively to the HTML section.
+///     // When added here, they will be available for both the HTML and plaintext versions of the email.
 ///     .inline_attachment(
 ///         "image2",                   // Content-ID for the inline image
 ///         "2.png",                    // Filename
@@ -134,13 +135,27 @@ impl<'x> InboxMimeBuilder<'x> {
         self
     }
 
-    /// Starts building the HTML body part of the message.
+    /// Sets the HTML body of the message without adding HTML-only inline attachments.
+    ///
+    /// If inline attachments are needed, use [`InboxMimeBuilder::begin_html_body`].
     ///
     /// # Parameters
     ///
-    /// * `html_body` - The HTML body of the email.
-    pub fn begin_html(self, html_body: &'x [u8]) -> HtmlMimeBuilder<'x> {
-        HtmlMimeBuilder::new(
+    /// * `html_body` - The HTML content of the email message.
+    pub fn html_body(self, html_body: &'x [u8]) -> InboxMimeBuilder<'x> {
+        self.begin_html_body(html_body).end_html_body()
+    }
+
+    /// Starts building the HTML body part of the message.
+    ///
+    /// Creates a builder that allows specifying HTML-specific inline attachments.
+    /// Once the body is complete, call [`HtmlMimeBuilder::end_html_body`].
+    ///
+    /// # Parameters
+    ///
+    /// * `html_body` - The HTML content of the email message.
+    pub fn begin_html_body(self, html_body: &'x [u8]) -> HtmlBodyPartBuilder<'x> {
+        HtmlBodyPartBuilder::new(
             self,
             MimePart::new(MIME_TYPE_HTML, BodyPart::Binary(html_body.into())),
         )
@@ -239,7 +254,7 @@ impl<'x> Default for InboxMimeBuilder<'x> {
     }
 }
 
-pub struct HtmlMimeBuilder<'x> {
+pub struct HtmlBodyPartBuilder<'x> {
     /// The message builder this builder belongs to.
     parent: InboxMimeBuilder<'x>,
 
@@ -250,7 +265,7 @@ pub struct HtmlMimeBuilder<'x> {
     inline_attachments: Vec<MimePart<'x>>,
 }
 
-impl<'x> HtmlMimeBuilder<'x> {
+impl<'x> HtmlBodyPartBuilder<'x> {
     /// Starts building an HTML part.
     fn new(parent: InboxMimeBuilder<'x>, html_body: MimePart<'x>) -> Self {
         Self {
@@ -289,7 +304,7 @@ impl<'x> HtmlMimeBuilder<'x> {
     }
 
     /// Finalizes the HTML body part.
-    pub fn end_html(mut self) -> InboxMimeBuilder<'x> {
+    pub fn end_html_body(mut self) -> InboxMimeBuilder<'x> {
         let mut parts = Vec::with_capacity(self.inline_attachments.len() + 1);
         parts.push(self.html_body);
         parts.extend(self.inline_attachments);
