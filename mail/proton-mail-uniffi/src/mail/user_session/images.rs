@@ -1,4 +1,3 @@
-use crate::mail::datatypes::MailSettings;
 use crate::mail::MailUserSession;
 use crate::mail::{MailSessionError, MailSessionResult};
 use crate::uniffi_async;
@@ -26,7 +25,6 @@ impl MailUserSession {
     #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,
-        mail_settings: MailSettings,
         address: String,
         bimi_selector: Option<String>,
         display_sender_image: bool,
@@ -39,7 +37,6 @@ impl MailUserSession {
             let mode = light_or_dark_mode_from_string(mode)?;
             if let Some(path) = ctx
                 .image_for_sender(
-                    &mail_settings.clone().into(),
                     address,
                     bimi_selector.as_deref(),
                     display_sender_image,

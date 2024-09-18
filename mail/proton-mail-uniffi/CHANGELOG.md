@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - Removed first argument (`mail_settings`) from `MailUserSession::image_for_sender`.
+
 ## [0.11.45] - 2024-09-18
 
 ### Added

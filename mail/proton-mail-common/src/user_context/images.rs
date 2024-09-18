@@ -1,6 +1,7 @@
-use crate::models::MailSettings;
+use crate::models::{MailSettings, MAIL_SETTINGS_ID};
 use crate::{MailContextResult, MailUserContext};
 use proton_core_common::datatypes::LightOrDarkMode;
+use stash::orm::Model;
 use std::path::PathBuf;
 
 impl MailUserContext {
@@ -28,7 +29,6 @@ impl MailUserContext {
     #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,
-        mail_settings: &MailSettings,
         address: String,
         bimi_selector: Option<&str>,
         display_sender_image: bool,
@@ -36,6 +36,10 @@ impl MailUserContext {
         mode: Option<LightOrDarkMode>,
         format: Option<String>,
     ) -> MailContextResult<Option<PathBuf>> {
+        let mail_settings = MailSettings::load(MAIL_SETTINGS_ID.into(), self.user_stash())
+            .await?
+            .unwrap_or_default();
+
         if mail_settings.hide_sender_images {
             // sender images are to be hidden, return nothing
             return Ok(None);
