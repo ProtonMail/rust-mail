@@ -68,7 +68,7 @@ impl EncryptedPackageBody {
     ///
     /// Returns a [`MessageError`] if the PGP message may not be imported (if it is malformed), or if decrypting the session key packet
     /// fails.
-    pub fn with_draft<Provider: PGPProviderSync, Draft: SessionKeyAndDataPacketsExtractable>(
+    pub fn new_with_draft<Provider: PGPProviderSync, Draft: SessionKeyAndDataPacketsExtractable>(
         provider: &Provider,
         draft: &Draft,
         mime_type: PackageMimeType,

@@ -3,6 +3,8 @@
 //! composing, encrypting, and sending emails with Proton.
 //!
 //! Note the example here is not complete.
+//!
+//! The tests only validate body decryption on the recipient side and no attachment decryption.
 use core::str;
 use std::collections::HashMap;
 
@@ -121,6 +123,160 @@ const EXPECTED_MESSAGE_EXTERNAL: &str = r#"<div style="font-family: Arial, sans-
 </div>
 "#;
 
+/// Simulates sending an email internally from a single sender to a single recipient.
+/// Assumes the email draft content is in HTML format and the recipient wants HTML-formatted emails.
+#[test]
+fn send_internal() {
+    let pgp_provider = new_pgp_provider();
+    let (mail_settings, draft, sender_keys) =
+        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
+    let recipient_preferences = send_logic::create_send_preferences(
+        &pgp_provider,
+        mail_settings,
+        recipient_keys::load_recipient_public_key_internal,
+        PackageMimeType::Html,
+    );
+
+    let encrypted_body = EncryptedPackageBody::new_with_draft(
+        &pgp_provider,
+        &draft,
+        PackageMimeType::Html,
+        &sender_keys,
+    )
+    .expect("Failed to create encrypted package body");
+
+    assert_eq!(draft.mime_type, "text/html");
+
+    let package = send_logic::process_package(
+        &pgp_provider,
+        draft.to_list.first().unwrap(),
+        &draft.attachments,
+        &encrypted_body,
+        &sender_keys,
+        recipient_preferences,
+    );
+
+    validate_decryption(
+        &package,
+        RECIPIENT_INTERNAL_DECRYPTION_KEY,
+        EXPECTED_MESSAGE_INTERNAL,
+    );
+}
+
+/// Simulates sending an email from a single internal sender to a single external recipient without keys.
+/// Assumes the email draft content is in HTML format and the recipient wants HTML-formatted emails.
+#[test]
+fn send_external_no_keys() {
+    let pgp_provider = new_pgp_provider();
+    let (mail_settings, draft, sender_keys) =
+        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
+    let recipient_preferences = send_logic::create_send_preferences(
+        &pgp_provider,
+        mail_settings,
+        recipient_keys::load_recipient_public_key_external_no_keys,
+        PackageMimeType::Html,
+    );
+
+    let encrypted_body = EncryptedPackageBody::new_with_draft(
+        &pgp_provider,
+        &draft,
+        PackageMimeType::Html,
+        &sender_keys,
+    )
+    .expect("Failed to create encrypted package body");
+
+    assert_eq!(draft.mime_type, "text/html");
+
+    let package = send_logic::process_package(
+        &pgp_provider,
+        draft.to_list.first().unwrap(),
+        &draft.attachments,
+        &encrypted_body,
+        &sender_keys,
+        recipient_preferences,
+    );
+
+    validate_decryption(
+        &package,
+        RECIPIENT_INTERNAL_DECRYPTION_KEY,
+        EXPECTED_MESSAGE_INTERNAL,
+    );
+}
+
+/// Simulates sending an email from a single internal sender to a single external recipient with `OpenPGP` keys.
+#[test]
+fn send_external_mime() {
+    let pgp_provider = new_pgp_provider();
+    let (mail_settings, draft, sender_keys) =
+        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_external);
+    let recipient_preferences = send_logic::create_send_preferences(
+        &pgp_provider,
+        mail_settings,
+        recipient_keys::load_recipient_public_key_external,
+        PackageMimeType::Multipart,
+    );
+
+    assert_eq!(draft.mime_type, "text/html");
+
+    let mime_body = send_logic::build_mime(&draft, &pgp_provider, &sender_keys);
+    let encrypted_body = mime_body
+        .package_body_encrypt(&pgp_provider, sender_keys.first().unwrap())
+        .expect("Package encryption failed");
+
+    let package = send_logic::process_package(
+        &pgp_provider,
+        draft.to_list.first().unwrap(),
+        &draft.attachments,
+        &encrypted_body,
+        &sender_keys,
+        recipient_preferences,
+    );
+
+    validate_decryption(
+        &package,
+        RECIPIENT_EXTERNAL_DECRYPTION_KEY,
+        EXPECTED_MESSAGE_EXTERNAL,
+    );
+}
+
+/// Simulates sending an email from a single internal sender to a single external recipient with `OpenPGP` keys but sign only.
+#[test]
+fn send_external_mime_sign_only() {
+    let pgp_provider = new_pgp_provider();
+    let (mail_settings, draft, sender_keys) =
+        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
+    let mut recipient_preferences = send_logic::create_send_preferences(
+        &pgp_provider,
+        mail_settings,
+        recipient_keys::load_recipient_public_key_external,
+        PackageMimeType::Multipart,
+    );
+    recipient_preferences.encrypt = false;
+    recipient_preferences.pgp_scheme = PackageCryptoType::ClearMime;
+
+    assert_eq!(draft.mime_type, "text/html");
+
+    let mime_body = send_logic::build_mime(&draft, &pgp_provider, &sender_keys);
+    let encrypted_body = mime_body
+        .package_body_encrypt(&pgp_provider, sender_keys.first().unwrap())
+        .expect("Package encryption failed");
+
+    let package = send_logic::process_package(
+        &pgp_provider,
+        draft.to_list.first().unwrap(),
+        &draft.attachments,
+        &encrypted_body,
+        &sender_keys,
+        recipient_preferences,
+    );
+
+    validate_decryption(
+        &package,
+        RECIPIENT_EXTERNAL_DECRYPTION_KEY,
+        EXPECTED_MESSAGE_EXTERNAL,
+    );
+}
+
 /// Contains all test models for the send email request.
 mod send_request {
 
@@ -142,7 +298,7 @@ mod send_request {
         pub mime_type: PackageMimeType,
         pub package_type: i32,
         pub body_key: Option<ExposedKey>,
-        pub attachment_keys: Vec<ExposedKey>,
+        pub attachment_keys: HashMap<String, ExposedKey>,
         pub body: Option<Vec<u8>>,
     }
 
@@ -150,9 +306,9 @@ mod send_request {
     pub struct SendAddress {
         pub address_type: PackageCryptoType,
         pub body_key_packet: Option<KeyPacket>,
-        pub attachment_key_packets: Option<Vec<KeyPacket>>,
-        pub attachment_enc_signatures: Option<Vec<AttachmentEncryptedSignature>>,
-        pub signature: bool,
+        pub attachment_key_packets: Option<HashMap<String, KeyPacket>>,
+        pub attachment_enc_signatures: Option<HashMap<String, AttachmentEncryptedSignature>>,
+        pub signature: Option<PackageSignaturesMode>,
         pub token: Option<String>,
         pub enc_token: Option<String>,
         pub auth: Option<()>,
@@ -170,6 +326,23 @@ mod send_request {
             Self {
                 key: value.expose_secret(),
                 algorithm: value.algorithm(),
+            }
+        }
+    }
+
+    #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+    pub enum PackageSignaturesMode {
+        #[default]
+        None = 0,
+        Attachments = 1,
+    }
+
+    impl From<bool> for PackageSignaturesMode {
+        fn from(value: bool) -> Self {
+            if value {
+                Self::Attachments
+            } else {
+                Self::None
             }
         }
     }
@@ -402,155 +575,9 @@ mod sender_keys {
     }
 }
 
-#[test]
-fn send_internal() {
-    let pgp_provider = new_pgp_provider();
-    let (mail_settings, draft, sender_keys) =
-        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
-    let recipient_preferences = send_logic::create_send_preferences(
-        &pgp_provider,
-        mail_settings,
-        recipient_keys::load_recipient_public_key_internal,
-        PackageMimeType::Html,
-    );
-
-    let encrypted_body = EncryptedPackageBody::with_draft(
-        &pgp_provider,
-        &draft,
-        PackageMimeType::Html,
-        &sender_keys,
-    )
-    .expect("Failed to create encrypted package body");
-
-    assert_eq!(draft.mime_type, "text/html");
-
-    let package = send_logic::process_package(
-        &pgp_provider,
-        draft.to_list.first().unwrap(),
-        &draft.attachments,
-        &encrypted_body,
-        &sender_keys,
-        recipient_preferences,
-    );
-
-    validate_decryption(
-        &package,
-        RECIPIENT_INTERNAL_DECRYPTION_KEY,
-        EXPECTED_MESSAGE_INTERNAL,
-    );
-}
-
-#[test]
-fn send_external_no_keys() {
-    let pgp_provider = new_pgp_provider();
-    let (mail_settings, draft, sender_keys) =
-        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
-    let recipient_preferences = send_logic::create_send_preferences(
-        &pgp_provider,
-        mail_settings,
-        recipient_keys::load_recipient_public_key_external_no_keys,
-        PackageMimeType::Html,
-    );
-
-    let encrypted_body = EncryptedPackageBody::with_draft(
-        &pgp_provider,
-        &draft,
-        PackageMimeType::Html,
-        &sender_keys,
-    )
-    .expect("Failed to create encrypted package body");
-
-    assert_eq!(draft.mime_type, "text/html");
-
-    let package = send_logic::process_package(
-        &pgp_provider,
-        draft.to_list.first().unwrap(),
-        &draft.attachments,
-        &encrypted_body,
-        &sender_keys,
-        recipient_preferences,
-    );
-
-    validate_decryption(
-        &package,
-        RECIPIENT_INTERNAL_DECRYPTION_KEY,
-        EXPECTED_MESSAGE_INTERNAL,
-    );
-}
-
-#[test]
-fn send_external_mime() {
-    let pgp_provider = new_pgp_provider();
-    let (mail_settings, draft, sender_keys) =
-        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_external);
-    let recipient_preferences = send_logic::create_send_preferences(
-        &pgp_provider,
-        mail_settings,
-        recipient_keys::load_recipient_public_key_external,
-        PackageMimeType::Multipart,
-    );
-
-    assert_eq!(draft.mime_type, "text/html");
-
-    let mime_body = send_logic::build_mime(&draft, &pgp_provider, &sender_keys);
-    let encrypted_body = mime_body
-        .package_body_encrypt(&pgp_provider, sender_keys.first().unwrap())
-        .expect("Package encryption failed");
-
-    let package = send_logic::process_package(
-        &pgp_provider,
-        draft.to_list.first().unwrap(),
-        &draft.attachments,
-        &encrypted_body,
-        &sender_keys,
-        recipient_preferences,
-    );
-
-    validate_decryption(
-        &package,
-        RECIPIENT_EXTERNAL_DECRYPTION_KEY,
-        EXPECTED_MESSAGE_EXTERNAL,
-    );
-}
-
-#[test]
-fn send_external_mime_sign_only() {
-    let pgp_provider = new_pgp_provider();
-    let (mail_settings, draft, sender_keys) =
-        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
-    let mut recipient_preferences = send_logic::create_send_preferences(
-        &pgp_provider,
-        mail_settings,
-        recipient_keys::load_recipient_public_key_external,
-        PackageMimeType::Multipart,
-    );
-    recipient_preferences.encrypt = false;
-    recipient_preferences.pgp_scheme = PackageCryptoType::ClearMime;
-
-    assert_eq!(draft.mime_type, "text/html");
-
-    let mime_body = send_logic::build_mime(&draft, &pgp_provider, &sender_keys);
-    let encrypted_body = mime_body
-        .package_body_encrypt(&pgp_provider, sender_keys.first().unwrap())
-        .expect("Package encryption failed");
-
-    let package = send_logic::process_package(
-        &pgp_provider,
-        draft.to_list.first().unwrap(),
-        &draft.attachments,
-        &encrypted_body,
-        &sender_keys,
-        recipient_preferences,
-    );
-
-    validate_decryption(
-        &package,
-        RECIPIENT_EXTERNAL_DECRYPTION_KEY,
-        EXPECTED_MESSAGE_EXTERNAL,
-    );
-}
-
 mod send_logic {
+    use send_request::PackageSignaturesMode;
+
     use super::*;
 
     pub fn setup_test_environment<Provider: PGPProviderSync>(
@@ -654,17 +681,13 @@ mod send_logic {
             }
             PackageCryptoType::Cleartext => {
                 top_package.body_key = Some(draft_sk.to_owned().into());
-                process_attachment_cleartext(
-                    top_package,
-                    &mut address_package,
-                    pgp_provider,
-                    attachments,
-                    sender_keys,
-                    recipient_send_preferences.sign,
-                );
+                process_attachment_cleartext(top_package, pgp_provider, attachments, sender_keys);
+                address_package.signature = Some(PackageSignaturesMode::None);
             }
             PackageCryptoType::ClearMime => {
                 top_package.body_key = Some(draft_sk.to_owned().into());
+                address_package.signature =
+                    Some(PackageSignaturesMode::from(recipient_send_preferences.sign));
             }
             PackageCryptoType::PgpInline | PackageCryptoType::EncryptedOutside => {
                 panic!("Not supported")
@@ -677,25 +700,18 @@ mod send_logic {
 
     fn process_attachment_cleartext<Provider: PGPProviderSync>(
         top_package: &mut send_request::SendPackage,
-        address_package: &mut send_request::SendAddress,
         pgp_provider: &Provider,
         attachments: &[models::Attachment],
         sender_keys: &[impl AsRef<Provider::PrivateKey>],
-        sign: bool,
     ) {
-        let mut sign = sign;
         for attachment in attachments {
-            if attachment.signature.is_none() && attachment.enc_signature.is_none() {
-                sign = false;
-            }
             let attachment_info = attachment
                 .decrypt_attachment_info(pgp_provider, sender_keys)
                 .expect("Failed to extract attachment info");
             top_package
                 .attachment_keys
-                .push(attachment_info.session_key.into());
+                .insert(attachment.id.clone(), attachment_info.session_key.into());
         }
-        address_package.signature = sign;
     }
 
     fn process_attachments<Provider: PGPProviderSync>(
@@ -706,8 +722,8 @@ mod send_logic {
         recipient_key: &Provider::PublicKey,
         sign: bool,
     ) {
-        let mut attachment_key_packets = Vec::with_capacity(attachments.len());
-        let mut attachment_enc_signatures = Vec::with_capacity(attachments.len());
+        let mut attachment_key_packets = HashMap::with_capacity(attachments.len());
+        let mut attachment_enc_signatures = HashMap::with_capacity(attachments.len());
         let mut sign = sign;
 
         for attachment in attachments {
@@ -730,15 +746,15 @@ mod send_logic {
                 .encrypt_signature_to_recipient(pgp_provider, recipient_key)
                 .expect("Failed to encrypt signature to recipient")
             {
-                attachment_enc_signatures.push(enc_signature);
+                attachment_enc_signatures.insert(attachment.id.clone(), enc_signature);
             }
 
-            attachment_key_packets.push(recipient_attachment_kp);
+            attachment_key_packets.insert(attachment.id.clone(), recipient_attachment_kp);
         }
 
         address_package.attachment_key_packets = Some(attachment_key_packets);
         address_package.attachment_enc_signatures = Some(attachment_enc_signatures);
-        address_package.signature = sign;
+        address_package.signature = Some(PackageSignaturesMode::from(sign));
     }
 
     #[derive(Debug)]

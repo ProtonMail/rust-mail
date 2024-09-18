@@ -265,7 +265,7 @@ impl<Pub: PublicKey> RecipientPublicKeyModel<Pub> {
         contact_type: ContactType,
     ) -> Option<bool> {
         if contact_type == ContactType::ExternalWithApiKeys && pinned_keys.is_none() {
-            // Enable encryption for external user's with API keys.
+            // Enable encryption for external users with API keys.
             return Some(true);
         }
         pinned_keys.as_ref().map(|keys| {
