@@ -18,6 +18,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::{MailUserContext, Mailbox};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 #[tokio::test]
 async fn paginate_conversations() {
@@ -91,8 +92,7 @@ async fn paginate_conversations() {
 
     ctx.catch_all().await;
     let cb = NullCallback {};
-    user_ctx
-        .initialize_async(&cb)
+    MailUserContext::initialize_async(Arc::clone(&user_ctx), &cb)
         .await
         .expect("failed to initialize");
 
@@ -196,8 +196,7 @@ async fn paginate_messages() {
 
     ctx.catch_all().await;
     let cb = NullCallback {};
-    user_ctx
-        .initialize_async(&cb)
+    MailUserContext::initialize_async(Arc::clone(&user_ctx), &cb)
         .await
         .expect("failed to initialize");
 
