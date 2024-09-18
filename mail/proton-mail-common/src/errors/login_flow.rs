@@ -163,6 +163,8 @@ impl From<AppError> for UserLoginFlowError {
             | AppError::MessageMissing(_)
             | AppError::EmptyListOfConversations
             | AppError::EmptyListOfMessages
+            | AppError::NoConversationWithValidRemoteIdFoundInPage
+            | AppError::NoMessageWithValidRemoteIdFoundInPage
             | AppError::ConversationDoesNotHaveLabel(_, _) => {
                 Self::Unexpected(Unexpected::Internal)
             }

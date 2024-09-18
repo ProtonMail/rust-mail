@@ -19,6 +19,7 @@ use proton_api_core::services::proton::responses::{
     GetUsersResponse,
 };
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
+use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::response_data::MessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, Conversation as ApiConversation,
@@ -460,6 +461,50 @@ impl TestContext {
             .await;
     }
 
+    /// Generate new mock expectations for retrieving conversations pages.
+    ///
+    /// This function will mock the response for the given conversations.
+    ///
+    /// # Parameters
+    ///
+    /// * `conversations` - The list of conversations to respond with.
+    /// * `end_id`        - The id of last page element
+    /// * `end_time`      - The end time of last page element
+    /// * `page_size`     - Size of the page.
+    /// * `total`         - Total number of pages.
+    /// * `expect`        - How many times the endpoint should be called.
+    ///
+    pub async fn mock_get_conversations_page(
+        &self,
+        conversations: Vec<ApiConversation>,
+        end_id: Option<RemoteId>,
+        end_time: Option<u64>,
+        page_size: u64,
+        total: u64,
+        expect: u64,
+    ) {
+        let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/conversations"));
+
+        if let Some(id) = end_id {
+            mock = mock.and(query_param("EndID", id.to_string()))
+        }
+        if let Some(time) = end_time {
+            mock = mock.and(query_param("End", time.to_string()));
+        }
+
+        mock.and(query_param("PageSize", page_size.to_string()))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                    conversations,
+                    stale: false,
+                    total,
+                }),
+            )
+            .expect(expect)
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate new mock expectations for retrieving message metadata.
     ///
     /// This function will mock the response for the given message metadata.
@@ -472,6 +517,50 @@ impl TestContext {
     pub async fn mock_get_message_metadata(&self, metadata: Vec<MessageMetadata>, expect: u64) {
         Mock::given(method("GET"))
             .and(path("/api/mail/v4/messages"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+                    messages: metadata,
+                    stale: false,
+                    total: 1,
+                }),
+            )
+            .expect(expect)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving message metadata pages.
+    ///
+    /// This function will mock the response for the given message metadata.
+    ///
+    /// # Parameters
+    ///
+    /// * `metadata`  - The list of message to respond with.
+    /// * `end_id`    - The id of last page element
+    /// * `end_time`  - The end time of last page element
+    /// * `page_size` - Size of the page.
+    /// * `total`     - Total number of pages.
+    /// * `expect`    - How many times the endpoint should be called.
+    ///
+    pub async fn mock_get_message_metadata_page(
+        &self,
+        metadata: Vec<MessageMetadata>,
+        end_id: Option<RemoteId>,
+        end_time: Option<u64>,
+        page_size: u64,
+        total: u64,
+        expect: u64,
+    ) {
+        let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages"));
+
+        if let Some(id) = end_id {
+            mock = mock.and(query_param("EndID", id.to_string()))
+        }
+        if let Some(time) = end_time {
+            mock = mock.and(query_param("End", time.to_string()));
+        }
+
+        mock.and(query_param("PageSize", page_size.to_string()))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
                     messages: metadata,

@@ -9,8 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Custom folders order are no more random.
-- The CSS for the html mails has been patched
+  - Custom folders order are no more random.
+  - The CSS for the html mails has been patched
+
+### Changed
+
+  - `paginate_conversations_for_label` and `paginate_message_for_label` now sync data from the
+     server.
+  - `Mailbox` syncs 50 elements to match pagination behavior.
 
 ## [0.11.44] - 2024-09-12
 

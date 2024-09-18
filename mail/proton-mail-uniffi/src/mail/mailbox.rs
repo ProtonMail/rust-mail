@@ -94,7 +94,7 @@ pub trait MailboxBackgroundResult: Send + Sync {
     fn on_background_result(&self, error: Option<MailboxError>);
 }
 
-const DEFAULT_CONVERSATION_COUNT: usize = 200;
+const DEFAULT_CONVERSATION_COUNT: usize = 50;
 
 #[uniffi::export]
 impl Mailbox {

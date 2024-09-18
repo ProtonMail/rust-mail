@@ -5,7 +5,7 @@ use proton_core_common::datatypes::LabelId;
 use proton_core_common::db::session::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
-use proton_mail_common::models::Conversation;
+use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContextInitializationCallback,
     MailUserContextLoadingStage, Mailbox,
@@ -42,7 +42,7 @@ async fn main() {
                     proton_core_common=trace,proton_mail_common=trace,\
                     proton_event_loop=trace,proton_api_core=trace,\
                     proton_action_queue=trace,proton_api_mail=trace,\
-                    stash=trace",
+                    stash=error",
         );
     tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(env_filter)
@@ -80,24 +80,28 @@ async fn main() {
     let mailbox = Mailbox::with_remote_id(Arc::clone(&user_ctx), LabelId::inbox())
         .await
         .unwrap();
-    Conversation::sync_first_conversation_page(
-        LabelId::inbox(),
-        200,
-        user_ctx.session().api(),
-        user_ctx.user_stash(),
-    )
-    .await
-    .unwrap();
+
+    let page_count = 5_u32;
+
     let paginator =
-        Conversation::paginate_in_label(mailbox.label_id(), 25, user_ctx.user_stash(), None)
+        Conversation::paginate_in_label(&user_ctx, mailbox.label_id(), page_count, None)
             .await
             .unwrap();
+    // Uncomment for messages.
+    /*
+    let paginator = Message::paginate_in_label(
+        &user_ctx,
+        mailbox.label_id(),
+        page_count,
+        user_ctx.user_stash(),
+        None,
+    )
+    .await
+    .unwrap();*/
 
-    let conversations = paginator.current_page().await.unwrap();
-
-    let conversations = conversations
-        .into_iter()
-        .filter_map(|c| ContextualConversation::new(c, mailbox.label_id()))
-        .collect::<Vec<_>>();
-    assert_eq!(conversations.len(), 25);
+    let page_1 = paginator.current_page().await.unwrap();
+    assert_eq!(page_1.len(), page_count as usize);
+    let page_2 = paginator.next_page().await.unwrap();
+    assert_eq!(page_2.len(), page_count as usize);
+    assert_ne!(page_1.last().unwrap(), page_2.first().unwrap());
 }
