@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.11.46] - 2024-09-18
+
 ### Changed
 
   - Removed first argument (`mail_settings`) from `MailUserSession::image_for_sender`.
+  - `MailUserSession::initialize` now fetches data in parallel.
 
 ## [0.11.45] - 2024-09-18
 
