@@ -145,7 +145,8 @@ impl CacheAttachmentKey {
 
     /// Set the cached status of this `Attachment`.
     async fn set_cache_status(&self, status: bool) -> Result<(), AppError> {
-        let attachment = Attachment::load(self.attachment_id.into(), &self.stash)
+        let transaction = self.stash.transaction().await?;
+        let attachment = Attachment::load(self.attachment_id.into(), &transaction)
             .await
             .inspect_err(|e| error!("Couldn't load Attachment: {e}"))?;
         let Some(mut attachment) = attachment else {
@@ -154,9 +155,10 @@ impl CacheAttachmentKey {
         };
         attachment.cached = status;
         attachment
-            .save()
+            .save_using(&transaction)
             .await
             .inspect_err(|e| error!("Couldn't save attachment: {e}"))?;
+        transaction.commit().await?;
         Ok(())
     }
 }
@@ -255,7 +257,8 @@ impl CacheMessageKey {
 
     /// Set the cached status of a MessageBody.
     async fn set_cached_status(&self, status: bool) -> Result<(), AppError> {
-        let message = Message::load(self.message_id.into(), &self.stash)
+        let transaction = self.stash.transaction().await?;
+        let message = Message::load(self.message_id.into(), &transaction)
             .await
             .inspect_err(|e| error!("Couldn't load message: {e}"))?;
         let Some(mut message) = message else {
@@ -264,9 +267,10 @@ impl CacheMessageKey {
         };
         message.cached = status;
         message
-            .save()
+            .save_using(&transaction)
             .await
             .inspect_err(|e| error!("Couldn't save message: {e}"))?;
+        transaction.commit().await?;
         Ok(())
     }
 }
