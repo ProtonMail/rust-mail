@@ -410,13 +410,13 @@ pub async fn paginate_conversations_for_label(
     label_id: Id,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<ConversationPaginator, MailboxError> {
-    let stash = session.user_stash().clone();
+    let context = session.ctx();
     let (msg_sender, msg_receiver) = flume::unbounded();
     uniffi_async(async move {
         let real_paginator = RealConversation::paginate_in_label(
+            &context,
             RealLocalId::from(label_id),
             50,
-            &stash,
             Some(msg_sender),
         )
         .await?;

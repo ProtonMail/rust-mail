@@ -9,7 +9,10 @@ use crate::mail::MailboxError;
 use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
 use proton_mail_common::datatypes::ContextualConversation;
-use proton_mail_common::models::{Conversation as RealConversation, Message as RealMessage};
+use proton_mail_common::models::{
+    Conversation as RealConversation, ConversationDataSource, Message as RealMessage,
+    MessageDataSource,
+};
 use stash::paginator::Paginator as RealPaginator;
 use std::sync::Arc;
 
@@ -27,7 +30,7 @@ use std::sync::Arc;
 #[derive(uniffi::Object)]
 pub struct ConversationPaginator {
     /// The "real" paginator that does the heavy lifting.
-    pub(crate) real_paginator: RealPaginator<RealConversation>,
+    pub(crate) real_paginator: RealPaginator<RealConversation, ConversationDataSource>,
 
     /// The handle to stop watching the data.
     pub(crate) handle: Arc<WatchHandle>,
@@ -152,7 +155,7 @@ impl ConversationPaginator {
 #[derive(uniffi::Object)]
 pub struct MessagePaginator {
     /// The "real" paginator that does the heavy lifting.
-    pub(crate) real_paginator: RealPaginator<RealMessage>,
+    pub(crate) real_paginator: RealPaginator<RealMessage, MessageDataSource>,
 
     /// The handle to stop watching the data.
     pub(crate) handle: Arc<WatchHandle>,

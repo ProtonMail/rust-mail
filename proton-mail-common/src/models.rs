@@ -50,13 +50,13 @@ use crate::datatypes::{
 };
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use bytes::Bytes;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
-use proton_api_core::session::CoreSession;
+use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::requests::{
     GetConversationsOptions, GetMessagesOptions, PatchLabelRequest, PostLabelsRequest,
     PutLabelRequest,
@@ -89,7 +89,7 @@ use smart_default::SmartDefault;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
-use stash::paginator::{Paginator, Param};
+use stash::paginator::{DataSource, Paginator, Param};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::btree_map::Entry;
@@ -2624,23 +2624,21 @@ impl Conversation {
     ///
     /// # Params
     ///
+    /// * `context`        - Active user context.
     /// * `local_label_id` - Label where to paginate in.
     /// * `page_count`     - Number of elements per page.
-    /// * `interface`      - Connection to the database.
     /// * `queue`          - Optional subscriber for changes.
     ///
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn paginate_in_label<A>(
+    pub async fn paginate_in_label(
+        context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
-        interface: &A,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
-    ) -> Result<Paginator<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    ) -> Result<Paginator<Self, ConversationDataSource>, AppError> {
+        let remote_source = ConversationDataSource::new(context, local_label_id).await?;
         Paginator::new(
             formatdoc!(
                 "
@@ -2658,9 +2656,10 @@ impl Conversation {
                     StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
                 })?,
             )],
-            interface,
+            context.user_stash(),
             NonZeroU32::new(page_count)
                 .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
+            remote_source,
             queue,
         )
         .await
@@ -5676,23 +5675,21 @@ impl Message {
     ///
     /// # Params
     ///
+    /// * `context`        - Active user context.
     /// * `local_label_id` - Label where to paginate in.
     /// * `page_count`     - Number of elements per page.
-    /// * `interface`      - Connection to the database.
     /// * `queue`          - Optional subscriber for changes.
     ///
     /// # Errors
     ///
     /// Returns error if the query fails.
-    pub async fn paginate_in_label<A>(
+    pub async fn paginate_in_label(
+        context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
-        interface: &A,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
-    ) -> Result<Paginator<Self>, StashError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
+    ) -> Result<Paginator<Self, MessageDataSource>, AppError> {
+        let remote_source = MessageDataSource::new(context, local_label_id).await?;
         Paginator::new(
             formatdoc!(
                 "
@@ -5710,9 +5707,10 @@ impl Message {
                     StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
                 })?,
             )],
-            interface,
+            context.user_stash(),
             NonZeroU32::new(page_count)
                 .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
+            remote_source,
             queue,
         )
         .await
@@ -5969,5 +5967,292 @@ impl ConversationMessageLabelStats {
         }
 
         stats
+    }
+}
+
+/// A data source for a [`Paginator`] which syncs pages of [`Message`]s in
+/// a [`Label`].
+pub struct ConversationDataSource {
+    /// Session for network request
+    session: Session,
+    /// Local id of the label.
+    remote_label_id: LabelId,
+    /// Remote id of the label.
+    local_label_id: LocalId,
+}
+
+impl ConversationDataSource {
+    /// Create a new data source for the given `label_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the remote id for the label can't be resolved.
+    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+        let Some(remote_id) = label_id
+            .counterpart::<Label, _>(context.user_stash())
+            .await?
+        else {
+            return Err(AppError::LabelDoesNotHaveRemoteId(label_id));
+        };
+
+        Ok(Self {
+            remote_label_id: remote_id.into(),
+            session: context.session().clone(),
+            local_label_id: label_id,
+        })
+    }
+}
+
+impl DataSource for ConversationDataSource {
+    type Item = Conversation;
+    type Error = AppError;
+
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
+    async fn total(&self, stash: &Stash) -> Result<usize, Self::Error> {
+        let label = Label::find_by_id(self.local_label_id, stash)
+            .await?
+            .ok_or(AppError::LabelNotFound(self.local_label_id))?;
+        debug!("Total conversations: {}", label.total_conv);
+        Ok(label.total_conv.try_into().unwrap_or(0))
+    }
+
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
+    async fn sync_first_page(
+        &self,
+        page_size: NonZeroU32,
+        stash: &Stash,
+    ) -> Result<(), Self::Error> {
+        let response = self
+            .session
+            .api()
+            .get_conversations(GetConversationsOptions {
+                desc: Some(true),
+                label_id: Some(self.remote_label_id.clone().into()),
+                page_size: page_size.get().into(),
+                ..Default::default()
+            })
+            .await?;
+        debug!(
+            "Fetched {} conversations. Total={}",
+            response.conversations.len(),
+            response.total
+        );
+        let tx = stash.transaction().await?;
+        for conversation in response.conversations {
+            let mut conversation: Conversation = conversation.into();
+            conversation.save_using(&tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash, elements))]
+    async fn sync_page_after(
+        &self,
+        _: u32,
+        page_size: NonZeroU32,
+        elements: Vec<Self::Item>,
+        stash: &Stash,
+    ) -> Result<(), Self::Error> {
+        // Find the first last element with a valid remote id.
+        let Some(last_element) = elements
+            .iter()
+            .rev()
+            .find(|element| element.remote_id.is_some())
+        else {
+            return Err(AppError::NoConversationWithValidRemoteIdFoundInPage);
+        };
+        // Safe to unwrap as we have validated this before.
+        let last_element_id: proton_api_core::services::proton::common::RemoteId =
+            last_element.remote_id.clone().unwrap().into();
+
+        debug!("Last Element= {last_element_id}");
+
+        let Some(last_element_time) = last_element
+            .labels
+            .iter()
+            .find(|l| l.local_label_id.unwrap() == self.local_label_id)
+            .map(|v| v.context_time)
+        else {
+            return Err(AppError::Other(anyhow!(
+                "Conversation does not have active label"
+            )));
+        };
+
+        let mut response = self
+            .session
+            .api()
+            .get_conversations(GetConversationsOptions {
+                desc: Some(true),
+                end: Some(last_element_time),
+                end_id: Some(last_element_id.clone()),
+                label_id: Some(self.remote_label_id.clone().into()),
+                page_size: page_size.get() as u64 + 1_u64,
+                ..Default::default()
+            })
+            .await?;
+        debug!(
+            "Fetched {} conversations. Total={}",
+            response.conversations.len(),
+            response.total
+        );
+
+        // `end_id` always returns the given conversation in the search results
+        // if it exists.
+        if response.conversations.is_empty() {
+            return Ok(());
+        }
+
+        if response.conversations[0].id == last_element_id {
+            response.conversations.remove(0);
+        } else if response.conversations.len() > page_size.get() as usize {
+            response.conversations.pop();
+        }
+
+        if response.conversations.is_empty() {
+            return Ok(());
+        }
+
+        let tx = stash.transaction().await?;
+        for conversation in response.conversations {
+            let mut conversation: Conversation = conversation.into();
+            conversation.save_using(&tx).await?;
+        }
+        tx.commit().await?;
+        Ok(())
+    }
+}
+
+/// A data source for a [`Paginator`] which syncs pages of [`Message`]s in
+/// a [`Label`].
+pub struct MessageDataSource {
+    /// Session for network request
+    session: Session,
+    /// Local id of the label.
+    remote_label_id: LabelId,
+    /// Remote id of the label.
+    local_label_id: LocalId,
+}
+
+impl MessageDataSource {
+    /// Create a new data source for the given `label_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the remote id for the label can't be resolved.
+    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+        let Some(remote_id) = label_id
+            .counterpart::<Label, _>(context.user_stash())
+            .await?
+        else {
+            return Err(AppError::LabelDoesNotHaveRemoteId(label_id));
+        };
+
+        Ok(Self {
+            remote_label_id: remote_id.into(),
+            session: context.session().clone(),
+            local_label_id: label_id,
+        })
+    }
+}
+impl DataSource for MessageDataSource {
+    type Item = Message;
+    type Error = AppError;
+
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
+    async fn total(&self, stash: &Stash) -> Result<usize, Self::Error> {
+        let label = Label::find_by_id(self.local_label_id, stash)
+            .await?
+            .ok_or(AppError::LabelNotFound(self.local_label_id))?;
+        debug!("Total messages: {}", label.total_msg);
+        Ok(label.total_msg.try_into().unwrap_or(0))
+    }
+
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
+    async fn sync_first_page(
+        &self,
+        page_size: NonZeroU32,
+        stash: &Stash,
+    ) -> Result<(), Self::Error> {
+        let response = self
+            .session
+            .api()
+            .get_messages(GetMessagesOptions {
+                desc: Some(true),
+                label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
+                page_size: page_size.get().into(),
+                ..Default::default()
+            })
+            .await?;
+        debug!(
+            "Fetched {} messages. Total={}",
+            response.messages.len(),
+            response.total
+        );
+
+        let tx = stash.transaction().await?;
+        Message::create_or_update_messages_from_metadata(response.messages, &tx).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash, elements))]
+    async fn sync_page_after(
+        &self,
+        _: u32,
+        page_size: NonZeroU32,
+        elements: Vec<Self::Item>,
+        stash: &Stash,
+    ) -> Result<(), Self::Error> {
+        // Find the first last element with a valid remote id.
+        let Some(last_element) = elements
+            .iter()
+            .rev()
+            .find(|element| element.remote_id.is_some())
+        else {
+            return Err(AppError::NoMessageWithValidRemoteIdFoundInPage);
+        };
+        // Safe to unwrap as we have validated this before.
+        let last_element_id: proton_api_core::services::proton::common::RemoteId =
+            last_element.remote_id.clone().unwrap().into();
+
+        debug!("Last Element= {last_element_id}");
+        let mut response = self
+            .session
+            .api()
+            .get_messages(GetMessagesOptions {
+                desc: Some(true),
+                end_id: Some(last_element_id.clone()),
+                label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
+                page_size: page_size.get() as u64 + 1_u64,
+                ..Default::default()
+            })
+            .await?;
+        debug!(
+            "Fetched {} messages. Total={}",
+            response.messages.len(),
+            response.total
+        );
+
+        // `end_id` always returns the given message in the search results
+        // if it exists.
+        if response.messages.is_empty() {
+            return Ok(());
+        }
+
+        if response.messages[0].id == last_element_id {
+            response.messages.remove(0);
+        } else if response.messages.len() > page_size.get() as usize {
+            response.messages.pop();
+        }
+
+        if response.messages.is_empty() {
+            return Ok(());
+        }
+
+        let tx = stash.transaction().await?;
+        Message::create_or_update_messages_from_metadata(response.messages, &tx).await?;
+        tx.commit().await?;
+        Ok(())
     }
 }
