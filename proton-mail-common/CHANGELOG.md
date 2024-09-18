@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `Label` and `Unlabel` actions for messages.
+- The following actions for the messages:
+    - `Label`: `apply_label_to_messages`
+    - `Unlabel`: `remove_label_from_messages`
+    - `Delete`: `delete_messages`
+    - `Read`: `mark_messages_read`
+    - `Unread`: `mark_messages_unread`
 - `CustomFolder` struct (like `ContextualLabel` with a children field)
 - `Sidebar::all_custom_folders` method (return all custom folders in a flat way)
 - Added a background job for expired messages.
