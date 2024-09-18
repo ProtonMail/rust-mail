@@ -1,8 +1,9 @@
 use common::TestContext;
 use futures::future::join_all;
-use proton_core_common::models::sender_image_cache::SenderImage;
+use proton_core_common::models::sender_image_cache::{ReceivedFormat, SenderImage};
 use stash::orm::Model;
 use std::fs;
+use test_case::test_case;
 
 mod common;
 
@@ -50,9 +51,12 @@ async fn get_sender_image_from_cache() {
     assert!(user_ctx.images_logo_cache.is_empty());
 
     // Add an item into cache
-    let mut key = create_test_key(TEST_ADDRESS);
+    let mut key = create_test_key(TEST_ADDRESS, Some(ReceivedFormat::Png));
     key.save_using(user_ctx.stash()).await.unwrap();
-    user_ctx.images_logo_cache.add_item(key, b"abcdef").unwrap();
+    user_ctx
+        .images_logo_cache
+        .add_item_with_extra(key, b"abcdef", &ReceivedFormat::Png)
+        .unwrap();
 
     // Get image
     let image_path = user_ctx
@@ -99,16 +103,8 @@ async fn concurrent_request() {
     }
 
     let key = SenderImage {
-        local_id: None,
         address: Some(TEST_ADDRESS.to_string()),
-        bimi_selector: None,
-        domain: None,
-        format: None,
-        max_scale_up_factor: None,
-        mode: None,
-        size: None,
-        row_id: None,
-        stash: None,
+        ..Default::default()
     };
 
     let (query, params) = key.build_query();
@@ -118,8 +114,36 @@ async fn concurrent_request() {
     assert_eq!(items.len(), 1);
 }
 
-fn create_test_key(address: &str) -> SenderImage {
+#[test_case(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], "png"; "png")]
+#[test_case(&[0x52, 0x49, 0x46, 0x46, 0x00, 0x01, 0x02, 0x03, 0x57, 0x45, 0x42, 0x50], "webp"; "webp")]
+#[tokio::test]
+async fn image_extension(bytes: &[u8], expected: &str) {
+    let ctx = TestContext::new().await;
+    let user_ctx = ctx.user_context().await;
+
+    ctx.mock_get_images_logo(bytes.to_vec()).await;
+    ctx.catch_all().await;
+
+    // No user image in cache
+    assert!(user_ctx.images_logo_cache.is_empty());
+
+    let image_path = user_ctx
+        .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
+        .await
+        .expect("failed to get image");
+
+    assert_eq!(image_path.extension().unwrap(), expected);
+    let sender_image = SenderImage::load(1.into(), user_ctx.stash())
+        .await
+        .unwrap()
+        .unwrap();
+    let received_format = sender_image.received_format.unwrap();
+    assert_eq!(format!("{received_format}"), expected);
+}
+
+fn create_test_key(address: &str, received_format: Option<ReceivedFormat>) -> SenderImage {
     let mut key = SenderImage::default();
     key.address = Some(address.to_owned());
+    key.received_format = received_format;
     key
 }

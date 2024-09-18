@@ -25,6 +25,7 @@ quick_cache.workspace = true
 secrecy = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }
+test-case = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

@@ -1,6 +1,6 @@
 use crate::cache::{CacheError, CacheResult};
 use crate::datatypes::LightOrDarkMode;
-use crate::models::sender_image_cache::SenderImage;
+use crate::models::sender_image_cache::{ReceivedFormat, SenderImage};
 use crate::{CoreContextResult, UserContext};
 use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
@@ -54,21 +54,37 @@ impl UserContext {
             ..Default::default()
         };
 
-        // if record exist, get local_id else create record
-        key.save_using(interface).await?;
+        // generate local_id if not exist
+        if key.local_id.is_none() {
+            key.save_using(interface).await?;
+        }
 
         Ok(self
             .images_logo_cache
-            .get_path_or_insert(&key.clone(), self.get_images_logo(key))
+            .get_path_or_insert_with_extra(&key.clone(), self.get_images_logo(key, interface))
             .await?)
     }
 
-    async fn get_images_logo(&self, key: SenderImage) -> CacheResult<Vec<u8>> {
-        self.session()
+    /// Get the logo corresponding to the given key
+    async fn get_images_logo<A>(
+        &self,
+        mut key: SenderImage,
+        interface: &A,
+    ) -> CacheResult<(Vec<u8>, ReceivedFormat)>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let image = self
+            .session()
             .api()
-            .get_images_logo(key.into())
+            .get_images_logo((&key).into())
             .await
             .map(|v| v.to_vec())
-            .map_err(|e| CacheError::Callback(anyhow!(e)))
+            .map_err(|e| CacheError::Callback(anyhow!(e)))?;
+        let format = ReceivedFormat::from(image.as_slice());
+        key.set_received_format(format, interface)
+            .await
+            .map_err(|e| CacheError::Callback(anyhow!(e)))?;
+        Ok((image, format))
     }
 }

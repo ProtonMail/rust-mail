@@ -4,12 +4,16 @@ use crate::models::ModelExtension;
 use anyhow::anyhow;
 use futures::executor::block_on;
 use proton_api_core::services::proton::requests::GetImagesLogoOptions;
-use stash::exports::ToSql;
+use proton_sqlite3::rusqlite::types::{
+    FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef,
+};
+use stash::exports::{SqliteError, ToSql, Value};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::vec;
 use tracing::error;
@@ -17,7 +21,7 @@ use tracing::error;
 /// Representation of configuration for a sender image
 /// Used to persist cache.
 /// A record must be present if and only if the corresponding item is in cache.
-#[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Model)]
 #[TableName("sender_image_cache")]
 pub struct SenderImage {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -56,6 +60,10 @@ pub struct SenderImage {
     #[DbField]
     pub size: Option<u32>,
 
+    /// Format received from backend (png, svg or webp)
+    #[DbField]
+    pub received_format: Option<ReceivedFormat>,
+
     /// The internal row ID of the record in the database. This is assigned by `SQLite`, and is used
     /// as a consistent identifier for records when listening for change notifications.
     #[RowIdField]
@@ -93,6 +101,28 @@ impl SenderImage {
             .execute(
                 r"DELETE FROM sender_image_cache WHERE local_id = ?",
                 params![self.local_id],
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Update the current value of `received_format`
+    ///
+    /// N.B.: It's necessary since `PartialEq` exclude `received_format` from equality test
+    ///
+    pub(crate) async fn set_received_format<A>(
+        &mut self,
+        received_format: ReceivedFormat,
+        interface: &A,
+    ) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        self.received_format = Some(received_format);
+        interface
+            .execute(
+                "UPDATE sender_image_cache SET received_format = ? WHERE local_id = ?",
+                params![self.received_format, self.local_id],
             )
             .await?;
         Ok(())
@@ -205,6 +235,8 @@ impl SenderImage {
     }
 }
 
+// Exclude `received_format`, `row_id` and `stash` so when used as a key in ProtonCache, those
+// values don't make it different keys.
 impl Hash for SenderImage {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.address.hash(state);
@@ -214,6 +246,23 @@ impl Hash for SenderImage {
         self.max_scale_up_factor.hash(state);
         self.mode.hash(state);
         self.size.hash(state);
+    }
+}
+
+// Exclude `received_format`, `row_id` and `stash` so when used as a key in ProtonCache, those
+// values don't make it different keys.
+//
+// N.B.: Excluding `received_format` prevent `<Model>::save()` to work when only that value change.
+//   So use Self::update_received_format
+impl PartialEq for SenderImage {
+    fn eq(&self, other: &Self) -> bool {
+        self.address == other.address
+            && self.bimi_selector == other.bimi_selector
+            && self.domain == other.domain
+            && self.format == other.format
+            && self.max_scale_up_factor == other.max_scale_up_factor
+            && self.mode == other.mode
+            && self.size == other.size
     }
 }
 
@@ -232,8 +281,8 @@ impl From<&GetImagesLogoOptions> for SenderImage {
     }
 }
 
-impl From<SenderImage> for GetImagesLogoOptions {
-    fn from(value: SenderImage) -> Self {
+impl From<&SenderImage> for GetImagesLogoOptions {
+    fn from(value: &SenderImage) -> Self {
         Self {
             address: value.address.clone(),
             bimi_selector: value.bimi_selector.clone(),
@@ -249,6 +298,7 @@ impl From<SenderImage> for GetImagesLogoOptions {
 impl CacheConfig for SenderImage {
     type Key = Self;
     type Init = Stash;
+    type ExtraMetadata = ReceivedFormat;
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
         Self::all(&stash, None)
@@ -262,9 +312,19 @@ impl CacheConfig for SenderImage {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    fn key_to_filename(key: &Self::Key) -> OsString {
-        let id = key.local_id.expect("Should be set");
-        format!("{id}").into()
+    fn key_to_filename(
+        key: &Self::Key,
+        extra: Option<&Self::ExtraMetadata>,
+    ) -> CacheResult<OsString> {
+        let id = key
+            .local_id
+            .ok_or(CacheError::Callback(anyhow!("LocalId is not initialized")))?;
+        let extra = extra.ok_or(CacheError::NeedExtraMetadata)?;
+        Ok(format!("{id}.{extra}").into())
+    }
+
+    fn extra_for_key(key: &Self::Key) -> Option<Self::ExtraMetadata> {
+        key.received_format
     }
 }
 
@@ -276,5 +336,63 @@ impl CacheKey for SenderImage {
                 .await
                 .inspect_err(|e| error!("Couldn't delete {self:?} from database: {e}"));
         });
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum ReceivedFormat {
+    Png = 1,
+    Svg = 2,
+    WebP = 3,
+}
+
+impl From<&[u8]> for ReceivedFormat {
+    fn from(value: &[u8]) -> Self {
+        if value.len() > 7 {
+            match value[0..4] {
+                // 89 50 4E 47 0D 0A 1A 0A	=> PNG ,
+                [0x89, 0x50, 0x4E, 0x47] => {
+                    if value[4..8] == [0x0D, 0x0A, 0x1A, 0x0A] {
+                        return ReceivedFormat::Png;
+                    }
+                }
+                // 52 49 46 46 ?? ?? ?? ?? 57 45 42 50 => WebP
+                [0x52, 0x49, 0x46, 0x46] => {
+                    if value.len() > 11 && value[8..12] == [0x57, 0x45, 0x42, 0x50] {
+                        return ReceivedFormat::WebP;
+                    }
+                }
+                _ => (),
+            }
+        }
+        ReceivedFormat::Svg
+    }
+}
+
+impl Display for ReceivedFormat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReceivedFormat::Png => write!(f, "png"),
+            ReceivedFormat::Svg => write!(f, "svg"),
+            ReceivedFormat::WebP => write!(f, "webp"),
+        }
+    }
+}
+
+impl FromSql for ReceivedFormat {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            1 => Ok(Self::Png),
+            2 => Ok(Self::Svg),
+            3 => Ok(Self::WebP),
+            v => Err(FromSqlError::OutOfRange(i64::from(v))),
+        }
+    }
+}
+
+impl ToSql for ReceivedFormat {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
 }

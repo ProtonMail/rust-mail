@@ -4,6 +4,7 @@ use proton_core_common::cache::{
 };
 use std::ffi::OsString;
 use std::fs::{read_dir, File};
+use std::hash::{Hash, Hasher};
 use std::io::Read;
 use std::sync::Arc;
 use std::thread::spawn;
@@ -32,6 +33,7 @@ impl CacheConfig for TestConfig {
     type Key = TestKey;
 
     type Init = Vec<TestKey>;
+    type ExtraMetadata = ();
 
     async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
         Ok(init)
@@ -41,8 +43,11 @@ impl CacheConfig for TestConfig {
         Ok(())
     }
 
-    fn key_to_filename(key: &Self::Key) -> OsString {
-        key.0.clone()
+    fn key_to_filename(
+        key: &Self::Key,
+        _extra: Option<&Self::ExtraMetadata>,
+    ) -> CacheResult<OsString> {
+        Ok(key.0.clone())
     }
 }
 
@@ -52,7 +57,7 @@ struct TestWeightlessKey;
 impl CacheConfig for TestWeightlessKey {
     type Key = TestKey;
     type Init = Vec<TestKey>;
-
+    type ExtraMetadata = ();
     async fn get_existing(init: Vec<TestKey>) -> CacheResult<Vec<TestKey>> {
         Ok(init)
     }
@@ -61,12 +66,59 @@ impl CacheConfig for TestWeightlessKey {
         Ok(())
     }
 
-    fn key_to_filename(key: &Self::Key) -> OsString {
-        key.0.clone()
+    fn key_to_filename(
+        key: &Self::Key,
+        _extra: Option<&Self::ExtraMetadata>,
+    ) -> CacheResult<OsString> {
+        Ok(key.0.clone())
     }
 
     fn weighting_strategy() -> WeightingStrategy {
         WeightingStrategy::Zero
+    }
+}
+
+#[derive(Eq, Debug, Clone)]
+struct TestExtraMetadata {
+    a: u8,
+    b: u8,
+}
+
+impl Hash for TestExtraMetadata {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.a.hash(state);
+    }
+}
+
+impl PartialEq for TestExtraMetadata {
+    fn eq(&self, other: &Self) -> bool {
+        self.a == other.a
+    }
+}
+
+impl CacheKey for TestExtraMetadata {}
+impl CacheConfig for TestExtraMetadata {
+    type Key = TestExtraMetadata;
+    type Init = Vec<TestExtraMetadata>;
+    type ExtraMetadata = u8;
+    async fn get_existing(init: Self::Init) -> CacheResult<Vec<Self::Key>> {
+        Ok(init)
+    }
+
+    async fn handle_failed(_failed: Vec<Self::Key>) -> CacheResult<()> {
+        Ok(())
+    }
+
+    fn key_to_filename(
+        key: &Self::Key,
+        extra: Option<&Self::ExtraMetadata>,
+    ) -> CacheResult<OsString> {
+        let extra = extra.unwrap();
+        Ok(format!("{}.{extra}", key.a).into())
+    }
+
+    fn extra_for_key(key: &Self::Key) -> Option<Self::ExtraMetadata> {
+        Some(key.b)
     }
 }
 
@@ -151,7 +203,7 @@ async fn add_get_cache_item() {
     assert!(path2.is_none());
     let dir = read_dir(dir).unwrap();
     assert_eq!(dir.count(), 1);
-    let file = cache.path_from_key(&key);
+    let file = cache.path_from_key(&key, None).unwrap();
     let mut file = File::open(file).unwrap();
     let mut content = Vec::new();
     file.read_to_end(&mut content).unwrap();
@@ -180,7 +232,7 @@ async fn add_item_twice() {
     //   * Only one file on disk
     let dir = read_dir(dir).unwrap();
     assert_eq!(dir.count(), 1);
-    let file = cache.path_from_key(&key);
+    let file = cache.path_from_key(&key, None).unwrap();
     let mut file = File::open(file).unwrap();
     let mut content = Vec::new();
     file.read_to_end(&mut content).unwrap();
@@ -339,4 +391,53 @@ async fn concurrent_insert_different() {
         file.read_to_end(&mut content).unwrap();
         assert_eq!(content, value);
     }
+}
+
+#[tokio::test]
+async fn use_extra_metadata() {
+    async fn with(value: Vec<u8>, extra: u8) -> CacheResult<(Vec<u8>, u8)> {
+        Ok((value, extra))
+    }
+
+    // Setup:
+    //   * Create a cache
+    let dir = TempDir::new("test").unwrap();
+    let dir = dir.into_path();
+    let key1 = TestExtraMetadata { a: 1, b: 2 };
+    let key2 = TestExtraMetadata { a: 3, b: 4 };
+    let key3 = TestExtraMetadata { a: 5, b: 6 };
+
+    File::create_new(dir.join("1.2")).unwrap();
+    File::create_new(dir.join("5.6")).unwrap();
+
+    let cache = Arc::new(
+        ProtonCache::<TestExtraMetadata>::new(dir.clone(), 1000, vec![key1.clone(), key2, key3])
+            .await
+            .unwrap(),
+    );
+    // All keys with files are now in cache
+    assert_eq!(cache.len(), 2);
+
+    let path = cache
+        .get_path_or_insert_with_extra(&key1, with(vec![], 7))
+        .await
+        .unwrap();
+    // Key is in cache -> use extra from key
+    assert!(path.ends_with("1.2"));
+
+    let key3 = TestExtraMetadata { a: 8, b: 9 };
+    let path = cache
+        .get_path_or_insert_with_extra(&key3, with(vec![], 10))
+        .await
+        .unwrap();
+    // Key is not in cache -> use given extra
+    assert!(path.ends_with("8.10"));
+
+    let key4 = TestExtraMetadata { a: 5, b: 11 };
+    let path = cache
+        .get_path_or_insert_with_extra(&key4, with(vec![], 10))
+        .await
+        .unwrap();
+    // Key is in cache -> use original extra
+    assert!(path.ends_with("5.6"));
 }
