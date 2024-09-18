@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added the following APIs: `delete_messages`, `mark_messages_read`, `mark_messages_unread`.
+  - Added the following APIs: `delete_messages`, `mark_messages_read`, `mark_messages_unread`.
+  - Added `reload()` method to the message and conversation paginators
 
 ### Fixed
 
