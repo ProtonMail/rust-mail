@@ -628,3 +628,99 @@ pub async fn remove_label_from_messages(
     })
     .await
 }
+
+/// Mark multiple messages as read.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to remove.
+/// * `ids`      - The local IDs of the messages to mark as read.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn mark_messages_read(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::action_mark_read(
+            user_context.session(),
+            user_context.queue(),
+            label_id.into(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
+    })
+    .await
+}
+
+/// Mark multiple messages as unread.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to remove.
+/// * `ids`      - The local IDs of the messages to mark as unread.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn mark_messages_unread(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::action_mark_unread(
+            user_context.session(),
+            user_context.queue(),
+            label_id.into(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
+    })
+    .await
+}
+
+/// Delete multiple messages
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to remove.
+/// * `ids`      - The local IDs of the messages to delete.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn delete_messages(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::action_delete(
+            user_context.session(),
+            user_context.queue(),
+            label_id.into(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
+    })
+    .await
+}
