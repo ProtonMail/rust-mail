@@ -137,20 +137,27 @@
 //!      Check if there's a previous page available.
 //!
 
-use crate::orm::{perform_find, Model, ResultsetChange};
-use crate::stash::{AgnosticInterface, Interface, Stash, StashError};
 use core::error::Error;
 use core::future::Future;
 use core::num::NonZeroU32;
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
-use rusqlite::types::{ToSqlOutput, Value};
-use rusqlite::{Error as SqliteError, ToSql};
+use stash::exports::{SqliteError, ToSql, ToSqlOutput, Value};
+use stash::orm::{perform_find, Model, ResultsetChange};
+use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
 use tracing::error;
+
+#[cfg(test)]
+#[path = "tests/paginator/paginator.rs"]
+mod tests_paginator;
+
+#[cfg(test)]
+#[path = "tests/paginator/data_source.rs"]
+mod tests_data_source;
 
 /// Represents a parameter for a query.
 #[derive(Clone, Debug)]
@@ -391,7 +398,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     {
         let total = self.remote.total(&self.stash).await?;
 
-        let initial_records = perform_find(
+        let initial_records = T::find(
             format!("{} LIMIT {}", self.query_logic, self.page_size,),
             convert_params(&self.params),
             &interface.clone().into(),
@@ -553,6 +560,9 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             }
             ResultsetChange::Updated(_) => {
                 // No change to cursor or count for updates
+            }
+            _ => {
+                error!("Pattern not covered");
             }
         }
 

@@ -1,15 +1,13 @@
+use crate::paginator::{DataSource, Paginator};
 use serde::{Deserialize, Serialize};
+use stash::macros::Model;
 use stash::orm::Model;
-use stash::paginator::{DataSource, Paginator};
 use stash::params;
 use stash::stash::{Interface, Stash, StashError};
-use stash_macros::Model;
 use std::future::Future;
-use std::io::Write;
 use std::num::NonZeroU32;
 use std::ops::Range;
 use tempdir::TempDir;
-use tracing::Instrument;
 
 #[derive(Debug, Model, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[TableName("test")]

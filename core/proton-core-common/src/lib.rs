@@ -8,6 +8,7 @@ mod event_subscriber;
 pub mod events;
 pub mod models;
 pub mod os;
+pub mod paginator;
 mod session;
 mod user_context;
 

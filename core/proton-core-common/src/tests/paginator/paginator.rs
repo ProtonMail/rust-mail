@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 
+use crate::paginator::{DataSource, Paginator, Param};
+use stash::macros::Model;
 use stash::orm::Model;
 use stash::orm::ResultsetChange;
-use stash::paginator::{DataSource, Paginator, Param};
 use stash::stash::{Interface, Stash, StashError};
-use stash_macros::Model;
 use std::future::Future;
 use std::num::NonZeroU32;
 

@@ -154,7 +154,6 @@
 // Standard modules
 pub mod datatypes;
 pub mod orm;
-pub mod paginator;
 pub mod stash;
 pub mod utils;
 
