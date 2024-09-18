@@ -110,6 +110,33 @@ impl ConversationPaginator {
         .await
     }
 
+    /// Reloads all data up to the cursor.
+    ///
+    /// Grabs **ALL** the rows that have been seen so far, without any kind of
+    /// limit or pagination, from the start right up to the current cursor
+    /// position.
+    ///
+    /// This does not attempt to prefetch anything, and does not update any
+    /// pagination state data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be fetched from the database.
+    ///
+    pub async fn reload(self: Arc<Self>) -> Result<Vec<Conversation>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .reload()
+                .await?
+                .into_iter()
+                .filter_map(|c| ContextualConversation::new(c, self.label_id.into()))
+                .map_into()
+                .collect())
+        })
+        .await
+    }
+
     /// Retrieves the total number of records in the result set.
     #[must_use]
     pub fn result_count(&self) -> u32 {
@@ -221,6 +248,32 @@ impl MessagePaginator {
             Ok(self
                 .real_paginator
                 .previous_page()
+                .await?
+                .iter()
+                .map(|m| m.clone().into())
+                .collect())
+        })
+        .await
+    }
+
+    /// Reloads all data up to the cursor.
+    ///
+    /// Grabs **ALL** the rows that have been seen so far, without any kind of
+    /// limit or pagination, from the start right up to the current cursor
+    /// position.
+    ///
+    /// This does not attempt to prefetch anything, and does not update any
+    /// pagination state data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be fetched from the database.
+    ///
+    pub async fn reload(self: Arc<Self>) -> Result<Vec<Message>, MailboxError> {
+        uniffi_async(async move {
+            Ok(self
+                .real_paginator
+                .reload()
                 .await?
                 .iter()
                 .map(|m| m.clone().into())
