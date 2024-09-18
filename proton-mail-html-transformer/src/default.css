@@ -203,6 +203,31 @@ blockquote blockquote blockquote blockquote blockquote blockquote {
     padding: 0 !important;
     border: none !important;
 }
+.proton-toggle-button {
+  display: inline-block;
+  padding-block: 0.25rem;
+  padding-inline: 0.5rem;
+  margin: 1em;
+  margin-inline-start: 0;
+  box-shadow: inset 0 0 0 1px silver;
+  border: none;
+  border-radius: 0.5rem;
+  outline: none;
+  background-color: transparent;
+  text-align: center;
+  transform: translateZ(0);
+  transition: 0.15s cubic-bezier(0.22, 1, 0.36, 1), background-position 0s;
+}
+.proton-toggle-button:hover, .proton-toggle-button:focus, .proton-toggle-button:focus-within .proton-toggle-button.is-hover .proton-toggle-button:active, .proton-toggle-button.is-active, .proton-toggle-button[aria-expanded=true]:not([aria-controls]) {
+  text-decoration: none;
+  box-shadow: inset 0 0 0 2px silver;
+  background-color: transparent;
+}
+@supports selector(:focus-visible) {
+  .proton-toggle-button {
+    outline: unset;
+    }
+}
 
 [hidden] {
     display: none;
