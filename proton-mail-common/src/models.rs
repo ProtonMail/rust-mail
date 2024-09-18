@@ -71,7 +71,7 @@ use proton_api_mail::services::proton::responses::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_core_common::cache::ProtonCache;
+use proton_core_common::cache::{CacheError, CacheResult, ProtonCache};
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
 use proton_crypto_inbox::attachment::{
@@ -95,8 +95,10 @@ use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fs::File;
 use std::io::Read;
 use std::num::NonZeroU32;
+use std::path::PathBuf;
 use std::vec;
 use tracing::{debug, error, info};
 
@@ -5017,55 +5019,56 @@ impl Message {
 
         // FIXME: https://jira.protontech.ch/projects/ET/issues/ET-1070
         // Recover from cache issues by requesting the data again.
-        if let Some(decrypted_message_body) =
-            self.try_fetch_message_from_cache(cache, interface).await?
-        {
-            return Ok(decrypted_message_body);
-        }
-
-        let decrypted_message_body = self
-            .decrypt_from_remote(address_keys, pgp_provider, api, interface)
+        let file_path: PathBuf = cache
+            .get_path_or_insert(
+                &key,
+                self.store_message_body(&key, address_keys, pgp_provider, api, interface),
+            )
             .await?;
 
-        // FIXME: We're not caching the fully encrypted messages
-        // https://jira.protontech.ch/projects/ET/issues/ET-1071
-        if decrypted_message_body.pgp_attachments.is_none() {
-            // Try to cache the message
-            if let Err(e) =
-                cache.add_item(key.clone(), decrypted_message_body.body.clone().as_bytes())
-            {
-                error!("Error writing message {key:?} into the cache: {e}");
-            }
-            key.set_cached().await?;
-        }
-        Ok(decrypted_message_body)
-    }
-
-    async fn try_fetch_message_from_cache<A>(
-        &self,
-        cache: &ProtonCache<CacheMessageConfig>,
-        interface: &A,
-    ) -> Result<Option<DecryptedMessageBody>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let key = CacheMessageKey::from_message(self, interface);
-        let Some(mut content) = cache.get_item(&key)? else {
-            return Ok(None);
-        };
-
+        let mut file = File::open(file_path)?;
         let mut body = String::new();
-        content.read_to_string(&mut body)?;
-        let Some(metadata) = self.get_message_body_metadata().await? else {
-            return Ok(None);
-        };
-
-        Ok(Some(DecryptedMessageBody {
+        file.read_to_string(&mut body)?;
+        let metadata = self.get_message_body_metadata().await?;
+        let metadata = metadata.ok_or(AppError::MessageBodyMetadataMissing(
+            self.local_id.expect("Should be set"),
+        ))?;
+        Ok(DecryptedMessageBody {
             body,
             metadata,
             pgp_attachments: None,
             pgp_subject: None,
-        }))
+        })
+    }
+
+    /// Fetch, decrypt and store message body in cache.
+    async fn store_message_body<P: PgpProviderSync, PM: ProtonMail, A>(
+        &self,
+        key: &CacheMessageKey,
+        address_keys: UnlockedAddressKeys<P>,
+        pgp_provider: P,
+        api: &PM,
+        interface: &A,
+    ) -> CacheResult<Vec<u8>>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let decrypted_message_body = self
+            .decrypt_from_remote(address_keys, pgp_provider, api, interface)
+            .await
+            .map_err(|e| CacheError::Callback(anyhow!("Message decryption failed: {e}")))?;
+
+        // FIXME: We're not caching the fully encrypted messages
+        // https://jira.protontech.ch/projects/ET/issues/ET-1071
+        if decrypted_message_body.pgp_attachments.is_some() {
+            return Err(CacheError::Callback(anyhow!(
+                "Multipart message not handled"
+            )));
+        }
+        key.set_cached()
+            .await
+            .map_err(|e| CacheError::Callback(anyhow!("Couldn't set message as cached: {e}")))?;
+        Ok(decrypted_message_body.body.into_bytes())
     }
 
     /// Finds all messages that have expired and deletes them.

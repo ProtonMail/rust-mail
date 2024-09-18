@@ -2,7 +2,9 @@ use crate::cache::CacheAttachmentKey;
 use crate::datatypes::AttachmentMetadata;
 use crate::models::Attachment;
 use crate::{AppError, MailContextError, Mailbox, MailboxError, MailboxResult};
+use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
+use proton_core_common::cache::{CacheError, CacheResult};
 use proton_core_common::datatypes::LocalId;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
 use proton_crypto_inbox::proton_crypto::crypto::{
@@ -78,35 +80,45 @@ impl Mailbox {
         let cache = user_context.attachements_cache();
         let key = CacheAttachmentKey::from_attachment(attachment, user_context.user_stash());
 
-        if let Some(data_path) = cache.get_item_path(&key) {
-            Ok(data_path)
-        } else {
-            let attachment_id = attachment.local_id.expect("Should be set");
-            let pgp_provider = new_pgp_provider();
-            let remote_attachment_id = attachment
+        Ok(cache
+            .get_path_or_insert(&key, self.store_attachment(attachment, &key))
+            .await?)
+    }
+
+    /// Fetch and store Attachment data
+    async fn store_attachment(
+        &self,
+        attachment: &Attachment,
+        key: &CacheAttachmentKey,
+    ) -> CacheResult<Vec<u8>> {
+        let attachment_id = attachment.local_id.expect("Should be set");
+        let user_context = self.user_context();
+        let pgp_provider = new_pgp_provider();
+        let remote_attachment_id =
+            attachment
                 .remote_id
                 .clone()
-                .ok_or(MailboxError::AttachmentDoesNotHaveRemoteId(attachment_id))?;
-            let encrypted_content = Attachment::fetch_content(
-                remote_attachment_id.clone(),
-                user_context.session().api(),
-            )
-            .await
-            .inspect_err(|e| {
-                error!("Failed to fetch attachment({attachment_id}) from API: {e})")
-            })?;
-            let (decrypted_content, _verification_result) = self
-                .decrypt_attachment(&pgp_provider, attachment, encrypted_content.as_ref())
+                .ok_or(CacheError::Callback(anyhow!(
+                    "Attachment without RemoteId {attachment_id}"
+                )))?;
+        let encrypted_content =
+            Attachment::fetch_content(remote_attachment_id.clone(), user_context.session().api())
                 .await
-                .inspect_err(|e| error!("Failed to decrypt attachment({attachment_id}): {e})"))?;
-            let data_path = cache
-                .add_item(key.clone(), decrypted_content.as_ref())
-                .inspect_err(|e| {
-                    error!("Failed to add attachment({attachment_id} into cache: {e})")
+                .map_err(|e| {
+                    error!("Failed to fetch attachment({attachment_id}) from API: {e})");
+                    CacheError::Callback(anyhow!(e))
                 })?;
-            key.set_cached().await?;
-            Ok(data_path)
-        }
+        let (decrypted_content, _verification_result) = self
+            .decrypt_attachment(&pgp_provider, attachment, encrypted_content.as_ref())
+            .await
+            .map_err(|e| {
+                error!("Failed to decrypt attachment({attachment_id}): {e})");
+                CacheError::Callback(anyhow!(e.to_string()))
+            })?;
+        key.set_cached()
+            .await
+            .map_err(|e| CacheError::Callback(anyhow!(e)))?;
+        Ok(decrypted_content)
     }
 
     /// Sync attachment metadata
