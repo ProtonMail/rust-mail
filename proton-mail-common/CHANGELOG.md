@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grouped `unread_conv` and `unread_msg` from `ContextualLabel` as `unread`.
 - Label parent is now resolved at load time.
 - Attachment and MessageBodies cache now use `get_path_or_insert`.
+- Removed first argument (`mail_settings`) from `MailUserContext::image_for_sender`.
 
 ### Fixed
 
