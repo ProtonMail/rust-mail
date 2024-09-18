@@ -74,6 +74,7 @@ use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
 use proton_core_common::cache::{CacheError, CacheResult, ProtonCache};
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::paginator::{DataSource, Paginator, Param};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment,
@@ -89,7 +90,6 @@ use smart_default::SmartDefault;
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::{Model, ResultsetChange};
-use stash::paginator::{DataSource, Paginator, Param};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError, Tether};
 use std::collections::btree_map::Entry;

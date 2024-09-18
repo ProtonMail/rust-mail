@@ -8,12 +8,12 @@ use crate::mail::datatypes::{Conversation, Message};
 use crate::mail::MailboxError;
 use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
+use proton_core_common::paginator::Paginator as RealPaginator;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{
     Conversation as RealConversation, ConversationDataSource, Message as RealMessage,
     MessageDataSource,
 };
-use stash::paginator::Paginator as RealPaginator;
 use std::sync::Arc;
 
 /// Represents a paginated view of a result set.
