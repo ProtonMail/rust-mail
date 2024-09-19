@@ -67,6 +67,7 @@ use stash::utils::sql_using_serde;
 use std::fmt::{Debug, Display, Formatter};
 use std::iter::repeat;
 use std::ops::Deref;
+use tracing::warn;
 use zeroize::Zeroize;
 
 //  ENUMS
@@ -687,6 +688,19 @@ pub enum UserType {
 
     /// TODO: Document this variant.
     External = 3,
+
+    Unknown(u8),
+}
+
+impl From<UserType> for i64 {
+    fn from(value: UserType) -> Self {
+        match value {
+            UserType::Proton => 1,
+            UserType::Managed => 2,
+            UserType::External => 3,
+            UserType::Unknown(v) => i64::from(v),
+        }
+    }
 }
 
 impl From<ApiUserType> for UserType {
@@ -695,6 +709,10 @@ impl From<ApiUserType> for UserType {
             ApiUserType::Proton => Self::Proton,
             ApiUserType::Managed => Self::Managed,
             ApiUserType::External => Self::External,
+            ApiUserType::Unknown(v) => {
+                warn!("Detected `Unknown` user type: {}", v);
+                Self::Unknown(v)
+            }
         }
     }
 }
@@ -705,14 +723,14 @@ impl FromSql for UserType {
             1 => Ok(Self::Proton),
             2 => Ok(Self::Managed),
             3 => Ok(Self::External),
-            v => Err(FromSqlError::OutOfRange(i64::from(v))),
+            v => Ok(Self::Unknown(v)),
         }
     }
 }
 
 impl ToSql for UserType {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+        Ok(ToSqlOutput::Owned(Value::Integer((*self).into())))
     }
 }
 

@@ -35,7 +35,7 @@ use serde_json::Value as JsonValue;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
 use serde_repr::Serialize_repr;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{serde_as, BoolFromInt, FromInto};
 
 //  ENUMS
 //==============================================================================
@@ -230,8 +230,8 @@ pub enum UserMnemonicStatus {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[repr(u8)]
 pub enum UserType {
     /// TODO: Document this variant.
@@ -242,6 +242,30 @@ pub enum UserType {
 
     /// TODO: Document this variant.
     External = 3,
+
+    Unknown(u8),
+}
+
+impl From<u8> for UserType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::Proton,
+            2 => Self::Managed,
+            3 => Self::External,
+            v => Self::Unknown(v),
+        }
+    }
+}
+
+impl From<UserType> for u8 {
+    fn from(value: UserType) -> Self {
+        match value {
+            UserType::Proton => 1,
+            UserType::Managed => 2,
+            UserType::External => 3,
+            UserType::Unknown(v) => v,
+        }
+    }
 }
 
 /// TODO: Document this enum.
@@ -866,6 +890,7 @@ pub struct User {
 
     /// TODO: Document this field.
     #[serde(rename = "Type")]
+    #[serde_as(as = "FromInto<u8>")]
     pub user_type: UserType,
 }
 
