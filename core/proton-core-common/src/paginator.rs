@@ -255,7 +255,7 @@ pub trait DataSource: Send + Sync {
 /// intuitive navigation experience through the result set.
 ///
 #[derive(Debug)]
-pub struct Paginator<T: Model, R: DataSource<Item = T>> {
+pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
     /// Shared state between the [`Paginator`] and the background watcher.
     shared: Arc<Mutex<Shared>>,
 
@@ -282,7 +282,7 @@ pub struct Paginator<T: Model, R: DataSource<Item = T>> {
 
     /// The [`DataSource`] from where pagination data will be synced
     /// from.
-    remote: R,
+    remote: Arc<R>,
 }
 
 /// Shared state between the [`Paginator`] and the background watcher.
@@ -293,7 +293,7 @@ struct Shared {
     cursor_index: u32,
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
-    cursor_row_id: u32,
+    cursor_row_id: Option<u64>,
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
     row_count: u32,
@@ -358,7 +358,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         let paginator = Self {
             shared: Arc::new(Mutex::new(Shared {
                 cursor_index: 0,
-                cursor_row_id: 0,
+                cursor_row_id: None,
                 row_count: 0,
             })),
             page_size,
@@ -366,7 +366,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             query_logic: query_logic.into(),
             queue: queue.clone(),
             stash: interface.stash().clone(),
-            remote,
+            remote: Arc::new(remote),
         };
 
         paginator.initialize(interface).await?;
@@ -415,7 +415,9 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 .await?;
         }
 
-        self.shared.lock().await.row_count = total.max(initial_records.len()) as u32;
+        let mut shared = self.shared.lock().await;
+        shared.row_count = total.max(initial_records.len()) as u32;
+        shared.cursor_row_id = initial_records.first().map(|v| v.row_id().unwrap());
 
         Ok(())
     }
@@ -426,6 +428,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         let query_logic = self.query_logic.clone();
         let params = self.params.clone();
         let shared_cloned = Arc::clone(&self.shared);
+        let remote_cloned = Arc::clone(&self.remote);
 
         drop(spawn(async move {
             let changed_query = formatdoc!(
@@ -448,6 +451,9 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 loop {
                     match receiver.recv_async().await {
                         Ok(notification) => {
+                            if notification.table != T::table_name() {
+                                continue;
+                            }
                             if let Some(change) = T::handle_notification(
                                 notification,
                                 // We don't use this in the same way here
@@ -462,6 +468,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                                     &query_logic,
                                     params.clone(),
                                     &shared_cloned,
+                                    &remote_cloned,
                                     &stash,
                                     &sender,
                                 )
@@ -504,6 +511,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         query_logic: &str,
         params: Vec<Param>,
         shared: &Arc<Mutex<Shared>>,
+        remote: &Arc<R>,
         stash: &Stash,
         sender: &flume::Sender<ResultsetChange<T, T::IdType>>,
     ) -> Result<(), StashError> {
@@ -532,30 +540,71 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 
                 match cursor_record {
                     Some(record) => {
-                        #[allow(clippy::cast_lossless, clippy::unwrap_used)]
-                        if shared.cursor_row_id as u64 != record.row_id().unwrap() {
-                            // The change was made before the cursor position
-                            if let ResultsetChange::Inserted(_) = *change {
-                                shared.cursor_index = shared.cursor_index.saturating_add(1);
-                            } else if let ResultsetChange::Deleted(_) = *change {
-                                shared.cursor_index = shared.cursor_index.saturating_sub(1);
+                        if let Some(cursor_row_id) = shared.cursor_row_id {
+                            #[allow(clippy::cast_lossless, clippy::unwrap_used)]
+                            if cursor_row_id != record.row_id().unwrap() {
+                                // The change was made before the cursor position
+                                if let ResultsetChange::Inserted(_) = *change {
+                                    shared.cursor_index = shared.cursor_index.saturating_add(1);
+                                } else if let ResultsetChange::Deleted(_) = *change {
+                                    shared.cursor_index = shared.cursor_index.saturating_sub(1);
+                                }
                             }
                         }
+                        // Update cursor
+                        shared.cursor_row_id = record.row_id();
                     }
                     None => {
                         // We've reached the end of the result set, meaning a deletion before the
                         // cursor position
                         if let ResultsetChange::Deleted(_) = *change {
-                            shared.cursor_index = shared.cursor_index.saturating_sub(1);
+                            // try to find something a valid element for the cursor.
+                            loop {
+                                shared.cursor_index = shared.cursor_index.saturating_sub(1);
+                                if let Some(cursor_record) = perform_find::<_, T>(
+                                    #[allow(clippy::unwrap_used)]
+                                    &paging_query(
+                                        query_logic,
+                                        shared.cursor_index,
+                                        NonZeroU32::new(1).unwrap(),
+                                    ),
+                                    convert_params(&params),
+                                    &stash.clone().into(),
+                                    None,
+                                )
+                                .await?
+                                .into_iter()
+                                .next()
+                                {
+                                    shared.cursor_row_id = Some(cursor_record.row_id().unwrap());
+                                    break;
+                                }
+
+                                // if we reach this point and we still don't
+                                // have an element then there is nothing left.
+                                if shared.cursor_index == 0 {
+                                    shared.cursor_row_id = None;
+                                    break;
+                                }
+                            }
                         }
                     }
                 }
 
-                // Update the total count
-                if let ResultsetChange::Inserted(_) = *change {
-                    shared.row_count = shared.row_count.saturating_add(1);
-                } else if let ResultsetChange::Deleted(_) = *change {
-                    shared.row_count = shared.row_count.saturating_sub(1);
+                match remote.total(stash).await {
+                    Ok(v) => {
+                        if let Ok(v) = v.try_into() {
+                            shared.row_count = v;
+                        }
+                    }
+                    Err(_) => {
+                        // fallback
+                        if let ResultsetChange::Inserted(_) = *change {
+                            shared.row_count = shared.row_count.saturating_add(1);
+                        } else if let ResultsetChange::Deleted(_) = *change {
+                            shared.row_count = shared.row_count.saturating_sub(1);
+                        }
+                    }
                 }
             }
             ResultsetChange::Updated(_) => {
@@ -585,11 +634,31 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     pub async fn current_page(&self) -> Result<Vec<T>, StashError> {
         let current_index = { self.shared.lock().await.cursor_index };
+        self.page_at(current_index, self.queue.clone()).await
+    }
+
+    /// Retrieves the page at the given cursor index.
+    ///
+    /// # Params
+    ///
+    /// * `cursor_index` - Index of the cursor to load from.
+    /// * `queue`        - Optional watcher for this range.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the current page could not be fetched from the
+    /// database.
+    ///
+    async fn page_at(
+        &self,
+        cursor_index: u32,
+        queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
+    ) -> Result<Vec<T>, StashError> {
         T::find(
-            paging_query(&self.query_logic, current_index, self.page_size),
+            paging_query(&self.query_logic, cursor_index, self.page_size),
             convert_params(&self.params),
             &self.stash,
-            None,
+            queue,
         )
         .await
     }
@@ -601,22 +670,35 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     /// Returns an error if the page after the next page could not be fetched
     /// from the database.
     ///
+    #[allow(clippy::missing_panics_doc)]
     pub async fn next_page(&self) -> Result<Vec<T>, R::Error> {
-        let next_index = {
-            let guard = self.shared.lock().await;
-            let next_index = guard.cursor_index.saturating_add(self.page_size.get());
-            drop(guard);
-            next_index
-        };
-        let current_page = self.current_page().await?;
+        // Acquire lock to prevent concurrent checks from the database
+        // watcher until we are done updating all the relevant data.
+        let mut shared = self.shared.lock().await;
+        let next_index = shared.cursor_index.saturating_add(self.page_size.get());
+        let current_page = self.page_at(shared.cursor_index, None).await?;
         self.remote
             .sync_page_after(next_index, self.page_size, current_page, &self.stash)
             .await?;
 
-        let mut guard = self.shared.lock().await;
-        guard.cursor_index = next_index;
-        drop(guard);
-        Ok(self.current_page().await?)
+        shared.cursor_index = next_index;
+        // Get the first element of the next page to update the cursor id.
+        if let Some(element) = T::find(
+            paging_query(&self.query_logic, next_index, NonZeroU32::new(1).unwrap()),
+            convert_params(&self.params),
+            &self.stash,
+            None,
+        )
+        .await?
+        .into_iter()
+        .next()
+        {
+            shared.cursor_row_id = Some(element.row_id().unwrap());
+        }
+
+        Ok(self
+            .page_at(shared.cursor_index, self.queue.clone())
+            .await?)
     }
 
     /// Moves to the previous page and retrieves its results.
@@ -703,6 +785,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     }
 
     /// Returns the current page size.
+    #[must_use]
     pub const fn page_size(&self) -> NonZeroU32 {
         self.page_size
     }

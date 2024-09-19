@@ -8,6 +8,7 @@ use std::future::Future;
 use std::num::NonZeroU32;
 use std::ops::Range;
 use tempdir::TempDir;
+use tokio::select;
 
 #[derive(Debug, Model, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[TableName("test")]
@@ -212,14 +213,27 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
 }
 
 #[tokio::test]
-#[ignore]
 async fn data_source_sync_with_callback() {
     // The page number should not increase when new elements are added.
     let (stash, _dir) = init_db().await;
     let source = TestDataSource::new();
     let (sender, receiver) = flume::unbounded();
+    let (waiter_sender, waiter_receiver) = flume::bounded::<()>(0);
 
-    let handle = tokio::spawn(async move { while !receiver.recv_async().await.is_err() {} });
+    let handle = tokio::spawn(async move {
+        loop {
+            select! {
+                rc = receiver.recv_async() => {
+                    if receiver.recv_async().await.is_err() {
+                        return;
+                    }
+                }
+                _ = waiter_receiver.recv_async() => {
+                    return;
+                }
+            }
+        }
+    });
 
     let paginator = Paginator::new(
         "ORDER BY id ASC",
@@ -233,23 +247,26 @@ async fn data_source_sync_with_callback() {
     .unwrap();
 
     assert_eq!(paginator.page_count().await, 4);
-
-    paginator.next_page().await.unwrap();
-
-    assert_eq!(paginator.page_count().await, 4);
-
-    paginator.next_page().await.unwrap();
-
-    assert_eq!(paginator.page_count().await, 4);
+    check_page(&stash, &paginator).await;
 
     paginator.next_page().await.unwrap();
     assert_eq!(paginator.page_count().await, 4);
+    check_page(&stash, &paginator).await;
+
+    paginator.next_page().await.unwrap();
+    assert_eq!(paginator.page_count().await, 4);
+    check_page(&stash, &paginator).await;
+
+    paginator.next_page().await.unwrap();
+    assert_eq!(paginator.page_count().await, 4);
+    check_page_with_limit(&stash, &paginator, Some(3)).await;
 
     // Check no new values are returned for the current page.
     assert!(!paginator.has_next_page().await);
     let last_values = paginator.next_page().await.unwrap();
     assert!(last_values.is_empty());
 
+    drop(waiter_sender);
     drop(paginator);
     drop(stash);
     handle.await.unwrap();
@@ -307,17 +324,28 @@ async fn check_page<R: DataSource<Item = TestModel>>(
     stash: &Stash,
     paginator: &Paginator<TestModel, R>,
 ) {
+    check_page_with_limit(stash, paginator, None).await
+}
+
+async fn check_page_with_limit<R: DataSource<Item = TestModel>>(
+    stash: &Stash,
+    paginator: &Paginator<TestModel, R>,
+    max_len: Option<usize>,
+) {
     let start =
         (paginator.current_page_number().await.saturating_sub(1)) * paginator.page_size().get();
     let end = (paginator.current_page_number().await) * paginator.page_size().get();
-    let expected = (start..end)
-        .into_iter()
-        .map(|id| TestModel {
-            id: id as u64,
-            row_id: Some(id as u64),
-            stash: Some(stash.clone()),
-        })
-        .collect::<Vec<_>>();
+    let iter = (start..end).into_iter().map(|id| TestModel {
+        id: id as u64,
+        row_id: Some(id as u64),
+        stash: Some(stash.clone()),
+    });
+
+    let expected = if let Some(max) = max_len {
+        iter.take(max).collect::<Vec<_>>()
+    } else {
+        iter.collect::<Vec<_>>()
+    };
 
     let values = paginator.current_page().await.unwrap();
     assert_eq!(
