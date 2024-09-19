@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Added
+
+- Add `encrypt_session_key_to_recipient` method on `ExtractedAttachmentInfo`.
+- Add `new_with_draft` method on `EncryptedPackageBody`.
+- End-to-end integration tests for email sending.
+
+### Changed
+
+- Unified use of `EncryptedMessageBody` and `InboxSessionKey` types across the crate.
+
 ## [0.6.5] - 2024-09-11
 
 ### Dependencies
