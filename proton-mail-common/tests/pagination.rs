@@ -172,7 +172,7 @@ async fn paginate_messages() {
                 .chain(page_chunks[2].to_vec().into_iter())
                 .collect(),
             Some(last_page_1_item.id.clone().into()),
-            None,
+            Some(last_page_1_item.time),
             page_size as u64 + 1_u64,
             (conversation_count - page_size * 2) as u64,
             1,
@@ -186,7 +186,7 @@ async fn paginate_messages() {
         ctx.mock_get_message_metadata_page(
             vec![last_page_2_item.clone().into()],
             Some(last_page_2_item.id.clone().into()),
-            None,
+            Some(last_page_2_item.time),
             page_size as u64 + 1_u64,
             1,
             1,
