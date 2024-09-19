@@ -6266,6 +6266,7 @@ impl DataSource for MessageDataSource {
             .api()
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
+                end: Some(last_element.time),
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
                 page_size: page_size.get() as u64 + 1_u64,

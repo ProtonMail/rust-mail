@@ -1,15 +1,18 @@
 use clap::Parser;
 use proton_api_core::services::proton::Config;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::db::session::SessionEncryptionKey;
+use proton_core_common::models::ModelExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
+use proton_core_common::paginator::{DataSource, Paginator};
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
-use proton_mail_common::models::{Conversation, Message};
+use proton_mail_common::models::{Conversation, Label, Message};
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage, Mailbox,
 };
+use stash::orm::Model;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tracing_subscriber::filter::LevelFilter;
@@ -32,6 +35,8 @@ struct Args {
     username: String,
     #[arg(short, long)]
     password: String,
+    #[arg(short, long, default_value = "false")]
+    messages: bool,
 }
 #[tokio::main]
 async fn main() {
@@ -48,7 +53,11 @@ async fn main() {
         .with_env_filter(env_filter)
         .init();
 
-    let Args { username, password } = Args::parse();
+    let Args {
+        username,
+        password,
+        messages,
+    } = Args::parse();
     let tmp_dir = TempDir::new("cli").unwrap();
 
     let keychain = InMemoryKeyChain::default();
@@ -79,31 +88,42 @@ async fn main() {
         .await
         .unwrap();
 
-    let mailbox = Mailbox::with_remote_id(Arc::clone(&user_ctx), LabelId::inbox())
+    let label = Label::find_by_id::<RemoteId, _>(LabelId::inbox().into(), user_ctx.user_stash())
         .await
+        .unwrap()
         .unwrap();
 
-    let page_count = 5_u32;
+    let page_count = 50_u32;
 
-    let paginator =
-        Conversation::paginate_in_label(&user_ctx, mailbox.label_id(), page_count, None)
-            .await
-            .unwrap();
-    // Uncomment for messages.
-    /*
-    let paginator = Message::paginate_in_label(
-        &user_ctx,
-        mailbox.label_id(),
-        page_count,
-        user_ctx.user_stash(),
-        None,
-    )
-    .await
-    .unwrap();*/
+    if messages {
+        let paginator =
+            Message::paginate_in_label(&user_ctx, label.local_id.unwrap(), page_count, None)
+                .await
+                .unwrap();
+        paginate(&paginator, label.total_msg).await;
+    } else {
+        let paginator =
+            Conversation::paginate_in_label(&user_ctx, label.local_id.unwrap(), page_count, None)
+                .await
+                .unwrap();
+        paginate(&paginator, label.total_conv).await;
+    }
+}
 
-    let page_1 = paginator.current_page().await.unwrap();
-    assert_eq!(page_1.len(), page_count as usize);
-    let page_2 = paginator.next_page().await.unwrap();
-    assert_eq!(page_2.len(), page_count as usize);
-    assert_ne!(page_1.last().unwrap(), page_2.first().unwrap());
+async fn paginate<T: Model, R: DataSource<Item = T>>(
+    paginator: &Paginator<T, R>,
+    total_elements: u64,
+) {
+    let mut element_count = 0_u64;
+
+    let page = paginator.current_page().await.unwrap();
+    element_count += page.len() as u64;
+
+    while element_count < total_elements {
+        tracing::info!("Elements {} / {}", element_count, total_elements);
+        let next_page = paginator.next_page().await.unwrap();
+        element_count += next_page.len() as u64;
+    }
+
+    tracing::info!("END {} / {}", element_count, total_elements);
 }

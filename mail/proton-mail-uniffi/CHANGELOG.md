@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fixed
+
+  - Message and Conversation pagination counters and element scroll
+
 ## [0.11.46] - 2024-09-18
 
 ### Changed
