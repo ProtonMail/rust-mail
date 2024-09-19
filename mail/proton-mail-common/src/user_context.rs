@@ -110,16 +110,24 @@ impl MailUserContext {
         self.user_context.stash()
     }
 
+    /// Get the mail context within which this user context resides.
     pub fn mail_context(&self) -> &MailContext {
         &self.mail_context
     }
 
+    /// Get the inner core context which this context wraps.
     pub fn user_context(&self) -> &UserContext {
         &self.user_context
     }
 
+    /// Get the remote (API) ID of the user associated with this context.
     pub fn user_id(&self) -> &RemoteId {
         self.user_context.user_id()
+    }
+
+    /// Get the remote (API) ID of the session associated with this context.
+    pub fn session_id(&self) -> &RemoteId {
+        self.user_context.session_id()
     }
 
     /// Provides a way to get the core::models::User instance.
@@ -213,6 +221,11 @@ impl MailUserContext {
     /// Returns the cache path for mail related resource.
     pub fn mail_cache_path(&self) -> PathBuf {
         self.mail_context.mail_cache_path(self.user_id())
+    }
+
+    /// Set this user as the primary user.
+    pub async fn set_primary(&self) -> MailContextResult<()> {
+        Ok(self.user_context.set_primary().await?)
     }
 
     pub async fn logout(&self) -> MailContextResult<()> {

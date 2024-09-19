@@ -159,3 +159,4 @@ macro_rules! result_builder {
 
 result_builder!(UserLoginFlowArcMailUserSessionResult, Arc<MailUserSession>);
 result_builder!(UserLoginFlowArcLoginFlowResult, Arc<LoginFlow>);
+result_builder!(UserLoginFlowStringResult, String);

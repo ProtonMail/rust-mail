@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+
+- Expose `CoreAccount` and related types
+- Add methods to query an account's login state
+- Enable a partially completed login flow to be resumed
+
+### Changed
+
+- Split `StoredSession` into `StoredAccount` / `StoredSession`
+
 ## [0.11.49] - 2024-09-20
 
 ### Fixed

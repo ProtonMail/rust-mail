@@ -1,6 +1,9 @@
 use crate::core::datatypes::ApiConfig;
-use crate::core::{FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged, StoredSessionState};
-use crate::core::{OSKeyChain, StoredSession};
+use crate::core::{
+    FFIKeyChain, FFINetworkStatusChanged, NetworkStatusChanged, StoredAccountState, StoredSession,
+    StoredSessionState,
+};
+use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::login_flow::UserLoginFlowArcLoginFlowResult;
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
@@ -10,10 +13,11 @@ use proton_action_queue::action::Action;
 use proton_action_queue::queue::{
     ActionError as QueueActionError, Error as QueueError, QueuedError,
 };
+use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
-use proton_core_common::db::session::SessionEncryptionKey;
+use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::ContactError;
 use proton_event_loop::EventLoopError;
 use proton_mail_common::actions::ActionError;
@@ -67,6 +71,8 @@ pub enum MailSessionError {
     App(#[from] AppError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
+    #[error("Login Error: {0}")]
+    Login(#[from] LoginError),
     #[error("API Error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("Cache Error: {0}")]
@@ -194,78 +200,24 @@ impl MailSession {
         .into()
     }
 
-    /// Return the list of active session.
-    ///
-    /// # Errors
-    /// Returns error if the db query failed.
-    pub fn stored_sessions(&self) -> MailSessionResult<Vec<Arc<StoredSession>>> {
+    /// Resume an existing login flow.
+    pub async fn resume_login_flow(
+        &self,
+        user_id: String,
+        session_id: String,
+    ) -> UserLoginFlowArcLoginFlowResult {
         let ctx = self.ctx.clone();
 
-        async_runtime().block_on(async move {
-            let sessions = ctx.sessions().await?;
+        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
+            let flow = ctx
+                .resume_login_flow(user_id.into(), session_id.into())
+                .await
+                .map_err(RealUserLoginFlowError::from)?;
 
-            Ok(sessions.into_iter().map(StoredSession::new).collect())
-        })
-    }
-
-    /// Watch the stored sessions for changes.
-    ///
-    /// # Errors
-    /// Returns error if the db query failed.
-    pub async fn watch_stored_sessions(
-        &self,
-        callback: Box<dyn LiveQueryCallback>,
-    ) -> MailSessionResult<WatchedSessions> {
-        let context = self.ctx.clone();
-
-        uniffi_async(async move {
-            let (sessions, rx) = context.watch_sessions().await?;
-
-            let watcher = watch_channel(rx, callback);
-
-            Ok(WatchedSessions {
-                sessions: sessions.into_iter().map(StoredSession::new).collect(),
-                handle: watcher,
-            })
+            Ok(LoginFlow::new(flow, ctx))
         })
         .await
-    }
-
-    /// Get the states of the available sessions.
-    ///
-    /// # Errors
-    /// Returns error if we fail to retrieve the session states from the db.
-    pub fn stored_session_states(&self) -> MailSessionResult<Vec<Arc<StoredSessionState>>> {
-        let ctx = self.ctx.clone();
-
-        async_runtime().block_on(async move {
-            let states = ctx.session_states().await?;
-
-            Ok(states.into_iter().map(StoredSessionState::new).collect())
-        })
-    }
-
-    /// Watch the stored session states for changes.
-    ///
-    /// # Errors
-    /// Returns error if the db query failed.
-    pub async fn watch_stored_session_states(
-        &self,
-        callback: Box<dyn LiveQueryCallback>,
-    ) -> MailSessionResult<WatchedSessionStates> {
-        let context = self.ctx.clone();
-
-        uniffi_async(async move {
-            let (states, rx) = context.watch_session_states().await?;
-
-            let watcher = watch_channel(rx, callback);
-
-            Ok(WatchedSessionStates {
-                states: states.into_iter().map(StoredSessionState::new).collect(),
-                handle: watcher,
-            })
-        })
-        .await
+        .into()
     }
 
     /// Create an user context from a stored session.
@@ -276,21 +228,216 @@ impl MailSession {
         async_runtime().block_on(async move {
             let ctx = self
                 .ctx
-                .user_context_from_session(session.encrypted_session())
+                .user_context_from_session(session.session())
                 .await?;
 
             Ok(MailUserSession::new(ctx))
         })
     }
 
-    /// Removes a user session and deletes all associated data.
+    /// Get all available accounts.
+    ///
+    /// An account is an entity representing a Proton account known to the system.
+    /// When a user first authenticates via the login flow, a new account is created,
+    /// and all subsequent sessions are associated with that account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the accounts from the db.
+    pub async fn get_accounts(&self) -> MailSessionResult<Vec<Arc<StoredAccount>>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let accounts = ctx.get_accounts().await?;
+
+            Ok(accounts.into_iter().map(StoredAccount::new).collect())
+        })
+        .await
+    }
+
+    /// Watch the accounts for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_accounts(
+        &self,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> MailSessionResult<WatchedAccounts> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let (accounts, rx) = ctx.watch_accounts().await?;
+
+            Ok(WatchedAccounts {
+                accounts: accounts.into_iter().map(StoredAccount::new).collect(),
+                handle: watch_channel(rx, callback),
+            })
+        })
+        .await
+    }
+
+    /// Get a single account by its remote (user) ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_account(
+        &self,
+        user_id: String,
+    ) -> MailSessionResult<Option<Arc<StoredAccount>>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let account = ctx.get_account(user_id.into()).await?;
+
+            Ok(account.map(StoredAccount::new))
+        })
+        .await
+    }
+
+    /// Get all API sessions associated with a given account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    pub async fn get_sessions(
+        &self,
+        account: Arc<StoredAccount>,
+    ) -> MailSessionResult<Vec<Arc<StoredSession>>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let account = account.account();
+            let user_id = account.remote_id.clone();
+            let sessions = ctx.get_sessions(user_id).await?;
+
+            Ok(sessions.into_iter().map(StoredSession::new).collect())
+        })
+        .await
+    }
+
+    /// Watch an account's API sessions for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_sessions(
+        &self,
+        account: Arc<StoredAccount>,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> MailSessionResult<WatchedSessions> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let (sessions, rx) = ctx.watch_sessions(account.user_id().into()).await?;
+
+            Ok(WatchedSessions {
+                sessions: sessions.into_iter().map(StoredSession::new).collect(),
+                handle: watch_channel(rx, callback),
+            })
+        })
+        .await
+    }
+
+    /// Get a single API session by its associated account and session ID.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_session(
+        &self,
+        session_id: String,
+    ) -> MailSessionResult<Option<Arc<StoredSession>>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let session = ctx.get_session(session_id.into()).await?;
+
+            Ok(session.map(StoredSession::new))
+        })
+        .await
+    }
+
+    /// Get the login state of an account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_account_state(
+        &self,
+        user_id: String,
+    ) -> MailSessionResult<Option<StoredAccountState>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let state = ctx.get_account_state(user_id.into()).await?;
+
+            Ok(state.map(StoredAccountState::from))
+        })
+        .await
+    }
+
+    /// Get the login state of a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_session_state(
+        &self,
+        session_id: String,
+    ) -> MailSessionResult<Option<StoredSessionState>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let state = ctx.get_session_state(session_id.into()).await?;
+
+            Ok(state.map(StoredSessionState::from))
+        })
+        .await
+    }
+
+    /// Get the account considered to be the primary account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_primary_account(&self) -> MailSessionResult<Option<Arc<StoredAccount>>> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move {
+            let account = ctx.get_primary_account().await?;
+
+            Ok(account.map(StoredAccount::new))
+        })
+        .await
+    }
+
+    /// Set the account considered to be the primary account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the account is not found.
+    pub async fn set_primary_account(&self, user_id: String) -> MailSessionResult<()> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async(async move { Ok(ctx.set_primary_account(user_id.into()).await?) }).await
+    }
+
+    /// Removes an account and all associated sessions and data.
     ///
     /// # Errors
     /// Returns error if data can not be removed or the db operation failed.
-    pub async fn delete_session(&self, session: Arc<StoredSession>) -> MailSessionResult<()> {
+    pub async fn delete_account(&self, account: Arc<StoredAccount>) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
-        uniffi_async(async move { Ok(ctx.delete_session(session.encrypted_session()).await?) })
-            .await
+
+        uniffi_async(async move {
+            let account = account.account();
+            let user_id = account.remote_id.clone();
+
+            Ok(ctx.delete_account(user_id).await?)
+        })
+        .await
     }
 
     /// Check whether the network is connected/online.
@@ -340,6 +487,7 @@ impl From<MailContextError> for MailSessionError {
             MailContextError::PGPKeyAccess(e) => Self::PGPKeyAccess(anyhow!("{e}")),
             MailContextError::App(e) => Self::App(e),
             MailContextError::Stash(e) => Self::Stash(e),
+            MailContextError::Login(e) => Self::Login(e),
             MailContextError::Api(e) => Self::Api(e),
             MailContextError::CacheError(e) => Self::CacheError(e),
             MailContextError::ContactError(e) => Self::ContactError(e),
@@ -362,19 +510,19 @@ where
 
 /// Data for watched sessions.
 #[derive(uniffi::Record)]
-pub struct WatchedSessions {
-    /// The sessions.
-    pub sessions: Vec<Arc<StoredSession>>,
+pub struct WatchedAccounts {
+    /// The accounts.
+    pub accounts: Vec<Arc<StoredAccount>>,
 
-    /// The handle to stop watching the sessions.
+    /// The handle to stop watching the accounts.
     pub handle: Arc<WatchHandle>,
 }
 
-/// Data for watched session states.
+/// Data for watched sessions.
 #[derive(uniffi::Record)]
-pub struct WatchedSessionStates {
-    /// The session states.
-    pub states: Vec<Arc<StoredSessionState>>,
+pub struct WatchedSessions {
+    /// The sessions.
+    pub sessions: Vec<Arc<StoredSession>>,
 
     /// The handle to stop watching the sessions.
     pub handle: Arc<WatchHandle>,

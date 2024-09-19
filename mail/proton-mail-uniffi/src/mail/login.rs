@@ -1,4 +1,6 @@
-use crate::errors::login_flow::{UserLoginFlowArcMailUserSessionResult, UserLoginFlowVoidResult};
+use crate::errors::login_flow::{
+    UserLoginFlowArcMailUserSessionResult, UserLoginFlowStringResult, UserLoginFlowVoidResult,
+};
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
 use proton_api_core::auth::{ExposeSecret, SecretString};
@@ -92,6 +94,40 @@ impl LoginFlow {
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
         async_runtime().block_on(async { self.flow.lock().await.is_logged_in() })
+    }
+
+    /// Get the user ID of the user that has (or is in the process of) logging in.
+    ///
+    /// This can be used to resume a login flow.
+    #[must_use]
+    pub fn user_id(&self) -> UserLoginFlowStringResult {
+        async_runtime()
+            .block_on(async {
+                self.flow
+                    .lock()
+                    .await
+                    .user_id()
+                    .map(|id| id.to_owned().into_inner())
+                    .map_err(RealUserLoginFlowError::from)
+            })
+            .into()
+    }
+
+    /// Get the session ID that has been (or is in the process of) being created.
+    ///
+    /// This can be used to resume a login flow.
+    #[must_use]
+    pub fn session_id(&self) -> UserLoginFlowStringResult {
+        async_runtime()
+            .block_on(async {
+                self.flow
+                    .lock()
+                    .await
+                    .session_id()
+                    .map(|id| id.to_owned().into_inner())
+                    .map_err(RealUserLoginFlowError::from)
+            })
+            .into()
     }
 
     /// Check whether the login flow is awaiting 2FA input.

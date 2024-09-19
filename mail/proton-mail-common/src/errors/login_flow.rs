@@ -96,6 +96,7 @@ impl From<MailContextError> for UserLoginFlowError {
             MailContextError::PGPKeyAccess(key_handling_error) => Self::from(key_handling_error),
             MailContextError::App(app_error) => Self::from(app_error),
             MailContextError::Stash(stash_error) => Self::from(stash_error),
+            MailContextError::Login(login_error) => Self::from(login_error),
             MailContextError::Api(api_service_error) => Self::from(api_service_error),
             MailContextError::CacheError(cache_error) => Self::from(cache_error),
             MailContextError::Other(anyhow) => Self::from(anyhow),
