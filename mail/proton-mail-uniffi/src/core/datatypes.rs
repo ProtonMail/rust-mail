@@ -471,16 +471,18 @@ impl From<RealUserMnemonicStatus> for UserMnemonicStatus {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, UniffiEnum)]
-#[repr(u8)]
 pub enum UserType {
     /// TODO: Document this variant.
-    Proton = 1,
+    Proton,
 
     /// TODO: Document this variant.
-    Managed = 2,
+    Managed,
 
     /// TODO: Document this variant.
-    External = 3,
+    External,
+
+    /// TODO: Document this variant.
+    Unknown(u8),
 }
 
 impl From<UserType> for RealUserType {
@@ -489,6 +491,7 @@ impl From<UserType> for RealUserType {
             UserType::Proton => Self::Proton,
             UserType::Managed => Self::Managed,
             UserType::External => Self::External,
+            UserType::Unknown(v) => Self::Unknown(v),
         }
     }
 }
@@ -499,6 +502,7 @@ impl From<RealUserType> for UserType {
             RealUserType::Proton => Self::Proton,
             RealUserType::Managed => Self::Managed,
             RealUserType::External => Self::External,
+            RealUserType::Unknown(v) => Self::Unknown(v),
         }
     }
 }
