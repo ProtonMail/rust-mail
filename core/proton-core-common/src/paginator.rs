@@ -735,9 +735,14 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             paging_query(
                 &self.query_logic,
                 0,
-                NonZeroU32::new(self.shared.lock().await.cursor_index)
-                    .unwrap()
-                    .saturating_add(self.page_size.into()),
+                NonZeroU32::new(
+                    self.shared
+                        .lock()
+                        .await
+                        .cursor_index
+                        .saturating_add(self.page_size.into()),
+                )
+                .unwrap(),
             ),
             convert_params(&self.params),
             &self.stash.clone(),

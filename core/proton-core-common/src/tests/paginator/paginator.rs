@@ -293,6 +293,28 @@ mod basic_pagination {
             ]
         );
     }
+
+    #[tokio::test]
+    async fn reload_does_not_panic_on_first_page() {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        create_table(&stash).await;
+
+        let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
+            "WHERE number > ? ORDER BY number ASC",
+            vec![Param::Integer(250)],
+            &stash,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
+            Some(msg_sender),
+        )
+        .await
+        .unwrap();
+
+        paginator.reload().await.unwrap();
+    }
 }
 
 #[cfg(test)]
