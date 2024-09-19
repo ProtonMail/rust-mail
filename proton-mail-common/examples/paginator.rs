@@ -1,8 +1,7 @@
 use clap::Parser;
 use proton_api_core::services::proton::Config;
-use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{LabelId, RemoteId};
-use proton_core_common::db::session::SessionEncryptionKey;
+use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_core_common::paginator::{DataSource, Paginator};

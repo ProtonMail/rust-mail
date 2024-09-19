@@ -1,6 +1,11 @@
-use proton_core_common::db::session::UserSessionState;
-use proton_mail_common::proton_core_common::db::session::EncryptedUserSession;
 use std::sync::Arc;
+
+use proton_core_common::{
+    datatypes::{PasswordMode, RemoteId, TfaStatus},
+    db::account::{CoreAccount, CoreSession},
+};
+use proton_core_common::{CoreAccountState, CoreSessionState};
+use uniffi::{Enum, Record};
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -19,66 +24,180 @@ pub enum SessionError {
     Http(String),
 }
 
-/// Represents a session that has been stored on the device.
+/// Represents an account known to the system.
+#[derive(uniffi::Object)]
+pub struct StoredAccount {
+    account: CoreAccount,
+}
+
+impl StoredAccount {
+    pub(crate) fn new(account: CoreAccount) -> Arc<Self> {
+        Arc::new(Self { account })
+    }
+
+    pub(crate) fn account(&self) -> &CoreAccount {
+        &self.account
+    }
+}
+
+#[uniffi::export]
+impl StoredAccount {
+    /// Get the account's user id.
+    #[must_use]
+    pub fn user_id(&self) -> String {
+        self.account.remote_id.to_string()
+    }
+
+    /// Get the username or email address of the account (whatever was used to log in).
+    #[must_use]
+    pub fn name_or_address(&self) -> String {
+        self.account.name_or_addr.clone()
+    }
+
+    /// Returns whether the account has 2FA enabled.
+    #[must_use]
+    pub fn second_factor_status(&self) -> SecondFactorStatus {
+        self.account.second_factor_mode.into()
+    }
+
+    /// Returns whether the account has a second (mailbox) password.
+    #[must_use]
+    pub fn second_password_status(&self) -> SecondPasswordStatus {
+        self.account.password_mode.into()
+    }
+}
+
+/// Represents an account known to the system.
 #[derive(uniffi::Object)]
 pub struct StoredSession {
-    session: EncryptedUserSession,
+    session: CoreSession,
 }
 
 impl StoredSession {
-    pub(crate) fn new(session: EncryptedUserSession) -> Arc<Self> {
+    pub(crate) fn new(session: CoreSession) -> Arc<Self> {
         Arc::new(Self { session })
     }
 
-    pub(crate) fn encrypted_session(&self) -> &EncryptedUserSession {
+    pub(crate) fn session(&self) -> &CoreSession {
         &self.session
     }
 }
 
 #[uniffi::export]
 impl StoredSession {
-    /// Get the session's email.
-    #[must_use]
-    pub fn name_or_address(&self) -> String {
-        self.session.name_or_addr.clone()
-    }
-
-    /// Get the session's user id.
-    #[must_use]
-    pub fn user_id(&self) -> String {
-        self.session.user_id.to_string()
-    }
-
-    /// Get the session id.
+    /// Get the ID of the session.
     #[must_use]
     pub fn session_id(&self) -> String {
-        self.session.session_id.to_string()
+        self.session.remote_id.to_string()
     }
-}
 
-/// Represents a session that has been stored on the device.
-#[derive(uniffi::Object)]
-pub struct StoredSessionState {
-    state: UserSessionState,
-}
-
-impl StoredSessionState {
-    pub(crate) fn new(state: UserSessionState) -> Arc<Self> {
-        Arc::new(Self { state })
-    }
-}
-
-#[uniffi::export]
-impl StoredSessionState {
-    /// Get the session state's user id.
+    /// Get the account id of the session.
     #[must_use]
     pub fn user_id(&self) -> String {
-        self.state.user_id.to_string()
+        self.session.account_id.to_string()
     }
+}
 
-    /// Get the timestamp at which the session was last active.
-    #[must_use]
-    pub fn last_active_ts(&self) -> u64 {
-        self.state.last_active_ts
+/// Represents the state of an account.
+#[derive(Debug, Enum)]
+pub enum StoredAccountState {
+    /// The account has at least one fully logged-in session;
+    /// the variant holds the (remote) IDs of the fullly logged-in sessions.
+    LoggedIn(Vec<String>),
+
+    /// The account has authenticated sessions but they are missing the key secret.
+    /// The variant holds the (remote) IDs of the sessions that are missing the key secret.
+    NeedMbp(Vec<String>),
+
+    /// The account has partially authenticated sessions that require a second factor.
+    /// The variant holds the (remote) IDs of the sessions that require a second factor.
+    NeedTfa(Vec<String>),
+
+    /// The account has no active sessions.
+    LoggedOut,
+}
+
+impl From<CoreAccountState> for StoredAccountState {
+    fn from(value: CoreAccountState) -> Self {
+        fn from_inner(value: Vec<RemoteId>) -> Vec<String> {
+            value.into_iter().map(RemoteId::into_inner).collect()
+        }
+
+        match value {
+            CoreAccountState::LoggedIn(vec) => Self::LoggedIn(from_inner(vec)),
+            CoreAccountState::NeedMbp(vec) => Self::NeedMbp(from_inner(vec)),
+            CoreAccountState::NeedTfa(vec) => Self::NeedTfa(from_inner(vec)),
+            CoreAccountState::LoggedOut => Self::LoggedOut,
+        }
+    }
+}
+
+/// Represents the state of a session.
+#[derive(Debug, Enum)]
+pub enum StoredSessionState {
+    /// The session is fully authenticated and ready to use.
+    Ready,
+
+    /// The session has authenticated but is missing the key secret.
+    NeedMbp,
+
+    /// The session has partially authenticated and requires a second factor.
+    NeedTfa,
+}
+
+impl From<CoreSessionState> for StoredSessionState {
+    fn from(value: CoreSessionState) -> Self {
+        match value {
+            CoreSessionState::Ready => Self::Ready,
+            CoreSessionState::NeedMbp => Self::NeedMbp,
+            CoreSessionState::NeedTfa => Self::NeedTfa,
+        }
+    }
+}
+
+/// Represents the second factor status of an account.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Record)]
+pub struct SecondFactorStatus {
+    /// Whether a TOTP second factor can be used.
+    pub totp: bool,
+
+    /// Whether a FIDO2 second factor can be used.
+    pub fido: bool,
+}
+
+impl From<TfaStatus> for SecondFactorStatus {
+    fn from(tfa: TfaStatus) -> Self {
+        let (totp, fido) = match tfa {
+            TfaStatus::None => (false, false),
+            TfaStatus::Totp => (true, false),
+            TfaStatus::Fido2 => (false, true),
+            TfaStatus::TotpOrFido2 => (true, true),
+        };
+
+        Self { totp, fido }
+    }
+}
+
+/// Represents the second password status of an account.
+///
+/// TODO: Add other additional password types,
+/// e.g.  the password that proton pass allows users to set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Record)]
+pub struct SecondPasswordStatus {
+    /// Whether a mailbox password has been set.
+    pub mailbox_password: bool,
+}
+
+impl From<PasswordMode> for SecondPasswordStatus {
+    fn from(mode: PasswordMode) -> Self {
+        match mode {
+            PasswordMode::One => Self {
+                mailbox_password: false,
+            },
+
+            PasswordMode::Two => Self {
+                mailbox_password: true,
+            },
+        }
     }
 }

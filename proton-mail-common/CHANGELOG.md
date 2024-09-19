@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a background job for expired messages.
 - New error targeting end users (Login flow only)
 - `MessageBody` and `Attachment` cache persistence.
+- Expose `CoreAccount` and related types
+- Add methods to query an account's login state
+- Enable a partially completed login flow to be resumed
 
 ### Changed
 
@@ -31,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Label parent is now resolved at load time.
 - Attachment and MessageBodies cache now use `get_path_or_insert`.
 - Removed first argument (`mail_settings`) from `MailUserContext::image_for_sender`.
+- Split `EncryptedUserSession` into `CoreAccount` / `CoreSession`
 
 ### Fixed
 

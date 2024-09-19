@@ -3,18 +3,20 @@ use crate::{AppError, MailUserContext};
 use futures::executor::block_on;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
-use proton_api_core::login::Flow;
+use proton_api_core::login::{Flow, LoginError};
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::{Config, Proton};
 use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::RemoteId;
-use proton_core_common::db::session::{EncryptedUserSession, UserSessionState};
+use proton_core_common::db::account::{CoreAccount, CoreSession};
+use proton_core_common::db::ChangeReceiver;
 use proton_core_common::os::{KeyChain, KeyChainError};
-use proton_core_common::{ContactError, Context, CoreContextError, KeyHandlingError};
+use proton_core_common::{
+    ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
+};
 use proton_core_common::{NetworkStatusChanged, UserDatabaseInitializer};
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
-use stash::orm::ResultsetChange;
 use stash::stash::{Stash, StashError};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -47,6 +49,8 @@ pub enum MailContextError {
     App(#[from] AppError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
+    #[error("Login Error: {0}")]
+    Login(#[from] LoginError),
     #[error("API Error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("Cache Error: {0}")]
@@ -60,6 +64,7 @@ pub enum MailContextError {
 impl From<CoreContextError> for MailContextError {
     fn from(value: CoreContextError) -> Self {
         match value {
+            CoreContextError::Login(err) => MailContextError::Login(err),
             CoreContextError::Api(err) => MailContextError::Api(err),
             CoreContextError::Crypto => MailContextError::Crypto,
             CoreContextError::KeyChain(err) => MailContextError::KeyChain(err),
@@ -127,9 +132,46 @@ impl MailContext {
         })
     }
 
+    /// Begin a login flow.
+    ///
+    /// This method initiates a new [`Flow`], used to log in to a Proton account.
+    /// The flow is used to guide the user through the login process and persist
+    /// the resulting session data.
+    ///
+    /// # Errors
+    ///
+    /// See [`Context::new_login_flow`].
     pub async fn new_login_flow(&self) -> MailContextResult<Flow> {
-        let f = self.core_context.new_login_flow().await?;
-        Ok(f)
+        Ok(self.core_context.new_login_flow().await?)
+    }
+
+    /// Resume a partially completed login flow.
+    ///
+    /// The initial [`Flow::login`] call creates a new session in the database.
+    /// However, this session may not yet be usable if 2FA or an additional
+    /// password is required. If at this point the login flow is interrupted,
+    /// the session is left in an incomplete state. This method allows resuming
+    /// the flow to complete the login process.
+    ///
+    /// # Arguments
+    ///
+    /// * `user_id` - The ID of the user to log in (from [`Flow::user_id`]).
+    /// * `session_id` - The ID of the session to resume (from [`Flow::session_id`]).
+    ///
+    /// # Errors
+    ///
+    /// See [`Context::resume_login_flow`].
+    pub async fn resume_login_flow(
+        &self,
+        user_id: RemoteId,
+        session_id: RemoteId,
+    ) -> MailContextResult<Flow> {
+        let flow = self
+            .core_context
+            .resume_login_flow(user_id, session_id)
+            .await?;
+
+        Ok(flow)
     }
 
     /// Create a new context from a login flow.
@@ -158,7 +200,7 @@ impl MailContext {
     /// Returns error if we failed to decrypt the user session or access the user database.
     pub async fn user_context_from_session(
         &self,
-        session: &EncryptedUserSession,
+        session: &CoreSession,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
@@ -167,56 +209,142 @@ impl MailContext {
         MailUserContext::new(self.clone(), ctx).await
     }
 
-    /// Return the list of active session.
+    /// Get all available accounts.
+    ///
+    /// An account is an entity representing a Proton account known to the system.
+    /// When a user first authenticates via the login flow, a new account is created,
+    /// and all subsequent sessions are associated with that account.
     ///
     /// # Errors
-    /// Returns error if the db query failed.
-    pub async fn sessions(&self) -> MailContextResult<Vec<EncryptedUserSession>> {
-        Ok(self.core_context.get_sessions().await?)
+    ///
+    /// Returns an error if we fail to retrieve the accounts from the db.
+    pub async fn get_accounts(&self) -> MailContextResult<Vec<CoreAccount>> {
+        Ok(self.core_context.get_accounts().await?)
     }
 
-    /// Watch the active sessions.
+    /// Watch the accounts for changes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the initial list of accounts and a receiver for changes.
+    /// The receiver is a channel over which change events are sent, such as when a new account is created,
+    /// an existing account is updated, or an account is deleted.
     ///
     /// # Errors
-    /// Returns error if the db query failed.
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
+    pub async fn watch_accounts(
+        &self,
+    ) -> MailContextResult<(Vec<CoreAccount>, ChangeReceiver<CoreAccount>)> {
+        Ok(self.core_context.watch_accounts().await?)
+    }
+
+    /// Get a single account by its remote (user) ID.
+    ///
+    /// This is a convenience method that enables retrieving a single account without requiring
+    /// the full set of accounts to be loaded first.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_account(&self, user_id: RemoteId) -> MailContextResult<Option<CoreAccount>> {
+        Ok(self.core_context.get_account(user_id).await?)
+    }
+
+    /// Get all API sessions associated with a given account.
+    ///
+    /// A session represents an authenticated session with the Proton API for a given account,
+    /// including the authentication tokens granted by the API, the state of the session,
+    /// and the user's key passphrase (once known).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    pub async fn get_sessions(&self, user_id: RemoteId) -> MailContextResult<Vec<CoreSession>> {
+        Ok(self.core_context.get_sessions(user_id).await?)
+    }
+
+    /// Watch an account's API sessions for changes.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the initial list of sessions and a receiver for changes.
+    /// The receiver is a channel over which change events are sent, such as when a new session is created,
+    /// an existing session is updated, or a session is deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the watcher cannot be registered with the database.
     pub async fn watch_sessions(
         &self,
-    ) -> MailContextResult<(
-        Vec<EncryptedUserSession>,
-        flume::Receiver<ResultsetChange<EncryptedUserSession, RemoteId>>,
-    )> {
-        Ok(self.core_context.watch_sessions().await?)
+        user_id: RemoteId,
+    ) -> MailContextResult<(Vec<CoreSession>, ChangeReceiver<CoreSession>)> {
+        Ok(self.core_context.watch_sessions(user_id).await?)
     }
 
-    /// Get available session states.
+    /// Get a single API session by its associated account and session ID.
+    ///
+    /// This is a convenience method that enables retrieving a single session without requiring
+    /// the full set of sessions to be loaded first.
     ///
     /// # Errors
     ///
-    /// Returns error if we fail to retrieve the session states from the db.
-    pub async fn session_states(&self) -> MailContextResult<Vec<UserSessionState>> {
-        Ok(self.core_context.get_session_states().await?)
-    }
-
-    /// Watch for changes to the available session states.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the watcher cannot be registered with the database.
-    pub async fn watch_session_states(
+    /// Returns an error if the database operation fails.
+    pub async fn get_session(
         &self,
-    ) -> MailContextResult<(
-        Vec<UserSessionState>,
-        flume::Receiver<ResultsetChange<UserSessionState, RemoteId>>,
-    )> {
-        Ok(self.core_context.watch_session_states().await?)
+        session_id: RemoteId,
+    ) -> MailContextResult<Option<CoreSession>> {
+        Ok(self.core_context.get_session(session_id).await?)
+    }
+
+    /// Get the login state of an account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_account_state(
+        &self,
+        user_id: RemoteId,
+    ) -> MailContextResult<Option<CoreAccountState>> {
+        Ok(self.core_context.get_account_state(user_id).await?)
+    }
+
+    /// Get the login state of a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_session_state(
+        &self,
+        session_id: RemoteId,
+    ) -> MailContextResult<Option<CoreSessionState>> {
+        Ok(self.core_context.get_session_state(session_id).await?)
+    }
+
+    /// Get the account considered to be the primary account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn get_primary_account(&self) -> MailContextResult<Option<CoreAccount>> {
+        Ok(self.core_context.get_primary_account().await?)
+    }
+
+    /// Set the account considered to be the primary account.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the account is not found.
+    pub async fn set_primary_account(&self, user_id: RemoteId) -> MailContextResult<()> {
+        Ok(self.core_context.set_primary_account(user_id).await?)
     }
 
     /// Removes a user session and deletes all associated data.
     ///
     /// # Errors
     /// Returns error if data can not be removed or the db operation failed.
-    pub async fn delete_session(&self, session: &EncryptedUserSession) -> MailContextResult<()> {
-        Ok(self.core_context.delete_session(session).await?)
+    pub async fn delete_account(&self, user_id: RemoteId) -> MailContextResult<()> {
+        Ok(self.core_context.delete_account(user_id).await?)
     }
     pub fn set_network_connected(&self, value: bool) {
         self.core_context.set_network_connected(value)

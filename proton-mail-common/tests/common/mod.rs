@@ -10,13 +10,12 @@ mod messages;
 
 use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use crate::common::account::{TEST_USER_KEY_ID, TEST_USER_PASSWORD};
-use proton_api_core::auth::{SecretString, UserKeySecret};
+use proton_api_core::auth::{AuthSession, AuthState, SecretString, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::Config;
-use proton_core_common::datatypes::{AuthScopes, RemoteId};
-use proton_core_common::db::session::{
-    DecryptedUserSession, EncryptedUserSession, SessionEncryptionKey,
-};
+use proton_core_common::datatypes::{AuthScope, PasswordMode, RemoteId, TfaStatus};
+use proton_core_common::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
+use proton_core_common::models::ModelExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey};
 use proton_crypto_account::proton_crypto::new_srp_provider;
@@ -42,14 +41,40 @@ use wiremock::{Mock, MockServer, Request};
 pub struct TestContext {
     context: MailContext,
     mock_server: MockServer,
-    _tmp_dir: TempDir,
-    encrypted_user_session: EncryptedUserSession,
+    tmp_dir: TempDir,
+    core_account: CoreAccount,
+    core_session: CoreSession,
 }
 
 impl TestContext {
     /// Generate a test UID.
     fn test_uid() -> RemoteId {
         RemoteId::from("TEST_UID")
+    }
+
+    /// Generate a test user ID.
+    fn test_user_id() -> RemoteId {
+        RemoteId::from(TEST_USER_ID)
+    }
+
+    /// Generate a test user name or address.
+    fn test_user_mail() -> String {
+        TEST_USER_MAIL.to_owned()
+    }
+
+    /// Generate a test access token.
+    fn test_acctok() -> SecretString {
+        SecretString::from("ACCESSTOKEN".to_owned())
+    }
+
+    /// Generate a test refresh token.
+    fn test_reftok() -> SecretString {
+        SecretString::from("REFRESHTOKEN".to_owned())
+    }
+
+    /// Generate test scopes.
+    fn test_scopes() -> Vec<String> {
+        vec!["foo".to_owned(), "bar".to_owned()]
     }
 
     /// Create and initialize test context.
@@ -76,6 +101,10 @@ impl TestContext {
             ..Default::default()
         };
         _ = Url::parse(&api_config.base_url).expect("Invalid URL");
+
+        // Use the given data or fall back to the default
+        let user_id = user_id.unwrap_or_else(Self::test_user_id);
+        let user_key_secret = user_key_secret.unwrap_or_else(testdata_user_secret);
 
         // Create a temporary directory for the database
         let tmp_dir = TempDir::new("pmc_test").expect("failed to create temp dir");
@@ -104,31 +133,55 @@ impl TestContext {
         .expect("failed to create mail context");
 
         // Generate a fake session and write it to the database
-        let stash =
-            Stash::new(Some(&tmp_dir.path().join("session.db"))).expect("failed to create stash");
+        let (core_account, core_session) = {
+            // Create a temporary stash just to insert the fake data.
+            let path = tmp_dir.path().join("account.db");
+            let stash = Stash::new(Some(&path)).expect("failed to create stash");
 
-        // Create a fake session
-        let mut session = DecryptedUserSession {
-            session_id: Self::test_uid(),
-            user_id: user_id.unwrap_or(RemoteId::from(TEST_USER_ID)),
-            name_or_addr: TEST_USER_MAIL.to_owned(),
-            refresh_token: RealSecretString::from_str("REFRESHTOKEN").unwrap(),
-            access_token: RealSecretString::from_str("ACCESSTOKEN").unwrap(),
-            key_secret: Some(user_key_secret.unwrap_or(testdata_user_secret())),
-            scopes: AuthScopes::new(vec![]),
-        }
-        .to_encrypted_session(&encryption_key)
-        .expect("failed to generate encrypted session");
-        session
-            .save_using(&stash.connection())
+            // Create a fake account.
+            let account = CoreAccount::new(
+                user_id.clone(),
+                Self::test_user_mail(),
+                TfaStatus::None,
+                PasswordMode::One,
+            )
+            .with_stash(&stash)
+            .with_save()
             .await
-            .expect("failed to make changes to session db");
+            .expect("fake account should save");
+
+            // Create a auth session.
+            let auth = AuthSession {
+                uid: Self::test_uid().into(),
+                name_or_addr: Self::test_user_mail(),
+                user_id: user_id.clone().into(),
+                second_factor_mode: TfaStatus::None.into(),
+                password_mode: PasswordMode::One.into(),
+                access_token: Self::test_acctok().into(),
+                refresh_token: Self::test_reftok().into(),
+                auth_scope: Self::test_scopes(),
+                auth_state: AuthState::Ready,
+            };
+
+            // Create a fake session.
+            let session = CoreSession::new(auth, &encryption_key)
+                .expect("session should be created")
+                .with_key_secret(&user_key_secret, &encryption_key)
+                .expect("key secret should be set")
+                .with_stash(&stash)
+                .with_save()
+                .await
+                .expect("fake session should save");
+
+            (account, session)
+        };
 
         Self {
             mock_server,
             context,
-            _tmp_dir: tmp_dir,
-            encrypted_user_session: session,
+            tmp_dir,
+            core_account,
+            core_session,
         }
     }
 
@@ -177,7 +230,7 @@ impl TestContext {
     /// Get the test user mail context.
     pub async fn user_context(&self) -> Arc<MailUserContext> {
         self.context
-            .user_context_from_session(&self.encrypted_user_session)
+            .user_context_from_session(&self.core_session)
             .await
             .expect("failed to create user context")
     }
