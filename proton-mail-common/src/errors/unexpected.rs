@@ -109,7 +109,7 @@ impl From<CacheError> for Unexpected {
             CacheError::IO(io_error) => Self::from(io_error),
             CacheError::QuickCache(anyhow) => Self::from(anyhow),
             CacheError::Callback(anyhow) => Self::from(anyhow),
-            CacheError::InsertFailed(_) => Self::Internal,
+            CacheError::InsertFailed(_) | CacheError::NeedExtraMetadata => Self::Internal,
         }
     }
 }

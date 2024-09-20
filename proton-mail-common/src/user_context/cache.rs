@@ -56,6 +56,7 @@ pub struct CacheAttachmentConfig;
 impl CacheConfig for CacheAttachmentConfig {
     type Key = CacheAttachmentKey;
     type Init = Stash;
+    type ExtraMetadata = ();
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
         CacheAttachmentKey::get_all_cached(&stash)
@@ -69,8 +70,8 @@ impl CacheConfig for CacheAttachmentConfig {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    fn key_to_filename(key: &Self::Key) -> OsString {
-        format!("{}-{}", key.attachment_id, key.filename).into()
+    fn key_to_filename(key: &Self::Key, _extra: Option<&()>) -> CacheResult<OsString> {
+        Ok(format!("{}-{}", key.attachment_id, key.filename).into())
     }
 }
 
@@ -183,6 +184,7 @@ pub struct CacheMessageConfig;
 impl CacheConfig for CacheMessageConfig {
     type Key = CacheMessageKey;
     type Init = Stash;
+    type ExtraMetadata = ();
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
         CacheMessageKey::get_all_cached(&stash)
@@ -196,8 +198,8 @@ impl CacheConfig for CacheMessageConfig {
             .map_err(|e| CacheError::Callback(anyhow!(e)))
     }
 
-    fn key_to_filename(key: &Self::Key) -> OsString {
-        format!("{}", key.message_id).into()
+    fn key_to_filename(key: &Self::Key, _extra: Option<&()>) -> CacheResult<OsString> {
+        Ok(format!("{}", key.message_id).into())
     }
 
     fn weighting_strategy() -> WeightingStrategy {
