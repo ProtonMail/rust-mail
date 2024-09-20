@@ -67,7 +67,6 @@ static CONV1_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
 static CONV1_MSG3: LazyLock<Message> = LazyLock::new(|| Message {
     remote_id: Some(new_message_id(3)),
     display_order: 1,
-    label_ids: vec![],
     subject: "RE: FW: Message subject".to_owned(),
     sender: "omega@bar.com".into(),
     to_list: MessageAddresses {
@@ -148,6 +147,7 @@ pub fn new_test_label_db_state() -> TestDBState {
         labels: vec![test_label1()],
         conversations: vec![Conversation {
             remote_id: Some(DELETE_DB_CONV1.clone()),
+            labels: vec![],
             ..Default::default()
         }],
         messages: vec![
@@ -167,7 +167,7 @@ pub fn new_message_id(num: usize) -> RemoteId {
 }
 
 pub fn new_test_delete_db_state() -> TestDBState {
-    // Conversation 1 has 3 messages, split between 2 labels, 1 is unread  + 1 Attachment(s)
+    // Conversation 1 has 4 messages, split between 2 labels, 1 is unread  + 1 Attachment(s)
     // Conversation 2 has 2 message in one label, 1 is unread + 0 Attachment(s)
     let conv_id1 = DELETE_DB_CONV1.clone();
     let conv_id2 = DELETE_DB_CONV2.clone();
@@ -198,12 +198,20 @@ pub fn new_test_delete_db_state() -> TestDBState {
             Message {
                 attachments_metadata: vec![TEXT_ATTACHMENT.to_owned()],
                 num_attachments: 1,
+                label_ids: vec![MY_LABEL_ID2.clone().into()],
                 ..CONV1_MSG1.to_owned()
             },
-            CONV1_MSG2.to_owned(),
-            CONV1_MSG3.to_owned(),
+            Message {
+                label_ids: vec![MY_LABEL_ID1.clone().into()],
+                ..CONV1_MSG2.to_owned()
+            },
+            Message {
+                label_ids: vec![MY_LABEL_ID1.clone().into()],
+                ..CONV1_MSG3.to_owned()
+            },
             Message {
                 unread: true,
+                label_ids: vec![MY_LABEL_ID2.clone().into()],
                 ..CONV1_MSG4.to_owned()
             },
             // conversation 2

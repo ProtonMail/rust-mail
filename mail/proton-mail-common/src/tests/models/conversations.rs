@@ -1212,6 +1212,7 @@ async fn test_conversation_create_starred() {
             context_num_attachments: 0,
             context_expiration_time: 0,
             context_snooze_time: 0,
+            deleted: false,
             row_id: None,
             stash: Some(stash.clone()),
         }];
@@ -1292,6 +1293,7 @@ async fn test_conversation_create_with_labels() {
         context_num_attachments: 0,
         context_expiration_time: 0,
         context_snooze_time: 0,
+        deleted: false,
         row_id: None,
         stash: Some(stash.clone()),
     }];
@@ -1472,6 +1474,7 @@ async fn test_conversation_update() {
             context_num_attachments: 0,
             context_expiration_time: 0,
             context_snooze_time: 0,
+            deleted: false,
             row_id: None,
             stash: Some(stash.clone()),
         },
@@ -1487,6 +1490,7 @@ async fn test_conversation_update() {
             context_num_attachments: 0,
             context_expiration_time: 0,
             context_snooze_time: 0,
+            deleted: false,
             row_id: None,
             stash: Some(stash.clone()),
         },
@@ -1611,7 +1615,6 @@ async fn test_conversation_undelete_all_mail() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_delete_all_mail() {
     // Simulate conversation delete from all mail, all messages for the conversation a
     // are deleted.
@@ -1620,12 +1623,7 @@ async fn test_conversation_delete_all_mail() {
     let mut state = new_test_delete_db_state();
     prepare_db_state_core(&tx, &mut state.addresses).await;
     let (state, state_map) = prepare_and_patch_db_state(&tx, state.clone()).await;
-    let all_mail_label = Label::find_by_id(RemoteId::from(LabelId::all_mail()), tx.stash())
-        .await
-        .unwrap()
-        .unwrap()
-        .local_id
-        .unwrap();
+    let all_mail_label = SystemLabel::AllMail.local_id(&tx).await.unwrap().unwrap();
 
     // Deleting a conversation must
     // * Update conversation counters
@@ -1637,17 +1635,8 @@ async fn test_conversation_delete_all_mail() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple_from_label(vec![local_conv_id], all_mail_label, &tx)
-        .await
-        .expect("failed to mark as deleted");
 
-    let mut db_conversation = Conversation::load(local_conv_id, &tx)
-        .await
-        .expect("failed to get conversation")
-        .expect("should have value");
-    db_conversation.deleted = true;
-    db_conversation
-        .save()
+    Conversation::mark_deleted(all_mail_label, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark as deleted");
 
@@ -1680,7 +1669,7 @@ async fn test_conversation_delete_all_mail() {
                 .get(&MY_LABEL_ID2.clone().into())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
-            assert_eq!(label_counts.unread, start_label_counts.unread,);
+            assert_eq!(label_counts.unread, start_label_counts.unread - 1,);
             assert_eq!(label_counts.total, start_label_counts.total - 1);
         }
     }
@@ -1726,7 +1715,7 @@ async fn test_conversation_delete_all_mail() {
         .conversations
         .get(&state.conversations[1].remote_id.clone().unwrap())
         .unwrap();
-    Conversation::delete_multiple_from_label(vec![local_conv_id], all_mail_label, &tx)
+    Conversation::mark_deleted(all_mail_label, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark conv as deleted");
 

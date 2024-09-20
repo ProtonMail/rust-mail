@@ -47,6 +47,7 @@ pub async fn create_conversation_tables(tx: &Tether) -> Result<(), StashError> {
                 context_num_attachments INTEGER NOT NULL,
                 context_expiration_time INTEGER NOT NULL,
                 context_snooze_time INTEGER NOT NULL,
+                deleted INTEGER NOT NULL DEFAULT 0,
 
                 UNIQUE(local_conversation_id, local_label_id),
 

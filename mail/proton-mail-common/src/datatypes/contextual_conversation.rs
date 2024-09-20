@@ -355,6 +355,7 @@ impl ContextualConversation {
                     WHERE label_type=? AND label_id IN (
                         SELECT local_label_id FROM conversation_labels
                         WHERE local_conversation_id IN ({args})
+                        AND deleted = 0
                     )
                 ", args=var_args},
                 std::iter::once(Box::new(LabelType::Label) as Box<dyn ToSql + Send>)
@@ -399,7 +400,7 @@ impl ContextualConversation {
 
         let (_, conversations, _) = futures::try_join!(
             ConversationLabel::find(
-                "WHERE local_label_id =?",
+                "WHERE local_label_id =? AND deleted = 0",
                 params![label_id],
                 interface,
                 Some(conv_label_sender),
@@ -411,7 +412,7 @@ impl ContextualConversation {
                         SELECT local_label_id FROM conversation_labels
                         WHERE local_conversation_id IN (
                             SELECT local_conversation_id FROM conversation_labels
-                                WHERE local_label_id=?
+                                WHERE local_label_id=? AND deleted = 0
                         )
                     )
                 "},
