@@ -6065,7 +6065,7 @@ impl DataSource for ConversationDataSource {
         &self,
         page_size: NonZeroU32,
         stash: &Stash,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Self::Item>, Self::Error> {
         let response = self
             .session
             .api()
@@ -6082,12 +6082,14 @@ impl DataSource for ConversationDataSource {
             response.total
         );
         let tx = stash.transaction().await?;
+        let mut result = Vec::with_capacity(response.conversations.len());
         for conversation in response.conversations {
             let mut conversation: Conversation = conversation.into();
             conversation.save_using(&tx).await?;
+            result.push(conversation);
         }
         tx.commit().await?;
-        Ok(())
+        Ok(result)
     }
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash, elements))]
@@ -6097,7 +6099,7 @@ impl DataSource for ConversationDataSource {
         page_size: NonZeroU32,
         elements: Vec<Self::Item>,
         stash: &Stash,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Self::Item>, Self::Error> {
         // Find the first last element with a valid remote id.
         let Some(last_element) = elements
             .iter()
@@ -6144,7 +6146,7 @@ impl DataSource for ConversationDataSource {
         // `end_id` always returns the given conversation in the search results
         // if it exists.
         if response.conversations.is_empty() {
-            return Ok(());
+            return Ok(vec![]);
         }
 
         if response.conversations[0].id == last_element_id {
@@ -6154,16 +6156,18 @@ impl DataSource for ConversationDataSource {
         }
 
         if response.conversations.is_empty() {
-            return Ok(());
+            return Ok(vec![]);
         }
 
         let tx = stash.transaction().await?;
+        let mut result = Vec::with_capacity(response.conversations.len());
         for conversation in response.conversations {
             let mut conversation: Conversation = conversation.into();
             conversation.save_using(&tx).await?;
+            result.push(conversation);
         }
         tx.commit().await?;
-        Ok(())
+        Ok(result)
     }
 }
 
@@ -6217,7 +6221,7 @@ impl DataSource for MessageDataSource {
         &self,
         page_size: NonZeroU32,
         stash: &Stash,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Self::Item>, Self::Error> {
         let response = self
             .session
             .api()
@@ -6235,9 +6239,10 @@ impl DataSource for MessageDataSource {
         );
 
         let tx = stash.transaction().await?;
-        Message::create_or_update_messages_from_metadata(response.messages, &tx).await?;
+        let result =
+            Message::create_or_update_messages_from_metadata_vec(response.messages, &tx).await?;
         tx.commit().await?;
-        Ok(())
+        Ok(result)
     }
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash, elements))]
@@ -6247,7 +6252,7 @@ impl DataSource for MessageDataSource {
         page_size: NonZeroU32,
         elements: Vec<Self::Item>,
         stash: &Stash,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Vec<Self::Item>, Self::Error> {
         // Find the first last element with a valid remote id.
         let Some(last_element) = elements
             .iter()
@@ -6282,7 +6287,7 @@ impl DataSource for MessageDataSource {
         // `end_id` always returns the given message in the search results
         // if it exists.
         if response.messages.is_empty() {
-            return Ok(());
+            return Ok(vec![]);
         }
 
         if response.messages[0].id == last_element_id {
@@ -6292,12 +6297,13 @@ impl DataSource for MessageDataSource {
         }
 
         if response.messages.is_empty() {
-            return Ok(());
+            return Ok(vec![]);
         }
 
         let tx = stash.transaction().await?;
-        Message::create_or_update_messages_from_metadata(response.messages, &tx).await?;
+        let result =
+            Message::create_or_update_messages_from_metadata_vec(response.messages, &tx).await?;
         tx.commit().await?;
-        Ok(())
+        Ok(result)
     }
 }
