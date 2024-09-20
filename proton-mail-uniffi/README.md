@@ -66,4 +66,26 @@ application:
 IOS_ROOT_REPO=${PATH_TO_REPO} ./proton-mail-uniffi/ios/build-local.sh
 ```
 
+## Creating a new release
 
+CI is currently setup to publish a new release for mobile when a new tag is
+published.
+
+The tags match the version of this crate.
+
+1. Update Cargo.toml version
+2. Insert a version entry into the Changelog
+    * E.g: `## [0.11.99] - 2024-09-12`
+    * Make sure there is an entry with `## [unreleased] - 2024-00-00` on the top
+      for new changes after the release.
+3. Commit with `chore: Bump proton-mail-uniffi` and push to master
+    * If you don't have permissions to merge to master open a pull request
+    * Contact a maintainer otherwise
+4. Create a new tag (e.g: `v0.11.99`)
+5. Push tag
+6. Observe release pipeline that is created for the tag
+    * You can observe running pipelines with `Build > Pipelines` from the repo
+      menu.
+7. Once both Android and iOS artifacts are published announce the new release
+   in the `#et-releases` slack channel and include a copy of the changelog
+   for the released version.
