@@ -271,10 +271,6 @@ pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
     /// obtaining additional pages from the database.
     query_logic: String,
 
-    /// The sending end of the queue for live updates to the result set, i.e.
-    /// the end that the paginator uses to send changes to the client.
-    queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
-
     /// The [`Stash`] instance used for database operations. This is not used
     /// for the initial query (that uses whatever was supplied), but is required
     /// for subsequent queries and for live updates.
@@ -364,18 +360,13 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             page_size,
             params,
             query_logic: query_logic.into(),
-            queue: queue.clone(),
             stash: interface.stash().clone(),
             remote: Arc::new(remote),
         };
 
         paginator.initialize(interface).await?;
 
-        // We handle the queue ourselves, rather than relying on the one that
-        // perform_find() manages, as that is not pagination-aware.
-        if let Some(sender) = queue {
-            paginator.start_update_listener(sender);
-        }
+        paginator.start_update_listener(queue);
 
         Ok(paginator)
     }
@@ -402,7 +393,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             format!("{} LIMIT {}", self.query_logic, self.page_size,),
             convert_params(&self.params),
             &interface.clone().into(),
-            self.queue.clone(),
+            None,
         )
         .await?;
 
@@ -423,7 +414,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     }
 
     /// Starts the update listener to handle live updates.
-    fn start_update_listener(&self, sender: QueueSender<ResultsetChange<T, T::IdType>>) {
+    fn start_update_listener(&self, sender: Option<QueueSender<ResultsetChange<T, T::IdType>>>) {
         let stash = self.stash.clone();
         let query_logic = self.query_logic.clone();
         let params = self.params.clone();
@@ -470,7 +461,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                                     &shared_cloned,
                                     &remote_cloned,
                                     &stash,
-                                    &sender,
+                                    sender.as_ref(),
                                 )
                                 .await
                                 {
@@ -513,7 +504,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         shared: &Arc<Mutex<Shared>>,
         remote: &Arc<R>,
         stash: &Stash,
-        sender: &flume::Sender<ResultsetChange<T, T::IdType>>,
+        sender: Option<&flume::Sender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<(), StashError> {
         #[allow(clippy::shadow_reuse)]
         let mut shared = shared.lock().await;
@@ -617,10 +608,12 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 
         drop(shared);
 
-        // Notify the client of the change
-        sender
-            .send(change.clone())
-            .map_err(|_err| StashError::Custom("Failed to send update".into()))?;
+        // Notify the client of the change if they have subscribed.
+        if let Some(sender) = sender {
+            sender
+                .send(change.clone())
+                .map_err(|_err| StashError::Custom("Failed to send update".into()))?;
+        }
 
         Ok(())
     }
@@ -634,7 +627,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     pub async fn current_page(&self) -> Result<Vec<T>, StashError> {
         let current_index = { self.shared.lock().await.cursor_index };
-        self.page_at(current_index, self.queue.clone()).await
+        self.page_at(current_index).await
     }
 
     /// Retrieves the page at the given cursor index.
@@ -649,16 +642,12 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     /// Returns an error if the current page could not be fetched from the
     /// database.
     ///
-    async fn page_at(
-        &self,
-        cursor_index: u32,
-        queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
-    ) -> Result<Vec<T>, StashError> {
+    async fn page_at(&self, cursor_index: u32) -> Result<Vec<T>, StashError> {
         T::find(
             paging_query(&self.query_logic, cursor_index, self.page_size),
             convert_params(&self.params),
             &self.stash,
-            queue,
+            None,
         )
         .await
     }
@@ -676,7 +665,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         // watcher until we are done updating all the relevant data.
         let mut shared = self.shared.lock().await;
         let next_index = shared.cursor_index.saturating_add(self.page_size.get());
-        let current_page = self.page_at(shared.cursor_index, None).await?;
+        let current_page = self.page_at(shared.cursor_index).await?;
         self.remote
             .sync_page_after(next_index, self.page_size, current_page, &self.stash)
             .await?;
@@ -696,9 +685,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             shared.cursor_row_id = Some(element.row_id().unwrap());
         }
 
-        Ok(self
-            .page_at(shared.cursor_index, self.queue.clone())
-            .await?)
+        Ok(self.page_at(shared.cursor_index).await?)
     }
 
     /// Moves to the previous page and retrieves its results.
