@@ -63,7 +63,7 @@ impl MailUserContext {
     /// Sets a background job where every 60 seconds it deletes all of the messages and conversations
     /// that have an expiration date.
     fn init_expiration_loop(&self) {
-        let db = self.user_stash().into();
+        let db = self.user_stash().clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);

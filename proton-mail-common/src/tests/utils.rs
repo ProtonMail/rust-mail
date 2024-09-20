@@ -6,7 +6,7 @@ use stash::orm::Model;
 use stash::stash::{Interface, Tether};
 use std::collections::{BTreeMap, HashMap};
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct TestDBState {
     pub addresses: Vec<Address>,
     pub labels: Vec<Label>,
@@ -14,7 +14,7 @@ pub struct TestDBState {
     pub messages: Vec<Message>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct TestDBStateMap {
     pub labels: HashMap<LabelId, LocalId>,
     pub conversations: HashMap<RemoteId, LocalId>,

@@ -5,11 +5,11 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_core_common::paginator::{DataSource, Paginator};
-use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
+use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label, Message};
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage, Mailbox,
+    MailUserContextLoadingStage,
 };
 use stash::orm::Model;
 use std::sync::Arc;

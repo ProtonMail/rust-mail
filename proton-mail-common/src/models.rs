@@ -46,8 +46,8 @@ use crate::datatypes::{
     Disposition, EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType,
     MessageAddress, MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount,
     MessageFlags, MimeType, MobileSettings, NextMessageOnMove, ParsedHeaders, PgpScheme,
-    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabelId, ViewLayout,
-    ViewMode,
+    PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabel, SystemLabelId,
+    ViewLayout, ViewMode,
 };
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
@@ -790,6 +790,7 @@ impl Conversation {
                         context_size: 0,
                         context_snooze_time: 0,
                         context_time: 0,
+                        deleted: false,
                         row_id: None,
                         stash: None,
                     };
@@ -891,63 +892,272 @@ impl Conversation {
         Ok(ids)
     }
 
-    /// Delete multiple conversations.
+    /// Mark conversations as deleted.
+    ///
+    /// Note that this is a soft delete. Conversations are only
+    /// really deleted when the event loop sends the delete event.
+    ///
+    /// Finally, only the messages in the active label will be marked as deleted
+    /// unless the label is AllMail which will mark all messages in all labels as deleted.
+    /// moreover the conversation will be removed from all labels as well as deleted field will
+    /// be set to true.
     ///
     /// # Parameters
     ///
-    /// * `ids`      - The IDs of the conversations to delete.
-    /// * `label_id` - TODO: Document this parameter.
-    /// * `tether`   - The tether to use for the database connection.
+    /// * `label_id`  - Label ID where the action is performed
+    /// * `ids`       - The IDs of the conversations to delete.
+    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn delete_multiple(
-        ids: Vec<LocalId>,
-        tether: &AgnosticInterface,
-    ) -> Result<usize, StashError> {
-        let tether = tether.transaction().await?;
-        let ids = ids
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<String>>()
-            .join(",");
-        let mut count = tether
-            .execute(
-                formatdoc!(
-                    r"
-            UPDATE
-                conversations
-            SET
-                deleted = 1
-            WHERE
-                local_id IN ({ids})
-            "
-                ),
-                vec![],
+    pub async fn mark_deleted<A>(
+        label_id: LocalId,
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_mail_id = SystemLabel::AllMail.local_id(interface).await?;
+        let is_all_mail = all_mail_id
+            .filter(|all_mail_id| *all_mail_id == label_id)
+            .is_some();
+
+        if is_all_mail {
+            Self::mark_deleted_all_mail(ids, interface).await?;
+        } else {
+            Self::mark_deleted_current_label(label_id, ids, interface).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Mark conversations as deleted for `AllMail` label.
+    /// More information can be found in [`Conversation::mark_deleted`].
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`       - The IDs of the conversations to delete.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    async fn mark_deleted_all_mail<A>(
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        for id in ids {
+            let Some(mut conversation) = Conversation::find_by_id(id, interface).await? else {
+                continue;
+            };
+
+            conversation.deleted = true;
+            conversation.save_using(interface).await?;
+
+            let mut messages = Message::find(
+                formatdoc! {"
+                WHERE local_conversation_id=? AND deleted = 0
+               "},
+                params![id],
+                interface,
+                None,
             )
             .await?;
 
-        count += tether
-            .execute(
-                formatdoc!(
-                    r"
-            UPDATE
-                messages
-            SET
-                deleted = 1
-            WHERE
-                local_conversation_id IN ({ids})
-            RETURNING
-                local_id
-            ",
-                ),
-                vec![],
+            for message in &mut messages {
+                message.deleted = true;
+                message.save_using(interface).await?
+            }
+
+            if !messages.is_empty() {
+                let stats = Message::update_message_counters_after_soft_delete(
+                    messages.into_iter(),
+                    interface,
+                )
+                .await?;
+                conversation
+                    .remove_conversation_from_all_labels(stats, interface)
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Updates all labels counters after soft delete of conversation in active view `AllMail`.
+    ///
+    /// # Parameters
+    ///
+    /// * `all_stats`  - The stats of the messages that were deleted.
+    /// * `interface`  - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if the data could not be written to the database.
+    ///
+    async fn remove_conversation_from_all_labels<A>(
+        &self,
+        all_stats: HashMap<LocalId, MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let conv_labels = ConversationLabel::find(
+            "WHERE local_conversation_id=? AND deleted=0",
+            params![self.local_id.unwrap()],
+            interface,
+            None,
+        )
+        .await?;
+
+        for mut conv_label in conv_labels {
+            let label_id = conv_label.local_label_id.unwrap();
+            let mut label = Label::find_by_id(label_id, interface)
+                .await?
+                .ok_or_else(|| AppError::LabelNotFound(label_id))?;
+            let stats = all_stats.get(&label_id);
+
+            label.total_conv -= 1;
+
+            if stats.filter(|s| s.unread_count > 0).is_some() {
+                label.unread_conv -= 1;
+            }
+
+            label.save_using(interface).await?;
+
+            conv_label.deleted = true;
+            conv_label.save_using(interface).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Mark conversations as deleted in active label.
+    /// More information can be found in [`Conversation::mark_deleted`].
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id`  - Label ID where the action is performed
+    /// * `ids`       - The IDs of the conversations to delete.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    pub async fn mark_deleted_current_label<A>(
+        label_id: LocalId,
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        for id in ids {
+            let Some(mut conversation) = Conversation::find_by_id(id, interface).await? else {
+                continue;
+            };
+
+            let mut messages = Message::find(
+                formatdoc! {"
+                WHERE local_conversation_id=? AND deleted = 0 AND local_id IN (
+                    SELECT local_message_id FROM message_labels WHERE local_label_id = ?
+                )
+               "},
+                params![id, label_id],
+                interface,
+                None,
             )
             .await?;
-        tether.commit().await?;
-        Ok(count)
+
+            for message in &mut messages {
+                message.deleted = true;
+                message.save_using(interface).await?
+            }
+
+            if !messages.is_empty() {
+                let stats = Message::update_message_counters_after_soft_delete(
+                    messages.into_iter(),
+                    interface,
+                )
+                .await?;
+                conversation
+                    .remove_conversation_from_label(label_id, stats.get(&label_id), interface)
+                    .await?;
+            }
+
+            let undeleted_messages = Message::find(
+                formatdoc! {"
+                WHERE local_conversation_id=? AND deleted = 0
+               "},
+                params![id],
+                interface,
+                None,
+            )
+            .await?;
+
+            if undeleted_messages.is_empty() {
+                conversation.deleted = true;
+                conversation.save_using(interface).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Updates active label counters after soft delete of conversation.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id`   - The ID of the label to update.
+    /// * `all_stats`  - The stats of the messages that were deleted.
+    /// * `interface`  - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if the data could not be written to the database.
+    ///
+    async fn remove_conversation_from_label<A>(
+        &self,
+        label_id: LocalId,
+        stats: Option<&MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let conv_label = ConversationLabel::find_first(
+            "WHERE local_conversation_id=? AND deleted=0 AND local_label_id=?",
+            params![self.local_id.unwrap(), label_id],
+            interface,
+        )
+        .await?;
+
+        if let Some(mut conv_label) = conv_label {
+            let mut label = Label::find_by_id(label_id, interface)
+                .await?
+                .ok_or_else(|| AppError::LabelNotFound(label_id))?;
+            label.total_conv -= 1;
+
+            if stats.filter(|s| s.unread_count > 0).is_some() {
+                label.unread_conv -= 1;
+            }
+
+            label.save_using(interface).await?;
+
+            conv_label.deleted = true;
+            conv_label.save_using(interface).await?;
+        }
+
+        Ok(())
     }
 
     /// Delete multiple conversations.
@@ -2362,7 +2572,10 @@ impl Conversation {
 
     /// Finds all of the conversations that have expired and deletes them and all of its
     /// messages.
-    pub async fn delete_expired(db: &AgnosticInterface) -> Result<usize, StashError> {
+    pub async fn delete_expired<A>(interface: &A) -> Result<usize, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let ids = Self::find_local_ids(
             r"
         WHERE
@@ -2370,13 +2583,18 @@ impl Conversation {
           AND expiration_time != 0
         ",
             vec![],
-            db,
+            interface,
         )
         .await?;
 
         let len = ids.len();
         if len != 0 {
-            Self::delete_multiple(ids, db).await?;
+            let label_id = SystemLabel::AllMail.label_id().into_inner();
+            let local_id = label_id
+                .counterpart::<Label, _>(interface)
+                .await?
+                .ok_or_else(|| StashError::IdNotSet)?;
+            Self::mark_deleted(local_id, ids, interface).await?;
         }
         Ok(len)
     }
@@ -2510,6 +2728,7 @@ impl Conversation {
                 context_size: stats.size,
                 context_snooze_time: stats.snooze_time,
                 context_time: stats.time,
+                deleted: false,
                 row_id: None,
                 stash: None,
             }
@@ -2629,6 +2848,8 @@ impl Conversation {
                     ON conversations.local_id = conversation_labels.local_conversation_id
                 WHERE
                     conversation_labels.local_label_id = ?
+                AND
+                    conversation_labels.deleted = 0
                 ORDER BY
                     conversation_labels.context_time DESC,
                     conversations.display_order DESC
@@ -2799,6 +3020,9 @@ pub struct ConversationLabel {
     #[DbField]
     pub context_time: u64,
 
+    #[DbField]
+    pub deleted: bool,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -2924,6 +3148,7 @@ impl From<ApiConversationLabel> for ConversationLabel {
             context_size: value.context_size,
             context_snooze_time: value.context_snooze_time,
             context_time: value.context_time,
+            deleted: false,
             row_id: None,
             stash: None,
         }
@@ -5189,7 +5414,7 @@ impl Message {
                 }
                 conversation_label.save_using(interface).await?
             }
-
+            // Cant we do it in one loop?
             for conversation_label in conversation_labels {
                 if mark_read {
                     if conversation_label.context_num_unread == 0 {
@@ -5742,6 +5967,94 @@ impl Message {
         Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
     {
         split_request(ids, 150, endpoint).await
+    }
+
+    /// Update message counters for `messages` after being marked as deleted.
+    async fn update_message_counters_after_soft_delete<A>(
+        messages: impl IntoIterator<Item = Message>,
+        interface: &A,
+    ) -> Result<HashMap<LocalId, MessageDeletedLabelStats>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let label_stats = MessageDeletedLabelStats::build(messages, interface).await?;
+        for (label_id, stats) in label_stats.iter() {
+            if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
+                label.total_msg -= stats.count;
+                label.unread_msg -= stats.unread_count;
+                label.save_using(interface).await?;
+            }
+        }
+
+        Ok(label_stats)
+    }
+
+    /// Update message counters for `messages` after being unmarked as deleted.
+    async fn _update_message_counters_after_soft_undelete<A>(
+        messages: impl IntoIterator<Item = Message>,
+        interface: &A,
+    ) -> Result<HashMap<LocalId, MessageDeletedLabelStats>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let label_stats = MessageDeletedLabelStats::build(messages, interface).await?;
+        for (label_id, stats) in label_stats.iter() {
+            if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
+                label.total_msg += stats.count;
+                label.unread_msg += stats.unread_count;
+                label.save_using(interface).await?;
+            }
+        }
+
+        Ok(label_stats)
+    }
+}
+
+struct MessageDeletedLabelStats {
+    pub unread_count: u64,
+    pub count: u64,
+    pub attachment_count: u64,
+}
+
+impl MessageDeletedLabelStats {
+    async fn build<A>(
+        messages: impl IntoIterator<Item = Message>,
+        interface: &A,
+    ) -> Result<HashMap<LocalId, MessageDeletedLabelStats>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let messages = messages.into_iter();
+        let mut label_stats = HashMap::with_capacity(messages.size_hint().1.unwrap_or(4));
+        for message in messages {
+            let label_ids = interface
+                .query_values::<_, LocalId>(
+                    "SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?",
+                    params![message.local_id.unwrap()],
+                )
+                .await?;
+            for label_id in label_ids {
+                match label_stats.entry(label_id) {
+                    HmEntry::Occupied(mut o) => {
+                        let details: &mut MessageDeletedLabelStats = o.get_mut();
+                        details.count += 1;
+                        if message.unread {
+                            details.unread_count += 1;
+                        }
+                        details.attachment_count += message.num_attachments as u64;
+                    }
+                    HmEntry::Vacant(v) => {
+                        v.insert(MessageDeletedLabelStats {
+                            count: 1,
+                            unread_count: if message.unread { 1 } else { 0 },
+                            attachment_count: message.num_attachments as u64,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(label_stats)
     }
 }
 
