@@ -22,8 +22,8 @@ impl DataSource for NullDataSource {
         &self,
         _: NonZeroU32,
         _: &Stash,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send {
-        std::future::ready(Ok(()))
+    ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
+        std::future::ready(Ok(vec![]))
     }
 
     fn sync_page_after(
@@ -32,8 +32,8 @@ impl DataSource for NullDataSource {
         _: NonZeroU32,
         _: Vec<Self::Item>,
         _: &Stash,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send {
-        std::future::ready(Ok(()))
+    ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
+        std::future::ready(Ok(vec![]))
     }
 }
 

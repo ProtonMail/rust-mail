@@ -142,14 +142,15 @@ use core::future::Future;
 use core::num::NonZeroU32;
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
+use proton_sqlite3::rusqlite::hooks::Action;
 use stash::exports::{SqliteError, ToSql, ToSqlOutput, Value};
 use stash::orm::{perform_find, Model, ResultsetChange};
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
-use tracing::error;
+use tracing::{error, warn};
 
 #[cfg(test)]
 #[path = "tests/paginator/paginator.rs"]
@@ -218,7 +219,7 @@ pub trait DataSource: Send + Sync {
         &self,
         page_size: NonZeroU32,
         stash: &Stash,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send;
 
     /// Sync the page after a given element.
     ///
@@ -240,7 +241,7 @@ pub trait DataSource: Send + Sync {
         page_size: NonZeroU32,
         elements: Vec<Self::Item>,
         stash: &Stash,
-    ) -> impl Future<Output = Result<(), Self::Error>> + Send;
+    ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send;
 }
 
 /// Represents a paginated view of a result set.
@@ -293,6 +294,10 @@ struct Shared {
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
     row_count: u32,
+    /// Recently synced record ids to filter out unnecessary create record events.
+    /// If the user is watching for change in this table they can skip these
+    /// as these events are a direct result of the user's action.
+    recently_synced: HashSet<u64>,
 }
 
 impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
@@ -356,6 +361,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 cursor_index: 0,
                 cursor_row_id: None,
                 row_count: 0,
+                recently_synced: HashSet::new(),
             })),
             page_size,
             params,
@@ -389,7 +395,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     {
         let total = self.remote.total(&self.stash).await?;
 
-        let initial_records = T::find(
+        let mut initial_records = T::find(
             format!("{} LIMIT {}", self.query_logic, self.page_size,),
             convert_params(&self.params),
             &interface.clone().into(),
@@ -397,16 +403,25 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         )
         .await?;
 
+        // Acquire lock to prevent interference from watcher thread.
+        // Note: watcher is currently initialized after this function,
+        // but at least we are safe if this changes in the future.
+        let mut shared = self.shared.lock().await;
+
         if initial_records.is_empty()
             || (initial_records.len() < self.page_size.get() as usize
                 && initial_records.len() < total)
         {
-            self.remote
+            initial_records = self
+                .remote
                 .sync_first_page(self.page_size, &self.stash)
                 .await?;
         }
 
-        let mut shared = self.shared.lock().await;
+        // Track recently inserted.
+        for record in &initial_records {
+            shared.recently_synced.insert(record.row_id().unwrap());
+        }
         shared.row_count = total.max(initial_records.len()) as u32;
         shared.cursor_row_id = initial_records.first().map(|v| v.row_id().unwrap());
 
@@ -445,6 +460,31 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                             if notification.table != T::table_name() {
                                 continue;
                             }
+
+                            let mut shared = shared_cloned.lock().await;
+
+                            // Update initial synced records
+
+                            match notification.action {
+                                Action::SQLITE_DELETE => {
+                                    // Always handle delete, but we still need to remove
+                                    // the element.
+                                    shared.recently_synced.remove(&notification.row);
+                                }
+                                Action::SQLITE_INSERT | Action::SQLITE_UPDATE => {
+                                    // If a record is inserted and matches a recently synced id
+                                    // we can ignore this notification.
+                                    // We also apply the same for update as its possible to have
+                                    // tables which perform create or update.
+                                    if shared.recently_synced.remove(&notification.row) {
+                                        continue;
+                                    }
+                                }
+                                _ => {
+                                    warn!("Unknown action");
+                                }
+                            }
+
                             if let Some(change) = T::handle_notification(
                                 notification,
                                 // We don't use this in the same way here
@@ -458,7 +498,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                                     &change,
                                     &query_logic,
                                     params.clone(),
-                                    &shared_cloned,
+                                    &mut shared,
                                     &remote_cloned,
                                     &stash,
                                     sender.as_ref(),
@@ -501,14 +541,11 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         change: &ResultsetChange<T, T::IdType>,
         query_logic: &str,
         params: Vec<Param>,
-        shared: &Arc<Mutex<Shared>>,
+        shared: &mut Shared,
         remote: &Arc<R>,
         stash: &Stash,
         sender: Option<&flume::Sender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<(), StashError> {
-        #[allow(clippy::shadow_reuse)]
-        let mut shared = shared.lock().await;
-
         match *change {
             ResultsetChange::Inserted(_) | ResultsetChange::Deleted(_) => {
                 // Re-run the query to check if the cursor position needs to change. This
@@ -606,8 +643,6 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             }
         }
 
-        drop(shared);
-
         // Notify the client of the change if they have subscribed.
         if let Some(sender) = sender {
             sender
@@ -666,9 +701,15 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         let mut shared = self.shared.lock().await;
         let next_index = shared.cursor_index.saturating_add(self.page_size.get());
         let current_page = self.page_at(shared.cursor_index).await?;
-        self.remote
+
+        let sync_elements = self
+            .remote
             .sync_page_after(next_index, self.page_size, current_page, &self.stash)
             .await?;
+
+        for element in sync_elements {
+            shared.recently_synced.insert(element.row_id().unwrap());
+        }
 
         shared.cursor_index = next_index;
         // Get the first element of the next page to update the cursor id.
@@ -685,7 +726,8 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             shared.cursor_row_id = Some(element.row_id().unwrap());
         }
 
-        Ok(self.page_at(shared.cursor_index).await?)
+        let next_page = self.page_at(shared.cursor_index).await?;
+        Ok(next_page)
     }
 
     /// Moves to the previous page and retrieves its results.
