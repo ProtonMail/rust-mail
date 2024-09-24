@@ -27,6 +27,7 @@
 //! a specific need.
 //!
 
+mod conversation;
 mod message;
 mod network;
 mod rollback_item;
@@ -959,6 +960,10 @@ impl Conversation {
             };
 
             conversation.deleted = true;
+            conversation.num_unread = 0;
+            conversation.num_messages = 0;
+            conversation.num_attachments = 0;
+            conversation.size = 0;
             conversation.save_using(interface).await?;
 
             let mut messages = Message::find(
@@ -1053,7 +1058,7 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_deleted_current_label<A>(
+    async fn mark_deleted_current_label<A>(
         label_id: LocalId,
         ids: impl IntoIterator<Item = LocalId>,
         interface: &A,
@@ -1089,24 +1094,10 @@ impl Conversation {
                     interface,
                 )
                 .await?;
+
                 conversation
                     .remove_conversation_from_label(label_id, stats.get(&label_id), interface)
                     .await?;
-            }
-
-            let undeleted_messages = Message::find(
-                formatdoc! {"
-                WHERE local_conversation_id=? AND deleted = 0
-               "},
-                params![id],
-                interface,
-                None,
-            )
-            .await?;
-
-            if undeleted_messages.is_empty() {
-                conversation.deleted = true;
-                conversation.save_using(interface).await?;
             }
         }
 
@@ -1126,7 +1117,7 @@ impl Conversation {
     /// Will return an error if the data could not be written to the database.
     ///
     async fn remove_conversation_from_label<A>(
-        &self,
+        &mut self,
         label_id: LocalId,
         stats: Option<&MessageDeletedLabelStats>,
         interface: &A,
@@ -1134,6 +1125,29 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
+        let undeleted_messages = Message::find(
+            formatdoc! {"
+            WHERE local_conversation_id=? AND deleted = 0
+           "},
+            params![self.local_id],
+            interface,
+            None,
+        )
+        .await?;
+
+        if undeleted_messages.is_empty() {
+            self.deleted = true;
+        }
+
+        if let Some(stats) = stats {
+            self.num_messages -= stats.count;
+            self.num_unread -= stats.unread_count;
+            self.num_attachments -= stats.attachment_count;
+            self.size -= stats.size;
+        }
+
+        self.save_using(interface).await?;
+
         let conv_label = ConversationLabel::find_first(
             "WHERE local_conversation_id=? AND deleted=0 AND local_label_id=?",
             params![self.local_id.unwrap(), label_id],
@@ -1160,48 +1174,280 @@ impl Conversation {
         Ok(())
     }
 
-    /// Delete multiple conversations.
+    /// Mark conversations as undeleted.
+    ///
+    /// Only the messages in the active label will be marked as undeleted
+    /// unless the label is AllMail which will mark all messages in all labels as undeleted.
+    /// moreover the conversation will be assigned to all labels as well as deleted field will
+    /// be set to false.
     ///
     /// # Parameters
     ///
-    /// * `ids`      - The IDs of the conversations to delete.
-    /// * `label_id` - TODO: Document this parameter.
-    /// * `tether`   - The tether to use for the database connection.
+    /// * `label_id`  - Label ID where the action is performed
+    /// * `ids`       - The IDs of the conversations to delete.
+    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn delete_multiple_from_label(
-        ids: Vec<LocalId>,
+    pub async fn mark_undeleted<A>(
         label_id: LocalId,
-        tether: &Tether,
-    ) -> Result<usize, StashError> {
-        // TODO: This used to do more, but the additional behaviour will be
-        // TODO: covered when these operations are refactored.
-        tether
-            .execute(
-                formatdoc!(
-                    r"
-            UPDATE
-                messages
-            SET
-                deleted = 1
-            WHERE
-                local_conversation_id IN ({})
-                AND deleted = 0
-                AND local_id IN (
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_mail_id = SystemLabel::AllMail.local_id(interface).await?;
+        let is_all_mail = all_mail_id
+            .filter(|all_mail_id| *all_mail_id == label_id)
+            .is_some();
+
+        if is_all_mail {
+            Self::mark_undeleted_all_mail(ids, interface).await?;
+        } else {
+            Self::mark_undeleted_current_label(label_id, ids, interface).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Mark conversations as undeleted for `AllMail` label.
+    /// More information can be found in [`Conversation::mark_undeleted`].
+    ///
+    /// # Parameters
+    ///
+    /// * `ids`       - The IDs of the conversations to undelete.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    async fn mark_undeleted_all_mail<A>(
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        for id in ids {
+            let Some(mut conversation) = Conversation::find_by_id(id, interface).await? else {
+                continue;
+            };
+
+            let mut messages = Message::find(
+                formatdoc! {"
+                WHERE local_conversation_id=? AND deleted = 1
+               "},
+                params![id],
+                interface,
+                None,
+            )
+            .await?;
+
+            let mut count = 0;
+            let mut unread_count = 0;
+            let mut attachment_count = 0;
+            let mut size = 0;
+
+            for message in &mut messages {
+                message.deleted = false;
+                count += 1;
+                unread_count += message.unread as u64;
+                attachment_count += message.num_attachments as u64;
+                size += message.size;
+
+                message.save_using(interface).await?
+            }
+
+            conversation.deleted = false;
+            conversation.num_messages += count;
+            conversation.num_unread += unread_count;
+            conversation.num_attachments += attachment_count;
+            conversation.size += size;
+
+            conversation.save_using(interface).await?;
+
+            if !messages.is_empty() {
+                let stats = Message::update_message_counters_after_soft_undelete(
+                    messages.into_iter(),
+                    interface,
+                )
+                .await?;
+                conversation
+                    .add_conversation_to_all_labels(stats, interface)
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Updates all labels counters after undelete of conversation in active view `AllMail`.
+    ///
+    /// # Parameters
+    ///
+    /// * `all_stats`  - The stats of the messages that were undeleted.
+    /// * `interface`  - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if the data could not be written to the database.
+    ///
+    async fn add_conversation_to_all_labels<A>(
+        &self,
+        all_stats: HashMap<LocalId, MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let conv_labels = ConversationLabel::find(
+            "WHERE local_conversation_id=? AND deleted=1",
+            params![self.local_id.unwrap()],
+            interface,
+            None,
+        )
+        .await?;
+
+        for mut conv_label in conv_labels {
+            let label_id = conv_label.local_label_id.unwrap();
+            let mut label = Label::find_by_id(label_id, interface)
+                .await?
+                .ok_or_else(|| AppError::LabelNotFound(label_id))?;
+            let stats = all_stats.get(&label_id);
+
+            label.total_conv += 1;
+
+            if stats.filter(|s| s.unread_count > 0).is_some() {
+                label.unread_conv += 1;
+            }
+
+            label.save_using(interface).await?;
+
+            conv_label.deleted = false;
+            conv_label.save_using(interface).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Mark conversations as undeleted in active label.
+    /// More information can be found in [`Conversation::mark_undeleted`].
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id`  - Label ID where the action is performed
+    /// * `ids`       - The IDs of the conversations to undelete.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    async fn mark_undeleted_current_label<A>(
+        label_id: LocalId,
+        ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        for id in ids {
+            let Some(mut conversation) = Conversation::find_by_id(id, interface).await? else {
+                continue;
+            };
+
+            let mut messages = Message::find(
+                formatdoc! {"
+                WHERE local_conversation_id=? AND deleted = 1 AND local_id IN (
                     SELECT local_message_id FROM message_labels WHERE local_label_id = ?
                 )
-            ",
-                    ids.iter()
-                        .map(ToString::to_string)
-                        .collect::<Vec<String>>()
-                        .join(",")
-                ),
-                params![label_id],
+               "},
+                params![id, label_id],
+                interface,
+                None,
             )
-            .await
+            .await?;
+
+            for message in &mut messages {
+                message.deleted = false;
+                message.save_using(interface).await?
+            }
+
+            if !messages.is_empty() {
+                let stats = Message::update_message_counters_after_soft_undelete(
+                    messages.into_iter(),
+                    interface,
+                )
+                .await?;
+                dbg!(&stats);
+
+                conversation
+                    .add_conversation_to_label(label_id, stats.get(&label_id), interface)
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Updates active label counters after undelete of conversation.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_id`   - The ID of the label to update.
+    /// * `stats`      - The stats of the messages that were undeleted.
+    /// * `interface`  - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if the data could not be written to the database.
+    ///
+    async fn add_conversation_to_label<A>(
+        &mut self,
+        label_id: LocalId,
+        stats: Option<&MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let conv_label = ConversationLabel::find_first(
+            "WHERE local_conversation_id=? AND deleted=1 AND local_label_id=?",
+            params![self.local_id.unwrap(), label_id],
+            interface,
+        )
+        .await?;
+
+        if let Some(stats) = stats {
+            self.num_messages += stats.count;
+            self.num_unread += stats.unread_count;
+            self.num_attachments += stats.attachment_count;
+            self.size += stats.size;
+            self.deleted = false;
+            self.save_using(interface).await?;
+        }
+
+        if let Some(mut conv_label) = conv_label {
+            let mut label = Label::find_by_id(label_id, interface)
+                .await?
+                .ok_or_else(|| AppError::LabelNotFound(label_id))?;
+            label.total_conv += 1;
+
+            if stats.filter(|s| s.unread_count > 0).is_some() {
+                label.unread_conv += 1;
+            }
+
+            label.save_using(interface).await?;
+
+            conv_label.deleted = false;
+            conv_label.save_using(interface).await?;
+        }
+
+        Ok(())
     }
 
     /// Delete multiple conversations.
@@ -2588,14 +2834,15 @@ impl Conversation {
         .await?;
 
         let len = ids.len();
+
         if len != 0 {
-            let label_id = SystemLabel::AllMail.label_id().into_inner();
-            let local_id = label_id
-                .counterpart::<Label, _>(interface)
+            let label_id = SystemLabel::AllMail
+                .local_id(interface)
                 .await?
                 .ok_or_else(|| StashError::IdNotSet)?;
-            Self::mark_deleted(local_id, ids, interface).await?;
+            Self::mark_deleted(label_id, ids, interface).await?;
         }
+
         Ok(len)
     }
 
@@ -5409,20 +5656,18 @@ impl Message {
             for conversation_label in &mut conversation_labels {
                 if mark_read {
                     conversation_label.context_num_unread -= 1;
-                } else {
-                    conversation_label.context_num_unread += 1;
-                }
-                conversation_label.save_using(interface).await?
-            }
-            // Cant we do it in one loop?
-            for conversation_label in conversation_labels {
-                if mark_read {
+
                     if conversation_label.context_num_unread == 0 {
                         label_ids.insert(conversation_label.local_label_id.unwrap());
                     }
-                } else if conversation_label.context_num_unread == 1 {
-                    label_ids.insert(conversation_label.local_label_id.unwrap());
+                } else {
+                    conversation_label.context_num_unread += 1;
+
+                    if conversation_label.context_num_unread == 1 {
+                        label_ids.insert(conversation_label.local_label_id.unwrap());
+                    }
                 }
+                conversation_label.save_using(interface).await?
             }
         }
 
@@ -5990,7 +6235,7 @@ impl Message {
     }
 
     /// Update message counters for `messages` after being unmarked as deleted.
-    async fn _update_message_counters_after_soft_undelete<A>(
+    async fn update_message_counters_after_soft_undelete<A>(
         messages: impl IntoIterator<Item = Message>,
         interface: &A,
     ) -> Result<HashMap<LocalId, MessageDeletedLabelStats>, StashError>
@@ -6010,10 +6255,12 @@ impl Message {
     }
 }
 
+#[derive(Debug)]
 struct MessageDeletedLabelStats {
     pub unread_count: u64,
     pub count: u64,
     pub attachment_count: u64,
+    pub size: u64,
 }
 
 impl MessageDeletedLabelStats {
@@ -6042,12 +6289,14 @@ impl MessageDeletedLabelStats {
                             details.unread_count += 1;
                         }
                         details.attachment_count += message.num_attachments as u64;
+                        details.size += message.size;
                     }
                     HmEntry::Vacant(v) => {
                         v.insert(MessageDeletedLabelStats {
                             count: 1,
-                            unread_count: if message.unread { 1 } else { 0 },
+                            unread_count: message.unread as u64,
                             attachment_count: message.num_attachments as u64,
+                            size: message.size,
                         });
                     }
                 }

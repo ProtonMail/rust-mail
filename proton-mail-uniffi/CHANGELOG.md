@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Fixed
+  - Bring back soft delete for conversations
+
 ## [0.11.52] - 2024-09-25
 
 ### Fixed

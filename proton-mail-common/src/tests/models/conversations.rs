@@ -1546,21 +1546,13 @@ async fn test_conversation_undelete_all_mail() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple_from_label(
-        vec![local_conv_id1, local_conv_id2],
-        all_mail_label,
-        &tx,
-    )
-    .await
-    .expect("failed to mark as deleted");
+    Conversation::mark_deleted(all_mail_label, vec![local_conv_id1, local_conv_id2], &tx)
+        .await
+        .expect("failed to mark as deleted");
 
-    Conversation::delete_multiple_from_label(
-        vec![local_conv_id1, local_conv_id2],
-        all_mail_label,
-        &tx,
-    )
-    .await
-    .expect("failed to mark conversations as undeleted");
+    Conversation::mark_undeleted(all_mail_label, vec![local_conv_id1, local_conv_id2], &tx)
+        .await
+        .expect("failed to mark conversations as undeleted");
 
     // Check conversation counts
     {
@@ -1744,7 +1736,6 @@ async fn test_conversation_delete_all_mail() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_conversation_delete() {
     // Simulate conversation according to API expectations, only delete conversations in that label.
     // If conversation has messages in other labels, it must still exist.
@@ -1763,7 +1754,7 @@ async fn test_conversation_delete() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id1, &tx)
+    Conversation::mark_deleted(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark as deleted");
 
@@ -1773,13 +1764,16 @@ async fn test_conversation_delete() {
         .expect("should have value");
 
     // No more unread messages
-    assert_eq!(db_conversation.num_unread, 0);
+    assert_eq!(db_conversation.num_unread, 1);
     // Should only have one message in other label
-    assert_eq!(db_conversation.num_messages, 1);
-    assert_eq!(db_conversation.size, state.messages[1].size);
+    assert_eq!(db_conversation.num_messages, 2);
+    assert_eq!(
+        db_conversation.size,
+        state.messages[0].size + state.messages[3].size
+    );
     assert_eq!(
         db_conversation.num_attachments,
-        state.messages[1].num_attachments as u64
+        state.messages[0].num_attachments as u64 + state.messages[3].num_attachments as u64
     );
 
     // Check conversation counts
@@ -1839,15 +1833,19 @@ async fn test_conversation_delete() {
     }
 
     // Deleting conv1 in label 2  should remove all traces of the  conversation
-    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id2, &tx)
+    Conversation::mark_deleted(local_label_id2, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark conv as deleted");
 
     {
-        let db_conv = Conversation::load(local_conv_id, &tx)
-            .await
-            .expect("failed to get conversation");
-        assert!(db_conv.is_none());
+        let db_conversation = Conversation::find_first(
+            "WHERE local_id = ? AND deleted = 0",
+            params![local_conv_id],
+            tx.stash(),
+        )
+        .await
+        .expect("failed to get conversation");
+        assert!(db_conversation.is_none());
     }
 
     // Check conversation counts
@@ -1866,7 +1864,7 @@ async fn test_conversation_delete() {
                 .get(&MY_LABEL_ID2.clone().into())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id2).unwrap();
-            assert_eq!(label_counts.unread, start_label_counts.unread);
+            assert_eq!(label_counts.unread, start_label_counts.unread - 1);
             assert_eq!(label_counts.total, start_label_counts.total - 1);
         }
     }
@@ -1881,15 +1879,15 @@ async fn test_conversation_delete() {
             assert_eq!(label_counts.unread, 0);
             assert_eq!(label_counts.total, 0);
         }
-        // Check label2 - should be missing one message.
+        // Check label2 - should be missing two messages.
         {
             let start_label_counts = state_map
                 .message_counts
                 .get(&MY_LABEL_ID2.clone().into())
                 .unwrap();
             let label_counts = message_counts.get(&local_label_id2).unwrap();
-            assert_eq!(label_counts.unread, start_label_counts.unread);
-            assert_eq!(label_counts.total, start_label_counts.total - 1);
+            assert_eq!(label_counts.unread, start_label_counts.unread - 1);
+            assert_eq!(label_counts.total, start_label_counts.total - 2);
         }
     }
 }
@@ -1913,17 +1911,17 @@ async fn test_conversation_undelete() {
         .unwrap();
     let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1.clone().into()).unwrap();
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2.clone().into()).unwrap();
-    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id1, &tx)
+    Conversation::mark_deleted(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark as deleted");
-    Conversation::delete_multiple_from_label(vec![local_conv_id], local_label_id2, &tx)
+    Conversation::mark_deleted(local_label_id2, vec![local_conv_id], &tx)
         .await
         .expect("failed to mark as deleted");
 
-    Conversation::undelete_multiple(vec![local_conv_id], local_label_id1, &tx)
+    Conversation::mark_undeleted(local_label_id1, vec![local_conv_id], &tx)
         .await
         .expect("Failed to mark as undeleted");
-    Conversation::undelete_multiple(vec![local_conv_id], local_label_id2, &tx)
+    Conversation::mark_undeleted(local_label_id2, vec![local_conv_id], &tx)
         .await
         .expect("Failed to mark as undeleted");
 
