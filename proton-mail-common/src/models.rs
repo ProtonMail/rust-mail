@@ -51,6 +51,7 @@ use crate::datatypes::{
     ViewLayout, ViewMode,
 };
 use crate::decrypted_message::DecryptedMessageBody;
+use crate::find_in_query;
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
@@ -1090,14 +1091,20 @@ impl Conversation {
             }
 
             if !messages.is_empty() {
-                let stats = Message::update_message_counters_after_soft_delete(
+                let all_stats = Message::update_message_counters_after_soft_delete(
                     messages.into_iter(),
                     interface,
                 )
                 .await?;
 
+                let stats = all_stats.get(&label_id);
+
                 conversation
-                    .remove_conversation_from_label(label_id, stats.get(&label_id), interface)
+                    .mark_delete_update_stats(stats, interface)
+                    .await?;
+
+                conversation
+                    .remove_conversation_from_label(label_id, stats, interface)
                     .await?;
             }
         }
@@ -1126,29 +1133,6 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let undeleted_messages = Message::find(
-            formatdoc! {"
-            WHERE local_conversation_id=? AND deleted = 0
-           "},
-            params![self.local_id],
-            interface,
-            None,
-        )
-        .await?;
-
-        if undeleted_messages.is_empty() {
-            self.deleted = true;
-        }
-
-        if let Some(stats) = stats {
-            self.num_messages -= stats.count;
-            self.num_unread -= stats.unread_count;
-            self.num_attachments -= stats.attachment_count;
-            self.size -= stats.size;
-        }
-
-        self.save_using(interface).await?;
-
         let conv_label = ConversationLabel::find_first(
             "WHERE local_conversation_id=? AND deleted=0 AND local_label_id=?",
             params![self.local_id.unwrap(), label_id],
@@ -1379,15 +1363,19 @@ impl Conversation {
             }
 
             if !messages.is_empty() {
-                let stats = Message::update_message_counters_after_soft_undelete(
+                let all_stats = Message::update_message_counters_after_soft_undelete(
                     messages.into_iter(),
                     interface,
                 )
                 .await?;
-                dbg!(&stats);
+                let stats = all_stats.get(&label_id);
 
                 conversation
-                    .add_conversation_to_label(label_id, stats.get(&label_id), interface)
+                    .add_conversation_to_label(label_id, stats, interface)
+                    .await?;
+
+                conversation
+                    .mark_undelete_update_stats(stats, interface)
                     .await?;
             }
         }
@@ -1423,15 +1411,6 @@ impl Conversation {
         )
         .await?;
 
-        if let Some(stats) = stats {
-            self.num_messages += stats.count;
-            self.num_unread += stats.unread_count;
-            self.num_attachments += stats.attachment_count;
-            self.size += stats.size;
-            self.deleted = false;
-            self.save_using(interface).await?;
-        }
-
         if let Some(mut conv_label) = conv_label {
             let mut label = Label::find_by_id(label_id, interface)
                 .await?
@@ -1446,6 +1425,78 @@ impl Conversation {
 
             conv_label.deleted = false;
             conv_label.save_using(interface).await?;
+        }
+
+        Ok(())
+    }
+    /// Updates conversation counters after delete of conversation.
+    ///
+    /// # Parameters
+    ///
+    /// * `stats`      - The stats of the messages that were undeleted.
+    /// * `interface`  - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if the data could not be written to the database.
+    ///
+    async fn mark_delete_update_stats<A>(
+        &mut self,
+        stats: Option<&MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let undeleted_messages = Message::count(
+            "WHERE local_conversation_id=? AND deleted = 0",
+            params![self.local_id],
+            interface,
+        )
+        .await?;
+
+        if undeleted_messages == 0 {
+            self.deleted = true;
+        }
+
+        if let Some(stats) = stats {
+            self.num_messages -= stats.count;
+            self.num_unread -= stats.unread_count;
+            self.num_attachments -= stats.attachment_count;
+            self.size -= stats.size;
+        }
+
+        self.save_using(interface).await?;
+
+        Ok(())
+    }
+
+    /// Updates conversation counters after undelete of conversation.
+    ///
+    /// # Parameters
+    ///
+    /// * `stats`      - The stats of the messages that were undeleted.
+    /// * `interface`  - The interface to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Will return an error if the data could not be written to the database.
+    ///
+    async fn mark_undelete_update_stats<A>(
+        &mut self,
+        stats: Option<&MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(stats) = stats {
+            self.num_messages += stats.count;
+            self.num_unread += stats.unread_count;
+            self.num_attachments += stats.attachment_count;
+            self.size += stats.size;
+            self.deleted = false;
+            self.save_using(interface).await?;
         }
 
         Ok(())
@@ -3384,6 +3435,68 @@ impl ConversationLabel {
 
         <Self as Model>::save_using(self, interface).await
     }
+
+    /// Adjust the stats of the conversation label when
+    /// a message is marked as deleted.
+    ///
+    /// ## Parameters
+    ///
+    /// * `stats` - The stats of the message that was deleted.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// ## Errors
+    ///
+    /// Returns error if the query fails.
+    ///
+    async fn mark_delete_update_stats<A>(
+        &mut self,
+        stats: Option<&MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(stats) = stats {
+            self.context_num_messages -= stats.count;
+            self.context_num_unread -= stats.unread_count;
+            self.context_num_attachments -= stats.attachment_count;
+            self.context_size -= stats.size;
+            self.save_using(interface).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Adjust the stats of the conversation label when
+    /// a message is marked as undeleted.
+    ///
+    /// ## Parameters
+    ///
+    /// * `stats` - The stats of the message that was undeleted.
+    /// * `interface` - The interface to use for the database connection.
+    ///
+    /// ## Errors
+    ///
+    /// Returns error if the query fails.
+    ///
+    async fn mark_undelete_update_stats<A>(
+        &mut self,
+        stats: Option<&MessageDeletedLabelStats>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(stats) = stats {
+            self.context_num_messages += stats.count;
+            self.context_num_unread += stats.unread_count;
+            self.context_num_attachments += stats.attachment_count;
+            self.context_size += stats.size;
+            self.save_using(interface).await?;
+        }
+
+        Ok(())
+    }
 }
 
 impl From<ApiConversationLabel> for ConversationLabel {
@@ -4571,64 +4684,147 @@ impl Message {
         Message::split_request(ids, request).await
     }
 
-    /// Delete multiple messages
+    /// Mark messages as deleted.
+    ///
+    /// This is soft delete of messages. It will assign deleted flag to true,
+    /// Adjust labels, conversations and conversation labels stats.
+    /// Morover if all messages within a conversation were deleted, the conversation
+    /// will be deleted as well.
     ///
     /// # Parameters
     ///
-    /// * `ids`        - The IDs of the conversations to delete.
-    /// * `interface`  - The database interface, i.e. [`Stash`] or [`Tether`],
+    /// * `ids`       - The IDs of the conversations to delete.
+    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn delete_multiple<A>(ids: Vec<LocalId>, interface: &A) -> Result<usize, StashError>
+    pub async fn mark_deleted<A>(ids: Vec<LocalId>, interface: &A) -> Result<(), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        interface
-            .execute(
-                r"
-            UPDATE
-                messages
-            SET
-                deleted = 1
-            WHERE
-                local_id IN (?)
-            ",
-                params![ids.iter().map(ToString::to_string).collect_vec().join(",")],
-            )
-            .await
+        let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", ids);
+        let mut messages = Message::find(query, params, interface, None).await?;
+        let conv_ids = messages
+            .iter()
+            .filter_map(|m| m.local_conversation_id)
+            .collect_vec();
+
+        for message in messages.iter_mut() {
+            message.deleted = true;
+            message.save_using(interface).await?;
+        }
+
+        let all_stats =
+            Message::update_message_counters_after_soft_delete(messages, interface).await?;
+        let (query, params) = find_in_query!("WHERE local_id IN ({})", conv_ids);
+        let conversations = Conversation::find(query, params, interface, None).await?;
+
+        for mut conversation in conversations {
+            let label_ids = all_stats.keys().copied().collect::<Vec<_>>();
+            let (query, mut params) = find_in_query!(
+                "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
+                label_ids
+            );
+            params.insert(
+                0,
+                Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
+            );
+
+            let conv_labels = ConversationLabel::find(query, params, interface, None).await?;
+
+            for mut conv_label in conv_labels {
+                let label_id = &conv_label.local_label_id.unwrap();
+                conversation
+                    .mark_delete_update_stats(all_stats.get(label_id), interface)
+                    .await?;
+                conv_label
+                    .mark_delete_update_stats(all_stats.get(label_id), interface)
+                    .await?;
+            }
+
+            if conversation.deleted {
+                for (label_id, stats) in all_stats.iter() {
+                    conversation
+                        .remove_conversation_from_label(*label_id, Some(stats), interface)
+                        .await?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
-    /// Marks multiple messages as not deleted
+    /// Mark messages as undeleted.
+    ///
+    /// This is soft undelete of messages. It will assign deleted flag to false,
+    /// Adjust labels, conversations and conversation labels stats.
+    /// Morover if conversation was deleted it will be restored.
     ///
     /// # Parameters
     ///
-    /// * `ids`        - The IDs of the conversations to undelete.
-    /// * `interface`  - The database interface, i.e. [`Stash`] or [`Tether`],
+    /// * `ids`       - The IDs of the messages to undelete.
+    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn undelete_multiple<A>(ids: Vec<LocalId>, interface: &A) -> Result<usize, StashError>
+    pub async fn mark_undeleted<A>(ids: Vec<LocalId>, interface: &A) -> Result<(), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        interface
-            .execute(
-                r"
-            UPDATE
-                messages
-            SET
-                deleted = 0
-            WHERE
-                local_id IN (?)
-            ",
-                params![ids.iter().map(ToString::to_string).collect_vec().join(",")],
-            )
-            .await
+        let (query, params) = find_in_query!("WHERE deleted = 1 AND local_id IN ({})", ids);
+        let mut messages = Message::find(query, params, interface, None).await?;
+        let conv_ids = messages
+            .iter()
+            .filter_map(|m| m.local_conversation_id)
+            .collect::<Vec<_>>();
+
+        for message in messages.iter_mut() {
+            message.deleted = false;
+            message.save_using(interface).await?;
+        }
+
+        let all_stats =
+            Message::update_message_counters_after_soft_undelete(messages, interface).await?;
+        let (query, params) = find_in_query!("WHERE local_id IN ({})", conv_ids);
+        let conversations = Conversation::find(query, params, interface, None).await?;
+
+        for mut conversation in conversations {
+            if conversation.deleted {
+                for (label_id, stats) in all_stats.iter() {
+                    conversation
+                        .add_conversation_to_label(*label_id, Some(stats), interface)
+                        .await?;
+                }
+            }
+
+            let label_ids = all_stats.keys().copied().collect::<Vec<_>>();
+            let (query, mut params) = find_in_query!(
+                "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
+                label_ids
+            );
+            params.insert(
+                0,
+                Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
+            );
+
+            let conv_labels = ConversationLabel::find(query, params, interface, None).await?;
+
+            for mut conv_label in conv_labels {
+                let label_id = &conv_label.local_label_id.unwrap();
+                conversation
+                    .mark_undelete_update_stats(all_stats.get(label_id), interface)
+                    .await?;
+                conv_label
+                    .mark_undelete_update_stats(all_stats.get(label_id), interface)
+                    .await?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Get the message counts.
@@ -5526,7 +5722,7 @@ impl Message {
     }
 
     /// Finds all messages that have expired and deletes them.
-    pub async fn delete_expired<A>(interface: &A) -> Result<usize, StashError>
+    pub async fn delete_expired<A>(interface: &A) -> Result<(), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -5540,7 +5736,7 @@ impl Message {
             interface,
         )
         .await?;
-        Self::delete_multiple(ids, interface).await
+        Self::mark_deleted(ids, interface).await
     }
 
     /// Mark the messages with `ids` as read.

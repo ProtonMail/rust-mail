@@ -39,6 +39,18 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::System,
 ];
 
+#[macro_export]
+macro_rules! find_in_query {
+    ($query:expr, $params:expr) => {{
+        let params = $params
+            .into_iter()
+            .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
+            .collect::<Vec<_>>();
+        let query = format!($query, vec!["?"; params.len()].join(","),);
+        (query, params)
+    }};
+}
+
 /// Errors that may occur while using the ProtonMail app.
 #[derive(Debug, Error)]
 pub enum AppError {

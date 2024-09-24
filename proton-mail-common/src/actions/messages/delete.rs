@@ -42,7 +42,7 @@ impl ActionHandler for Handler {
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
-        Message::delete_multiple(action.0.target_ids.clone(), tx).await?;
+        Message::mark_deleted(action.0.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -51,7 +51,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::undelete_multiple(action.0.target_ids.clone(), tx).await?;
+        Message::mark_undeleted(action.0.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Message, tx)
@@ -91,7 +91,7 @@ impl ActionHandler for Handler {
             let tx = stash.transaction().await?;
             let local_ids = RemoteId::counterparts::<Message, _>(failed_ids.clone(), &tx).await?;
 
-            Message::undelete_multiple(local_ids, &tx)
+            Message::mark_undeleted(local_ids, &tx)
                 .await
                 .inspect_err(|e| error!("Failed to rollback delete on messages: {e}"))?;
             tx.commit().await?;
