@@ -45,13 +45,6 @@
 //!       2. The sliding window is updated, and the cursor is moved forward.
 //!       3. The next page is pre-fetched from the API in the background.
 //!
-//!   - **Moving to the previous page**
-//!
-//!       1. The previous page is fetched from the database.
-//!       2. The sliding window is updated, and the cursor is moved backward.
-//!       3. No API interaction is performed, as the previous page is expected
-//!          to already be in the database.
-//!
 //! ## Live updates
 //!
 //! The paginator listens for changes to the result set:
@@ -97,49 +90,19 @@
 //!
 //! Clients interact with the [`Paginator`] through a set of intuitive methods:
 //!
-//!   1. [`current_page()`](Paginator::current_page()):
-//!      Get the current page. This will be obtained from the database, and is
-//!      always based on the current cursor position.
-//!
-//!   2. [`next_page()`](Paginator::next_page()):
+//!   1. [`next_page()`](Paginator::next_page()):
 //!      Move to and get the next page. This will be obtained from the database,
 //!      and the page after will be fetched from the API into the database in
 //!      the background. The next page is always calculated from the current
 //!      cursor position.
 //!
-//!   3. [`previous_page()`](Paginator::previous_page()):
-//!      Move to and get the previous page. This will be obtained from the
-//!      database. The previous page is always calculated from the current
-//!      cursor position.
-//!
-//!   4. [`first_page()`](Paginator::first_page()):
-//!      Get the first page. This will be obtained from the database. Moving to
-//!      the first page will reset the cursor position to the start of the
-//!      result set.
-//!
-//!   5. [`current_page_number()`](Paginator::current_page_number()):
-//!      Get the current page number. Note that this is somewhat arbitrary, as
-//!      the concept of pages is nominal, and so the page number calculated for
-//!      the current cursor position can change as the result set changes. The
-//!      sliding window approach fits better with an infinite scroll model,
-//!      where there are no page numbers.
-//!
-//!   6. [`page_count()`](Paginator::page_count()):
-//!      Get the total number of pages. This can change over time.
-//!
-//!   7. [`result_count()`](Paginator::result_count()):
+//!   2. [`result_count()`](Paginator::result_count()):
 //!      Get the total number of results. This can change over time.
-//!
-//!   8. [`has_next_page()`](Paginator::has_next_page()):
-//!      Check if there's a next page available.
-//!
-//!   9. [`has_previous_page()`](Paginator::has_previous_page()):
-//!      Check if there's a previous page available.
 //!
 
 use core::error::Error;
 use core::future::Future;
-use core::num::NonZeroU32;
+use core::num::NonZeroUsize;
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use proton_sqlite3::rusqlite::hooks::Action;
@@ -151,6 +114,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use tokio::spawn;
 use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tracing::{error, warn};
 
 #[cfg(test)]
@@ -215,10 +179,10 @@ pub trait DataSource: Send + Sync {
     ///
     /// # Params
     /// * `page_size` - Number of elements per page.
-    /// * `stash`     - Database connection.
+    /// * `stash` - Database connection.
     fn sync_first_page(
         &self,
-        page_size: NonZeroU32,
+        page_size: NonZeroUsize,
         stash: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send;
 
@@ -231,18 +195,42 @@ pub trait DataSource: Send + Sync {
     ///
     /// # Params
     ///
-    /// * `cursor_index` : Current position of the cursor in the new page.
+    /// * `cursor_index` : Current position of the last synced element
     /// * `page_size`    : Number of elements per page.
-    /// * `elements`     : Elements that are in the current page.
-    ///
+    /// * `element`      : Last synced element. `None` if no element was ever synced.
     /// * `stash` - Database connection.
     fn sync_page_after(
         &self,
-        cursor_index: u32,
-        page_size: NonZeroU32,
-        elements: Vec<Self::Item>,
+        cursor_index: usize,
+        page_size: NonZeroUsize,
+        element: Option<&Self::Item>,
         stash: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send;
+
+    /// Save `records` to the database.
+    ///
+    /// This method is here to allow the data source to override the default
+    /// save method. Some cases which require overriding `Model::Save`
+    /// will not work correctly otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the db operation failed.
+    fn save_to_database(
+        &self,
+        mut records: Vec<Self::Item>,
+        stash: &Stash,
+    ) -> impl Future<Output = Result<Vec<Self::Item>, StashError>> {
+        let stash = stash.clone();
+        async move {
+            let tx = stash.transaction().await?;
+            for record in &mut records {
+                record.save_using(&tx).await?;
+            }
+            tx.commit().await?;
+            Ok(records)
+        }
+    }
 }
 
 /// Represents a paginated view of a result set.
@@ -264,7 +252,7 @@ pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
     /// The number of records per page. Assuming no changes to the result set,
     /// this will remain constant. However, if the data changes, the number for
     /// a particular page may vary.
-    page_size: NonZeroU32,
+    page_size: NonZeroUsize,
 
     /// The parameters used in the query.
     params: Vec<Param>,
@@ -281,6 +269,9 @@ pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
     /// The [`DataSource`] from where pagination data will be synced
     /// from.
     remote: Option<Arc<R>>,
+
+    #[allow(clippy::type_complexity)] // Can't define an alias due to trait bounds
+    pre_fetch_task: Mutex<Option<JoinHandle<Result<Vec<T>, R::Error>>>>,
 }
 
 /// Shared state between the [`Paginator`] and the background watcher.
@@ -288,13 +279,15 @@ pub struct Paginator<T: Model, R: DataSource<Item = T> + 'static> {
 struct Shared {
     /// The current cursor position in the result set. This indicates the start
     /// of the current frame.
-    cursor_index: u32,
+    cursor_index: usize,
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
     cursor_row_id: Option<u64>,
+    last_synced_index: usize,
+    last_synced_row_id: Option<u64>,
     /// The total number of records in the result set. This will be kept updated
     /// as changes occur to the result set.
-    row_count: u32,
+    row_count: usize,
     /// Recently synced record ids to filter out unnecessary create record events.
     /// If the user is watching for change in this table they can skip these
     /// as these events are a direct result of the user's action.
@@ -348,7 +341,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         query_logic: Q,
         params: Vec<Param>,
         interface: &A,
-        page_size: NonZeroU32,
+        page_size: NonZeroUsize,
         remote: Option<R>,
         queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<Self, R::Error>
@@ -363,12 +356,15 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 cursor_row_id: None,
                 row_count: 0,
                 recently_synced: HashSet::new(),
+                last_synced_index: 0,
+                last_synced_row_id: None,
             })),
             page_size,
             params,
             query_logic: query_logic.into(),
             stash: interface.stash().clone(),
             remote: remote.map(Arc::new),
+            pre_fetch_task: Mutex::new(None),
         };
 
         paginator.initialize(interface).await?;
@@ -394,39 +390,37 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let mut initial_records = T::find(
-            format!("{} LIMIT {}", self.query_logic, self.page_size,),
-            convert_params(&self.params),
-            &interface.clone().into(),
-            None,
-        )
-        .await?;
-
         // Acquire lock to prevent interference from watcher thread.
         // Note: watcher is currently initialized after this function,
         // but at least we are safe if this changes in the future.
         let mut shared = self.shared.lock().await;
 
+        let initial_records = interface
+            .query_values::<_, u64>(
+                format!(
+                    "SELECT rowid AS value FROM {} {} LIMIT {}",
+                    T::table_name(),
+                    self.query_logic,
+                    self.page_size,
+                ),
+                convert_params(&self.params),
+            )
+            .await?;
+
         if let Some(remote) = self.remote.as_ref() {
             let total = remote.total(&self.stash).await?;
-            if initial_records.is_empty()
-                || (initial_records.len() < self.page_size.get() as usize
-                    && initial_records.len() < total)
-            {
-                initial_records = remote.sync_first_page(self.page_size, &self.stash).await?;
-
-                // Track recently inserted.
-                for record in &initial_records {
-                    shared.recently_synced.insert(record.row_id().unwrap());
-                }
-            }
-
-            shared.row_count = total.max(initial_records.len()) as u32;
+            shared.row_count = total.max(initial_records.len());
+            let remote_cloned = Arc::clone(remote);
+            let page_size = self.page_size;
+            let stash = self.stash.clone();
+            *self.pre_fetch_task.lock().await = Some(spawn(async move {
+                remote_cloned.sync_first_page(page_size, &stash).await
+            }));
         } else {
-            shared.row_count = initial_records.len() as u32;
+            shared.row_count = initial_records.len();
         }
 
-        shared.cursor_row_id = initial_records.first().map(|v| v.row_id().unwrap());
+        shared.cursor_row_id = initial_records.first().copied();
 
         Ok(())
     }
@@ -551,77 +545,24 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ) -> Result<(), StashError> {
         match *change {
             ResultsetChange::Inserted(_) | ResultsetChange::Deleted(_) => {
-                // Re-run the query to check if the cursor position needs to change. This
-                // gets the first record at the offset of the cursor, and if doesn't have
-                // the same ID as the current cursor record, we need to adjust the cursor.
-                let cursor_record: Option<T> = perform_find(
-                    #[allow(clippy::unwrap_used)]
-                    &paging_query(
-                        query_logic,
-                        shared.cursor_index,
-                        NonZeroU32::new(1).unwrap(),
-                    ),
-                    convert_params(&params),
-                    &stash.clone().into(),
-                    None,
+                Self::update_cursor_and_row_id(
+                    &mut shared.cursor_index,
+                    &mut shared.cursor_row_id,
+                    change,
+                    query_logic,
+                    &params,
+                    stash,
                 )
-                .await?
-                .into_iter()
-                .next();
-
-                match cursor_record {
-                    Some(record) => {
-                        if let Some(cursor_row_id) = shared.cursor_row_id {
-                            #[allow(clippy::cast_lossless, clippy::unwrap_used)]
-                            if cursor_row_id != record.row_id().unwrap() {
-                                // The change was made before the cursor position
-                                if let ResultsetChange::Inserted(_) = *change {
-                                    shared.cursor_index = shared.cursor_index.saturating_add(1);
-                                } else if let ResultsetChange::Deleted(_) = *change {
-                                    shared.cursor_index = shared.cursor_index.saturating_sub(1);
-                                }
-                            }
-                        }
-                        // Update cursor
-                        shared.cursor_row_id = record.row_id();
-                    }
-                    None => {
-                        // We've reached the end of the result set, meaning a deletion before the
-                        // cursor position
-                        if let ResultsetChange::Deleted(_) = *change {
-                            // try to find something a valid element for the cursor.
-                            loop {
-                                shared.cursor_index = shared.cursor_index.saturating_sub(1);
-                                if let Some(cursor_record) = perform_find::<_, T>(
-                                    #[allow(clippy::unwrap_used)]
-                                    &paging_query(
-                                        query_logic,
-                                        shared.cursor_index,
-                                        NonZeroU32::new(1).unwrap(),
-                                    ),
-                                    convert_params(&params),
-                                    &stash.clone().into(),
-                                    None,
-                                )
-                                .await?
-                                .into_iter()
-                                .next()
-                                {
-                                    shared.cursor_row_id = Some(cursor_record.row_id().unwrap());
-                                    break;
-                                }
-
-                                // if we reach this point and we still don't
-                                // have an element then there is nothing left.
-                                if shared.cursor_index == 0 {
-                                    shared.cursor_row_id = None;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-
+                .await?;
+                Self::update_cursor_and_row_id(
+                    &mut shared.last_synced_index,
+                    &mut shared.last_synced_row_id,
+                    change,
+                    query_logic,
+                    &params,
+                    stash,
+                )
+                .await?;
                 // Manually update total row count based on event.
                 let mut total_update_fallback = || {
                     if let ResultsetChange::Inserted(_) = *change {
@@ -634,9 +575,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
                 if let Some(remote) = remote {
                     match remote.total(stash).await {
                         Ok(v) => {
-                            if let Ok(v) = v.try_into() {
-                                shared.row_count = v;
-                            }
+                            shared.row_count = v;
                         }
                         Err(_) => {
                             total_update_fallback();
@@ -664,48 +603,101 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         Ok(())
     }
 
-    /// Retrieves the results of the current page.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the current page could not be fetched from the
-    /// database.
-    ///
-    pub async fn current_page(&self) -> Result<Vec<T>, StashError> {
-        let current_index = { self.shared.lock().await.cursor_index };
-        self.page_at(current_index).await
+    /// Update a cursor index and respective row id based on ongoing changes.
+    async fn update_cursor_and_row_id(
+        cursor_index: &mut usize,
+        cursor_row_id: &mut Option<u64>,
+        change: &ResultsetChange<T, T::IdType>,
+        query_logic: &str,
+        params: &[Param],
+        stash: &Stash,
+    ) -> Result<(), StashError> {
+        // Re-run the query to check if the cursor position needs to change. This
+        // gets the first record at the offset of the cursor, and if doesn't have
+        // the same ID as the current cursor record, we need to adjust the cursor.
+        let cursor_record: Option<T> = perform_find(
+            #[allow(clippy::unwrap_used)]
+            &paging_query(query_logic, *cursor_index, NonZeroUsize::new(1).unwrap()),
+            convert_params(params),
+            &stash.clone().into(),
+            None,
+        )
+        .await?
+        .into_iter()
+        .next();
+
+        match cursor_record {
+            Some(record) => {
+                if let Some(cursor_row_id) = *cursor_row_id {
+                    #[allow(clippy::cast_lossless, clippy::unwrap_used)]
+                    if cursor_row_id != record.row_id().unwrap() {
+                        // The change was made before the cursor position
+                        if let ResultsetChange::Inserted(_) = *change {
+                            *cursor_index = cursor_index.saturating_add(1);
+                        } else if let ResultsetChange::Deleted(_) = *change {
+                            *cursor_index = cursor_index.saturating_sub(1);
+                        }
+                    }
+                }
+                // Update cursor
+                *cursor_row_id = record.row_id();
+            }
+            None => {
+                // We've reached the end of the result set, meaning a deletion before the
+                // cursor position
+                if let ResultsetChange::Deleted(_) = *change {
+                    // try to find something a valid element for the cursor.
+                    loop {
+                        *cursor_index = cursor_index.saturating_sub(1);
+                        if let Some(cursor_record) = perform_find::<_, T>(
+                            #[allow(clippy::unwrap_used)]
+                            &paging_query(
+                                query_logic,
+                                *cursor_index,
+                                NonZeroUsize::new(1).unwrap(),
+                            ),
+                            convert_params(params),
+                            &stash.clone().into(),
+                            None,
+                        )
+                        .await?
+                        .into_iter()
+                        .next()
+                        {
+                            *cursor_row_id = Some(cursor_record.row_id().unwrap());
+                            break;
+                        }
+
+                        // if we reach this point and we still don't
+                        // have an element then there is nothing left.
+                        if *cursor_index == 0 {
+                            *cursor_row_id = None;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
-    /// Retrieves the page at the given cursor index.
-    ///
-    /// # Params
-    ///
-    /// * `cursor_index` - Index of the cursor to load from.
-    /// * `queue`        - Optional watcher for this range.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the current page could not be fetched from the
-    /// database.
-    ///
-    async fn page_at(&self, cursor_index: u32) -> Result<Vec<T>, StashError> {
-        self.range(cursor_index, self.page_size).await
-    }
-
-    /// Retrieves the range of values
+    /// Retrieves a collection of values.
     ///
     /// # Params
     ///
     /// * `cursor_index` - Index of the cursor to load from.
     /// * `count`        - Number of elements to load after `cursor_index`
-    /// * `queue`        - Optional watcher for this range.
     ///
     /// # Errors
     ///
     /// Returns an error if the current page could not be fetched from the
     /// database.
     ///
-    async fn range(&self, cursor_index: u32, count: NonZeroU32) -> Result<Vec<T>, StashError> {
+    async fn values_at(
+        &self,
+        cursor_index: usize,
+        count: NonZeroUsize,
+    ) -> Result<Vec<T>, StashError> {
         T::find(
             paging_query(&self.query_logic, cursor_index, count),
             convert_params(&self.params),
@@ -717,6 +709,16 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 
     /// Moves to the next page and retrieves its results.
     ///
+    /// If there are no values available at this time for the next page this
+    /// method will return an empty collection.
+    ///
+    /// This method will pre-fetch the next page in the background and will
+    /// wait until the previous pre-fetching of a page has finished before
+    /// returning to the user.
+    ///
+    /// The first time this method is called, it will wait on the pre-fetch
+    /// scheduled by the [`initialize()`].
+    ///
     /// # Errors
     ///
     /// Returns an error if the page after the next page could not be fetched
@@ -724,80 +726,92 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     #[allow(clippy::missing_panics_doc)]
     pub async fn next_page(&self) -> Result<Vec<T>, R::Error> {
-        // Acquire lock to prevent concurrent checks from the database
-        // watcher until we are done updating all the relevant data.
-        let mut shared = self.shared.lock().await;
-
-        let current_page = self.page_at(shared.cursor_index).await?;
-
-        // Should be safe to convert.
-        let current_page_len: u32 = current_page.len().try_into().map_err(|_| {
-            StashError::Custom("current page len is not a valid u32 value".to_owned())
-        })?;
-
-        let is_current_page_incomplete = current_page_len < self.page_size.get();
-        // If we currently have less than `page_size` elements, we should
-        // try to sync a new page and the remaining elements for the current
-        // page.
-        let remaining_count = self.page_size.get() - current_page_len;
-        let (next_index, sync_count) = if is_current_page_incomplete {
-            let remaining_count = NonZeroU32::new(remaining_count).unwrap();
-            let next_index = shared.cursor_index.saturating_add(current_page_len);
-            (next_index, remaining_count)
-        } else {
-            let next_index = shared.cursor_index.saturating_add(self.page_size.get());
-            (next_index, self.page_size)
-        };
-
         if let Some(remote) = self.remote.as_ref() {
-            let sync_elements = remote
-                .sync_page_after(next_index, sync_count, current_page, &self.stash)
-                .await?;
-            // If no elements are returned there are no new items, so nothing
-            // to do.
-            if sync_elements.is_empty() {
-                return Ok(vec![]);
-            }
+            let mut pre_fetch_task = self.pre_fetch_task.lock().await;
+            if let Some(task) = pre_fetch_task.take() {
+                let new_records = task.await.map_err(|_| {
+                    StashError::Custom("Failed to join pre fetch task".to_owned())
+                })??;
 
-            for element in &sync_elements {
-                shared.recently_synced.insert(element.row_id().unwrap());
-            }
-        }
+                let mut shared = self.shared.lock().await;
+                if new_records.is_empty() {
+                    let last_synced_element = self
+                        .values_at(shared.last_synced_index, NonZeroUsize::new(1).unwrap())
+                        .await?;
+                    let remote_cloned = Arc::clone(remote);
+                    let page_size = self.page_size;
+                    let last_synced_index = shared.last_synced_index;
+                    let stash = self.stash.clone();
+                    *pre_fetch_task = Some(spawn(async move {
+                        let last_element = last_synced_element.first();
+                        remote_cloned
+                            .sync_page_after(last_synced_index, page_size, last_element, &stash)
+                            .await
+                    }));
+                    Ok(vec![])
+                } else {
+                    let new_records = remote.save_to_database(new_records, &self.stash).await?;
 
-        if is_current_page_incomplete {
-            // return only the new elements without updating cursor index
-            // and the row_id.
-            Ok(self
-                .range(next_index, NonZeroU32::new(remaining_count).unwrap())
-                .await?)
+                    for element in &new_records {
+                        shared.recently_synced.insert(element.row_id().unwrap());
+                    }
+
+                    let current_page = self
+                        .values_at(
+                            shared.last_synced_index,
+                            NonZeroUsize::new(new_records.len()).unwrap(),
+                        )
+                        .await?;
+
+                    shared.cursor_index = shared.last_synced_index.saturating_add(1);
+                    shared.last_synced_index = shared
+                        .cursor_index
+                        .saturating_add(current_page.len())
+                        .saturating_sub(1);
+                    shared.cursor_row_id = current_page.first().map(|v| v.row_id().unwrap());
+                    shared.last_synced_row_id = current_page.last().map(|v| v.row_id().unwrap());
+
+                    // Schedule new sync
+                    let remote_cloned = Arc::clone(remote);
+                    let last_element = current_page.last().cloned();
+                    let last_element_cursor = shared.last_synced_index;
+                    let page_size = self.page_size;
+                    let stash = self.stash.clone();
+                    *pre_fetch_task = Some(spawn(async move {
+                        remote_cloned
+                            .sync_page_after(
+                                last_element_cursor,
+                                page_size,
+                                last_element.as_ref(),
+                                &stash,
+                            )
+                            .await
+                    }));
+                    Ok(current_page)
+                }
+            } else {
+                Ok(vec![])
+            }
         } else {
-            // If the current page is complete we should update the cursor index
-            // and the row id value.
-            shared.cursor_index = next_index;
+            // fallback for lack of remote source
+            let mut shared = self.shared.lock().await;
 
-            let new_page = self.page_at(shared.cursor_index).await?;
+            let current_page = self
+                .values_at(shared.last_synced_index, self.page_size)
+                .await?;
 
-            // Get the first element of the next page to update the cursor id
-            if let Some(element) = new_page.first() {
-                shared.cursor_row_id = Some(element.row_id().unwrap());
+            if !current_page.is_empty() {
+                shared.cursor_index = shared.last_synced_index.saturating_add(1);
+                shared.last_synced_index = shared
+                    .cursor_index
+                    .saturating_add(current_page.len())
+                    .saturating_sub(1);
+                shared.cursor_row_id = current_page.first().map(|v| v.row_id().unwrap());
+                shared.last_synced_row_id = current_page.last().map(|v| v.row_id().unwrap());
             }
 
-            Ok(new_page)
+            Ok(current_page)
         }
-    }
-
-    /// Moves to the previous page and retrieves its results.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the page before the previous page could not be
-    /// fetched from the database.
-    ///
-    pub async fn previous_page(&self) -> Result<Vec<T>, StashError> {
-        let mut guard = self.shared.lock().await;
-        guard.cursor_index = guard.cursor_index.saturating_sub(u32::from(self.page_size));
-        drop(guard);
-        self.current_page().await
     }
 
     /// Reloads all data up to the cursor.
@@ -815,69 +829,19 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     #[allow(clippy::missing_panics_doc)]
     pub async fn reload(&self) -> Result<Vec<T>, StashError> {
-        #[allow(clippy::unwrap_used)]
-        T::find(
-            paging_query(
-                &self.query_logic,
-                0,
-                NonZeroU32::new(
-                    self.shared
-                        .lock()
-                        .await
-                        .cursor_index
-                        .saturating_add(self.page_size.into()),
-                )
-                .unwrap(),
-            ),
-            convert_params(&self.params),
-            &self.stash.clone(),
-            None,
-        )
-        .await
+        let range = {
+            let shared = self.shared.lock().await;
+            shared.last_synced_index
+        };
+        match NonZeroUsize::new(range) {
+            None => Ok(vec![]),
+            Some(range) => self.values_at(0, range).await,
+        }
     }
 
     /// Retrieves the total number of records in the result set.
-    pub async fn result_count(&self) -> u32 {
+    pub async fn result_count(&self) -> usize {
         self.shared.lock().await.row_count
-    }
-
-    /// Retrieves the current page number.
-    pub async fn current_page_number(&self) -> u32 {
-        #[allow(clippy::arithmetic_side_effects)]
-        self.shared
-            .lock()
-            .await
-            .cursor_index
-            .saturating_div(u32::from(self.page_size))
-            .saturating_add(1)
-    }
-
-    /// Retrieves the total number of pages.
-    pub async fn page_count(&self) -> u32 {
-        #[allow(clippy::arithmetic_side_effects)]
-        self.shared
-            .lock()
-            .await
-            .row_count
-            .saturating_add(u32::from(self.page_size))
-            .saturating_sub(1)
-            .saturating_div(u32::from(self.page_size))
-    }
-
-    /// Checks if there is a next page available.
-    pub async fn has_next_page(&self) -> bool {
-        self.current_page_number().await < self.page_count().await
-    }
-
-    /// Checks if there is a previous page available.
-    pub async fn has_previous_page(&self) -> bool {
-        self.current_page_number().await > 1
-    }
-
-    /// Returns the current page size.
-    #[must_use]
-    pub const fn page_size(&self) -> NonZeroU32 {
-        self.page_size
     }
 }
 
@@ -889,7 +853,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
 /// * `cursor_index` - The current cursor position in the result set.
 /// * `page_size`    - The number of records per page.
 ///
-fn paging_query(query_logic: &str, cursor_index: u32, page_size: NonZeroU32) -> String {
+fn paging_query(query_logic: &str, cursor_index: usize, page_size: NonZeroUsize) -> String {
     formatdoc!(
         "
             {}

@@ -5,7 +5,7 @@ use stash::orm::{Model, ResultsetChange};
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, Stash, StashError};
 use std::future::Future;
-use std::num::NonZeroU32;
+use std::num::NonZeroUsize;
 use std::ops::Range;
 use tempdir::TempDir;
 use tokio::sync::Mutex;
@@ -66,21 +66,35 @@ impl TestDataSource {
     }
     async fn insert_pages(
         &self,
-        range: Range<u32>,
+        range: Range<usize>,
         stash: &Stash,
     ) -> Result<Vec<TestModel>, StashError> {
         let tx = stash.transaction().await?;
         let mut result = Vec::with_capacity(range.len());
         for i in range.into_iter() {
             let mut value = TestModel {
-                id: i.into(),
+                id: i.try_into().unwrap(),
                 row_id: None,
                 stash: None,
             };
             value.save_using(&tx).await?;
+            value.set_stash(stash);
             result.push(value);
         }
         tx.commit().await?;
+        Ok(result)
+    }
+
+    async fn gen_pages(&self, range: Range<usize>) -> Result<Vec<TestModel>, StashError> {
+        let mut result = Vec::with_capacity(range.len());
+        for i in range.into_iter() {
+            let value = TestModel {
+                id: i.try_into().unwrap(),
+                row_id: None,
+                stash: None,
+            };
+            result.push(value);
+        }
         Ok(result)
     }
 }
@@ -94,20 +108,20 @@ impl DataSource for TestDataSource {
 
     fn sync_first_page(
         &self,
-        page_size: NonZeroU32,
-        stash: &Stash,
+        page_size: NonZeroUsize,
+        _: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
-        async move { self.insert_pages(0u32..page_size.get(), stash).await }
+        async move { self.gen_pages(0usize..page_size.get()).await }
     }
 
     fn sync_page_after(
         &self,
-        cursor_index: u32,
-        page_size: NonZeroU32,
-        mut elements: Vec<Self::Item>,
-        stash: &Stash,
+        cursor_index: usize,
+        page_size: NonZeroUsize,
+        elements: Option<&Self::Item>,
+        _: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
-        let last_element = elements.pop().unwrap();
+        let last_element = elements.unwrap();
         if cursor_index <= 15 {
             assert_eq!(last_element.id, cursor_index as u64 - 1);
         } else {
@@ -118,7 +132,7 @@ impl DataSource for TestDataSource {
         let end = (start + page_size.get()).min(self.total.try_into().unwrap());
         async move {
             if start < self.total.try_into().unwrap() {
-                self.insert_pages(start..end, stash).await
+                self.gen_pages(start..end).await
             } else {
                 Ok(vec![])
             }
@@ -138,7 +152,7 @@ impl DataSource for SkipFirstSyncSource {
 
     fn sync_first_page(
         &self,
-        _: NonZeroU32,
+        _: NonZeroUsize,
         _: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         async {
@@ -148,9 +162,9 @@ impl DataSource for SkipFirstSyncSource {
 
     fn sync_page_after(
         &self,
-        cursor_index: u32,
-        page_size: NonZeroU32,
-        elements: Vec<Self::Item>,
+        cursor_index: usize,
+        page_size: NonZeroUsize,
+        elements: Option<&Self::Item>,
         stash: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         self.0
@@ -160,13 +174,13 @@ impl DataSource for SkipFirstSyncSource {
 
 struct IrregularPageDataSource {
     source: TestDataSource,
-    pages: Mutex<Vec<Range<u32>>>,
+    pages: Mutex<Vec<Range<usize>>>,
 }
 
 impl IrregularPageDataSource {
-    fn new(ranges: impl IntoIterator<Item = Range<u32>>) -> Self {
+    fn new(ranges: impl IntoIterator<Item = Range<usize>>) -> Self {
         let mut total = 0_usize;
-        let mut ranges: Vec<Range<u32>> = ranges
+        let mut ranges: Vec<Range<usize>> = ranges
             .into_iter()
             .inspect(|v| {
                 total += v.len();
@@ -190,12 +204,12 @@ impl DataSource for IrregularPageDataSource {
 
     fn sync_first_page(
         &self,
-        _: NonZeroU32,
-        stash: &Stash,
+        _: NonZeroUsize,
+        _: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         async move {
             if let Some(range) = self.pages.lock().await.pop() {
-                return self.source.insert_pages(range, stash).await;
+                return self.source.gen_pages(range).await;
             }
             Ok(vec![])
         }
@@ -203,15 +217,15 @@ impl DataSource for IrregularPageDataSource {
 
     fn sync_page_after(
         &self,
-        _: u32,
-        _: NonZeroU32,
-        elements: Vec<Self::Item>,
-        stash: &Stash,
+        _: usize,
+        _: NonZeroUsize,
+        elements: Option<&Self::Item>,
+        _: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         async move {
             if let Some(range) = self.pages.lock().await.pop() {
-                assert_eq!(elements.last().unwrap().id, range.start as u64 - 1);
-                return self.source.insert_pages(range, stash).await;
+                assert_eq!(elements.unwrap().id, range.start as u64 - 1);
+                return self.source.gen_pages(range).await;
             }
             Ok(vec![])
         }
@@ -228,7 +242,7 @@ async fn data_source_sync() {
         "ORDER BY id ASC",
         vec![],
         &stash,
-        NonZeroU32::new(5).unwrap(),
+        NonZeroUsize::new(5).unwrap(),
         Some(source),
         None,
     )
@@ -236,78 +250,30 @@ async fn data_source_sync() {
     .unwrap();
 
     // Check first page is downloaded
+    let next_page = paginator.next_page().await.unwrap();
     check_range(&stash, 0u32..5u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&stash, &next_page, 0u32..5u32).await;
 
     // Check element [5..9] are available
-    paginator.next_page().await.unwrap();
+    let next_page = paginator.next_page().await.unwrap();
     check_range(&stash, 5u32..10u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&stash, &next_page, 5u32..10u32).await;
 
     // Check element [10..14] are available
-    paginator.next_page().await.unwrap();
+    let next_page = paginator.next_page().await.unwrap();
     check_range(&stash, 10u32..15u32).await;
-    check_page(&stash, &paginator).await;
+    check_page(&stash, &next_page, 10u32..15u32).await;
 
     // Check element [15..18] are available
-    let values = paginator.next_page().await.unwrap();
+    let next_page = paginator.next_page().await.unwrap();
     check_range_with_limit(&stash, 15u32..19u32, Some(3)).await;
-    assert_eq!(values.len(), 3);
+    check_page(&stash, &next_page, 15u32..18u32).await;
+    assert_eq!(next_page.len(), 3);
 
     // Check no new values are returned for the current page.
-    assert!(!paginator.has_next_page().await);
     let last_values = paginator.next_page().await.unwrap();
+    dbg!(&last_values);
     assert!(last_values.is_empty());
-}
-
-#[tokio::test]
-async fn data_source_sync_first_page_if_existing_less_than_page_size() {
-    // Check if the first sync is performed if some elements are present
-    // but not more than page size.
-    let (stash, _dir) = init_db().await;
-
-    let source = TestDataSource::new();
-    source.insert_pages(0..3_u32.into(), &stash).await.unwrap();
-
-    let paginator = Paginator::new(
-        "ORDER BY id ASC",
-        vec![],
-        &stash,
-        NonZeroU32::new(5).unwrap(),
-        Some(source),
-        None,
-    )
-    .await
-    .unwrap();
-
-    // Check first page is downloaded
-    check_range(&stash, 0u32..5u32).await;
-    check_page(&stash, &paginator).await;
-}
-
-#[tokio::test]
-async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() {
-    // Check if the first sync is performed if some elements are present
-    // but not more than page size.
-    let (stash, _dir) = init_db().await;
-
-    let source = TestDataSource::new();
-    source.insert_pages(0..5_u32.into(), &stash).await.unwrap();
-
-    let paginator = Paginator::new(
-        "ORDER BY id ASC",
-        vec![],
-        &stash,
-        NonZeroU32::new(5).unwrap(),
-        Some(SkipFirstSyncSource(source)),
-        None,
-    )
-    .await
-    .unwrap();
-
-    // Check first page is downloaded
-    check_range(&stash, 0u32..5u32).await;
-    check_page(&stash, &paginator).await;
 }
 
 #[tokio::test]
@@ -315,6 +281,7 @@ async fn data_source_sync_with_callback() {
     // The page number should not increase when new elements are added.
     let (stash, _dir) = init_db().await;
     let source = TestDataSource::new();
+    let total = source.total;
     let (sender, receiver) = flume::unbounded();
 
     let handle = tokio::spawn(async move {
@@ -326,30 +293,30 @@ async fn data_source_sync_with_callback() {
         "ORDER BY id ASC",
         vec![],
         &stash,
-        NonZeroU32::new(5).unwrap(),
+        NonZeroUsize::new(5).unwrap(),
         Some(source),
         Some(sender),
     )
     .await
     .unwrap();
 
-    assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    let next_page = paginator.next_page().await.unwrap();
+    assert_eq!(paginator.result_count().await, total);
+    check_page(&stash, &next_page, 0u32..5u32).await;
 
-    paginator.next_page().await.unwrap();
-    assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    let next_page = paginator.next_page().await.unwrap();
+    assert_eq!(paginator.result_count().await, total);
+    check_page(&stash, &next_page, 5u32..10u32).await;
 
-    paginator.next_page().await.unwrap();
-    assert_eq!(paginator.page_count().await, 4);
-    check_page(&stash, &paginator).await;
+    let next_page = paginator.next_page().await.unwrap();
+    assert_eq!(paginator.result_count().await, total);
+    check_page(&stash, &next_page, 10u32..15u32).await;
 
-    paginator.next_page().await.unwrap();
-    assert_eq!(paginator.page_count().await, 4);
-    check_page_with_limit(&stash, &paginator, Some(3)).await;
+    let next_page = paginator.next_page().await.unwrap();
+    assert_eq!(paginator.result_count().await, total);
+    check_page(&stash, &next_page, 15u32..18u32).await;
 
     // Check no new values are returned for the current page.
-    assert!(!paginator.has_next_page().await);
     let last_values = paginator.next_page().await.unwrap();
     assert!(last_values.is_empty());
 
@@ -374,31 +341,32 @@ async fn data_source_irregular_pages() {
     // Check syncing logic for pages that do not have page number of elements.
     let (stash, _dir) = init_db().await;
 
-    // Ranges represent the following sequence of (element range, expected page number)
+    // Ranges represent the following sequence of expected ranges
     let pages = [
         // * Sync first page: 3 elements
-        (0u32..3, 1u32),
+        0usize..3,
         // * Sync next page: fetch remaining 2 elements, still first page
-        (3..5, 1),
+        3..5,
         // * Sync next page: Syncs full page, page 2
-        (5..10, 2),
+        5..10,
         // * Sync next page: Syncs 2 element, page 3
-        (10..12, 3),
+        10..12,
         // * Sync next page: Syncs 1 element, still page 3
-        (12..13, 3),
+        12..13,
         // * Sync next page: Syncs 2 elements, still page 3,
-        (13..15, 3),
+        13..15,
         // * Sync next page: Syncs full page, page 4
-        (15..20, 4),
+        15..20,
     ];
 
-    let source = IrregularPageDataSource::new(pages.iter().map(|(range, _)| range.clone()));
+    let source = IrregularPageDataSource::new(pages.clone());
+    let total = source.source.total;
 
     let paginator = Paginator::new(
         "ORDER BY id ASC",
         vec![],
         &stash,
-        NonZeroU32::new(5).unwrap(),
+        NonZeroUsize::new(5).unwrap(),
         Some(source),
         None,
     )
@@ -406,23 +374,13 @@ async fn data_source_irregular_pages() {
     .unwrap();
 
     // Check initial sync
-    assert_eq!(paginator.page_count().await as usize, 4);
-    assert_eq!(paginator.current_page_number().await, 1);
 
-    check_page_with_limit(&stash, &paginator, Some(pages[0].0.len())).await;
-
-    for (range, page_num) in pages.into_iter().skip(1) {
-        assert!(paginator.has_next_page().await);
+    for range in pages.into_iter() {
         let next_elements = paginator.next_page().await.unwrap();
         assert_eq!(
             next_elements.len(),
             range.len(),
             "Failed to sync expected number of elements in range:{range:?}"
-        );
-        assert_eq!(
-            paginator.current_page_number().await,
-            page_num,
-            "Page number does not match for range={range:?}"
         );
         for (index, id) in range.clone().into_iter().enumerate() {
             assert_eq!(
@@ -433,8 +391,10 @@ async fn data_source_irregular_pages() {
             );
         }
     }
+    assert_eq!(paginator.result_count().await, total);
 
-    assert!(!paginator.has_next_page().await);
+    let next_elements = paginator.next_page().await.unwrap();
+    assert!(next_elements.is_empty());
 }
 
 async fn init_db() -> (Stash, TempDir) {
@@ -485,42 +445,27 @@ async fn check_range_with_limit(stash: &Stash, range: Range<u32>, max_len: Optio
 }
 
 // Check the range of values is present in the current page.
-async fn check_page<R: DataSource<Item = TestModel>>(
-    stash: &Stash,
-    paginator: &Paginator<TestModel, R>,
-) {
-    check_page_with_limit(stash, paginator, None).await
-}
+async fn check_page(stash: &Stash, page: &[TestModel], expected_range: Range<u32>) {
+    let start = expected_range.start;
+    let end = expected_range.end;
+    let expected: Vec<TestModel> = expected_range
+        .clone()
+        .into_iter()
+        .map(|id| TestModel {
+            id: id as u64,
+            row_id: Some(id as u64),
+            stash: Some(stash.clone()),
+        })
+        .collect();
 
-async fn check_page_with_limit<R: DataSource<Item = TestModel>>(
-    stash: &Stash,
-    paginator: &Paginator<TestModel, R>,
-    max_len: Option<usize>,
-) {
-    let start =
-        (paginator.current_page_number().await.saturating_sub(1)) * paginator.page_size().get();
-    let end = (paginator.current_page_number().await) * paginator.page_size().get();
-    let iter = (start..end).into_iter().map(|id| TestModel {
-        id: id as u64,
-        row_id: Some(id as u64),
-        stash: Some(stash.clone()),
-    });
-
-    let expected = if let Some(max) = max_len {
-        iter.take(max).collect::<Vec<_>>()
-    } else {
-        iter.collect::<Vec<_>>()
-    };
-
-    let values = paginator.current_page().await.unwrap();
     assert_eq!(
-        expected.len(),
-        values.len(),
+        (end - start) as u64,
+        page.len() as u64,
         "Range [{start}..{end}]: Expected and values have different lengths"
     );
-    for (index, (expected, value)) in std::iter::zip(expected, values).into_iter().enumerate() {
+    for (index, (expected, value)) in std::iter::zip(expected, page).into_iter().enumerate() {
         assert_eq!(
-            expected, value,
+            expected, *value,
             "Range [{start}..{end}]: Value at index {index}, does not match"
         );
     }
