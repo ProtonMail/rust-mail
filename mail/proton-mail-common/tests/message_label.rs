@@ -10,7 +10,9 @@ use proton_api_core::services::proton::response_data::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
-use proton_api_mail::services::proton::response_data::Label as ApiLabel;
+use proton_api_mail::services::proton::response_data::{
+    ConversationCount, Label as ApiLabel, MessageCount,
+};
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageFlags as ApiMessageFlags,
     MessageMetadata as ApiMessageMetadata, MimeType as ApiMimeType, ViewMode as ApiViewMode,
@@ -20,7 +22,7 @@ use proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey, UserKeys as ApiUserKeys,
 };
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Label, Message};
 use proton_mail_common::{MailUserContext, Mailbox};
 use stash::orm::Model;
@@ -325,8 +327,16 @@ fn test_init_params_label(label: ApiLabel) -> TestParams {
         labels,
         conversations: vec![],
         attachments: vec![],
-        conversation_count: vec![],
-        message_count: vec![],
+        conversation_count: vec![ConversationCount {
+            label_id: SystemLabel::Inbox.remote_id().into(),
+            total: 1,
+            unread: 0,
+        }],
+        message_count: vec![MessageCount {
+            label_id: SystemLabel::Inbox.remote_id().into(),
+            total: 1,
+            unread: 0,
+        }],
     }
 }
 

@@ -1172,7 +1172,6 @@ async fn test_message_counts() {
 }
 
 #[tokio::test]
-#[ignore]
 pub async fn test_delete_local_message() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let tx = stash.connection();
@@ -1191,16 +1190,12 @@ pub async fn test_delete_local_message() {
     {
         // Delete 3rd message from 1st conversation.
         let message = &mut state.messages[2];
-        let _local_id = *state_map
+        let local_id = *state_map
             .messages
             .get(&message.remote_id.clone().unwrap())
             .unwrap();
 
-        message.deleted = true;
-        message
-            .save_using(&tx)
-            .await
-            .expect("failed to mark local message as deleted");
+        Message::mark_deleted(vec![local_id], &tx).await.unwrap();
 
         let conv_counts = conv_counts_as_map(&tx).await;
         let msg_counts = msg_counts_as_map(&tx).await;
@@ -1213,11 +1208,15 @@ pub async fn test_delete_local_message() {
             let conv_count = conv_counts.get(&local_label_id).unwrap();
             let start_conv_count = state_map.conversation_counts.get(label).unwrap();
             let start_msg_count = state_map.message_counts.get(label).unwrap();
+            let local_conv = ContextualConversation::new(
+                Conversation::load(local_conv_id, tx.stash())
+                    .await
+                    .unwrap()
+                    .unwrap(),
+                local_label_id,
+            )
+            .unwrap();
 
-            let local_conv = Conversation::load(local_conv_id, tx.stash())
-                .await
-                .unwrap()
-                .unwrap();
             let remote_conversation_label = find_conversation_label(&state.conversations[0], label);
 
             assert_eq!(
@@ -1236,15 +1235,15 @@ pub async fn test_delete_local_message() {
                 local_conv.num_attachments,
                 remote_conversation_label.context_num_attachments - message.num_attachments as u64
             );
-            assert_eq!(
-                local_conv.num_messages,
-                state.conversations[0].num_messages - 1
-            );
 
             let local_conv = Conversation::load(local_conv_id, tx.stash())
                 .await
                 .unwrap()
                 .unwrap();
+            assert_eq!(
+                local_conv.num_messages,
+                state.conversations[0].num_messages - 1
+            );
 
             assert_eq!(
                 local_conv.num_messages,
@@ -1257,9 +1256,9 @@ pub async fn test_delete_local_message() {
             assert_eq!(msg_count.unread, start_msg_count.unread - 1);
 
             assert_eq!(conv_count.total, start_conv_count.total);
-            // Conversation 1 & 2 have only one unread message on different labels and we removed
+            // Conversation 1 & 2 have two unread message each on different labels and we removed
             // the unread message from label1.
-            assert_eq!(conv_count.unread, 0);
+            assert_eq!(conv_count.unread, 1);
         }
     }
 
@@ -1276,17 +1275,8 @@ pub async fn test_delete_local_message() {
                     .unwrap()
             })
             .collect::<Vec<_>>();
-        for id in &ids {
-            let mut message = Message::load(*id, tx.stash())
-                .await
-                .expect("failed to get message")
-                .expect("must have a value");
-            message.deleted = true;
-            message
-                .save_using(&tx)
-                .await
-                .expect("failed to mark local message as deleted");
-        }
+
+        Message::mark_deleted(ids, &tx).await.unwrap();
 
         let conv_counts = conv_counts_as_map(&tx).await;
         let msg_counts = msg_counts_as_map(&tx).await;
@@ -1310,17 +1300,30 @@ pub async fn test_delete_local_message() {
             // Conversation should no longer exist
             assert_eq!(conv_count.total, start_conv_count.total - 1);
             if label.remote_label_id == state.labels[0].remote_id {
-                assert_eq!(msg_count.total, start_msg_count.total - 3);
+                assert_eq!(msg_count.total, start_msg_count.total - 2);
             } else {
-                assert_eq!(msg_count.total, start_msg_count.total - 1);
+                assert_eq!(msg_count.total, start_msg_count.total - 2);
             }
         }
 
         // Conversation should be deleted
-        assert!(Conversation::load(local_conv_id, tx.stash())
-            .await
-            .unwrap()
-            .is_none());
+        assert!(
+            Conversation::load(local_conv_id, tx.stash())
+                .await
+                .unwrap()
+                .unwrap()
+                .deleted
+        );
+
+        assert!(Conversation::find(
+            "WHERE local_id = ? AND deleted = 0",
+            params![local_conv_id],
+            &tx,
+            None
+        )
+        .await
+        .unwrap()
+        .is_empty());
     }
 }
 
@@ -1368,7 +1371,6 @@ pub async fn test_delete_local_message_does_not_change_conv_unread_count() {
 }
 
 #[tokio::test]
-#[ignore] // Needs proper message delete to work correctly
 pub async fn test_undelete_local_message() {
     let (stash, _db_dir) = new_test_connection_file().await;
     let tx = stash.connection();
@@ -1384,21 +1386,13 @@ pub async fn test_undelete_local_message() {
     {
         // Delete 3rd message from 1st conversation.
         let message = &mut state.messages[2];
-        let _local_id = *state_map
+        let local_id = *state_map
             .messages
             .get(&message.remote_id.clone().unwrap())
             .unwrap();
-        message.deleted = true;
-        message
-            .save_using(&tx)
-            .await
-            .expect("failed to mark local message as deleted");
 
-        message.deleted = false;
-        message
-            .save_using(&tx)
-            .await
-            .expect("failed to undelete message");
+        Message::mark_deleted(vec![local_id], &tx).await.unwrap();
+        Message::mark_undeleted(vec![local_id], &tx).await.unwrap();
 
         let conv_counts = conv_counts_as_map(&tx).await;
         let msg_counts = msg_counts_as_map(&tx).await;
@@ -1435,7 +1429,6 @@ pub async fn test_undelete_local_message() {
                 local_conv.num_attachments,
                 remote_conversation_label.context_num_attachments,
             );
-            assert_eq!(local_conv.num_messages, state.conversations[0].num_messages,);
 
             let local_conv = Conversation::load(local_conv_id, tx.stash())
                 .await
