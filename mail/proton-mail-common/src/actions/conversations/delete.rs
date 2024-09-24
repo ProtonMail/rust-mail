@@ -43,12 +43,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::delete_multiple_from_label(
-            action.0.target_ids.clone(),
-            action.0.label_id,
-            tx,
-        )
-        .await?;
+        Conversation::mark_deleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;
 
         Ok(())
     }
@@ -58,7 +53,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::undelete_multiple(action.0.target_ids.clone(), action.0.label_id, tx).await?;
+        Conversation::mark_undeleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)

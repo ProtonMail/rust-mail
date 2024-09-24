@@ -65,13 +65,18 @@ pub async fn apply_label_to_conversations(
 /// Returns an error if the database query fails.
 ///
 #[uniffi::export]
-pub async fn delete_conversations(mailbox: Arc<Mailbox>, ids: Vec<Id>) -> Result<(), MailboxError> {
-    let conn = mailbox.stash().connection();
+pub async fn delete_conversations(
+    mailbox: Arc<Mailbox>,
+    conversation_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let label_id = mailbox.mbox().label_id();
+    let user_context = mailbox.mbox().user_context();
     uniffi_async(async move {
-        RealConversation::delete_multiple_from_label(
-            ids.into_iter().map(Into::into).collect(),
-            mailbox.label_id().into(),
-            &conn,
+        RealConversation::action_mark_deleted(
+            user_context.session(),
+            user_context.queue(),
+            label_id,
+            conversation_ids.into_iter().map(Into::into),
         )
         .await?;
         Ok(())
