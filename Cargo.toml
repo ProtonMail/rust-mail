@@ -25,7 +25,7 @@ pretty_assertions = "1.4.0"
 proton-action-queue = { version = "=0.7.25", registry = "proton" }
 proton-api-core = { version = "=0.7.0", registry = "proton" }
 proton-api-mail = { version = "=0.3.13", path = "proton-api-mail" }
-proton-core-common = { version = "=0.7.1", registry = "proton" }
+proton-core-common = { version = "=0.7.2", registry = "proton" }
 proton-crypto-account = { version = "=0.6.2", registry = "proton" }
 proton-crypto-inbox = { version = "=0.6.5", registry = "proton" }
 proton-event-loop = { version = "=0.7.25", registry = "proton" }
