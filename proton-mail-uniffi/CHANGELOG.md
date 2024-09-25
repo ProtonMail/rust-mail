@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.11.51] - 2024-09-25
+
 ### Changed
 
   - Paginators now only work with `next_page()`. The of the result set is reached when
