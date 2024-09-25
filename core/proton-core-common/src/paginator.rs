@@ -398,7 +398,8 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         let initial_records = interface
             .query_values::<_, u64>(
                 format!(
-                    "SELECT rowid AS value FROM {} {} LIMIT {}",
+                    "SELECT {}.rowid AS value FROM {} {} LIMIT {}",
+                    T::table_name(),
                     T::table_name(),
                     self.query_logic,
                     self.page_size,
