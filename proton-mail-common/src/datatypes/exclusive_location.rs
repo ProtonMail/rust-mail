@@ -26,7 +26,7 @@ impl ExclusiveLocation {
     pub fn new(label: &Label) -> Option<Self> {
         match Self::new_inner(label) {
             None => {
-                tracing::error!(
+                tracing::trace!(
                     "Could not get exclusive location from label lid: `{:?}`, rid: `{:?}`",
                     label.local_id,
                     label.remote_id
@@ -54,7 +54,7 @@ impl ExclusiveLocation {
             {
                 Ok(location) => Some(location),
                 Err(e) => {
-                    tracing::error!("Error while getting exclusive location: {e}");
+                    tracing::trace!("Error while getting exclusive location: {e}");
                     None
                 }
             },
