@@ -92,7 +92,7 @@ async fn main() {
         .unwrap()
         .unwrap();
 
-    let page_count = 50_u32;
+    let page_count = 50_usize;
 
     if messages {
         let paginator =
@@ -115,13 +115,13 @@ async fn paginate<T: Model, R: DataSource<Item = T>>(
 ) {
     let mut element_count = 0_u64;
 
-    let page = paginator.current_page().await.unwrap();
-    element_count += page.len() as u64;
-
-    while element_count < total_elements {
+    loop {
+        let page = paginator.next_page().await.unwrap();
+        if page.is_empty() {
+            break;
+        }
         tracing::info!("Elements {} / {}", element_count, total_elements);
-        let next_page = paginator.next_page().await.unwrap();
-        element_count += next_page.len() as u64;
+        element_count += page.len() as u64;
     }
 
     tracing::info!("END {} / {}", element_count, total_elements);

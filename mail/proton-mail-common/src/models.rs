@@ -101,7 +101,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::future::Future;
 use std::io::Read;
-use std::num::NonZeroU32;
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::vec;
 use tracing::{debug, error, info};
@@ -2656,7 +2656,7 @@ impl Conversation {
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
-        page_count: u32,
+        page_count: usize,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<Paginator<Self, ConversationDataSource>, AppError> {
         let remote_source = ConversationDataSource::new(context, local_label_id).await?;
@@ -2678,9 +2678,9 @@ impl Conversation {
                 })?,
             )],
             context.user_stash(),
-            NonZeroU32::new(page_count)
+            NonZeroUsize::new(page_count)
                 .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
-            remote_source,
+            Some(remote_source),
             queue,
         )
         .await
@@ -4030,63 +4030,8 @@ impl Message {
         let mut ids = Vec::with_capacity(metadata.len());
 
         for metadata in metadata {
-            let mut message = Self {
-                local_id: None,
-                remote_id: Some(metadata.id.into()),
-                local_address_id: RemoteId::from(metadata.address_id.clone())
-                    .counterpart::<Address, _>(interface)
-                    .await?
-                    .ok_or_else(|| {
-                        AppError::LocalIdNotFound(
-                            "Address".to_owned(),
-                            metadata.address_id.clone().into(),
-                        )
-                    })?,
-                remote_address_id: metadata.address_id.into(),
-                attachments_metadata: metadata
-                    .attachments_metadata
-                    .into_iter()
-                    .map(AttachmentMetadata::from)
-                    .collect(),
-                bcc_list: MessageAddresses {
-                    value: metadata.bcc_list.into_iter().map_into().collect(),
-                },
-                cc_list: MessageAddresses {
-                    value: metadata.cc_list.into_iter().map(|v| v.into()).collect(),
-                },
-                deleted: false,
-                display_order: metadata.order,
-                expiration_time: metadata.expiration_time,
-                external_id: metadata.external_id.map(|v| v.into()),
-                flags: metadata.flags.into(),
-                is_forwarded: metadata.is_forwarded,
-                is_replied: metadata.is_replied,
-                is_replied_all: metadata.is_replied_all,
-                exclusive_location: None,
-                label_ids: metadata.label_ids.into_iter().map_into().collect(),
-                local_conversation_id: None,
-                num_attachments: metadata.num_attachments,
-                remote_conversation_id: Some(metadata.conversation_id.into()),
-                reply_tos: MessageAddresses {
-                    value: metadata.reply_tos.into_iter().map(|v| v.into()).collect(),
-                },
-                sender: metadata.sender.into(),
-                size: metadata.size,
-                snooze_time: metadata.snooze_time,
-                subject: metadata.subject,
-                time: metadata.time,
-                to_list: MessageAddresses {
-                    value: metadata.to_list.into_iter().map(|v| v.into()).collect(),
-                },
-                custom_labels: vec![],
-                unread: metadata.unread,
-                cached: false,
-                row_id: None,
-                stash: None,
-            };
-
+            let mut message = Message::from_api_metadata(metadata, interface).await?;
             Self::save_using(&mut message, interface).await?;
-
             ids.push(message);
         }
         Ok(ids)
@@ -5283,78 +5228,72 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let label_ids: Vec<LabelId> = value.metadata.label_ids.into_iter().map_into().collect();
+        Message::from_api_metadata(value.metadata, interface).await
+    }
+
+    /// Converts an [`ApiMessageMetadata`] into a [`Message`].
+    ///
+    /// # Parameters
+    ///
+    /// * `value`     - The [`ApiMessage`] to convert.
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    pub async fn from_api_metadata<A>(
+        value: ApiMessageMetadata,
+        interface: &A,
+    ) -> Result<Self, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let label_ids: Vec<LabelId> = value.label_ids.into_iter().map_into().collect();
 
         Ok(Self {
             local_id: None,
-            remote_id: Some(value.metadata.id.into()),
+            remote_id: Some(value.id.into()),
             local_conversation_id: None,
-            remote_conversation_id: Some(value.metadata.conversation_id.into()),
-            local_address_id: RemoteId::from(value.metadata.address_id.clone())
+            remote_conversation_id: Some(value.conversation_id.into()),
+            local_address_id: RemoteId::from(value.address_id.clone())
                 .counterpart::<Address, _>(interface)
                 .await?
                 .ok_or_else(|| {
-                    AppError::LocalIdNotFound(
-                        "Address".to_owned(),
-                        value.metadata.address_id.clone().into(),
-                    )
+                    AppError::LocalIdNotFound("Address".to_owned(), value.address_id.clone().into())
                 })?,
-            remote_address_id: value.metadata.address_id.into(),
+            remote_address_id: value.address_id.into(),
             attachments_metadata: value
-                .metadata
                 .attachments_metadata
                 .into_iter()
                 .map(AttachmentMetadata::from)
                 .collect(),
             bcc_list: MessageAddresses {
-                value: value
-                    .metadata
-                    .bcc_list
-                    .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
+                value: value.bcc_list.into_iter().map(|v| v.into()).collect(),
             },
             cc_list: MessageAddresses {
-                value: value
-                    .metadata
-                    .cc_list
-                    .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
+                value: value.cc_list.into_iter().map(|v| v.into()).collect(),
             },
             deleted: false,
-            display_order: value.metadata.order,
-            expiration_time: value.metadata.expiration_time,
-            external_id: value.metadata.external_id.map(|v| v.into()),
-            flags: value.metadata.flags.into(),
-            is_forwarded: value.metadata.is_forwarded,
-            is_replied: value.metadata.is_replied,
-            is_replied_all: value.metadata.is_replied_all,
+            display_order: value.order,
+            expiration_time: value.expiration_time,
+            external_id: value.external_id.map(|v| v.into()),
+            flags: value.flags.into(),
+            is_forwarded: value.is_forwarded,
+            is_replied: value.is_replied,
+            is_replied_all: value.is_replied_all,
             exclusive_location: None,
             label_ids,
-            num_attachments: value.metadata.num_attachments,
+            num_attachments: value.num_attachments,
             reply_tos: MessageAddresses {
-                value: value
-                    .metadata
-                    .reply_tos
-                    .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
+                value: value.reply_tos.into_iter().map(|v| v.into()).collect(),
             },
-            sender: value.metadata.sender.into(),
-            size: value.metadata.size,
-            snooze_time: value.metadata.snooze_time,
-            subject: value.metadata.subject,
-            time: value.metadata.time,
+            sender: value.sender.into(),
+            size: value.size,
+            snooze_time: value.snooze_time,
+            subject: value.subject,
+            time: value.time,
             to_list: MessageAddresses {
-                value: value
-                    .metadata
-                    .to_list
-                    .into_iter()
-                    .map(|v| v.into())
-                    .collect(),
+                value: value.to_list.into_iter().map(|v| v.into()).collect(),
             },
-            unread: value.metadata.unread,
+            unread: value.unread,
             cached: false,
             row_id: None,
             stash: Some(interface.stash().to_owned()),
@@ -5762,7 +5701,7 @@ impl Message {
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
-        page_count: u32,
+        page_count: usize,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<Paginator<Self, MessageDataSource>, AppError> {
         let remote_source = MessageDataSource::new(context, local_label_id).await?;
@@ -5784,9 +5723,9 @@ impl Message {
                 })?,
             )],
             context.user_stash(),
-            NonZeroU32::new(page_count)
+            NonZeroUsize::new(page_count)
                 .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
-            remote_source,
+            Some(remote_source),
             queue,
         )
         .await
@@ -6064,9 +6003,9 @@ impl ConversationMessageLabelStats {
 pub struct ConversationDataSource {
     /// Session for network request
     session: Session,
-    /// Local id of the label.
-    remote_label_id: LabelId,
     /// Remote id of the label.
+    remote_label_id: LabelId,
+    /// Local id of the label.
     local_label_id: LocalId,
 }
 
@@ -6105,11 +6044,11 @@ impl DataSource for ConversationDataSource {
         Ok(label.total_conv.try_into().unwrap_or(0))
     }
 
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self))]
     async fn sync_first_page(
         &self,
-        page_size: NonZeroU32,
-        stash: &Stash,
+        page_size: NonZeroUsize,
+        _: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
         let response = self
             .session
@@ -6117,7 +6056,7 @@ impl DataSource for ConversationDataSource {
             .get_conversations(GetConversationsOptions {
                 desc: Some(true),
                 label_id: Some(self.remote_label_id.clone().into()),
-                page_size: page_size.get().into(),
+                page_size: page_size.get() as u64,
                 ..Default::default()
             })
             .await?;
@@ -6126,32 +6065,21 @@ impl DataSource for ConversationDataSource {
             response.conversations.len(),
             response.total
         );
-        let tx = stash.transaction().await?;
-        let mut result = Vec::with_capacity(response.conversations.len());
-        for conversation in response.conversations {
-            let mut conversation: Conversation = conversation.into();
-            conversation.save_using(&tx).await?;
-            result.push(conversation);
-        }
-        tx.commit().await?;
-        Ok(result)
+        Ok(response.conversations.into_iter().map_into().collect())
     }
 
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash, elements))]
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, elements))]
     async fn sync_page_after(
         &self,
-        _: u32,
-        page_size: NonZeroU32,
-        elements: Vec<Self::Item>,
-        stash: &Stash,
+        _: usize,
+        page_size: NonZeroUsize,
+        elements: Option<&Self::Item>,
+        _: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
-        // Find the first last element with a valid remote id.
-        let Some(last_element) = elements
-            .iter()
-            .rev()
-            .find(|element| element.remote_id.is_some())
-        else {
-            return Err(AppError::NoConversationWithValidRemoteIdFoundInPage);
+        // Get remote id of the last element.
+        let last_element = elements.ok_or(AppError::NoMessageWithValidRemoteIdFoundInPage)?;
+        if last_element.remote_id.is_none() {
+            return Err(AppError::NoMessageWithValidRemoteIdFoundInPage);
         };
         // Safe to unwrap as we have validated this before.
         let last_element_id: proton_api_core::services::proton::common::RemoteId =
@@ -6196,7 +6124,7 @@ impl DataSource for ConversationDataSource {
 
         if response.conversations[0].id == last_element_id {
             response.conversations.remove(0);
-        } else if response.conversations.len() > page_size.get() as usize {
+        } else if response.conversations.len() > page_size.get() {
             response.conversations.pop();
         }
 
@@ -6204,15 +6132,20 @@ impl DataSource for ConversationDataSource {
             return Ok(vec![]);
         }
 
+        Ok(response.conversations.into_iter().map_into().collect())
+    }
+
+    async fn save_to_database(
+        &self,
+        mut records: Vec<Self::Item>,
+        stash: &Stash,
+    ) -> Result<Vec<Self::Item>, StashError> {
         let tx = stash.transaction().await?;
-        let mut result = Vec::with_capacity(response.conversations.len());
-        for conversation in response.conversations {
-            let mut conversation: Conversation = conversation.into();
-            conversation.save_using(&tx).await?;
-            result.push(conversation);
+        for record in &mut records {
+            Conversation::save_using(record, &tx).await?;
         }
         tx.commit().await?;
-        Ok(result)
+        Ok(records)
     }
 }
 
@@ -6221,9 +6154,9 @@ impl DataSource for ConversationDataSource {
 pub struct MessageDataSource {
     /// Session for network request
     session: Session,
-    /// Local id of the label.
-    remote_label_id: LabelId,
     /// Remote id of the label.
+    remote_label_id: LabelId,
+    /// Local id of the label.
     local_label_id: LocalId,
 }
 
@@ -6264,7 +6197,7 @@ impl DataSource for MessageDataSource {
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
     async fn sync_first_page(
         &self,
-        page_size: NonZeroU32,
+        page_size: NonZeroUsize,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
         let response = self
@@ -6273,7 +6206,7 @@ impl DataSource for MessageDataSource {
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
-                page_size: page_size.get().into(),
+                page_size: page_size.get() as u64,
                 ..Default::default()
             })
             .await?;
@@ -6282,28 +6215,24 @@ impl DataSource for MessageDataSource {
             response.messages.len(),
             response.total
         );
-
-        let tx = stash.transaction().await?;
-        let result =
-            Message::create_or_update_messages_from_metadata_vec(response.messages, &tx).await?;
-        tx.commit().await?;
-        Ok(result)
+        let mut messages = Vec::with_capacity(response.messages.len());
+        for message in response.messages {
+            messages.push(Message::from_api_metadata(message, stash).await?);
+        }
+        Ok(messages)
     }
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash, elements))]
     async fn sync_page_after(
         &self,
-        _: u32,
-        page_size: NonZeroU32,
-        elements: Vec<Self::Item>,
+        _: usize,
+        page_size: NonZeroUsize,
+        elements: Option<&Self::Item>,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
-        // Find the first last element with a valid remote id.
-        let Some(last_element) = elements
-            .iter()
-            .rev()
-            .find(|element| element.remote_id.is_some())
-        else {
+        // Get remote id of the last element.
+        let last_element = elements.ok_or(AppError::NoMessageWithValidRemoteIdFoundInPage)?;
+        if last_element.remote_id.is_none() {
             return Err(AppError::NoMessageWithValidRemoteIdFoundInPage);
         };
         // Safe to unwrap as we have validated this before.
@@ -6337,7 +6266,7 @@ impl DataSource for MessageDataSource {
 
         if response.messages[0].id == last_element_id {
             response.messages.remove(0);
-        } else if response.messages.len() > page_size.get() as usize {
+        } else if response.messages.len() > page_size.get() {
             response.messages.pop();
         }
 
@@ -6345,10 +6274,23 @@ impl DataSource for MessageDataSource {
             return Ok(vec![]);
         }
 
+        let mut messages = Vec::with_capacity(response.messages.len());
+        for message in response.messages {
+            messages.push(Message::from_api_metadata(message, stash).await?);
+        }
+        Ok(messages)
+    }
+
+    async fn save_to_database(
+        &self,
+        mut records: Vec<Self::Item>,
+        stash: &Stash,
+    ) -> Result<Vec<Self::Item>, StashError> {
         let tx = stash.transaction().await?;
-        let result =
-            Message::create_or_update_messages_from_metadata_vec(response.messages, &tx).await?;
+        for record in &mut records {
+            Message::save_using(record, &tx).await?;
+        }
         tx.commit().await?;
-        Ok(result)
+        Ok(records)
     }
 }
