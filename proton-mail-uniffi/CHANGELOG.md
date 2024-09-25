@@ -7,17 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - Paginators now only work with `next_page()`. The of the result set is reached when
+    nothing is returned.
+  - Paginator construction loads initial page in the background.
+
 ## [0.11.50] - 2024-09-23
 
 ### Added
 
-- Expose `CoreAccount` and related types
-- Add methods to query an account's login state
-- Enable a partially completed login flow to be resumed
+
+  - Expose `CoreAccount` and related types
+  - Add methods to query an account's login state
+  - Enable a partially completed login flow to be resumed
 
 ### Changed
 
-- Split `StoredSession` into `StoredAccount` / `StoredSession`
+  - Split `StoredSession` into `StoredAccount` / `StoredSession`
 
 ## [0.11.49] - 2024-09-20
 

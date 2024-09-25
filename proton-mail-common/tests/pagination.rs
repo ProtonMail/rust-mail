@@ -109,7 +109,7 @@ async fn paginate_conversations() {
     .await
     .unwrap();
 
-    let page1 = paginator.current_page().await.unwrap();
+    let page1 = paginator.next_page().await.unwrap();
     compare_conversations(&user_ctx, &page1, &page_chunks[0]).await;
 
     // page 2
@@ -213,7 +213,7 @@ async fn paginate_messages() {
     .await
     .unwrap();
 
-    let page1 = paginator.current_page().await.unwrap();
+    let page1 = paginator.next_page().await.unwrap();
     compare_messages(&user_ctx, &page1, &page_chunks[0]).await;
 
     // page 2
