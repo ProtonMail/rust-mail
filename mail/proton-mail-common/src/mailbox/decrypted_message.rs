@@ -151,11 +151,20 @@ pub fn transform_html(
     user_session_id: &str,
     mime_type: MimeType,
 ) -> BodyOutput {
-    let mut transformer = Transformer::new(html);
+    // If the message is text/plain we need to apply some extra transforms to it like
+    // preserving whitespaces and adding links.
+    let mut transformer = if mime_type == MimeType::TextPlain {
+        let mut transformer = Transformer::new_text_plain(html);
+        transformer.add_noreferrer();
+        transformer.insert_links();
+        transformer
+    } else {
+        let mut transformer = Transformer::new(html);
+        transformer.add_noreferrer();
+        transformer
+    };
     let tags_stripped = transformer.strip_whitelist();
     let utm_stripped = transformer.strip_utm();
-
-    transformer.add_noreferrer();
 
     // Only insert links if message is of type text.
     if mime_type == MimeType::TextPlain {

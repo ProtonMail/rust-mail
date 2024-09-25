@@ -148,3 +148,32 @@ pub fn proxy_images(document: NodeRef, user_session_id: &str) {
         });
     }
 }
+
+#[must_use]
+/// Replaces consecutive ' ' for `&nbsp;` and '\n' for `<br>`
+pub fn keep_spaces(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() * 2);
+    out.push_str("<pre>");
+
+    let mut prev_was_space = false;
+
+    for ch in text.chars() {
+        if ch == ' ' {
+            if prev_was_space {
+                out.push_str("&nbsp;");
+            } else {
+                out.push(' ');
+                prev_was_space = true;
+            }
+            continue;
+        }
+        prev_was_space = false;
+        if ch == '\n' {
+            out.push_str("<br>");
+        } else {
+            out.push(ch);
+        }
+    }
+    out.push_str("</pre>");
+    out
+}
