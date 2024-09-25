@@ -844,6 +844,12 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     pub async fn result_count(&self) -> usize {
         self.shared.lock().await.row_count
     }
+
+    /// Checks if there is a next page available.
+    pub async fn has_next_page(&self) -> bool {
+        let shared = self.shared.lock().await;
+        shared.last_synced_index < shared.row_count
+    }
 }
 
 /// Constructs a query for paging through a result set.

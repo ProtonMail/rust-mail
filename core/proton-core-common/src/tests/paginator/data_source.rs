@@ -250,27 +250,32 @@ async fn data_source_sync() {
     .unwrap();
 
     // Check first page is downloaded
+    assert!(paginator.has_next_page().await);
     let next_page = paginator.next_page().await.unwrap();
     check_range(&stash, 0u32..5u32).await;
     check_page(&stash, &next_page, 0u32..5u32).await;
 
     // Check element [5..9] are available
+    assert!(paginator.has_next_page().await);
     let next_page = paginator.next_page().await.unwrap();
     check_range(&stash, 5u32..10u32).await;
     check_page(&stash, &next_page, 5u32..10u32).await;
 
     // Check element [10..14] are available
+    assert!(paginator.has_next_page().await);
     let next_page = paginator.next_page().await.unwrap();
     check_range(&stash, 10u32..15u32).await;
     check_page(&stash, &next_page, 10u32..15u32).await;
 
     // Check element [15..18] are available
+    assert!(paginator.has_next_page().await);
     let next_page = paginator.next_page().await.unwrap();
     check_range_with_limit(&stash, 15u32..19u32, Some(3)).await;
     check_page(&stash, &next_page, 15u32..18u32).await;
     assert_eq!(next_page.len(), 3);
 
     // Check no new values are returned for the current page.
+    assert!(!paginator.has_next_page().await);
     let last_values = paginator.next_page().await.unwrap();
     dbg!(&last_values);
     assert!(last_values.is_empty());
@@ -317,6 +322,7 @@ async fn data_source_sync_with_callback() {
     check_page(&stash, &next_page, 15u32..18u32).await;
 
     // Check no new values are returned for the current page.
+    assert!(!paginator.has_next_page().await);
     let last_values = paginator.next_page().await.unwrap();
     assert!(last_values.is_empty());
 
@@ -393,6 +399,7 @@ async fn data_source_irregular_pages() {
     }
     assert_eq!(paginator.result_count().await, total);
 
+    assert!(!paginator.has_next_page().await);
     let next_elements = paginator.next_page().await.unwrap();
     assert!(next_elements.is_empty());
 }
