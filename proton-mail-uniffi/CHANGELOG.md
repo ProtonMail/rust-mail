@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Paginators now only work with `next_page()`. The of the result set is reached when
     nothing is returned.
   - Paginator construction loads initial page in the background.
+  - Disable contact related events
 
 ## [0.11.50] - 2024-09-23
 
