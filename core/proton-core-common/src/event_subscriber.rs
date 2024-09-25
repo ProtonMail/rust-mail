@@ -60,7 +60,7 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
         "proton-core-subscriber"
     }
 
-    #[tracing::instrument(level = Level::DEBUG, skip(self))]
+    #[tracing::instrument(level = Level::DEBUG, skip(self, events))]
     async fn on_events(&self, events: &mut [E]) -> Result<(), SubscriberError> {
         let (user_id, stash) = self
             .0
