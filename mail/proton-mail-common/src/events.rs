@@ -177,19 +177,27 @@ impl CoreEvent for MailEvent {
     }
 
     fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
-        self.contacts.as_deref()
+        // TODO: re-enable once contact events are fixed
+        //self.contacts.as_deref()
+        None
     }
 
     fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        self.contacts.as_deref_mut()
+        // TODO: re-enable once contact events are fixed
+        // self.contacts.as_deref_mut()
+        None
     }
 
     fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
-        self.contact_emails.as_deref()
+        // TODO: re-enable once contact events are fixed
+        // self.contact_emails.as_deref()
+        None
     }
 
     fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        self.contact_emails.as_deref_mut()
+        // TODO: re-enable once contact events are fixed
+        // self.contact_emails.as_deref_mut()
+        None
     }
 }
 
