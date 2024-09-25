@@ -100,6 +100,12 @@ impl ConversationPaginator {
     pub fn result_count(&self) -> u64 {
         async_runtime().block_on(async { self.real_paginator.result_count().await }) as u64
     }
+
+    /// Checks if there is a next page available.
+    #[must_use]
+    pub fn has_next_page(&self) -> bool {
+        async_runtime().block_on(async { self.real_paginator.has_next_page().await })
+    }
 }
 
 /// Represents a paginated view of a result set.
@@ -180,5 +186,11 @@ impl MessagePaginator {
     #[must_use]
     pub fn result_count(&self) -> u64 {
         async_runtime().block_on(async { self.real_paginator.result_count().await }) as u64
+    }
+
+    /// Checks if there is a next page available.
+    #[must_use]
+    pub fn has_next_page(&self) -> bool {
+        async_runtime().block_on(async { self.real_paginator.has_next_page().await })
     }
 }
