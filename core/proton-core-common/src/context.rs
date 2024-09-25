@@ -18,7 +18,6 @@ use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session as ApiCoreSession;
 use proton_sqlite3::MigratorError;
 use secrecy::{ExposeSecret, SecretString};
-use stash::orm::Model;
 use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};

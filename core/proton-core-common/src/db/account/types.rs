@@ -23,6 +23,7 @@ use zeroize::Zeroize;
 
 use crate::datatypes::{AuthScope, AuthState, PasswordMode, RemoteId, TfaStatus, Timestamp};
 use crate::db::ChangeSender;
+use crate::models::ModelExtension;
 
 #[derive(Debug, Clone, PartialEq, Eq, Model)]
 #[TableName("core_accounts")]
@@ -98,6 +99,50 @@ impl CoreAccount {
             // --- preserve ---
             ..self
         }
+    }
+
+    /// Save a account to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save()`] to
+    /// ensure that existing accounts are updated.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save(&mut self) -> Result<(), StashError> {
+        let Some(stash) = self.stash.clone() else {
+            return Err(StashError::NoStashAvailable);
+        };
+
+        self.save_using(&stash).await
+    }
+
+    /// Save a account to the database.
+    ///
+    /// It's imperative that you use this method over [`Model::save_using()`] to
+    /// ensure that existing accounts are updated.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///                 use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the local conversation id is not set or the query
+    /// failed.
+    ///
+    pub async fn save_using<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        if let Some(existing) = Self::find_by_id(self.remote_id.clone(), interface).await? {
+            self.row_id = existing.row_id;
+        }
+
+        <Self as Model>::save_using(self, interface).await
     }
 }
 
