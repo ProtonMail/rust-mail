@@ -6,9 +6,9 @@ use stash::orm::Model;
 use stash::orm::ResultsetChange;
 use stash::stash::{Interface, Stash, StashError};
 use std::future::Future;
-use std::num::NonZeroUsize;
+use std::num::NonZeroU32;
 
-pub struct NullDataSource {}
+struct NullDataSource {}
 
 impl DataSource for NullDataSource {
     type Item = TestModel;
@@ -20,7 +20,7 @@ impl DataSource for NullDataSource {
 
     fn sync_first_page(
         &self,
-        _: NonZeroUsize,
+        _: NonZeroU32,
         _: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         std::future::ready(Ok(vec![]))
@@ -28,9 +28,9 @@ impl DataSource for NullDataSource {
 
     fn sync_page_after(
         &self,
-        _: usize,
-        _: NonZeroUsize,
-        _: Option<&Self::Item>,
+        _: u32,
+        _: NonZeroU32,
+        _: Vec<Self::Item>,
         _: &Stash,
     ) -> impl Future<Output = Result<Vec<Self::Item>, Self::Error>> + Send {
         std::future::ready(Ok(vec![]))
@@ -69,12 +69,13 @@ pub async fn paginate_test_models(
     flume::Receiver<ResultsetChange<TestModel, u64>>,
 ) {
     let (msg_sender, msg_receiver) = flume::unbounded();
+    let data_source = NullDataSource {};
     let paginator = Paginator::new(
         "WHERE number > ? ORDER BY number ASC",
         vec![Param::Integer(250)],
         stash,
-        NonZeroUsize::new(50).unwrap(),
-        None,
+        NonZeroU32::new(50).unwrap(),
+        data_source,
         Some(msg_sender),
     )
     .await
@@ -125,18 +126,20 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(250)],
             &stash,
-            NonZeroUsize::new(50).unwrap(),
-            None,
+            NonZeroU32::new(50).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
         .unwrap();
 
         assert_eq!(paginator.result_count().await, 50);
+        assert_eq!(paginator.current_page_number().await, 1);
     }
 
     #[tokio::test]
@@ -147,18 +150,20 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "ORDER BY number ASC",
             vec![],
             &stash,
-            NonZeroUsize::new(5).unwrap(),
-            None,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
         .unwrap();
 
-        let page = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        let page = paginator.current_page().await.unwrap();
         assert_eq!(page.len(), 5);
         assert_eq!(
             page.into_iter()
@@ -182,18 +187,20 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(250)],
             &stash,
-            NonZeroUsize::new(5).unwrap(),
-            None,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
         .unwrap();
 
-        let page = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        let page = paginator.current_page().await.unwrap();
         assert_eq!(page.len(), 5);
         assert_eq!(
             page.into_iter()
@@ -217,19 +224,21 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(250)],
             &stash,
-            NonZeroUsize::new(5).unwrap(),
-            None,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
         .unwrap();
 
-        let _ = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
         let page = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
         assert_eq!(page.len(), 5);
         assert_eq!(
             page.into_iter()
@@ -253,18 +262,23 @@ mod basic_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(350)],
             &stash,
-            NonZeroUsize::new(5).unwrap(),
-            None,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
         .unwrap();
 
-        let page = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        _ = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        let page = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
         assert_eq!(page.len(), 5);
         assert_eq!(
             page.into_iter()
@@ -287,12 +301,13 @@ mod basic_pagination {
         create_table(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(250)],
             &stash,
-            NonZeroUsize::new(5).unwrap(),
-            None,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
@@ -314,18 +329,21 @@ mod extended_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(500)],
             &stash,
-            NonZeroUsize::new(10).unwrap(),
-            None,
+            NonZeroU32::new(10).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
         .unwrap();
 
-        let page1 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        let page1 = paginator.current_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
         assert_eq!(page1.len(), 10);
         assert_eq!(
             page1
@@ -347,6 +365,7 @@ mod extended_pagination {
         );
 
         let page2 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
         assert_eq!(page2.len(), 10);
         assert_eq!(
             page2
@@ -368,6 +387,7 @@ mod extended_pagination {
         );
 
         let page3 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 3);
         assert_eq!(page3.len(), 10);
         assert_eq!(
             page3
@@ -387,6 +407,28 @@ mod extended_pagination {
                 ("Test model #530".to_owned(), 530),
             ]
         );
+
+        let page2b = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        assert_eq!(page2b.len(), 10);
+        assert_eq!(
+            page2b
+                .into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #511".to_owned(), 511),
+                ("Test model #512".to_owned(), 512),
+                ("Test model #513".to_owned(), 513),
+                ("Test model #514".to_owned(), 514),
+                ("Test model #515".to_owned(), 515),
+                ("Test model #516".to_owned(), 516),
+                ("Test model #517".to_owned(), 517),
+                ("Test model #518".to_owned(), 518),
+                ("Test model #519".to_owned(), 519),
+                ("Test model #520".to_owned(), 520),
+            ]
+        );
     }
 
     #[tokio::test]
@@ -397,30 +439,37 @@ mod extended_pagination {
         create_records(&stash).await;
 
         let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
         let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
             "WHERE number > ? ORDER BY number ASC",
             vec![Param::Integer(600)],
             &stash,
-            NonZeroUsize::new(5).unwrap(),
-            None,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
             Some(msg_sender),
         )
         .await
         .unwrap();
 
-        let page1 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        let page1 = paginator.current_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
         assert_eq!(page1.len(), 5);
 
         let page2 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
         assert_eq!(page2.len(), 5);
 
         let page3 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 3);
         assert_eq!(page3.len(), 5);
 
         let page4 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 4);
         assert_eq!(page4.len(), 5);
 
         let page5 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 5);
         assert_eq!(page5.len(), 5);
 
         let reloaded = paginator.reload().await.unwrap();
@@ -455,6 +504,162 @@ mod extended_pagination {
                 ("Test model #623".to_owned(), 623),
                 ("Test model #624".to_owned(), 624),
                 ("Test model #625".to_owned(), 625),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn reload_after_navigating_forward_then_back() {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        create_table(&stash).await;
+        create_records(&stash).await;
+
+        let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
+            "WHERE number > ? ORDER BY number ASC",
+            vec![Param::Integer(600)],
+            &stash,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
+            Some(msg_sender),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(paginator.current_page_number().await, 1);
+        let page1 = paginator.current_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        assert_eq!(page1.len(), 5);
+
+        let page2 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        assert_eq!(page2.len(), 5);
+
+        let page3 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 3);
+        assert_eq!(page3.len(), 5);
+
+        let page4 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 4);
+        assert_eq!(page4.len(), 5);
+
+        let page5 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 5);
+        assert_eq!(page5.len(), 5);
+
+        let _page6 = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 6);
+        assert_eq!(page5.len(), 5);
+
+        let page5b = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 5);
+        assert_eq!(page5b.len(), 5);
+
+        let page4b = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 4);
+        assert_eq!(page4b.len(), 5);
+
+        let reloaded = paginator.reload().await.unwrap();
+        assert_eq!(
+            reloaded
+                .into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #601".to_owned(), 601),
+                ("Test model #602".to_owned(), 602),
+                ("Test model #603".to_owned(), 603),
+                ("Test model #604".to_owned(), 604),
+                ("Test model #605".to_owned(), 605),
+                ("Test model #606".to_owned(), 606),
+                ("Test model #607".to_owned(), 607),
+                ("Test model #608".to_owned(), 608),
+                ("Test model #609".to_owned(), 609),
+                ("Test model #610".to_owned(), 610),
+                ("Test model #611".to_owned(), 611),
+                ("Test model #612".to_owned(), 612),
+                ("Test model #613".to_owned(), 613),
+                ("Test model #614".to_owned(), 614),
+                ("Test model #615".to_owned(), 615),
+                ("Test model #616".to_owned(), 616),
+                ("Test model #617".to_owned(), 617),
+                ("Test model #618".to_owned(), 618),
+                ("Test model #619".to_owned(), 619),
+                ("Test model #620".to_owned(), 620),
+            ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod changes_during_pagination {
+    use super::*;
+    use stash::params;
+
+    #[tokio::test]
+    async fn previous_page__changes_to_data_seen() {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        create_table(&stash).await;
+        create_records(&stash).await;
+
+        let (msg_sender, _msg_receiver) = flume::unbounded();
+        let data_source = NullDataSource {};
+        let paginator: Paginator<TestModel, NullDataSource> = Paginator::new(
+            "WHERE number > ? ORDER BY number ASC",
+            vec![Param::Integer(100)],
+            &stash,
+            NonZeroU32::new(5).unwrap(),
+            data_source,
+            Some(msg_sender),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(paginator.current_page_number().await, 1);
+        _ = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        _ = paginator.next_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 3);
+
+        stash
+            .execute(r#"DELETE FROM test_models WHERE number = ?"#, params![102])
+            .await
+            .unwrap();
+
+        let page2 = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 2);
+        assert_eq!(page2.len(), 5);
+        assert_eq!(
+            page2
+                .into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #107".to_owned(), 107),
+                ("Test model #108".to_owned(), 108),
+                ("Test model #109".to_owned(), 109),
+                ("Test model #110".to_owned(), 110),
+                ("Test model #111".to_owned(), 111),
+            ]
+        );
+
+        let page1 = paginator.previous_page().await.unwrap();
+        assert_eq!(paginator.current_page_number().await, 1);
+        assert_eq!(page1.len(), 5);
+        assert_eq!(
+            page1
+                .into_iter()
+                .map(|m| (m.text.clone(), m.number))
+                .collect::<Vec<_>>(),
+            vec![
+                ("Test model #101".to_owned(), 101),
+                ("Test model #103".to_owned(), 103),
+                ("Test model #104".to_owned(), 104),
+                ("Test model #105".to_owned(), 105),
+                ("Test model #106".to_owned(), 106),
             ]
         );
     }
