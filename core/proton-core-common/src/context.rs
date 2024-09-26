@@ -392,7 +392,6 @@ impl Context {
                 self.new_api_session(Some(&session)).await?,
                 user_id.into(),
                 session_id.into(),
-                account.password_mode.into(),
                 account.second_factor_mode.into(),
             )),
 
@@ -493,10 +492,12 @@ impl Context {
     ///
     /// Returns an error if data can not be removed or the db operation failed.
     pub async fn delete_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
-        tokio::fs::remove_file(get_user_db_path(&self.user_db_path, &user_id))
-            .map_err(|e| CoreContextError::Other(anyhow!("Failed to erase user database: {e}")))
-            .inspect_err(|e| error!("{e}"))
-            .await?;
+        if let Some(path) = self.find_user_db(&user_id) {
+            tokio::fs::remove_file(&path)
+                .map_err(|e| CoreContextError::Other(anyhow!("Failed to erase user database: {e}")))
+                .inspect_err(|e| error!("{e}"))
+                .await?;
+        }
 
         // TODO(ET-231): User cache paths.
 
@@ -581,6 +582,17 @@ impl Context {
     /// Panics if the weak reference to this context is invalid.
     pub fn this(&self) -> Arc<Self> {
         self.this.upgrade().expect("context should exist")
+    }
+
+    /// Find the user's database file.
+    fn find_user_db(&self, user_id: &RemoteId) -> Option<PathBuf> {
+        let path = get_user_db_path(&self.user_db_path, user_id);
+
+        if path.try_exists().is_ok() {
+            Some(path)
+        } else {
+            None
+        }
     }
 }
 

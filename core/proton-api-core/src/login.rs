@@ -101,7 +101,6 @@ impl Flow {
         session: Session,
         user_id: RemoteId,
         session_id: RemoteId,
-        password_mode: PasswordMode,
         tfa_status: TfaStatus,
     ) -> Self {
         Self {
@@ -110,7 +109,10 @@ impl Flow {
             user_id: Some(user_id),
             session_id: Some(session_id),
             mailbox_password: None,
-            password_mode: Some(password_mode),
+
+            // We force two-password mode here because we are resuming the flow from the point
+            // before the key secret is derived.
+            password_mode: Some(PasswordMode::Two),
 
             // This is `None` because we are resuming the flow at the TFA step;
             // the `tfa_status` is moved from here to the `LoginState::AwaitingTfa` variant
