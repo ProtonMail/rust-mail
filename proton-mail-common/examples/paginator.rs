@@ -4,9 +4,9 @@ use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
-use proton_core_common::paginator::{DataSource, Paginator};
+use proton_core_common::paginator::DataSource;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, Label, Message};
+use proton_mail_common::models::{Conversation, Label, Message, PaginatorCompat};
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
@@ -92,7 +92,7 @@ async fn main() {
         .unwrap()
         .unwrap();
 
-    let page_count = 50_usize;
+    let page_count = 50_u32;
 
     if messages {
         let paginator =
@@ -110,16 +110,13 @@ async fn main() {
 }
 
 async fn paginate<T: Model, R: DataSource<Item = T>>(
-    paginator: &Paginator<T, R>,
+    paginator: &PaginatorCompat<T, R>,
     total_elements: u64,
 ) {
     let mut element_count = 0_u64;
 
-    loop {
+    while paginator.has_next_page().await {
         let page = paginator.next_page().await.unwrap();
-        if page.is_empty() {
-            break;
-        }
         tracing::info!("Elements {} / {}", element_count, total_elements);
         element_count += page.len() as u64;
     }

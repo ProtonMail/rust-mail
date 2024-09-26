@@ -102,8 +102,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::future::Future;
 use std::io::Read;
-use std::num::NonZeroUsize;
+use std::num::NonZeroU32;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::vec;
 use tracing::{debug, error, info};
 
@@ -3124,13 +3125,14 @@ impl Conversation {
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
-        page_count: usize,
+        page_count: u32,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
-    ) -> Result<Paginator<Self, ConversationDataSource>, AppError> {
+    ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
         let remote_source = ConversationDataSource::new(context, local_label_id).await?;
-        Paginator::new(
-            formatdoc!(
-                "
+        Ok(PaginatorCompat::new(
+            Paginator::new(
+                formatdoc!(
+                    "
                 JOIN conversation_labels
                     ON conversations.local_id = conversation_labels.local_conversation_id
                 WHERE
@@ -3139,19 +3141,22 @@ impl Conversation {
                     conversation_labels.context_time DESC,
                     conversations.display_order DESC
                 "
-            ),
-            vec![Param::Integer(
-                i64::try_from(local_label_id.as_u64()).map_err(|err| {
-                    StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
-                })?,
-            )],
-            context.user_stash(),
-            NonZeroUsize::new(page_count)
-                .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
-            Some(remote_source),
-            queue,
-        )
-        .await
+                ),
+                vec![Param::Integer(
+                    i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                        StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(
+                            err,
+                        )))
+                    })?,
+                )],
+                context.user_stash(),
+                NonZeroU32::new(page_count)
+                    .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
+                remote_source,
+                queue,
+            )
+            .await?,
+        ))
     }
     /// This fn should be called for conversation endpoints.
     /// Repeatedly calls `endpoint` in batches of 1 in parallel.
@@ -6171,13 +6176,14 @@ impl Message {
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
-        page_count: usize,
+        page_count: u32,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
-    ) -> Result<Paginator<Self, MessageDataSource>, AppError> {
+    ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
         let remote_source = MessageDataSource::new(context, local_label_id).await?;
-        Paginator::new(
-            formatdoc!(
-                "
+        Ok(PaginatorCompat::new(
+            Paginator::new(
+                formatdoc!(
+                    "
                 JOIN message_labels
                     ON messages.local_id = message_labels.local_message_id
                 WHERE
@@ -6186,19 +6192,22 @@ impl Message {
                     messages.time DESC,
                     messages.display_order DESC
                 "
-            ),
-            vec![Param::Integer(
-                i64::try_from(local_label_id.as_u64()).map_err(|err| {
-                    StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
-                })?,
-            )],
-            context.user_stash(),
-            NonZeroUsize::new(page_count)
-                .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
-            Some(remote_source),
-            queue,
-        )
-        .await
+                ),
+                vec![Param::Integer(
+                    i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                        StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(
+                            err,
+                        )))
+                    })?,
+                )],
+                context.user_stash(),
+                NonZeroU32::new(page_count)
+                    .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
+                remote_source,
+                queue,
+            )
+            .await?,
+        ))
     }
 
     /// This fn should be called for message endpoints.
@@ -6609,8 +6618,8 @@ impl DataSource for ConversationDataSource {
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self))]
     async fn sync_first_page(
         &self,
-        page_size: NonZeroUsize,
-        _: &Stash,
+        page_size: NonZeroU32,
+        stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
         let response = self
             .session
@@ -6627,20 +6636,28 @@ impl DataSource for ConversationDataSource {
             response.conversations.len(),
             response.total
         );
-        Ok(response.conversations.into_iter().map_into().collect())
+        Ok(self
+            .save_to_database(
+                response.conversations.into_iter().map_into().collect(),
+                stash,
+            )
+            .await?)
     }
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, elements))]
     async fn sync_page_after(
         &self,
-        _: usize,
-        page_size: NonZeroUsize,
-        elements: Option<&Self::Item>,
-        _: &Stash,
+        _: u32,
+        page_size: NonZeroU32,
+        elements: Vec<Self::Item>,
+        stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
-        // Get remote id of the last element.
-        let last_element = elements.ok_or(AppError::NoMessageWithValidRemoteIdFoundInPage)?;
-        if last_element.remote_id.is_none() {
+        // Find the first last element with a valid remote id.
+        let Some(last_element) = elements
+            .iter()
+            .rev()
+            .find(|element| element.remote_id.is_some())
+        else {
             return Err(AppError::NoMessageWithValidRemoteIdFoundInPage);
         };
         // Safe to unwrap as we have validated this before.
@@ -6686,7 +6703,7 @@ impl DataSource for ConversationDataSource {
 
         if response.conversations[0].id == last_element_id {
             response.conversations.remove(0);
-        } else if response.conversations.len() > page_size.get() {
+        } else if response.conversations.len() > page_size.get() as usize {
             response.conversations.pop();
         }
 
@@ -6694,14 +6711,21 @@ impl DataSource for ConversationDataSource {
             return Ok(vec![]);
         }
 
-        Ok(response.conversations.into_iter().map_into().collect())
+        Ok(self
+            .save_to_database(
+                response.conversations.into_iter().map_into().collect(),
+                stash,
+            )
+            .await?)
     }
+}
 
+impl ConversationDataSource {
     async fn save_to_database(
         &self,
-        mut records: Vec<Self::Item>,
+        mut records: Vec<Conversation>,
         stash: &Stash,
-    ) -> Result<Vec<Self::Item>, StashError> {
+    ) -> Result<Vec<Conversation>, StashError> {
         let tx = stash.transaction().await?;
         for record in &mut records {
             Conversation::save_using(record, &tx).await?;
@@ -6759,7 +6783,7 @@ impl DataSource for MessageDataSource {
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash))]
     async fn sync_first_page(
         &self,
-        page_size: NonZeroUsize,
+        page_size: NonZeroU32,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
         let response = self
@@ -6781,20 +6805,24 @@ impl DataSource for MessageDataSource {
         for message in response.messages {
             messages.push(Message::from_api_metadata(message, stash).await?);
         }
-        Ok(messages)
+
+        Ok(self.save_to_database(messages, stash).await?)
     }
 
     #[tracing::instrument(level=tracing::Level::DEBUG,skip(self, stash, elements))]
     async fn sync_page_after(
         &self,
-        _: usize,
-        page_size: NonZeroUsize,
-        elements: Option<&Self::Item>,
+        _: u32,
+        page_size: NonZeroU32,
+        elements: Vec<Self::Item>,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
-        // Get remote id of the last element.
-        let last_element = elements.ok_or(AppError::NoMessageWithValidRemoteIdFoundInPage)?;
-        if last_element.remote_id.is_none() {
+        // Find the first last element with a valid remote id.
+        let Some(last_element) = elements
+            .iter()
+            .rev()
+            .find(|element| element.remote_id.is_some())
+        else {
             return Err(AppError::NoMessageWithValidRemoteIdFoundInPage);
         };
         // Safe to unwrap as we have validated this before.
@@ -6828,7 +6856,7 @@ impl DataSource for MessageDataSource {
 
         if response.messages[0].id == last_element_id {
             response.messages.remove(0);
-        } else if response.messages.len() > page_size.get() {
+        } else if response.messages.len() > page_size.get() as usize {
             response.messages.pop();
         }
 
@@ -6840,19 +6868,73 @@ impl DataSource for MessageDataSource {
         for message in response.messages {
             messages.push(Message::from_api_metadata(message, stash).await?);
         }
-        Ok(messages)
-    }
 
+        Ok(self.save_to_database(messages, stash).await?)
+    }
+}
+
+impl MessageDataSource {
     async fn save_to_database(
         &self,
-        mut records: Vec<Self::Item>,
+        mut records: Vec<Message>,
         stash: &Stash,
-    ) -> Result<Vec<Self::Item>, StashError> {
+    ) -> Result<Vec<Message>, StashError> {
         let tx = stash.transaction().await?;
         for record in &mut records {
             Message::save_using(record, &tx).await?;
         }
         tx.commit().await?;
         Ok(records)
+    }
+}
+
+/// Compatibility layer to map new behavior over old paginator code.
+///
+/// The new behavior expects all the pages to be loaded via `next_page()`
+/// but in the older versions this does not happen in the first page.
+///
+// TODO: Remove when caching is completely implemented.
+pub struct PaginatorCompat<T: Model, R: DataSource<Item = T> + 'static> {
+    is_first_page: AtomicBool,
+    paginator: Paginator<T, R>,
+}
+
+impl<T: Model, R: DataSource<Item = T> + 'static> PaginatorCompat<T, R> {
+    fn new(paginator: Paginator<T, R>) -> Self {
+        Self {
+            paginator,
+            is_first_page: AtomicBool::new(true),
+        }
+    }
+
+    /// See [`Paginate::next_page`] for more details.
+    pub async fn next_page(&self) -> Result<Vec<T>, R::Error> {
+        // If it's the first time we are calling this we want the
+        // current page. Otherwise we call `next_page`.
+        if self.is_first_page.load(Ordering::Acquire) {
+            let items = self.paginator.current_page().await?;
+            self.is_first_page.store(false, Ordering::Release);
+            Ok(items)
+        } else {
+            self.paginator.next_page().await
+        }
+    }
+
+    /// See [`Paginate::result_count`] for more details.
+    #[inline]
+    pub async fn result_count(&self) -> u32 {
+        self.paginator.result_count().await
+    }
+
+    /// See [`Paginate::has_next_page`] for more details.
+    #[inline]
+    pub async fn has_next_page(&self) -> bool {
+        self.paginator.has_next_page().await
+    }
+
+    /// See [`Paginate::reload`] for more details.
+    #[inline]
+    pub async fn reload(&self) -> Result<Vec<T>, StashError> {
+        self.paginator.reload().await
     }
 }
