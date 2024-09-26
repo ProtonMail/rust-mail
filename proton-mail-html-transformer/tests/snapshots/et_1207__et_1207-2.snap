@@ -1,0 +1,5 @@
+---
+source: proton-mail-html-transformer/tests/et-1207.rs
+expression: processed
+---
+true
