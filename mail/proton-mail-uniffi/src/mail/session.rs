@@ -499,6 +499,59 @@ impl MailSession {
     }
 }
 
+#[uniffi::export]
+impl MailSession {
+    /// A blocking form of `get_accounts`.
+    pub fn get_accounts_blocking(&self) -> MailSessionResult<Vec<Arc<StoredAccount>>> {
+        async_runtime().block_on(self.get_accounts())
+    }
+
+    /// A blocking form of `get_account`.
+    pub fn get_account_blocking(
+        &self,
+        user_id: String,
+    ) -> MailSessionResult<Option<Arc<StoredAccount>>> {
+        async_runtime().block_on(self.get_account(user_id))
+    }
+
+    /// A blocking form of `get_sessions`.
+    pub fn get_sessions_blocking(
+        &self,
+        account: Arc<StoredAccount>,
+    ) -> MailSessionResult<Vec<Arc<StoredSession>>> {
+        async_runtime().block_on(self.get_sessions(account))
+    }
+
+    /// A blocking form of `get_session`.
+    pub fn get_session_blocking(
+        &self,
+        session_id: String,
+    ) -> MailSessionResult<Option<Arc<StoredSession>>> {
+        async_runtime().block_on(self.get_session(session_id))
+    }
+
+    /// A blocking form of `get_account_state`.
+    pub fn get_account_state_blocking(
+        &self,
+        user_id: String,
+    ) -> MailSessionResult<Option<StoredAccountState>> {
+        async_runtime().block_on(self.get_account_state(user_id))
+    }
+
+    /// A blocking form of `get_session_state`.
+    pub fn get_session_state_blocking(
+        &self,
+        session_id: String,
+    ) -> MailSessionResult<Option<StoredSessionState>> {
+        async_runtime().block_on(self.get_session_state(session_id))
+    }
+
+    /// A blocking form of `get_primary_account`.
+    pub fn get_primary_account_blocking(&self) -> MailSessionResult<Option<Arc<StoredAccount>>> {
+        async_runtime().block_on(self.get_primary_account())
+    }
+}
+
 impl MailSession {
     /// Get the mail context.
     #[must_use]

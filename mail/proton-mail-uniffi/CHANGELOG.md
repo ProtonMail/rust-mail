@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
   - Add account and session state directly in StoredAccount/StoredSession
+  - Blocking forms of `get_account[s]` and `get_session[s]`
+  - Blocking forms of `get_account_state` and `get_session_state`
+  - Blocking form of `get_primary_account`
 
 ## [0.11.56] - 2024-10-03
 
