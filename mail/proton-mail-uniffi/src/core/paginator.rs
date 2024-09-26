@@ -8,11 +8,10 @@ use crate::mail::datatypes::{Conversation, Message};
 use crate::mail::MailboxError;
 use crate::{async_runtime, uniffi_async, WatchHandle};
 use itertools::Itertools;
-use proton_core_common::paginator::Paginator as RealPaginator;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{
     Conversation as RealConversation, ConversationDataSource, Message as RealMessage,
-    MessageDataSource,
+    MessageDataSource, PaginatorCompat as RealPaginator,
 };
 use std::sync::Arc;
 
@@ -97,8 +96,8 @@ impl ConversationPaginator {
 
     /// Retrieves the total number of records in the result set.
     #[must_use]
-    pub fn result_count(&self) -> u64 {
-        async_runtime().block_on(async { self.real_paginator.result_count().await }) as u64
+    pub fn result_count(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.result_count().await })
     }
 
     /// Checks if there is a next page available.
@@ -149,8 +148,8 @@ impl MessagePaginator {
                 .real_paginator
                 .next_page()
                 .await?
-                .iter()
-                .map(|m| m.clone().into())
+                .into_iter()
+                .map_into()
                 .collect())
         })
         .await
@@ -184,8 +183,8 @@ impl MessagePaginator {
 
     /// Retrieves the total number of records in the result set.
     #[must_use]
-    pub fn result_count(&self) -> u64 {
-        async_runtime().block_on(async { self.real_paginator.result_count().await }) as u64
+    pub fn result_count(&self) -> u32 {
+        async_runtime().block_on(async { self.real_paginator.result_count().await })
     }
 
     /// Checks if there is a next page available.
