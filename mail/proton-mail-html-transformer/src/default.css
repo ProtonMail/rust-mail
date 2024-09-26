@@ -11,12 +11,14 @@ nav,
 section {
     display: block;
 }
+
 audio,
 canvas,
 progress,
 video {
     display: inline-block;
 }
+
 abbr,
 mark,
 meter,
@@ -24,6 +26,7 @@ time,
 output {
     display: inline;
 }
+
 html,
 body,
 blockquote,
@@ -35,10 +38,11 @@ figure {
     margin: 0;
     padding: 0;
 }
-button,
-progress {
-    border: 0;
+
+button,progress{
+    border: 0
 }
+
 p,
 ul,
 ol,
@@ -50,8 +54,10 @@ td,
 th {
     font-size: 1em;
     line-height: 1.5;
-    margin: 1.5em 0;
+    margin-block: 1.5em;
+    margin-inline: 0;
 }
+
 input,
 select,
 textarea,
@@ -59,175 +65,224 @@ optgroup,
 button {
     font: inherit;
 }
+
 img,
 iframe {
     vertical-align: middle;
 }
+
 ul,
 ol,
 menu {
     padding-inline-start: 2em;
 }
+
 dd {
     margin-inline-start: 2em;
 }
+
 b,
 strong {
     font-weight: bold;
 }
+
 pre,
 code,
 kbd,
 samp {
-    font-family: SFMono-Regular, Consolas, 'Liberation Mono', 'Menlo', monospace, monospace;
+    font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
     font-size: 1em;
 }
+
 pre {
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+
 mark {
-    background-color: #ff0;
-    color: #000;
+    background-color: var(--bgcolor-mark, #ff0);
+    color: var(--color-mark, currentColor);
     font-weight: bold;
 }
+
 small {
     font-size: 80%;
 }
+
+a:link {
+    color: var(--primary);
+}
+
 a:link img,
 a:visited img,
 img {
     border-style: none;
 }
-audio:not([controls]) {
-    display: none;
-    block-size: 0;
+
+audio:not([controls]){
+    display:none;
+    block-size: 0
 }
+
 abbr[title] {
     border-block-end: dotted 1px;
     cursor: help;
     text-decoration: none;
 }
+
 code,
 pre,
 samp {
     white-space: pre-wrap;
 }
+
 code {
     line-height: 1;
 }
+
 dfn {
     font-style: italic;
 }
-body {
-    color: var(--text-norm);
-    line-height: 1.25;
-    font-size: 1em;
+
+h1, h2, h3, h4, h5, h6 {
+    display: block;
+    font-weight: normal;
+    margin-inline: 0;
 }
+
 h1 {
-    display: block;
-    font-size: 2em;
-    margin: 0 0 0.625em 0;
-    font-weight: var(--font-weight-normal);
+  font-size: 2em; /* equiv 32px */
+  line-height: 1.5;
+  margin-block: .75em;
 }
+
 h2 {
-    display: block;
-    font-size: 1.5em;
-    margin: 0 0 0.8333333333em 0;
-    font-weight: var(--font-weight-normal);
+  font-size: 1.5em; /* equiv 24px */
+  line-height: 1;
+  margin-block: .5em;
 }
+
 h3 {
-    display: block;
-    font-size: 1.1875em;
-    margin: 0 0 1.0526315789em 0;
-    font-weight: var(--font-weight-normal);
+  font-size: 1.1875em; /* equiv 19px */
+  line-height: 1.26316;
+  margin-block: 1.26316em;
 }
+
 h4 {
-    display: block;
-    font-size: 1em;
-    margin: 0 0 1.25em 0;
-    font-weight: var(--font-weight-normal);
+  display: block;
+  font-size: 1em; /* equiv 16px */
+  line-height: 1.5;
+  margin-block: 1.5em;
 }
+
 h5 {
-    display: block;
-    font-size: 0.8125em;
-    margin: 0 0 1.5384615385em 0;
-    font-weight: var(--font-weight-normal);
+  font-size: .8125em; /* equiv 13px */
+  line-height: 1.84615;
+  margin-block: 1.84615em;
 }
+
 h6 {
-    display: block;
-    font-size: 0.75em;
-    margin: 0 0 1.6666666667em 0;
-    font-weight: var(--font-weight-normal);
+  font-size: .75em; /* equiv 12px */
+  line-height: 2;
+  margin-block: 2em;
 }
-body {
-    font-size: 100%;
-    inline-size: 100%;
-    background-color: Canvas;
-    color: CanvasText;
-    color-scheme: light dark;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue',
-        sans-serif;
-    padding: 1rem;
-    line-height: 1.25;
-}
+
+
 q {
     quotes: none;
 }
+
 q::after,
 q::before {
     content: none;
 }
+
 a:focus {
     outline: dotted thin;
 }
+
 a:active,
 a:hover {
     outline: 0;
 }
+
 img {
     border: 0;
     max-inline-size: 100%;
 }
+
 table img {
     max-inline-size: none;
 }
+
 blockquote {
     padding-block: 0.2em !important;
     padding-inline: 1.2em !important;
     margin: 0 !important;
     border: 3px solid var(--primary) !important;
-    border-width: 0 0 0 3px !important;
+    border-block-width: 0 !important;
+    border-inline-end-width: 0 !important;
+    border-inline-start-width: 3px !important;
 }
-blockquote blockquote blockquote blockquote blockquote blockquote {
+
+blockquote blockquote blockquote blockquote blockquote blockquote{
     padding: 0 !important;
-    border: none !important;
-}
-.proton-toggle-button {
-  display: inline-block;
-  padding-block: 0.25rem;
-  padding-inline: 0.5rem;
-  margin: 1em;
-  margin-inline-start: 0;
-  box-shadow: inset 0 0 0 1px silver;
-  border: none;
-  border-radius: 0.5rem;
-  outline: none;
-  background-color: transparent;
-  text-align: center;
-  transform: translateZ(0);
-  transition: 0.15s cubic-bezier(0.22, 1, 0.36, 1), background-position 0s;
-}
-.proton-toggle-button:hover, .proton-toggle-button:focus, .proton-toggle-button:focus-within .proton-toggle-button.is-hover .proton-toggle-button:active, .proton-toggle-button.is-active, .proton-toggle-button[aria-expanded=true]:not([aria-controls]) {
-  text-decoration: none;
-  box-shadow: inset 0 0 0 2px silver;
-  background-color: transparent;
-}
-@supports selector(:focus-visible) {
-  .proton-toggle-button {
-    outline: unset;
-    }
+    border: none !important
 }
 
 [hidden] {
     display: none;
+}
+
+
+
+:root {
+    /**
+	  If we want to follow some app themes, we have to inject values and/or update --primary for link/blockquote
+    
+	--background-norm: white;
+	--text-norm: #262a33;
+    */
+
+    --primary: #8A6EFF; 
+
+	padding: 1rem; /* to check if still useful */
+}
+
+body {
+    font-size: 100%;
+    inline-size: 100%;
+    background: var(--background-norm, Canvas);
+    color: var(--text-norm, CanvasText);
+    color-scheme: light dark;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue',
+        sans-serif;
+    line-height: 1.5;
+    word-wrap: break-word;
+}
+
+
+/* From Android V6 */
+
+/* Only override <pre> when it's the first direct child of the body (case when replying to HTML). */
+body > pre:first-child {
+    margin:0;
+    font-size: 100%;
+    inline-size: 100%;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+    line-height: 1.5;
+    background: var(--background-norm, Canvas);
+    color: var(--text-norm, CanvasText);
+}
+
+/* This should not be needed, but in some cases the resulting HTML contains a <pre> within a styled body. */
+body:not([class]) > pre:first-child  {
+    margin:0;
+    padding:unset;
+    font-size: 100%;
+    inline-size: 100%;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+    line-height: 1.5;
+    background: var(--background-norm, Canvas);
+    color: var(--text-norm, CanvasText);
+}
