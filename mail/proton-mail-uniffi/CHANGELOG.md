@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
   - Bring back soft delete for conversations
+  - HTML messages no longer have extra padding.
+  - Plain text messsages get properly rendered.
 
 ## [0.11.52] - 2024-09-25
 
