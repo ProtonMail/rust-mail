@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
   - Expose actions to star and unstar messages.
 
+### Changed
+  - Rename `Ready` variant of `StoredSessionState` to `Authenticated`
+
 ## [0.11.54] - 2024-09-27
 
 ### Fixed
