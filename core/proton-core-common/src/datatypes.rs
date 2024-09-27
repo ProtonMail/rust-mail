@@ -560,6 +560,14 @@ pub enum TfaStatus {
     TotpOrFido2 = 3,
 }
 
+impl TfaStatus {
+    /// Returns true if any type of second factor auth method is active.
+    #[must_use]
+    pub fn is_active(self) -> bool {
+        !matches!(self, Self::None)
+    }
+}
+
 impl From<ApiTfaStatus> for TfaStatus {
     fn from(value: ApiTfaStatus) -> Self {
         match value {
@@ -1819,6 +1827,14 @@ pub enum AuthState {
     Ready,
 }
 
+impl AuthState {
+    /// Returns true if the auth is ready for use.
+    #[must_use]
+    pub fn is_ready(self) -> bool {
+        matches!(self, Self::Ready)
+    }
+}
+
 impl From<ApiAuthState> for AuthState {
     fn from(value: ApiAuthState) -> Self {
         match value {
@@ -1868,6 +1884,14 @@ impl FromSql for AuthState {
 pub enum PasswordMode {
     One = 1,
     Two = 2,
+}
+
+impl PasswordMode {
+    /// Returns true if any type of additional password is active.
+    #[must_use]
+    pub fn is_active(self) -> bool {
+        !matches!(self, Self::One)
+    }
 }
 
 impl From<ApiPasswordMode> for PasswordMode {

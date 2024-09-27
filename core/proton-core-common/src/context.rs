@@ -1,7 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
-use crate::datatypes::{AuthState, RemoteId};
+use crate::datatypes::RemoteId;
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::db::ChangeReceiver;
@@ -19,6 +19,7 @@ use proton_api_core::session::Session as ApiCoreSession;
 use proton_sqlite3::MigratorError;
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError};
+use std::borrow::Borrow;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
@@ -96,16 +97,24 @@ pub enum CoreSessionState {
 }
 
 impl CoreSessionState {
-    fn of(session: &CoreSession) -> Self {
-        let AuthState::Ready = session.auth_state else {
-            return CoreSessionState::NeedTfa;
-        };
+    fn of(session: impl Borrow<CoreSession>, account: impl Borrow<CoreAccount>) -> Self {
+        let (need_tfa, want_tfa) = (
+            !session.borrow().auth_state.is_ready(),
+            account.borrow().second_factor_mode.is_active(),
+        );
 
-        let Some(_) = &session.key_secret else {
-            return CoreSessionState::NeedMbp;
-        };
+        let (need_mbp, want_mbp) = (
+            session.borrow().key_secret.is_none(),
+            account.borrow().password_mode.is_active(),
+        );
 
-        CoreSessionState::Ready
+        if need_tfa && want_tfa {
+            CoreSessionState::NeedTfa
+        } else if need_mbp && want_mbp {
+            CoreSessionState::NeedMbp
+        } else {
+            CoreSessionState::Ready
+        }
     }
 }
 
@@ -285,27 +294,29 @@ impl Context {
         &self,
         user_id: RemoteId,
     ) -> CoreContextResult<Option<CoreAccountState>> {
-        let Some(account) = CoreAccount::find_by_id(user_id, &self.stash).await? else {
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.stash).await? else {
             return Ok(None);
         };
 
-        let mut sessions = CoreSession::find_by_user_id(account.remote_id, &self.stash, None)
+        let mut sessions = CoreSession::find_by_user_id(user_id.clone(), &self.stash, None)
             .await?
             .into_iter()
-            .map(|session| (CoreSessionState::of(&session), session.remote_id))
+            .map(|session| (CoreSessionState::of(&session, &account), session.remote_id))
             .into_group_map();
 
-        let state = if let Some(sessions) = sessions.remove(&CoreSessionState::Ready) {
-            CoreAccountState::LoggedIn(sessions)
-        } else if let Some(sessions) = sessions.remove(&CoreSessionState::NeedMbp) {
-            CoreAccountState::NeedMbp(sessions)
-        } else if let Some(sessions) = sessions.remove(&CoreSessionState::NeedTfa) {
-            CoreAccountState::NeedTfa(sessions)
-        } else {
-            CoreAccountState::LoggedOut
-        };
+        if let Some(sessions) = sessions.remove(&CoreSessionState::Ready) {
+            return Ok(Some(CoreAccountState::LoggedIn(sessions)));
+        }
 
-        Ok(Some(state))
+        if let Some(sessions) = sessions.remove(&CoreSessionState::NeedMbp) {
+            return Ok(Some(CoreAccountState::NeedMbp(sessions)));
+        }
+
+        if let Some(sessions) = sessions.remove(&CoreSessionState::NeedTfa) {
+            return Ok(Some(CoreAccountState::NeedTfa(sessions)));
+        }
+
+        Ok(Some(CoreAccountState::LoggedOut))
     }
 
     /// Get the login state of a session.
@@ -315,11 +326,18 @@ impl Context {
     /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
+        user_id: RemoteId,
         session_id: RemoteId,
     ) -> CoreContextResult<Option<CoreSessionState>> {
-        Ok(CoreSession::find_by_id(session_id, &self.stash)
-            .map_ok(|session| session.map(|session| CoreSessionState::of(&session)))
-            .await?)
+        let Some(account) = CoreAccount::find_by_id(user_id, &self.stash).await? else {
+            return Ok(None);
+        };
+
+        let Some(session) = CoreSession::find_by_id(session_id, &self.stash).await? else {
+            return Ok(None);
+        };
+
+        Ok(Some(CoreSessionState::of(session, account)))
     }
 
     /// Get the account considered to be the primary account.
@@ -387,7 +405,7 @@ impl Context {
             return Err(CoreContextError::Other(anyhow!("session not found")));
         };
 
-        match CoreSessionState::of(&session) {
+        match CoreSessionState::of(&session, &account) {
             CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
                 self.new_api_session(Some(&session)).await?,
                 user_id.into(),
