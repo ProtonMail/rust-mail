@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.11.54] - 2024-09-27
+
+### Fixed
+  - adjusted watcher dump time from 5s to 200ms.
+
 ## [0.11.53] - 2024-09-25
 
 ### Fixed
