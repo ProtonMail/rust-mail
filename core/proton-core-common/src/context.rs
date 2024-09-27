@@ -19,7 +19,6 @@ use proton_api_core::session::Session as ApiCoreSession;
 use proton_sqlite3::MigratorError;
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError};
-use std::borrow::Borrow;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
@@ -83,37 +82,53 @@ pub enum CoreAccountState {
     LoggedOut,
 }
 
+impl CoreAccountState {
+    fn of(account: &CoreAccount, sessions: &[CoreSession]) -> Self {
+        let mut sessions_by_state = (sessions.iter())
+            .map(|session| (CoreSessionState::of(session), session.remote_id.clone()))
+            .into_group_map();
+
+        if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::Authenticated) {
+            return CoreAccountState::LoggedIn(sessions);
+        }
+
+        if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedKey) {
+            if account.password_mode.want_mbp() {
+                return CoreAccountState::NeedMbp(sessions);
+            }
+        }
+
+        if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedTfa) {
+            if account.second_factor_mode.want_tfa() {
+                return CoreAccountState::NeedTfa(sessions);
+            }
+        }
+
+        CoreAccountState::LoggedOut
+    }
+}
+
 /// Represents the state of a session.
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub enum CoreSessionState {
     /// The session is fully authenticated and ready to use.
-    Ready,
+    Authenticated,
 
     /// The session has authenticated but is missing the key secret.
-    NeedMbp,
+    NeedKey,
 
     /// The session has partially authenticated and requires a second factor.
     NeedTfa,
 }
 
 impl CoreSessionState {
-    fn of(session: impl Borrow<CoreSession>, account: impl Borrow<CoreAccount>) -> Self {
-        let (need_tfa, want_tfa) = (
-            !session.borrow().auth_state.is_ready(),
-            account.borrow().second_factor_mode.is_active(),
-        );
-
-        let (need_mbp, want_mbp) = (
-            session.borrow().key_secret.is_none(),
-            account.borrow().password_mode.is_active(),
-        );
-
-        if need_tfa && want_tfa {
+    fn of(session: &CoreSession) -> Self {
+        if session.auth_state.need_tfa() {
             CoreSessionState::NeedTfa
-        } else if need_mbp && want_mbp {
-            CoreSessionState::NeedMbp
+        } else if session.key_secret.is_none() {
+            CoreSessionState::NeedKey
         } else {
-            CoreSessionState::Ready
+            CoreSessionState::Authenticated
         }
     }
 }
@@ -298,25 +313,11 @@ impl Context {
             return Ok(None);
         };
 
-        let mut sessions = CoreSession::find_by_user_id(user_id.clone(), &self.stash, None)
-            .await?
-            .into_iter()
-            .map(|session| (CoreSessionState::of(&session, &account), session.remote_id))
-            .into_group_map();
+        let state = CoreSession::find_by_user_id(user_id, &self.stash, None)
+            .map_ok(|s| CoreAccountState::of(&account, &s))
+            .await?;
 
-        if let Some(sessions) = sessions.remove(&CoreSessionState::Ready) {
-            return Ok(Some(CoreAccountState::LoggedIn(sessions)));
-        }
-
-        if let Some(sessions) = sessions.remove(&CoreSessionState::NeedMbp) {
-            return Ok(Some(CoreAccountState::NeedMbp(sessions)));
-        }
-
-        if let Some(sessions) = sessions.remove(&CoreSessionState::NeedTfa) {
-            return Ok(Some(CoreAccountState::NeedTfa(sessions)));
-        }
-
-        Ok(Some(CoreAccountState::LoggedOut))
+        Ok(Some(state))
     }
 
     /// Get the login state of a session.
@@ -326,18 +327,13 @@ impl Context {
     /// Returns an error if the database operation fails.
     pub async fn get_session_state(
         &self,
-        user_id: RemoteId,
         session_id: RemoteId,
     ) -> CoreContextResult<Option<CoreSessionState>> {
-        let Some(account) = CoreAccount::find_by_id(user_id, &self.stash).await? else {
-            return Ok(None);
-        };
-
         let Some(session) = CoreSession::find_by_id(session_id, &self.stash).await? else {
             return Ok(None);
         };
 
-        Ok(Some(CoreSessionState::of(session, account)))
+        Ok(Some(CoreSessionState::of(&session)))
     }
 
     /// Get the account considered to be the primary account.
@@ -405,7 +401,7 @@ impl Context {
             return Err(CoreContextError::Other(anyhow!("session not found")));
         };
 
-        match CoreSessionState::of(&session, &account) {
+        match CoreSessionState::of(&session) {
             CoreSessionState::NeedTfa => Ok(Flow::resume_second_factor(
                 self.new_api_session(Some(&session)).await?,
                 user_id.into(),
@@ -413,14 +409,14 @@ impl Context {
                 account.second_factor_mode.into(),
             )),
 
-            CoreSessionState::NeedMbp => Ok(Flow::resume_mailbox_password(
+            CoreSessionState::NeedKey => Ok(Flow::resume_mailbox_password(
                 self.new_api_session(Some(&session)).await?,
                 user_id.into(),
                 session_id.into(),
                 account.password_mode.into(),
             )),
 
-            CoreSessionState::Ready => Err(CoreContextError::Other(anyhow!(
+            CoreSessionState::Authenticated => Err(CoreContextError::Other(anyhow!(
                 "session is already logged in"
             ))),
         }

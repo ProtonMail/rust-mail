@@ -563,7 +563,7 @@ pub enum TfaStatus {
 impl TfaStatus {
     /// Returns true if any type of second factor auth method is active.
     #[must_use]
-    pub fn is_active(self) -> bool {
+    pub fn want_tfa(self) -> bool {
         !matches!(self, Self::None)
     }
 }
@@ -1828,10 +1828,10 @@ pub enum AuthState {
 }
 
 impl AuthState {
-    /// Returns true if the auth is ready for use.
+    /// Returns true if the auth needs 2FA to be completed.
     #[must_use]
-    pub fn is_ready(self) -> bool {
-        matches!(self, Self::Ready)
+    pub fn need_tfa(self) -> bool {
+        matches!(self, Self::TwoFA)
     }
 }
 
@@ -1889,7 +1889,7 @@ pub enum PasswordMode {
 impl PasswordMode {
     /// Returns true if any type of additional password is active.
     #[must_use]
-    pub fn is_active(self) -> bool {
+    pub fn want_mbp(self) -> bool {
         !matches!(self, Self::One)
     }
 }
