@@ -93,17 +93,16 @@ impl AuthStore {
             return Ok(None);
         };
 
-        let Some(key_secret) = session.key_secret else {
+        let key_secret = if let Some(secret) = session.key_secret {
+            secret.decrypt_to_bytes(&key)?.expose_secret().to_owned()
+        } else {
             return Ok(None);
         };
 
-        Ok(Some(UserSecrets {
-            key_secret: key_secret
-                .decrypt_to_bytes(&key)?
-                .expose_secret()
-                .to_owned()
-                .into(),
-        }))
+        Ok(Some(UserSecrets::new(
+            session.account_id.into(),
+            key_secret.into(),
+        )))
     }
 
     async fn set_session(&mut self, auth: AuthSession) -> Result<(), StoreError> {
@@ -118,32 +117,18 @@ impl AuthStore {
         // We write twice, so do it in a transaction.
         let tx = self.stash.transaction().await?;
 
-        // Attempt to load the account.
-        let account = if let Some(id) = &self.user_id {
-            CoreAccount::find_by_id(id.to_owned(), &tx).await?
-        } else {
-            None
-        };
-
-        // If the account doesn't exist, create it.
-        if let Some(account) = account {
-            assert_eq!(account.remote_id, user_id);
-        } else {
+        // Load or create the account.
+        if (CoreAccount::find_by_id(user_id.clone(), &tx).await?).is_none() {
             let user_id = user_id.clone();
             let name_or_addr = auth.name_or_addr.clone();
 
-            (CoreAccount::new(user_id, name_or_addr, tfa_mode, mbp_mode).save_using(&tx)).await?;
+            CoreAccount::new(user_id, name_or_addr, tfa_mode, mbp_mode)
+                .save_using(&tx)
+                .await?;
         }
 
-        // Attempt to load the session.
-        let session = if let Some(id) = &self.session_id {
-            CoreSession::find_by_id(id.to_owned(), &tx).await?
-        } else {
-            None
-        };
-
-        // Update the session or create a new one.
-        if let Some(session) = session {
+        // Load or create the session.
+        if let Some(session) = CoreSession::find_by_id(session_id.clone(), &tx).await? {
             session.with_auth(&auth, &key)?.save_using(&tx).await?;
         } else {
             CoreSession::new(auth, &key)?.save_using(&tx).await?;
@@ -168,18 +153,13 @@ impl AuthStore {
     }
 
     async fn set_secrets(&mut self, secrets: UserSecrets) -> Result<(), StoreError> {
-        let Some(session) = (if let Some(id) = &self.session_id {
-            CoreSession::find_by_id(id.to_owned(), &self.stash).await?
-        } else {
-            None
-        }) else {
-            return Err("session must exist to set secrets")?;
-        };
+        let key = self.encryption_key()?;
+        let user_id = secrets.user_id.into();
+        let secret = secrets.key_secret;
 
-        session
-            .with_key_secret(&secrets.key_secret, &self.encryption_key()?)?
-            .save_using(&self.stash)
-            .await?;
+        for session in CoreSession::find_by_user_id(user_id, &self.stash, None).await? {
+            session.with_key_secret(&secret, &key)?.save().await?;
+        }
 
         Ok(())
     }

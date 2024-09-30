@@ -85,14 +85,20 @@ impl AuthSession {
 /// Unlike the [`AuthSession`] type, this type is not tied to a specific session.
 #[derive(Clone)]
 pub struct UserSecrets {
+    /// The ID of the user to which these secrets belong.
+    pub user_id: RemoteId,
+
     /// The secret used to unlock user keys.
     pub key_secret: UserKeySecret,
 }
 
 impl UserSecrets {
     #[must_use]
-    pub fn new(key_secret: UserKeySecret) -> Self {
-        Self { key_secret }
+    pub fn new(user_id: RemoteId, key_secret: UserKeySecret) -> Self {
+        Self {
+            user_id,
+            key_secret,
+        }
     }
 }
 

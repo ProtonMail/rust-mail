@@ -416,7 +416,7 @@ impl Flow {
             .auth_store()
             .write()
             .await
-            .set_secrets(UserSecrets::new(key_secret))
+            .set_secrets(UserSecrets::new(user.id, key_secret))
             .await?;
 
         // The password is no longer needed, erase it.
