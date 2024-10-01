@@ -1,6 +1,7 @@
 //! Rust bindings for the REST API for Proton
 
 pub mod auth;
+pub mod consts;
 mod crypto_clock;
 pub mod login;
 pub mod service;
