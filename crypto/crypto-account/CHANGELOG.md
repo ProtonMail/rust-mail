@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+
+- Adapt key secret extraction to new `SRPProvider` version.
+
 ### Fixed
 
 -  Fix encryption preferences `encrypt` setting for external users with API keys.

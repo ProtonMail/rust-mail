@@ -2,12 +2,13 @@ use std::fmt::Debug;
 
 use crate::keys::KeyId;
 use base64::{prelude::BASE64_STANDARD as BASE_64, DecodeSliceError, Engine as _};
-use proton_crypto::{generate_secure_random_bytes, srp::SRPProvider, CryptoError};
+use proton_crypto::{
+    generate_secure_random_bytes,
+    srp::{HashedPassword, SRPProvider},
+    CryptoError,
+};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
-
-// bcrypt prefix and salt (first 29 bytes)
-const PREFIX_LEN: usize = 29;
 
 crate::string_id! {
     // A base64 encoded key salt.
@@ -100,11 +101,8 @@ impl KeySalt {
         key_pass: &[u8],
     ) -> Result<KeySecret, SaltError> {
         let result = srp_provider.mailbox_password(key_pass, self.decode()?)?;
-        if result.as_ref().len() < PREFIX_LEN {
-            return Err(SaltError::HashDecode);
-        }
-        // Remove bcrypt prefix and salt (first 29 characters)
-        Ok(KeySecret(result.as_ref()[PREFIX_LEN..].as_ref().to_vec()))
+        // Remove bcrypt prefix and salt.
+        Ok(KeySecret(result.password_hash().to_vec()))
     }
 }
 
