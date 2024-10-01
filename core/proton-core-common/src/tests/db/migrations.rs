@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use super::*;
+use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use stash::stash::Stash;
 
 #[tokio::test]

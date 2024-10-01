@@ -27,6 +27,10 @@
 //! a specific need.
 //!
 
+#[cfg(test)]
+#[path = "tests/models.rs"]
+mod tests;
+
 pub mod sender_image_cache;
 
 use crate::datatypes::{
@@ -282,6 +286,47 @@ pub trait ModelExtension: Model {
         let query = format!("DELETE FROM {table} WHERE remote_id = ?");
 
         interface.execute(query, params![remote_id]).await
+    }
+
+    /// Counts models in database.
+    ///
+    /// # Parameters
+    ///
+    /// * `query_logic` - The query logic to use for finding the records. This
+    ///                   should be a string that represents the conditions,
+    ///                   ordering, offset, and limit for the query, as may be
+    ///                   required. It can be empty. Note that each part of the
+    ///                   logic is optional — so if conditions are passed, for
+    ///                   instance, the `WHERE` keyword needs to be included.
+    /// * `params`      - The parameters to use in the query. These should be in
+    ///                   the order they are expected in the query logic, and
+    ///                   match with any expectations set in the query logic.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records.
+    ///
+    /// # Errors
+    ///
+    /// When querying the database fails.
+    ///
+    async fn count<Q, A>(
+        query_logic: Q,
+        params: Vec<Box<dyn ToSql + Send>>,
+        interface: &A,
+    ) -> Result<u64, StashError>
+    where
+        Q: Into<String> + Send,
+        A: Into<AgnosticInterface> + Interface,
+    {
+        interface
+            .query_value::<_, u64>(
+                formatdoc!(
+                    "SELECT COUNT(*) AS value FROM {} {}",
+                    Self::table_name(),
+                    query_logic.into(),
+                ),
+                params,
+            )
+            .await
     }
 
     /// Sets the stash, returning the updated model.

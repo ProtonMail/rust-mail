@@ -5,8 +5,8 @@ use crate::datatypes::{
     RemoteId, SettingsFlags, TfaStatus, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
     WeekStart,
 };
-use crate::db::tests::new_core_test_connection;
 use crate::models::{User, UserSettings};
+use crate::tests::common::new_core_test_connection;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
 use stash::stash::{Interface, Stash};

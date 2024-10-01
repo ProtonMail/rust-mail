@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use crate::datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, RemoteId};
-use crate::db::tests::new_core_test_connection;
 use crate::models::Address;
+use crate::tests::common::new_core_test_connection;
 use proton_crypto_account::keys::{
     AddressKeys as RealAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyId, KeyTokenSignature,
     LockedKey,

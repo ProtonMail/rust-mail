@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use crate::datatypes::{ContactSendingPreferences, ContactTypes, LabelId, Labels, RemoteId};
-use crate::db::tests::new_core_test_connection;
 use crate::models::{Contact, ContactCard, ContactEmail};
+use crate::tests::common::new_core_test_connection;
 use proton_crypto_account::contacts::ContactCardType;
 use stash::orm::Model;
 use stash::params;

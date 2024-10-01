@@ -10,10 +10,6 @@ mod contacts;
 mod core;
 pub mod migrations;
 
-#[cfg(test)]
-#[path = "tests/db.rs"]
-mod tests;
-
 pub type ChangeSender<T> =
     flume::Sender<stash::orm::ResultsetChange<T, <T as stash::orm::Model>::IdType>>;
 

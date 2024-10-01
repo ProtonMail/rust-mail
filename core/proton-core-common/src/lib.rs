@@ -11,6 +11,9 @@ pub mod os;
 pub mod paginator;
 mod user_context;
 
+#[cfg(test)]
+mod tests;
+
 pub use context::*;
 pub use event_subscriber::*;
 pub use user_context::*;
