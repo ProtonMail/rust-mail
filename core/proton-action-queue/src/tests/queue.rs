@@ -30,7 +30,7 @@ async fn check_action_priority() {
 
     let id0 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_priority_override(Priority::Normal)
                 .build(),
@@ -40,7 +40,7 @@ async fn check_action_priority() {
 
     let id1 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_priority_override(Priority::Low)
                 .build(),
@@ -50,7 +50,7 @@ async fn check_action_priority() {
 
     let id2 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_priority_override(Priority::Highest)
                 .build(),
@@ -60,7 +60,7 @@ async fn check_action_priority() {
 
     let id3 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_priority_override(Priority::High)
                 .build(),
@@ -70,7 +70,7 @@ async fn check_action_priority() {
 
     let id4 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_priority_override(Priority::Highest)
                 .build(),
@@ -119,7 +119,7 @@ async fn check_action_delay() {
 
     let id0 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_creation_time(date_time)
                 .with_delay(Duration::from_secs(1))
@@ -130,7 +130,7 @@ async fn check_action_delay() {
 
     let id1 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new().with_creation_time(date_time).build(),
         )
         .await
@@ -138,7 +138,7 @@ async fn check_action_delay() {
 
     let id2 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_creation_time(date_time)
                 .with_delay(Duration::from_secs(1))
@@ -178,7 +178,7 @@ async fn check_action_only_executed_without_dependencies() {
 
     let id0 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_priority_override(Priority::Low)
                 .build(),
@@ -188,7 +188,7 @@ async fn check_action_only_executed_without_dependencies() {
 
     let id1 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_dependency(id0)
                 .with_priority_override(Priority::Normal)
@@ -199,7 +199,7 @@ async fn check_action_only_executed_without_dependencies() {
 
     let id2 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_dependency(id0)
                 .with_dependency(id1)
@@ -211,7 +211,7 @@ async fn check_action_only_executed_without_dependencies() {
 
     let id3 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_dependency(id0)
                 .with_dependency(id1)
@@ -223,7 +223,7 @@ async fn check_action_only_executed_without_dependencies() {
 
     let id4 = queue
         .queue_action_with_metadata(
-            action.clone(),
+            action,
             MetadataBuilder::new()
                 .with_dependency(id0)
                 .with_dependency(id2)

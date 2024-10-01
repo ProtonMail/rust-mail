@@ -19,37 +19,33 @@ fn address_struct() {
     .unwrap();
     assert_eq!(
         adr.post_office_box,
-        ListComponent::new(&vec![Component::new("pobox1"), Component::new("pobox2")])
+        ListComponent::new(&[Component::new("pobox1"), Component::new("pobox2")])
     );
     assert_eq!(
         adr.extension,
-        ListComponent::new(&vec![Component::new("ext1"), Component::new("ext2")])
+        ListComponent::new(&[Component::new("ext1"), Component::new("ext2")])
     );
     assert_eq!(
         adr.street,
-        ListComponent::new(&vec![Component::new("street1"), Component::new("street2")])
+        ListComponent::new(&[Component::new("street1"), Component::new("street2")])
     );
     assert_eq!(
         adr.locality,
-        ListComponent::new(&vec![
-            Component::new("locality1"),
-            Component::new("locality2")
-        ])
+        ListComponent::new(&[Component::new("locality1"),
+            Component::new("locality2")])
     );
     assert_eq!(
         adr.region,
-        ListComponent::new(&vec![Component::new("region1"), Component::new("region2")])
+        ListComponent::new(&[Component::new("region1"), Component::new("region2")])
     );
     assert_eq!(
         adr.code,
-        ListComponent::new(&vec![Component::new("code1"), Component::new("code2")])
+        ListComponent::new(&[Component::new("code1"), Component::new("code2")])
     );
     assert_eq!(
         adr.country,
-        ListComponent::new(&vec![
-            Component::new("country1"),
-            Component::new("country2")
-        ])
+        ListComponent::new(&[Component::new("country1"),
+            Component::new("country2")])
     );
 }
 

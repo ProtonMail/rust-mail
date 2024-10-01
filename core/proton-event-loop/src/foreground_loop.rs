@@ -8,6 +8,7 @@ use proton_api_core::services::proton::common::RemoteId;
 use tracing::{self, debug, error, Level};
 
 /// Collect events from the Proton Servers in a loop and publish the events to the subscribers.
+///
 /// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
 /// iterate the loop. For a continuous loop which operates in the background see
 /// [`BackgroundEventLoop`].

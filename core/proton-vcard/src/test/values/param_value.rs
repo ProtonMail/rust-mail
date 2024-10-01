@@ -6,7 +6,7 @@ fn param_value_struct() {
     assert_eq!(param_value.value, " \t ! #9<~𝕯");
     let param_value = ParamValue::new_validated("\" \t ! #:;~𝕯\"").unwrap();
     assert_eq!(param_value.value, "\" \t ! #:;~𝕯\"");
-    assert!(ParamValue::new_validated("foo\"bar").is_err())
+    assert!(ParamValue::new_validated("foo\"bar").is_err());
 }
 
 #[test]

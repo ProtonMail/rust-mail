@@ -26,5 +26,5 @@ fn mediatype_param() {
         "AZaz09!#$&.+-^_/AZaz09!#$&.+-^_".to_owned(),
         "AZaz09!#$&.+-^_/AZaz09!#$&.+-^_".to_owned(),
     ]));
-    assert!(is_mediatype_param(&["text/calendar".to_owned()]))
+    assert!(is_mediatype_param(&["text/calendar".to_owned()]));
 }

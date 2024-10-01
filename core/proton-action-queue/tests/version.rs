@@ -32,7 +32,7 @@ async fn queued_version_migration() {
     let queue = new_queue_with_stash(pool.clone(), factory_v2).await;
     assert!(queue.contains(queued_id).await.unwrap());
     let session = new_session().await;
-    queue.execute_all(&session).await.unwrap()
+    queue.execute_all(&session).await.unwrap();
 }
 
 #[derive(Serialize, Deserialize)]
@@ -103,7 +103,7 @@ impl VersionConverter for V2VersionConverter {
         assert_eq!(old_version, V1Action::VERSION);
         assert_eq!(current_version, V2Action::VERSION);
 
-        let v1 = action::deserialize::<V1Action>(&data)?;
+        let v1 = action::deserialize::<V1Action>(data)?;
 
         Ok(V2Action {
             value: format!("foo={}", v1.value),

@@ -34,10 +34,10 @@ async fn test_tracker() {
         .expect("failed to create table");
 
     let (sender, receiver) = flume::unbounded::<ResultsetChange<Foo, u64>>();
-    let results = Foo::find("".to_owned(), vec![], &stash, Some(sender))
+    let results = Foo::find(String::new(), vec![], &stash, Some(sender))
         .await
         .expect("Failed to run query");
-    println!(">> {:?}", results);
+    println!(">> {results:?}");
 
     let mut join_handles = Vec::new();
     for _ in 0..3 {
@@ -54,7 +54,7 @@ async fn test_tracker() {
 
     spawn_async(async move {
         for (i, h) in join_handles.into_iter().enumerate() {
-            h.await.expect(&format!("failed to join thread {i}"));
+            h.await.unwrap_or_else(|_| panic!("failed to join thread {i}"));
         }
     });
 
@@ -62,8 +62,8 @@ async fn test_tracker() {
     loop {
         match receiver.recv_async().await {
             Ok(change) => {
-                println!(">> {:?}", change);
-                count = count + 1;
+                println!(">> {change:?}");
+                count += 1;
                 if count >= 3 {
                     break;
                 }

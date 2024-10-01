@@ -280,7 +280,7 @@ async fn test_sync_and_modify_event_contact() {
     let expected_cards: Vec<ContactCard> = modified_contact
         .cards
         .iter()
-        .map(|value| value.clone().into())
+        .map(|value| value.clone())
         .collect();
     assert_eq!(contact.cards().await.unwrap(), &expected_cards);
 }
@@ -547,8 +547,7 @@ fn expected_local_contacts(stash: Option<Stash>) -> Vec<Contact> {
     let contact_emails = create_test_local_contact_emails(stash.clone());
     contacts
         .into_iter()
-        .enumerate()
-        .map(|(_index, mut contact)| {
+        .map(|mut contact| {
             let contact_emails: Vec<_> = contact_emails
                 .iter()
                 .enumerate()
@@ -654,7 +653,7 @@ fn create_test_remote_full_contact() -> ApiContactFull {
 
     ApiContactFull {
         id: remote_partial_contact.id,
-        cards: cards,
+        cards,
         contact_emails: emails,
         create_time: remote_partial_contact.create_time,
         label_ids: remote_partial_contact.label_ids,

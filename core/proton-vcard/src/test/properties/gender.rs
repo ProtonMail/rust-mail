@@ -6,27 +6,27 @@ use velcro::hash_set;
 #[test]
 fn gender_struct() {
     let gender = Gender::new_validated("").unwrap();
-    assert_eq!(gender.value, GenderValue::None("".to_owned()));
+    assert_eq!(gender.value, GenderValue::None(String::new()));
     let gender = Gender::new_validated("m").unwrap();
-    assert_eq!(gender.value, GenderValue::Male("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Male(String::new()));
     let gender = Gender::new_validated("M").unwrap();
-    assert_eq!(gender.value, GenderValue::Male("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Male(String::new()));
     let gender = Gender::new_validated("f").unwrap();
-    assert_eq!(gender.value, GenderValue::Female("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Female(String::new()));
     let gender = Gender::new_validated("F").unwrap();
-    assert_eq!(gender.value, GenderValue::Female("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Female(String::new()));
     let gender = Gender::new_validated("o").unwrap();
-    assert_eq!(gender.value, GenderValue::Other("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Other(String::new()));
     let gender = Gender::new_validated("O").unwrap();
-    assert_eq!(gender.value, GenderValue::Other("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Other(String::new()));
     let gender = Gender::new_validated("n").unwrap();
-    assert_eq!(gender.value, GenderValue::NotApplicable("".to_owned()));
+    assert_eq!(gender.value, GenderValue::NotApplicable(String::new()));
     let gender = Gender::new_validated("N").unwrap();
-    assert_eq!(gender.value, GenderValue::NotApplicable("".to_owned()));
+    assert_eq!(gender.value, GenderValue::NotApplicable(String::new()));
     let gender = Gender::new_validated("u").unwrap();
-    assert_eq!(gender.value, GenderValue::Unknown("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Unknown(String::new()));
     let gender = Gender::new_validated("U").unwrap();
-    assert_eq!(gender.value, GenderValue::Unknown("".to_owned()));
+    assert_eq!(gender.value, GenderValue::Unknown(String::new()));
     let gender = Gender::new_validated(";it's complicated").unwrap();
     assert_eq!(
         gender.value,

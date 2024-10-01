@@ -8,7 +8,7 @@ use crate::ParameterType;
 #[test]
 fn title_struct() {
     let title = Title::new_validated("text").unwrap();
-    assert_eq!(title.value, Text::new_unchecked("text"))
+    assert_eq!(title.value, Text::new_unchecked("text"));
 }
 
 #[test]

@@ -1,5 +1,4 @@
 use common::TestContext;
-use stash::orm::ResultsetChange;
 
 mod common;
 

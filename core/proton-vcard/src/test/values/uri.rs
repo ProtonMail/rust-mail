@@ -20,5 +20,5 @@ fn uri_value() {
         "urn:oasis:names:specification:docbook:dtd:xml:4.1.2"
     ));
     assert!(!is_uri_value(""));
-    assert!(!is_uri_value("x-09-azAZ"))
+    assert!(!is_uri_value("x-09-azAZ"));
 }

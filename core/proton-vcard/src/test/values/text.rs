@@ -3,7 +3,7 @@ use crate::values::text::{is_text_value, Text};
 #[test]
 fn text_struct() {
     let text = Text::new_validated("\\\\ \\, \\n \t 𝕯!+-[]~").unwrap();
-    assert_eq!(text.value, "\\ , \n \t 𝕯!+-[]~")
+    assert_eq!(text.value, "\\ , \n \t 𝕯!+-[]~");
 }
 
 #[test]

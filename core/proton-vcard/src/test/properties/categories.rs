@@ -11,7 +11,7 @@ fn categories_struct() {
     assert_eq!(
         categories.value,
         TextList::new_validated(&["A".to_owned(), "b".to_owned()]).unwrap()
-    )
+    );
 }
 
 #[test]

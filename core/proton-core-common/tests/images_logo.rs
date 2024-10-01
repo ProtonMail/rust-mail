@@ -90,7 +90,7 @@ async fn concurrent_request() {
             None,
             None,
             user_ctx.stash(),
-        ))
+        ));
     }
 
     let result = join_all(requests).await;

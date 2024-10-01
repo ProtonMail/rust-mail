@@ -49,7 +49,7 @@ async fn new_test_account(stash: &Stash) -> Result<CoreAccount> {
 /// Create a test auth session with dummy data.
 fn new_test_auth(account: &CoreAccount) -> AuthSession {
     let uid = RemoteId::from("session_id");
-    let user_id = RemoteId::from(account.remote_id.clone());
+    let user_id = account.remote_id.clone();
     let refresh_token = SecretString::from("token".to_owned());
     let access_token = SecretString::from("access".to_owned());
     let scopes = ["foo".to_owned(), "bar".to_owned()];

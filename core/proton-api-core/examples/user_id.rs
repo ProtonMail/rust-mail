@@ -60,7 +60,7 @@ async fn main() {
                 let totp = line.trim_end_matches('\n');
 
                 match login_flow.submit_totp(totp.to_owned()).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         break;
                     }
                     Err(e) => {
@@ -91,7 +91,7 @@ async fn main() {
                 let mailbox_pw = line.trim_end_matches('\n');
 
                 match login_flow.submit_mailbox_password(mailbox_pw).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         break;
                     }
                     Err(e) => {
@@ -108,7 +108,7 @@ async fn main() {
     println!("Session ID is {}", session_id.unwrap());
 
     let settings = session.api().get_settings().await.unwrap();
-    println!("User settings is {:?}", settings);
+    println!("User settings is {settings:?}");
 
     session.logout().await.unwrap();
 }

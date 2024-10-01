@@ -625,7 +625,7 @@ mod changes_during_pagination {
         assert_eq!(paginator.current_page_number().await, 3);
 
         stash
-            .execute(r#"DELETE FROM test_models WHERE number = ?"#, params![102])
+            .execute(r"DELETE FROM test_models WHERE number = ?", params![102])
             .await
             .unwrap();
 

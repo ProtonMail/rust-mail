@@ -67,7 +67,7 @@ async fn run_tasks(stash: Stash, count: usize) -> Result<(), StashError> {
                 nums.shuffle(&mut rng);
                 let me = Person {
                     id: 0,
-                    name: format!("{:?}", nums),
+                    name: format!("{nums:?}"),
                     data: Some(nums.clone()),
                 };
 
@@ -139,7 +139,7 @@ async fn run_random_command_test() {
     let watcher = stash.subscribe().await.expect("Failed to watch");
     let _watcher_handle = spawn_async(async move {
         while let Ok(notification) = watcher.recv_async().await {
-            println!("Change detected {:?}", notification);
+            println!("Change detected {notification:?}");
         }
     });
 

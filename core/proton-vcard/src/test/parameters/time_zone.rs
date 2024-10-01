@@ -26,5 +26,5 @@ fn tz_param() {
     assert!(!is_tz_param(&[
         "ftp://ftp.is.co.za/rfc/rfc1808.txt".to_owned(),
         "foo".to_owned()
-    ]))
+    ]));
 }
