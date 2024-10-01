@@ -95,7 +95,9 @@ impl DataSource for TestDataSource {
         &self,
         page_size: NonZeroU32,
         stash: &Stash,
-    ) -> Result<Vec<Self::Item>, Self::Error> { self.insert_pages(0_u32..page_size.get(), stash).await }
+    ) -> Result<Vec<Self::Item>, Self::Error> {
+        self.insert_pages(0_u32..page_size.get(), stash).await
+    }
 
     fn sync_page_after(
         &self,

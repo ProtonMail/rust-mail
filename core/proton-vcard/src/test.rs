@@ -218,7 +218,10 @@ fn property_reject_parameters(
     value: &str,
     params: HashSet<ParameterType>,
 ) {
-    assert!(func(&make_property(name, Some(value), None)).is_ok(), "Invalid test: value should be valid for given function");
+    assert!(
+        func(&make_property(name, Some(value), None)).is_ok(),
+        "Invalid test: value should be valid for given function"
+    );
     for param in params {
         let param_value = match param {
             ParameterType::AltId => ("ALTID", vec!["param-value"]),

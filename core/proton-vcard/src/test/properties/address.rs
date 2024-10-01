@@ -31,8 +31,7 @@ fn address_struct() {
     );
     assert_eq!(
         adr.locality,
-        ListComponent::new(&[Component::new("locality1"),
-            Component::new("locality2")])
+        ListComponent::new(&[Component::new("locality1"), Component::new("locality2")])
     );
     assert_eq!(
         adr.region,
@@ -44,8 +43,7 @@ fn address_struct() {
     );
     assert_eq!(
         adr.country,
-        ListComponent::new(&[Component::new("country1"),
-            Component::new("country2")])
+        ListComponent::new(&[Component::new("country1"), Component::new("country2")])
     );
 }
 

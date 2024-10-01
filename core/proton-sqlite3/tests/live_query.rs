@@ -54,7 +54,8 @@ async fn test_tracker() {
 
     spawn_async(async move {
         for (i, h) in join_handles.into_iter().enumerate() {
-            h.await.unwrap_or_else(|_| panic!("failed to join thread {i}"));
+            h.await
+                .unwrap_or_else(|_| panic!("failed to join thread {i}"));
         }
     });
 

@@ -15,9 +15,7 @@ async fn test_full_contact() {
     full_contact.set_stash(&stash);
     full_contact.row_id = None;
     full_contact.save().await.expect("failed to create contact");
-    let id = full_contact
-        .row_id
-        .expect("failed to get contact id");
+    let id = full_contact.row_id.expect("failed to get contact id");
     let remote_id = full_contact
         .remote_id
         .clone()
@@ -26,9 +24,7 @@ async fn test_full_contact() {
         .save()
         .await
         .expect("failed to overwrite contact");
-    let id_second = full_contact
-        .row_id
-        .expect("failed to get contact id");
+    let id_second = full_contact.row_id.expect("failed to get contact id");
     assert_eq!(id, 1);
     assert_eq!(id, id_second);
     // Query the full contact with cards
