@@ -136,10 +136,10 @@ impl From<CoreAccountState> for StoredAccountState {
 #[derive(Debug, Enum)]
 pub enum StoredSessionState {
     /// The session is fully authenticated and ready to use.
-    Ready,
+    Authenticated,
 
     /// The session has authenticated but is missing the key secret.
-    NeedMbp,
+    NeedKey,
 
     /// The session has partially authenticated and requires a second factor.
     NeedTfa,
@@ -148,8 +148,8 @@ pub enum StoredSessionState {
 impl From<CoreSessionState> for StoredSessionState {
     fn from(value: CoreSessionState) -> Self {
         match value {
-            CoreSessionState::Ready => Self::Ready,
-            CoreSessionState::NeedMbp => Self::NeedMbp,
+            CoreSessionState::Authenticated => Self::Authenticated,
+            CoreSessionState::NeedKey => Self::NeedKey,
             CoreSessionState::NeedTfa => Self::NeedTfa,
         }
     }
