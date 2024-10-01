@@ -163,6 +163,41 @@ fn send_internal() {
     );
 }
 
+/// Simulates sending an email internally to a self owned address.
+#[test]
+fn send_internal_to_self() {
+    let pgp_provider = new_pgp_provider();
+    let (mail_settings, draft, sender_keys) =
+        send_logic::setup_test_environment(&pgp_provider, models::DraftMessage::load_internal);
+    let recipient_preferences = SendPreferences::new_for_self(
+        &sender_keys,
+        UnixTimestamp::new(1_726_502_569),
+        mail_settings,
+    )
+    .unwrap();
+
+    let encrypted_body = EncryptedPackageBody::new_with_draft(
+        &pgp_provider,
+        &draft,
+        PackageMimeType::Html,
+        &sender_keys,
+    )
+    .expect("Failed to create encrypted package body");
+
+    assert_eq!(draft.mime_type, "text/html");
+
+    let package = send_logic::process_package(
+        &pgp_provider,
+        draft.to_list.first().unwrap(),
+        &draft.attachments,
+        &encrypted_body,
+        &sender_keys,
+        recipient_preferences,
+    );
+
+    validate_decryption(&package, ADDRESS_KEY, EXPECTED_MESSAGE_INTERNAL);
+}
+
 /// Simulates sending an email from a single internal sender to a single external recipient without keys.
 /// Assumes the email draft content is in HTML format and the recipient wants HTML-formatted emails.
 #[test]
