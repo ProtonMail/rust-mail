@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
   - Bring back soft delete for messages.
 
+### Added
+  - Expose actions to star and unstar messages.
+
 ## [0.11.54] - 2024-09-27
 
 ### Fixed
