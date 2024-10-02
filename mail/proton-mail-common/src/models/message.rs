@@ -58,6 +58,31 @@ impl Message {
         queue.apply_action(session, action).await
     }
 
+    /// Unstar multiple messages.
+    ///
+    /// # Parameters
+    ///
+    /// * `session`     - The session.
+    /// * `queue`       - The action queue.
+    /// * `message_ids` - The IDs of the messages to unstar.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed.
+    ///
+    pub async fn action_unstar(
+        session: &Session,
+        queue: &Queue,
+        message_ids: Vec<LocalId>,
+    ) -> Result<ActionStatus<()>, ActionError<Unlabel>> {
+        let label_id = LabelId::starred()
+            .counterpart::<crate::models::Label, _>(queue.stash())
+            .await?
+            .expect("Star system label not found");
+        let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
+        queue.apply_action(session, action).await
+    }
+
     /// Unlabel multiple messages.
     ///
     /// # Parameters
