@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.7.0] - 2024-10-02
+
 ### Added
 
 - Add `encrypt_session_key_to_recipient` method on `ExtractedAttachmentInfo`.
@@ -16,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Unified use of `EncryptedMessageBody` and `InboxSessionKey` types across the crate.
+- Update `proton-crypto-account` to 0.6.3 and `proton-crypto-inbox-mime` to 0.3.0.
 
 ## [0.6.5] - 2024-09-11
 

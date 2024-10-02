@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+## [0.6.3] - 2024-10-02
+
 ### Changed
 
 - Adapt key secret extraction to new `SRPProvider` version.
+- Update `proton-crypto` to 0.4.7.
 
 ### Fixed
 

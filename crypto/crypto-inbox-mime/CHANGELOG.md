@@ -7,9 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
-## Added
+## [0.3.0] - 2024-10-02
+
+### Added
 - Parse attachment disposition.
 - Mime message builder to create `PGP/MIME` message bodies. 
+
+### Changed
+- Update `proton-crypto` to 0.4.6
 
 ## [0.2.5] - 2024-09-11
 
