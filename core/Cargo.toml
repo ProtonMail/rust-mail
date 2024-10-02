@@ -32,8 +32,10 @@ paste = "1"
 pin-project = "1"
 pretty_assertions = "1.4.0"
 proton-api-core = { version = "=0.7.1", path = "proton-api-core", registry = "proton" }
-proton-core-common = { version = "=0.7.4", path = "proton-core-common" }
-proton-crypto-account = { version = "=0.6.2", registry = "proton", features = ["sql"] }
+proton-core-common = { version = "=0.7.5", path = "proton-core-common" }
+proton-crypto-account = { version = "=0.6.2", registry = "proton", features = [
+    "sql",
+] }
 proton-event-loop = { version = "=0.7.26", path = "proton-event-loop", registry = "proton" }
 proton-sqlite3 = { version = "=0.7.14", path = "proton-sqlite3", registry = "proton" }
 proton-vcard = { version = "=0.1.2", path = "proton-vcard", registry = "proton" }
