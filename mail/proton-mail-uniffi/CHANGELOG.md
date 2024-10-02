@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.11.56] - 2024-10-03
 
 ### Fixed
+  - `MailUserContext::image_for_sender` now return None for empty images.
   - Bring back soft delete for messages.
 
 ### Added
