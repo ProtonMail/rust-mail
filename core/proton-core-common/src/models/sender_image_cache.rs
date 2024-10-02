@@ -16,7 +16,7 @@ use std::ffi::OsString;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::vec;
-use tracing::error;
+use tracing::{error, warn};
 
 /// Representation of configuration for a sender image
 /// Used to persist cache.
@@ -64,6 +64,10 @@ pub struct SenderImage {
     #[DbField]
     pub received_format: Option<ReceivedFormat>,
 
+    /// Received file is empty (happen when backend can't find an item corresponding to the request)
+    #[DbField]
+    pub is_empty: bool,
+
     /// The internal row ID of the record in the database. This is assigned by `SQLite`, and is used
     /// as a consistent identifier for records when listening for change notifications.
     #[RowIdField]
@@ -108,21 +112,23 @@ impl SenderImage {
 
     /// Update the current value of `received_format`
     ///
-    /// N.B.: It's necessary since `PartialEq` exclude `received_format` from equality test
+    /// N.B.: It's necessary since `PartialEq` exclude `received_format` and `is_empty` from
+    ///       equality test
     ///
-    pub(crate) async fn set_received_format<A>(
+    pub(crate) async fn set_metadata<A>(
         &mut self,
-        received_format: ReceivedFormat,
+        metadata: &SenderImageMetadata,
         interface: &A,
     ) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        self.received_format = Some(received_format);
+        self.received_format = Some(metadata.received_format);
+        self.is_empty = metadata.is_empty;
         interface
             .execute(
-                "UPDATE sender_image_cache SET received_format = ? WHERE local_id = ?",
-                params![self.received_format, self.local_id],
+                "UPDATE sender_image_cache SET received_format = ?, is_empty = ? WHERE local_id = ?",
+                params![self.received_format, self.is_empty, self.local_id],
             )
             .await?;
         Ok(())
@@ -298,7 +304,7 @@ impl From<&SenderImage> for GetImagesLogoOptions {
 impl CacheConfig for SenderImage {
     type Key = Self;
     type Init = Stash;
-    type ExtraMetadata = ReceivedFormat;
+    type ExtraMetadata = SenderImageMetadata;
 
     async fn get_existing(stash: Stash) -> CacheResult<Vec<Self::Key>> {
         Self::all(&stash, None)
@@ -320,11 +326,13 @@ impl CacheConfig for SenderImage {
             .local_id
             .ok_or(CacheError::Callback(anyhow!("LocalId is not initialized")))?;
         let extra = extra.ok_or(CacheError::NeedExtraMetadata)?;
-        Ok(format!("{id}.{extra}").into())
+        Ok(format!("{id}.{}", extra.received_format).into())
     }
 
     fn extra_for_key(key: &Self::Key) -> Option<Self::ExtraMetadata> {
-        key.received_format
+        SenderImageMetadata::try_from(key)
+            .inspect_err(|()| warn!("Can't get extra metadata for {key:?}"))
+            .ok()
     }
 }
 
@@ -394,5 +402,26 @@ impl FromSql for ReceivedFormat {
 impl ToSql for ReceivedFormat {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct SenderImageMetadata {
+    pub received_format: ReceivedFormat,
+    pub is_empty: bool,
+}
+
+impl TryFrom<&SenderImage> for SenderImageMetadata {
+    type Error = ();
+
+    fn try_from(value: &SenderImage) -> Result<Self, Self::Error> {
+        if let Some(received_format) = value.received_format {
+            Ok(Self {
+                received_format,
+                is_empty: value.is_empty,
+            })
+        } else {
+            Err(())
+        }
     }
 }

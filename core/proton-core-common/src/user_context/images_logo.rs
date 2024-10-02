@@ -1,6 +1,6 @@
 use crate::cache::{CacheError, CacheResult};
 use crate::datatypes::LightOrDarkMode;
-use crate::models::sender_image_cache::{ReceivedFormat, SenderImage};
+use crate::models::sender_image_cache::{ReceivedFormat, SenderImage, SenderImageMetadata};
 use crate::{CoreContextResult, UserContext};
 use anyhow::anyhow;
 use proton_api_core::session::CoreSession;
@@ -33,6 +33,9 @@ impl UserContext {
     /// # Errors
     /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an
     /// issue with the sender that causes problems when creating the API request on our side.
+    ///
+    /// # Panics
+    /// If cache metadata are unset
     pub async fn image_for_sender<A>(
         &self,
         address: &str,
@@ -41,7 +44,7 @@ impl UserContext {
         mode: Option<LightOrDarkMode>,
         size: Option<u32>,
         interface: &A,
-    ) -> CoreContextResult<PathBuf>
+    ) -> CoreContextResult<Option<PathBuf>>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -59,10 +62,21 @@ impl UserContext {
             key.save_using(interface).await?;
         }
 
-        Ok(self
+        let result = self
             .images_logo_cache
-            .get_path_or_insert_with_extra(&key.clone(), self.get_images_logo(key, interface))
-            .await?)
+            .get_path_or_insert_with_extra(&key, self.get_images_logo(key.clone(), interface))
+            .await?;
+
+        let metadata = self
+            .images_logo_cache
+            .get_extra_metadata(&key)
+            .expect("Should be set");
+
+        if metadata.is_empty {
+            Ok(None)
+        } else {
+            Ok(Some(result))
+        }
     }
 
     /// Get the logo corresponding to the given key
@@ -70,7 +84,7 @@ impl UserContext {
         &self,
         mut key: SenderImage,
         interface: &A,
-    ) -> CacheResult<(Vec<u8>, ReceivedFormat)>
+    ) -> CacheResult<(Vec<u8>, SenderImageMetadata)>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -81,10 +95,14 @@ impl UserContext {
             .await
             .map(|v| v.to_vec())
             .map_err(|e| CacheError::Callback(anyhow!(e)))?;
-        let format = ReceivedFormat::from(image.as_slice());
-        key.set_received_format(format, interface)
+        let received_format = ReceivedFormat::from(image.as_slice());
+        let metadata = SenderImageMetadata {
+            received_format,
+            is_empty: image.is_empty(),
+        };
+        key.set_metadata(&metadata, interface)
             .await
             .map_err(|e| CacheError::Callback(anyhow!(e)))?;
-        Ok((image, format))
+        Ok((image, metadata))
     }
 }

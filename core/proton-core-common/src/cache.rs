@@ -398,6 +398,14 @@ where
         self.cache.get(key).map(|v| v.file_path)
     }
 
+    /// Retrieve extra metadata
+    ///
+    /// # params:
+    /// * `key`: unique identifier for the item
+    pub fn get_extra_metadata(&self, key: &Config::Key) -> Option<Config::ExtraMetadata> {
+        self.cache.get(key).and_then(|v| v.extra)
+    }
+
     /// Try to get the cached value, if it's not exist, insert it using the given function.
     ///
     /// # params:

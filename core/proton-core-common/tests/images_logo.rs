@@ -1,6 +1,8 @@
 use common::TestContext;
 use futures::future::join_all;
-use proton_core_common::models::sender_image_cache::{ReceivedFormat, SenderImage};
+use proton_core_common::models::sender_image_cache::{
+    ReceivedFormat, SenderImage, SenderImageMetadata,
+};
 use stash::orm::Model;
 use std::fs;
 use test_case::test_case;
@@ -24,7 +26,8 @@ async fn get_sender_image() {
     let image_path = user_ctx
         .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
         .await
-        .expect("failed to get image");
+        .expect("failed to get image")
+        .unwrap();
 
     assert_eq!(
         fs::read(image_path).unwrap(),
@@ -41,6 +44,22 @@ async fn get_sender_image() {
 }
 
 #[tokio::test]
+async fn get_empty_sender_image() {
+    let ctx = TestContext::new().await;
+    let user_ctx = ctx.user_context().await;
+
+    ctx.mock_get_images_logo(vec![]).await;
+    ctx.catch_all().await;
+
+    let image_path = user_ctx
+        .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
+        .await
+        .expect("failed to get image");
+
+    assert!(image_path.is_none());
+}
+
+#[tokio::test]
 async fn get_sender_image_from_cache() {
     let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
@@ -53,16 +72,21 @@ async fn get_sender_image_from_cache() {
     // Add an item into cache
     let mut key = create_test_key(TEST_ADDRESS, Some(ReceivedFormat::Png));
     key.save_using(user_ctx.stash()).await.unwrap();
+    let extra_metadata = SenderImageMetadata {
+        received_format: ReceivedFormat::Png,
+        is_empty: false,
+    };
     user_ctx
         .images_logo_cache
-        .add_item_with_extra(key, b"abcdef", &ReceivedFormat::Png)
+        .add_item_with_extra(key, b"abcdef", &extra_metadata)
         .unwrap();
 
     // Get image
     let image_path = user_ctx
         .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
         .await
-        .expect("failed to get image");
+        .expect("failed to get image")
+        .unwrap();
 
     // Image is the one from cache
     assert_eq!(fs::read(image_path).unwrap(), b"abcdef");
@@ -95,7 +119,7 @@ async fn concurrent_request() {
 
     let result = join_all(requests).await;
     for result in result {
-        let image_path = result.unwrap();
+        let image_path = result.unwrap().unwrap();
         assert_eq!(
             fs::read(image_path).unwrap(),
             vec![0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07]
@@ -130,7 +154,8 @@ async fn image_extension(bytes: &[u8], expected: &str) {
     let image_path = user_ctx
         .image_for_sender(TEST_ADDRESS, None, None, None, None, user_ctx.stash())
         .await
-        .expect("failed to get image");
+        .expect("failed to get image")
+        .unwrap();
 
     assert_eq!(image_path.extension().unwrap(), expected);
     let sender_image = SenderImage::load(1.into(), user_ctx.stash())

@@ -14,7 +14,8 @@ pub fn create_tables(tx: &Tether) -> Result<(), StashError> {
                 max_scale_up_factor INTEGER DEFAULT NULL,
                 mode INTEGER DEFAULT NULL,
                 size INTEGER DEFAULT NULL,
-                received_format INTEGER DEFAULT NULL
+                received_format INTEGER DEFAULT NULL,
+                is_empty INTEGER NOT NULL
             )
         ",
             vec![],
