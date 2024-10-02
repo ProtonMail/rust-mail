@@ -1,4 +1,13 @@
+
 # Proton Cryptography Rust
+
+<div align="left">
+  <!-- docs.rs docs -->
+  <a href="https://rust.gitlab-pages.protontech.ch/proton-crypto-rs/">
+    <img src="https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square"
+      alt="docs.rs docs" />
+  </a>
+</div>
 
 This workspace provides several utility crates for cryptographic operations within Proton.
 
