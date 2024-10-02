@@ -597,6 +597,36 @@ pub async fn apply_label_to_messages(
     .await
 }
 
+/// Label the given messages with the given label id.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `label_id` - The local ID of the label to apply.
+/// * `ids`      - The local IDs of the messages to apply the label to.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn star_messages(
+    session: Arc<MailUserSession>,
+    message_ids: Vec<Id>,
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
+    uniffi_async(async move {
+        RealMessage::action_star(
+            user_context.session(),
+            user_context.queue(),
+            message_ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
+    })
+    .await
+}
+
 /// Remove label from the given messages with the given label id.
 ///
 /// # Parameters
