@@ -17,7 +17,8 @@ use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::cache::CacheError;
-use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
+use proton_core_common::db::ChangeReceiver;
 use proton_core_common::ContactError;
 use proton_event_loop::EventLoopError;
 use proton_mail_common::actions::ActionError;
@@ -110,7 +111,7 @@ pub struct MailSessionParams {
     pub api_env_config: Option<ApiConfig>,
 }
 
-#[uniffi::export]
+// #[uniffi::export]
 impl MailSession {
     // NOTE: Callbacks can not be stored in record types, which is why they are still in the
     // constructor.
@@ -248,9 +249,15 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let accounts = ctx.get_accounts().await?;
+            let mut accounts = Vec::new();
 
-            Ok(accounts.into_iter().map(StoredAccount::new).collect())
+            for account in ctx.get_accounts().await? {
+                if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
+                    accounts.push(StoredAccount::new(account, state));
+                };
+            }
+
+            Ok(accounts)
         })
         .await
     }
@@ -267,12 +274,17 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let (accounts, rx) = ctx.watch_accounts().await?;
+            let mut accounts = Vec::new();
 
-            Ok(WatchedAccounts {
-                accounts: accounts.into_iter().map(StoredAccount::new).collect(),
-                handle: watch_channel(rx, callback),
-            })
+            let (initial, rx) = ctx.watch_accounts().await?;
+
+            for account in initial {
+                if let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? {
+                    accounts.push(StoredAccount::new(account, state));
+                };
+            }
+
+            Ok(WatchedAccounts::new(accounts, rx, callback))
         })
         .await
     }
@@ -289,9 +301,15 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let account = ctx.get_account(user_id.into()).await?;
+            let Some(account) = ctx.get_account(user_id.into()).await? else {
+                return Ok(None);
+            };
 
-            Ok(account.map(StoredAccount::new))
+            let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? else {
+                return Ok(None);
+            };
+
+            Ok(Some(StoredAccount::new(account, state)))
         })
         .await
     }
@@ -309,10 +327,16 @@ impl MailSession {
 
         uniffi_async(async move {
             let account = account.account();
-            let user_id = account.remote_id.clone();
-            let sessions = ctx.get_sessions(user_id).await?;
 
-            Ok(sessions.into_iter().map(StoredSession::new).collect())
+            let mut sessions = Vec::new();
+
+            for session in ctx.get_sessions(account.remote_id.clone()).await? {
+                if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
+                    sessions.push(StoredSession::new(session, state));
+                };
+            }
+
+            Ok(sessions)
         })
         .await
     }
@@ -330,12 +354,17 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let (sessions, rx) = ctx.watch_sessions(account.user_id().into()).await?;
+            let mut sessions = Vec::new();
 
-            Ok(WatchedSessions {
-                sessions: sessions.into_iter().map(StoredSession::new).collect(),
-                handle: watch_channel(rx, callback),
-            })
+            let (initial, rx) = ctx.watch_sessions(account.user_id().into()).await?;
+
+            for session in initial {
+                if let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? {
+                    sessions.push(StoredSession::new(session, state));
+                };
+            }
+
+            Ok(WatchedSessions::new(sessions, rx, callback))
         })
         .await
     }
@@ -352,9 +381,15 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let session = ctx.get_session(session_id.into()).await?;
+            let Some(session) = ctx.get_session(session_id.into()).await? else {
+                return Ok(None);
+            };
 
-            Ok(session.map(StoredSession::new))
+            let Some(state) = ctx.get_session_state(session.remote_id.clone()).await? else {
+                return Ok(None);
+            };
+
+            Ok(Some(StoredSession::new(session, state)))
         })
         .await
     }
@@ -371,9 +406,12 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let state = ctx.get_account_state(user_id.into()).await?;
+            let state = ctx
+                .get_account_state(user_id.into())
+                .await?
+                .map(StoredAccountState::from);
 
-            Ok(state.map(StoredAccountState::from))
+            Ok(state)
         })
         .await
     }
@@ -390,9 +428,12 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let state = ctx.get_session_state(session_id.into()).await?;
+            let state = ctx
+                .get_session_state(session_id.into())
+                .await?
+                .map(StoredSessionState::from);
 
-            Ok(state.map(StoredSessionState::from))
+            Ok(state)
         })
         .await
     }
@@ -406,9 +447,15 @@ impl MailSession {
         let ctx = self.ctx.clone();
 
         uniffi_async(async move {
-            let account = ctx.get_primary_account().await?;
+            let Some(account) = ctx.get_primary_account().await? else {
+                return Ok(None);
+            };
 
-            Ok(account.map(StoredAccount::new))
+            let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? else {
+                return Ok(None);
+            };
+
+            Ok(Some(StoredAccount::new(account, state)))
         })
         .await
     }
@@ -518,6 +565,18 @@ pub struct WatchedAccounts {
     pub handle: Arc<WatchHandle>,
 }
 
+impl WatchedAccounts {
+    fn new(
+        accounts: Vec<Arc<StoredAccount>>,
+        receiver: ChangeReceiver<CoreAccount>,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> WatchedAccounts {
+        let handle = watch_channel(receiver, callback);
+
+        WatchedAccounts { accounts, handle }
+    }
+}
+
 /// Data for watched sessions.
 #[derive(uniffi::Record)]
 pub struct WatchedSessions {
@@ -526,4 +585,16 @@ pub struct WatchedSessions {
 
     /// The handle to stop watching the sessions.
     pub handle: Arc<WatchHandle>,
+}
+
+impl WatchedSessions {
+    fn new(
+        sessions: Vec<Arc<StoredSession>>,
+        receiver: ChangeReceiver<CoreSession>,
+        callback: Box<dyn LiveQueryCallback>,
+    ) -> WatchedSessions {
+        let handle = watch_channel(receiver, callback);
+
+        WatchedSessions { sessions, handle }
+    }
 }

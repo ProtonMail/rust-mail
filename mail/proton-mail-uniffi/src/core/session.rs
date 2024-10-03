@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 
 use proton_core_common::{
     datatypes::{PasswordMode, RemoteId, TfaStatus},
@@ -28,11 +28,12 @@ pub enum SessionError {
 #[derive(uniffi::Object)]
 pub struct StoredAccount {
     account: CoreAccount,
+    state: CoreAccountState,
 }
 
 impl StoredAccount {
-    pub(crate) fn new(account: CoreAccount) -> Arc<Self> {
-        Arc::new(Self { account })
+    pub(crate) fn new(account: CoreAccount, state: CoreAccountState) -> Arc<Self> {
+        Arc::new(Self { account, state })
     }
 
     pub(crate) fn account(&self) -> &CoreAccount {
@@ -65,17 +66,24 @@ impl StoredAccount {
     pub fn second_password_status(&self) -> SecondPasswordStatus {
         self.account.password_mode.into()
     }
+
+    /// Get the state of the account.
+    #[must_use]
+    pub fn state(&self) -> StoredAccountState {
+        self.state.borrow().into()
+    }
 }
 
 /// Represents an account known to the system.
 #[derive(uniffi::Object)]
 pub struct StoredSession {
     session: CoreSession,
+    state: CoreSessionState,
 }
 
 impl StoredSession {
-    pub(crate) fn new(session: CoreSession) -> Arc<Self> {
-        Arc::new(Self { session })
+    pub(crate) fn new(session: CoreSession, state: CoreSessionState) -> Arc<Self> {
+        Arc::new(Self { session, state })
     }
 
     pub(crate) fn session(&self) -> &CoreSession {
@@ -95,6 +103,12 @@ impl StoredSession {
     #[must_use]
     pub fn user_id(&self) -> String {
         self.session.account_id.to_string()
+    }
+
+    /// Get the state of the session.
+    #[must_use]
+    pub fn state(&self) -> StoredSessionState {
+        self.state.borrow().into()
     }
 }
 
@@ -119,8 +133,14 @@ pub enum StoredAccountState {
 
 impl From<CoreAccountState> for StoredAccountState {
     fn from(value: CoreAccountState) -> Self {
-        fn from_inner(value: Vec<RemoteId>) -> Vec<String> {
-            value.into_iter().map(RemoteId::into_inner).collect()
+        Self::from(&value)
+    }
+}
+
+impl From<&CoreAccountState> for StoredAccountState {
+    fn from(value: &CoreAccountState) -> Self {
+        fn from_inner(value: &[RemoteId]) -> Vec<String> {
+            value.iter().cloned().map(RemoteId::into_inner).collect()
         }
 
         match value {
@@ -147,6 +167,12 @@ pub enum StoredSessionState {
 
 impl From<CoreSessionState> for StoredSessionState {
     fn from(value: CoreSessionState) -> Self {
+        Self::from(&value)
+    }
+}
+
+impl From<&CoreSessionState> for StoredSessionState {
+    fn from(value: &CoreSessionState) -> Self {
         match value {
             CoreSessionState::Authenticated => Self::Authenticated,
             CoreSessionState::NeedKey => Self::NeedKey,

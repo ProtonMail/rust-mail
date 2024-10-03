@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+  - Add account and session state directly in StoredAccount/StoredSession
+
+## [0.11.56] - 2024-10-03
+
 ### Fixed
   - Bring back soft delete for messages.
 
