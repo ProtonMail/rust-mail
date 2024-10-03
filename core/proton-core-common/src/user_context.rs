@@ -2,7 +2,7 @@ pub use self::keys::*;
 use crate::cache::ProtonCache;
 use crate::datatypes::RemoteId;
 use crate::models::sender_image_cache::SenderImage;
-use crate::{Context, CoreContextResult};
+use crate::CoreContextResult;
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::stash::Stash;
@@ -33,7 +33,6 @@ pub trait UserDatabaseInitializer: Send + Sync {
 /// Contains all the relevant information to an initialize user session.
 #[derive(Clone)]
 pub struct UserContext {
-    context: Arc<Context>,
     session: Session,
     user_stash: Stash,
     user_id: RemoteId,
@@ -50,7 +49,6 @@ impl Debug for UserContext {
 
 impl UserContext {
     pub(crate) async fn new(
-        context: Arc<Context>,
         session: Session,
         user_stash: Stash,
         user_id: RemoteId,
@@ -62,7 +60,6 @@ impl UserContext {
             Self::init_sender_image_cache(cache_path, cache_size, &user_stash).await?;
 
         Ok(Self {
-            context,
             session,
             user_stash,
             user_id,
@@ -115,14 +112,5 @@ impl UserContext {
     #[must_use]
     pub fn session_id(&self) -> &RemoteId {
         &self.session_id
-    }
-
-    /// Set this user as the primary user.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database operation fails.
-    pub async fn set_primary(&self) -> CoreContextResult<()> {
-        self.context.set_primary_account(self.user_id.clone()).await
     }
 }

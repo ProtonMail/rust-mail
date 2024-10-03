@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
-use tracing::{debug, error, Level};
+use tracing::{debug, error, info, Level};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
@@ -444,16 +444,7 @@ impl Context {
         let session = flow.session().to_owned();
         let stash = self.new_user_db_pool(&user_id).await?;
 
-        UserContext::new(
-            self.this(),
-            session,
-            stash,
-            user_id,
-            session_id,
-            cache_path,
-            cache_size,
-        )
-        .await
+        UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await
     }
 
     /// Get a user context from an existing session.
@@ -488,16 +479,36 @@ impl Context {
         let session = self.new_api_session(Some(session)).await?;
         let stash = self.new_user_db_pool(&user_id).await?;
 
-        UserContext::new(
-            self.this(),
-            session,
-            stash,
-            user_id,
-            session_id,
-            cache_path,
-            cache_size,
-        )
-        .await
+        UserContext::new(session, stash, user_id, session_id, cache_path, cache_size).await
+    }
+
+    /// Logs out all sessions of an account without deleting the account's data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn logout_account(&self, user_id: RemoteId) -> CoreContextResult<()> {
+        for session in &self.get_sessions(user_id).await? {
+            let Ok(api) = self
+                .new_api_session(Some(session))
+                .inspect_err(|err| error!("failed to create API session: {err}"))
+                .await
+            else {
+                continue;
+            };
+
+            let Ok(()) = api
+                .logout()
+                .inspect_err(|err| error!("failed to logout API session: {err}"))
+                .await
+            else {
+                continue;
+            };
+
+            info!("logged out session {}", session.remote_id);
+        }
+
+        Ok(())
     }
 
     /// Removes an account, deleting all associated sessions and data.
@@ -587,15 +598,6 @@ impl Context {
     /// Get the stash in use
     pub fn stash(&self) -> &Stash {
         &self.stash
-    }
-
-    /// Get an arc to this context
-    ///
-    /// # Panics
-    ///
-    /// Panics if the weak reference to this context is invalid.
-    pub fn this(&self) -> Arc<Self> {
-        self.this.upgrade().expect("context should exist")
     }
 
     /// Find the user's database file.
