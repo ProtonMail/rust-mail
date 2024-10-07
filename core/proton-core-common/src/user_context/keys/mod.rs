@@ -174,28 +174,19 @@ impl UserContext {
                 .await?
                 .ok_or(ContactError::CardNotFound(email.to_owned()))?;
 
-        let remote_contact_id =
+        let local_contact_id =
             contact_email
-                .remote_contact_id
+                .local_contact_id
                 .ok_or(ContactError::ContactCardRemoteIdNotPresent(
                     email.to_owned(),
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::sync_with_card(
-            remote_contact_id.clone(),
-            self.session().api(),
-            self.stash(),
-        )
-        .await?;
+        Contact::sync_with_card(local_contact_id, self.session().api(), self.stash()).await?;
 
-        let mut contact = Contact::find_first(
-            "WHERE remote_id = ?",
-            params![remote_contact_id],
-            self.stash(),
-        )
-        .await?
-        .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
+        let mut contact = Contact::load(local_contact_id, self.stash())
+            .await?
+            .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 
         debug!("Full contact with cards found");
         Ok(extract_pinned_keys(pgp_provider, unlocked_user_keys, &mut contact, email).await?)

@@ -1,7 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::cache::CacheError;
-use crate::datatypes::RemoteId;
+use crate::datatypes::{LocalId, RemoteId};
 use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::db::ChangeReceiver;
@@ -17,6 +17,7 @@ use proton_api_core::services::proton::Config as ApiConfig;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::session::Session as ApiCoreSession;
 use proton_sqlite3::MigratorError;
+use proton_vcard::VcardValidationError;
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError};
 use std::path::{Path, PathBuf};
@@ -41,6 +42,8 @@ pub enum CoreContextError {
     DBMigration(#[from] MigratorError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
+    #[error("RemoteId not present for local_id: {0}")]
+    MissingRemoteId(LocalId),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(#[from] KeyHandlingError),
     #[error("Stash Error: {0}")]
@@ -53,6 +56,12 @@ pub enum CoreContextError {
     Other(AnyhowError),
 }
 
+impl From<VcardValidationError> for CoreContextError {
+    fn from(e: VcardValidationError) -> Self {
+        CoreContextError::ContactError(ContactError::Validation(e))
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ContactError {
     #[error("ContactCard not found for email: {0}")]
@@ -61,6 +70,8 @@ pub enum ContactError {
     ContactCardRemoteIdNotPresent(String),
     #[error("Contact not found for email: {0}")]
     FullContactNotFound(String),
+    #[error("Validation: {0}")]
+    Validation(#[from] VcardValidationError),
 }
 
 /// Represents the state of an account.

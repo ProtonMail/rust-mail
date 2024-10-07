@@ -40,7 +40,7 @@ use crate::datatypes::{
     Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
     WeekStart,
 };
-use crate::CoreContextResult;
+use crate::{CoreContextError, CoreContextResult};
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
@@ -539,10 +539,18 @@ impl From<ApiAddress> for Address {
 #[TableName("contacts")]
 #[ModelActions(on_save)]
 pub struct Contact {
+    /// The local ID of the record, i.e. the ID assigned by the client
+    /// application. This is a restricted-scope unique identifier for the record
+    /// within the set of all records of this type, and is important for
+    /// relating local records. It has no relationship to the centrally-stored
+    /// API ID, and never leaves the local system.
+    #[IdField(autoincrement)]
+    pub local_id: Option<LocalId>,
+
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
-    #[IdField(optional)]
+    #[DbField]
     pub remote_id: Option<RemoteId>,
 
     /// TODO: Document this field.
@@ -629,6 +637,12 @@ impl Contact {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
                 self.row_id = existing.row_id;
+                self.local_id = existing.local_id;
+            }
+        } else if let Some(local_id) = self.local_id {
+            if let Some(existing) = Self::find_by_id(local_id, interface).await? {
+                self.row_id = existing.row_id;
+                self.remote_id = existing.remote_id;
             }
         }
 
@@ -688,22 +702,24 @@ impl Contact {
     ///
     pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
         for card in &mut self.cards {
+            card.local_contact_id = self.local_id;
             card.remote_contact_id.clone_from(&self.remote_id);
         }
         for email in &mut self.contact_emails {
+            email.local_contact_id = self.local_id;
             email.remote_contact_id.clone_from(&self.remote_id);
         }
         interface
             .execute(
-                "DELETE FROM contact_cards WHERE remote_contact_id = ?",
-                params![self.remote_id.clone()],
+                "DELETE FROM contact_cards WHERE local_contact_id = ?",
+                params![self.local_id],
             )
             .await?;
         for card in &mut self.cards {
             card.local_id = None;
             card.row_id = None;
             card.set_stash(interface.stash());
-            card.save().await.map_err(|e| {
+            card.save_using(interface).await.map_err(|e| {
                 error!("Failed to update contact cards: {e}");
                 e
             })?;
@@ -832,64 +848,62 @@ impl Contact {
     ///
     /// TODO: Document the errors.
     ///
-    pub async fn sync_with_card(
-        id: RemoteId,
+    pub async fn sync_with_card<A>(
+        local_id: LocalId,
         api: &Proton,
-        stash: &Stash,
-    ) -> CoreContextResult<()> {
-        debug!("Syncing full contact for contact id {id}");
+        interface: &A,
+    ) -> CoreContextResult<()>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        debug!("Syncing full contact for contact id {local_id}");
+        let remote_id = local_id
+            .counterpart::<Contact, _>(interface)
+            .await?
+            .ok_or_else(|| CoreContextError::MissingRemoteId(local_id))?;
+
         let mut contact_with_card = Contact::from(
-            api.get_contact(id.clone().into())
+            api.get_contact(remote_id.clone().into())
                 .await
                 .map_err(|err| {
-                    error!("Failed to fetch full contact with id {id}: {err}");
+                    error!("Failed to fetch full contact with id {local_id}: {err}");
                     err
                 })?
                 .contact,
         );
 
-        if let Some(remote_id) = &contact_with_card.remote_id {
-            let existing = Contact::load(remote_id.clone(), stash)
-                .await
-                .map_err(|err| {
-                    error!("Failed to load contact from db: {err}");
-                    err
-                })?;
-            if let Some(existing) = existing {
-                contact_with_card.row_id = existing.row_id;
-            }
-        }
-        contact_with_card.set_stash(stash);
-        contact_with_card.save().await.map_err(|err| {
-            error!("Failed to sync full contact to db: {err}");
-            err
-        })?;
+        contact_with_card
+            .save_using(interface)
+            .await
+            .map_err(|err| {
+                error!("Failed to sync full contact to db: {err}");
+                err
+            })?;
+
         for email in &mut contact_with_card.contact_emails {
-            if let Some(remote_id) = &email.remote_id {
-                let existing =
-                    ContactEmail::load(remote_id.clone(), stash)
-                        .await
-                        .map_err(|err| {
-                            error!("Failed to load contact email from db: {err}");
-                            err
-                        })?;
-                if let Some(existing) = existing {
-                    email.row_id = existing.row_id;
-                }
-            }
-            email.set_stash(stash);
-            email.save().await.map_err(|e| {
+            email.save_using(interface).await.map_err(|e| {
                 error!("Failed to update contact emails: {e}");
                 e
             })?;
         }
         Ok(())
     }
+
+    // pub async fn vcard<Provider: PGPProviderSync>(
+    //     &mut self,
+    //     pgp_provider: &Provider,
+    //     unlocked_user_keys: &UnlockedUserKeys<Provider>,
+    // ) -> CoreContextResult<VCard> {
+    //     self.cards().await?;
+
+    //     VCard::new(pgp_provider, unlocked_user_keys, self)
+    // }
 }
 
 impl From<ApiContactBasic> for Contact {
     fn from(value: ApiContactBasic) -> Self {
         Self {
+            local_id: None,
             remote_id: Some(value.id.into()),
             cards: vec![],
             contact_emails: vec![],
@@ -908,6 +922,7 @@ impl From<ApiContactBasic> for Contact {
 impl From<ApiContactFull> for Contact {
     fn from(value: ApiContactFull) -> Self {
         Self {
+            local_id: None,
             remote_id: Some(value.id.into()),
             cards: value.cards.into_iter().map(ContactCard::from).collect(),
             contact_emails: value
@@ -942,6 +957,9 @@ pub struct ContactCard {
     /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalId>,
+
+    #[DbField]
+    pub local_contact_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -994,6 +1012,7 @@ impl From<ApiContactCard> for ContactCard {
     fn from(value: ApiContactCard) -> Self {
         Self {
             local_id: None,
+            local_contact_id: None,
             remote_contact_id: None,
             card_type: value.card_type,
             data: value.data,
@@ -1008,15 +1027,21 @@ impl From<ApiContactCard> for ContactCard {
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contact_emails")]
 pub struct ContactEmail {
+    #[IdField(autoincrement)]
+    pub local_id: Option<LocalId>,
     /// The remote ID of the record, i.e. the ID assigned by the API. This is a
     /// globally-consistent unique identifier for the record within the set of
     /// all records of this type, and is important for synchronisation.
-    #[IdField(optional)]
+
+    #[DbField]
     pub remote_id: Option<RemoteId>,
 
     /// TODO: Document this field.
     #[DbField]
     pub remote_contact_id: Option<RemoteId>,
+
+    #[DbField]
+    pub local_contact_id: Option<LocalId>,
 
     /// TODO: Document this field.
     #[DbField]
@@ -1070,7 +1095,9 @@ pub struct ContactEmail {
 impl From<ApiContactEmail> for ContactEmail {
     fn from(value: ApiContactEmail) -> Self {
         Self {
+            local_id: None,
             remote_id: Some(value.id.into()),
+            local_contact_id: None,
             remote_contact_id: Some(value.contact_id.into()),
             canonical_email: value.canonical_email,
             contact_type: ContactTypes::new(value.contact_type),
@@ -1127,8 +1154,15 @@ impl ContactEmail {
     {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_id(remote_id, interface).await? {
+                self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
             }
+        }
+
+        if let Some(contact_remote_id) = self.remote_contact_id.clone() {
+            self.local_contact_id = contact_remote_id
+                .counterpart::<Contact, _>(interface)
+                .await?;
         }
 
         <Self as Model>::save_using(self, interface).await

@@ -1,4 +1,5 @@
 use common::{account::unlocked_user_key, TestContext, TestCoreEvent};
+use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
@@ -7,10 +8,10 @@ use proton_api_core::services::proton::response_data::{
 };
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::{
-    ContactSendingPreferences, ContactTypes, LabelId, Labels, RemoteId,
+    ContactSendingPreferences, ContactTypes, Id, LabelId, Labels, RemoteId,
 };
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
-use proton_core_common::models::{Contact, ContactCard, ContactEmail};
+use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelExtension};
 use proton_core_common::{CoreEventSubscriber, UserContext};
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::proton_crypto::crypto::AccessKeyInfo;
@@ -20,8 +21,57 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
 use std::sync::Arc;
-
 mod common;
+
+macro_rules! prune_email {
+    ($email:expr) => {{
+        $email.set_id(None);
+        $email.local_contact_id = None;
+        $email.set_row_id(None);
+    }};
+}
+
+macro_rules! prune_emails {
+    ($emails:expr) => {
+        for email in $emails.iter_mut() {
+            prune_email!(email);
+        }
+    };
+}
+
+macro_rules! prune_card {
+    ($card:expr) => {{
+        $card.set_id(None);
+        $card.local_contact_id = None;
+        $card.set_row_id(None);
+    }};
+}
+
+macro_rules! prune_cards {
+    ($cards:expr) => {
+        for card in $cards.iter_mut() {
+            prune_card!(card);
+        }
+    };
+}
+
+macro_rules! prune_contact {
+    ($contact:expr) => {{
+        $contact.set_id(None);
+        $contact.set_row_id(None);
+
+        prune_emails!(&mut $contact.contact_emails);
+        prune_cards!(&mut $contact.cards);
+    }};
+}
+
+macro_rules! prune_contacts {
+    ($contacts:expr) => {
+        for contact in $contacts.iter_mut() {
+            prune_contact!(contact);
+        }
+    };
+}
 
 #[tokio::test]
 async fn test_sync_and_load_contacts() {
@@ -53,41 +103,8 @@ async fn test_sync_and_load_contacts() {
         contact.emails().await.expect("Failed to query emails");
     }
     let expected_contacts = expected_local_contacts(Some(user_ctx.stash().clone()));
+    prune_contacts!(contacts);
     assert_eq!(contacts, expected_contacts);
-}
-
-#[tokio::test]
-async fn test_sync_and_load_full_contact() {
-    let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
-
-    let test_full_contact = create_test_remote_full_contact();
-    let remote_id = test_full_contact.id.clone();
-
-    // Api mock.
-    ctx.mock_get_full_contact(test_full_contact.clone()).await;
-    ctx.catch_all().await;
-
-    // Sync contacts
-    Contact::sync_with_card(
-        remote_id.clone().into(),
-        user_ctx.session().api(),
-        user_ctx.stash(),
-    )
-    .await
-    .expect("failed to sync contacts");
-
-    // Check database
-    let conn = user_ctx.stash();
-    let mut contact = Contact::load(remote_id.clone().into(), conn)
-        .await
-        .expect("Failed to load contact")
-        .expect("contact should be found");
-    contact.cards().await.expect("Failed to query cards");
-    contact.emails().await.expect("Failed to query emails");
-    let mut expected_contact = create_test_local_full_contact(Some(user_ctx.stash().clone()));
-    expected_contact.set_row_id(Some(1));
-    assert_eq!(contact, expected_contact);
 }
 
 #[tokio::test]
@@ -111,14 +128,15 @@ async fn test_sync_and_load_contacts_mixed() {
     let conn = user_ctx.stash();
 
     let remote_id = test_contacts.first().unwrap().id.clone();
-    let mut contact = Contact::load(remote_id.into(), conn)
+    let mut contact = Contact::find_by_id(RemoteId::from(remote_id), conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
     contact.cards().await.expect("Failed to query cards");
     contact.emails().await.expect("Failed to query emails");
-    let mut expected_contact = create_test_local_full_contact(Some(user_ctx.stash().clone()));
-    expected_contact.set_row_id(Some(1));
+    prune_contact!(contact);
+    let expected_contact = create_test_local_full_contact(Some(user_ctx.stash().clone()));
+
     assert_eq!(contact, expected_contact);
 
     let mut contacts = Contact::find("LIMIT 100", vec![], conn, None)
@@ -127,6 +145,7 @@ async fn test_sync_and_load_contacts_mixed() {
     for contact in &mut contacts {
         contact.emails().await.expect("Failed to query emails");
     }
+    prune_contacts!(contacts);
     let expected_contacts = expected_local_contacts(Some(user_ctx.stash().clone()));
     assert_eq!(contacts, expected_contacts);
 
@@ -140,7 +159,10 @@ async fn test_sync_and_load_contacts_mixed() {
         .iter()
         .find(|email| email.email.eq_ignore_ascii_case(email_to_query))
         .expect("expect to be found");
-    assert_eq!(queried_contact_emails.first().unwrap(), expected_mail);
+    let mut actual_mail = queried_contact_emails[0].clone();
+
+    prune_email!(actual_mail);
+    assert_eq!(&actual_mail, expected_mail);
 }
 
 #[tokio::test]
@@ -262,7 +284,7 @@ async fn test_sync_and_modify_event_contact() {
     .expect("Failed to get contact emails");
     assert!(queried_contact_emails.is_empty());
 
-    let mut contact = Contact::load(remote_id, conn)
+    let mut contact = Contact::find_by_id(remote_id, conn)
         .await
         .expect("Failed to load contact")
         .expect("contact should be found");
@@ -282,7 +304,13 @@ async fn test_sync_and_modify_event_contact() {
         .iter()
         .map(|value| value.clone())
         .collect();
-    assert_eq!(contact.cards().await.unwrap(), &expected_cards);
+    let mut cards = contact
+        .cards()
+        .await
+        .expect("Failed to query cards")
+        .clone();
+    prune_cards!(cards);
+    assert_eq!(cards, expected_cards);
 }
 
 #[tokio::test]
@@ -377,18 +405,20 @@ async fn prepare_sync_test_data_contacts(
     Contact::sync(user_ctx.session().api(), user_ctx.stash())
         .await
         .expect("failed to sync contacts");
-    Contact::sync_with_card(
-        remote_contact_id.into(),
-        user_ctx.session().api(),
-        user_ctx.stash(),
-    )
-    .await
-    .expect("failed to sync contacts");
+    let local_id = RemoteId::from(remote_contact_id)
+        .counterpart::<Contact, _>(user_ctx.stash())
+        .await
+        .unwrap()
+        .unwrap();
+    Contact::sync_with_card(local_id, user_ctx.session().api(), user_ctx.stash())
+        .await
+        .expect("failed to sync contacts");
 }
 
 fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
     vec![
         Contact {
+            local_id: None,
             remote_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
             cards: vec![],
             contact_emails: vec![],
@@ -398,10 +428,11 @@ fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
             name: "contact_name".to_owned(),
             size: 1443,
             uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
-            row_id: Some(1),
+            row_id: None,
             stash: stash.clone(),
         },
         Contact {
+            local_id: None,
             remote_id: Some(RemoteId::from("z29olIjFv0rnXxBhSMz==")),
             cards: vec![],
             contact_emails: vec![],
@@ -413,7 +444,7 @@ fn create_test_local_partial_contacts(stash: Option<Stash>) -> Vec<Contact> {
             name: "contact_name2".to_owned(),
             size: 1445,
             uid: RemoteId::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
-            row_id: Some(2),
+            row_id: None,
             stash: stash.clone(),
         },
     ]
@@ -447,7 +478,9 @@ fn create_test_remote_partial_contacts() -> Vec<ApiContactBasic> {
 fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
     vec![
         ContactEmail {
+            local_id: None,
             remote_id: Some(RemoteId::from("aefew4323jFv0BhSMw==")),
+            local_contact_id: None,
             remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
             canonical_email: "keytransparencymailer@gmail.com".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
@@ -460,11 +493,13 @@ fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             )]),
             last_used_time: 0,
             name: "contact_email_name_1".to_owned(),
-            row_id: Some(1),
+            row_id: None,
             stash: stash.clone(),
         },
         ContactEmail {
+            local_id: None,
             remote_id: Some(RemoteId::from("aefew4323jFv0BhSMz==")),
+            local_contact_id: None,
             remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==")),
             canonical_email: "contact_email_2@contact.test".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
@@ -475,11 +510,13 @@ fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             last_used_time: 0,
             name: "contact_email_name_2".to_owned(),
-            row_id: Some(2),
+            row_id: None,
             stash: stash.clone(),
         },
         ContactEmail {
+            local_id: None,
             remote_id: Some(RemoteId::from("oZfew4323jFv0BhSMz==")),
+            local_contact_id: None,
             remote_contact_id: Some(RemoteId::from("z29olIjFv0rnXxBhSMz==")),
             canonical_email: "contact_email_3@contact.test".to_owned(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
@@ -490,7 +527,7 @@ fn create_test_local_contact_emails(stash: Option<Stash>) -> Vec<ContactEmail> {
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             last_used_time: 0,
             name: "contact_email_name_3".to_owned(),
-            row_id: Some(3),
+            row_id: None,
             stash: stash.clone(),
         },
     ]
@@ -550,10 +587,11 @@ fn expected_local_contacts(stash: Option<Stash>) -> Vec<Contact> {
         .map(|mut contact| {
             let contact_emails: Vec<_> = contact_emails
                 .iter()
-                .enumerate()
-                .filter(|(_email_id, email)| email.remote_contact_id == contact.remote_id)
-                .map(|(email_id, email)| ContactEmail {
+                .filter(|email| email.remote_contact_id == contact.remote_id)
+                .map(|email| ContactEmail {
+                    local_id: email.local_id,
                     remote_id: email.remote_id.clone(),
+                    local_contact_id: email.local_contact_id,
                     remote_contact_id: contact.remote_id.clone(),
                     canonical_email: email.canonical_email.clone(),
                     contact_type: email.contact_type.clone(),
@@ -564,7 +602,7 @@ fn expected_local_contacts(stash: Option<Stash>) -> Vec<Contact> {
                     label_ids: email.label_ids.clone(),
                     last_used_time: email.last_used_time,
                     name: email.name.clone(),
-                    row_id: Some((email_id as u64) + 1),
+                    row_id: None,
                     stash: stash.clone(),
                 })
                 .collect();
@@ -591,7 +629,8 @@ fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
         .filter(|mail| mail.remote_contact_id == partial_contact.remote_id)
         .collect();
     Contact {
-        remote_id: partial_contact.id(),
+        local_id: None,
+        remote_id: partial_contact.remote_id.clone(),
         name: partial_contact.name,
         uid: partial_contact.uid,
         size: partial_contact.size,
@@ -601,27 +640,29 @@ fn create_test_local_full_contact(stash: Option<Stash>) -> Contact {
         label_ids: partial_contact.label_ids,
         cards: vec![
             ContactCard {
-                local_id: Some(1.into()),
+                local_id: None,
+                local_contact_id: None,
                 remote_contact_id: partial_contact.remote_id.clone(),
                 card_type: ContactCardType::Signed,
                 data: VCARD.to_owned(),
                 signature: Some(VCARD_SIGNATURE.to_owned()),
-                row_id: Some(1),
+                row_id: None,
                 stash: stash.clone(),
             },
             ContactCard {
-                local_id: Some(2.into()),
+                local_id: None,
+                local_contact_id: None,
                 remote_contact_id: partial_contact.remote_id.clone(),
                 card_type: ContactCardType::EncryptedAndSigned,
                 data: "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_owned(),
                 signature: Some(
                     "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned(),
                 ),
-                row_id: Some(2),
+                row_id: None,
                 stash: stash.clone(),
             },
         ],
-        row_id: Some(0),
+        row_id: None,
         stash: stash.clone(),
     }
 }
@@ -670,7 +711,9 @@ fn create_test_local_full_modified_contact(
     let mut contact = create_test_local_full_contact(stash.clone());
     let removed_mail = contact.contact_emails.pop().unwrap();
     let new_email = ContactEmail {
+        local_id: None,
         remote_id: Some(RemoteId::from("aefew4323jFv0BhScc==".to_owned())),
+        local_contact_id: None,
         remote_contact_id: Some(RemoteId::from("a29olIjFv0rnXxBhSMw==".to_owned())),
         canonical_email: "contact_email_mod@contact.test".to_owned(),
         contact_type: ContactTypes::new(vec!["work".to_owned()]),
@@ -691,21 +734,23 @@ fn create_test_local_full_modified_contact(
     contact.contact_emails.push(new_email.clone());
     contact.cards = vec![
         ContactCard {
-            local_id: Some(3.into()),
+            local_id: None,
+            local_contact_id: None,
             remote_contact_id: contact.remote_id.clone(),
             card_type: ContactCardType::Signed,
             data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-129892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:sdfsdf@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
-            row_id: Some(3),
+            row_id: None,
             stash: stash.clone(),
         },
         ContactCard {
-            local_id: Some(4.into()),
+            local_id: None,
+            local_contact_id: None,
             remote_contact_id: contact.remote_id.clone(),
             card_type: ContactCardType::EncryptedAndSigned,
             data: "-----BEGIN PGP MESSAGE-----modified.*-----END PGP MESSAGE-----".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----modified.*-----END PGP SIGNATURE-----".to_owned()),
-            row_id: Some(4),
+            row_id: None,
             stash: stash.clone(),
         }
     ];

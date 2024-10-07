@@ -103,6 +103,7 @@ pub mod vcard;
 
 pub use crate::errors::VCardError;
 pub use crate::errors::VCardResult;
+pub use crate::errors::VcardValidationError;
 use crate::parameters::pid::is_pid_param;
 use crate::parameters::preference::is_pref_param;
 use crate::parameters::sort_as::is_sort_as_param;
