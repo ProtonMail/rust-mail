@@ -107,7 +107,7 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::vec;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
 
@@ -589,11 +589,11 @@ pub struct Conversation {
     #[DbField]
     pub num_attachments: u64,
 
-    /// TODO: Document this field.
+    /// How many messages there are in the conversation.
     #[DbField]
     pub num_messages: u64,
 
-    /// TODO: Document this field.
+    /// How many unread messages there are in the conversation.
     #[DbField]
     pub num_unread: u64,
 
@@ -1979,14 +1979,16 @@ impl Conversation {
         for conversation_id in conversation_ids {
             let Some(mut conversation) = Conversation::find_by_id(conversation_id, tether).await?
             else {
+                warn!("Conversation with id {conversation_id} does not exist!");
                 continue;
             };
             // Find all messages that need to be marked as read.
-            let mut messages = Message::find(
-                "WHERE local_conversation_id=? AND unread=0",
+            let message = Message::find_first(
+                "WHERE local_conversation_id=? 
+                AND unread=0 
+                ORDER BY time",
                 params![conversation_id],
                 tether,
-                None,
             )
             .await?;
 
@@ -1997,7 +1999,7 @@ impl Conversation {
                 )
                 .await?;
 
-            if messages.is_empty() {
+            let Some(mut message) = message else {
                 if total_conversation_message_count == 0 {
                     // These conversations where asked to be marked as read, but had
                     // no messages. Either the messages were already mark as read or
@@ -2026,34 +2028,32 @@ impl Conversation {
                     }
                 }
                 continue;
-            }
+            };
 
-            let mut label_unread_counts = HashMap::new();
-            for message in &mut messages {
-                message.unread = true;
-                message.save_using(tether).await?;
+            // Update the message
 
-                let label_ids = tether.query_values::<_, LocalId>("SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?", params![message.local_id.unwrap()]).await?;
-                for label_id in label_ids {
-                    match label_unread_counts.entry(label_id) {
-                        HmEntry::Occupied(mut o) => {
-                            *o.get_mut() += 1_u64;
-                        }
-                        HmEntry::Vacant(v) => {
-                            v.insert(1_u64);
-                        }
-                    }
-                }
-            }
+            message.unread = true;
+            message.save_using(tether).await?;
 
-            // update label counts
-            for (label_id, num_unread) in label_unread_counts {
+            // Update the label counts
+
+            let label_ids = tether
+                .query_values::<_, LocalId>(
+                    "SELECT local_label_id AS value 
+                     FROM message_labels 
+                     WHERE local_message_id=?",
+                    params![message.id_value()?],
+                )
+                .await?;
+
+            for label_id in label_ids {
                 if let Some(mut label) = Label::find_by_id(label_id, tether).await? {
-                    label.unread_msg += num_unread;
+                    // Always update the message count
+                    label.unread_msg += 1;
                     // only update conversation unread count if we really marked
                     // all messages as unread. If we have mixture, this value
                     // should not be modified
-                    if total_conversation_message_count == messages.len() as u64 {
+                    if total_conversation_message_count == 1 {
                         label.unread_conv += 1;
                     }
 
@@ -2067,13 +2067,13 @@ impl Conversation {
                 )
                 .await?
                 {
-                    conv_label.context_num_unread += num_unread;
+                    conv_label.context_num_unread += 1;
                     conv_label.save_using(tether).await?;
                 }
             }
 
             // update conversations
-            conversation.num_unread += messages.len() as u64;
+            conversation.num_unread += 1;
             conversation.save_using(tether).await?;
         }
         Ok(())
