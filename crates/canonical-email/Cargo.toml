@@ -1,0 +1,11 @@
+[package]
+name = "canonical-email"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+proton-sqlite3 = { workspace = true }
+serde = {workspace = true}
+
+[lints]
+workspace = true
