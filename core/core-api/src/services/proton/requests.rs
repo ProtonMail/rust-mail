@@ -92,6 +92,7 @@ pub struct GetEventOptions {
 }
 
 /// Parameters for getting all keys.
+#[serde_as]
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetKeysAllOptions {
@@ -99,6 +100,7 @@ pub struct GetKeysAllOptions {
     pub email: String,
 
     /// Whether to only get internal keys.
+    #[serde_as(as = "Option<BoolFromInt>")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub internal_only: Option<bool>,
 }
