@@ -328,8 +328,6 @@ impl CachedStore {
         self.account_info.as_ref()
     }
 
-    /// Get the account info, if available.
-
     /// Update the auth session data.
     ///
     /// # Errors
