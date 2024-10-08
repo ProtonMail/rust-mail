@@ -602,7 +602,6 @@ pub async fn apply_label_to_messages(
 /// # Parameters
 ///
 /// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to apply.
 /// * `ids`      - The local IDs of the messages to apply the label to.
 ///
 /// # Errors
@@ -632,7 +631,6 @@ pub async fn star_messages(
 /// # Parameters
 ///
 /// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to apply.
 /// * `ids`      - The local IDs of the messages to apply the label to.
 ///
 /// # Errors
@@ -694,7 +692,6 @@ pub async fn remove_label_from_messages(
 /// # Parameters
 ///
 /// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to remove.
 /// * `ids`      - The local IDs of the messages to mark as read.
 ///
 /// # Errors
@@ -703,11 +700,11 @@ pub async fn remove_label_from_messages(
 ///
 #[uniffi::export]
 pub async fn mark_messages_read(
-    session: Arc<MailUserSession>,
-    label_id: Id,
+    mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
 ) -> Result<(), MailSessionError> {
-    let user_context = session.ctx();
+    let user_context = mailbox.mbox().user_context();
+    let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_mark_read(
             user_context.session(),
@@ -726,7 +723,6 @@ pub async fn mark_messages_read(
 /// # Parameters
 ///
 /// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to remove.
 /// * `ids`      - The local IDs of the messages to mark as unread.
 ///
 /// # Errors
@@ -735,11 +731,11 @@ pub async fn mark_messages_read(
 ///
 #[uniffi::export]
 pub async fn mark_messages_unread(
-    session: Arc<MailUserSession>,
-    label_id: Id,
+    mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
 ) -> Result<(), MailSessionError> {
-    let user_context = session.ctx();
+    let user_context = mailbox.mbox().user_context();
+    let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_mark_unread(
             user_context.session(),
@@ -758,7 +754,6 @@ pub async fn mark_messages_unread(
 /// # Parameters
 ///
 /// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to remove.
 /// * `ids`      - The local IDs of the messages to delete.
 ///
 /// # Errors
@@ -767,11 +762,11 @@ pub async fn mark_messages_unread(
 ///
 #[uniffi::export]
 pub async fn delete_messages(
-    session: Arc<MailUserSession>,
-    label_id: Id,
+    mailbox: Arc<Mailbox>,
     message_ids: Vec<Id>,
 ) -> Result<(), MailSessionError> {
-    let user_context = session.ctx();
+    let user_context = mailbox.mbox().user_context();
+    let label_id = mailbox.label_id();
     uniffi_async(async move {
         RealMessage::action_delete(
             user_context.session(),

@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.12.0] - 2024-10-07
+
+### Changed
+  - `mark_messages_read`, `mark_messages_unread` and `mark_messages_deleted` no longer require a label.
+
 ### Added
   - Add account and session state directly in StoredAccount/StoredSession
   - Blocking forms of `get_account[s]` and `get_session[s]`
