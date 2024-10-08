@@ -11,13 +11,13 @@ use tracing::error;
 
 /// Action to mark conversations as unread.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MarkUnread(GenericActionData<Conversation>);
+pub struct MarkUnread(GenericActionData<Conversation>, Option<LocalId>);
 
 impl MarkUnread {
     /// Create a new action which marks the conversations with `ids` as read.
     pub fn new(label_id: LocalId, ids: impl IntoIterator<Item = LocalId>) -> Self {
         // TODO(db-tests): label_id was present in the original action, why was it used.
-        Self(GenericActionData::new(label_id, ids))
+        Self(GenericActionData::new(label_id, ids), None)
     }
 }
 

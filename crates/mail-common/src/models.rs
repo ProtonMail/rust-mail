@@ -1845,14 +1845,14 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_read<A>(
-        ids: impl IntoIterator<Item = LocalId>,
+        conversation_ids: impl IntoIterator<Item = LocalId>,
         interface: &A,
     ) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        for id in ids {
-            let mut conversation = Conversation::find_by_id(id, interface)
+        for conversation_id in conversation_ids {
+            let mut conversation = Conversation::find_by_id(conversation_id, interface)
                 .await?
                 .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
             // If conversation has no unread messages, there is nothing to do.
@@ -1867,7 +1867,7 @@ impl Conversation {
             // Update conversation labels unread stats.
             let conversation_labels = ConversationLabel::find(
                 "WHERE local_conversation_id=? AND context_num_unread <> 0",
-                params![id],
+                params![conversation_id],
                 interface,
                 None,
             )
@@ -1901,7 +1901,7 @@ impl Conversation {
             // Update messages
             let messages = Message::find(
                 "WHERE local_conversation_id=? AND unread<>0",
-                params![id],
+                params![conversation_id],
                 interface,
                 None,
             )
@@ -1959,6 +1959,7 @@ impl Conversation {
     }
 
     /// Mark multiple conversations as unread.
+    /// For each conversation only the last read message gets marked as unread.
     ///
     /// # Parameters
     ///
@@ -1972,17 +1973,18 @@ impl Conversation {
     ///
     pub async fn mark_unread(
         local_label_id: LocalId,
-        ids: impl IntoIterator<Item = LocalId>,
+        conversation_ids: impl IntoIterator<Item = LocalId>,
         tether: &Tether,
     ) -> Result<(), StashError> {
-        for id in ids {
-            let Some(mut conversation) = Conversation::find_by_id(id, tether).await? else {
+        for conversation_id in conversation_ids {
+            let Some(mut conversation) = Conversation::find_by_id(conversation_id, tether).await?
+            else {
                 continue;
             };
             // Find all messages that need to be marked as read.
             let mut messages = Message::find(
                 "WHERE local_conversation_id=? AND unread=0",
-                params![id],
+                params![conversation_id],
                 tether,
                 None,
             )
@@ -1991,7 +1993,7 @@ impl Conversation {
             let total_conversation_message_count = tether
                 .query_value::<_, u64>(
                     "SELECT COUNT(local_id) AS value FROM messages WHERE local_conversation_id=?",
-                    params![id],
+                    params![conversation_id],
                 )
                 .await?;
 
@@ -2005,7 +2007,7 @@ impl Conversation {
 
                     let conv_labels = ConversationLabel::find(
                         "WHERE local_conversation_id=? AND local_label_id=?",
-                        params![id, local_label_id],
+                        params![conversation_id, local_label_id],
                         tether,
                         None,
                     )
