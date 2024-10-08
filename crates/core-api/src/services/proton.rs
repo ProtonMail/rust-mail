@@ -272,10 +272,10 @@ impl ApiService for Proton {
                     auth.auth_scope = response.scopes;
                     tracing::debug!("Session has been refreshed");
                 }
-                if let Err(e) = auth_store.set_session(auth).await {
+                if let Err(e) = auth_store.set_auth_session(auth).await {
                     error!("Failed to update authentication in store: {e}");
                 }
-                if let Err(e) = auth_store.set_secrets(secrets).await {
+                if let Err(e) = auth_store.set_user_secrets(secrets).await {
                     error!("Failed to update secrets in store: {e}");
                 }
                 drop(auth_store);

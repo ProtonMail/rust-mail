@@ -1,6 +1,6 @@
 #![allow(clippy::module_name_repetitions)]
 
-use crate::auth::{AuthSession, AuthState, StoreError, UserKeySecret, UserSecrets};
+use crate::auth::{AccountInfo, AuthSession, AuthState, StoreError, UserKeySecret, UserSecrets};
 use crate::service::{ApiServiceError, ServiceError};
 use crate::services::proton::common::RemoteId;
 use crate::services::proton::request_data::HumanVerificationData;
@@ -199,7 +199,7 @@ impl Flow {
             .auth_store()
             .write()
             .await
-            .set_session(AuthSession::from_response(username, auth_response.clone()))
+            .set_auth_session(AuthSession::from_response(username, auth_response.clone()))
             .await?;
 
         self.tfa_status = Some(auth_response.tfa.enabled);
@@ -230,7 +230,7 @@ impl Flow {
 
             // Get the current auth session from the auth store.
             let mut auth = store
-                .get_session()
+                .get_auth_session()
                 .cloned()
                 .ok_or(LoginError::InvalidState)?;
 
@@ -239,7 +239,7 @@ impl Flow {
             auth.auth_state = AuthState::Ready;
 
             // Save the updated auth session in the auth store.
-            store.set_session(auth).await?;
+            store.set_auth_session(auth).await?;
         }
 
         self.next().await
@@ -372,8 +372,7 @@ impl Flow {
 
     /// Finalize the login by fetching the user and deriving the key secret.
     async fn finalize_login(&mut self) -> Result<(), LoginError> {
-        // Fetch user info at least once
-        // (some accounts trigger HV after login with first API call).
+        // Fetch user info to trigger HV and update user info.
         let user = self.session.api().get_users().await?.user;
 
         // We need a mailbox password by this point.
@@ -382,8 +381,8 @@ impl Flow {
         };
 
         // Initialize the crypto providers.
-        let srp_provider = proton_crypto::new_srp_provider();
-        let pgp_provider = proton_crypto::new_pgp_provider();
+        let srp = proton_crypto::new_srp_provider();
+        let pgp = proton_crypto::new_pgp_provider();
 
         // Fetch the salts to derive the key password.
         let salts = Salts::new(
@@ -401,15 +400,15 @@ impl Flow {
         );
 
         // Derive the key secret to unlock the user keys.
-        let key_secret =
-            Self::salt_password(&user, &srp_provider, &salts, password.expose_secret())
-                .map(UserKeySecret)
-                .map_err(LoginError::KeySecretDerivation)?;
+        let key_secret = Self::salt_password(&user, &srp, &salts, password.expose_secret())
+            .map(UserKeySecret)
+            .map_err(LoginError::KeySecretDerivation)?;
 
         // Check that the key works
-        let unlock_result =
-            Self::unlock_encryption_keys(&user, &pgp_provider, key_secret.expose_secret());
-        if unlock_result.unlocked_keys.is_empty() {
+        if Self::unlock_encryption_keys(&user, &pgp, key_secret.expose_secret())
+            .unlocked_keys
+            .is_empty()
+        {
             return Err(LoginError::KeySecretDecryption);
         }
 
@@ -418,7 +417,15 @@ impl Flow {
             .auth_store()
             .write()
             .await
-            .set_secrets(UserSecrets::new(user.id, key_secret))
+            .set_user_secrets(UserSecrets::new(key_secret))
+            .await?;
+
+        // Save the user's account info in the auth store.
+        self.session
+            .auth_store()
+            .write()
+            .await
+            .set_account_info(AccountInfo::from_user(user))
             .await?;
 
         // The password is no longer needed, erase it.

@@ -1,7 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use crate::services::proton::common::RemoteId;
-use crate::services::proton::response_data::{PasswordMode, TfaStatus};
+use crate::services::proton::response_data::{PasswordMode, TfaStatus, User};
 use crate::services::proton::responses::PostAuthResponse;
 use crate::X_PM_UID_HEADER;
 use futures::future::BoxFuture;
@@ -85,19 +85,34 @@ impl AuthSession {
 /// Unlike the [`AuthSession`] type, this type is not tied to a specific session.
 #[derive(Clone)]
 pub struct UserSecrets {
-    /// The ID of the user to which these secrets belong.
-    pub user_id: RemoteId,
-
     /// The secret used to unlock user keys.
     pub key_secret: UserKeySecret,
 }
 
 impl UserSecrets {
     #[must_use]
-    pub fn new(user_id: RemoteId, key_secret: UserKeySecret) -> Self {
+    pub fn new(key_secret: UserKeySecret) -> Self {
+        Self { key_secret }
+    }
+}
+
+/// Information related to a user's account.
+///
+/// TODO: Decide which fields really need to be optional.
+#[derive(Clone)]
+pub struct AccountInfo {
+    pub username: Option<String>,
+    pub display_name: Option<String>,
+    pub primary_addr: Option<String>,
+}
+
+impl AccountInfo {
+    #[must_use]
+    pub fn from_user(user: User) -> Self {
         Self {
-            user_id,
-            key_secret,
+            username: user.name,
+            display_name: user.display_name,
+            primary_addr: Some(user.email),
         }
     }
 }
@@ -197,7 +212,7 @@ pub trait Store: Send + Sync {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    fn get_session(&self) -> BoxFuture<'_, Result<Option<AuthSession>, StoreError>>;
+    fn get_auth_session(&self) -> BoxFuture<'_, Result<Option<AuthSession>, StoreError>>;
 
     /// Retrieve the secrets from the store.
     ///
@@ -206,14 +221,23 @@ pub trait Store: Send + Sync {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    fn get_secrets(&self) -> BoxFuture<'_, Result<Option<UserSecrets>, StoreError>>;
+    fn get_user_secrets(&self) -> BoxFuture<'_, Result<Option<UserSecrets>, StoreError>>;
+
+    /// Retrieve the account info from the store.
+    ///
+    /// If no value exists, return `None`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the operation failed.
+    fn get_account_info(&self) -> BoxFuture<'_, Result<Option<AccountInfo>, StoreError>>;
 
     /// Update the auth session data in the store.
     ///
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    fn set_session(&mut self, auth: AuthSession) -> BoxFuture<'_, Result<(), StoreError>>;
+    fn set_auth_session(&mut self, auth: AuthSession) -> BoxFuture<'_, Result<(), StoreError>>;
 
     /// Update the secrets in the store.
     ///
@@ -222,7 +246,14 @@ pub trait Store: Send + Sync {
     /// # Errors
     ///
     /// Returns error if the operation failed.
-    fn set_secrets(&mut self, secrets: UserSecrets) -> BoxFuture<'_, Result<(), StoreError>>;
+    fn set_user_secrets(&mut self, secrets: UserSecrets) -> BoxFuture<'_, Result<(), StoreError>>;
+
+    /// Update the account info in the store.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the operation failed.
+    fn set_account_info(&mut self, info: AccountInfo) -> BoxFuture<'_, Result<(), StoreError>>;
 
     /// Remove the auth data from the store.
     ///
@@ -237,8 +268,11 @@ pub trait Store: Send + Sync {
 /// In memory cache of the auth data which can optionally be backed by an authentication [`Store`].
 pub(crate) struct CachedStore {
     headers: Arc<RwLock<HeaderMap>>,
-    session: Option<AuthSession>,
-    secrets: Option<UserSecrets>,
+
+    auth_session: Option<AuthSession>,
+    user_secrets: Option<UserSecrets>,
+    account_info: Option<AccountInfo>,
+
     store: Option<Box<dyn Store>>,
 }
 
@@ -255,46 +289,61 @@ impl CachedStore {
         store: Option<Box<dyn Store>>,
         headers: Arc<RwLock<HeaderMap>>,
     ) -> Result<Self, StoreError> {
-        let (session, secrets) = if let Some(store) = &store {
-            (store.get_session().await?, store.get_secrets().await?)
+        let (auth_session, user_secrets, account_info) = if let Some(store) = &store {
+            (
+                store.get_auth_session().await?,
+                store.get_user_secrets().await?,
+                store.get_account_info().await?,
+            )
         } else {
-            (None, None)
+            (None, None, None)
         };
 
-        if let Some(auth) = &session {
+        if let Some(auth) = &auth_session {
             update_auth_headers(&headers, auth)?;
         }
 
         Ok(Self {
             headers,
-            session,
-            secrets,
+            auth_session,
+            user_secrets,
+            account_info,
             store,
         })
     }
 
     /// Get the auth session data, if available.
-    pub(crate) fn get_session(&self) -> Option<&AuthSession> {
-        self.session.as_ref()
+    pub(crate) fn get_auth_session(&self) -> Option<&AuthSession> {
+        self.auth_session.as_ref()
     }
 
     /// Get the auth secrets, if available.
-    pub(crate) fn get_secrets(&self) -> Option<&UserSecrets> {
-        self.secrets.as_ref()
+    pub(crate) fn get_user_secrets(&self) -> Option<&UserSecrets> {
+        self.user_secrets.as_ref()
     }
+
+    /// Get the account info, if available.
+    #[allow(unused)]
+    pub(crate) fn get_account_info(&self) -> Option<&AccountInfo> {
+        self.account_info.as_ref()
+    }
+
+    /// Get the account info, if available.
 
     /// Update the auth session data.
     ///
     /// # Errors
     ///
     /// Returns error if the data could not be stored.
-    pub(crate) async fn set_session(&mut self, auth: AuthSession) -> Result<(), StoreError> {
-        // Update auth headers.
+    pub(crate) async fn set_auth_session(&mut self, auth: AuthSession) -> Result<(), StoreError> {
         update_auth_headers(&self.headers, &auth)?;
+
         if let Some(store) = &mut self.store {
-            store.set_session(auth.clone()).await?;
+            store.set_auth_session(auth.clone()).await?;
         }
-        self.session = Some(auth);
+
+        self.auth_session = Some(auth);
+
         Ok(())
     }
 
@@ -303,11 +352,28 @@ impl CachedStore {
     /// # Errors
     ///
     /// Returns error if the data could not be stored.
-    pub(crate) async fn set_secrets(&mut self, secrets: UserSecrets) -> Result<(), StoreError> {
+    pub(crate) async fn set_user_secrets(&mut self, data: UserSecrets) -> Result<(), StoreError> {
         if let Some(store) = &mut self.store {
-            store.set_secrets(secrets.clone()).await?;
+            store.set_user_secrets(data.clone()).await?;
         }
-        self.secrets = Some(secrets);
+
+        self.user_secrets = Some(data);
+
+        Ok(())
+    }
+
+    /// Update the account info.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the data could not be stored.
+    pub(crate) async fn set_account_info(&mut self, info: AccountInfo) -> Result<(), StoreError> {
+        if let Some(store) = &mut self.store {
+            store.set_account_info(info.clone()).await?;
+        }
+
+        self.account_info = Some(info);
+
         Ok(())
     }
 
@@ -319,12 +385,13 @@ impl CachedStore {
     pub(crate) async fn clear(
         &mut self,
     ) -> Result<(Option<AuthSession>, Option<UserSecrets>), StoreError> {
-        // Remove auth headers.
         remove_auth_headers(&self.headers);
+
         if let Some(store) = &mut self.store {
             store.clear().await?;
         }
-        Ok((self.session.take(), self.secrets.take()))
+
+        Ok((self.auth_session.take(), self.user_secrets.take()))
     }
 }
 
