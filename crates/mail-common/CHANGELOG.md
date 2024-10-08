@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `LabelAs` action for messages.
 - `Move` actions for messages.
 - `Label` and `Unlabel` actions for messages.
 - The following actions for the messages:

@@ -396,6 +396,14 @@ pub struct PutMessagesUnreadRequest {
     pub ids: Vec<RemoteId>,
 }
 
+/// Request to relabel a message.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostMessagesRelabelRequest {
+    #[serde(rename = "LabelIDs")]
+    pub label_ids: Vec<RemoteId>,
+}
+
 #[serde_as]
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "PascalCase")]

@@ -30,6 +30,7 @@ use proton_core_common::cache::CacheError;
 use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use stash::stash::StashError;
 
+use proton_action_queue::action::Id as ActionId;
 use thiserror::Error;
 
 pub const ALL_LABEL_TYPES: [LabelType; 4] = [
@@ -54,44 +55,46 @@ macro_rules! find_in_query {
 /// Errors that may occur while using the ProtonMail app.
 #[derive(Debug, Error)]
 pub enum AppError {
-    #[error("API error: {0}")]
-    API(#[from] ApiServiceError),
+    #[error("Attachment missing in database for local_id {0}")]
+    ActionStillQueued(ActionId),
     #[error("Attachment missing in database for local_id {0}")]
     AttachmentMissing(LocalId),
+    #[error("Conversation with ID {0} is not in given view {1}")]
+    ConversationDoesNotHaveLabel(LocalId, String),
+    #[error("Conversation with ID {0} has no messages")]
+    ConversationHasNoMessages(LocalId),
+    #[error("Conversation with ID {0} has no remote ID")]
+    ConversationHasNoRemoteId(LocalId),
     #[error("Conversation with ID {0} not found")]
     ConversationNotFound(LocalId),
+    #[error("Empty list of conversations, expected at least one")]
+    EmptyListOfConversations,
+    #[error("Empty list of messages, expected at least one")]
+    EmptyListOfMessages,
+    #[error("Incorrect mime type: {0}")]
+    InvalidMimeType(String),
     #[error("Label with local id {0} does not have remote id")]
     LabelDoesNotHaveRemoteId(LocalId),
     #[error("Label with local id {0} not found")]
     LabelNotFound(LocalId),
     #[error("Local ID not found for {0} with remote ID {1}")]
     LocalIdNotFound(String, RemoteId),
-    #[error("Incorrect mime type: {0}")]
-    InvalidMimeType(String),
     #[error("MessageBodyMetadata missing in database for message {0}")]
     MessageBodyMetadataMissing(LocalId),
-    #[error("Message missing in database for local_id {0}")]
-    MessageMissing(LocalId),
-    #[error("Could not find remote label {0}")]
-    RemoteLabelDoesNotExist(LabelId),
-    #[error("Remote ID not found for {0} with local ID {1}")]
-    RemoteIdNotFound(String, LocalId),
-    #[error("Conversation with ID {0} has no remote ID")]
-    ConversationHasNoRemoteId(LocalId),
     #[error("Message with ID {0} has no remote ID")]
     MessageHasNoRemoteId(LocalId),
-    #[error("Conversation with ID {0} has no messages")]
-    ConversationHasNoMessages(LocalId),
-    #[error("Empty list of conversations, expected at least one")]
-    EmptyListOfConversations,
-    #[error("Empty list of messages, expected at least one")]
-    EmptyListOfMessages,
-    #[error("Conversation with ID {0} is not in given view {1}")]
-    ConversationDoesNotHaveLabel(LocalId, String),
+    #[error("Message missing in database for local_id {0}")]
+    MessageMissing(LocalId),
     #[error("No conversation found in the current page which has a remote id")]
     NoConversationWithValidRemoteIdFoundInPage,
     #[error("No message found in the current page which has a remote id")]
     NoMessageWithValidRemoteIdFoundInPage,
+    #[error("Remote ID not found for {0} with local ID {1}")]
+    RemoteIdNotFound(String, LocalId),
+    #[error("Could not find remote label {0}")]
+    RemoteLabelDoesNotExist(LabelId),
+    #[error("API error: {0}")]
+    API(#[from] ApiServiceError),
     #[error("Cache error: {0}")]
     Cache(#[from] CacheError),
     #[error("IO error: {0}")]

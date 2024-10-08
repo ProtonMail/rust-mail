@@ -8,8 +8,9 @@ use crate::{
 };
 use itertools::Itertools;
 use proton_core_common::datatypes::LocalId;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ExclusiveLocation {
     System {
         name: SystemLabel,
