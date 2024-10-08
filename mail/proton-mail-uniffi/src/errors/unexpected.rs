@@ -1,0 +1,43 @@
+use proton_mail_common::errors::unexpected::Unexpected as RealUnexpected;
+
+/// Categories for Unexpected error
+#[derive(Debug, uniffi::Enum)]
+pub enum UnexpectedError {
+    /// Error related to cryptography
+    Crypto,
+    /// Error related to the database
+    Database,
+    /// Error related to an operation on file system
+    FileSystem,
+    /// Error related to an internal operation
+    Internal,
+    /// Some argument is invalid
+    InvalidArgument,
+    /// Error related with memory
+    Memory,
+    /// Error related with network
+    Network,
+    /// Error related to an OS operation
+    Os,
+    /// Error related to the event queue
+    Queue,
+    /// Error with no identified operation
+    Unknown,
+}
+
+impl From<RealUnexpected> for UnexpectedError {
+    fn from(value: RealUnexpected) -> Self {
+        match value {
+            RealUnexpected::Crypto => Self::Crypto,
+            RealUnexpected::Database => Self::Database,
+            RealUnexpected::FileSystem => Self::FileSystem,
+            RealUnexpected::Internal => Self::Internal,
+            RealUnexpected::InvalidArgument => Self::InvalidArgument,
+            RealUnexpected::Memory => Self::Memory,
+            RealUnexpected::Network => Self::Network,
+            RealUnexpected::Os => Self::Os,
+            RealUnexpected::Queue => Self::Queue,
+            RealUnexpected::Unknown => Self::Unknown,
+        }
+    }
+}

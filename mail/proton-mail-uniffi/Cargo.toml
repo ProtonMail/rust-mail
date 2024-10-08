@@ -1,0 +1,36 @@
+[package]
+name = "proton-mail-uniffi"
+version = "0.11.56"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["staticlib", "cdylib"]
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+flume = { workspace = true }
+itertools = { workspace = true }
+proton-action-queue = { workspace = true }
+proton-api-core = { workspace = true }
+proton-api-mail = { workspace = true }
+proton-core-common = { workspace = true }
+proton-crypto-account = { workspace = true }
+proton-event-loop = { workspace = true }
+proton-mail-common = { workspace = true }
+serde_json = { workspace = true }
+smart-default = { workspace = true }
+stash = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uniffi = { workspace = true }
+
+[dev-dependencies]
+proton-api-mail = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,86 @@
+[workspace]
+resolver = "2"
+members = [
+    "proton-api-mail",
+    "proton-mail-common",
+    "proton-mail-html-transformer",
+    "proton-mail-uniffi",
+    "proton-mail-wasm",
+    "uniffi-bindgen",
+]
+
+[workspace.dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+bitflags = { version = "2.5.0" }
+bytes = "1.4"
+flume = "0.11"
+futures = "0.3.30"
+indoc = "2"
+itertools = "0.13.0"
+lazy_static = "1"
+mime = "0.3.17"
+parking_lot = "0.12.3"
+pretty_assertions = "1.4.0"
+proton-action-queue = { version = "=0.7.27", registry = "proton" }
+proton-api-core = { version = "=0.7.2", registry = "proton" }
+proton-api-mail = { version = "=0.3.13", path = "proton-api-mail" }
+proton-core-common = { version = "=0.7.7", registry = "proton" }
+proton-crypto-account = { version = "=0.6.2", registry = "proton" }
+proton-crypto-inbox = { version = "=0.6.5", registry = "proton" }
+proton-event-loop = { version = "=0.7.27", registry = "proton" }
+proton-mail-common = { path = "proton-mail-common" }
+proton-sqlite3 = { version = "=0.7.14", registry = "proton" }
+scraper = "0.19.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.117"
+serde_repr = "0.1"
+smart-default = "0.7.1"
+stash = { version = "=0.1.14", registry = "proton" }
+test-case = "3.3.1"
+thiserror = "1.0.61"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uniffi = { version = "0.28.1", features = ["tokio"] }
+typed-builder = "0.20.0"
+url = "2.5.0"
+velcro = "0.5.4"
+wiremock = "0.6.0"
+ctor = "0.2.8"
+color-backtrace = "0.6.1"
+
+[patch.proton]
+# proton-action-queue = { path = "../proton-api-core/proton-action-queue" }
+# proton-api-core = { path = "../proton-api-core/proton-api-core" }
+# proton-core-common = { path = "../proton-api-core/proton-core-common" }
+# proton-event-loop = { path = "../proton-api-core/proton-event-loop" }
+# proton-sqlite3 = { path = "../proton-api-core/proton-sqlite3" }
+# stash = { path = "../proton-api-core/stash" }
+
+[workspace.lints.rust]
+trivial_numeric_casts = "warn"
+unused_extern_crates = "warn"
+unused_crate_dependencies = "warn"
+unused_import_braces = "warn"
+trivial_casts = "warn"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "deny", priority = -1 }
+missing_errors_doc = "allow"
+module_name_repetitions = "allow"
+# Useful to track missing comments on private items/code.
+# missing_docs_in_private_items ="warn"
+#Disallow `println!`. Use `debug!` for debug output
+# (which is provided by the `log` crate).
+print_stdout = "warn"
+unseparated_literal_suffix = "warn"
+wrong_self_convention = "warn"
+#TODO: Cargo build override rather than profile config(https://users.rust-lang.org/t/how-to-modify-profile-release-only-for-a-target/48811/3)
+
+[profile.bench]
+debug = true
+
+[profile.release]
+panic = "abort"
