@@ -1,70 +1,65 @@
 [workspace]
 resolver = "2"
-members = [
-    "proton-action-queue",
-    "proton-api-core",
-    "proton-sqlite3",
-    "proton-event-loop",
-    "proton-core-common",
-    "proton-vcard",
-    "stash",
-    "stash-macros",
-]
+members  = ["crates/*"]
 
 [workspace.dependencies]
 aes-gcm = { version = "0.10", features = ["zeroize", "std"] }
 anyhow = "1.0"
 async-trait = "0.1"
 base64 = "0.22"
+bitflags = { version = "2.5.0" }
 bytes = "1.4"
 chrono = { version = "0.4", features = ["default", "serde"] }
+color-backtrace = "0.6.1"
 colored = "2.1.0"
+ctor = "0.2.8"
 flume = "0.11"
-futures = "0.3"
+futures = "0.3.30"
 ical = { version = "0.11", features = ["generator"] }
 indoc = "2.0.5"
 itertools = "0.13.0"
+lazy_static = "1"
+mime = "0.3.17"
 mockall = "0.12"
 num_enum = "0.7.3"
 oxilangtag = "0.1"
-parking_lot = "0.12"
+parking_lot = "0.12.3"
 paste = "1"
 pin-project = "1"
 pretty_assertions = "1.4.0"
-proton-api-core = { version = "=0.7.2", path = "proton-api-core", registry = "proton" }
-proton-core-common = { version = "=0.7.7", path = "proton-core-common" }
-proton-crypto-account = { version = "=0.6.2", registry = "proton", features = [
-    "sql",
-] }
-proton-action-queue = { version = "=0.7.27", path = "proton-action-queue", registry = "proton" }
-proton-event-loop = { version = "=0.7.27", path = "proton-event-loop", registry = "proton" }
-proton-sqlite3 = { version = "=0.7.14", path = "proton-sqlite3", registry = "proton" }
-proton-vcard = { version = "=0.1.2", path = "proton-vcard", registry = "proton" }
+proton-action-queue = { version = "=0.7.27", path = "crates/action-queue", registry = "proton" }
+proton-api-core = { version = "=0.7.2", path = "crates/core-api", registry = "proton" }
+proton-api-mail = { version = "=0.3.13", path = "crates/mail-api" }
+proton-core-common = { version = "=0.7.7", path = "crates/core-common", registry = "proton" }
+proton-crypto-account = { version = "=0.6.2", registry = "proton", features = ["sql"] }
+proton-crypto-inbox = { version = "=0.6.5", registry = "proton" }
+proton-event-loop = { version = "=0.7.27", path = "crates/event-loop", registry = "proton" }
+proton-mail-common = { path = "crates/mail-common" }
+proton-sqlite3 = { version = "=0.7.14", path = "crates/sqlite3", registry = "proton" }
+proton-vcard = { version = "=0.1.2", path = "crates/vcard", registry = "proton" }
 quick_cache = "0.6"
 rand = "0.8"
 regex = "1.10.5"
 regex_static = "0.1"
-rusqlite = { version = "0.31.0", features = [
-    "bundled",
-    "chrono",
-    "functions",
-    "trace",
-    "uuid",
-] }
+rusqlite = { version = "0.31.0", features = ["bundled", "chrono", "functions", "trace", "uuid"] }
+scraper = "0.19.0"
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde-aux = "4.5"
-serde_json = "1"
+serde_json = "1.0.117"
 serde_repr = "0.1"
-stash = { version = "=0.1.14", path = "stash", registry = "proton" }
+smart-default = "0.7.1"
+stash = { version = "=0.1.14", path = "crates/stash", registry = "proton" }
 tempdir = "0.3.1"
 tempfile = "3.10.1"
 test-case = "3.3.1"
-thiserror = "1"
+thiserror = "1.0.61"
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+typed-builder = "0.20.0"
+uniffi = { version = "0.28.1", features = ["tokio"] }
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.8.0", features = ["serde", "v4"] }
 velcro = "0.5.4"
@@ -74,16 +69,7 @@ zeroize = "1.7.0"
 [workspace.dependencies.reqwest]
 version = "0.11"
 default-features = false
-features = [
-    "json",
-    "deflate",
-    "stream",
-    "cookies",
-    "multipart",
-    "rustls",
-    "rustls-tls",
-    "socks",
-]
+features = ["json", "deflate", "stream", "cookies", "multipart", "rustls", "rustls-tls", "socks"]
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
@@ -98,6 +84,8 @@ cast_possible_truncation = "warn"
 cast_possible_wrap = "warn"
 cast_precision_loss = "warn"
 cast_sign_loss = "warn"
+missing_errors_doc = "allow"
+module_name_repetitions = "allow"
 # Useful to track missing comments on private items/code.
 # missing_docs_in_private_items = "warn"
 mut_mut = "warn"
@@ -106,3 +94,10 @@ mut_mut = "warn"
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
+#TODO: Cargo build override rather than profile config(https://users.rust-lang.org/t/how-to-modify-profile-release-only-for-a-target/48811/3)
+
+[profile.bench]
+debug = true
+
+[profile.release]
+panic = "abort"
