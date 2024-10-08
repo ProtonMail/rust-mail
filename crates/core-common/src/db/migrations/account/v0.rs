@@ -31,6 +31,15 @@ async fn create_table_core_accounts(tx: &Tether) -> Result<(), StashError> {
                 -- The account's username or email address (used for login)
                 name_or_addr TEXT NOT NULL,
 
+                -- The account's username (once known)
+                username TEXT,
+
+                -- The account's display name (once known)
+                display_name TEXT,
+
+                -- The account's primary email address (once known)
+                primary_addr TEXT,
+
                 -- Timestamp of when account was made primary
                 primary_at INTEGER
             )

@@ -80,7 +80,7 @@ impl Session {
         self.auth_store()
             .read()
             .await
-            .get_secrets()
+            .get_user_secrets()
             .map(|secrets| secrets.key_secret.clone())
     }
 

@@ -6,7 +6,9 @@ use crate::models::ModelExtension;
 use crate::os::KeyChain;
 use futures::future::BoxFuture;
 use futures::FutureExt;
-use proton_api_core::auth::{AuthSession, SecretString, Store, StoreError, UserSecrets};
+use proton_api_core::auth::{
+    AccountInfo, AuthSession, SecretString, Store, StoreError, UserSecrets,
+};
 use secrecy::{ExposeSecret, SecretVec};
 use stash::orm::Model;
 use stash::stash::{Interface, Stash};
@@ -50,7 +52,7 @@ impl AuthStore {
         SessionEncryptionKey::from_base64(&key).ok_or("Invalid encryption key".into())
     }
 
-    async fn get_session(&self) -> Result<Option<AuthSession>, StoreError> {
+    async fn get_auth_session(&self) -> Result<Option<AuthSession>, StoreError> {
         let key = self.encryption_key()?;
 
         let Some(account) = (if let Some(id) = &self.user_id {
@@ -82,7 +84,7 @@ impl AuthStore {
         }))
     }
 
-    async fn get_secrets(&self) -> Result<Option<UserSecrets>, StoreError> {
+    async fn get_user_secrets(&self) -> Result<Option<UserSecrets>, StoreError> {
         let key = self.encryption_key()?;
 
         let Some(session) = (if let Some(id) = &self.session_id {
@@ -99,13 +101,26 @@ impl AuthStore {
             return Ok(None);
         };
 
-        Ok(Some(UserSecrets::new(
-            session.account_id.into(),
-            key_secret.into(),
-        )))
+        Ok(Some(UserSecrets::new(key_secret.into())))
     }
 
-    async fn set_session(&mut self, auth: AuthSession) -> Result<(), StoreError> {
+    async fn get_account_info(&self) -> Result<Option<AccountInfo>, StoreError> {
+        let Some(user_id) = self.user_id.clone() else {
+            return Ok(None);
+        };
+
+        let Some(account) = CoreAccount::find_by_id(user_id, &self.stash).await? else {
+            return Ok(None);
+        };
+
+        Ok(Some(AccountInfo {
+            username: account.username,
+            display_name: account.display_name,
+            primary_addr: account.primary_addr,
+        }))
+    }
+
+    async fn set_auth_session(&mut self, auth: AuthSession) -> Result<(), StoreError> {
         let key = self.encryption_key()?;
 
         // Get the user and session IDs from the incoming auth session.
@@ -148,18 +163,48 @@ impl AuthStore {
             self.session_id = Some(session_id);
         }
 
-        // Commit the transaction.
-        Ok(tx.commit().await?)
+        tx.commit().await?;
+
+        Ok(())
     }
 
-    async fn set_secrets(&mut self, secrets: UserSecrets) -> Result<(), StoreError> {
-        let key = self.encryption_key()?;
-        let user_id = secrets.user_id.into();
-        let secret = secrets.key_secret;
+    async fn set_user_secrets(&mut self, data: UserSecrets) -> Result<(), StoreError> {
+        let Some(user_id) = self.user_id.clone() else {
+            return Err("failed to set user secrets: no user ID")?;
+        };
 
-        for session in CoreSession::find_by_user_id(user_id, &self.stash, None).await? {
-            session.with_key_secret(&secret, &key)?.save().await?;
+        let tx = self.stash.transaction().await?;
+        let key = self.encryption_key()?;
+        let sec = data.key_secret;
+
+        for session in CoreSession::find_by_user_id(user_id, &tx, None).await? {
+            session.with_key_secret(&sec, &key)?.save_using(&tx).await?;
         }
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn set_account_info(&mut self, info: AccountInfo) -> Result<(), StoreError> {
+        let AccountInfo {
+            username,
+            display_name,
+            primary_addr,
+        } = info;
+
+        let Some(user_id) = self.user_id.clone() else {
+            return Err("failed to set account info: no user ID")?;
+        };
+
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.stash).await? else {
+            return Err("failed to set account info: no account found")?;
+        };
+
+        account
+            .with_info(username, display_name, primary_addr)
+            .save()
+            .await?;
 
         Ok(())
     }
@@ -179,20 +224,28 @@ impl AuthStore {
 }
 
 impl Store for AuthStore {
-    fn get_session(&self) -> BoxFuture<Result<Option<AuthSession>, StoreError>> {
-        self.get_session().boxed()
+    fn get_auth_session(&self) -> BoxFuture<Result<Option<AuthSession>, StoreError>> {
+        self.get_auth_session().boxed()
     }
 
-    fn get_secrets(&self) -> BoxFuture<Result<Option<UserSecrets>, StoreError>> {
-        self.get_secrets().boxed()
+    fn get_user_secrets(&self) -> BoxFuture<Result<Option<UserSecrets>, StoreError>> {
+        self.get_user_secrets().boxed()
     }
 
-    fn set_session(&mut self, auth: AuthSession) -> BoxFuture<Result<(), StoreError>> {
-        self.set_session(auth).boxed()
+    fn get_account_info(&self) -> BoxFuture<Result<Option<AccountInfo>, StoreError>> {
+        self.get_account_info().boxed()
     }
 
-    fn set_secrets(&mut self, secrets: UserSecrets) -> BoxFuture<Result<(), StoreError>> {
-        self.set_secrets(secrets).boxed()
+    fn set_auth_session(&mut self, auth: AuthSession) -> BoxFuture<Result<(), StoreError>> {
+        self.set_auth_session(auth).boxed()
+    }
+
+    fn set_user_secrets(&mut self, data: UserSecrets) -> BoxFuture<Result<(), StoreError>> {
+        self.set_user_secrets(data).boxed()
+    }
+
+    fn set_account_info(&mut self, info: AccountInfo) -> BoxFuture<Result<(), StoreError>> {
+        self.set_account_info(info).boxed()
     }
 
     fn clear(&mut self) -> BoxFuture<Result<(), StoreError>> {

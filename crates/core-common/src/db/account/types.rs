@@ -44,6 +44,18 @@ pub struct CoreAccount {
     #[DbField]
     pub password_mode: PasswordMode,
 
+    /// The account's username (once known).
+    #[DbField]
+    pub username: Option<String>,
+
+    /// The account's display name (once known).
+    #[DbField]
+    pub display_name: Option<String>,
+
+    /// The account's primary email address (once known).
+    #[DbField]
+    pub primary_addr: Option<String>,
+
     /// Timestamp of when the account was last set as the primary account.
     #[DbField]
     pub primary_at: Option<Timestamp>,
@@ -61,16 +73,19 @@ impl CoreAccount {
     pub fn new(
         remote_id: RemoteId,
         name_or_addr: String,
-        tfa_mode: TfaStatus,
-        mbp_mode: PasswordMode,
+        second_factor_mode: TfaStatus,
+        password_mode: PasswordMode,
     ) -> Self {
         Self {
             remote_id,
             name_or_addr,
-            password_mode: mbp_mode,
-            second_factor_mode: tfa_mode,
+            second_factor_mode,
+            password_mode,
 
             // --- Optional fields ---
+            username: None,
+            display_name: None,
+            primary_addr: None,
             primary_at: None,
             row_id: None,
             stash: None,
@@ -88,6 +103,24 @@ impl CoreAccount {
         interface: &(impl Into<AgnosticInterface> + Interface),
     ) -> Result<Option<Self>, StashError> {
         Self::find_first("ORDER BY primary_at DESC", vec![], interface).await
+    }
+
+    /// Update the user info of the account.
+    #[must_use]
+    pub fn with_info(
+        self,
+        username: Option<String>,
+        display_name: Option<String>,
+        primary_addr: Option<String>,
+    ) -> Self {
+        Self {
+            username,
+            display_name,
+            primary_addr,
+
+            // --- preserve ---
+            ..self
+        }
     }
 
     /// Update the primary timestamp to now.

@@ -111,7 +111,7 @@ pub struct MailSessionParams {
     pub api_env_config: Option<ApiConfig>,
 }
 
-// #[uniffi::export]
+#[uniffi::export]
 impl MailSession {
     // NOTE: Callbacks can not be stored in record types, which is why they are still in the
     // constructor.
@@ -467,24 +467,33 @@ impl MailSession {
     /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: String) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
+        let user_id = user_id.into();
 
-        uniffi_async(async move { Ok(ctx.set_primary_account(user_id.into()).await?) }).await
+        uniffi_async(async move { Ok(ctx.set_primary_account(user_id).await?) }).await
+    }
+
+    /// Logs out all sessions of an account without deleting the account's data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn logout_account(&self, user_id: String) -> MailSessionResult<()> {
+        let ctx = self.ctx.clone();
+        let user_id = user_id.into();
+
+        uniffi_async(async move { Ok(ctx.logout_account(user_id).await?) }).await
     }
 
     /// Removes an account and all associated sessions and data.
     ///
     /// # Errors
+    ///
     /// Returns error if data can not be removed or the db operation failed.
-    pub async fn delete_account(&self, account: Arc<StoredAccount>) -> MailSessionResult<()> {
+    pub async fn delete_account(&self, user_id: String) -> MailSessionResult<()> {
         let ctx = self.ctx.clone();
+        let user_id = user_id.into();
 
-        uniffi_async(async move {
-            let account = account.account();
-            let user_id = account.remote_id.clone();
-
-            Ok(ctx.delete_account(user_id).await?)
-        })
-        .await
+        uniffi_async(async move { Ok(ctx.delete_account(user_id).await?) }).await
     }
 
     /// Check whether the network is connected/online.

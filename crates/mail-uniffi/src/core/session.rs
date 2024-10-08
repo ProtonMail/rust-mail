@@ -1,3 +1,4 @@
+use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use std::{borrow::Borrow, sync::Arc};
 
 use proton_core_common::{
@@ -6,6 +7,8 @@ use proton_core_common::{
 };
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use uniffi::{Enum, Record};
+
+use crate::mail::datatypes::AvatarInformation;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -67,10 +70,37 @@ impl StoredAccount {
         self.account.password_mode.into()
     }
 
+    /// The account's username (once known).
+    #[must_use]
+    pub fn username(&self) -> Option<String> {
+        self.account.username.clone()
+    }
+
+    /// The account's display name (once known).
+    #[must_use]
+    pub fn display_name(&self) -> Option<String> {
+        self.account.display_name.clone()
+    }
+
+    /// The account's primary email address (once known).
+    #[must_use]
+    pub fn primary_addr(&self) -> Option<String> {
+        self.account.primary_addr.clone()
+    }
+
     /// Get the state of the account.
     #[must_use]
     pub fn state(&self) -> StoredAccountState {
         self.state.borrow().into()
+    }
+
+    /// Get the avatar information for the account, if available.
+    #[must_use]
+    pub fn avatar_information(&self) -> Option<AvatarInformation> {
+        let name = self.account.display_name.as_ref()?;
+        let addr = self.account.primary_addr.as_ref()?;
+
+        Some(RealAvatarInformation::build(name, addr).into())
     }
 }
 

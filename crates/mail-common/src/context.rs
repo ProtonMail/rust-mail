@@ -340,17 +340,30 @@ impl MailContext {
         Ok(self.core_context.set_primary_account(user_id).await?)
     }
 
+    /// Logs out all sessions of an account without deleting the account's data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn logout_account(&self, user_id: RemoteId) -> MailContextResult<()> {
+        Ok(self.core_context.logout_account(user_id).await?)
+    }
+
     /// Removes a user session and deletes all associated data.
     ///
     /// # Errors
+    ///
     /// Returns error if data can not be removed or the db operation failed.
     pub async fn delete_account(&self, user_id: RemoteId) -> MailContextResult<()> {
         Ok(self.core_context.delete_account(user_id).await?)
     }
+
+    /// Set the network connected status.
     pub fn set_network_connected(&self, value: bool) {
         self.core_context.set_network_connected(value)
     }
 
+    /// Check if the network is connected.
     pub fn is_network_connected(&self) -> bool {
         self.core_context.is_network_corrected()
     }

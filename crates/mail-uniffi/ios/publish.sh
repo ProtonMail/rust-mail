@@ -5,7 +5,7 @@ set -eo pipefail
 # Read the Rust crate version
 
 cargo generate-lockfile 
-CRATE_VERSION=$(cargo pkgid --manifest-path=proton-mail-uniffi/Cargo.toml | cut -d "#" -f2)
+CRATE_VERSION=$(cargo pkgid --manifest-path=./crates/mail-uniffi/Cargo.toml | cut -d "#" -f2)
 echo $CRATE_VERSION
 
 cd ./tmp/ios-framework/

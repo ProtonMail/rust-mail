@@ -14,5 +14,5 @@ fi
 export GRADLE_USER_HOME=`pwd`/.gradle
 
 # Build and Publish lib to maven
-cd proton-mail-uniffi/android/
+cd ./crates/mail-uniffi/android/
 ./gradlew :lib:assembleRelease
