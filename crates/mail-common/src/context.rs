@@ -352,7 +352,7 @@ impl MailContext {
     /// Removes a user session and deletes all associated data.
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns error if data can not be removed or the db operation failed.
     pub async fn delete_account(&self, user_id: RemoteId) -> MailContextResult<()> {
         Ok(self.core_context.delete_account(user_id).await?)
