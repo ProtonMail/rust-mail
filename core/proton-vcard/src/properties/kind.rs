@@ -1,0 +1,190 @@
+use std::collections::HashSet;
+use std::fmt::{Debug, Formatter};
+
+use ical::generator::Property as IcalProperty;
+use velcro::hash_set;
+
+use crate::errors::{VcardValidationError, VcardValidationResult};
+use crate::parameters::any::Any;
+use crate::parameters::value::ValueType;
+use crate::properties::{any_debug, optional_debug, validate_parameters};
+use crate::validation::get_property_kind;
+use crate::values::iana_token::{is_iana_token_value, IanaToken};
+use crate::values::x_name::{is_x_name_value, XName};
+use crate::vcard::group_from_name;
+use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
+
+/// To specify the kind of object the vCard represents.
+#[derive(Clone)]
+pub struct Kind {
+    /// Value
+    pub value: KindValue,
+    /// type of the value (here nothing or "text")
+    pub value_type: Option<ValueType>,
+    /// Free parameters
+    pub any: HashSet<Any>,
+    /// Group this `CalendarUserAddress` belong to
+    pub group: Option<String>,
+}
+
+impl Kind {
+    /// Create a new KIND property without any parameter or group
+    #[must_use]
+    pub fn new(value: KindValue) -> Self {
+        Self {
+            value,
+            value_type: None,
+            any: HashSet::new(),
+            group: None,
+        }
+    }
+
+    /// Try to create a new KIND property without any parameter or group
+    ///
+    /// # Errors
+    ///   * if given value is not one of: "individual" / "group" / "org" / "location" / iana-token / x-name
+    pub fn new_validated(value: &str) -> VCardResult<Self> {
+        Ok(Self::new(KindValue::try_from(value)?))
+    }
+}
+
+impl Debug for Kind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Kind {{{:?}", self.value)?;
+        optional_debug!(self, f, VALUE, value_type);
+        any_debug!(self, f, any);
+        optional_debug!(self, f, group, group);
+        write!(f, "}}")
+    }
+}
+
+impl TryFrom<&IcalProperty> for Kind {
+    type Error = VCardError;
+
+    fn try_from(property: &IcalProperty) -> VCardResult<Self> {
+        let Some(value) = &property.value else {
+            return Err(VCardError::MissingValue(PropertyKind::Kind));
+        };
+        let mut result = Self {
+            value: KindValue::try_from(value.as_str())?,
+            value_type: None,
+            any: HashSet::new(),
+            group: group_from_name(&property.name),
+        };
+        if let Some(parameters) = &property.params {
+            for (name, values) in parameters {
+                match ParameterType::from(name.as_str()) {
+                    ParameterType::Value => {
+                        result.value_type = Some(
+                            ValueType::try_from(values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Kind))?,
+                        );
+                    }
+                    ParameterType::Any => {
+                        result.any.insert(
+                            Any::new_validated(name.as_str(), values.as_slice())
+                                .map_err(VCardError::from_parameter_error(PropertyKind::Kind))?,
+                        );
+                    }
+                    parameter_type => {
+                        return Err(VCardError::UnexpectedParameter(
+                            PropertyKind::Kind,
+                            parameter_type,
+                        ))
+                    }
+                }
+            }
+        };
+        Ok(result)
+    }
+}
+
+/// Possible values for Kind property
+#[derive(Clone, PartialEq)]
+pub enum KindValue {
+    /// Individual
+    Individual,
+    /// Group
+    Group,
+    /// Organization
+    Organization,
+    /// Location
+    Location,
+    /// Iana token
+    IanaToken(IanaToken),
+    /// X name
+    XName(XName),
+}
+
+impl Debug for KindValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            KindValue::Individual => write!(f, "Individual"),
+            KindValue::Group => write!(f, "Group"),
+            KindValue::Organization => write!(f, "Organization"),
+            KindValue::Location => write!(f, "Location"),
+            KindValue::IanaToken(v) => write!(f, "IT({v:?})"),
+            KindValue::XName(v) => write!(f, "XN({v:?})"),
+        }
+    }
+}
+
+impl TryFrom<&str> for KindValue {
+    type Error = VCardError;
+
+    fn try_from(value: &str) -> VCardResult<Self> {
+        match value.to_ascii_lowercase().as_str() {
+            "individual" => Ok(Self::Individual),
+            "group" => Ok(Self::Group),
+            "org" => Ok(Self::Organization),
+            "location" => Ok(Self::Location),
+            _ => {
+                if is_x_name_value(value) {
+                    Ok(Self::XName(XName::try_from(value).map_err(
+                        VCardError::from_value_error(PropertyKind::Kind),
+                    )?))
+                } else if is_iana_token_value(value) {
+                    Ok(Self::IanaToken(IanaToken::try_from(value).map_err(
+                        VCardError::from_value_error(PropertyKind::Kind),
+                    )?))
+                } else {
+                    Err(VCardError::InvalidValue(
+                        PropertyKind::Kind,
+                        value.to_owned(),
+                    ))
+                }
+            }
+        }
+    }
+}
+
+/// Validate that the given `property` respect the format for a `KIND` property
+///
+/// # Errors
+///   * if property value is not one of: "individual" / "group" / "org" / "location" / iana-token / x-name
+///   * if any of the parameters is invalid
+pub fn validate_kind(property: &IcalProperty) -> VcardValidationResult<()> {
+    // KIND-param = "VALUE=text" / any-param
+    // KIND-value = "individual" / "group" / "org" / "location" / iana-token / x-name
+    let validate_value = if let Some(value) = &property.value {
+        match value.to_ascii_lowercase().as_str() {
+            "individual" | "group" | "org" | "location" => true,
+            value => is_iana_token_value(value) || is_x_name_value(value),
+        }
+    } else {
+        false
+    };
+
+    if validate_value {
+        validate_parameters(
+            property,
+            ValueType::Text,
+            &hash_set!(ParameterType::Value, ParameterType::Any),
+        )?;
+    } else {
+        return Err(VcardValidationError::InvalidPropertyValue(
+            get_property_kind(&property.name)?,
+        ));
+    }
+    Ok(())
+}

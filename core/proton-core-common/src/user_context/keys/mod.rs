@@ -1,0 +1,235 @@
+//! Contains the logic to access PGP keys from the `UserContext`.
+mod cache;
+
+use bytes::Buf;
+use cache::{CachedAddressKey, CachedUserKey};
+mod manager;
+use crate::{
+    datatypes::RemoteId,
+    models::{Contact, ContactEmail},
+    ContactError,
+};
+use ical::VcardParser;
+pub use manager::*;
+use proton_api_core::{auth::UserKeySecret, session::CoreSession};
+use proton_crypto_account::{
+    contacts::{ContactCardType, DecryptableVerifiableCard},
+    errors::{AccountCryptoError, CardCryptoError},
+    keys::{PinnedPublicKeys, PublicAddressKeys, UnlockedAddressKeys, UnlockedUserKeys},
+    proton_crypto::{crypto::PGPProviderSync, CryptoError},
+};
+use proton_vcard::{vcard::VCard, VCardError};
+use stash::params;
+use stash::{orm::Model, stash::StashError};
+use thiserror::Error;
+use tracing::{debug, Level};
+
+use crate::{CoreContextResult, UserContext};
+
+#[allow(clippy::module_name_repetitions)]
+type CachedUserKeys = Vec<CachedUserKey>;
+#[allow(clippy::module_name_repetitions)]
+type CachedAddressKeys = Vec<CachedAddressKey>;
+
+/// Result for key handling  operations.
+pub type KeyHandlingResult<T> = Result<T, KeyHandlingError>;
+
+/// An error type that is thrown when loading keys
+/// via the [`CryptoKeyManager`].
+#[derive(Debug, Error)]
+pub enum KeyHandlingError {
+    #[error("No keys found in contacts")]
+    NoKeys,
+    #[error("No user found")]
+    NoUser,
+    #[error("No user secret found")]
+    NoUserSecret,
+    #[error("No valid pinned keys found in signed contact card")]
+    NoPinnedKeyInCard,
+    #[error("No user keys unlocked but has {0} user keys")]
+    UserKeyUnlock(usize),
+    #[error("Failed to store user keys in the cache {0}")]
+    UserKeyCacheStore(#[from] CryptoError),
+    #[error("No address found for id {0}")]
+    NoAddress(RemoteId),
+    #[error("Failed to unlock at least one address key, but the user has {0} address keys")]
+    AddressKeyUnlock(usize),
+    #[error("Database Error: {0}")]
+    DB(#[from] StashError),
+    #[error("Problem decrypting and/or verifying the signature of the contact card: {0}")]
+    CardDecryptionVerificationError(#[from] CardCryptoError),
+    #[error("An account crypto error occured: {0}")]
+    AccountCrypto(#[from] AccountCryptoError),
+    #[error("Failed to load key data from contact v-card: {0}")]
+    VCard(#[from] VCardError),
+}
+
+/// A trait that loads the user secret to unlock the user keys.
+pub trait LoadKeySecret {
+    /// Loads the user secret to unlock the user keys.
+    fn key_secret(&self) -> Option<UserKeySecret>;
+}
+
+impl UserContext {
+    /// Returns the unlocked user keys of this user.
+    ///
+    /// First tries to retrieve them from the cache else
+    /// it loads and unlocks them from the database.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `secret_loader` - The struct providing the access to the secret needed to unlock the user keys
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub async fn unlocked_user_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
+        &self,
+        pgp_provider: &Provider,
+        secret_loader: &Secret,
+    ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
+        self.key_manager
+            .user_keys(pgp_provider, secret_loader, self)
+            .await
+    }
+
+    /// Returns the unlocked address keys of this user for the given address.
+    ///
+    /// Loads the address keys from the database and unlocks them with the user keys.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `secret_load_fn` - The struct providing the access to the secret needed to unlock the user keys
+    /// * `address_id` - The ID of the address key
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub async fn unlocked_address_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
+        &self,
+        pgp_provider: &Provider,
+        secret_loader: &Secret,
+        address_id: &RemoteId,
+    ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
+        self.key_manager
+            .address_keys(pgp_provider, secret_loader, self, address_id)
+            .await
+    }
+
+    /// Loads the public address keys for an email address from the backend API.
+    ///
+    /// Imports the keys with the PGP provider. In the future, this function will also
+    /// verify the keys with key transparency.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `email` - The email address the public address keys are being requested for.
+    /// * `internal_only` - A flag used to indicate if the keys requested are internal-only, i.e. keys for a Proton user.
+    ///
+    /// # Errors
+    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    pub async fn public_address_keys<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        email: &str,
+        internal_only: bool,
+    ) -> CoreContextResult<PublicAddressKeys<<Provider>::PublicKey>> {
+        self.key_manager
+            .public_address_keys(pgp_provider, email, internal_only, self)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Loads the public address keys pinned to a user's contact, if any.
+    ///
+    /// Performs the following operations:
+    /// - Searches for the contact email matching the input email in the database.
+    /// - If no contact matches returns None, else Syncs the full contact with cards
+    /// - Extracts the pinned keys from the signed `VCard` if any
+    /// - Verifies the signature of the `VCard` with the unlocked user keys
+    /// - Returns the pinned keys if any else None
+    ///
+    /// Parameters
+    ///
+    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `unlocked_user_keys` - Unlocked keys for the current user, these are used to decrypt and verify the contact cards.
+    /// * `email` - the email address that keys are being sought for.
+    ///
+    /// # Errors
+    /// Returns an error on a database or sync failure.
+    /// - A DB/IO error if syncing the contact or accessing the contacts fails.
+    /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
+    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, unlocked_user_keys))]
+    pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync>(
+        &self,
+        pgp_provider: &Provider,
+        unlocked_user_keys: &UnlockedUserKeys<Provider>,
+        email: &str,
+    ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>> {
+        // First, we try to load an contact emails that matches the email.
+        debug!("Try to load the contact email for {email} from the db");
+        let contact_email =
+            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], self.stash())
+                .await?
+                .ok_or(ContactError::CardNotFound(email.to_owned()))?;
+
+        let local_contact_id =
+            contact_email
+                .local_contact_id
+                .ok_or(ContactError::ContactCardRemoteIdNotPresent(
+                    email.to_owned(),
+                ))?;
+
+        // On success try to sync the most recent full contact including its v-cards from the BE.
+        Contact::sync_with_card(local_contact_id, self.session().api(), self.stash()).await?;
+
+        let mut contact = Contact::load(local_contact_id, self.stash())
+            .await?
+            .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
+
+        debug!("Full contact with cards found");
+        Ok(extract_pinned_keys(pgp_provider, unlocked_user_keys, &mut contact, email).await?)
+    }
+}
+
+/// Helper function to extract pinned keys from a contact with cards.
+async fn extract_pinned_keys<Provider: PGPProviderSync>(
+    pgp_provider: &Provider,
+    unlocked_user_keys: &UnlockedUserKeys<Provider>,
+    full_contact: &mut Contact,
+    email: &str,
+) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError> {
+    // The pinned key information can be found in the signed v-card.
+    let signed_card_opt = full_contact
+        .cards()
+        .await?
+        .iter()
+        .find(|card| card.card_type == ContactCardType::Signed);
+
+    let Some(signed_card) = signed_card_opt else {
+        return Ok(None);
+    };
+
+    let mut verification_keys = Vec::with_capacity(unlocked_user_keys.len());
+    unlocked_user_keys
+        .iter()
+        .for_each(|uuk| verification_keys.push(uuk.public_key.clone()));
+
+    // Verify the signature of the v-card.
+    let card_data = signed_card.decrypt_and_verify_sync(
+        pgp_provider,
+        &pgp_provider.empty_private_keys(),
+        &verification_keys,
+    )?;
+
+    // Parse the v-card.
+    let vcard_parser = VcardParser::new(card_data.reader()).flatten();
+    for card in vcard_parser {
+        if let Ok(vcard) = VCard::try_from(card) {
+            return Ok(vcard.pinned_keys_for_mail(pgp_provider, email));
+        }
+    }
+
+    Err(KeyHandlingError::NoPinnedKeyInCard)
+}

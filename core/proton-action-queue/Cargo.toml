@@ -1,0 +1,36 @@
+[package]
+name = "proton-action-queue"
+version = "0.7.27"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+indoc = { workspace = true }
+log = "0.4.20"
+parking_lot = { workspace = true }
+proton-api-core = { workspace = true }
+proton-sqlite3 = { workspace = true }
+rmp = "0.8"
+rmp-serde = "1.1"
+serde = { workspace = true }
+stash = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+topological-sort = "0.2.2"
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+reqwest = { workspace = true }
+tempfile = "3"
+tracing-subscriber = "0.3"
+tracing-test = { version = "0.2", features = ["no-env-filter"] }
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

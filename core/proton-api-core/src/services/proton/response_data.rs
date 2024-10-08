@@ -1,0 +1,977 @@
+//! Response child data structures for the Proton API.
+//!
+//! This module provides child data types that are used by the response
+//! structures when receiving requests from the Proton API.
+//!
+//! The purpose of the API service is to provide not only the means to make
+//! requests, but also a formalisation of the data that is sent and received. To
+//! this end, the structs in this module should mirror the API endpoint response
+//! definitions, and NOT have any business logic or other functionality.
+//!
+//! To be clear, they should only contain data, and not methods; should not be
+//! saved in the database; and should not be used for anything except providing
+//! an interface for incoming data.
+//!
+//! Structs in this module should only implement [`Deserialize`], and should not
+//! implement [`Serialize`](serde::Serialize). If anything in this module
+//! implements [`Serialize`](serde::Serialize), it is a sign that a mistake has
+//! been made. The exception here is for testing purposes, e.g. when mocking
+//! response data — in which case implementing [`Serialize`](serde::Serialize)
+//! conditionally, only in test mode, is advised.
+//!
+//! Any types that used by both requests and responses should be defined in the
+//! [`common`](crate::services::proton::common) module.
+//!
+
+use crate::services::proton::common::{Fido2Auth, HumanVerificationType, RemoteId};
+use crate::services::proton::responses::GetEventResponse;
+use proton_crypto_account::contacts::ContactCardType;
+use proton_crypto_account::keys::{AddressKeys, UserKeys};
+use serde::Deserialize;
+#[cfg(any(test, debug_assertions))]
+use serde::Serialize;
+use serde_aux::field_attributes::deserialize_default_from_null;
+use serde_json::Value as JsonValue;
+use serde_repr::Deserialize_repr;
+#[cfg(any(test, debug_assertions))]
+use serde_repr::Serialize_repr;
+use serde_with::{serde_as, BoolFromInt, FromInto};
+
+//  ENUMS
+//==============================================================================
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum Action {
+    /// TODO: Document this field.
+    Delete = 0,
+
+    /// TODO: Document this field.
+    Create = 1,
+
+    /// TODO: Document this field.
+    Update = 2,
+
+    /// TODO: Document this field.
+    UpdateFlags = 3,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum AddressStatus {
+    /// TODO: Document this field.
+    Disabled = 0,
+
+    /// TODO: Document this field.
+    Enabled = 1,
+
+    /// TODO: Document this field.
+    Deleting = 2,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum AddressType {
+    /// TODO: Document this variant.
+    Original = 1,
+
+    /// TODO: Document this variant.
+    Alias = 2,
+
+    /// TODO: Document this variant.
+    Custom = 3,
+
+    /// TODO: Document this variant.
+    Premium = 4,
+
+    /// TODO: Document this variant.
+    External = 5,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum ContactSendingPreferences {
+    /// TODO: Document this variant.
+    Custom = 0,
+
+    /// TODO: Document this variant.
+    Default = 1,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum DateFormat {
+    /// TODO: Document this variant.
+    Default = 0,
+
+    /// TODO: Document this variant.
+    DdMmYyyy = 1,
+
+    /// TODO: Document this variant.
+    MmDdYyyy = 2,
+
+    /// TODO: Document this variant.
+    YyyyMmDd = 3,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum Density {
+    /// TODO: Document this variant.
+    Comfortable = 0,
+
+    /// TODO: Document this variant.
+    Compact = 1,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum EarlyAccess {
+    /// TODO: Document this variant.
+    Regular = 0,
+
+    /// TODO: Document this variant.
+    Beta = 1,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum LogAuth {
+    /// TODO: Document this variant.
+    Disabled = 0,
+
+    /// TODO: Document this variant.
+    Basic = 1,
+
+    /// TODO: Document this variant.
+    Advanced = 2,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum PasswordMode {
+    /// TODO: Document this variant.
+    One = 1,
+
+    /// TODO: Document this variant.
+    Two = 2,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum TfaStatus {
+    /// TODO: Document this variant.
+    None = 0,
+
+    /// TODO: Document this variant.
+    Totp = 1,
+
+    /// TODO: Document this variant.
+    Fido2 = 2,
+
+    /// TODO: Document this variant.
+    TotpOrFido2 = 3,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum TimeFormat {
+    /// TODO: Document this variant.
+    Default = 0,
+
+    /// TODO: Document this variant.
+    H24 = 1,
+
+    /// TODO: Document this variant.
+    H12 = 2,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum UserMnemonicStatus {
+    /// TODO: Document this variant.
+    Disabled = 0,
+
+    /// TODO: Document this variant.
+    EnabledButNotSet = 1,
+
+    /// TODO: Document this variant.
+    EnabledNeedsReactivation = 2,
+
+    /// TODO: Document this variant.
+    EnabledAndSet = 3,
+
+    /// TODO: Document this variant.
+    Unknown = 4,
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[repr(u8)]
+pub enum UserType {
+    /// TODO: Document this variant.
+    Proton = 1,
+
+    /// TODO: Document this variant.
+    Managed = 2,
+
+    /// TODO: Document this variant.
+    External = 3,
+
+    Unknown(u8),
+}
+
+impl From<u8> for UserType {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::Proton,
+            2 => Self::Managed,
+            3 => Self::External,
+            v => Self::Unknown(v),
+        }
+    }
+}
+
+impl From<UserType> for u8 {
+    fn from(value: UserType) -> Self {
+        match value {
+            UserType::Proton => 1,
+            UserType::Managed => 2,
+            UserType::External => 3,
+            UserType::Unknown(v) => v,
+        }
+    }
+}
+
+/// TODO: Document this enum.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum WeekStart {
+    /// TODO: Document this variant.
+    Default = 0,
+
+    /// TODO: Document this variant.
+    Monday = 1,
+
+    /// TODO: Document this variant.
+    Saturday = 6,
+
+    /// TODO: Document this variant.
+    Sunday = 7,
+}
+
+//  STRUCTS
+//==============================================================================
+
+/// TODO: Document this struct.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[allow(clippy::struct_excessive_bools)]
+pub struct Address {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "Type")]
+    pub address_type: AddressType,
+
+    /// TODO: Document this field.
+    pub catch_all: bool,
+
+    /// TODO: Document this field.
+    pub display_name: String,
+
+    /// TODO: Document this field.
+    #[serde(rename = "DomainID")]
+    pub domain_id: Option<String>,
+
+    /// TODO: Document this field.
+    pub email: String,
+
+    /// TODO: Document this field.
+    pub keys: AddressKeys,
+
+    /// TODO: Document this field.
+    pub order: u32,
+
+    /// TODO: Document this field.
+    #[serde(rename = "ProtonMX")]
+    pub proton_mx: bool,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub receive: bool,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub send: bool,
+
+    /// TODO: Document this field.
+    pub signature: String,
+
+    /// TODO: Document this field.
+    #[serde(deserialize_with = "deserialize_default_from_null")]
+    pub signed_key_list: AddressSignedKeyList,
+
+    /// TODO: Document this field.
+    pub status: AddressStatus,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct AddressSignedKeyList {
+    /// TODO: Document this field.
+    pub data: Option<String>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "ExpectedMinEpochID")]
+    pub expected_min_epoch_id: Option<u64>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "MaxEpochID")]
+    pub max_epoch_id: Option<u64>,
+
+    /// TODO: Document this field.
+    #[serde(rename = "MinEpochID")]
+    pub min_epoch_id: Option<u64>,
+
+    /// TODO: Document this field.
+    pub obsolescence_token: Option<String>,
+
+    /// TODO: Document this field.
+    pub revision: u64,
+
+    /// TODO: Document this field.
+    pub signature: Option<String>,
+}
+
+/// Additional information about an API service error.
+///
+/// If a response is received with an HTTP status code that indicates a protocol
+/// error, then it may be accompanied by additional information about the error.
+/// This struct provides a way to access that information.
+///
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ApiErrorInfo {
+    /// Internal API code.
+    pub code: u32,
+
+    /// Optional error message that may be present.
+    pub error: Option<String>,
+
+    /// Optional JSON type with error details.
+    pub details: Option<JsonValue>,
+}
+
+/// Represents partial contact information returned by the API.
+///
+/// The partial contact information does not contain the contact emails and the
+/// v-cards.
+///
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactBasic {
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    pub create_time: u64,
+
+    /// TODO: Document this field.
+    #[serde(rename = "LabelIDs")]
+    pub label_ids: Vec<RemoteId>,
+
+    /// TODO: Document this field.
+    pub modify_time: u64,
+
+    /// TODO: Document this field.
+    pub name: String,
+
+    /// TODO: Document this field.
+    pub size: u64,
+
+    /// TODO: Document this field.
+    #[serde(rename = "UID")]
+    pub uid: RemoteId,
+}
+
+/// Represents a contact card returned by the API.
+///
+/// Contact cards contain information encoded as a v-card. Cards can be
+/// encrypted or signed with the user keys.
+///
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactCard {
+    /// TODO: Document this field.
+    #[serde(rename = "Type")]
+    pub card_type: ContactCardType,
+
+    /// TODO: Document this field.
+    pub data: String,
+
+    /// TODO: Document this field.
+    pub signature: Option<String>,
+}
+
+/// Models the contact email addresses for a contact returned by the API.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactEmail {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    #[serde(rename = "ContactID")]
+    pub contact_id: RemoteId,
+
+    /// TODO: Document this field.
+    pub canonical_email: String,
+
+    /// TODO: Document this field.
+    #[serde(rename = "Type")]
+    pub contact_type: Vec<String>,
+
+    /// TODO: Document this field.
+    pub defaults: ContactSendingPreferences,
+
+    /// TODO: Document this field.
+    pub email: String,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub is_proton: bool,
+
+    /// TODO: Document this field.
+    #[serde(rename = "LabelIDs")]
+    pub label_ids: Vec<RemoteId>,
+
+    /// TODO: Document this field.
+    pub last_used_time: u64,
+
+    /// TODO: Document this field.
+    pub name: String,
+
+    /// TODO: Document this field.
+    pub order: u32,
+}
+
+/// Data for an event related to a [`ContactEmail`] record.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactEmailEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub contact_email: Option<ContactEmail>,
+}
+
+impl GetEventResponse for ContactEmailEvent {}
+
+/// Data for an event related to a [`ContactBasic`] record.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactEvent {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    pub action: Action,
+
+    /// TODO: Document this field.
+    pub contact: Option<ContactBasic>,
+}
+
+impl GetEventResponse for ContactEvent {}
+
+/// A complete contact returned by the API.
+///
+/// Compared to the [`ContactBasic`], it additionally includes all associated
+/// contact emails ([`ContactEmail`]) and cards ([`ContactCard`]).
+///
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ContactFull {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    pub cards: Vec<ContactCard>,
+
+    /// TODO: Document this field.
+    pub contact_emails: Vec<ContactEmail>,
+
+    /// TODO: Document this field.
+    pub create_time: u64,
+
+    /// TODO: Document this field.
+    #[serde(rename = "LabelIDs")]
+    pub label_ids: Vec<RemoteId>,
+
+    /// TODO: Document this field.
+    pub modify_time: u64,
+
+    /// TODO: Document this field.
+    pub name: String,
+
+    /// TODO: Document this field.
+    pub size: u64,
+
+    /// TODO: Document this field.
+    #[serde(rename = "UID")]
+    pub uid: RemoteId,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Email {
+    /// TODO: Document this field.
+    pub notify: u8,
+
+    /// TODO: Document this field.
+    pub reset: u8,
+
+    /// TODO: Document this field.
+    pub status: u8,
+
+    /// TODO: Document this field.
+    #[serde(deserialize_with = "deserialize_default_from_null")]
+    pub value: String,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Fido2Info {
+    /// TODO: Document this field.
+    pub authentication_options: JsonValue,
+
+    /// TODO: Document this field.
+    pub registered_keys: Option<JsonValue>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct FidoKey {
+    /// TODO: Document this field.
+    pub attestation_format: String,
+
+    /// TODO: Document this field.
+    #[serde(rename = "CredentialID")]
+    pub credential_id: Vec<i32>,
+
+    /// TODO: Document this field.
+    pub name: String,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[allow(clippy::struct_excessive_bools)]
+pub struct Flags {
+    /// TODO: Document this field.
+    #[serde(rename = "has-temporary-password")]
+    pub has_temporary_password: bool,
+
+    /// TODO: Document this field.
+    #[serde(rename = "no-login")]
+    pub no_login: bool,
+
+    /// TODO: Document this field.
+    #[serde(rename = "no-proton-address")]
+    pub no_proton_address: bool,
+
+    /// TODO: Document this field.
+    #[serde(rename = "onboard-checklist-storage-granted")]
+    pub onboard_checklist_storage_granted: bool,
+
+    /// TODO: Document this field.
+    pub protected: bool,
+
+    /// TODO: Document this field.
+    #[serde(rename = "recovery-attempt")]
+    pub recovery_attempt: bool,
+
+    /// TODO: Document this field.
+    pub sso: bool,
+
+    /// TODO: Document this field.
+    #[serde(rename = "test-account")]
+    pub test_account: bool,
+}
+
+/// TODO: Document this struct.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct HighSecurity {
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub eligible: bool,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub value: bool,
+}
+
+/// Information for the human verification challenge.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct HumanVerificationChallenge {
+    /// Types of supported verification.
+    pub methods: Vec<HumanVerificationType>,
+
+    /// Token for the verification request.
+    pub token: String,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Password {
+    /// TODO: Document this field.
+    pub mode: u32,
+
+    /// TODO: Document this field.
+    pub expiration_time: Option<u64>,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Phone {
+    /// TODO: Document this field.
+    pub notify: u8,
+
+    /// TODO: Document this field.
+    pub reset: u8,
+
+    /// TODO: Document this field.
+    pub status: u8,
+
+    /// TODO: Document this field.
+    #[serde(deserialize_with = "deserialize_default_from_null")]
+    pub value: String,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct ProductUsedSpace {
+    /// TODO: Document this field.
+    pub calendar: i64,
+
+    /// TODO: Document this field.
+    pub contact: i64,
+
+    /// TODO: Document this field.
+    pub drive: i64,
+
+    /// TODO: Document this field.
+    pub mail: i64,
+
+    /// TODO: Document this field.
+    pub pass: i64,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Referral {
+    /// TODO: Document this field.
+    pub eligible: bool,
+
+    /// TODO: Document this field.
+    pub link: String,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct Salt {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    pub key_salt: Option<String>,
+}
+
+/// TODO: Document this struct.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct SettingsFlags {
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub in_app_promos_hidden: bool,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub welcomed: bool,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct TfaAuth {
+    /// TODO: Document this field.
+    #[serde(rename = "FIDO2")]
+    pub fido2: Fido2Auth,
+
+    /// TODO: Document this field.
+    pub two_factor_code: String,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct TfaInfo {
+    /// TODO: Document this field.
+    pub enabled: TfaStatus,
+
+    /// TODO: Document this field.
+    #[serde(rename = "FIDO2")]
+    pub fido2_info: Fido2Info,
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct TwoFa {
+    /// TODO: Document this field.
+    pub allowed: TfaStatus,
+
+    /// TODO: Document this field.
+    pub enabled: TfaStatus,
+
+    /// TODO: Document this field.
+    pub expiration_time: Option<u64>,
+
+    /// TODO: Document this field.
+    #[serde(default)]
+    pub registered_keys: Vec<FidoKey>,
+}
+
+/// TODO: Document this struct.
+/// Represents an API user
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct User {
+    /// TODO: Document this field.
+    #[serde(rename = "ID")]
+    pub id: RemoteId,
+
+    /// TODO: Document this field.
+    pub create_time: u64,
+
+    /// TODO: Document this field.
+    pub credit: i64,
+
+    /// TODO: Document this field.
+    pub currency: String,
+
+    /// TODO: Document this field.
+    pub delinquent: u32,
+
+    /// TODO: Document this field.
+    pub display_name: Option<String>,
+
+    /// TODO: Document this field.
+    pub email: String,
+
+    /// TODO: Document this field.
+    pub flags: Flags,
+
+    /// TODO: Document this field.
+    pub keys: UserKeys,
+
+    /// TODO: Document this field.
+    pub max_space: i64,
+
+    /// TODO: Document this field.
+    pub max_upload: i64,
+
+    /// TODO: Document this field.
+    pub mnemonic_status: UserMnemonicStatus,
+
+    /// TODO: Document this field.
+    pub name: Option<String>,
+
+    /// TODO: Document this field.
+    pub private: u32,
+
+    /// TODO: Document this field.
+    pub product_used_space: ProductUsedSpace,
+
+    /// TODO: Document this field.
+    pub role: u32,
+
+    /// TODO: Document this field.
+    pub services: u32,
+
+    /// TODO: Document this field.
+    pub subscribed: u32,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub to_migrate: bool,
+
+    /// TODO: Document this field.
+    pub used_space: i64,
+
+    /// TODO: Document this field.
+    #[serde(rename = "Type")]
+    #[serde_as(as = "FromInto<u8>")]
+    pub user_type: UserType,
+}
+
+/// TODO: Document this struct.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+#[allow(clippy::struct_excessive_bools)]
+pub struct UserSettings {
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub crash_reports: bool,
+
+    /// TODO: Document this field.
+    pub date_format: DateFormat,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub device_recovery: bool,
+
+    /// TODO: Document this field.
+    pub density: Density,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub early_access: bool,
+
+    /// TODO: Document this field.
+    pub email: Email,
+
+    /// TODO: Document this field.
+    pub flags: SettingsFlags,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub hide_side_panel: bool,
+
+    /// TODO: Document this field.
+    pub high_security: HighSecurity,
+
+    /// TODO: Document this field.
+    pub invoice_text: String,
+
+    /// TODO: Document this field.
+    pub locale: String,
+
+    /// TODO: Document this field.
+    pub log_auth: LogAuth,
+
+    /// TODO: Document this field.
+    pub news: u32,
+
+    /// TODO: Document this field.
+    pub password: Password,
+
+    /// TODO: Document this field.
+    pub phone: Phone,
+
+    /// TODO: Document this field.
+    pub referral: Option<Referral>,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub session_account_recovery: bool,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub telemetry: bool,
+
+    /// TODO: Document this field.
+    pub time_format: TimeFormat,
+
+    /// TODO: Document this field.
+    #[serde(rename = "2FA")]
+    pub two_factor_auth: TwoFa,
+
+    /// TODO: Document this field.
+    pub week_start: WeekStart,
+
+    /// TODO: Document this field.
+    #[serde_as(as = "BoolFromInt")]
+    pub welcome: bool,
+}

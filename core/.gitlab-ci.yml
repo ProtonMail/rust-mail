@@ -1,0 +1,155 @@
+image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+
+include:
+  - project: "rust/shared/registry"
+    file: "upload_template.yml"
+
+default:
+  tags:
+    - shared-medium
+
+# Config git acccess to other repos
+.script-config-git:
+  script:
+    - git config --global url.https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}.insteadOf https://${CI_SERVER_HOST}
+
+stages:
+  - lint
+  - build
+  - deploy
+
+.do_fmt_check:
+  script:
+    - cargo fmt --check
+
+.do_clippy_check:
+  script:
+    - !reference [ .script-config-git, script ]
+    - cargo clippy -- -D warnings
+
+format:
+  stage: lint
+  script:
+    - !reference [ .do_fmt_check, script ]
+
+clippy:
+  stage: lint
+  script:
+    - !reference [ .do_clippy_check, script ]
+
+build:
+  tags:
+    - shared-large
+  stage: build
+  script:
+    - !reference [ .script-config-git, script ]
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo build
+    - RUSTFLAGS="-C link-arg=-fuse-ld=lld" cargo nextest run --color=never
+
+build-android:
+  stage: build
+  script:
+    - !reference [ .script-config-git, script ]
+    - cargo ndk -t "armeabi-v7a" -t "arm64-v8a" -t "x86_64" build --release
+
+build-macos:
+  tags:
+    - inbox-tart
+  image: "inbox-rust:1.81.0"
+  stage: build
+  script:
+    - !reference [ .script-config-git, script ]
+    - cargo build --release
+    - cargo nextest run --color=never
+
+build-ios:
+  tags:
+    - inbox-tart
+  image: "inbox-rust:1.81.0"
+  stage: build
+  script:
+    - !reference [ .script-config-git, script ]
+    - cargo build --release --target --target x86_64-apple-ios
+    - cargo build --release --target --target aarch64-apple-ios-sim
+    - cargo build --release --target --target aarch64-apple-ios
+
+# ------------ Crate Publishing -----------------------------------------------------------------------------------
+# Crates are listed in the order they should be published
+
+deploy-proton-sqlite3:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-sqlite3/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-sqlite3/Cargo.toml"
+  when: manual
+
+deploy-proton-api-core:
+  extends: .deploy_to_protonvpn_repository
+  tags:
+    - shared-medium
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-api-core/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-api-core/Cargo.toml"
+  when: manual
+
+deploy-proton-action-queue:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-action-queue/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-action-queue/Cargo.toml"
+  when: manual
+
+deploy-proton-event-loop:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-event-loop/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-event-loop/Cargo.toml"
+  when: manual
+
+deploy-proton-core-common:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-core-common/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-core-common/Cargo.toml"
+  when: manual
+
+deploy-stash-macros:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path stash-macros/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path stash-macros/Cargo.toml"
+  when: manual
+
+deploy-proton-vcard:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path proton-vcard/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path proton-vcard/Cargo.toml"
+  when: manual
+
+deploy-stash:
+  extends: .deploy_to_protonvpn_repository
+  image: gitlab.protontech.ch:4567/rust/inbox/docker-images:rust-1.81.0-v3
+  tags:
+    - shared-medium
+  variables:
+    CARGO_PACKAGE_OPTIONS: "--manifest-path stash/Cargo.toml"
+    CARGO_MANIFEST_OPTIONS: "--manifest-path stash/Cargo.toml"
+  when: manual

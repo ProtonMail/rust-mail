@@ -1,0 +1,55 @@
+use std::fmt::{Debug, Formatter};
+
+use regex_static::static_regex;
+
+use crate::errors::{VCardValueError, VCardValueResult};
+use crate::parameters::value::ValueType;
+
+/// Represent a iana-token value from vCard RFC6350
+#[derive(Clone, Eq, Hash, PartialEq)]
+pub struct IanaToken(pub(crate) String);
+
+impl IanaToken {
+    /// Create a new iana-token (no check is done)
+    #[must_use]
+    pub fn new_unchecked(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+
+    /// Try to create a new iana-token
+    ///
+    /// # Errors
+    ///   * if given value is not a valid iana token (only alphanumeric and dash allowed)
+    pub fn new_validated(value: &str) -> VCardValueResult<Self> {
+        Self::try_from(value)
+    }
+}
+
+impl Debug for IanaToken {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "IT({})", self.0)
+    }
+}
+
+impl TryFrom<&str> for IanaToken {
+    type Error = VCardValueError;
+
+    fn try_from(value: &str) -> VCardValueResult<Self> {
+        if is_iana_token_value(value) {
+            Ok(Self(value.to_owned()))
+        } else {
+            Err(VCardValueError::Invalid(
+                ValueType::IanaToken,
+                value.to_owned(),
+            ))
+        }
+    }
+}
+
+/// Validate that given `value` respect format for `iana-token` values
+pub fn is_iana_token_value(value: &str) -> bool {
+    // iana-token = 1*(ALPHA / DIGIT / "-")
+    //  ; identifier registered with IANA
+    let re = static_regex!("^[a-zA-Z0-9-]+$");
+    re.is_match(value)
+}

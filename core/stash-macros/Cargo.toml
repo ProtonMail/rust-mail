@@ -1,0 +1,20 @@
+[package]
+name = "stash-macros"
+version = "0.1.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0.83"
+quote = "1.0.36"
+syn = "2.0.66"
+
+[dev-dependencies]
+rusqlite = { workspace = true }
+serde = { workspace = true }
+stash = { version = "0.1.0", path = "../stash" }
+uuid = { workspace = true }

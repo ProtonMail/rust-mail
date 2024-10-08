@@ -1,0 +1,36 @@
+[package]
+name = "proton-sqlite3"
+version = "0.7.14"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fixedbitset = "0.5"
+flume = { workspace = true }
+futures = { workspace = true }
+notify = { version = "6", default-features = false, features = ["macos_fsevent"], optional = true }
+parking_lot = { workspace = true }
+paste = { workspace = true }
+rusqlite = { version = "0.31.0", features = ["bundled", "modern_sqlite", "uuid", "chrono", "functions", "trace"] }
+serde = { workspace = true }
+slotmap = "1"
+stash = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+rand = { workspace = true }
+tempdir = { workspace = true }
+
+[lints]
+workspace = true
+
+[features]
+default = []
+notify = ["dep:notify"]
+
+[[test]]
+name = "main"
