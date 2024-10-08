@@ -76,6 +76,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::Stash(err) => MailContextError::Stash(err),
             CoreContextError::CacheError(err) => MailContextError::CacheError(err),
             CoreContextError::ContactError(err) => MailContextError::ContactError(err),
+            _ => todo!(),
         }
     }
 }

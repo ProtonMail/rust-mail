@@ -179,6 +179,7 @@ impl From<ContactError> for UserLoginFlowError {
             ContactError::CardNotFound(_string) => Self::Unexpected(Unexpected::Internal),
             ContactError::ContactCardRemoteIdNotPresent(_string)
             | ContactError::FullContactNotFound(_string) => Self::Unexpected(Unexpected::Database),
+            _ => todo!(),
         }
     }
 }

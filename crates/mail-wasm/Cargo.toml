@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wasm-bindgen = "0.2"
-proton-mail-html-transformer = { version = "0.2.0", path = "../proton-mail-html-transformer", registry = "proton" }
+proton-mail-html-transformer = { version = "0.2.0", path = "../mail-html-transformer", registry = "proton" }
 
 [lints]
 workspace = true

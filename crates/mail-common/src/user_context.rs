@@ -223,11 +223,6 @@ impl MailUserContext {
         self.mail_context.mail_cache_path(self.user_id())
     }
 
-    /// Set this user as the primary user.
-    pub async fn set_primary(&self) -> MailContextResult<()> {
-        Ok(self.user_context.set_primary().await?)
-    }
-
     pub async fn logout(&self) -> MailContextResult<()> {
         self.user_context.session().logout().await?;
         Ok(())
