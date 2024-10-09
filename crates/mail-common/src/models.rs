@@ -107,7 +107,7 @@ use std::num::NonZeroU32;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::vec;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 pub const MAIL_SETTINGS_ID: u64 = 1;
 
@@ -589,11 +589,11 @@ pub struct Conversation {
     #[DbField]
     pub num_attachments: u64,
 
-    /// TODO: Document this field.
+    /// How many messages there are in the conversation.
     #[DbField]
     pub num_messages: u64,
 
-    /// TODO: Document this field.
+    /// How many unread messages there are in the conversation.
     #[DbField]
     pub num_unread: u64,
 
@@ -1845,14 +1845,14 @@ impl Conversation {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_read<A>(
-        ids: impl IntoIterator<Item = LocalId>,
+        conversation_ids: impl IntoIterator<Item = LocalId>,
         interface: &A,
     ) -> Result<(), StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        for id in ids {
-            let mut conversation = Conversation::find_by_id(id, interface)
+        for conversation_id in conversation_ids {
+            let mut conversation = Conversation::find_by_id(conversation_id, interface)
                 .await?
                 .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
             // If conversation has no unread messages, there is nothing to do.
@@ -1867,7 +1867,7 @@ impl Conversation {
             // Update conversation labels unread stats.
             let conversation_labels = ConversationLabel::find(
                 "WHERE local_conversation_id=? AND context_num_unread <> 0",
-                params![id],
+                params![conversation_id],
                 interface,
                 None,
             )
@@ -1901,7 +1901,7 @@ impl Conversation {
             // Update messages
             let messages = Message::find(
                 "WHERE local_conversation_id=? AND unread<>0",
-                params![id],
+                params![conversation_id],
                 interface,
                 None,
             )
@@ -1959,6 +1959,7 @@ impl Conversation {
     }
 
     /// Mark multiple conversations as unread.
+    /// For each conversation only the last read message gets marked as unread.
     ///
     /// # Parameters
     ///
@@ -1972,30 +1973,33 @@ impl Conversation {
     ///
     pub async fn mark_unread(
         local_label_id: LocalId,
-        ids: impl IntoIterator<Item = LocalId>,
+        conversation_ids: impl IntoIterator<Item = LocalId>,
         tether: &Tether,
     ) -> Result<(), StashError> {
-        for id in ids {
-            let Some(mut conversation) = Conversation::find_by_id(id, tether).await? else {
+        for conversation_id in conversation_ids {
+            let Some(mut conversation) = Conversation::find_by_id(conversation_id, tether).await?
+            else {
+                warn!("Conversation with id {conversation_id} does not exist!");
                 continue;
             };
             // Find all messages that need to be marked as read.
-            let mut messages = Message::find(
-                "WHERE local_conversation_id=? AND unread=0",
-                params![id],
+            let message = Message::find_first(
+                "WHERE local_conversation_id=? 
+                AND unread=0 
+                ORDER BY time",
+                params![conversation_id],
                 tether,
-                None,
             )
             .await?;
 
             let total_conversation_message_count = tether
                 .query_value::<_, u64>(
                     "SELECT COUNT(local_id) AS value FROM messages WHERE local_conversation_id=?",
-                    params![id],
+                    params![conversation_id],
                 )
                 .await?;
 
-            if messages.is_empty() {
+            let Some(mut message) = message else {
                 if total_conversation_message_count == 0 {
                     // These conversations where asked to be marked as read, but had
                     // no messages. Either the messages were already mark as read or
@@ -2005,7 +2009,7 @@ impl Conversation {
 
                     let conv_labels = ConversationLabel::find(
                         "WHERE local_conversation_id=? AND local_label_id=?",
-                        params![id, local_label_id],
+                        params![conversation_id, local_label_id],
                         tether,
                         None,
                     )
@@ -2024,34 +2028,32 @@ impl Conversation {
                     }
                 }
                 continue;
-            }
+            };
 
-            let mut label_unread_counts = HashMap::new();
-            for message in &mut messages {
-                message.unread = true;
-                message.save_using(tether).await?;
+            // Update the message
 
-                let label_ids = tether.query_values::<_, LocalId>("SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?", params![message.local_id.unwrap()]).await?;
-                for label_id in label_ids {
-                    match label_unread_counts.entry(label_id) {
-                        HmEntry::Occupied(mut o) => {
-                            *o.get_mut() += 1_u64;
-                        }
-                        HmEntry::Vacant(v) => {
-                            v.insert(1_u64);
-                        }
-                    }
-                }
-            }
+            message.unread = true;
+            message.save_using(tether).await?;
 
-            // update label counts
-            for (label_id, num_unread) in label_unread_counts {
+            // Update the label counts
+
+            let label_ids = tether
+                .query_values::<_, LocalId>(
+                    "SELECT local_label_id AS value 
+                     FROM message_labels 
+                     WHERE local_message_id=?",
+                    params![message.id_value()?],
+                )
+                .await?;
+
+            for label_id in label_ids {
                 if let Some(mut label) = Label::find_by_id(label_id, tether).await? {
-                    label.unread_msg += num_unread;
+                    // Always update the message count
+                    label.unread_msg += 1;
                     // only update conversation unread count if we really marked
                     // all messages as unread. If we have mixture, this value
                     // should not be modified
-                    if total_conversation_message_count == messages.len() as u64 {
+                    if total_conversation_message_count == 1 {
                         label.unread_conv += 1;
                     }
 
@@ -2065,13 +2067,13 @@ impl Conversation {
                 )
                 .await?
                 {
-                    conv_label.context_num_unread += num_unread;
+                    conv_label.context_num_unread += 1;
                     conv_label.save_using(tether).await?;
                 }
             }
 
             // update conversations
-            conversation.num_unread += messages.len() as u64;
+            conversation.num_unread += 1;
             conversation.save_using(tether).await?;
         }
         Ok(())

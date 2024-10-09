@@ -221,9 +221,9 @@ pub fn new_test_delete_db_state() -> TestDBState {
     }
 }
 
+/// Conversation 1 has 4 messages, All unread.
+/// 3 are in label1 and 1 in label2
 pub fn new_test_unread_db_state() -> TestDBState {
-    // Conversation 1 has 4 messages, All unread.
-    // 3 are in label1 and 1 in label2
     let conv_id1 = DELETE_DB_CONV1.clone();
     TestDBState {
         addresses: vec![test_address()],
@@ -246,21 +246,25 @@ pub fn new_test_unread_db_state() -> TestDBState {
             Message {
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 unread: true,
+                time: 100,
                 ..CONV1_MSG1.to_owned()
             },
             Message {
                 label_ids: vec![MY_LABEL_ID2.clone().into()],
                 unread: true,
+                time: 200,
                 ..CONV1_MSG2.to_owned()
             },
             Message {
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 unread: true,
+                time: 300,
                 ..CONV1_MSG3.to_owned()
             },
             Message {
                 label_ids: vec![MY_LABEL_ID1.clone().into()],
                 unread: true,
+                time: 400,
                 ..CONV1_MSG4.to_owned()
             },
         ],
