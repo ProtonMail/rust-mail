@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members  = ["crates/*"]
+members = ["crates/*"]
 
 [workspace.dependencies]
 aes-gcm = { version = "0.10", features = ["zeroize", "std"] }
@@ -31,18 +31,26 @@ proton-action-queue = { version = "=0.7.28", path = "crates/action-queue", regis
 proton-api-core = { version = "=0.8.0", path = "crates/core-api", registry = "proton" }
 proton-api-mail = { version = "=0.4.0", path = "crates/mail-api", registry = "proton" }
 proton-core-common = { version = "=0.8.0", path = "crates/core-common", registry = "proton" }
-proton-crypto-account = { version = "=0.6.2", registry = "proton", features = ["sql"] }
+proton-crypto-account = { version = "=0.6.2", registry = "proton", features = [
+    "sql",
+] }
 proton-crypto-inbox = { version = "=0.6.5", registry = "proton" }
 proton-event-loop = { version = "=0.7.28", path = "crates/event-loop", registry = "proton" }
 proton-mail-common = { version = "=0.6.0", path = "crates/mail-common", registry = "proton" }
 proton-mail-uniffi = { version = "=0.12.0", path = "crates/mail-uniffi", registry = "proton" }
 proton-sqlite3 = { version = "=0.7.14", path = "crates/sqlite3", registry = "proton" }
-proton-vcard = { version = "=0.1.2", path = "crates/vcard", registry = "proton" }
+proton-vcard = { version = "=0.2.0", path = "crates/vcard", registry = "proton" }
 quick_cache = "0.6"
 rand = "0.8"
 regex = "1.10.5"
 regex_static = "0.1"
-rusqlite = { version = "0.31.0", features = ["bundled", "chrono", "functions", "trace", "uuid"] }
+rusqlite = { version = "0.31.0", features = [
+    "bundled",
+    "chrono",
+    "functions",
+    "trace",
+    "uuid",
+] }
 scraper = "0.19.0"
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
@@ -70,7 +78,16 @@ zeroize = "1.7.0"
 [workspace.dependencies.reqwest]
 version = "0.11"
 default-features = false
-features = ["json", "deflate", "stream", "cookies", "multipart", "rustls", "rustls-tls", "socks"]
+features = [
+    "json",
+    "deflate",
+    "stream",
+    "cookies",
+    "multipart",
+    "rustls",
+    "rustls-tls",
+    "socks",
+]
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
