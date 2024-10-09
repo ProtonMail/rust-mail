@@ -45,18 +45,35 @@ impl Registry {
         Ok(Self { sh, branch })
     }
 
-    pub fn commit(&self, name: &str, vrsn: &Version, data: &Utf8Path, json: &str) -> Result<()> {
+    pub fn has(&self, name: &str, version: &Version) -> Result<bool> {
         self.switch(|_| {
-            let vrsn = vrsn.to_string();
+            let version = version.to_string();
 
-            let data_path = self.data_path(name, &vrsn);
-            let json_path = self.json_path(name, &vrsn);
+            let data_path = self.data_path(name, &version);
+            let json_path = self.json_path(name, &version);
 
-            assert!(!data_path.exists());
-            assert!(!json_path.exists());
+            Ok(data_path.exists() && json_path.exists())
+        })
+    }
 
-            fs::copy(data, &data_path)?;
-            fs::write(&json_path, json)?;
+    pub fn commit(&self, name: &str, version: &Version, data: &Utf8Path, json: &str) -> Result<()> {
+        self.switch(|_| {
+            let version = version.to_string();
+
+            let data_path = self.data_path(name, &version);
+            let json_path = self.json_path(name, &version);
+
+            if !data_path.exists() {
+                fs::copy(data, &data_path)?;
+            } else {
+                panic!("data file already exists: {}", data_path.display());
+            }
+
+            if !json_path.exists() {
+                fs::write(&json_path, json)?;
+            } else {
+                panic!("json file already exists: {}", json_path.display());
+            }
 
             cmd!(self.sh, "git add {data_path} {json_path}")
                 .ignore_stdout()
@@ -64,7 +81,7 @@ impl Registry {
                 .run()?;
 
             cmd!(self.sh, "git commit")
-                .args(["-m", &format!("Publish: {name}-{vrsn}")])
+                .args(["-m", &format!("Publish: {name}-{version}")])
                 .ignore_stdout()
                 .ignore_stderr()
                 .run()?;
@@ -86,23 +103,6 @@ impl Registry {
         })
     }
 
-    fn data_path(&self, name: &str, version: &str) -> PathBuf {
-        self.downloads().join(format!("{name}@{version}.crate"))
-    }
-
-    fn json_path(&self, name: &str, version: &str) -> PathBuf {
-        self.downloads().join(format!("{name}@{version}.json"))
-    }
-
-    pub fn downloads(&self) -> PathBuf {
-        self.cwd().join("downloads")
-    }
-
-    #[allow(dead_code)]
-    pub fn index(&self) -> PathBuf {
-        self.cwd().join("index")
-    }
-
     fn switch<T>(&self, f: impl FnOnce(&str) -> Result<T>) -> Result<T> {
         let branch = &self.branch;
 
@@ -119,6 +119,18 @@ impl Registry {
             .run()?;
 
         Ok(res)
+    }
+
+    fn data_path(&self, name: &str, version: &str) -> PathBuf {
+        self.downloads().join(format!("{name}@{version}.crate"))
+    }
+
+    fn json_path(&self, name: &str, version: &str) -> PathBuf {
+        self.downloads().join(format!("{name}@{version}.json"))
+    }
+
+    fn downloads(&self) -> PathBuf {
+        self.cwd().join("downloads")
     }
 
     fn cwd(&self) -> PathBuf {
