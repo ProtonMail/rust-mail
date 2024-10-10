@@ -784,6 +784,10 @@ impl Apply for BuildOpt {
             cmd.arg("--workspace");
         }
 
+        for exclude in &self.exclude {
+            cmd.arg("--exclude").arg(exclude);
+        }
+
         for target in &self.triplet {
             cmd.arg("--target").arg(target);
         }
@@ -968,20 +972,11 @@ pub struct Package {
     manifest_opt: ManifestOpt,
     publish_opt: PublishOpt,
 
-    /// Whether to package the entire workspace.
-    workspace: Option<bool>,
-
     /// Index of registry to use.
     registry: Option<String>,
 }
 
 impl Package {
-    /// Whether to package the entire workspace.
-    pub fn workspace(mut self, enable: bool) -> Self {
-        self.workspace = Some(enable);
-        self
-    }
-
     /// The registry to use.
     pub fn registry(mut self, name: impl AsRef<str>) -> Self {
         self.registry = Some(name.as_ref().to_owned());
@@ -1010,10 +1005,6 @@ impl HasPublishOpt for Package {
 impl Apply for Package {
     fn apply(&self, cmd: &mut Command) {
         cmd.arg("package");
-
-        if self.workspace.unwrap_or(false) {
-            cmd.arg("--workspace");
-        }
 
         if let Some(name) = &self.registry {
             cmd.arg("--registry").arg(name);
