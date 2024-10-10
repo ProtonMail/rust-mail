@@ -22,18 +22,19 @@ pub mod responses;
 use crate::services::proton::common::LabelType;
 use crate::services::proton::requests::{
     GetConversationsOptions, GetLabelsOptions, GetMessagesOptions, PatchLabelRequest,
-    PostLabelsRequest, PutConversationsDeleteRequest, PutConversationsLabelRequest,
-    PutConversationsReadRequest, PutConversationsUnlabelRequest, PutConversationsUnreadRequest,
-    PutLabelRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
-    PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
+    PostLabelsRequest, PostMessagesRelabelRequest, PutConversationsDeleteRequest,
+    PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
+    PutConversationsUnreadRequest, PutLabelRequest, PutMessagesDeleteRequest,
+    PutMessagesLabelRequest, PutMessagesReadRequest, PutMessagesUnlabelRequest,
+    PutMessagesUnreadRequest,
 };
 use crate::services::proton::responses::{
     GetAttachmentMetadataResponse, GetConversationResponse, GetConversationsCountResponse,
     GetConversationsResponse, GetLabelsResponse, GetMessageResponse, GetMessagesCountResponse,
     GetMessagesResponse, GetSettingsResponse, PatchLabelResponse, PostLabelsResponse,
-    PutConversationsDeleteResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
-    PutConversationsUnlabelResponse, PutConversationsUnreadResponse, PutLabelResponse,
-    PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
+    PostMessagesRelabelResponse, PutConversationsDeleteResponse, PutConversationsLabelResponse,
+    PutConversationsReadResponse, PutConversationsUnlabelResponse, PutConversationsUnreadResponse,
+    PutLabelResponse, PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
     PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
@@ -615,6 +616,34 @@ pub trait ProtonMail: ApiService {
         self.put::<_, Json<_>>(
             &format!("{}/messages/unread", Self::BASE_PATH_MAIL),
             PutMessagesUnreadRequest { ids: message_ids },
+            None,
+        )
+        .await
+    }
+
+    /// Relabel a message.
+    ///
+    /// Set the message to have the labels passed in the request. The labels are added and removed as necessary.
+    /// If either INBOX, SENT or DRAFT are supposed to be added. The correct one according to the message flags will be added.
+    /// Note that a maximum of 150 labels IDs can be passed by request.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_id` - Id of the message to relabel.
+    /// * `label_ids`  - List of labels that must be set.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn relabel_message(
+        &self,
+        message_id: RemoteId,
+        label_ids: Vec<RemoteId>,
+    ) -> Result<PostMessagesRelabelResponse, ApiServiceError> {
+        self.post::<_, Json<_>>(
+            &format!("{}/messages/{}/relabel", Self::BASE_PATH_MAIL, message_id),
+            PostMessagesRelabelRequest { label_ids },
             None,
         )
         .await

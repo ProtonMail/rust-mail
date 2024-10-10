@@ -1,20 +1,26 @@
 use crate::actions::messages::delete::Delete;
 use crate::actions::messages::label::Label as ActionLabel;
+use crate::actions::messages::label_as::LabelAs;
 use crate::actions::messages::r#move::Move;
 use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
-use crate::datatypes::SystemLabelId;
-use crate::models::{Label, Message};
-use crate::AppError;
+use crate::datatypes::{LabelType, SystemLabelId};
+use crate::models::{Label, Message, MessageLabelStats};
+use crate::{find_in_query, AppError};
+use anyhow::anyhow;
 use itertools::Itertools as _;
 use proton_action_queue::queue::{ActionError, ActionStatus, Queue};
-use proton_api_core::session::Session;
-use proton_core_common::datatypes::{Id, LabelId, LocalId};
+use proton_api_core::session::{CoreSession, Session};
+use proton_api_mail::services::proton::ProtonMail;
+use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use proton_core_common::models::ModelExtension;
+use stash::exports::ToSql;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
-use tracing::error;
+use std::collections::HashSet;
+use tracing::{error, warn};
 
 impl Message {
     /// Label multiple messages.
@@ -325,6 +331,199 @@ impl Message {
             .await
             .inspect_err(|e| error!("Failed to apply destination label to messages: {e}"))?;
 
+        Ok(())
+    }
+
+    /// Change Labels of a list of messages and optionally archive them.
+    ///
+    /// Set Labels from `selected_label_ids` while unsetting all those that are not in
+    /// `partially_selected_label_ids`.
+    ///
+    /// # Parameters
+    ///
+    /// * `source_label_id`              - Id of the Label containing the messages to label.
+    /// * `message_ids`                  - List the ids of the messages to label.
+    /// * `selected_label_ids`           - List the ids of the Labels to set.
+    /// * `partially_selected_label_ids` - List the ids of the Labels to keep as is.
+    /// * `must_archive`                 - If true, the given messages will me move into Archive.
+    ///
+    /// # Errors
+    ///
+    /// Returns errors if the operation failed.
+    ///
+    pub async fn label_messages_as<A>(
+        source_label_id: LocalId,
+        message_ids: Vec<LocalId>,
+        selected_label_ids: &[LocalId],
+        partially_selected_label_ids: &[LocalId],
+        must_archive: bool,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let (query, params) = find_in_query!(
+            "WHERE deleted = 0 AND local_id IN ({})",
+            message_ids.clone()
+        );
+        let mut messages = Message::find(query, params, interface, None).await?;
+        let label_stats_before = MessageLabelStats::build(messages.clone(), interface).await?;
+        for message in &mut messages {
+            let current_labels = message.all_message_labels(interface).await?;
+            let (current_custom_labels, other_current_labels): (Vec<_>, Vec<_>) = current_labels
+                .into_iter()
+                .partition(|l| l.label_type == LabelType::Label);
+            let new_label_ids = Self::compute_expected_labels(
+                &current_custom_labels,
+                selected_label_ids,
+                partially_selected_label_ids,
+            );
+            let new_label_ids = LocalId::counterparts::<Label, _>(new_label_ids, interface).await?;
+
+            message.label_ids = other_current_labels
+                .into_iter()
+                .map(|l| l.remote_id.expect("Should be set"))
+                .chain(new_label_ids.into_iter().map(|l| LabelId::from(l.clone())))
+                .collect();
+
+            message.save_using(interface).await?
+        }
+
+        let label_stats_after = MessageLabelStats::build(messages, interface).await?;
+        for label_id in label_stats_before
+            .keys()
+            .chain(label_stats_after.keys())
+            .collect::<HashSet<_>>()
+        {
+            if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
+                if let Some(after) = label_stats_after.get(label_id) {
+                    label.total_msg += after.count;
+                    label.unread_msg += after.unread_count;
+                }
+                if let Some(before) = label_stats_before.get(label_id) {
+                    label.total_msg -= before.count;
+                    label.unread_msg -= before.unread_count;
+                }
+                label.save_using(interface).await?
+            } else {
+                warn!("Label {label_id} does not exist");
+            }
+        }
+
+        if must_archive {
+            let archive_id =
+                RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), interface)
+                    .await?
+                    .expect("Archive label must have a RemoteId");
+            Self::move_messages(source_label_id, archive_id, message_ids, interface).await?;
+        }
+        Ok(())
+    }
+
+    /// Compute which labels must be set
+    ///
+    /// # Parameters
+    /// * `current_labels`               - Labels currently set.
+    /// * `selected_labels_ids`          - Ids of the wanted label.
+    /// * `partially_selected_label_ids` - Ids of the label that should be kept as his.
+    ///
+    fn compute_expected_labels(
+        current_labels: &[Label],
+        selected_label_ids: &[LocalId],
+        partially_selected_label_ids: &[LocalId],
+    ) -> Vec<LocalId> {
+        let current_labels: HashSet<LocalId> = HashSet::from_iter(
+            current_labels
+                .iter()
+                .map(|l| l.local_id.expect("Should be set")),
+        );
+        let selected_label_ids = HashSet::from_iter(selected_label_ids.iter().cloned());
+        let partially_selected_label_ids =
+            HashSet::from_iter(partially_selected_label_ids.iter().cloned());
+        let labels_to_keep: HashSet<_> = current_labels
+            .intersection(&partially_selected_label_ids)
+            .cloned()
+            .collect();
+        labels_to_keep.union(&selected_label_ids).cloned().collect()
+    }
+
+    /// Action to change labels of a group of messages and optionally archive them.
+    ///
+    /// # Parameters
+    ///
+    /// * `session`                      - The session.
+    /// * `queue`                        - The action queue.
+    /// * `message_ids`                  - List the ids of the messages to label.
+    /// * `selected_label_ids`           - List the ids of the Labels to set.
+    /// * `partially_selected_label_ids` - List the ids of the Labels to keep as is.
+    /// * `must_archive`                 - If true, the given messages will me move into Archive.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action can not be applied.
+    ///
+    pub async fn action_label_as(
+        session: &Session,
+        queue: &Queue,
+        source_label_id: LocalId,
+        message_ids: Vec<LocalId>,
+        selected_label_ids: Vec<LocalId>,
+        partially_selected_label_ids: Vec<LocalId>,
+        must_archive: bool,
+    ) -> Result<bool, AppError> {
+        let action = LabelAs::new(
+            source_label_id,
+            message_ids,
+            selected_label_ids,
+            partially_selected_label_ids,
+            must_archive,
+        );
+        match queue
+            .apply_action(session, action)
+            .await
+            .map_err(|e| AppError::Other(anyhow!(e)))?
+        {
+            ActionStatus::Executed(result) => Ok(result),
+            ActionStatus::Queued(id) => Err(AppError::ActionStillQueued(id)),
+        }
+    }
+
+    pub async fn relabel_message<A>(
+        &self,
+        session: &Session,
+        selected_label_ids: &[LocalId],
+        partially_selected_label_ids: &[LocalId],
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let api = session.api();
+
+        let current_labels = self.all_message_labels(interface).await?;
+        let current_labels: Vec<_> = current_labels
+            .into_iter()
+            .filter(|l| l.label_type == LabelType::Label)
+            .collect();
+
+        let labels_to_set = Message::compute_expected_labels(
+            &current_labels,
+            selected_label_ids,
+            partially_selected_label_ids,
+        );
+        let labels_to_set = LocalId::counterparts::<Label, _>(labels_to_set, interface).await?;
+        let labels_to_set = labels_to_set.into_iter().map_into().collect();
+
+        if let Some(remote_message_id) = &self.remote_id {
+            // TODO: api.relabel_message return a MessageMetadata. Should we use it to update current message?
+            api.relabel_message(remote_message_id.clone().into(), labels_to_set)
+                .await?;
+        } else {
+            warn!(
+                "While labeling messages, message without remote_id: {:?}",
+                self.local_id
+            );
+        };
         Ok(())
     }
 }

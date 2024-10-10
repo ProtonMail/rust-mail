@@ -814,3 +814,48 @@ pub async fn move_messages(
     })
     .await
 }
+
+/// Change Labels of a list of messages and optionally archive them.
+///
+/// Set Labels from `selected_label_ids` while unsetting all those that are not in
+/// `partially_selected_label_ids`.
+///
+/// # Parameters
+///
+/// * `mailbox`                      - Mailbox containing the messages.
+/// * `message_ids`                  - List the ids of the messages to label.
+/// * `selected_label_ids`           - List the ids of the Labels to set.
+/// * `partially_selected_label_ids` - List the ids of the Labels to keep as is.
+/// * `must_archive`                 - If true, the given messages will me move into Archive.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi::export]
+pub async fn label_messages_as(
+    mailbox: Arc<Mailbox>,
+    message_ids: Vec<Id>,
+    selected_label_ids: Vec<Id>,
+    partially_selected_label_ids: Vec<Id>,
+    must_archive: bool,
+) -> Result<bool, MailSessionError> {
+    let user_context = mailbox.mbox().user_context();
+    let source_label_id = mailbox.label_id();
+    uniffi_async(async move {
+        Ok(RealMessage::action_label_as(
+            user_context.session(),
+            user_context.queue(),
+            source_label_id.into(),
+            message_ids.into_iter().map_into().collect(),
+            selected_label_ids.into_iter().map_into().collect(),
+            partially_selected_label_ids
+                .into_iter()
+                .map_into()
+                .collect(),
+            must_archive,
+        )
+        .await?)
+    })
+    .await
+}

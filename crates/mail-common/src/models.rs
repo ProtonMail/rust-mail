@@ -1011,7 +1011,7 @@ impl Conversation {
     ///
     async fn remove_conversation_from_all_labels<A>(
         &self,
-        all_stats: HashMap<LocalId, MessageDeletedLabelStats>,
+        all_stats: HashMap<LocalId, MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -1127,7 +1127,7 @@ impl Conversation {
     async fn remove_conversation_from_label<A>(
         &mut self,
         label_id: LocalId,
-        stats: Option<&MessageDeletedLabelStats>,
+        stats: Option<&MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -1283,7 +1283,7 @@ impl Conversation {
     ///
     async fn add_conversation_to_all_labels<A>(
         &self,
-        all_stats: HashMap<LocalId, MessageDeletedLabelStats>,
+        all_stats: HashMap<LocalId, MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -1398,7 +1398,7 @@ impl Conversation {
     async fn add_conversation_to_label<A>(
         &mut self,
         label_id: LocalId,
-        stats: Option<&MessageDeletedLabelStats>,
+        stats: Option<&MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -1442,7 +1442,7 @@ impl Conversation {
     ///
     async fn mark_delete_update_stats<A>(
         &mut self,
-        stats: Option<&MessageDeletedLabelStats>,
+        stats: Option<&MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -1484,7 +1484,7 @@ impl Conversation {
     ///
     async fn mark_undelete_update_stats<A>(
         &mut self,
-        stats: Option<&MessageDeletedLabelStats>,
+        stats: Option<&MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -3446,7 +3446,7 @@ impl ConversationLabel {
     ///
     async fn mark_delete_update_stats<A>(
         &mut self,
-        stats: Option<&MessageDeletedLabelStats>,
+        stats: Option<&MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -3477,7 +3477,7 @@ impl ConversationLabel {
     ///
     async fn mark_undelete_update_stats<A>(
         &mut self,
-        stats: Option<&MessageDeletedLabelStats>,
+        stats: Option<&MessageLabelStats>,
         interface: &A,
     ) -> Result<(), AppError>
     where
@@ -6456,11 +6456,11 @@ impl Message {
     async fn update_message_counters_after_soft_delete<A>(
         messages: impl IntoIterator<Item = Message>,
         interface: &A,
-    ) -> Result<HashMap<LocalId, MessageDeletedLabelStats>, StashError>
+    ) -> Result<HashMap<LocalId, MessageLabelStats>, StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let label_stats = MessageDeletedLabelStats::build(messages, interface).await?;
+        let label_stats = MessageLabelStats::build(messages, interface).await?;
         for (label_id, stats) in label_stats.iter() {
             if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
                 label.total_msg -= stats.count;
@@ -6476,11 +6476,11 @@ impl Message {
     async fn update_message_counters_after_soft_undelete<A>(
         messages: impl IntoIterator<Item = Message>,
         interface: &A,
-    ) -> Result<HashMap<LocalId, MessageDeletedLabelStats>, StashError>
+    ) -> Result<HashMap<LocalId, MessageLabelStats>, StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let label_stats = MessageDeletedLabelStats::build(messages, interface).await?;
+        let label_stats = MessageLabelStats::build(messages, interface).await?;
         for (label_id, stats) in label_stats.iter() {
             if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
                 label.total_msg += stats.count;
@@ -6494,18 +6494,18 @@ impl Message {
 }
 
 #[derive(Debug)]
-struct MessageDeletedLabelStats {
+struct MessageLabelStats {
     pub unread_count: u64,
     pub count: u64,
     pub attachment_count: u64,
     pub size: u64,
 }
 
-impl MessageDeletedLabelStats {
+impl MessageLabelStats {
     async fn build<A>(
         messages: impl IntoIterator<Item = Message>,
         interface: &A,
-    ) -> Result<HashMap<LocalId, MessageDeletedLabelStats>, StashError>
+    ) -> Result<HashMap<LocalId, MessageLabelStats>, StashError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
@@ -6521,7 +6521,7 @@ impl MessageDeletedLabelStats {
             for label_id in label_ids {
                 match label_stats.entry(label_id) {
                     HmEntry::Occupied(mut o) => {
-                        let details: &mut MessageDeletedLabelStats = o.get_mut();
+                        let details: &mut MessageLabelStats = o.get_mut();
                         details.count += 1;
                         if message.unread {
                             details.unread_count += 1;
@@ -6530,7 +6530,7 @@ impl MessageDeletedLabelStats {
                         details.size += message.size;
                     }
                     HmEntry::Vacant(v) => {
-                        v.insert(MessageDeletedLabelStats {
+                        v.insert(MessageLabelStats {
                             count: 1,
                             unread_count: message.unread as u64,
                             attachment_count: message.num_attachments as u64,

@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use proton_core_common::datatypes::{Id, LocalId, RemoteId};
+use serde::{Deserialize, Serialize};
 use stash::stash::{AgnosticInterface, Interface, StashError};
 
 use crate::{
@@ -9,8 +10,8 @@ use crate::{
 };
 
 /// This enum represents the system labels that are available in ProtonMail.
-/// Their values corresponds to the remote ids of the labels in the core API database.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+/// Their values correspond to the remote ids of the labels in the core API database.
+#[derive(Copy, Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 #[repr(u8)]
 pub enum SystemLabel {
     Inbox = 0,

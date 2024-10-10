@@ -265,6 +265,14 @@ pub struct PutMessagesUnreadResponse {
     pub responses: Vec<OperationResult>,
 }
 
+/// Response to a relabel message request.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostMessagesRelabelResponse {
+    pub message: MessageMetadata,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]

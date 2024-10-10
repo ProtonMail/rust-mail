@@ -9,11 +9,13 @@ use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
-    GetMessageResponse, GetMessagesResponse, PutMessagesDeleteResponse, PutMessagesLabelResponse,
-    PutMessagesReadResponse, PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
+    GetMessageResponse, GetMessagesResponse, PostMessagesRelabelResponse,
+    PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
+    PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use proton_core_common::datatypes::RemoteId;
 use std::collections::HashSet;
+use std::path::Path;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -142,6 +144,23 @@ impl TestContext {
         Mock::given(method("PUT"))
             .and(path("/api/mail/v4/messages/unlabel"))
             .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for relabel message.
+    ///
+    /// # Parameters
+    ///
+    /// * `id`      - ID of the message to relabel.
+    /// * `message` - modified message as response.
+    ///
+    pub async fn mock_relabel_message(&self, id: &ApiRemoteId, message: MessageMetadata) {
+        let response = PostMessagesRelabelResponse { message };
+        Mock::given(method("POST"))
+            .and(path(format!("/api/mail/v4/messages/{id}/relabel")))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
             .mount(self.mock_server())
