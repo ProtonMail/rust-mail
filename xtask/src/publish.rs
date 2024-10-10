@@ -46,11 +46,13 @@ impl Publish {
         for pkg in meta.workspace_packages() {
             if registry.has(&pkg.name, &pkg.version)? {
                 exclude.push(&pkg.name);
-            } else if self.exclude.contains(&pkg.name) {
-                exclude.push(&pkg.name);
             } else {
                 include.push(pkg);
             }
+        }
+
+        if include.is_empty() {
+            return Ok(());
         }
 
         cargo::package()
@@ -62,6 +64,14 @@ impl Publish {
             .ok()?;
 
         for pkg in include {
+            if pkg.publish.as_ref().is_some_and(Vec::is_empty) {
+                continue;
+            }
+
+            if self.exclude.contains(&pkg.name) {
+                continue;
+            }
+
             let data = (meta.target_directory)
                 .join("package")
                 .join(format!("{}-{}.crate", &pkg.name, &pkg.version));
