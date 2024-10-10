@@ -353,7 +353,19 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
-        Ok(CoreAccount::find_primary(&self.stash).await?)
+        let Some(account) = CoreAccount::find_primary(&self.stash).await? else {
+            return Ok(None);
+        };
+
+        let Some(state) = self.get_account_state(account.remote_id.clone()).await? else {
+            return Ok(None);
+        };
+
+        if let CoreAccountState::LoggedIn(_) = state {
+            Ok(Some(account))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Set the account considered to be the primary account.
