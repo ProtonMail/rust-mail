@@ -1,5 +1,3 @@
-#![allow(clippy::all)]
-
 //! This project uses the xtask pattern to define custom cargo commands.
 //!
 //! See <https://github.com/matklad/cargo-xtask>.
