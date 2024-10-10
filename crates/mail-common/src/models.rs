@@ -4361,8 +4361,23 @@ impl MailSettings {
         Ok(())
     }
 
-    pub async fn get(db: &AgnosticInterface) -> Result<Option<Self>, StashError> {
-        Self::load(MAIL_SETTINGS_ID.into(), db).await
+    /// Get the mail settings from database
+    pub async fn get<A>(interface: &A) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::load(MAIL_SETTINGS_ID.into(), interface).await
+    }
+
+    /// Get the mail settings from database, fallback on default
+    pub async fn get_or_default<A>(interface: &A) -> Self
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Self::get(interface)
+            .await
+            .unwrap_or_default()
+            .unwrap_or_default()
     }
 }
 

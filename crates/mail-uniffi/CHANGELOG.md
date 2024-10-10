@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Added
+  - `all_available_bottom_bar_actions_for_messages` function who return available actions for messages in bottom bar.
+
 ## [0.13.0] - 2024-10-11
 
 ### Added

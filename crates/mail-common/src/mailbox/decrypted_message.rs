@@ -101,10 +101,7 @@ impl DecryptedMessageBody {
         remote_content: RemoteContent,
         block_quote: BlockQuote,
     ) -> Result<BodyOutput, MailboxError> {
-        let mail_settings = MailSettings::get(&ctx.user_stash().into())
-            .await
-            .unwrap_or_default()
-            .unwrap_or_default();
+        let mail_settings = MailSettings::get_or_default(ctx.user_stash()).await;
         let user_session_id = ctx.user_id();
         let BodyOutput {
             body,

@@ -73,6 +73,8 @@ pub enum AppError {
     EmptyListOfMessages,
     #[error("Incorrect mime type: {0}")]
     InvalidMimeType(String),
+    #[error("InvalidMobileActions: {0}")]
+    InvalidMobileActions(String),
     #[error("Label with local id {0} does not have remote id")]
     LabelDoesNotHaveRemoteId(LocalId),
     #[error("Label with local id {0} not found")]

@@ -11,13 +11,9 @@ use super::{datatypes::MailSettings, MailSessionError, MailUserSession};
 #[uniffi::export]
 pub async fn mail_settings(ctx: &MailUserSession) -> MailSettings {
     let stash = ctx.ctx().user_stash().clone();
-    uniffi_async::<_, JoinError, _>(async move {
-        Ok(RealSettings::get(&stash.into())
-            .await
-            .unwrap_or_default()
-            .unwrap_or_default()
-            .into())
-    })
+    uniffi_async::<_, JoinError, _>(
+        async move { Ok(RealSettings::get_or_default(&stash).await.into()) },
+    )
     .await
     .unwrap_or(MailSettings::default())
 }

@@ -45,6 +45,7 @@ mod rollback_item_type;
 pub(crate) mod system_label;
 
 use crate::models::{Label, MessageBodyMetadata};
+use crate::AppError;
 pub use contextual_conversation::*;
 use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
@@ -78,6 +79,7 @@ use stash::sql_using_serde;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
+use std::str::FromStr;
 pub use system_label::SystemLabel;
 //  ENUMS
 //==============================================================================
@@ -1448,7 +1450,7 @@ impl ToSql for MessageFlags {
 }
 
 /// TODO: Document this struct.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MobileSetting {
     /// TODO: Document this field.
     pub actions: Vec<String>,
@@ -1466,8 +1468,65 @@ impl From<ApiMobileSetting> for MobileSetting {
     }
 }
 
-/// TODO: Document this struct.
+/// All possible actions sent by API GET settings request
+///
+/// Found in MailSettings::MobileSettings::MessageToolbar::Actions /
+///          MailSettings::MobileSettings::ConversationToolbar::Actions /
+///          MailSettings::MobileSettings::ListToolbar::Actions
+///
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum MobileActions {
+    Archive,
+    Forward,
+    Label,
+    Move,
+    Print,
+    Remind,
+    Reply,
+    ReportPhishing,
+    SaveAttachments,
+    SavePDF,
+    SenderEmails,
+    Snooze,
+    Spam,
+    ToggleLight,
+    ToggleRead,
+    ToggleStar,
+    Trash,
+    ViewHeaders,
+    ViewHTML,
+}
+
+impl FromStr for MobileActions {
+    type Err = AppError;
+
+    fn from_str(value: &str) -> Result<Self, AppError> {
+        match value {
+            "archive" => Ok(Self::Archive),
+            "forward" => Ok(Self::Forward),
+            "label" => Ok(Self::Label),
+            "move" => Ok(Self::Move),
+            "print" => Ok(Self::Print),
+            "remind" => Ok(Self::Remind),
+            "reply" => Ok(Self::Reply),
+            "report_phishing" => Ok(Self::ReportPhishing),
+            "save_attachments" => Ok(Self::SaveAttachments),
+            "save_pdf" => Ok(Self::SavePDF),
+            "sender_emails" => Ok(Self::SenderEmails),
+            "spam" => Ok(Self::Spam),
+            "toggle_light" => Ok(Self::ToggleLight),
+            "toggle_read" => Ok(Self::ToggleRead),
+            "toggle_star" => Ok(Self::ToggleStar),
+            "trash" => Ok(Self::Trash),
+            "view_headers" => Ok(Self::ViewHeaders),
+            "view_html" => Ok(Self::ViewHTML),
+            s => Err(AppError::InvalidMobileActions(s.to_owned())),
+        }
+    }
+}
+
+/// TODO: Document this struct.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MobileSettings {
     /// TODO: Document this field.
     pub conversation_toolbar: MobileSetting,
