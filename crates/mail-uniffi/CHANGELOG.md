@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.13.0] - 2024-10-11
+
+### Added
+  - `NotReady` account state
+
 ## [0.12.1] - 2024-10-10
 
 ### Fixed

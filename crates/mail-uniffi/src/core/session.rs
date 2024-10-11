@@ -145,6 +145,9 @@ impl StoredSession {
 /// Represents the state of an account.
 #[derive(Debug, Enum)]
 pub enum StoredAccountState {
+    /// The account is not yet ready to be used.
+    NotReady,
+
     /// The account has at least one fully logged-in session;
     /// the variant holds the (remote) IDs of the fullly logged-in sessions.
     LoggedIn(Vec<String>),
@@ -174,6 +177,7 @@ impl From<&CoreAccountState> for StoredAccountState {
         }
 
         match value {
+            CoreAccountState::NotReady => Self::NotReady,
             CoreAccountState::LoggedIn(vec) => Self::LoggedIn(from_inner(vec)),
             CoreAccountState::NeedMbp(vec) => Self::NeedMbp(from_inner(vec)),
             CoreAccountState::NeedTfa(vec) => Self::NeedTfa(from_inner(vec)),

@@ -71,7 +71,7 @@ path = "crates/mail-api"
 registry = "proton" 
 
 [workspace.dependencies.proton-core-common] 
-version = "0.8"
+version = "0.9"
 path = "crates/core-common"
 registry = "proton" 
 
@@ -83,11 +83,6 @@ registry = "proton"
 [workspace.dependencies.proton-mail-common] 
 version = "0.6"
 path = "crates/mail-common"
-registry = "proton" 
-
-[workspace.dependencies.proton-mail-uniffi] 
-version = "0.12"
-path = "crates/mail-uniffi"
 registry = "proton" 
 
 [workspace.dependencies.proton-sqlite3] 

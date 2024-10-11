@@ -77,6 +77,9 @@ pub enum ContactError {
 /// Represents the state of an account.
 #[derive(Debug)]
 pub enum CoreAccountState {
+    /// The account is not yet ready to be used.
+    NotReady,
+
     /// The account has at least one fully logged-in session;
     /// the variant holds the (remote) IDs of the fullly logged-in sessions.
     LoggedIn(Vec<RemoteId>),
@@ -95,6 +98,10 @@ pub enum CoreAccountState {
 
 impl CoreAccountState {
     fn of(account: &CoreAccount, sessions: &[CoreSession]) -> Self {
+        if !account.is_ready {
+            return CoreAccountState::NotReady;
+        }
+
         let mut sessions_by_state = (sessions.iter())
             .map(|session| (CoreSessionState::of(session), session.remote_id.clone()))
             .into_group_map();
