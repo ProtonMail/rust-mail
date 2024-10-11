@@ -182,11 +182,11 @@ impl AuthStore {
         };
 
         for session in CoreSession::find_by_user_id(user_id, &tx, None).await? {
-            session.with_key_secret(&sec, &key)?.save().await?;
+            session.with_key_secret(&sec, &key)?.save_using(&tx).await?;
         }
 
         if !account.is_ready {
-            account.with_ready().save().await?;
+            account.with_ready().save_using(&tx).await?;
         }
 
         tx.commit().await?;
