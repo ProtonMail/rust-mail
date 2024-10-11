@@ -60,6 +60,10 @@ pub struct CoreAccount {
     #[DbField]
     pub primary_at: Option<Timestamp>,
 
+    /// Whether the account is ready (i.e. login flow completed).
+    #[DbField]
+    pub is_ready: bool,
+
     #[RowIdField]
     pub row_id: Option<u64>,
 
@@ -81,6 +85,7 @@ impl CoreAccount {
             name_or_addr,
             second_factor_mode,
             password_mode,
+            is_ready: false,
 
             // --- Optional fields ---
             username: None,
@@ -128,6 +133,17 @@ impl CoreAccount {
     pub fn with_primary_now(self) -> Self {
         Self {
             primary_at: Some(Timestamp::now()),
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
+    /// Mark the account as ready.
+    #[must_use]
+    pub fn with_ready(self) -> Self {
+        Self {
+            is_ready: true,
 
             // --- preserve ---
             ..self

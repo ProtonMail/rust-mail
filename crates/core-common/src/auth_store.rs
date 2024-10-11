@@ -169,16 +169,24 @@ impl AuthStore {
     }
 
     async fn set_user_secrets(&mut self, data: UserSecrets) -> Result<(), StoreError> {
-        let Some(user_id) = self.user_id.clone() else {
-            return Err("failed to set user secrets: no user ID")?;
-        };
-
         let tx = self.stash.transaction().await?;
         let key = self.encryption_key()?;
         let sec = data.key_secret;
 
+        let Some(user_id) = self.user_id.clone() else {
+            return Err("failed to set user secrets: no user ID")?;
+        };
+
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? else {
+            return Err(format!("failed to set user secrets: missing {user_id}"))?;
+        };
+
         for session in CoreSession::find_by_user_id(user_id, &tx, None).await? {
-            session.with_key_secret(&sec, &key)?.save_using(&tx).await?;
+            session.with_key_secret(&sec, &key)?.save().await?;
+        }
+
+        if !account.is_ready {
+            account.with_ready().save().await?;
         }
 
         tx.commit().await?;
@@ -198,7 +206,7 @@ impl AuthStore {
         };
 
         let Some(account) = CoreAccount::find_by_id(user_id.clone(), &self.stash).await? else {
-            return Err("failed to set account info: no account found")?;
+            return Err(format!("failed to set account info: missing {user_id}"))?;
         };
 
         account

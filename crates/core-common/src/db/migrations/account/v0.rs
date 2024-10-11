@@ -31,6 +31,9 @@ async fn create_table_core_accounts(tx: &Tether) -> Result<(), StashError> {
                 -- The account's username or email address (used for login)
                 name_or_addr TEXT NOT NULL,
 
+                -- Whether the account is ready (i.e. login flow completed)
+                is_ready INTEGER NOT NULL,
+
                 -- The account's username (once known)
                 username TEXT,
 
