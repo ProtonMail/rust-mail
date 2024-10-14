@@ -4,9 +4,10 @@ pub mod labels;
 pub mod messages;
 
 pub use self::available_action::*;
-use crate::datatypes::RollbackItemType;
+use crate::datatypes::{ExclusiveLocation, RollbackItemType};
 use crate::models::{Label, RollbackItem};
 use crate::AppError;
+use itertools::Itertools;
 use proton_action_queue::action::Factory;
 use proton_api_core::service::ApiServiceError;
 use proton_api_mail::services::proton::response_data::OperationResult;
@@ -14,6 +15,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use tracing::error;
 
@@ -196,6 +198,68 @@ where
         self.remote_target_ids = LocalId::counterparts::<T, _>(self.target_ids.clone(), tx)
             .await
             .inspect_err(|e| error!("Failed to resolve ids: {e}"))?;
+        Ok(())
+    }
+}
+
+/// Action which change all the labels of messages or conversations.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LabelAsData<T>
+where
+    T: Model,
+{
+    source_label_id: LocalId,
+    local_ids: Vec<LocalId>,
+    remote_ids: Vec<RemoteId>,
+    local_selected_label_ids: Vec<LocalId>,
+    remote_selected_label_ids: Vec<RemoteId>,
+    local_partially_selected_label_ids: Vec<LocalId>,
+    remote_partially_selected_label_ids: Vec<RemoteId>,
+    original_labels: HashMap<LocalId, Vec<LocalId>>,
+    original_locations: HashMap<LocalId, Option<ExclusiveLocation>>,
+    must_archive: bool,
+    phantom_data: PhantomData<T>,
+}
+
+impl<T> LabelAsData<T>
+where
+    T: Model,
+{
+    fn new(
+        source_label_id: LocalId,
+        local_ids: Vec<LocalId>,
+        selected_label_ids: Vec<LocalId>,
+        partially_selected_label_ids: Vec<LocalId>,
+        must_archive: bool,
+    ) -> Self {
+        Self {
+            source_label_id,
+            local_ids,
+            remote_ids: vec![],
+            local_selected_label_ids: selected_label_ids,
+            remote_selected_label_ids: vec![],
+            local_partially_selected_label_ids: partially_selected_label_ids,
+            remote_partially_selected_label_ids: vec![],
+            original_labels: HashMap::new(),
+            original_locations: HashMap::new(),
+            must_archive,
+            phantom_data: PhantomData,
+        }
+    }
+
+    /// Resolve all local ids into the remote counterpart.
+    async fn resolve_remote_ids(&mut self, tx: &Tether) -> Result<(), ActionError> {
+        self.remote_ids = LocalId::counterparts::<T, _>(self.local_ids.clone(), tx).await?;
+        let remote_selected_label_ids =
+            LocalId::counterparts::<Label, _>(self.local_selected_label_ids.clone(), tx).await?;
+        self.remote_selected_label_ids = remote_selected_label_ids.into_iter().map_into().collect();
+        let remote_partially_selected_label_ids =
+            LocalId::counterparts::<Label, _>(self.local_partially_selected_label_ids.clone(), tx)
+                .await?;
+        self.remote_partially_selected_label_ids = remote_partially_selected_label_ids
+            .into_iter()
+            .map_into()
+            .collect();
         Ok(())
     }
 }
