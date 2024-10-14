@@ -1,4 +1,5 @@
 mod avatar_information;
+mod contacts;
 pub mod conversations;
 pub mod datatypes;
 mod logging;

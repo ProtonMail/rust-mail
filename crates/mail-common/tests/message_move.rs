@@ -468,16 +468,11 @@ fn test_message(label_ids: Vec<ApiRemoteId>, unread: bool) -> ApiMessage {
 
 fn test_init_params(labels: HashMap<ApiLabelType, Vec<ApiLabel>>) -> TestParams {
     TestParams {
-        last_event_id: None,
         user_info: Some(test_user_info()),
-        user_settings: None,
         addresses: test_addresses(),
         mail_settings: Some(test_mail_settings()),
         labels,
-        conversations: vec![],
-        attachments: vec![],
-        conversation_count: vec![],
-        message_count: vec![],
+        ..Default::default()
     }
 }
 

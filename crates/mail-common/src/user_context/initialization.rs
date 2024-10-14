@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::models::{Conversation, Label, MailSettings};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_api_core::session::CoreSession;
-use proton_core_common::models::{Address, User};
+use proton_core_common::models::{Address, Contact, User};
 use tracing::{debug, error, Level};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -13,6 +13,7 @@ pub enum MailUserContextLoadingStage {
     Addresses,
     Events,
     Labels,
+    Contacts,
     Counters,
     Finished,
 }
@@ -69,18 +70,26 @@ impl MailUserContext {
             debug!("Syncing labels");
             Label::sync_labels(ctx_clone.session().api(), ctx_clone.user_stash()).await
         });
+        let ctx_clone = ctx.clone();
+        let contacts_handle = tokio::spawn(async move {
+            debug!("Syncing contacts");
+            Contact::sync(ctx_clone.session().api(), ctx_clone.user_stash()).await
+        });
+
         let (
             event_loop_handle,
             user_settings_handle,
             mail_settings_handle,
             addresses_handle,
             labels_handle,
+            contacts_handle,
         ) = tokio::join!(
             event_loop_handle,
             user_settings_handle,
             mail_settings_handle,
             addresses_handle,
             labels_handle,
+            contacts_handle
         );
         let sync_count_result = Conversation::sync_conversation_and_message_counts(
             ctx.session().api(),
@@ -103,12 +112,14 @@ impl MailUserContext {
             sync_mail_settings_result,
             sync_addresses_result,
             sync_labels_result,
+            sync_contacts_result,
         ) = (
             map_err(event_loop_handle),
             map_err(user_settings_handle),
             map_err(mail_settings_handle),
             map_err(addresses_handle),
             map_err(labels_handle),
+            map_err(contacts_handle),
         );
 
         debug!("Syncing Complete");
@@ -145,6 +156,13 @@ impl MailUserContext {
         if let Err(e) = sync_labels_result {
             error!("Failed to sync labels: {e}");
             return Err((MailUserContextLoadingStage::Labels, e));
+        }
+
+        debug!("Validate contacts");
+        cb.on_stage(MailUserContextLoadingStage::Contacts);
+        if let Err(e) = sync_contacts_result {
+            error!("Failed to sync contacts: {e}");
+            return Err((MailUserContextLoadingStage::Contacts, e));
         }
 
         debug!("Validate conversation and message counts");

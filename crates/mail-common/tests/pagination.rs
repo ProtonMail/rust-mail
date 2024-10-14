@@ -17,7 +17,6 @@ use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::{MailUserContext, Mailbox};
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -274,11 +273,6 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
         }]
     };
     let params = TestParams {
-        last_event_id: None,
-        user_info: None,
-        user_settings: None,
-        mail_settings: None,
-        labels: HashMap::default(),
         addresses: vec![ApiAddress {
             id: ApiRemoteId::from("myaddress"),
             email: "foo@bar.com".to_owned(),
@@ -325,6 +319,7 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
             total: count.try_into().unwrap(),
             unread: 0,
         }],
+        ..Default::default()
     };
 
     let messages = (0..count)

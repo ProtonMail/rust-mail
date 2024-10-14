@@ -2,6 +2,26 @@
 
 use stash::stash::Stash;
 
+/// Macro wrapping u64 into Option<LocalId> for easier model definition.
+#[macro_export]
+macro_rules! lid {
+    ($id:expr) => {{
+        use crate::datatypes::LocalId;
+        Some(LocalId::from($id))
+    }};
+}
+
+#[macro_export]
+macro_rules! contact {
+    ($($field:tt)*) => {{
+        use crate::models::Contact;
+        Contact {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
 pub async fn new_core_test_connection() -> Stash {
     use std::io::stdout;
     use tracing::subscriber::set_global_default;

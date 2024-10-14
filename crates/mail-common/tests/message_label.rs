@@ -309,14 +309,10 @@ fn test_init_params_label(label: ApiLabel) -> TestParams {
     };
 
     TestParams {
-        last_event_id: None,
         user_info: Some(test_user_info()),
-        user_settings: None,
         addresses: test_addresses(),
         mail_settings: Some(test_mail_settings()),
         labels,
-        conversations: vec![],
-        attachments: vec![],
         conversation_count: vec![ConversationCount {
             label_id: SystemLabel::Inbox.remote_id().into(),
             total: 1,
@@ -327,6 +323,7 @@ fn test_init_params_label(label: ApiLabel) -> TestParams {
             total: 1,
             unread: 0,
         }],
+        ..Default::default()
     }
 }
 

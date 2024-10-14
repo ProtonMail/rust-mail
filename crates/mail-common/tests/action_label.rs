@@ -283,10 +283,6 @@ fn test_init_params_label() -> (TestParams, RemoteId, LabelId, LabelId) {
     };
     (
         TestParams {
-            last_event_id: None,
-            user_info: None,
-            user_settings: None,
-            mail_settings: None,
             labels,
             addresses: vec![ApiAddress {
                 id: ApiRemoteId::from("myaddress"),
@@ -340,6 +336,7 @@ fn test_init_params_label() -> (TestParams, RemoteId, LabelId, LabelId) {
                 unread: 0,
             }],
             attachments: Vec::new(),
+            ..Default::default()
         },
         conv_id,
         label_id,

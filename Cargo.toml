@@ -1,8 +1,9 @@
 [workspace]
 resolver = "2"
-members  = ["crates/*", "xtask"]
+members = ["crates/*", "xtask"]
 
 [workspace.dependencies]
+
 aes-gcm = { version = "0.10", features = ["zeroize", "std"] }
 anyhow = "1.0"
 async-trait = "0.1"
@@ -31,7 +32,13 @@ quick_cache = "0.6"
 rand = "0.8"
 regex = "1.10.5"
 regex_static = "0.1"
-rusqlite = { version = "0.31.0", features = ["bundled", "chrono", "functions", "trace", "uuid"] }
+rusqlite = { version = "0.31.0", features = [
+    "bundled",
+    "chrono",
+    "functions",
+    "trace",
+    "uuid",
+] }
 scraper = "0.19.0"
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
@@ -48,6 +55,7 @@ tokio-util = "0.7"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 typed-builder = "0.20.0"
+unicode-segmentation = "1.12.0"
 uniffi = { version = "0.28.1", features = ["tokio"] }
 url = { version = "2.5.2", features = ["serde"] }
 uuid = { version = "1.8.0", features = ["serde", "v4"] }
@@ -55,61 +63,66 @@ velcro = "0.5.4"
 wiremock = "0.6.0"
 zeroize = "1.7.0"
 
-[workspace.dependencies.proton-action-queue] 
+[workspace.dependencies.proton-action-queue]
 version = "0.7"
 path = "crates/action-queue"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-api-core] 
+[workspace.dependencies.proton-api-core]
 version = "0.8"
 path = "crates/core-api"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-api-mail] 
+[workspace.dependencies.proton-api-mail]
 version = "0.5"
 path = "crates/mail-api"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-core-common] 
+[workspace.dependencies.proton-core-common]
 version = "0.9"
 path = "crates/core-common"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-event-loop] 
+[workspace.dependencies.proton-event-loop]
 version = "0.7"
 path = "crates/event-loop"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-mail-common] 
+[workspace.dependencies.proton-mail-common]
 version = "0.7"
 path = "crates/mail-common"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-sqlite3] 
+[workspace.dependencies.proton-mail-uniffi]
+version = "0.12"
+path = "crates/mail-uniffi"
+registry = "proton"
+
+[workspace.dependencies.proton-sqlite3]
 version = "0.7"
 path = "crates/sqlite3"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-vcard] 
+[workspace.dependencies.proton-vcard]
 version = "0.2"
 path = "crates/vcard"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.stash] 
+[workspace.dependencies.stash]
 version = "0.2"
 path = "crates/stash"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.stash-macros] 
+[workspace.dependencies.stash-macros]
 version = "0.2"
 path = "crates/stash-macros"
-registry = "proton" 
+registry = "proton"
 
-[workspace.dependencies.proton-crypto-inbox] 
+[workspace.dependencies.proton-crypto-inbox]
 version = "0.6"
 registry = "proton"
 
-[workspace.dependencies.proton-crypto-account] 
+[workspace.dependencies.proton-crypto-account]
 version = "0.6"
 registry = "proton"
 features = ["sql"]

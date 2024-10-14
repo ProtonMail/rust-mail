@@ -1,6 +1,22 @@
 #[cfg(test)]
-#[path = "tests/proton_color.rs"]
+#[path = "tests/utils.rs"]
 mod tests;
+
+use unicode_segmentation::UnicodeSegmentation;
+
+/// Returns the first grapheme of the string in uppercase.
+/// Graphene is a user-perceived character, which can be any Unicode code point.
+///
+#[must_use]
+pub fn first_grapheme_upppercase<S: AsRef<str>>(s: S) -> Option<String> {
+    Some(s.as_ref().trim().graphemes(true).next()?.to_uppercase())
+}
+
+/// Returns the first word of the string.
+///
+pub fn first_word<S: AsRef<str>>(s: S) -> Option<String> {
+    s.as_ref().unicode_words().next().map(ToString::to_string)
+}
 
 /// List of Proton colors defined by designers.
 static PROTON_COLORS: [&str; 15] = [
@@ -9,6 +25,8 @@ static PROTON_COLORS: [&str; 15] = [
 ];
 
 /// Returns hexadecimal Proton color based on string value.
+///
+#[must_use]
 pub fn proton_color(name: &str) -> &str {
     let mut hash = 0;
     for c in name.chars() {

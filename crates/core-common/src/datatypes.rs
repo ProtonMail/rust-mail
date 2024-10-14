@@ -37,6 +37,12 @@
 //! Hence event data types are placed into the [`events`](crate::events) module.
 //!
 
+mod avatar;
+mod contact_list;
+
+pub use self::avatar::AvatarInformation;
+pub use self::contact_list::*;
+
 use core::fmt;
 use indoc::formatdoc;
 use itertools::Itertools;
@@ -1237,7 +1243,7 @@ impl ToSql for LabelId {
 }
 
 /// Wrapper type around `Vec<RemoteId>` to implement [`FromSql`] and [`ToSql`].
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Labels(Vec<LabelId>);
 
 impl Labels {
