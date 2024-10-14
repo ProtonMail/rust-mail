@@ -2,26 +2,29 @@ use crate::app::Command;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{BackgroundSender, Item, LiveQueryBuilder, Message, ITEM_LIMIT};
+use crate::app_model::mailbox::{BackgroundSender, Item, Message, ITEM_LIMIT};
+use crate::app_model::watcher::WatchHandle;
 use crate::app_model::{AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
 use crossterm::event::Event;
-use proton_core_common::db::proton_sqlite3::Observed;
-use proton_core_common::db::DBResult;
-use proton_mail_common::db::{LabelItemCount, LocalLabel, LocalLabelId};
-use proton_mail_common::exports::tracing;
-use proton_mail_common::exports::tracing::error;
-use proton_mail_common::proton_api_mail::domain::{LabelId, MailSettingsViewMode};
-use proton_mail_common::settings::MailSettings;
-use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult};
+use flume::{Receiver, Sender};
+use futures::FutureExt;
+use proton_core_common::datatypes::{LabelId, LocalId};
+use proton_core_common::models::ModelExtension;
+use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
+use proton_mail_common::models::{Label, MailSettings};
+use proton_mail_common::{
+    AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
+};
 use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
-use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
+use stash::orm::ResultsetChange;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
+use tracing::error;
 
 enum State {
     Syncing(ThrobberState),
@@ -38,7 +41,7 @@ impl State {
 pub(super) trait StateHandler {
     fn handle_event(&mut self, event: Event) -> Command<Messages>;
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Message,
@@ -49,32 +52,32 @@ pub(super) trait StateHandler {
     fn view(&mut self, frame: &mut Frame, area: Rect);
 }
 pub struct Model {
-    ctx: MailUserContext,
+    ctx: Arc<MailUserContext>,
     mailbox: Mailbox,
     mail_settings: Arc<MailSettings>,
-    label: LocalLabel,
-    item_count_query: Option<Observed>,
-    item_count: Option<LabelItemCount>,
+    label: Label,
+    label_watcher: Option<WatchHandle>,
     state: State,
     cancel_token: Option<Sender<()>>,
 }
 
 impl Model {
-    pub fn new(ctx: MailUserContext) -> MailboxResult<Self> {
-        let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox())?;
-        let label = ctx
-            .get_label_with_remote_id(LabelId::inbox())?
-            .ok_or(MailboxError::RemoteLabelNotFound(LabelId::inbox().clone()))?;
-        let mail_settings = MailSettings::new(&ctx, None);
+    pub async fn new(ctx: Arc<MailUserContext>) -> MailboxResult<Self> {
+        let mailbox = Mailbox::with_remote_id(ctx.clone(), LabelId::inbox()).await?;
+        let label = Label::find_by_id(mailbox.label_id(), ctx.user_stash())
+            .await?
+            .ok_or(AppError::LabelNotFound(mailbox.label_id()))?;
+        let mail_settings = MailSettings::get(&ctx.user_stash().into())
+            .await?
+            .unwrap_or_default();
         Ok(Self {
             ctx,
             mailbox,
             mail_settings: Arc::new(mail_settings),
             state: State::new_syncing(),
             label,
-            item_count_query: None,
-            item_count: None,
             cancel_token: None,
+            label_watcher: None,
         })
     }
 
@@ -84,10 +87,10 @@ impl Model {
         }
 
         let ctx = self.ctx.clone();
-        let (sender, receiver) = std::sync::mpsc::channel();
+        let (sender, receiver) = flume::bounded(0);
         self.cancel_token = Some(sender);
         std::thread::spawn(move || {
-            background_worker(&ctx, &receiver, &bg_sender);
+            background_worker(ctx, receiver, bg_sender);
         });
     }
 
@@ -98,32 +101,33 @@ impl Model {
         self.init_background_worker(sender);
 
         Command::task(async {
-            let label = match mbox.user_context().get_label(mbox.label_id()) {
-                Ok(l) => {
-                    if let Some(l) = l {
-                        l
-                    } else {
-                        let e = anyhow!(
-                            "Failed to get label: {}",
-                            MailboxError::LabelNotFound(mbox.label_id())
-                        );
-                        tracing::error!("{e}");
+            let label =
+                match Label::find_by_id(mbox.label_id(), mbox.user_context().user_stash()).await {
+                    Ok(l) => {
+                        if let Some(l) = l {
+                            l
+                        } else {
+                            let e = anyhow!(
+                                "Failed to get label: {}",
+                                MailboxError::LabelNotFound(mbox.label_id())
+                            );
+                            error!("{e}");
+                            return Command::message(Messages::DisplayError(None, e));
+                        }
+                    }
+                    Err(e) => {
+                        let e = anyhow!("Failed to get label: {e}");
+                        error!("{e}");
                         return Command::message(Messages::DisplayError(None, e));
                     }
-                }
-                Err(e) => {
-                    let e = anyhow!("Failed to get label: {e}");
-                    tracing::error!("{e}");
-                    return Command::message(Messages::DisplayError(None, e));
-                }
-            };
+                };
             if let Err(e) = mbox.sync(ITEM_LIMIT).await {
                 let e = anyhow!("Failed to sync mailbox: {e}");
-                tracing::error!("{e}");
+                error!("{e}");
                 return Command::message(Messages::DisplayError(None, e));
             };
 
-            let msg = if mbox.view_mode() == MailSettingsViewMode::Conversations {
+            let msg = if mbox.view_mode() == ViewMode::Conversations {
                 Message::OpenConversationView(mbox, label)
             } else {
                 Message::OpenMessageView(mbox, label)
@@ -133,74 +137,91 @@ impl Model {
         })
     }
 
-    fn build_item_count_query(&mut self, sender: BackgroundSender) -> Command<Messages> {
-        self.item_count_query = None;
-        self.item_count = None;
-        let local_label = match self
-            .mailbox
-            .user_context()
-            .db_read(|conn| conn.label_with_id_and_conversation_count(self.mailbox.label_id()))
+    async fn build_item_count_query(&mut self, sender: BackgroundSender) -> Command<Messages> {
+        match Label::watch(
+            self.label.local_id.unwrap(),
+            self.mailbox.user_context().user_stash(),
+        )
+        .await
         {
-            Ok(label) => label,
-            Err(e) => return Command::message(MailboxError::from(e).into()),
-        };
-        self.item_count = local_label.map(|l| LabelItemCount {
-            unread: l.unread_count,
-            total: l.total_count,
-        });
-        match self
-            .mailbox
-            .new_label_item_count_query(LiveQueryBuilder::new(label_item_count_converter, sender))
-        {
-            Ok(q) => {
-                self.item_count_query = Some(q);
-                Command::None
+            Ok(receiver) => {
+                if let Some((_, receiver)) = receiver {
+                    self.label_watcher = Some(WatchHandle::new(
+                        receiver,
+                        |change| {
+                            async move {
+                                match change {
+                                    ResultsetChange::Deleted(_) => {
+                                        todo!("Select inbox on deleted");
+                                    }
+                                    ResultsetChange::Inserted(label)
+                                    | ResultsetChange::Updated(label) => {
+                                        Message::LabelRefreshed(label).into()
+                                    }
+                                    _ => {
+                                        panic!("unhandled pattern")
+                                    }
+                                }
+                            }
+                            .boxed()
+                        },
+                        sender,
+                    ));
+                    Command::none()
+                } else {
+                    Command::message(
+                        MailboxError::from(AppError::LabelNotFound(self.label.local_id.unwrap()))
+                            .into(),
+                    )
+                }
             }
-            Err(e) => Command::message(e.into()),
+            Err(e) => Command::message(MailboxError::from(e).into()),
         }
     }
 
-    fn open_conversation_view(
+    async fn open_conversation_view(
         &mut self,
         mbox: Mailbox,
-        label: LocalLabel,
+        label: Label,
         sender: BackgroundSender,
     ) -> Command<Messages> {
         self.mailbox = mbox;
-        match ConversationsState::new(&self.mailbox, sender.clone()) {
+        self.label = label;
+        match ConversationsState::new(&self.mailbox, sender.clone()).await {
             Ok(state) => {
                 self.state = State::Conversations(state);
-                self.label = label;
-                self.build_item_count_query(sender)
+                self.build_item_count_query(sender).await
             }
             Err(e) => Command::message(Messages::from(e)),
         }
     }
 
-    fn open_message_view(
+    async fn open_message_view(
         &mut self,
         mbox: Mailbox,
-        label: LocalLabel,
+        label: Label,
         sender: &BackgroundSender,
     ) -> Command<Messages> {
         self.mailbox = mbox;
-        let state = match MessagesState::new(&self.mailbox, sender.clone()) {
+        self.label = label;
+        let state = match MessagesState::new(&self.mailbox, sender.clone()).await {
             Ok(state) => state,
             Err(e) => {
                 return Command::message(e.into());
             }
         };
-        self.label = label;
         self.state = State::Messages(state);
-        self.build_item_count_query(sender.clone())
+        self.build_item_count_query(sender.clone()).await
     }
 
-    fn item_count_refreshed(&mut self, item_count: LabelItemCount) {
-        self.item_count = Some(item_count);
-    }
-
-    fn open_label_select_popup(&mut self) -> Command<Messages> {
-        match LabelSelectPopup::new(self.mailbox.user_context(), &self.label) {
+    async fn open_label_select_popup(&mut self) -> Command<Messages> {
+        match LabelSelectPopup::new(
+            self.mailbox.user_context(),
+            &self.label,
+            self.mailbox.view_mode(),
+        )
+        .await
+        {
             Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
             Err(e) => {
                 let e = anyhow!("Failed to load labels: {e}");
@@ -210,12 +231,12 @@ impl Model {
         }
     }
 
-    fn open_move_item_popup(&mut self, item: Item) -> Command<Messages> {
+    async fn open_move_item_popup(&mut self, item: Item) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
         };
 
-        match MoveItemPopup::new(&self.ctx, item) {
+        match MoveItemPopup::new(&self.ctx, item).await {
             Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
             Err(e) => {
                 let e = anyhow!("Failed to load folders: {e}");
@@ -225,12 +246,12 @@ impl Model {
         }
     }
 
-    fn open_label_popup(&mut self, item: Item) -> Command<Messages> {
+    async fn open_label_popup(&mut self, item: Item) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
         };
 
-        match LabelItemPopup::new(&self.ctx, item, true) {
+        match LabelItemPopup::new(&self.ctx, item, true).await {
             Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
             Err(e) => {
                 let e = anyhow!("Failed to load labels: {e}");
@@ -240,12 +261,12 @@ impl Model {
         }
     }
 
-    fn open_unlabel_popup(&mut self, item: Item) -> Command<Messages> {
+    async fn open_unlabel_popup(&mut self, item: Item) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
         };
 
-        match LabelItemPopup::new(&self.ctx, item, false) {
+        match LabelItemPopup::new(&self.ctx, item, false).await {
             Ok(state) => Command::message(Messages::RaisePopup(Box::new(state))),
             Err(e) => {
                 let e = anyhow!("Failed to load labels: {e}");
@@ -255,8 +276,8 @@ impl Model {
         }
     }
 
-    fn select_label(&mut self, label_id: LocalLabelId) -> Command<Messages> {
-        Command::message(match Mailbox::with_id(self.ctx.clone(), label_id) {
+    async fn select_label(&mut self, label_id: LocalId) -> Command<Messages> {
+        Command::message(match Mailbox::new(self.ctx.clone(), label_id).await {
             Ok(mbox) => Message::Sync(mbox).into(),
             Err(e) => {
                 let e = anyhow!("Failed to open label: {e}");
@@ -282,7 +303,7 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Messages,
@@ -296,19 +317,23 @@ impl AppStateHandler for Model {
             Message::Sync(mbox) => self.sync_mailbox(mbox, sender.clone()),
             Message::OpenConversationView(mbox, label) => {
                 self.open_conversation_view(mbox, label, sender.clone())
+                    .await
             }
-            Message::OpenMessageView(mbox, label) => self.open_message_view(mbox, label, sender),
-            Message::OpenLabelSelectPopup => self.open_label_select_popup(),
-            Message::SelectLabel(label_id) => self.select_label(label_id),
-            Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
-            Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
-            Message::OpenUnlabelItemPopup(item) => self.open_unlabel_popup(item),
+            Message::OpenMessageView(mbox, label) => {
+                self.open_message_view(mbox, label, sender).await
+            }
+            Message::OpenLabelSelectPopup => self.open_label_select_popup().await,
+            Message::SelectLabel(label_id) => self.select_label(label_id).await,
+            Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item).await,
+            Message::OpenLabelItemPopup(item) => self.open_label_popup(item).await,
+            Message::OpenUnlabelItemPopup(item) => self.open_unlabel_popup(item).await,
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state
                     .update(ctx, message, &self.mailbox, &self.mail_settings, sender)
+                    .await
             }
-            Message::ItemCountRefreshed(count) => {
-                self.item_count_refreshed(count);
+            Message::LabelRefreshed(label) => {
+                self.label = label;
                 Command::None
             }
         }
@@ -359,27 +384,23 @@ impl AppStateHandler for Model {
             .as_deref()
             .unwrap_or(self.label.name.as_str());
 
-        let counters = self
-            .item_count
-            .as_ref()
-            .map(|counts| format!("T:{:4} U:{:4}", counts.total, counts.unread));
+        let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
+            (self.label.total_conv, self.label.unread_conv)
+        } else {
+            (self.label.total_msg, self.label.unread_msg)
+        };
+        let counters = format!("T:{total:4} U:{unread:4}");
         let [label_area, _, count_area, other_area] = Layout::horizontal([
             Constraint::Length(u16::try_from(label_name.chars().count()).unwrap_or(10)),
             Constraint::Length(1),
-            if counters.is_some() {
-                Constraint::Length(13)
-            } else {
-                Constraint::Length(1)
-            },
+            Constraint::Length(13),
             Constraint::Percentage(100),
         ])
         .flex(Flex::Start)
         .areas(area);
         let text = Text::from(label_name);
         frame.render_widget(text, label_area);
-        if let Some(counters) = counters {
-            frame.render_widget(Text::from(counters), count_area);
-        }
+        frame.render_widget(Text::from(counters), count_area);
         if let State::Conversations(state) = &mut self.state {
             state.draw_status_bar(frame, other_area);
         }
@@ -395,7 +416,7 @@ impl StateHandler for State {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Message,
@@ -405,8 +426,16 @@ impl StateHandler for State {
     ) -> Command<Messages> {
         match self {
             State::Syncing(_) => Command::None,
-            State::Conversations(state) => state.update(ctx, message, mbox, mail_settings, sender),
-            State::Messages(state) => state.update(ctx, message, mbox, mail_settings, sender),
+            State::Conversations(state) => {
+                state
+                    .update(ctx, message, mbox, mail_settings, sender)
+                    .await
+            }
+            State::Messages(state) => {
+                state
+                    .update(ctx, message, mbox, mail_settings, sender)
+                    .await
+            }
         }
     }
 
@@ -435,55 +464,52 @@ impl From<Model> for AppState {
     }
 }
 
-fn background_worker(context: &MailUserContext, reader: &Receiver<()>, sender: &BackgroundSender) {
-    let interval = Duration::from_secs(15);
-    loop {
-        if let Err(e) = reader.recv_timeout(interval) {
-            if e == RecvTimeoutError::Disconnected {
-                return;
-            }
-        }
-        if let Err(e) = context.execute_pending_actions() {
-            let e = anyhow!("Failed to flush actions: {e}");
-            tracing::error!("{e}");
-            if sender
-                .send(Command::message(Messages::DisplayError(
-                    Some("Action Queue".to_owned()),
-                    e,
-                )))
-                .is_err()
-            {
-                error!("Failed to send message from worker");
-            }
-        }
+fn background_worker(
+    context: Arc<MailUserContext>,
+    reader: Receiver<()>,
+    sender: BackgroundSender,
+) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(15));
+        loop {
+            tokio::select! {
+                _ = reader.recv_async() => {
+                    return;
+                }
+                _ = interval.tick() => {
+                    if let Err(e) = context.execute_pending_actions().await {
+                        let e = anyhow!("Failed to flush actions: {e}");
+                        error!("{e}");
+                        if sender
+                            .send(Command::message(Messages::DisplayError(
+                                Some("Action Queue".to_owned()),
+                                e,
+                            )))
+                            .is_err()
+                        {
+                            error!("Failed to send message from worker");
+                        }
+                    }
 
-        if let Err(e) = context
-            .mail_context()
-            .async_runtime()
-            .block_on(async { context.poll_event_loop().await })
-        {
-            let e = anyhow!("Failed to poll events: {e}");
-            tracing::error!("{e}");
-            if sender
-                .send(Command::message(Messages::DisplayError(
-                    Some("Event Loop".to_owned()),
-                    e,
-                )))
-                .is_err()
-            {
-                error!("Failed to send message from worker");
+                    if let Err(e) = context.poll_event_loop().await {
+                        let e = anyhow!("Failed to poll events: {e}");
+                        error!("{e}");
+                        if sender
+                            .send(Command::message(Messages::DisplayError(
+                                Some("Event Loop".to_owned()),
+                                e,
+                            )))
+                            .is_err()
+                        {
+                            error!("Failed to send message from worker");
+                        }
+                    }
+                }
             }
         }
-    }
-}
-
-fn label_item_count_converter(value: DBResult<LabelItemCount>) -> Command<Messages> {
-    Command::message(match value {
-        Ok(value) => Message::ItemCountRefreshed(value).into(),
-        Err(e) => {
-            let e = anyhow!("Label Item Count Query error: {e}");
-            tracing::error!("{e}");
-            e.into()
-        }
-    })
+    });
 }

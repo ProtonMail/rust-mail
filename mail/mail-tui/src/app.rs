@@ -1,12 +1,13 @@
 use crate::TerminalType;
+use anyhow::anyhow;
 use crossterm::event;
 use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
-use proton_async::runtime::MultiThreaded;
-use proton_async::sync::mpsc::{unbounded, Receiver, Sender};
-use proton_mail_common::exports::tracing::error;
+use flume::{Receiver, Sender};
 use ratatui::prelude::*;
 use std::future::Future;
+use std::io;
 use std::pin::Pin;
+use tracing::error;
 
 /// Behavior specification for the model.
 pub trait Model<Message> {
@@ -25,36 +26,60 @@ pub trait Model<Message> {
     /// If you want to run an async tasks in the background return [`Command::task`]. The `sender`
     /// is passed here for situations where you are running something on a dedicated thread and
     /// need to communicate back to the main thread.
-    fn update(&mut self, message: Message, sender: &Sender<Command<Message>>) -> Command<Message>;
+    async fn update(
+        &mut self,
+        message: Message,
+        sender: &Sender<Command<Message>>,
+    ) -> Command<Message>;
     /// Called to display the appication.
     fn view(&mut self, frame: &mut Frame);
-
-    fn runtime(&self) -> &MultiThreaded;
 }
 pub struct App<M: Model<Message>, Message: Send + 'static> {
     model: M,
     bg_receiver: Receiver<Command<Message>>,
     bg_sender: Sender<Command<Message>>,
+    event_receiver: Receiver<io::Result<event::Event>>,
     quit: bool,
 }
 
 impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
     pub fn new(model: M) -> Self {
-        let (sender, receiver) = unbounded();
+        let (sender, receiver) = flume::unbounded();
+        let (event_sender, event_receiver) = flume::unbounded();
+        std::thread::spawn(move || loop {
+            match event::poll(std::time::Duration::from_millis(250)) {
+                Ok(has_event) => {
+                    if has_event {
+                        let event = event::read();
+                        if event_sender.send(event).is_err() {
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to poll events: {e}");
+                }
+            }
+        });
+
         Self {
             model,
             quit: false,
             bg_receiver: receiver,
             bg_sender: sender,
+            event_receiver,
         }
     }
 
-    pub fn run(&mut self, mut terminal: TerminalType) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn run(
+        &mut self,
+        mut terminal: TerminalType,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Initialize.
         {
             // handle init.
             let message = self.model.on_ready();
-            self.handle_command(message);
+            self.handle_command(message).await;
         }
 
         while !self.quit {
@@ -63,14 +88,14 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
 
             // Handle background issued messages.
             while let Ok(message) = self.bg_receiver.try_recv() {
-                self.handle_command(message);
+                self.handle_command(message).await;
             }
 
             // handle input
-            let message = self.poll_events()?;
+            let message = self.poll_events().await?;
 
             // Apply updates from input.
-            self.handle_command(message);
+            self.handle_command(message).await;
         }
 
         Ok(())
@@ -81,36 +106,42 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
         self.quit = true;
     }
 
-    fn poll_events(&mut self) -> Result<Command<Message>, Box<dyn std::error::Error>> {
-        if event::poll(std::time::Duration::from_millis(250))? {
-            let event = event::read()?;
-
-            if let event::Event::Key(key) = &event {
-                if key.kind == KeyEventKind::Press
-                    && key.code == KeyCode::Char('c')
-                    && key.modifiers == KeyModifiers::CONTROL
-                {
-                    self.quit();
-                }
+    async fn poll_events(&mut self) -> Result<Command<Message>, Box<dyn std::error::Error>> {
+        tokio::select! {
+            () = tokio::time::sleep(std::time::Duration::from_millis(250))  => {
+                Ok(Command::None)
             }
+            r = self.event_receiver.recv_async() => {
+               let Ok(event)  = r else {
+                    return Err(anyhow!("Failed to receive event").into());
+                };
+                let event=event?;
+                if let event::Event::Key(key) = &event {
+                    if key.kind == KeyEventKind::Press
+                        && key.code == KeyCode::Char('c')
+                        && key.modifiers == KeyModifiers::CONTROL
+                    {
+                        self.quit();
+                    }
+                }
 
-            return Ok(self.model.handle_event(event));
+                Ok(self.model.handle_event(event))
+            }
         }
-        Ok(Command::None)
     }
 
-    fn handle_command(&mut self, command: Command<Message>) {
+    async fn handle_command(&mut self, command: Command<Message>) {
         let mut pending = Vec::with_capacity(4);
         pending.push(command);
         while let Some(command) = pending.pop() {
             match command {
                 Command::None => {}
                 Command::Message(message) => {
-                    pending.push(self.model.update(message, &self.bg_sender));
+                    pending.push(self.model.update(message, &self.bg_sender).await);
                 }
                 Command::Task(future) => {
                     let sender = self.bg_sender.clone();
-                    self.model.runtime().spawn(async move {
+                    tokio::spawn(async move {
                         let command = future.await;
                         if sender.send(command).is_err() {
                             error!("Failed to send background command");

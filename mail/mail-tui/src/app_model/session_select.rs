@@ -5,8 +5,7 @@ use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
-use proton_core_common::db::EncryptedUserSession;
-use proton_mail_common::exports::tracing;
+use proton_core_common::db::account::CoreAccount;
 use proton_mail_common::{MailContext, MailContextError};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
@@ -21,16 +20,16 @@ pub enum Message {
 }
 
 pub struct Model {
-    sessions: Vec<EncryptedUserSession>,
+    accounts: Vec<CoreAccount>,
     session_list_state: ScrollableListState,
 }
 
 impl Model {
-    pub fn new(ctx: &MailContext) -> Result<Self, MailContextError> {
-        let sessions = ctx.sessions()?;
+    pub async fn new(ctx: &MailContext) -> Result<Self, MailContextError> {
+        let accounts = ctx.get_accounts().await?;
 
         Ok(Self {
-            sessions,
+            accounts,
             session_list_state: ScrollableListState::new(Some(0)),
         })
     }
@@ -61,7 +60,7 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Messages,
@@ -80,21 +79,21 @@ impl AppStateHandler for Model {
                 };
 
                 {
-                    let Some(session) = self.sessions.get(index) else {
+                    let Some(account) = self.accounts.get(index) else {
                         return Command::message(Messages::DisplayError(
                             None,
                             anyhow!("Invalid session index",),
                         ));
                     };
 
-                    if let Err(e) = ctx.delete_session(session) {
+                    if let Err(e) = ctx.delete_account(account.remote_id.clone()).await {
                         let e = anyhow!("Failed to delete session: {e}");
                         tracing::error!("{e}");
                         return Command::message(Messages::DisplayError(None, e));
                     }
                 };
 
-                self.sessions.remove(index);
+                self.accounts.remove(index);
                 Command::None
             }
             Message::Submit => {
@@ -105,30 +104,43 @@ impl AppStateHandler for Model {
                     ));
                 };
 
-                let Some(session) = self.sessions.get(index) else {
+                let Some(account) = self.accounts.get(index) else {
                     return Command::message(Messages::DisplayError(
                         None,
                         anyhow!("Invalid session index",),
                     ));
                 };
 
-                match ctx.user_context_from_session(session, None) {
-                    Ok(context) => Command::message(match mailbox::Model::new(context) {
-                        Ok(model) => Messages::SwitchAppState(model.into()),
-                        Err(e) => e.into(),
-                    }),
-                    Err(e) => {
-                        let e = anyhow!("Failed to load session: {e}");
-                        tracing::error!("{e}");
-                        Command::message(Messages::DisplayError(None, e))
+                match ctx.get_sessions(account.remote_id.clone()).await {
+                    Ok(sessions) => {
+                        if sessions.is_empty() {
+                            Command::message(Messages::SwitchAppState(
+                                login::Model::with_email(account.name_or_addr.clone()).into(),
+                            ))
+                        } else {
+                            match ctx.user_context_from_session(&sessions[0]).await {
+                                Ok(context) => {
+                                    Command::message(match mailbox::Model::new(context).await {
+                                        Ok(model) => Messages::SwitchAppState(model.into()),
+                                        Err(e) => e.into(),
+                                    })
+                                }
+                                Err(e) => {
+                                    let e = anyhow!("Failed to load session: {e}");
+                                    tracing::error!("{e}");
+                                    Command::message(Messages::DisplayError(None, e))
+                                }
+                            }
+                        }
                     }
+                    Err(e) => Command::message(e.into()),
                 }
             }
             Message::NewAccount => {
                 Command::message(Messages::SwitchAppState(login::Model::new().into()))
             }
             Message::Init => {
-                if self.sessions.is_empty() {
+                if self.accounts.is_empty() {
                     Command::message(Messages::SwitchAppState(login::Model::new().into()))
                 } else {
                     Command::None
@@ -152,11 +164,11 @@ impl AppStateHandler for Model {
         .areas(area);
 
         let list_sessions = self
-            .sessions
+            .accounts
             .iter()
-            .map(|session| ListItem::new(Text::from(session.email.clone())))
+            .map(|session| ListItem::new(Text::from(session.name_or_addr.clone())))
             .collect::<Vec<_>>();
-        self.session_list_state.set_len(self.sessions.len());
+        self.session_list_state.set_len(self.accounts.len());
 
         frame.render_stateful_widget(
             ScrollableList::new(

@@ -1,4 +1,5 @@
 use chrono::DateTime;
+use proton_mail_common::datatypes::{MessageAddress, MessageAddresses};
 
 pub fn date_from_timestamp(timestamp: u64) -> String {
     let timestamp_i64 = i64::try_from(timestamp).unwrap_or(0);
@@ -7,7 +8,7 @@ pub fn date_from_timestamp(timestamp: u64) -> String {
     let date_str = date.format("%d/%m/%Y %H:%M");
     date_str.to_string()
 }
-pub fn sender_name(sender: &proton_mail_common::proton_api_mail::domain::MessageAddress) -> &str {
+pub fn sender_name(sender: &MessageAddress) -> &str {
     if sender.name.is_empty() {
         sender.address.as_str()
     } else {
@@ -15,9 +16,7 @@ pub fn sender_name(sender: &proton_mail_common::proton_api_mail::domain::Message
     }
 }
 
-pub fn format_sender(
-    sender: &proton_mail_common::proton_api_mail::domain::MessageAddress,
-) -> String {
+pub fn format_sender(sender: &MessageAddress) -> String {
     if sender.name.is_empty() {
         sender.address.clone()
     } else {
@@ -25,10 +24,9 @@ pub fn format_sender(
     }
 }
 
-pub fn format_senders(
-    senders: &[proton_mail_common::proton_api_mail::domain::MessageAddress],
-) -> String {
+pub fn format_senders(senders: &MessageAddresses) -> String {
     senders
+        .value
         .iter()
         .map(format_sender)
         .collect::<Vec<_>>()

@@ -26,16 +26,17 @@ fn initialize_panic_handler() {
         original_hook(panic_info);
     }));
 }
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     initialize_panic_handler();
 
-    let state = AppModel::new()?;
+    let state = AppModel::new().await?;
     let mut app = App::new(state);
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
-    let result = app.run(terminal);
+    let result = app.run(terminal).await;
     stdout().execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;
     result

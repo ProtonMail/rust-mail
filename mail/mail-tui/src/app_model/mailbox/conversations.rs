@@ -3,18 +3,16 @@
 use crate::app::Command;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{
-    BackgroundSender, ConversationMessage, Item, LiveQueryBuilder, Message, ITEM_LIMIT,
-};
+use crate::app_model::mailbox::{BackgroundSender, ConversationMessage, Item, Message};
+use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
-use proton_core_common::db::proton_sqlite3::Observed;
-use proton_core_common::db::DBResult;
-use proton_mail_common::db::{LocalConversation, LocalConversationId, LocalLabelId};
-use proton_mail_common::exports::tracing;
-use proton_mail_common::settings::MailSettings;
+use futures::FutureExt;
+use proton_core_common::datatypes::LocalId;
+use proton_mail_common::datatypes::ContextualConversation;
+use proton_mail_common::models::{Conversation, MailSettings};
 use proton_mail_common::{MailContext, Mailbox, MailboxResult};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
@@ -25,20 +23,41 @@ use throbber_widgets_tui::ThrobberState;
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
-    _query: Observed,
-    conversations: Vec<LocalConversation>,
+    _query: WatchHandle,
+    conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
 }
 
 impl ConversationsState {
-    pub fn new(mbox: &Mailbox, sender: BackgroundSender) -> MailboxResult<Self> {
-        let conversations = mbox.conversations(ITEM_LIMIT)?;
+    pub async fn new(mbox: &Mailbox, sender: BackgroundSender) -> MailboxResult<Self> {
+        let (conversations, receiver) = ContextualConversation::watch_in_label(
+            mbox.label_id(),
+            mbox.user_context().user_stash(),
+        )
+        .await?;
+        let ctx = mbox.user_context();
+        let label_id = mbox.label_id();
+        let watcher = WatchHandle::new_dampened(
+            receiver,
+            move || {
+                let ctx = Arc::clone(&ctx);
+                async move {
+                    match ContextualConversation::in_label(label_id, ctx.user_stash()).await {
+                        Ok(c) => ConversationMessage::Refreshed(c).into(),
+                        Err(e) => {
+                            let e = anyhow!("Conversation list Query error: {e}");
+                            tracing::error!("{e}");
+                            e.into()
+                        }
+                    }
+                }
+                .boxed()
+            },
+            sender,
+        );
         Ok(Self {
-            _query: mbox.new_conversation_query(
-                LiveQueryBuilder::new(conversations_refreshed_converter, sender),
-                ITEM_LIMIT,
-            )?,
+            _query: watcher,
             table_state: ScrollableTableState::new(Some(0)),
             messages: MessagesStatus::None,
             conversations,
@@ -49,7 +68,7 @@ impl ConversationsState {
     fn open_conversation(
         &mut self,
         mbox: &Mailbox,
-        id: LocalConversationId,
+        id: LocalId,
         sender: BackgroundSender,
     ) -> Command<Messages> {
         self.messages = MessagesStatus::Loading(ThrobberState::default());
@@ -87,7 +106,7 @@ impl ConversationsState {
         self.messages = MessagesStatus::None;
     }
 
-    fn conversations_refreshed(&mut self, conversations: Vec<LocalConversation>) {
+    fn conversations_refreshed(&mut self, conversations: Vec<ContextualConversation>) {
         self.conversations = conversations;
     }
 
@@ -97,9 +116,9 @@ impl ConversationsState {
         }
     }
 
-    fn selected_conversation(&self) -> Option<LocalConversationId> {
+    fn selected_conversation(&self) -> Option<LocalId> {
         let index = self.table_state.selected()?;
-        self.conversations.get(index).map(|c| c.id)
+        self.conversations.get(index).map(|c| c.local_id)
     }
 }
 
@@ -170,7 +189,7 @@ impl StateHandler for ConversationsState {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Message,
@@ -191,7 +210,9 @@ impl StateHandler for ConversationsState {
                     ConversationMessage::MarkConversationUnread(id) => {
                         mark_conversation_unread(mbox, id)
                     }
-                    ConversationMessage::DeleteConversation(id) => delete_conversation(mbox, id),
+                    ConversationMessage::DeleteConversation(id) => {
+                        delete_conversation(mbox, id).await
+                    }
                     ConversationMessage::MoveConversation(id, label_id) => {
                         move_conversation(mbox, id, label_id)
                     }
@@ -227,7 +248,9 @@ impl StateHandler for ConversationsState {
                     self.close_conversation();
                     return Command::None;
                 }
-                state.update(ctx, message, mbox, mail_settings, sender)
+                state
+                    .update(ctx, message, mbox, mail_settings, sender)
+                    .await
             }
         }
     }
@@ -260,7 +283,10 @@ enum MessagesStatus {
     Ready(Box<MessagesState>),
 }
 
-fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
+#[allow(unused_variables)]
+fn mark_conversation_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    todo!();
+    /*
     match mailbox.mark_conversations_read(std::iter::once(id)) {
         Ok(()) => Command::None,
         Err(e) => {
@@ -268,10 +294,13 @@ fn mark_conversation_read(mailbox: &Mailbox, id: LocalConversationId) -> Command
             tracing::error!("{e}");
             Command::message(e.into())
         }
-    }
+    }*/
 }
 
-fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
+#[allow(unused_variables)]
+fn mark_conversation_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    todo!()
+    /*
     match mailbox.mark_conversations_unread(std::iter::once(id)) {
         Ok(()) => Command::None,
         Err(e) => {
@@ -280,11 +309,20 @@ fn mark_conversation_unread(mailbox: &Mailbox, id: LocalConversationId) -> Comma
             Command::message(e.into())
         }
     }
+     */
 }
 
-fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Messages> {
-    match mailbox.delete_conversations(std::iter::once(id)) {
-        Ok(()) => Command::None,
+#[allow(unused_variables)]
+async fn delete_conversation(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    match Conversation::action_mark_deleted(
+        mailbox.user_context().session(),
+        mailbox.user_context().queue(),
+        mailbox.label_id(),
+        std::iter::once(id),
+    )
+    .await
+    {
+        Ok(_) => Command::None,
         Err(e) => {
             let e = anyhow!("Failed to delete conversation: {e}");
             tracing::error!("{e}");
@@ -293,11 +331,14 @@ fn delete_conversation(mailbox: &Mailbox, id: LocalConversationId) -> Command<Me
     }
 }
 
+#[allow(unused_variables)]
 fn move_conversation(
     mailbox: &Mailbox,
-    conversation_id: LocalConversationId,
-    label_id: LocalLabelId,
+    conversation_id: LocalId,
+    label_id: LocalId,
 ) -> Command<Messages> {
+    todo!();
+    /*
     Command::message(
         match mailbox.move_conversations(label_id, std::iter::once(conversation_id)) {
             Ok(()) => Messages::DismissPopup,
@@ -307,14 +348,17 @@ fn move_conversation(
                 e.into()
             }
         },
-    )
+    )*/
 }
 
+#[allow(unused_variables)]
 fn label_conversation(
     mailbox: &Mailbox,
-    conversation_id: LocalConversationId,
-    label_id: LocalLabelId,
+    conversation_id: LocalId,
+    label_id: LocalId,
 ) -> Command<Messages> {
+    todo!();
+    /*
     Command::message(
         match mailbox.label_conversations(label_id, std::iter::once(conversation_id)) {
             Ok(()) => Messages::DismissPopup,
@@ -324,14 +368,17 @@ fn label_conversation(
                 e.into()
             }
         },
-    )
+    )*/
 }
 
+#[allow(unused_variables)]
 fn unlabel_conversation(
     mailbox: &Mailbox,
-    conversation_id: LocalConversationId,
-    label_id: LocalLabelId,
+    conversation_id: LocalId,
+    label_id: LocalId,
 ) -> Command<Messages> {
+    todo!()
+    /*
     Command::message(
         match mailbox.unlabel_conversations(label_id, std::iter::once(conversation_id)) {
             Ok(()) => Messages::DismissPopup,
@@ -341,18 +388,5 @@ fn unlabel_conversation(
                 e.into()
             }
         },
-    )
-}
-
-fn conversations_refreshed_converter(
-    conversations: DBResult<Vec<LocalConversation>>,
-) -> Command<Messages> {
-    Command::message(match conversations {
-        Ok(c) => ConversationMessage::Refreshed(c).into(),
-        Err(e) => {
-            let e = anyhow!("Conversation list Query error: {e}");
-            tracing::error!("{e}");
-            e.into()
-        }
-    })
+    )*/
 }

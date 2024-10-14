@@ -1,21 +1,22 @@
 use crate::widgets::{utils, AsTable};
-use proton_mail_common::db::LocalConversation;
+use proton_mail_common::datatypes::ContextualConversation;
 use ratatui::layout::Constraint;
 use ratatui::prelude::*;
 use ratatui::widgets::{Cell, Row, Table};
 
-impl AsTable for Vec<LocalConversation> {
+impl AsTable for Vec<ContextualConversation> {
     fn as_table(&self) -> Table<'_> {
         let rows = self.iter().map(|conv| {
-            let starred = if conv.starred { "★" } else { " " };
+            let starred = if conv.is_starred { "★" } else { " " };
             let date = utils::date_from_timestamp(conv.time);
-            let num_attachments = conv.attachments.as_ref().map_or(0, Vec::len);
-            let num_labels = conv.labels.as_ref().map_or(0, Vec::len);
+            let num_attachments = conv.attachments_metadata.len();
+            let num_labels = conv.custom_labels.len();
             let senders = {
-                if conv.senders.len() == 1 {
-                    utils::sender_name(&conv.senders[0]).to_string()
+                if conv.senders.value.len() == 1 {
+                    utils::sender_name(&conv.senders.value[0]).to_string()
                 } else {
                     conv.senders
+                        .value
                         .iter()
                         .map(|s| utils::sender_name(s).to_string())
                         .collect::<Vec<_>>()

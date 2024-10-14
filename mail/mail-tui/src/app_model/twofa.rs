@@ -6,8 +6,7 @@ use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
-use proton_mail_common::exports::tracing;
-use proton_mail_common::proton_api_mail::proton_api_core::login::{Error, Flow};
+use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
 use proton_mail_common::MailContext;
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
@@ -16,7 +15,7 @@ pub enum Message {
     Abort,
     Submit,
     TwoFASuccess(Flow),
-    TwoFAFailed(Flow, Error),
+    TwoFAFailed(Flow, LoginError),
 }
 
 pub struct Model {
@@ -48,7 +47,7 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Messages,
@@ -86,7 +85,7 @@ impl AppStateHandler for Model {
                         "Submitting Two Factor Code ...".to_owned(),
                     )),
                     Command::task(async move {
-                        let message = if let Err(e) = flow.submit_totp(&code).await {
+                        let message = if let Err(e) = flow.submit_totp(code).await {
                             Message::TwoFAFailed(flow, e).into()
                         } else {
                             Message::TwoFASuccess(flow).into()
@@ -101,7 +100,7 @@ impl AppStateHandler for Model {
             }
             Message::TwoFASuccess(flow) => {
                 if flow.is_logged_in() {
-                    match ctx.user_context_from_login_flow(&flow) {
+                    match ctx.user_context_from_login_flow(&flow).await {
                         Ok(context) => Command::message(Messages::SwitchAppState(
                             context_init::Model::new(context).into(),
                         )),

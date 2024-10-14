@@ -5,8 +5,7 @@ use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
-use proton_mail_common::exports::tracing;
-use proton_mail_common::proton_api_mail::proton_api_core::login::{Error, Flow};
+use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
 use proton_mail_common::MailContext;
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
@@ -16,7 +15,7 @@ pub enum Message {
     Submit,
     ToggleInput,
     LoginSuccess(Flow),
-    LoginFailed(Error),
+    LoginFailed(LoginError),
 }
 
 pub struct Model {
@@ -29,6 +28,14 @@ impl Model {
     pub fn new() -> Self {
         Self {
             email_input_state: TextInputState::new().selected(true),
+            password_input_state: TextInputState::new().secret(true),
+            active_input: ActiveInput::Email,
+        }
+    }
+
+    pub fn with_email(email: String) -> Self {
+        Self {
+            email_input_state: TextInputState::with_value(email).selected(true),
             password_input_state: TextInputState::new().secret(true),
             active_input: ActiveInput::Email,
         }
@@ -68,7 +75,7 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Messages,
@@ -98,7 +105,7 @@ impl AppStateHandler for Model {
                     ));
                 }
 
-                let mut flow = match ctx.new_login_flow(None) {
+                let mut flow = match ctx.new_login_flow().await {
                     Ok(f) => f,
                     Err(e) => {
                         return Command::message(e.into());
@@ -113,7 +120,7 @@ impl AppStateHandler for Model {
                     )),
                     Command::task(async move {
                         let message = if let Err(e) = flow
-                            .login(email.as_str(), password.expose_secret().as_str(), None)
+                            .login(email.clone(), password.expose_secret().to_owned(), None)
                             .await
                         {
                             Message::LoginFailed(e).into()
@@ -131,7 +138,7 @@ impl AppStateHandler for Model {
                 if flow.is_awaiting_2fa() {
                     Command::message(Messages::SwitchAppState(twofa::Model::new(flow).into()))
                 } else {
-                    match ctx.user_context_from_login_flow(&flow) {
+                    match ctx.user_context_from_login_flow(&flow).await {
                         Ok(context) => Command::message(Messages::SwitchAppState(
                             context_init::Model::new(context).into(),
                         )),

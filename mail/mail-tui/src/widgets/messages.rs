@@ -1,17 +1,17 @@
 use crate::widgets::utils::{date_from_timestamp, sender_name};
 use crate::widgets::AsTable;
-use proton_mail_common::db::LocalMessageMetadata;
+use proton_mail_common::models::Message;
 use ratatui::layout::Constraint;
 use ratatui::prelude::*;
 use ratatui::widgets::{Cell, Row, Table};
 
-impl AsTable for Vec<LocalMessageMetadata> {
+impl AsTable for Vec<Message> {
     fn as_table(&self) -> Table<'_> {
         let rows = self.iter().map(|msg| {
-            let starred = if msg.starred { "★" } else { " " };
+            let starred = if msg.is_starred() { "★" } else { " " };
             let date = date_from_timestamp(msg.time);
-            let num_attachments = msg.attachments.as_ref().map_or(0, Vec::len);
-            let num_labels = msg.labels.as_ref().map_or(0, Vec::len);
+            let num_attachments = msg.attachments_metadata.len();
+            let num_labels = msg.custom_labels.len();
             let sender = sender_name(&msg.sender);
 
             let mut row = Row::new([

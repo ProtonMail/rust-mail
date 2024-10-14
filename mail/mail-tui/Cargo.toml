@@ -23,6 +23,10 @@ chrono = { version = "0.4" }
 throbber-widgets-tui = "0.6.0"
 scopeguard = "1.2"
 html2text = "0.12.5"
+tracing = "0.1.40"
+tokio = { version = "1.40.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
+flume = "0.11.0"
+futures = "0.3.31"
 
 [target.'cfg(target_os="linux")'.dependencies]
 keyring = { version = "3.0.3", features = ["linux-native"] }
@@ -31,20 +35,14 @@ keyring = { version = "3.0.3", features = ["linux-native"] }
 keyring = { version = "3.0.3", features = ["apple-native"] }
 
 
-[dependencies.proton-async]
-#path = "../../proton-api-core/proton-async"
-registry = "proton"
-version = "0.5"
-
 [dependencies.proton-core-common]
-version = "=0.5.11"
-registry = "proton"
-#path = "../../proton-api-core/proton-core-common"
+path = "sdk/crates/core-common"
 
 [dependencies.proton-mail-common]
-#path = "../mail/proton-mail-common"
-version = "=0.5.31"
-registry = "proton"
+path = "sdk/crates/mail-common"
+
+[dependencies.stash]
+path = "sdk/crates/stash"
 
 [lints.rust]
 trivial_numeric_casts = "warn"

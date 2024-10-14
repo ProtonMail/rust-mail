@@ -3,6 +3,7 @@ pub mod login;
 pub mod mailbox;
 pub mod session_select;
 pub mod twofa;
+mod watcher;
 
 use crate::app::{Command, Model};
 use crate::app_model::mailbox::BackgroundSender;
@@ -10,10 +11,6 @@ use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyEventKind};
-use proton_async::runtime::MultiThreaded;
-use proton_mail_common::exports::tracing;
-use proton_mail_common::exports::tracing::level_filters::LevelFilter;
-use proton_mail_common::proton_api_mail::proton_api_core::http::Builder;
 use proton_mail_common::MailContext;
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
@@ -22,6 +19,7 @@ use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -53,7 +51,7 @@ pub trait AppStateHandler {
     /// Called when there is an input event.
     fn handle_event(&mut self, event: Event) -> Command<Messages>;
     /// Called when there is a message to be handled.
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Messages,
@@ -92,7 +90,7 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub async fn new() -> Result<Self, Box<dyn Error>> {
         let cache_dir = dirs::cache_dir()
             .ok_or(anyhow!("Failed to get cache dir"))?
             .join(APP_ID);
@@ -115,19 +113,19 @@ impl AppModel {
         tracing::info!("Creating Async Runtime...");
         let mut keychain = AppKeyChain::new()?;
         keychain.init()?;
-        let runtime = MultiThreaded::new(4)?;
-        let client = Builder::new().build()?;
         let context = MailContext::new(
-            runtime,
             config_dir,
             user_db_path,
             mail_cache_dir,
+            100 * 1024 * 1024,
             Arc::new(keychain),
-            client,
+            #[allow(clippy::default_trait_access)]
+            Default::default(),
             None,
-        )?;
+        )
+        .await?;
 
-        let sessions_model = session_select::Model::new(&context)?;
+        let sessions_model = session_select::Model::new(&context).await?;
         Ok(Self {
             context,
             state: AppState::SessionSelect(sessions_model),
@@ -198,7 +196,7 @@ impl Model<Messages> for AppModel {
         self.state.handle_event(event)
     }
 
-    fn update(&mut self, message: Messages, sender: &BackgroundSender) -> Command<Messages> {
+    async fn update(&mut self, message: Messages, sender: &BackgroundSender) -> Command<Messages> {
         let message = match message {
             Messages::DisplayBackgroundProgress(text) => {
                 self.bg_progress = Some(BackgroundProgress::new(text));
@@ -230,7 +228,7 @@ impl Model<Messages> for AppModel {
             _ => message,
         };
 
-        self.state.update(&self.context, message, sender)
+        self.state.update(&self.context, message, sender).await
     }
 
     fn view(&mut self, frame: &mut Frame) {
@@ -293,10 +291,6 @@ impl Model<Messages> for AppModel {
             frame.render_widget(block, box_area);
         }
     }
-
-    fn runtime(&self) -> &MultiThreaded {
-        self.context.async_runtime()
-    }
 }
 
 impl AppStateHandler for AppState {
@@ -320,18 +314,18 @@ impl AppStateHandler for AppState {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Messages,
         sender: &BackgroundSender,
     ) -> Command<Messages> {
         match self {
-            AppState::SessionSelect(state) => state.update(ctx, message, sender),
-            AppState::Login(state) => state.update(ctx, message, sender),
-            AppState::TwoFA(state) => state.update(ctx, message, sender),
-            AppState::ContextInit(state) => state.update(ctx, message, sender),
-            AppState::Mailbox(state) => state.update(ctx, message, sender),
+            AppState::SessionSelect(state) => state.update(ctx, message, sender).await,
+            AppState::Login(state) => state.update(ctx, message, sender).await,
+            AppState::TwoFA(state) => state.update(ctx, message, sender).await,
+            AppState::ContextInit(state) => state.update(ctx, message, sender).await,
+            AppState::Mailbox(state) => state.update(ctx, message, sender).await,
         }
     }
 

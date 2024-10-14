@@ -2,9 +2,8 @@
 
 use crate::app::Command;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{
-    BackgroundSender, LiveQueryBuilder, Message, MessageMessage, ITEM_LIMIT,
-};
+use crate::app_model::mailbox::{BackgroundSender, Message, MessageMessage};
+use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
 use crate::widgets::{
@@ -13,15 +12,12 @@ use crate::widgets::{
 };
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
-use proton_core_common::db::proton_sqlite3::Observed;
-use proton_core_common::db::DBResult;
-use proton_mail_common::db::{LocalConversationId, LocalMessageId, LocalMessageMetadata};
-use proton_mail_common::exports::tracing;
-use proton_mail_common::proton_api_mail::domain::MimeType;
-use proton_mail_common::settings::MailSettings;
-use proton_mail_common::{
-    DecryptedMessage as DecryptedMessageBody, MailContext, Mailbox, MailboxResult,
-};
+use futures::FutureExt;
+use proton_core_common::datatypes::LocalId;
+use proton_mail_common::datatypes::{ContextualConversation, MimeType};
+use proton_mail_common::decrypted_message::DecryptedMessageBody;
+use proton_mail_common::models::{MailSettings, Message as MailMessage};
+use proton_mail_common::{AppError, MailContext, Mailbox, MailboxResult};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
@@ -32,8 +28,8 @@ use throbber_widgets_tui::ThrobberState;
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
 pub struct MessagesState {
-    _query: Observed,
-    messages: Vec<LocalMessageMetadata>,
+    _query: WatchHandle,
+    messages: Vec<MailMessage>,
     table_state: ScrollableTableState,
     open_message: DecryptedMessageStatus,
 }
@@ -41,15 +37,33 @@ pub struct MessagesState {
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
 impl MessagesState {
-    pub fn new(mbox: &Mailbox, sender: BackgroundSender) -> MailboxResult<Self> {
-        let messages = mbox.messages(ITEM_LIMIT)?;
-        let query = mbox.new_messages_query(
-            LiveQueryBuilder::new(messages_refreshed_converter, sender),
-            ITEM_LIMIT,
-        )?;
+    pub async fn new(mbox: &Mailbox, sender: BackgroundSender) -> MailboxResult<Self> {
+        let (messages, receiver) =
+            MailMessage::watch_in_label(mbox.label_id(), mbox.user_context().user_stash()).await?;
+
+        let ctx_cloned = mbox.user_context();
+        let label_id = mbox.label_id();
+        let watcher = WatchHandle::new_dampened(
+            receiver,
+            move || {
+                let ctx_cloned = Arc::clone(&ctx_cloned);
+                async move {
+                    match MailMessage::in_label(label_id, ctx_cloned.user_stash(), None).await {
+                        Ok(messages) => MessageMessage::Refreshed(messages).into(),
+                        Err(e) => {
+                            let e = anyhow!("Message list Query error: {e}");
+                            tracing::error!("{e}");
+                            e.into()
+                        }
+                    }
+                }
+                .boxed()
+            },
+            sender,
+        );
 
         Ok(Self {
-            _query: query,
+            _query: watcher,
             messages,
             table_state: ScrollableTableState::new(Some(0)),
             open_message: DecryptedMessageStatus::None,
@@ -58,25 +72,61 @@ impl MessagesState {
 
     pub async fn from_conversation(
         mbox: &Mailbox,
-        conversation_id: LocalConversationId,
+        conversation_id: LocalId,
         sender: BackgroundSender,
     ) -> MailboxResult<Self> {
-        let (to_select_id, messages) = mbox.conversation_messages(conversation_id).await?;
-        let query = mbox
-            .new_conversation_message_query(
-                LiveQueryBuilder::new(messages_refreshed_converter, sender),
-                conversation_id,
-            )
-            .await?;
+        let Some(conv_and_messages) = ContextualConversation::conversation_and_messages(
+            conversation_id,
+            mbox.label_id(),
+            mbox.user_context().user_stash(),
+            mbox.user_context().api(),
+        )
+        .await?
+        else {
+            return Err(AppError::ConversationNotFound(conversation_id).into());
+        };
 
-        let index = messages
+        let receiver = ContextualConversation::watch_conversation_and_messages(
+            conversation_id,
+            mbox.user_context().user_stash(),
+        )
+        .await?;
+
+        let context_cloned = mbox.user_context();
+        let watcher = WatchHandle::new_dampened(
+            receiver,
+            move || {
+                let context_cloned = Arc::clone(&context_cloned);
+                async move {
+                    match MailMessage::in_conversation(
+                        conversation_id,
+                        context_cloned.user_stash(),
+                        None,
+                    )
+                    .await
+                    {
+                        Ok(m) => MessageMessage::Refreshed(m).into(),
+                        Err(e) => {
+                            let e = anyhow!("Message list Query error: {e}");
+                            tracing::error!("{e}");
+                            e.into()
+                        }
+                    }
+                }
+                .boxed()
+            },
+            sender,
+        );
+
+        let index = conv_and_messages
+            .messages
             .iter()
-            .position(|m| m.id == to_select_id)
+            .position(|m| m.local_id.unwrap() == conv_and_messages.message_id_to_open)
             .unwrap_or(0);
 
         Ok(Self {
-            _query: query,
-            messages,
+            _query: watcher,
+            messages: conv_and_messages.messages,
             table_state: ScrollableTableState::new(Some(index)),
             open_message: DecryptedMessageStatus::None,
         })
@@ -92,14 +142,17 @@ impl MessagesState {
         self.open_message = DecryptedMessageStatus::Loading(ThrobberState::default());
 
         Command::task(async move {
-            let decrypted = match mbox.message_body(metadata.id).await {
-                Ok(m) => m,
-                Err(e) => {
-                    let e = anyhow!("Failed to get message body {e}");
-                    tracing::error!("{e}");
-                    return Command::message(e.into());
-                }
-            };
+            let decrypted =
+                match MailMessage::message_body(&mbox.user_context(), metadata.local_id.unwrap())
+                    .await
+                {
+                    Ok(m) => m,
+                    Err(e) => {
+                        let e = anyhow!("Failed to get message body {e}");
+                        tracing::error!("{e}");
+                        return Command::message(e.into());
+                    }
+                };
 
             let result = process_message(&decrypted)
                 .map(|m| Box::new(DecryptedMessage::new(metadata, decrypted, m)));
@@ -119,18 +172,18 @@ impl MessagesState {
         self.open_message = DecryptedMessageStatus::None;
     }
 
-    fn messages_refreshed(&mut self, messages: Vec<LocalMessageMetadata>) {
+    fn messages_refreshed(&mut self, messages: Vec<MailMessage>) {
         self.messages = messages;
     }
 
-    fn selected_message(&self) -> Option<LocalMessageMetadata> {
+    fn selected_message(&self) -> Option<MailMessage> {
         let index = self.table_state.selected()?;
         self.messages.get(index).cloned()
     }
 
-    fn selected_message_id(&self) -> Option<LocalMessageId> {
+    fn selected_message_id(&self) -> Option<LocalId> {
         let index = self.table_state.selected()?;
-        self.messages.get(index).map(|c| c.id)
+        self.messages.get(index).map(|c| c.local_id.unwrap())
     }
 }
 
@@ -184,7 +237,7 @@ impl StateHandler for MessagesState {
         }
     }
 
-    fn update(
+    async fn update(
         &mut self,
         ctx: &MailContext,
         message: Message,
@@ -224,7 +277,7 @@ impl StateHandler for MessagesState {
 }
 
 pub struct DecryptedMessage {
-    metadata: LocalMessageMetadata,
+    metadata: MailMessage,
     decrypted_body: DecryptedMessageBody,
     content: Option<String>,
     scroll_state: ScrollableParagraphState,
@@ -289,24 +342,24 @@ impl DecryptedMessageStatus {
 
 impl DecryptedMessage {
     pub fn new(
-        metadata: LocalMessageMetadata,
+        metadata: MailMessage,
         decrypted_body: DecryptedMessageBody,
         content: Option<String>,
     ) -> Self {
-        let text = content.as_deref().unwrap_or(decrypted_body.body());
+        let text = content.as_deref().unwrap_or(&decrypted_body.body);
         let num_lines = text.chars().filter(|c| *c == '\n').count();
 
         let date = date_from_timestamp(metadata.time);
         let sender = format_sender(&metadata.sender);
-        let to_list = format_senders(&metadata.to);
-        let cc_list = format_senders(&metadata.cc);
-        let bcc_list = format_senders(&metadata.bcc);
-        let label_list = metadata.labels.as_ref().map_or(String::new(), |l| {
-            l.iter()
-                .map(|l| l.name.clone())
-                .collect::<Vec<_>>()
-                .join(", ")
-        });
+        let to_list = format_senders(&metadata.to_list);
+        let cc_list = format_senders(&metadata.cc_list);
+        let bcc_list = format_senders(&metadata.bcc_list);
+        let label_list = metadata
+            .custom_labels
+            .iter()
+            .map(|l| l.name.clone())
+            .collect::<Vec<_>>()
+            .join(", ");
         Self {
             metadata,
             decrypted_body,
@@ -356,22 +409,19 @@ impl DecryptedMessage {
         frame.render_widget(table, header_area);
 
         frame.render_widget(Block::new().borders(Borders::TOP), box_area);
-        let text = self
-            .content
-            .as_deref()
-            .unwrap_or(self.decrypted_body.body());
+        let text = self.content.as_deref().unwrap_or(&self.decrypted_body.body);
         let paragraph = ScrollableParagraph::new(Paragraph::new(text), self.num_lines);
         frame.render_stateful_widget(paragraph, message_area, &mut self.scroll_state);
     }
 }
 
 pub(super) fn process_message(message: &DecryptedMessageBody) -> anyhow::Result<Option<String>> {
-    match message.metadata().mime_type {
+    match message.metadata.mime_type {
         MimeType::TextPlain => Ok(None),
-        MimeType::TextHTML => html_to_text(message.body()).map(Some),
+        MimeType::TextHtml => html_to_text(&message.body).map(Some),
         _ => Err(anyhow!(
             "Unsupported mime type: {:?}",
-            message.metadata().mime_type
+            message.metadata.mime_type
         )),
     }
 }
@@ -382,17 +432,4 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
     config
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
-}
-
-fn messages_refreshed_converter(
-    messages: DBResult<Vec<LocalMessageMetadata>>,
-) -> Command<Messages> {
-    Command::message(match messages {
-        Ok(m) => MessageMessage::Refreshed(m).into(),
-        Err(e) => {
-            let e = anyhow!("Message list Query error: {e}");
-            tracing::error!("{e}");
-            e.into()
-        }
-    })
 }

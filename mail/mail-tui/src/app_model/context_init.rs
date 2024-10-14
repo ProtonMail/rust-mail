@@ -5,13 +5,12 @@ use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
 use crossterm::event::Event;
-use proton_mail_common::exports::tracing;
-use proton_mail_common::proton_api_mail::domain::LabelId;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
 use ratatui::prelude::*;
+use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 
 pub enum Message {
@@ -20,12 +19,12 @@ pub enum Message {
     InitFailed(MailContextError),
 }
 pub struct Model {
-    ctx: MailUserContext,
+    ctx: Arc<MailUserContext>,
     throbber_state: ThrobberState,
 }
 
 impl Model {
-    pub fn new(ctx: MailUserContext) -> Self {
+    pub fn new(ctx: Arc<MailUserContext>) -> Self {
         Self {
             ctx,
             throbber_state: ThrobberState::default(),
@@ -41,7 +40,7 @@ impl AppStateHandler for Model {
         Command::none()
     }
 
-    fn update(
+    async fn update(
         &mut self,
         _: &MailContext,
         message: Messages,
@@ -57,9 +56,8 @@ impl AppStateHandler for Model {
                 Command::task(async move {
                     tracing::info!("Initializing user account");
                     let cb = InitCallback {};
-                    let msg = if let Err((stage, e)) = user_ctx
-                        .initialize_async(LabelId::inbox().clone(), &cb)
-                        .await
+                    let msg = if let Err((stage, e)) =
+                        MailUserContext::initialize_async(user_ctx, &cb).await
                     {
                         tracing::error!("Failed to initialize account ({:?}): {e}", stage);
                         Message::InitFailed(e).into()
@@ -70,7 +68,7 @@ impl AppStateHandler for Model {
                     Command::message(msg)
                 })
             }
-            Message::InitComplete => match mailbox::Model::new(self.ctx.clone()) {
+            Message::InitComplete => match mailbox::Model::new(self.ctx.clone()).await {
                 Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
                 Err(e) => Command::message(e.into()),
             },
