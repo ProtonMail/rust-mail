@@ -43,6 +43,7 @@ pretty_assertions = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
 secrecy = { version = "0.8", features = ["serde"] }
+serde_with = { workspace = true }
 tempdir = "0.3.1"
 tempfile = "3.10.1"
 test-case = { workspace = true }

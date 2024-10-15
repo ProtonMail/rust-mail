@@ -45,6 +45,7 @@ serde = { version = "1", features = ["derive"] }
 serde-aux = "4.5"
 serde_json = "1.0.117"
 serde_repr = "0.1"
+serde_with = "3.11.0"
 smart-default = "0.7.1"
 tempdir = "0.3.1"
 tempfile = "3.10.1"
@@ -93,7 +94,7 @@ version = "0.1"
 path = "core/proton-canonical-email"
 registry = "proton"
 
-[workspace.dependencies.proton-vcard] 
+[workspace.dependencies.proton-vcard]
 version = "0.2"
 path = "core/vcard"
 registry = "proton"

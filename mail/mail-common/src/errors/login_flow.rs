@@ -101,6 +101,7 @@ impl From<MailContextError> for UserLoginFlowError {
             MailContextError::CacheError(cache_error) => Self::from(cache_error),
             MailContextError::Other(anyhow) => Self::from(anyhow),
             MailContextError::ContactError(contact_error) => Self::from(contact_error),
+            MailContextError::Draft(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }
@@ -169,6 +170,7 @@ impl From<AppError> for UserLoginFlowError {
             | AppError::ConversationDoesNotHaveLabel(_, _)
             | AppError::ActionStillQueued(_) => Self::Unexpected(Unexpected::Internal),
             AppError::InvalidMobileActions(_) => Self::Unexpected(Unexpected::Api),
+            AppError::UserNotFound => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

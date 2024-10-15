@@ -377,6 +377,20 @@ impl From<ApiMimeType> for MimeType {
     }
 }
 
+impl From<MimeType> for ApiMimeType {
+    fn from(value: MimeType) -> Self {
+        match value {
+            MimeType::ApplicationJson => Self::ApplicationJson,
+            MimeType::ApplicationPdf => Self::ApplicationPdf,
+            MimeType::MessageRfc822 => Self::MessageRfc822,
+            MimeType::MultipartMixed => Self::MultipartMixed,
+            MimeType::MultipartRelated => Self::MultipartRelated,
+            MimeType::TextHtml => Self::TextHtml,
+            MimeType::TextPlain => Self::TextPlain,
+        }
+    }
+}
+
 impl FromSql for MimeType {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         match u8::column_result(value)? {

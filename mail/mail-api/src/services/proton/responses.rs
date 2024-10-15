@@ -279,3 +279,17 @@ pub struct PostMessagesRelabelResponse {
 pub struct PatchLabelResponse {
     pub responses: Vec<OperationResult>,
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostCreateDraftResponse {
+    pub message: Message,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutUpdateDraftResponse {
+    pub message: Message,
+}

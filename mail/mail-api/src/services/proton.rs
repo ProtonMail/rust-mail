@@ -20,22 +20,24 @@ pub mod response_data;
 pub mod responses;
 
 use crate::services::proton::common::LabelType;
+use crate::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets, DraftParams};
 use crate::services::proton::requests::{
     GetConversationsOptions, GetLabelsOptions, GetMessagesOptions, PatchLabelRequest,
-    PostLabelsRequest, PostMessagesRelabelRequest, PutConversationsDeleteRequest,
-    PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
-    PutConversationsUnreadRequest, PutLabelRequest, PutMessagesDeleteRequest,
-    PutMessagesLabelRequest, PutMessagesReadRequest, PutMessagesUnlabelRequest,
-    PutMessagesUnreadRequest,
+    PostCreateDraftRequest, PostLabelsRequest, PostMessagesRelabelRequest,
+    PutConversationsDeleteRequest, PutConversationsLabelRequest, PutConversationsReadRequest,
+    PutConversationsUnlabelRequest, PutConversationsUnreadRequest, PutLabelRequest,
+    PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
+    PutMessagesUnlabelRequest, PutMessagesUnreadRequest, PutUpdateDraftRequest,
 };
 use crate::services::proton::responses::{
     GetAttachmentMetadataResponse, GetConversationResponse, GetConversationsCountResponse,
     GetConversationsResponse, GetLabelsResponse, GetMessageResponse, GetMessagesCountResponse,
-    GetMessagesResponse, GetSettingsResponse, PatchLabelResponse, PostLabelsResponse,
-    PostMessagesRelabelResponse, PutConversationsDeleteResponse, PutConversationsLabelResponse,
-    PutConversationsReadResponse, PutConversationsUnlabelResponse, PutConversationsUnreadResponse,
-    PutLabelResponse, PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
-    PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
+    GetMessagesResponse, GetSettingsResponse, PatchLabelResponse, PostCreateDraftResponse,
+    PostLabelsResponse, PostMessagesRelabelResponse, PutConversationsDeleteResponse,
+    PutConversationsLabelResponse, PutConversationsReadResponse, PutConversationsUnlabelResponse,
+    PutConversationsUnreadResponse, PutLabelResponse, PutMessagesDeleteResponse,
+    PutMessagesLabelResponse, PutMessagesReadResponse, PutMessagesUnlabelResponse,
+    PutMessagesUnreadResponse, PutUpdateDraftResponse,
 };
 use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 use bytes::Bytes;
@@ -674,6 +676,67 @@ pub trait ProtonMail: ApiService {
         self.patch::<_, Json<_>>(
             &format!("{}/labels/{label_id}", Self::BASE_PATH_CORE),
             body,
+            None,
+        )
+        .await
+    }
+
+    /// This method creates a new draft message on the server.
+    ///
+    /// # Params
+    ///
+    ///  * `message`     - Draft message details
+    ///  * `action`      - The draft's action.
+    ///  * `attachments` - Map of attachment id to attachment to base64 encoded
+    ///                    key packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the request fails.
+    async fn create_draft(
+        &self,
+        message: DraftParams,
+        action: DraftAction,
+        attachments: DraftAttachmentKeyPackets,
+        parent_id: Option<RemoteId>,
+    ) -> Result<PostCreateDraftResponse, ApiServiceError> {
+        let body = PostCreateDraftRequest {
+            message,
+            action,
+            attachment_key_packets: attachments,
+            parent_id,
+        };
+        self.post::<_, Json<_>>(&format!("{}/messages", Self::BASE_PATH_MAIL), body, None)
+            .await
+    }
+
+    /// This method will update a draft message on the server.
+    ///
+    /// # Params
+    ///
+    ///  * `message_id`  - message id to update
+    ///  * `message`     - Draft message details
+    ///  * `action`      - The draft's action.
+    ///  * `attachments` - Map of attachment id to attachment to base64 encoded
+    ///                    key packet.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the request fails.
+    async fn update_draft(
+        &self,
+        message_id: RemoteId,
+        message: DraftParams,
+        action: DraftAction,
+        attachments: DraftAttachmentKeyPackets,
+    ) -> Result<PutUpdateDraftResponse, ApiServiceError> {
+        self.put::<_, Json<_>>(
+            &format!("{}/messages/{message_id}", Self::BASE_PATH_MAIL),
+            PutUpdateDraftRequest {
+                message,
+                action,
+                attachment_key_packets: attachments,
+            },
             None,
         )
         .await

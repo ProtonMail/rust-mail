@@ -3,7 +3,16 @@ use std::error::Error;
 use std::fmt::Formatter;
 
 #[derive(Debug)]
-pub struct KeyChainError(Box<dyn Error + Send>);
+pub struct KeyChainError(Box<dyn Error + Send + Sync>);
+
+impl KeyChainError {
+    /// Create new instance.
+    #[must_use]
+    pub fn new(e: Box<dyn Error + Send + Sync>) -> Self {
+        //Note: Can't use from as it conflicts with exiting from errors.
+        Self(e)
+    }
+}
 
 impl std::fmt::Display for KeyChainError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -12,12 +21,6 @@ impl std::fmt::Display for KeyChainError {
 }
 
 impl Error for KeyChainError {}
-
-impl<T: Into<Box<dyn Error + Send>>> From<T> for KeyChainError {
-    fn from(value: T) -> Self {
-        Self(value.into())
-    }
-}
 
 /// OS Keychain abstraction.
 pub trait KeyChain: Send + Sync {

@@ -6,6 +6,7 @@ pub mod attachment;
 pub mod conversations;
 pub mod init;
 pub mod labels;
+pub mod message_body;
 mod messages;
 
 use self::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};

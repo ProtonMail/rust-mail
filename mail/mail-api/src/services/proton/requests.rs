@@ -21,7 +21,9 @@
 //!
 
 use crate::services::proton::common::LabelType;
-use crate::services::proton::request_data::MessageMetadataSortMode;
+use crate::services::proton::request_data::{
+    DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
+};
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_api_core::services::proton::common::RemoteId;
 use serde::Serialize;
@@ -412,4 +414,38 @@ pub struct PatchLabelRequest {
     pub expanded: Option<bool>,
     #[serde_as(as = "Option<BoolFromInt>")]
     pub notify: Option<bool>,
+}
+
+/// Create a new message/draft.
+#[serde_as]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostCreateDraftRequest {
+    ///  Message details.
+    pub message: DraftParams,
+
+    /// Draft action used for the request.
+    pub action: DraftAction,
+
+    /// Map of attachment id to encoded key packet.
+    pub attachment_key_packets: DraftAttachmentKeyPackets,
+
+    /// Parent message id.
+    #[serde(rename = "ParentID")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<RemoteId>,
+}
+
+/// Create a new message/draft.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutUpdateDraftRequest {
+    ///  Message details.
+    pub message: DraftParams,
+
+    /// Draft action used for the request.
+    pub action: DraftAction,
+
+    /// Map of attachment id to encoded key packet.
+    pub attachment_key_packets: DraftAttachmentKeyPackets,
 }
