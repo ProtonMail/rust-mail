@@ -207,22 +207,22 @@ impl StateHandler for ConversationsState {
 
                 match message {
                     ConversationMessage::MarkConversationRead(id) => {
-                        mark_conversation_read(mbox, id)
+                        mark_conversation_read(mbox, id).await
                     }
                     ConversationMessage::MarkConversationUnread(id) => {
-                        mark_conversation_unread(mbox, id)
+                        mark_conversation_unread(mbox, id).await
                     }
                     ConversationMessage::DeleteConversation(id) => {
                         delete_conversation(mbox, id).await
                     }
                     ConversationMessage::MoveConversation(id, label_id) => {
-                        move_conversation(mbox, id, label_id)
+                        move_conversation(mbox, id, label_id).await
                     }
                     ConversationMessage::LabelConversation(id, label_id) => {
-                        label_conversation(mbox, id, label_id)
+                        label_conversation(mbox, id, label_id).await
                     }
                     ConversationMessage::UnlabelConversation(id, label_id) => {
-                        unlabel_conversation(mbox, id, label_id)
+                        unlabel_conversation(mbox, id, label_id).await
                     }
                     ConversationMessage::OpenConversation(id) => {
                         self.open_conversation(mbox, id, sender.clone())
@@ -286,32 +286,41 @@ enum MessagesStatus {
 }
 
 #[allow(unused_variables)]
-fn mark_conversation_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
-    todo!();
-    /*
-    match mailbox.mark_conversations_read(std::iter::once(id)) {
-        Ok(()) => Command::None,
-        Err(e) => {
-            let e = anyhow!("Failed to mark conversation as read: {e}");
-            tracing::error!("{e}");
-            Command::message(e.into())
-        }
-    }*/
-}
-
-#[allow(unused_variables)]
-fn mark_conversation_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
-    todo!()
-    /*
-    match mailbox.mark_conversations_unread(std::iter::once(id)) {
-        Ok(()) => Command::None,
+async fn mark_conversation_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    match Conversation::action_mark_read(
+        mailbox.user_context().session(),
+        mailbox.user_context().queue(),
+        mailbox.label_id(),
+        vec![id],
+    )
+    .await
+    {
+        Ok(_) => Command::None,
         Err(e) => {
             let e = anyhow!("Failed to mark conversation as read: {e}");
             tracing::error!("{e}");
             Command::message(e.into())
         }
     }
-     */
+}
+
+#[allow(unused_variables)]
+async fn mark_conversation_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    match Conversation::action_mark_unread(
+        mailbox.user_context().session(),
+        mailbox.user_context().queue(),
+        mailbox.label_id(),
+        vec![id],
+    )
+    .await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to mark conversation as read: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
 }
 
 #[allow(unused_variables)]
@@ -334,61 +343,71 @@ async fn delete_conversation(mailbox: &Mailbox, id: LocalId) -> Command<Messages
 }
 
 #[allow(unused_variables)]
-fn move_conversation(
+async fn move_conversation(
     mailbox: &Mailbox,
     conversation_id: LocalId,
     label_id: LocalId,
 ) -> Command<Messages> {
-    todo!();
-    /*
-    Command::message(
-        match mailbox.move_conversations(label_id, std::iter::once(conversation_id)) {
-            Ok(()) => Messages::DismissPopup,
-            Err(e) => {
-                let e = anyhow!("Failed to move conversation: {e}");
-                tracing::error!("{e}");
-                e.into()
-            }
-        },
-    )*/
+    match Conversation::action_move(
+        mailbox.user_context().session(),
+        mailbox.user_context().queue(),
+        mailbox.label_id(),
+        label_id,
+        vec![conversation_id],
+    )
+    .await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to move conversation: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
 }
 
 #[allow(unused_variables)]
-fn label_conversation(
+async fn label_conversation(
     mailbox: &Mailbox,
     conversation_id: LocalId,
     label_id: LocalId,
 ) -> Command<Messages> {
-    todo!();
-    /*
-    Command::message(
-        match mailbox.label_conversations(label_id, std::iter::once(conversation_id)) {
-            Ok(()) => Messages::DismissPopup,
-            Err(e) => {
-                let e = anyhow!("Failed to label conversation: {e}");
-                tracing::error!("{e}");
-                e.into()
-            }
-        },
-    )*/
+    match Conversation::action_apply_label(
+        mailbox.user_context().session(),
+        mailbox.user_context().queue(),
+        mailbox.label_id(),
+        vec![conversation_id],
+    )
+    .await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to label conversation: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
 }
 
 #[allow(unused_variables)]
-fn unlabel_conversation(
+async fn unlabel_conversation(
     mailbox: &Mailbox,
     conversation_id: LocalId,
     label_id: LocalId,
 ) -> Command<Messages> {
-    todo!()
-    /*
-    Command::message(
-        match mailbox.unlabel_conversations(label_id, std::iter::once(conversation_id)) {
-            Ok(()) => Messages::DismissPopup,
-            Err(e) => {
-                let e = anyhow!("Failed to unlabel conversation: {e}");
-                tracing::error!("{e}");
-                e.into()
-            }
-        },
-    )*/
+    match Conversation::action_remove_label(
+        mailbox.user_context().session(),
+        mailbox.user_context().queue(),
+        mailbox.label_id(),
+        vec![conversation_id],
+    )
+    .await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to unlabel conversation: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
 }
