@@ -11,6 +11,7 @@ use anyhow::anyhow;
 use crossterm::event::Event;
 use flume::{Receiver, Sender};
 use futures::FutureExt;
+use log::warn;
 use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
@@ -145,18 +146,22 @@ impl Model {
         .await
         {
             Ok(receiver) => {
-                if let Some((_, receiver)) = receiver {
+                if let Some((label, receiver)) = receiver {
                     self.label_watcher = Some(WatchHandle::new(
                         receiver,
-                        |change| {
+                        move |change| {
+                            let label_id = label.local_id.unwrap();
                             async move {
                                 match change {
-                                    ResultsetChange::Deleted(_) => {
-                                        todo!("Select inbox on deleted");
+                                    ResultsetChange::Deleted(id) => {
+                                        if label_id == id {
+                                            warn!("Received delete on current label");
+                                        }
+                                        None
                                     }
                                     ResultsetChange::Inserted(label)
                                     | ResultsetChange::Updated(label) => {
-                                        Message::LabelRefreshed(label).into()
+                                        Some(Message::LabelRefreshed(label).into())
                                     }
                                     _ => {
                                         panic!("unhandled pattern")

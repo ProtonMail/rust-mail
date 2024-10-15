@@ -2,7 +2,7 @@
 
 use crate::app::Command;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{BackgroundSender, Message, MessageMessage};
+use crate::app_model::mailbox::{BackgroundSender, Item, Message, MessageMessage};
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
@@ -48,14 +48,16 @@ impl MessagesState {
             move || {
                 let ctx_cloned = Arc::clone(&ctx_cloned);
                 async move {
-                    match MailMessage::in_label(label_id, ctx_cloned.user_stash(), None).await {
-                        Ok(messages) => MessageMessage::Refreshed(messages).into(),
-                        Err(e) => {
-                            let e = anyhow!("Message list Query error: {e}");
-                            tracing::error!("{e}");
-                            e.into()
-                        }
-                    }
+                    Some(
+                        match MailMessage::in_label(label_id, ctx_cloned.user_stash(), None).await {
+                            Ok(messages) => MessageMessage::Refreshed(messages).into(),
+                            Err(e) => {
+                                let e = anyhow!("Message list Query error: {e}");
+                                tracing::error!("{e}");
+                                e.into()
+                            }
+                        },
+                    )
                 }
                 .boxed()
             },
@@ -98,20 +100,22 @@ impl MessagesState {
             move || {
                 let context_cloned = Arc::clone(&context_cloned);
                 async move {
-                    match MailMessage::in_conversation(
-                        conversation_id,
-                        context_cloned.user_stash(),
-                        None,
+                    Some(
+                        match MailMessage::in_conversation(
+                            conversation_id,
+                            context_cloned.user_stash(),
+                            None,
+                        )
+                        .await
+                        {
+                            Ok(m) => MessageMessage::Refreshed(m).into(),
+                            Err(e) => {
+                                let e = anyhow!("Message list Query error: {e}");
+                                tracing::error!("{e}");
+                                e.into()
+                            }
+                        },
                     )
-                    .await
-                    {
-                        Ok(m) => MessageMessage::Refreshed(m).into(),
-                        Err(e) => {
-                            let e = anyhow!("Message list Query error: {e}");
-                            tracing::error!("{e}");
-                            e.into()
-                        }
-                    }
                 }
                 .boxed()
             },
@@ -228,7 +232,31 @@ impl StateHandler for MessagesState {
                 self.table_state.next();
                 Command::None
             }
+            KeyCode::Char('u') => self
+                .selected_message_id()
+                .map(|id| Command::message(MessageMessage::MarkMessageUnread(id).into()))
+                .unwrap_or_default(),
+            KeyCode::Char('r') => self
+                .selected_message_id()
+                .map(|id| Command::message(MessageMessage::MarkMessageRead(id).into()))
+                .unwrap_or_default(),
+            KeyCode::Char('d') => self
+                .selected_message_id()
+                .map(|id| Command::message(MessageMessage::DeleteMessage(id).into()))
+                .unwrap_or_default(),
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
+            KeyCode::Char('m') => self
+                .selected_message_id()
+                .map(|id| Command::message(Message::OpenMoveItemPopup(Item::Message(id)).into()))
+                .unwrap_or_default(),
+            KeyCode::Char('l') => self
+                .selected_message_id()
+                .map(|id| Command::message(Message::OpenLabelItemPopup(Item::Message(id)).into()))
+                .unwrap_or_default(),
+            KeyCode::Char('L') => self
+                .selected_message_id()
+                .map(|id| Command::message(Message::OpenUnlabelItemPopup(Item::Message(id)).into()))
+                .unwrap_or_default(),
             KeyCode::Enter => self
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
@@ -260,6 +288,24 @@ impl StateHandler for MessagesState {
                 self.close_message();
             }
             MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
+            MessageMessage::DeleteMessage(id) => {
+                return delete_message(mbox, id).await;
+            }
+            MessageMessage::MoveMessage(msg_id, id) => {
+                return move_message(mbox, msg_id, id).await;
+            }
+            MessageMessage::LabelMessage(msg_id, id) => {
+                return label_message(mbox, msg_id, id).await;
+            }
+            MessageMessage::UnlabelMessage(msg_id, id) => {
+                return unlabel_message(mbox, msg_id, id).await;
+            }
+            MessageMessage::MarkMessageRead(id) => {
+                return mark_message_read(mbox, id).await;
+            }
+            MessageMessage::MarkMessageUnread(id) => {
+                return mark_message_unread(mbox, id).await;
+            }
         }
         Command::None
     }
@@ -432,4 +478,86 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
     config
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
+}
+async fn mark_message_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    match MailMessage::action_mark_read(ctx.session(), ctx.queue(), mailbox.label_id(), vec![id])
+        .await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to mark message as read: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
+}
+
+async fn mark_message_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    match MailMessage::action_mark_unread(ctx.session(), ctx.queue(), mailbox.label_id(), vec![id])
+        .await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to mark message as unread: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
+}
+
+async fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    match MailMessage::action_delete(ctx.session(), ctx.queue(), mailbox.label_id(), vec![id]).await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to delete message: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
+}
+async fn label_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    match MailMessage::action_apply_label(ctx.session(), ctx.queue(), label_id, vec![id]).await {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to apply label to message: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
+}
+
+async fn unlabel_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    match MailMessage::action_remove_label(ctx.session(), ctx.queue(), label_id, vec![id]).await {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to apply label to message: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
+}
+async fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    match MailMessage::action_move(
+        ctx.session(),
+        ctx.queue(),
+        mailbox.label_id(),
+        label_id,
+        vec![id],
+    )
+    .await
+    {
+        Ok(_) => Command::None,
+        Err(e) => {
+            let e = anyhow!("Failed to apply label to message: {e}");
+            tracing::error!("{e}");
+            Command::message(e.into())
+        }
+    }
 }

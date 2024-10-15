@@ -12,7 +12,7 @@ impl WatchHandle {
     /// Create a new watcher which is not dampened.
     pub fn new<T: Send + 'static>(
         receiver: flume::Receiver<T>,
-        converter: impl Fn(T) -> BoxFuture<'static, Messages> + Send + 'static,
+        converter: impl Fn(T) -> BoxFuture<'static, Option<Messages>> + Send + 'static,
         background_sender: Sender<Command<Messages>>,
     ) -> Self {
         let (control_sender, control_receiver) = flume::bounded(0);
@@ -30,10 +30,11 @@ impl WatchHandle {
                             return;
                         };
 
-                        let message = converter(value).await;
-                        if background_sender.send_async(Command::message(message)).await.is_err() {
-                            error!("Failed to send message from watcher");
-                            return;
+                        if let Some(message) = converter(value).await {
+                            if background_sender.send_async(Command::message(message)).await.is_err() {
+                                error!("Failed to send message from watcher");
+                                return;
+                            }
                         }
                     }
                 }
@@ -47,7 +48,7 @@ impl WatchHandle {
     /// Create a new watcher that is dampened.
     pub fn new_dampened<T: Send + 'static>(
         receiver: flume::Receiver<T>,
-        converter: impl Fn() -> BoxFuture<'static, Messages> + Send + 'static,
+        converter: impl Fn() -> BoxFuture<'static, Option<Messages>> + Send + 'static,
         background_sender: Sender<Command<Messages>>,
     ) -> Self {
         let (control_sender, control_receiver) = flume::bounded(0);
@@ -65,10 +66,11 @@ impl WatchHandle {
                         if received_update {
                             received_update = false;
 
-                            let message = converter().await;
-                            if background_sender.send_async(Command::message(message)).await.is_err() {
-                                error!("Failed to send message from watcher");
-                                return;
+                            if let Some(message) = converter().await {
+                                if background_sender.send_async(Command::message(message)).await.is_err() {
+                                    error!("Failed to send message from watcher");
+                                    return;
+                                }
                             }
                         }
                     }

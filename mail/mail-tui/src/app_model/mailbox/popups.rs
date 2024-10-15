@@ -1,8 +1,7 @@
 use crate::app::Command;
-use crate::app_model::mailbox::{ConversationMessage, Item, Message};
+use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage};
 use crate::messages::Messages;
 use crate::widgets::{AsList, ScrollableList, ScrollableListState};
-use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::{LabelType, ViewMode};
@@ -64,10 +63,9 @@ impl crate::app_model::Popup for MoveItemPopup {
                     Item::Conversation(item_id) => {
                         Command::message(ConversationMessage::MoveConversation(item_id, id).into())
                     }
-                    Item::Message(_) => Command::message(Messages::DisplayError(
-                        None,
-                        anyhow!("Not Yet Implemented"),
-                    )),
+                    Item::Message(item_id) => {
+                        Command::message(MessageMessage::MoveMessage(item_id, id).into())
+                    }
                 })
                 .unwrap_or_default(),
             _ => Command::None,
@@ -140,10 +138,13 @@ impl crate::app_model::Popup for LabelItemPopup {
                             )
                         }
                     }
-                    Item::Message(_) => Command::message(Messages::DisplayError(
-                        None,
-                        anyhow!("Not Yet Implemented"),
-                    )),
+                    Item::Message(item_id) => {
+                        if self.apply {
+                            Command::message(MessageMessage::LabelMessage(item_id, id).into())
+                        } else {
+                            Command::message(MessageMessage::UnlabelMessage(item_id, id).into())
+                        }
+                    }
                 })
                 .unwrap_or_default(),
             _ => Command::None,

@@ -43,14 +43,16 @@ impl ConversationsState {
             move || {
                 let ctx = Arc::clone(&ctx);
                 async move {
-                    match ContextualConversation::in_label(label_id, ctx.user_stash()).await {
-                        Ok(c) => ConversationMessage::Refreshed(c).into(),
-                        Err(e) => {
-                            let e = anyhow!("Conversation list Query error: {e}");
-                            tracing::error!("{e}");
-                            e.into()
-                        }
-                    }
+                    Some(
+                        match ContextualConversation::in_label(label_id, ctx.user_stash()).await {
+                            Ok(c) => ConversationMessage::Refreshed(c).into(),
+                            Err(e) => {
+                                let e = anyhow!("Conversation list Query error: {e}");
+                                tracing::error!("{e}");
+                                e.into()
+                            }
+                        },
+                    )
                 }
                 .boxed()
             },

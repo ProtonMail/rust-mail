@@ -55,6 +55,12 @@ pub enum MessageMessage {
     OpenMessageBodyResult(anyhow::Result<Box<DecryptedMessage>>),
     CloseMessageBody,
     Refreshed(Vec<MailMessage>),
+    DeleteMessage(LocalId),
+    MoveMessage(LocalId, LocalId),
+    LabelMessage(LocalId, LocalId),
+    UnlabelMessage(LocalId, LocalId),
+    MarkMessageRead(LocalId),
+    MarkMessageUnread(LocalId),
 }
 
 impl From<MessageMessage> for Messages {
