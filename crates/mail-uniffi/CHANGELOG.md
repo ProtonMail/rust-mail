@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
   - `contact_list` method which returns new set of data objects representing contact list
+  - `all_available_bottom_bar_actions_for_messages` function who return available actions for messages in bottom bar.
+
+### Changed
+  - All functions which interact on conversations now use their respective actions.
+  - `mark_conversations_as_read` requires a `Maibox` rather than `MailUserSession`.
 
 ## [0.13.0] - 2024-10-11
 

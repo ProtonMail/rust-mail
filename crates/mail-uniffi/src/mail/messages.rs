@@ -8,7 +8,7 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{BlockQuote, RemoteContent};
+use super::datatypes::{AllBottomBarMessageActions, BlockQuote, RemoteContent};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::{MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
@@ -471,8 +471,7 @@ pub async fn available_label_as_actions_for_messages(
 ///
 /// # Parameters
 ///
-/// * `session` - The session to use for the request.
-/// * `view`    - The local ID of the label which messages are viewed in.
+/// * `mailbox` - The current Mailbox.
 /// * `ids`     - The local IDs of the messages to calcualte available actions for.
 ///
 /// # Errors
@@ -499,6 +498,35 @@ pub async fn available_move_to_actions_for_messages(
         .map_into()
         .collect_vec();
 
+        Ok(actions)
+    })
+    .await
+}
+
+/// Returns available actions for messages bottom bar.
+///
+/// # Parameters
+///
+/// * `mailbox`     - The current Mailbox.
+/// * `message_ids` - The local IDs of the messages to calcualte available actions for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn all_available_bottom_bar_actions_for_messages(
+    mailbox: Arc<Mailbox>,
+    message_ids: Vec<Id>,
+) -> MailboxResult<AllBottomBarMessageActions> {
+    uniffi_async(async move {
+        let actions = RealMessage::all_available_bottom_bar_actions_for_messages(
+            mailbox.label_id().into(),
+            message_ids.into_iter().map_into().collect(),
+            mailbox.stash(),
+        )
+        .await?
+        .into();
         Ok(actions)
     })
     .await

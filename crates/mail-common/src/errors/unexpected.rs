@@ -18,6 +18,8 @@ use tokio::task::JoinError;
 /// Categories for Unexpected error
 #[derive(Debug)]
 pub enum Unexpected {
+    /// Error related to API values (not API error)
+    Api,
     /// Error related to cryptography
     Crypto,
     /// Error related to the database

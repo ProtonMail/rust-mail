@@ -5,8 +5,9 @@ use crate::actions::messages::r#move::Move;
 use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
-use crate::datatypes::{LabelType, SystemLabelId};
-use crate::models::{Label, Message, MessageLabelStats};
+use crate::actions::{AllBottomBarMessageActions, BottomBarActions};
+use crate::datatypes::{LabelType, MobileActions, SystemLabel, SystemLabelId};
+use crate::models::{Label, MailSettings, Message, MessageLabelStats};
 use crate::{find_in_query, AppError};
 use anyhow::anyhow;
 use itertools::Itertools as _;
@@ -20,6 +21,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::HashSet;
+use std::str::FromStr;
 use tracing::{error, warn};
 
 impl Message {
@@ -525,5 +527,186 @@ impl Message {
             );
         };
         Ok(())
+    }
+
+    /// Find a group of Messages by their IDs.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - The IDs of the messages to find.
+    /// * `interface`   - The database interface.
+    ///
+    /// # Errors
+    ///
+    /// When database request fail.
+    ///
+    async fn find_by_ids<A>(
+        message_ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Message::find(
+            format!(
+                "WHERE local_id IN ({}) AND DELETED = 0",
+                message_ids.into_iter().join(", ")
+            ),
+            vec![],
+            interface,
+            None,
+        )
+        .await
+    }
+
+    /// Get the available actions from bottom bar for given messages
+    ///
+    /// # Parameters
+    ///
+    /// * `message_ids` - List of the messages IDs.
+    /// * `interface`   - The database interface.
+    ///
+    pub async fn all_available_bottom_bar_actions_for_messages<A>(
+        current_label_id: LocalId,
+        message_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<AllBottomBarMessageActions, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
+        let bottom_bar_actions = Self::bottom_bar_actions(interface).await?;
+        let messages = Self::find_by_ids(message_ids.to_vec(), interface).await?;
+        let visible_bottom_bar_actions =
+            Self::visible_bottom_bar_actions(&current_label, &messages, &bottom_bar_actions)?;
+        let hidden_bottom_bar_actions =
+            Self::hidden_bottom_bar_actions(current_label, messages, &visible_bottom_bar_actions);
+
+        Ok(AllBottomBarMessageActions {
+            hidden_bottom_bar_actions,
+            visible_bottom_bar_actions,
+        })
+    }
+
+    async fn bottom_bar_actions<A>(interface: &A) -> Result<Vec<MobileActions>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let settings = MailSettings::get_or_default(interface).await;
+
+        if let Some(mobile_settings) = settings.mobile_settings {
+            if mobile_settings.message_toolbar.is_custom {
+                return mobile_settings
+                    .message_toolbar
+                    .actions
+                    .iter()
+                    .map(|a| MobileActions::from_str(a))
+                    .collect::<Result<_, _>>();
+            }
+        } else {
+            warn!("No mobile_settings defined in MailSettings");
+        }
+        Ok(vec![
+            MobileActions::ToggleRead,
+            MobileActions::Archive,
+            MobileActions::Trash,
+        ])
+    }
+
+    /// Get actions to display in bottom_bar when selecting messages
+    fn visible_bottom_bar_actions(
+        current_label: &LabelId,
+        messages: &[Message],
+        bottom_bar_actions: &[MobileActions],
+    ) -> Result<Vec<BottomBarActions>, AppError> {
+        let any_unread = messages.iter().any(|m| m.unread);
+        let all_starred = messages.iter().all(|m| m.is_starred());
+
+        let mut result: Vec<_> = bottom_bar_actions
+            .iter()
+            .filter_map(|a| {
+                BottomBarActions::from_mobile_actions(a, any_unread, all_starred, current_label)
+            })
+            .collect();
+        if result.len() > 5 {
+            warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
+            result.truncate(5);
+        }
+        result.push(BottomBarActions::More);
+        Ok(result)
+    }
+
+    /// Get actions not displayed in bottom_bar when selecting messages
+    fn hidden_bottom_bar_actions(
+        current_label: LabelId,
+        messages: Vec<Message>,
+        visible_actions: &[BottomBarActions],
+    ) -> Vec<BottomBarActions> {
+        let mut result = Vec::new();
+
+        // Mark as read/unread
+        if messages.iter().any(|m| m.unread)
+            && !visible_actions.contains(&BottomBarActions::MarkRead)
+        {
+            result.push(BottomBarActions::MarkRead);
+        }
+        if messages.iter().any(|m| !m.unread)
+            && !visible_actions.contains(&BottomBarActions::MarkUnread)
+        {
+            result.push(BottomBarActions::MarkUnread);
+        }
+        // Star/Unstar
+        if messages.iter().any(|m| !m.is_starred())
+            && !visible_actions.contains(&BottomBarActions::Star)
+        {
+            result.push(BottomBarActions::Star);
+        }
+        if messages.iter().any(|m| m.is_starred())
+            && !visible_actions.contains(&BottomBarActions::Unstar)
+        {
+            result.push(BottomBarActions::Unstar);
+        }
+        // Move to...
+        if !visible_actions.contains(&BottomBarActions::MoveTo) {
+            result.push(BottomBarActions::MoveTo);
+        }
+        // Label as...
+        if !visible_actions.contains(&BottomBarActions::LabelAs) {
+            result.push(BottomBarActions::LabelAs);
+        }
+        // Move to Inbox
+        if [LabelId::trash(), LabelId::archive()].contains(&current_label)
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox));
+        }
+        if current_label == LabelId::spam() && !visible_actions.contains(&BottomBarActions::NotSpam)
+        {
+            result.push(BottomBarActions::NotSpam);
+        }
+        // Archive
+        if current_label != LabelId::archive()
+            && !visible_actions
+                .contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Archive))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Archive));
+        }
+        // Move to Spam
+        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Spam))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Spam));
+        }
+        // Move to Trash
+        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Trash))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Trash));
+        }
+        // Snooze
+        if !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed)) {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed));
+        }
+        result
     }
 }
