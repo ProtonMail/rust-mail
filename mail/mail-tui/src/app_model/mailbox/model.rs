@@ -68,7 +68,7 @@ impl Model {
         let label = Label::find_by_id(mailbox.label_id(), ctx.user_stash())
             .await?
             .ok_or(AppError::LabelNotFound(mailbox.label_id()))?;
-        let mail_settings = MailSettings::get(&ctx.user_stash().into())
+        let mail_settings = MailSettings::get(ctx.user_stash())
             .await?
             .unwrap_or_default();
         Ok(Self {
