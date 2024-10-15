@@ -42,13 +42,17 @@ pub async fn apply_label_to_conversations(
     session: Arc<MailUserSession>,
     label_id: Id,
     ids: Vec<Id>,
-) -> Result<(), MailboxError> {
-    let conn = session.user_stash().connection();
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
     uniffi_async(async move {
-        Ok(
-            RealConversation::apply_label(label_id.into(), ids.into_iter().map(Into::into), &conn)
-                .await?,
+        RealConversation::action_apply_label(
+            user_context.session(),
+            user_context.queue(),
+            label_id.into(),
+            ids.into_iter().map(Into::into).collect(),
         )
+        .await?;
+        Ok(())
     })
     .await
 }
@@ -312,7 +316,7 @@ pub async fn load_conversation(
 ///
 /// # Parameters
 ///
-/// * `session` - The session to use for the request.
+/// * `mailbox` - The mailbox to use for the request.
 /// * `ids`     - The local IDs of the conversations to mark as read.
 ///
 /// # Errors
@@ -321,12 +325,19 @@ pub async fn load_conversation(
 ///
 #[uniffi::export]
 pub async fn mark_conversations_as_read(
-    session: Arc<MailUserSession>,
+    mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
-) -> Result<(), MailboxError> {
-    let tether = session.user_stash().connection();
+) -> Result<(), MailSessionError> {
     uniffi_async(async move {
-        Ok(RealConversation::mark_read(ids.into_iter().map(Into::into), &tether).await?)
+        let user_context = mailbox.mbox().user_context();
+        RealConversation::action_mark_read(
+            user_context.session(),
+            user_context.queue(),
+            mailbox.label_id().into(),
+            ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
     })
     .await
 }
@@ -346,11 +357,17 @@ pub async fn mark_conversations_as_read(
 pub async fn mark_conversations_as_unread(
     mailbox: Arc<Mailbox>,
     ids: Vec<Id>,
-) -> Result<(), MailboxError> {
-    let conn = mailbox.stash().connection();
-    let label_id = mailbox.mbox().label_id();
+) -> Result<(), MailSessionError> {
     uniffi_async(async move {
-        Ok(RealConversation::mark_unread(label_id, ids.into_iter().map(Into::into), &conn).await?)
+        let user_context = mailbox.mbox().user_context();
+        RealConversation::action_mark_unread(
+            user_context.session(),
+            user_context.queue(),
+            mailbox.label_id().into(),
+            ids.into_iter().map(Into::into).collect(),
+        )
+        .await?;
+        Ok(())
     })
     .await
 }
@@ -376,14 +393,15 @@ pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
     label_id: Id,
     ids: Vec<Id>,
-) -> Result<(), MailboxError> {
-    let conn = mailbox.stash().connection();
+) -> Result<(), MailSessionError> {
     uniffi_async(async move {
-        RealConversation::move_conversations(
+        let user_context = mailbox.mbox().user_context();
+        RealConversation::action_move(
+            user_context.session(),
+            user_context.queue(),
             mailbox.label_id().into(),
             label_id.into(),
             ids.into_iter().map(Into::into).collect(),
-            &conn,
         )
         .await?;
         Ok(())
@@ -451,13 +469,17 @@ pub async fn remove_label_from_conversations(
     session: Arc<MailUserSession>,
     label_id: Id,
     ids: Vec<Id>,
-) -> Result<(), MailboxError> {
-    let conn = session.user_stash().connection();
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
     uniffi_async(async move {
-        Ok(
-            RealConversation::remove_label(label_id.into(), ids.into_iter().map(Into::into), &conn)
-                .await?,
+        RealConversation::action_remove_label(
+            user_context.session(),
+            user_context.queue(),
+            label_id.into(),
+            ids.into_iter().map(Into::into).collect(),
         )
+        .await?;
+        Ok(())
     })
     .await
 }
@@ -514,13 +536,16 @@ pub async fn search_for_conversations(
 pub async fn star_conversations(
     session: Arc<MailUserSession>,
     ids: Vec<Id>,
-) -> Result<(), MailboxError> {
-    let stash = session.user_stash().clone();
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
     uniffi_async(async move {
-        Ok(
-            RealConversation::star_multiple(ids.into_iter().map(Into::into).collect(), &stash)
-                .await?,
+        RealConversation::action_star(
+            user_context.session(),
+            user_context.queue(),
+            ids.into_iter().map(Into::into).collect(),
         )
+        .await?;
+        Ok(())
     })
     .await
 }
@@ -540,13 +565,16 @@ pub async fn star_conversations(
 pub async fn unstar_conversations(
     session: Arc<MailUserSession>,
     ids: Vec<Id>,
-) -> Result<(), MailboxError> {
-    let stash = session.user_stash().clone();
+) -> Result<(), MailSessionError> {
+    let user_context = session.ctx();
     uniffi_async(async move {
-        Ok(
-            RealConversation::unstar_multiple(ids.into_iter().map(Into::into).collect(), &stash)
-                .await?,
+        RealConversation::action_unstar(
+            user_context.session(),
+            user_context.queue(),
+            ids.into_iter().map(Into::into).collect(),
         )
+        .await?;
+        Ok(())
     })
     .await
 }
