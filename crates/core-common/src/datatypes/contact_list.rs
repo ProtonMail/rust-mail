@@ -47,6 +47,8 @@ impl GroupedContacts {
     }
 }
 
+/// List of contacts is composed of contacts and groups.
+/// This enum is used to represent the either one.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ContactItemType {
     Contact(ContactItem),

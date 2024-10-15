@@ -25,6 +25,8 @@ impl From<RealGroupedContacts> for GroupedContacts {
     }
 }
 
+/// List of contacts is composed of contacts and groups.
+/// This enum is used to represent the either one.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
 pub enum ContactItemType {
     Contact(ContactItem),
