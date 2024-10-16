@@ -19,21 +19,29 @@ where
     <T as Action>::LocalOutput: Default,
 {
     type Action = T;
+    type Context = ();
 
     async fn apply_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<<T as Action>::LocalOutput, T::Error> {
         Ok(<T as Action>::LocalOutput::default())
     }
 
-    async fn revert_local(&self, _: &mut Self::Action, _: &Tether) -> Result<(), T::Error> {
+    async fn revert_local(
+        &self,
+        _: &Self::Context,
+        _: &mut Self::Action,
+        _: &Tether,
+    ) -> Result<(), T::Error> {
         Ok(())
     }
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,

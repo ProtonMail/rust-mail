@@ -59,7 +59,9 @@ impl Action for TestAction {
     type RemoteOutput = u32;
 
     type LocalOutput = ();
+
     type Error = DefaultError;
+    type Context = ();
 }
 
 #[derive(Default)]
@@ -73,9 +75,11 @@ const ACTION_KEY: &str = "bar";
 
 impl Handler for TestActionHandler {
     type Action = TestAction;
+    type Context = ();
 
     async fn apply_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -88,6 +92,7 @@ impl Handler for TestActionHandler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -96,6 +101,7 @@ impl Handler for TestActionHandler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         _: &Session,
         stash: &Stash,

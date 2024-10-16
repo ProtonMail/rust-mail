@@ -46,7 +46,7 @@ impl MailUserContext {
         let stash = user_context.stash().clone();
         let cache_path = mail_context.mail_cache_path(user_context.user_id());
         let cache = Cache::new(cache_path, mail_context.mail_cache_size, &stash).await?;
-        let action_queue = new_action_queue(stash).await.unwrap();
+        let action_queue = new_action_queue(stash).await?;
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
@@ -55,6 +55,9 @@ impl MailUserContext {
             action_queue,
             cache,
         });
+
+        this.queue()
+            .register_execution_context(Weak::clone(&this.this));
 
         this.init_expiration_loop();
         Ok(this)

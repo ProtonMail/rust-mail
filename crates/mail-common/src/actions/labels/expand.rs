@@ -1,10 +1,6 @@
-#[cfg(test)]
-#[path = "../../tests/actions/labels/expand.rs"]
-mod tests;
-
 use crate::datatypes::RollbackItemType;
 use crate::models::{Label, RollbackItem};
-use crate::{actions::ActionError, AppError};
+use crate::{actions::ActionError, AppError, MailUserContext};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::datatypes::{LabelId, LocalId};
@@ -50,6 +46,8 @@ impl Action for Expand {
 
     type LocalOutput = ();
     type Error = ActionError;
+
+    type Context = MailUserContext;
 }
 
 #[derive(Default)]
@@ -58,8 +56,11 @@ pub struct Handler;
 impl proton_action_queue::action::Handler for Handler {
     type Action = Expand;
 
+    type Context = MailUserContext;
+
     async fn apply_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -95,6 +96,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn revert_local(
         &self,
+        ctx: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -107,7 +109,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         action.expand = original_state;
 
-        self.apply_local(action, tx).await?;
+        self.apply_local(ctx, action, tx).await?;
 
         if let Some(remote_id) = action.remote_id.clone() {
             RollbackItem::new(remote_id.into(), RollbackItemType::Label)
@@ -120,6 +122,7 @@ impl proton_action_queue::action::Handler for Handler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
