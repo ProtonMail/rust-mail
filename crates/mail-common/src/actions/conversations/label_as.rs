@@ -1,6 +1,7 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
-use crate::datatypes::SystemLabelId;
+use crate::datatypes::{ExclusiveLocation, SystemLabelId};
 use crate::models::{Conversation, ConversationLabel, Label};
+use crate::AppError;
 use itertools::Itertools;
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler as ActionHandler, Type,
@@ -11,11 +12,14 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface, Stash, Tether};
+use std::collections::HashSet;
 use tracing::{error, warn};
 
 /// Action to change the labels of a group of conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LabelAs(LabelAsData<Conversation>);
+pub struct LabelAs {
+    data: LabelAsData<Conversation>,
+}
 
 impl LabelAs {
     pub fn new(
@@ -25,13 +29,15 @@ impl LabelAs {
         partially_selected_label_ids: Vec<LocalId>,
         must_archive: bool,
     ) -> Self {
-        Self(LabelAsData::new(
-            source_label_id,
-            conversation_ids,
-            selected_label_ids,
-            partially_selected_label_ids,
-            must_archive,
-        ))
+        Self {
+            data: LabelAsData::new(
+                source_label_id,
+                conversation_ids,
+                selected_label_ids,
+                partially_selected_label_ids,
+                must_archive,
+            ),
+        }
     }
 
     /// Save status of target conversations.
@@ -39,21 +45,14 @@ impl LabelAs {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        for conversation_id in &self.0.local_ids {
+        self.data.memorize_original_data(interface).await?;
+        for conversation_id in &self.data.local_ids {
             let Some(conversation) = Conversation::load(*conversation_id, interface).await? else {
                 warn!("Couldn't find conversation with id: {conversation_id:?}");
                 continue;
             };
-            self.0.original_labels.insert(
-                *conversation_id,
-                conversation
-                    .labels
-                    .iter()
-                    .map(|l| l.local_id.expect("Should be set"))
-                    .collect(),
-            );
-            self.0
-                .original_locations
+            self.data
+                .original_location
                 .insert(*conversation_id, conversation.exclusive_location);
         }
         Ok(())
@@ -65,12 +64,47 @@ impl Action for LabelAs {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
-    type Output = bool;
+    type RemoteOutput = ();
+    type LocalOutput = bool;
     type Error = ActionError;
 }
 
 #[derive(Default)]
 pub struct Handler;
+
+impl Handler {
+    pub(crate) async fn revert_one_locally<A>(
+        conversation_id: &LocalId,
+        added_labels: HashSet<LocalId>,
+        removed_labels: HashSet<LocalId>,
+        original_locations: Option<Option<ExclusiveLocation>>,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let Some(mut conversation) = Conversation::load(*conversation_id, interface).await? else {
+            warn!("While reverting locally, could not find conversation with local_id: {conversation_id:?}");
+            return Ok(());
+        };
+
+        let current_labels = HashSet::from_iter(
+            conversation
+                .labels
+                .iter()
+                .map(|l| l.local_id.expect("Should be set")),
+        );
+        let new_labels = &(&current_labels - &removed_labels) | &added_labels;
+        conversation.labels = ConversationLabel::find_by_ids(new_labels, interface).await?;
+
+        if let Some(location) = original_locations {
+            conversation.exclusive_location = location;
+        }
+        conversation.save_using(interface).await?;
+
+        Ok(())
+    }
+}
 
 impl ActionHandler for Handler {
     type Action = LabelAs;
@@ -79,21 +113,29 @@ impl ActionHandler for Handler {
         &self,
         action: &mut Self::Action,
         tx: &Tether,
-    ) -> Result<(), <Self::Action as Action>::Error> {
-        action.0.resolve_remote_ids(tx).await?;
+    ) -> Result<bool, <Self::Action as Action>::Error> {
         action.memorize_original_data(tx).await?;
+        action.data.resolve_remote_ids(tx).await?;
 
         Conversation::label_as(
-            action.0.source_label_id,
-            action.0.local_ids.clone(),
-            &action.0.local_selected_label_ids,
-            &action.0.local_partially_selected_label_ids,
-            action.0.must_archive,
+            action.data.source_label_id,
+            action.data.local_ids.clone(),
+            &action.data.local_selected_label_ids,
+            &action.data.local_partially_selected_label_ids,
+            action.data.must_archive,
             tx,
         )
         .await?;
 
-        Ok(())
+        if let Some(source_label) = Label::load(action.data.source_label_id, tx).await? {
+            Ok(source_label.total_conv == 0)
+        } else {
+            warn!(
+                "Could not find label with id: {}",
+                action.data.source_label_id
+            );
+            Ok(true)
+        }
     }
 
     async fn revert_local(
@@ -101,40 +143,16 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let archive_id = RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), tx)
-            .await?
-            .expect("Archive label must have a RemoteId");
-
-        for conversation_id in &action.0.local_ids {
-            let Some(mut conversation) = Conversation::load(*conversation_id, tx).await? else {
-                warn!("While reverting locally, could not find conversation with local_id: {conversation_id:?}");
-                continue;
-            };
-
-            if let Some(labels) = action.0.original_labels.remove(conversation_id) {
-                conversation.labels = Vec::with_capacity(labels.len());
-                for label_id in labels {
-                    if let Some(label) = ConversationLabel::load(label_id, tx).await? {
-                        conversation.labels.push(label);
-                    } else {
-                        warn!("While reverting locally, could not find ConversationLabel with local_id: {label_id:?}");
-                    }
-                }
-            }
-            if let Some(location) = action.0.original_locations.get(conversation_id) {
-                conversation.exclusive_location = location.clone();
-            }
-            if action.0.must_archive {
-                Conversation::move_conversations(
-                    archive_id,
-                    action.0.source_label_id,
-                    action.0.local_ids.clone(),
-                    tx,
-                )
-                .await?;
-            }
-            conversation.save_using(tx).await?
-        }
+        Conversation::undo_label_as(
+            action.data.local_ids.clone(),
+            action.data.source_label_id,
+            action.data.added_labels.clone(),
+            action.data.removed_labels.clone(),
+            action.data.original_location.clone(),
+            action.data.must_archive,
+            tx,
+        )
+        .await?;
         Ok(())
     }
 
@@ -143,25 +161,48 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<(), <Self::Action as Action>::Error> {
         let api = session.api();
 
         let failed_ids = Conversation::remote_relabel(
             session,
-            action.0.remote_ids.clone(),
-            &action.0.remote_selected_label_ids,
-            &action.0.remote_partially_selected_label_ids,
+            &action.data.added_labels,
+            &action.data.removed_labels,
             stash,
         )
         .await?;
 
         if !failed_ids.is_empty() {
             error!("LabelAs conversation operation failed for conversations: {failed_ids:?}");
-            todo!("revert locally for failed ids");
+            let failed_ids = RemoteId::counterparts::<Conversation, _>(failed_ids, stash).await?;
+            for conversation_id in &failed_ids {
+                Self::revert_one_locally(
+                    conversation_id,
+                    action
+                        .data
+                        .added_labels
+                        .remove(conversation_id)
+                        .unwrap_or_default(),
+                    action
+                        .data
+                        .removed_labels
+                        .remove(conversation_id)
+                        .unwrap_or_default(),
+                    action.data.original_location.remove(conversation_id),
+                    stash,
+                )
+                .await?;
+            }
         }
 
-        if action.0.must_archive {
-            let conversation_ids = action.0.remote_ids.clone().into_iter().map_into().collect();
+        if action.data.must_archive {
+            let conversation_ids = action
+                .data
+                .remote_ids
+                .clone()
+                .into_iter()
+                .map_into()
+                .collect();
             let response = api
                 .put_conversations_label(
                     conversation_ids,
@@ -184,7 +225,7 @@ impl ActionHandler for Handler {
                     RemoteId::counterparts::<Conversation, _>(failed_ids.clone(), &tx).await?;
                 Conversation::move_conversations(
                     archive_id,
-                    action.0.source_label_id,
+                    action.data.source_label_id,
                     local_ids,
                     &tx,
                 )
@@ -192,12 +233,6 @@ impl ActionHandler for Handler {
                 tx.commit().await?;
             }
         }
-
-        if let Some(source_label) = Label::load(action.0.source_label_id, stash).await? {
-            Ok(source_label.total_conv == 0)
-        } else {
-            warn!("Could not find label with id: {}", action.0.source_label_id);
-            Ok(true)
-        }
+        Ok(())
     }
 }

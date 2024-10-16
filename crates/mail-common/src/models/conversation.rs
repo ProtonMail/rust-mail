@@ -1,7 +1,8 @@
+use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::filter_responses;
-use crate::datatypes::{LabelType, SystemLabelId};
+use crate::datatypes::{ExclusiveLocation, LabelType, SystemLabelId};
 use crate::models::Label;
 use crate::{actions::conversations::Delete, models::Conversation, AppError};
 use anyhow::anyhow;
@@ -11,7 +12,7 @@ use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use stash::stash::{AgnosticInterface, Interface};
-use tracing::warn;
+use std::collections::{HashMap, HashSet};
 
 impl Conversation {
     /// Label multiple conversations.
@@ -264,14 +265,11 @@ impl Conversation {
             partially_selected_label_ids,
             must_archive,
         );
-        match queue
+        let ActionOutput { local, .. } = queue
             .apply_action(session, action)
             .await
-            .map_err(|e| AppError::Other(anyhow!(e)))?
-        {
-            ActionStatus::Executed(result) => Ok(result),
-            ActionStatus::Queued(id) => Err(AppError::ActionStillQueued(id)),
-        }
+            .map_err(|e| AppError::Other(anyhow!(e)))?;
+        Ok(local)
     }
 
     /// Locally apply LabelAs action for conversations
@@ -286,8 +284,7 @@ impl Conversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let labels = Label::find_by_kind(LabelType::Label, interface).await?;
-        for label in labels {
+        for label in Label::find_by_kind(LabelType::Label, interface).await? {
             let label_id = label.local_id.expect("Should be set");
             if selected_label_ids.contains(&label_id) {
                 Self::apply_label(label_id, conversation_ids.clone(), interface).await?
@@ -312,9 +309,8 @@ impl Conversation {
     /// Remotely apply LabelAs action for conversations
     pub(crate) async fn remote_relabel<A>(
         session: &Session,
-        conversation_ids: Vec<RemoteId>,
-        selected_label_ids: &[RemoteId],
-        partially_selected_label_ids: &[RemoteId],
+        added_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
+        removed_label_ids: &HashMap<LocalId, HashSet<LocalId>>,
         interface: &A,
     ) -> Result<Vec<RemoteId>, AppError>
     where
@@ -322,36 +318,109 @@ impl Conversation {
     {
         let api = session.api();
 
-        let conversation_ids: Vec<_> = conversation_ids.into_iter().map_into().collect();
-        let labels = Label::find_by_kind(LabelType::Label, interface).await?;
-        let mut failed_ids = vec![];
-        for label in labels {
-            let Some(label_id) = label.remote_id else {
-                warn!("Label without remote_id: {label:?}");
-                continue;
-            };
-            if selected_label_ids.contains(&label_id) {
-                let response = api
-                    .put_conversations_label(
-                        conversation_ids.clone(),
-                        label_id.into_inner().into(),
-                        None,
-                    )
-                    .await?
-                    .responses;
-                failed_ids.append(&mut filter_responses(response));
-            } else if !partially_selected_label_ids.contains(&label_id) {
-                let response = api
-                    .put_conversations_unlabel(
-                        conversation_ids.clone(),
-                        label_id.into_inner().into(),
-                    )
-                    .await?
-                    .responses;
-                failed_ids.append(&mut filter_responses(response));
+        let mut added_by_label = HashMap::new();
+        for (conversation_id, label_ids) in added_label_ids {
+            let label_ids = LocalId::counterparts::<Label, _>(
+                Vec::from_iter(label_ids.iter().cloned()),
+                interface,
+            )
+            .await?;
+            for label_id in label_ids {
+                added_by_label
+                    .entry(label_id)
+                    .or_insert_with(HashSet::new)
+                    .insert(*conversation_id);
             }
-            // else keep label as is
         }
+        let mut removed_by_label = HashMap::new();
+        for (conversation_id, label_ids) in removed_label_ids {
+            let label_ids = LocalId::counterparts::<Label, _>(
+                Vec::from_iter(label_ids.iter().cloned()),
+                interface,
+            )
+            .await?;
+            for label_id in label_ids {
+                removed_by_label
+                    .entry(label_id)
+                    .or_insert_with(HashSet::new)
+                    .insert(*conversation_id);
+            }
+        }
+
+        let mut failed_ids = vec![];
+        for (label_id, conversation_ids) in added_by_label {
+            let conversation_ids = LocalId::counterparts::<Conversation, _>(
+                Vec::from_iter(conversation_ids),
+                interface,
+            )
+            .await?;
+            let response = api
+                .put_conversations_label(
+                    conversation_ids.into_iter().map_into().collect(),
+                    label_id.clone().into(),
+                    None,
+                )
+                .await?
+                .responses;
+            failed_ids.append(&mut filter_responses(response));
+        }
+        for (label_id, conversation_ids) in removed_by_label {
+            let conversation_ids = LocalId::counterparts::<Conversation, _>(
+                Vec::from_iter(conversation_ids),
+                interface,
+            )
+            .await?;
+            let response = api
+                .put_conversations_unlabel(
+                    conversation_ids.into_iter().map_into().collect(),
+                    label_id.clone().into(),
+                )
+                .await?
+                .responses;
+            failed_ids.append(&mut filter_responses(response));
+        }
+
         Ok(failed_ids)
+    }
+
+    /// Revert locally the LabelAs action for conversation.
+    pub(crate) async fn undo_label_as<A>(
+        local_ids: Vec<LocalId>,
+        source_label_id: LocalId,
+        mut added_labels: HashMap<LocalId, HashSet<LocalId>>,
+        mut removed_labels: HashMap<LocalId, HashSet<LocalId>>,
+        mut original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
+        must_archive: bool,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let archive_id =
+            RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), interface)
+                .await?
+                .expect("Archive label must have a RemoteId");
+
+        for conversation_id in &local_ids {
+            LabelAsHandler::revert_one_locally(
+                conversation_id,
+                added_labels.remove(conversation_id).unwrap_or_default(),
+                removed_labels.remove(conversation_id).unwrap_or_default(),
+                original_location.remove(conversation_id),
+                interface,
+            )
+            .await?;
+
+            if must_archive {
+                Conversation::move_conversations(
+                    archive_id,
+                    source_label_id,
+                    local_ids.clone(),
+                    interface,
+                )
+                .await?;
+            }
+        }
+        Ok(())
     }
 }

@@ -4,8 +4,8 @@ pub mod labels;
 pub mod messages;
 
 pub use self::available_action::*;
-use crate::datatypes::{ExclusiveLocation, RollbackItemType};
-use crate::models::{Label, RollbackItem};
+use crate::datatypes::{ExclusiveLocation, LabelType, RollbackItemType};
+use crate::models::{ConversationLabel, Label, RollbackItem};
 use crate::AppError;
 use itertools::Itertools;
 use proton_action_queue::action::Factory;
@@ -14,8 +14,8 @@ use proton_api_mail::services::proton::response_data::OperationResult;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::{StashError, Tether};
-use std::collections::HashMap;
+use stash::stash::{AgnosticInterface, Interface, StashError, Tether};
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use tracing::error;
 
@@ -211,13 +211,16 @@ where
     source_label_id: LocalId,
     local_ids: Vec<LocalId>,
     remote_ids: Vec<RemoteId>,
+    local_all_label_ids: Vec<LocalId>,
+    remote_all_label_ids: Vec<RemoteId>,
     local_selected_label_ids: Vec<LocalId>,
     remote_selected_label_ids: Vec<RemoteId>,
     local_partially_selected_label_ids: Vec<LocalId>,
     remote_partially_selected_label_ids: Vec<RemoteId>,
-    original_labels: HashMap<LocalId, Vec<LocalId>>,
-    original_locations: HashMap<LocalId, Option<ExclusiveLocation>>,
     must_archive: bool,
+    added_labels: HashMap<LocalId, HashSet<LocalId>>,
+    removed_labels: HashMap<LocalId, HashSet<LocalId>>,
+    original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
     phantom_data: PhantomData<T>,
 }
 
@@ -235,14 +238,17 @@ where
         Self {
             source_label_id,
             local_ids,
+            local_all_label_ids: vec![],
+            remote_all_label_ids: vec![],
             remote_ids: vec![],
             local_selected_label_ids: selected_label_ids,
             remote_selected_label_ids: vec![],
             local_partially_selected_label_ids: partially_selected_label_ids,
             remote_partially_selected_label_ids: vec![],
-            original_labels: HashMap::new(),
-            original_locations: HashMap::new(),
             must_archive,
+            added_labels: HashMap::new(),
+            removed_labels: HashMap::new(),
+            original_location: HashMap::new(),
             phantom_data: PhantomData,
         }
     }
@@ -250,6 +256,8 @@ where
     /// Resolve all local ids into the remote counterpart.
     async fn resolve_remote_ids(&mut self, tx: &Tether) -> Result<(), ActionError> {
         self.remote_ids = LocalId::counterparts::<T, _>(self.local_ids.clone(), tx).await?;
+        self.remote_all_label_ids =
+            LocalId::counterparts::<Label, _>(self.local_all_label_ids.clone(), tx).await?;
         let remote_selected_label_ids =
             LocalId::counterparts::<Label, _>(self.local_selected_label_ids.clone(), tx).await?;
         self.remote_selected_label_ids = remote_selected_label_ids.into_iter().map_into().collect();
@@ -260,6 +268,38 @@ where
             .into_iter()
             .map_into()
             .collect();
+        Ok(())
+    }
+
+    async fn memorize_original_data<A>(&mut self, interface: &A) -> Result<(), ActionError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let all_labels = Label::find_by_kind(LabelType::Label, interface).await?;
+        self.local_all_label_ids = all_labels
+            .iter()
+            .map(|l| l.local_id.expect("Should be set"))
+            .collect();
+
+        self.save_modifications(interface).await?;
+        Ok(())
+    }
+
+    async fn save_modifications<A>(&mut self, interface: &A) -> Result<(), ActionError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let selected = HashSet::from_iter(self.local_selected_label_ids.iter().cloned());
+        let partial = HashSet::from_iter(self.local_partially_selected_label_ids.iter().cloned());
+        for conversation_id in &self.local_ids {
+            let labels =
+                ConversationLabel::labels_ids_for_conversation(*conversation_id, interface).await?;
+            let labels = HashSet::from_iter(labels.into_iter());
+            self.added_labels
+                .insert(*conversation_id, &selected - &labels);
+            self.removed_labels
+                .insert(*conversation_id, &(&labels - &selected) - &partial);
+        }
         Ok(())
     }
 }

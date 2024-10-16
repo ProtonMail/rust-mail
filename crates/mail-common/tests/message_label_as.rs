@@ -13,12 +13,12 @@ use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageMetadata as ApiMessageMetadata,
     ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::LabelId;
+use proton_core_common::datatypes::{Id, LabelId};
 use proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey, UserKeys as ApiUserKeys,
 };
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Label, Message};
 use proton_mail_common::Mailbox;
 use stash::orm::Model;
@@ -114,18 +114,21 @@ async fn label_as_without_archive() {
         .unwrap()
         .unwrap();
     label1.total_msg = 2;
+    label1.total_conv = 1;
     label1.save().await.unwrap();
     let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], stash)
         .await
         .unwrap()
         .unwrap();
     label2.total_msg = 2;
+    label2.total_conv = 1;
     label2.save().await.unwrap();
     let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], stash)
         .await
         .unwrap()
         .unwrap();
     label3.total_msg = 3;
+    label3.total_conv = 1;
     label3.save().await.unwrap();
     let message1 = Message::load(1.into(), stash).await.unwrap().unwrap();
     assert!(message1.label_ids.is_empty());
@@ -265,18 +268,21 @@ async fn label_as_with_archive() {
         .unwrap()
         .unwrap();
     label1.total_msg = 1;
+    label1.total_conv = 1;
     label1.save().await.unwrap();
     let mut label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], stash)
         .await
         .unwrap()
         .unwrap();
     label2.total_msg = 1;
+    label2.total_conv = 1;
     label2.save().await.unwrap();
     let mut label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], stash)
         .await
         .unwrap()
         .unwrap();
     label3.total_msg = 1;
+    label3.total_conv = 1;
     label3.save().await.unwrap();
 
     let message1 = Message::load(1.into(), stash).await.unwrap().unwrap();
@@ -300,18 +306,38 @@ async fn label_as_with_archive() {
     .unwrap();
 
     // Validation:
+    let archive_id = LabelId::archive()
+        .counterpart::<Label, _>(stash)
+        .await
+        .unwrap()
+        .unwrap();
+
     assert!(action_result);
     let message1 = Message::load(1.into(), stash).await.unwrap().unwrap();
     assert_eq!(message1.label_ids.len(), 2);
     assert!(message1.label_ids.contains(&label1_id));
     assert!(message1.label_ids.contains(&LabelId::archive()));
     assert_eq!(message1.custom_labels.len(), 1);
+    assert_eq!(
+        message1.exclusive_location,
+        Some(ExclusiveLocation::System {
+            name: SystemLabel::Archive,
+            local_id: archive_id,
+        })
+    );
     let message2 = Message::load(2.into(), stash).await.unwrap().unwrap();
     assert_eq!(message2.label_ids.len(), 3);
     assert!(message2.label_ids.contains(&label1_id));
     assert!(message2.label_ids.contains(&label2_id));
     assert!(message2.label_ids.contains(&LabelId::archive()));
     assert_eq!(message2.custom_labels.len(), 2);
+    assert_eq!(
+        message2.exclusive_location,
+        Some(ExclusiveLocation::System {
+            name: SystemLabel::Archive,
+            local_id: archive_id,
+        })
+    );
 }
 
 fn test_label(label_id: &LabelId, name: &str) -> ApiLabel {

@@ -7,16 +7,14 @@ use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions};
 use crate::datatypes::{LabelType, MobileActions, SystemLabel, SystemLabelId};
-use crate::models::{Label, MailSettings, Message, MessageLabelStats};
-use crate::{find_in_query, AppError};
+use crate::models::{Label, MailSettings, Message};
+use crate::AppError;
 use anyhow::anyhow;
 use itertools::Itertools as _;
 use proton_action_queue::queue::{ActionError, ActionOutput, ActionRemoteOutput, Queue};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
-use proton_core_common::models::ModelExtension;
-use stash::exports::ToSql;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
@@ -353,63 +351,25 @@ impl Message {
     ///
     /// Returns errors if the operation failed.
     ///
-    pub async fn label_messages_as<A>(
+    pub async fn label_as<A>(
         source_label_id: LocalId,
         message_ids: Vec<LocalId>,
         selected_label_ids: &[LocalId],
         partially_selected_label_ids: &[LocalId],
+        all_label_ids: &[LocalId],
         must_archive: bool,
         interface: &A,
     ) -> Result<(), AppError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let (query, params) = find_in_query!(
-            "WHERE deleted = 0 AND local_id IN ({})",
-            message_ids.clone()
-        );
-        let mut messages = Message::find(query, params, interface, None).await?;
-        let label_stats_before = MessageLabelStats::build(messages.clone(), interface).await?;
-        for message in &mut messages {
-            let current_labels = message.all_message_labels(interface).await?;
-            let (current_custom_labels, other_current_labels): (Vec<_>, Vec<_>) = current_labels
-                .into_iter()
-                .partition(|l| l.label_type == LabelType::Label);
-            let new_label_ids = Self::compute_expected_labels(
-                &current_custom_labels,
-                selected_label_ids,
-                partially_selected_label_ids,
-            );
-            let new_label_ids = LocalId::counterparts::<Label, _>(new_label_ids, interface).await?;
-
-            message.label_ids = other_current_labels
-                .into_iter()
-                .map(|l| l.remote_id.expect("Should be set"))
-                .chain(new_label_ids.into_iter().map(|l| LabelId::from(l.clone())))
-                .collect();
-
-            message.save_using(interface).await?
-        }
-
-        let label_stats_after = MessageLabelStats::build(messages, interface).await?;
-        for label_id in label_stats_before
-            .keys()
-            .chain(label_stats_after.keys())
-            .collect::<HashSet<_>>()
-        {
-            if let Some(mut label) = Label::find_by_id(*label_id, interface).await? {
-                if let Some(after) = label_stats_after.get(label_id) {
-                    label.total_msg += after.count;
-                    label.unread_msg += after.unread_count;
-                }
-                if let Some(before) = label_stats_before.get(label_id) {
-                    label.total_msg -= before.count;
-                    label.unread_msg -= before.unread_count;
-                }
-                label.save_using(interface).await?
-            } else {
-                warn!("Label {label_id} does not exist");
+        for label_id in all_label_ids {
+            if selected_label_ids.contains(label_id) {
+                Self::apply_label(*label_id, message_ids.clone(), interface).await?
+            } else if !partially_selected_label_ids.contains(label_id) {
+                Self::remove_label(*label_id, message_ids.clone(), interface).await?
             }
+            // else keep label as is
         }
 
         if must_archive {

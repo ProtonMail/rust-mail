@@ -1,6 +1,6 @@
 mod delete;
 mod label;
-mod label_as;
+pub(crate) mod label_as;
 mod mark_read;
 mod mark_unread;
 mod r#move;

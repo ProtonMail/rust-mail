@@ -15,7 +15,7 @@ use proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey,
 };
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
 use stash::orm::Model;
@@ -68,12 +68,7 @@ async fn action_label_as_without_archive() {
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
         &label1_id.clone().into_inner().into(),
-        vec![
-            conversation1.id.clone(),
-            conversation2.id.clone(),
-            conversation3.id.clone(),
-            conversation4.id.clone(),
-        ],
+        vec![conversation1.id.clone(), conversation2.id.clone()],
         None,
         vec![],
     )
@@ -81,7 +76,6 @@ async fn action_label_as_without_archive() {
     ctx.mock_unlabel_conversation(
         &label3_id.into_inner().into(),
         vec![
-            conversation1.id,
             conversation2.id,
             conversation3.id.clone(),
             conversation4.id.clone(),
@@ -240,14 +234,14 @@ async fn action_label_as_with_archive() {
     .await;
     ctx.mock_label_conversation(
         &label1_id.clone().into_inner().into(),
-        vec![conversation1.id.clone(), conversation2.id.clone()],
+        vec![conversation1.id.clone()],
         None,
         vec![],
     )
     .await;
     ctx.mock_unlabel_conversation(
         &label3_id.into_inner().into(),
-        vec![conversation1.id, conversation2.id],
+        vec![conversation2.id],
         vec![],
     )
     .await;
@@ -314,6 +308,13 @@ async fn action_label_as_with_archive() {
         .map(|l| l.local_label_id.unwrap())
         .collect();
     assert_eq!(ids, hash_set![label1.local_id.unwrap(), archive_id]);
+    assert_eq!(
+        conversation1.exclusive_location,
+        Some(ExclusiveLocation::System {
+            name: SystemLabel::Archive,
+            local_id: archive_id,
+        })
+    );
     let conversation2 = Conversation::load(2.into(), stash).await.unwrap().unwrap();
     assert_eq!(conversation2.labels.len(), 3);
     let ids: HashSet<_> = conversation2
@@ -328,6 +329,13 @@ async fn action_label_as_with_archive() {
             label2.local_id.unwrap(),
             archive_id
         ]
+    );
+    assert_eq!(
+        conversation2.exclusive_location,
+        Some(ExclusiveLocation::System {
+            name: SystemLabel::Archive,
+            local_id: archive_id,
+        })
     );
 }
 
