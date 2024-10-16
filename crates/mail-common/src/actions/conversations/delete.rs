@@ -26,7 +26,9 @@ impl Action for Delete {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
-    type Output = ();
+    type RemoteOutput = ();
+
+    type LocalOutput = ();
     type Error = ActionError;
 }
 
@@ -40,7 +42,7 @@ impl proton_action_queue::action::Handler for Handler {
         &self,
         action: &mut Self::Action,
         tx: &Tether,
-    ) -> Result<(), <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
         Conversation::mark_deleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;
@@ -67,7 +69,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let remote_label_id = action
             .0
             .remote_label_id

@@ -26,7 +26,8 @@ async fn queued_version_migration() {
             value: STARTING_VALUE,
         })
         .await
-        .unwrap();
+        .unwrap()
+        .id;
     drop(queue);
 
     let queue = new_queue_with_stash(pool.clone(), factory_v2).await;
@@ -45,7 +46,9 @@ impl Action for V1Action {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = V1ActionHandler;
-    type Output = u32;
+    type RemoteOutput = u32;
+
+    type LocalOutput = ();
     type Error = DefaultError;
 }
 
@@ -77,7 +80,7 @@ impl Handler for V1ActionHandler {
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
 }
@@ -92,7 +95,9 @@ impl Action for V2Action {
     const VERSION: u32 = 2;
     type VersionConverter = V2VersionConverter;
     type Handler = V2ActionHandler;
-    type Output = ();
+    type RemoteOutput = ();
+
+    type LocalOutput = ();
     type Error = DefaultError;
 }
 
@@ -137,7 +142,7 @@ impl Handler for V2ActionHandler {
         action: &mut Self::Action,
         _: &Session,
         _: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.value, END_VALUE);
         Ok(())
     }

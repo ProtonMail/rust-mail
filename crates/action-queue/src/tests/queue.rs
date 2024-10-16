@@ -17,9 +17,11 @@ impl Action for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Output = ();
-    type Error = NoopError;
     type Handler = NoopActionHandler<Self>;
+
+    type RemoteOutput = ();
+    type LocalOutput = ();
+    type Error = NoopError;
 }
 
 #[tokio::test]
@@ -36,7 +38,8 @@ async fn check_action_priority() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id1 = queue
         .queue_action_with_metadata(
@@ -46,7 +49,8 @@ async fn check_action_priority() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id2 = queue
         .queue_action_with_metadata(
@@ -56,7 +60,8 @@ async fn check_action_priority() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id3 = queue
         .queue_action_with_metadata(
@@ -66,7 +71,8 @@ async fn check_action_priority() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id4 = queue
         .queue_action_with_metadata(
@@ -76,7 +82,8 @@ async fn check_action_priority() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     // Expected order:
     // * 2 Highest, oldest
@@ -126,7 +133,8 @@ async fn check_action_delay() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id1 = queue
         .queue_action_with_metadata(
@@ -134,7 +142,8 @@ async fn check_action_delay() {
             MetadataBuilder::new().with_creation_time(date_time).build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id2 = queue
         .queue_action_with_metadata(
@@ -146,7 +155,8 @@ async fn check_action_delay() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     // Expected order:
     // * 1 No delay
@@ -184,7 +194,8 @@ async fn check_action_only_executed_without_dependencies() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id1 = queue
         .queue_action_with_metadata(
@@ -195,7 +206,8 @@ async fn check_action_only_executed_without_dependencies() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id2 = queue
         .queue_action_with_metadata(
@@ -207,7 +219,8 @@ async fn check_action_only_executed_without_dependencies() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id3 = queue
         .queue_action_with_metadata(
@@ -219,7 +232,8 @@ async fn check_action_only_executed_without_dependencies() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let id4 = queue
         .queue_action_with_metadata(
@@ -231,7 +245,8 @@ async fn check_action_only_executed_without_dependencies() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     // Expected order
     // * 0 - No Deps

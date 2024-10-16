@@ -174,7 +174,7 @@ impl From<StoredAction> for QueuedMetadata {
 /// if we detect that we can't apply the action on the remote due to lack of network, the action
 /// is automatically queued.
 ///
-/// If the action can complete all steps successfully [`Action::Output`] is returned as part of
+/// If the action can complete all steps successfully [`Action::RemoteOutput`] is returned as part of
 /// the result.
 ///
 /// If the action fails, [`Action::Error`] is returned with [`ActionError`].
@@ -240,13 +240,35 @@ pub struct Queue {
     exec_guard: AtomicBool,
 }
 
-/// State of the [`Action`] after being applied with [`Queue::apply_action`] or
+/// Output of the [`Action`] after being applied with [`Queue::apply_action`] or
 /// [`Queue::apply_action_with_metadata`].
-pub enum ActionStatus<T> {
+pub enum ActionRemoteOutput<Remote> {
     /// Action was executed successfully on local and on remote.
-    Executed(T),
+    Executed(Remote),
     /// Action could not be executed on the remote at this time and was queued.
     Queued(Id),
+}
+
+/// Output of applying the [`Action`] with [`Queue::apply_action`] or
+/// [`Queue::apply_action_with_metadata`].
+///
+/// If remote result depends on whether the action was queued or
+/// executed immediately.
+pub struct ActionOutput<T: Action> {
+    /// Result of executing the action locally.
+    pub local: T::LocalOutput,
+    /// Result of executing the action on the remote server.
+    pub remote: ActionRemoteOutput<T::RemoteOutput>,
+}
+
+/// Output of queueing the [`Action`] with [`Queue::queue_action`] or
+/// [`Queue::queue_action_with_metadata`].
+///
+pub struct QueuedActionOutput<T: Action> {
+    /// Result of executing the action locally.
+    pub local: T::LocalOutput,
+    /// Id of the queued action.
+    pub id: Id,
 }
 
 impl Queue {
@@ -298,7 +320,7 @@ impl Queue {
     pub async fn queue_action<T: Action>(
         &self,
         action: T,
-    ) -> std::result::Result<Id, ActionError<T>> {
+    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
         self.queue_action_with_metadata::<T>(action, Metadata::default())
             .await
     }
@@ -314,15 +336,19 @@ impl Queue {
         &self,
         mut action: T,
         metadata: Metadata,
-    ) -> std::result::Result<Id, ActionError<T>> {
+    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
         debug!("Queueing action: {} {:?}", T::TYPE, metadata,);
         let handler = T::Handler::default();
 
-        let id = self
+        let (local_output, id) = self
             .execute_action_local(&handler, &mut action, metadata)
             .await?;
         debug!("Action queued with id={id}");
-        Ok(id)
+
+        Ok(QueuedActionOutput {
+            local: local_output,
+            id,
+        })
     }
 
     /// Execute an `action` immediately.
@@ -342,7 +368,7 @@ impl Queue {
         &self,
         session: &Session,
         action: T,
-    ) -> std::result::Result<ActionStatus<T::Output>, ActionError<T>> {
+    ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
         self.apply_action_with_metadata::<T>(session, action, Metadata::default())
             .await
     }
@@ -367,19 +393,25 @@ impl Queue {
         session: &Session,
         mut action: T,
         metadata: Metadata,
-    ) -> std::result::Result<ActionStatus<T::Output>, ActionError<T>> {
+    ) -> std::result::Result<ActionOutput<T>, ActionError<T>> {
         debug!("Applying action: {} {:?}", T::TYPE, metadata,);
         let handler = T::Handler::default();
 
         // 1) Apply local action and store in the queue
-        let id = self
+        let (local_output, id) = self
             .execute_action_local(&handler, &mut action, metadata)
             .await?;
         debug!("Action queued with id={id}");
 
         // 2) Execute remote counter part
-        self.execute_action_remote(id, &handler, &mut action, session)
-            .await
+        let remote_output = self
+            .execute_action_remote(id, &handler, &mut action, session)
+            .await?;
+
+        Ok(ActionOutput {
+            local: local_output,
+            remote: remote_output,
+        })
     }
 
     /// Execute one action from the queue, if available, using the given `session` for remote
@@ -588,10 +620,10 @@ impl Queue {
         handler: &T::Handler,
         action: &mut T,
         metadata: Metadata,
-    ) -> std::result::Result<Id, ActionError<T>> {
+    ) -> std::result::Result<(T::LocalOutput, Id), ActionError<T>> {
         let tx = self.stash.transaction().await?;
 
-        handler.apply_local(action, &tx).await.map_err(|e| {
+        let local_output = handler.apply_local(action, &tx).await.map_err(|e| {
             error!("Failed to apply local changes: {e}");
             ActionError::Action(e)
         })?;
@@ -607,7 +639,7 @@ impl Queue {
         })?;
         tx.commit().await?;
 
-        Ok(stored_action.id.unwrap())
+        Ok((local_output, stored_action.id.unwrap()))
     }
 
     /// Shared snippet to execute actions remotely.
@@ -617,7 +649,7 @@ impl Queue {
         handler: &T::Handler,
         action: &mut T,
         session: &Session,
-    ) -> std::result::Result<ActionStatus<T::Output>, ActionError<T>> {
+    ) -> std::result::Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
         let tether = self.stash.connection();
         // Note: While we do our bets to check whether this action is still around at the time we
         // are executing this (e.g: concurrent cancel) it is not guaranteed that we will actually
@@ -641,13 +673,13 @@ impl Queue {
                 StoredAction::delete(&tether, id).await?;
                 tether.commit().await?;
 
-                Ok(ActionStatus::Executed(result))
+                Ok(ActionRemoteOutput::Executed(result))
             }
             Err(e) => {
                 error!("Failed to apply on server: {e}");
                 if e.is_network_failure() {
                     // if this failed due to network error we should leave it in the queue.
-                    return Ok(ActionStatus::Queued(id));
+                    return Ok(ActionRemoteOutput::Queued(id));
                 }
 
                 // Revert local changes and remove action from queue.

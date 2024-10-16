@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use proton_action_queue::queue::{ActionError, ActionStatus, Queue};
+use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::session::Session;
 use proton_core_common::datatypes::{Id, LabelId, LocalId};
 
@@ -26,7 +26,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, conversation_ids);
         queue.apply_action(session, action).await
     }
@@ -47,7 +47,7 @@ impl Conversation {
         session: &Session,
         queue: &Queue,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await
@@ -73,7 +73,7 @@ impl Conversation {
         session: &Session,
         queue: &Queue,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await?
@@ -100,7 +100,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
         let action = Unlabel::new(label_id, conversation_ids.into_iter().map_into());
         queue.apply_action(session, action).await
     }
@@ -123,7 +123,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<MarkRead>> {
+    ) -> Result<ActionOutput<MarkRead>, ActionError<MarkRead>> {
         let action = MarkRead::new(label_id, conversation_ids);
         queue.apply_action(session, action).await
     }
@@ -146,7 +146,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<MarkUnread>> {
+    ) -> Result<ActionOutput<MarkUnread>, ActionError<MarkUnread>> {
         let action = MarkUnread::new(label_id, conversation_ids);
         queue.apply_action(session, action).await
     }
@@ -169,7 +169,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Delete>> {
+    ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
         queue.apply_action(session, action).await
     }
@@ -194,7 +194,7 @@ impl Conversation {
         source_id: LocalId,
         destination_id: LocalId,
         target_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Move>> {
+    ) -> Result<ActionOutput<Move>, ActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
         queue.apply_action(session, action).await
     }
@@ -217,7 +217,7 @@ impl Conversation {
         queue: &Queue,
         label_id: LocalId,
         conversation_ids: impl IntoIterator<Item = LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Delete>> {
+    ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
         let action = Delete::new(label_id, conversation_ids);
         queue.apply_action(session, action).await
     }
