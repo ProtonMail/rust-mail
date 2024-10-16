@@ -1200,7 +1200,11 @@ pub async fn test_delete_local_message() {
         let conv_counts = conv_counts_as_map(&tx).await;
         let msg_counts = msg_counts_as_map(&tx).await;
 
-        for label in &mut message.label_ids {
+        for label in message
+            .label_ids
+            .iter_mut()
+            .filter(|l| *l != &SystemLabel::AllMail.label_id())
+        {
             let local_label_id = *state_map
                 .labels
                 .get(label)
@@ -1299,8 +1303,8 @@ pub async fn test_delete_local_message() {
 
             // Conversation should no longer exist
             assert_eq!(conv_count.total, start_conv_count.total - 1);
-            if label.remote_label_id == state.labels[0].remote_id {
-                assert_eq!(msg_count.total, start_msg_count.total - 2);
+            if label.remote_label_id == Some(SystemLabel::AllMail.label_id()) {
+                assert_eq!(msg_count.total, start_msg_count.total - 4);
             } else {
                 assert_eq!(msg_count.total, start_msg_count.total - 2);
             }
