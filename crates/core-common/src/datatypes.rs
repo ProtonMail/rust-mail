@@ -1025,7 +1025,7 @@ impl From<ApiAddressSignedKeyList> for AddressSignedKeyList {
 sql_using_serde!(AddressSignedKeyList);
 
 /// Wrapper type around `Vec<String>` to implement [`FromSql`] and [`ToSql`].
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ContactTypes(Vec<String>);
 
 impl ContactTypes {

@@ -686,7 +686,7 @@ impl Contact {
             return Err(StashError::NoStashAvailable);
         };
         self.contact_emails = ContactEmail::find(
-            "WHERE remote_contact_id = ?",
+            "WHERE remote_contact_id = ? ORDER BY display_order ASC",
             params![self.remote_id.clone()],
             stash,
             None,
@@ -1162,6 +1162,30 @@ impl From<ApiContactEmail> for ContactEmail {
             name: value.name,
             row_id: None,
             stash: None,
+        }
+    }
+}
+
+#[cfg(any(test, debug_assertions))]
+impl Default for ContactEmail {
+    #[allow(clippy::default_trait_access)]
+    fn default() -> Self {
+        Self {
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            remote_contact_id: Default::default(),
+            local_contact_id: Default::default(),
+            canonical_email: Default::default(),
+            contact_type: Default::default(),
+            defaults: ContactSendingPreferences::Default,
+            display_order: Default::default(),
+            email: Default::default(),
+            is_proton: Default::default(),
+            label_ids: Default::default(),
+            last_used_time: Default::default(),
+            name: Default::default(),
+            row_id: Default::default(),
+            stash: Default::default(),
         }
     }
 }

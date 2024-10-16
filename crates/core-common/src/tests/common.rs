@@ -11,11 +11,32 @@ macro_rules! lid {
     }};
 }
 
+/// Macro wrapping &str into Option<RemoteId> for easier model definition.
+/// Since it calls .into() on the RemoteId, it allows creation of Option<LabelId> as well.
+#[macro_export]
+macro_rules! rid {
+    ($id:expr) => {{
+        use crate::datatypes::RemoteId;
+        Some(RemoteId::from($id).into())
+    }};
+}
+
 #[macro_export]
 macro_rules! contact {
     ($($field:tt)*) => {{
         use crate::models::Contact;
         Contact {
+            $($field)*,
+            ..Default::default()
+        }
+    }};
+}
+
+#[macro_export]
+macro_rules! contact_email {
+    ($($field:tt)*) => {{
+        use crate::models::ContactEmail;
+        ContactEmail {
             $($field)*,
             ..Default::default()
         }
