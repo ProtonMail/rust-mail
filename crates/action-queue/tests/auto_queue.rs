@@ -3,7 +3,7 @@ mod common;
 use crate::common::DefaultError;
 use common::{new_queue_typed, new_session};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
-use proton_action_queue::queue::ActionStatus;
+use proton_action_queue::queue::ActionRemoteOutput;
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
@@ -28,7 +28,7 @@ async fn auto_queued_on_network_failure() {
             .unwrap();
 
         assert!(
-            matches!(output, ActionStatus::Queued(_)),
+            matches!(output.remote, ActionRemoteOutput::Queued(_)),
             "Error type {error:?} did not result in queued action"
         );
     }
@@ -53,7 +53,9 @@ impl Action for ErrorAction {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ErrorActionHandler;
-    type Output = u32;
+    type RemoteOutput = u32;
+
+    type LocalOutput = ();
 
     type Error = DefaultError;
 }
@@ -86,7 +88,7 @@ impl Handler for ErrorActionHandler {
         action: &mut Self::Action,
         _: &Session,
         _: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         use proton_api_core::service::ApiServiceError;
         let err = match action.error_type {
             ErrorType::Timeout => ApiServiceError::Timeout(String::new()),

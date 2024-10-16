@@ -46,7 +46,9 @@ impl Action for Expand {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
-    type Output = ();
+    type RemoteOutput = ();
+
+    type LocalOutput = ();
     type Error = ActionError;
 }
 

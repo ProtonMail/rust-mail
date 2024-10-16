@@ -1,7 +1,7 @@
 use crate::actions::{new_action_factory, ActionError};
 use crate::{MailContextResult, MailUserContext};
-use proton_action_queue::action::{Action, Id as ActionId};
-use proton_action_queue::queue::{ActionStatus, Queue};
+use proton_action_queue::action::Action;
+use proton_action_queue::queue::{ActionOutput, Queue, QueuedActionOutput};
 use stash::stash::Stash;
 
 impl MailUserContext {
@@ -13,7 +13,7 @@ impl MailUserContext {
     pub async fn execute_action<T: Action<Error = ActionError>>(
         &self,
         action: T,
-    ) -> MailContextResult<ActionStatus<T::Output>> {
+    ) -> MailContextResult<ActionOutput<T>> {
         Ok(self
             .action_queue
             .apply_action(self.session(), action)
@@ -27,7 +27,7 @@ impl MailUserContext {
     pub async fn queue_action<T: Action<Error = ActionError>>(
         &self,
         action: T,
-    ) -> MailContextResult<ActionId> {
+    ) -> MailContextResult<QueuedActionOutput<T>> {
         Ok(self.action_queue.queue_action(action).await?)
     }
 

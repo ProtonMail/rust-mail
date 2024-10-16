@@ -25,7 +25,9 @@ impl Action for Unlabel {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
-    type Output = ();
+    type RemoteOutput = ();
+
+    type LocalOutput = ();
     type Error = ActionError;
 }
 
@@ -63,7 +65,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let response = Conversation::remove_label_from_multiple_remote::<Proton>(
             action.0.remote_label_id.clone().expect("Should be set"),
             action.0.remote_target_ids.clone(),

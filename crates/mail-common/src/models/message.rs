@@ -11,7 +11,7 @@ use crate::models::{Label, MailSettings, Message, MessageLabelStats};
 use crate::{find_in_query, AppError};
 use anyhow::anyhow;
 use itertools::Itertools as _;
-use proton_action_queue::queue::{ActionError, ActionStatus, Queue};
+use proton_action_queue::queue::{ActionError, ActionOutput, ActionRemoteOutput, Queue};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
@@ -43,7 +43,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
         let action = ActionLabel::new(label_id, message_ids.into_iter().map_into());
         queue.apply_action(session, action).await
     }
@@ -64,7 +64,7 @@ impl Message {
         session: &Session,
         queue: &Queue,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<ActionLabel>> {
+    ) -> Result<ActionOutput<ActionLabel>, ActionError<ActionLabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await
@@ -90,7 +90,7 @@ impl Message {
         session: &Session,
         queue: &Queue,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
         let label_id = LabelId::starred()
             .counterpart::<crate::models::Label, _>(queue.stash())
             .await?
@@ -117,7 +117,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Unlabel>> {
+    ) -> Result<ActionOutput<Unlabel>, ActionError<Unlabel>> {
         let action = Unlabel::new(label_id, message_ids.into_iter().map_into());
         queue.apply_action(session, action).await
     }
@@ -140,7 +140,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Read>> {
+    ) -> Result<ActionOutput<Read>, ActionError<Read>> {
         let action = Read::new(label_id, message_ids);
         queue.apply_action(session, action).await
     }
@@ -163,7 +163,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Unread>> {
+    ) -> Result<ActionOutput<Unread>, ActionError<Unread>> {
         let action = Unread::new(label_id, message_ids);
         queue.apply_action(session, action).await
     }
@@ -186,7 +186,7 @@ impl Message {
         queue: &Queue,
         label_id: LocalId,
         message_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Delete>> {
+    ) -> Result<ActionOutput<Delete>, ActionError<Delete>> {
         let action = Delete::new(label_id, message_ids);
         queue.apply_action(session, action).await
     }
@@ -211,7 +211,7 @@ impl Message {
         source_id: LocalId,
         destination_id: LocalId,
         target_ids: Vec<LocalId>,
-    ) -> Result<ActionStatus<()>, ActionError<Move>> {
+    ) -> Result<ActionOutput<Move>, ActionError<Move>> {
         let action = Move::new(source_id, destination_id, target_ids);
         queue.apply_action(session, action).await
     }
@@ -484,9 +484,10 @@ impl Message {
             .apply_action(session, action)
             .await
             .map_err(|e| AppError::Other(anyhow!(e)))?
+            .remote
         {
-            ActionStatus::Executed(result) => Ok(result),
-            ActionStatus::Queued(id) => Err(AppError::ActionStillQueued(id)),
+            ActionRemoteOutput::Executed(result) => Ok(result),
+            ActionRemoteOutput::Queued(id) => Err(AppError::ActionStillQueued(id)),
         }
     }
 

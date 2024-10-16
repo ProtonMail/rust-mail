@@ -15,12 +15,17 @@ impl<T: Action> Default for NoopActionHandler<T> {
 
 impl<T: Action + 'static> Handler for NoopActionHandler<T>
 where
-    <T as Action>::Output: Default,
+    <T as Action>::RemoteOutput: Default,
+    <T as Action>::LocalOutput: Default,
 {
     type Action = T;
 
-    async fn apply_local(&self, _: &mut Self::Action, _: &Tether) -> Result<(), T::Error> {
-        Ok(())
+    async fn apply_local(
+        &self,
+        _: &mut Self::Action,
+        _: &Tether,
+    ) -> Result<<T as Action>::LocalOutput, T::Error> {
+        Ok(<T as Action>::LocalOutput::default())
     }
 
     async fn revert_local(&self, _: &mut Self::Action, _: &Tether) -> Result<(), T::Error> {
@@ -32,7 +37,7 @@ where
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
-    ) -> Result<<T as Action>::Output, T::Error> {
-        Ok(T::Output::default())
+    ) -> Result<<T as Action>::RemoteOutput, T::Error> {
+        Ok(T::RemoteOutput::default())
     }
 }

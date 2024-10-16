@@ -90,7 +90,9 @@ impl Action for LabelAs {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
-    type Output = bool;
+    type RemoteOutput = bool;
+
+    type LocalOutput = ();
     type Error = ActionError;
 }
 
@@ -161,7 +163,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let api = session.api();
 
         for message_id in &action.local_message_ids {

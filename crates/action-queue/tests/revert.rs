@@ -54,7 +54,8 @@ async fn network_failure_causes_revert_on_queue() {
             value,
         })
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     // Check local state is present.
     assert_eq!(
@@ -100,7 +101,9 @@ impl Action for RevertAction {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = RevertActionHandler;
-    type Output = u32;
+    type RemoteOutput = u32;
+
+    type LocalOutput = ();
     type Error = DefaultError;
 }
 
@@ -131,7 +134,7 @@ impl Handler for RevertActionHandler {
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         use proton_api_core::service::ApiServiceError;
         Err(ApiServiceError::UnknownError("it failed".to_owned()).into())
     }

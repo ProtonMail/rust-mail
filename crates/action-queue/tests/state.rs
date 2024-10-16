@@ -3,7 +3,7 @@ mod common;
 use crate::common::{DefaultError, TestExtension};
 use common::{new_factory, new_queue, new_session};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Handler, Type};
-use proton_action_queue::queue::ActionStatus;
+use proton_action_queue::queue::ActionRemoteOutput;
 use proton_api_core::session::Session;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Stash, Tether};
@@ -21,7 +21,10 @@ async fn state_preserved_after_local_change() {
         .apply_action(&session, TestAction { v: ACTION_VALUE })
         .await
         .unwrap();
-    assert!(matches!(output, ActionStatus::Executed(ACTION_VALUE_FINAL)));
+    assert!(matches!(
+        output.remote,
+        ActionRemoteOutput::Executed(ACTION_VALUE_FINAL)
+    ));
 
     // Check local state is as expected.
     assert_eq!(
@@ -53,7 +56,9 @@ impl Action for TestAction {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = TestActionHandler;
-    type Output = u32;
+    type RemoteOutput = u32;
+
+    type LocalOutput = ();
     type Error = DefaultError;
 }
 
@@ -94,7 +99,7 @@ impl Handler for TestActionHandler {
         action: &mut Self::Action,
         _: &Session,
         stash: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
 
         stash

@@ -23,7 +23,8 @@ async fn cancel_causes_revert() {
             value,
         })
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     // Check local state is present.
     assert_eq!(
@@ -80,7 +81,8 @@ async fn cancel_causes_revert_with_dependees() {
             old_value: 0,
         })
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let action_id2 = queue
         .queue_action_with_metadata(
@@ -92,7 +94,8 @@ async fn cancel_causes_revert_with_dependees() {
             MetadataBuilder::new().with_dependency(action_id1).build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     let action_id3 = queue
         .queue_action_with_metadata(
@@ -106,7 +109,8 @@ async fn cancel_causes_revert_with_dependees() {
                 .build(),
         )
         .await
-        .unwrap();
+        .unwrap()
+        .id;
 
     // Check local state is present.
     assert_eq!(
@@ -152,7 +156,9 @@ impl Action for CancelAction {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = CancelActionHandler;
-    type Output = u32;
+    type RemoteOutput = u32;
+
+    type LocalOutput = ();
     type Error = DefaultError;
 }
 
@@ -183,7 +189,7 @@ impl Handler for CancelActionHandler {
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
 }
@@ -200,7 +206,9 @@ impl Action for ChainCancelAction {
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ChainCancelActionHandler;
-    type Output = u32;
+
+    type LocalOutput = ();
+    type RemoteOutput = u32;
     type Error = DefaultError;
 }
 
@@ -232,7 +240,7 @@ impl Handler for ChainCancelActionHandler {
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error> {
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         panic!("should not be called");
     }
 }

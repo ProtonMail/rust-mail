@@ -22,7 +22,7 @@
 //! use std::sync::Arc;
 //! use serde::{Deserialize, Serialize};
 //! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, Metadata, Priority, Type};
-//! use proton_action_queue::queue::{ActionStatus, Queue};
+//! use proton_action_queue::queue::{ActionRemoteOutput, Queue};
 //! use proton_api_core::service::ApiServiceError;
 //! use proton_api_core::session::Session;
 //! use stash::stash::{Stash, Tether};
@@ -74,7 +74,7 @@
 //!         todo!()
 //!     }
 //!
-//!     async fn apply_remote(&self, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::Output,<Self::Action as Action>::Error> {
+//!     async fn apply_remote(&self, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //! }
@@ -88,11 +88,11 @@
 //!     queue.register::<MyAction>().unwrap();
 //!     // Execute action immediately
 //!     let queued_id = match queue.apply_action(session, MyAction{value:10}).await.unwrap() {
-//!         ActionStatus::Executed(value) => {
+//!         ActionRemoteOutput::Executed(value) => {
 //!             println!("Action was executed and returned: {value}");
 //!             return;
 //!         }
-//!         ActionStatus::Queued(id) => {
+//!         ActionRemoteOutput::Queued(id) => {
 //!             println!("Action was queued with id: {id}");
 //!             id
 //!         }

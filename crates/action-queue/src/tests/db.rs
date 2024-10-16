@@ -35,7 +35,9 @@ async fn action_store_and_retrieve() {
         const TYPE: Type = Type("test_action");
         const VERSION: u32 = 1;
         type VersionConverter = DefaultVersionConverter<Self>;
-        type Output = ();
+        type RemoteOutput = ();
+
+        type LocalOutput = ();
         type Error = Error;
 
         type Handler = NoopActionHandler<Self>;

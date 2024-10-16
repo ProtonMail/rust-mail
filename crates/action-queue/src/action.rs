@@ -166,11 +166,14 @@ pub trait Action: Serialize + DeserializeOwned + 'static {
     /// For more details see the [`Handler`] trait.
     type Handler: Handler<Action = Self>;
 
-    /// Output returned by executing this action.
+    /// Output returned by executing this action on the remote.
     ///
     /// Note this is only available if the action was executed on the remote via
     /// [`crate::queue::Queue::apply_action`].
-    type Output;
+    type RemoteOutput;
+
+    /// Output returned by executing this action on the local state.
+    type LocalOutput;
 
     /// Error type returned if this action fails.
     ///
@@ -216,7 +219,7 @@ pub trait Handler: Default + 'static {
         &self,
         action: &mut Self::Action,
         tx: &Tether,
-    ) -> Result<(), <Self::Action as Action>::Error>;
+    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>;
 
     /// Revert the `action` from the local database using the given `tx` transaction.
     ///
@@ -252,7 +255,7 @@ pub trait Handler: Default + 'static {
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
-    ) -> Result<<Self::Action as Action>::Output, <Self::Action as Action>::Error>;
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>;
 }
 
 /// Identifier for an action that has been queued.
