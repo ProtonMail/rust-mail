@@ -116,16 +116,10 @@ async fn mailbox_message_body_simple() {
 
 fn message_body_test_params() -> TestParams {
     TestParams {
-        last_event_id: None,
         user_info: Some(message_body_test_user_info()),
-        user_settings: None,
         addresses: message_body_test_addresses(),
         mail_settings: Some(message_body_test_mail_settings()),
-        labels: Default::default(),
-        conversations: vec![],
-        attachments: vec![],
-        conversation_count: vec![],
-        message_count: vec![],
+        ..Default::default()
     }
 }
 

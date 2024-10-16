@@ -7,16 +7,17 @@ use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
-    DateFormat as ApiDateFormat, Density as ApiDensity, Email as ApiEmail, Flags as ApiFlags,
-    HighSecurity as ApiHighSecurity, LogAuth as ApiLogAuth, Password as ApiPassword,
-    Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
+    ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat,
+    Density as ApiDensity, Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity,
+    LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
+    ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
     TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
     UserType as ApiUserType, WeekStart as ApiWeekStart,
 };
 use proton_api_core::services::proton::responses::{
-    GetAddressesResponse, GetEventsLatestResponse, GetSettingsResponse as GetCoreSettingsResponse,
-    GetUsersResponse,
+    GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
+    GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
 };
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::requests::GetConversationsOptions;
@@ -95,6 +96,12 @@ pub struct Params {
 
     /// List of message counts.
     pub message_count: Vec<ApiMessageCount>,
+
+    /// List of contacts
+    pub contacts: Vec<ApiContactBasic>,
+
+    /// List of email contacts
+    pub emails: Vec<ApiContactEmail>,
 }
 
 impl Params {
@@ -187,6 +194,8 @@ impl Params {
                 total: 1,
                 unread: 0,
             }],
+            contacts: vec![],
+            emails: vec![],
         }
     }
 }
@@ -426,6 +435,30 @@ impl TestContext {
                 .mount(self.mock_server())
                 .await;
         }
+
+        Mock::given(method("GET"))
+            .and(path("/api/contacts/emails"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetContactsEmailsResponse {
+                    total: params.emails.len() as u64,
+                    contact_emails: params.emails,
+                }),
+            )
+            .expect(number_of_calls)
+            .mount(self.mock_server())
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/api/contacts"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetContactsResponse {
+                    total: params.contacts.len() as u64,
+                    contacts: params.contacts,
+                }),
+            )
+            .expect(number_of_calls)
+            .mount(self.mock_server())
+            .await;
 
         // Message counts
         Mock::given(method("GET"))

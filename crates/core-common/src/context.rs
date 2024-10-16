@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
+use tokio::task::JoinError;
 use tracing::{debug, error, info, Level};
 
 #[derive(Debug, Error)]
@@ -59,6 +60,12 @@ pub enum CoreContextError {
 impl From<VcardValidationError> for CoreContextError {
     fn from(e: VcardValidationError) -> Self {
         CoreContextError::ContactError(ContactError::Validation(e))
+    }
+}
+
+impl From<JoinError> for CoreContextError {
+    fn from(e: JoinError) -> Self {
+        CoreContextError::Other(anyhow!(e))
     }
 }
 

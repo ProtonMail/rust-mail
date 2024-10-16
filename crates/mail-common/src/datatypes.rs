@@ -64,7 +64,7 @@ use proton_api_mail::services::proton::response_data::{
     SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction, ViewLayout as ApiViewLayout,
     ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
+use proton_core_common::datatypes::{AvatarInformation, LabelId, LocalId, RemoteId};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
@@ -1106,6 +1106,31 @@ pub struct MessageAddress {
 
     /// TODO: Document this field.
     pub name: String,
+}
+
+impl MessageAddress {
+    /// Creates an AvatarInformation struct using the details of
+    /// the first MessageAddress in the provided slice.
+    ///
+    pub fn avatar_info(address_list: &[MessageAddress]) -> AvatarInformation {
+        if let Some(address) = address_list.first() {
+            AvatarInformation::from(address)
+        } else {
+            AvatarInformation::default()
+        }
+    }
+}
+
+impl From<MessageAddress> for AvatarInformation {
+    fn from(address: MessageAddress) -> AvatarInformation {
+        AvatarInformation::from(&address)
+    }
+}
+
+impl From<&MessageAddress> for AvatarInformation {
+    fn from(address: &MessageAddress) -> AvatarInformation {
+        AvatarInformation::from(&address.name).or_else(&address.address)
+    }
 }
 
 impl From<ApiMessageAddress> for MessageAddress {

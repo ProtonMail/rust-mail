@@ -653,10 +653,6 @@ fn test_init_params_conversation(
         })
         .collect();
     TestParams {
-        last_event_id: None,
-        user_info: None,
-        user_settings: None,
-        mail_settings: None,
         labels,
         addresses: vec![ApiAddress {
             id: ApiRemoteId::from("myaddress"),
@@ -690,7 +686,6 @@ fn test_init_params_conversation(
             attachments_metadata: vec![],
             attachment_info: Default::default(),
         }],
-        attachments: vec![],
         conversation_count: vec![ApiConversationCount {
             label_id: LabelId::inbox().clone().into(),
             total: 1,
@@ -701,5 +696,6 @@ fn test_init_params_conversation(
             total: 1,
             unread: 0,
         }],
+        ..Default::default()
     }
 }

@@ -7,7 +7,7 @@ use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, MailSettings, MAIL_SETTINGS_ID};
+use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
 use stash::orm::Model;
 use std::fs;

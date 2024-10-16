@@ -1,4 +1,4 @@
-use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
+use proton_core_common::datatypes::AvatarInformation as RealAvatarInformation;
 use std::{borrow::Borrow, sync::Arc};
 
 use proton_core_common::{
@@ -8,7 +8,7 @@ use proton_core_common::{
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use uniffi::{Enum, Record};
 
-use crate::mail::datatypes::AvatarInformation;
+use crate::core::datatypes::AvatarInformation;
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 #[uniffi(flat_error)]
@@ -100,7 +100,7 @@ impl StoredAccount {
         let name = self.account.display_name.as_ref()?;
         let addr = self.account.primary_addr.as_ref()?;
 
-        Some(RealAvatarInformation::build(name, addr).into())
+        Some(RealAvatarInformation::from(name).or_else(addr).into())
     }
 }
 

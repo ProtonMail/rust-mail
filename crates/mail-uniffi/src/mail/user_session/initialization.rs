@@ -35,6 +35,7 @@ pub enum MailUserSessionInitializationStage {
     Addresses,
     Events,
     Labels,
+    Contacts,
     Counters,
     Finished,
 }
@@ -54,6 +55,7 @@ impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserSessionIn
             proton_mail_common::MailUserContextLoadingStage::Events => Self::Events,
             proton_mail_common::MailUserContextLoadingStage::Labels => Self::Labels,
             proton_mail_common::MailUserContextLoadingStage::Counters => Self::Counters,
+            proton_mail_common::MailUserContextLoadingStage::Contacts => Self::Contacts,
             proton_mail_common::MailUserContextLoadingStage::Finished => Self::Finished,
         }
     }

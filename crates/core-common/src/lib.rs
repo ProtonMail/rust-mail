@@ -10,6 +10,7 @@ pub mod models;
 pub mod os;
 pub mod paginator;
 mod user_context;
+pub mod utils;
 
 #[cfg(test)]
 mod tests;

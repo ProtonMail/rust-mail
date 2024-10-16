@@ -1,0 +1,72 @@
+mod common;
+
+use crate::common::init::Params as TestParams;
+use common::TestContext;
+use proton_api_core::services::proton::response_data::{
+    ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactSendingPreferences,
+};
+use proton_core_common::datatypes::{
+    AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts,
+};
+use proton_core_common::models::Contact;
+
+#[tokio::test]
+async fn contact_list() {
+    let ctx = TestContext::new().await;
+    let user_ctx = ctx.user_context().await;
+    let stash = user_ctx.user_stash();
+    let mut params = TestParams::default_basic();
+
+    params.contacts = vec![ApiContactBasic {
+        id: "123".into(),
+        create_time: 0,
+        label_ids: vec![],
+        modify_time: 0,
+        name: "Mr Banksy".to_string(),
+        size: 0,
+        uid: "123".into(),
+    }];
+
+    params.emails = vec![ApiContactEmail {
+        id: "321".into(),
+        contact_id: "123".into(),
+        canonical_email: "".to_string(),
+        contact_type: vec![],
+        defaults: ContactSendingPreferences::Default,
+        email: "banksy@proton.me".to_string(),
+        is_proton: true,
+        label_ids: vec![],
+        last_used_time: 0,
+        name: "Mr Banksy".to_string(),
+        order: 0,
+    }];
+
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.catch_all().await;
+
+    ctx.init_user(user_ctx.clone()).await;
+
+    let contact_list = Contact::contact_list(stash).await.unwrap();
+
+    assert_eq!(contact_list.len(), 1);
+    assert_eq!(
+        contact_list,
+        vec![GroupedContacts {
+            grouped_by: "M".to_string(),
+            item: vec![ContactItemType::Contact(ContactItem {
+                local_id: 1.into(),
+                name: "Mr Banksy".to_string(),
+                avatar_information: AvatarInformation {
+                    text: "MB".to_string(),
+                    color: "#1ED19C".to_string()
+                },
+                emails: vec![ContactEmailItem {
+                    local_id: 1.into(),
+                    email: "banksy@proton.me".to_string()
+                }]
+            })]
+        }]
+    );
+}

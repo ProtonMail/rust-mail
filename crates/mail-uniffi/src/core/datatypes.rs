@@ -43,6 +43,12 @@
 //!   - [`User::keys`](proton_core_common::datatypes::User::keys)
 //!
 
+mod avatar;
+mod contact_list;
+
+pub use avatar::*;
+pub use contact_list::*;
+
 use core::fmt;
 use proton_api_core::services::proton::Config as RealApiConfig;
 use proton_api_core::{DEFAULT_APP_VERSION, DEFAULT_CLIENT, DEFAULT_HOST_URL};

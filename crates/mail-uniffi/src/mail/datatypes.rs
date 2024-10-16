@@ -53,7 +53,7 @@ mod available_action;
 pub(crate) mod labels;
 mod system_label;
 
-use crate::core::datatypes::Id;
+use crate::core::datatypes::{AvatarInformation, Id};
 pub use crate::{UniffiEnum, UniffiRecord};
 pub use attachment::*;
 pub use available_action::*;
@@ -61,11 +61,11 @@ use core::fmt;
 use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
+use proton_core_common::datatypes::AvatarInformation as RealAvatarInformation;
 use proton_core_common::datatypes::{
     Id as RealId, LocalId as RealLocalId, RemoteId as RealRemoteId,
 };
 use proton_core_common::models::Address as RealAddress;
-use proton_mail_common::avatar::AvatarInformation as RealAvatarInformation;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
@@ -911,34 +911,6 @@ impl From<RealAttachmentMetadata> for AttachmentMetadata {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
-pub struct AvatarInformation {
-    /// TODO: Document this field.
-    pub text: String,
-
-    /// TODO: Document this field.
-    pub color: String,
-}
-
-impl From<AvatarInformation> for RealAvatarInformation {
-    fn from(value: AvatarInformation) -> Self {
-        RealAvatarInformation {
-            text: value.text,
-            color: value.color,
-        }
-    }
-}
-
-impl From<RealAvatarInformation> for AvatarInformation {
-    fn from(value: RealAvatarInformation) -> Self {
-        AvatarInformation {
-            text: value.text,
-            color: value.color,
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct Conversation {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -1005,7 +977,7 @@ pub struct Conversation {
 
 impl From<ContextualConversation> for Conversation {
     fn from(value: ContextualConversation) -> Self {
-        let avatar = RealAvatarInformation::from_message_addresses(&value.senders.value);
+        let avatar = RealMessageAddress::avatar_info(&value.senders.value);
         Self {
             id: value.local_id.into(),
             attachments_metadata: value
@@ -1632,7 +1604,7 @@ pub struct Message {
 impl From<RealMessage> for Message {
     fn from(value: RealMessage) -> Self {
         let starred = value.is_starred();
-        let avatar = RealAvatarInformation::from_message_address(&value.sender);
+        let avatar = RealAvatarInformation::from(&value.sender);
         Message {
             id: value.local_id.unwrap().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),

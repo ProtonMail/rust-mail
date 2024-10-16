@@ -35,14 +35,15 @@ pub mod sender_image_cache;
 
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, AgnosticId,
-    ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, HighSecurity, Id,
-    LabelId, Labels, LocalId, LogAuth, Password, Phone, ProductUsedSpace, QueryResultRemoteId,
-    Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys, UserMnemonicStatus, UserType,
-    WeekStart,
+    ContactSendingPreferences, ContactTypes, DateFormat, Density, Email, Flags, GroupedContacts,
+    HighSecurity, Id, LabelId, Labels, LocalId, LogAuth, Password, Phone, ProductUsedSpace,
+    QueryResultRemoteId, Referral, RemoteId, SettingsFlags, TimeFormat, TwoFa, UserKeys,
+    UserMnemonicStatus, UserType, WeekStart,
 };
 use crate::{CoreContextError, CoreContextResult};
 use flume::Sender as QueueSender;
 use indoc::formatdoc;
+use itertools::Itertools;
 use proton_api_core::services::proton::requests::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
@@ -685,7 +686,7 @@ impl Contact {
             return Err(StashError::NoStashAvailable);
         };
         self.contact_emails = ContactEmail::find(
-            "WHERE remote_contact_id = ?",
+            "WHERE remote_contact_id = ? ORDER BY display_order ASC",
             params![self.remote_id.clone()],
             stash,
             None,
@@ -742,96 +743,103 @@ impl Contact {
     ///
     #[allow(clippy::too_many_lines)]
     pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
-        // TODO: There should be one transaction for the whole sync.
-        let mut page_index = 0;
-        // Reset the database state by deleting all contacts.
-        stash.execute("DELETE FROM contacts", vec![]).await?;
-        stash.execute("DELETE FROM contact_emails", vec![]).await?;
-        stash.execute("DELETE FROM contact_cards", vec![]).await?;
-        stash
-            .execute("DELETE FROM contact_email_labels", vec![])
-            .await?;
-        Ok(()).map_err(|err: StashError| {
-            error!("Failed to reset contact tables: {err}");
-            err
-        })?;
-        // First update the partial contacts since email contacts reference them.
-        debug!("Syncing partial contacts");
-        loop {
-            let mut contacts: Vec<Contact> = api
-                .get_contacts(GetContactsOptions {
-                    label_id: None,
-                    page: page_index,
-                    page_size: SYNC_CONTACT_PAGE_SIZE,
-                })
-                .await
-                .map_err(|err| {
-                    error!("Failed to fetch contacts for page {page_index}: {err}");
-                    err
-                })?
-                .contacts
-                .into_iter()
-                .map(Contact::from)
-                .collect();
-            if !contacts.is_empty() {
-                for contact in &mut contacts {
-                    contact.set_stash(stash);
-                    contact.save().await.map_err(|err: StashError| {
-                        error!("Failed to sync contacts for page {page_index} to db: {err}");
-                        err
-                    })?;
+        macro_rules! request_pages {
+            ($api: expr, $type: tt, $field: tt, $api_rq:tt, $options_type: tt) => {{
+                let mut retval = vec![];
+                let mut page_index = 0;
+                debug!("Syncing partial {}", stringify!($field));
+                loop {
+                    let response = $api
+                        .$api_rq($options_type {
+                            page: page_index,
+                            page_size: SYNC_CONTACT_PAGE_SIZE,
+                            ..Default::default()
+                        })
+                        .await
+                        .map_err(|err| {
+                            error!(
+                                "Failed to sync {} for page {page_index}: {err}",
+                                stringify!($field)
+                            );
+
+                            err
+                        })?;
+
+                    let is_last_request = response.$field.len() < SYNC_CONTACT_PAGE_SIZE;
+
+                    debug!(
+                        "Synced page {} of partial {}, {} {} fetched",
+                        page_index,
+                        stringify!($field),
+                        response.$field.len(),
+                        stringify!($field),
+                    );
+
+                    retval.extend(response.$field.into_iter().map($type::from).collect_vec());
+
+                    if is_last_request {
+                        break;
+                    }
+
+                    page_index += 1;
                 }
-            }
-            debug!(
-                "Synced page {} of partial contacts, {} contacts fetched",
-                page_index,
-                contacts.len()
-            );
-            if contacts.len() < SYNC_CONTACT_PAGE_SIZE {
-                break;
-            }
-            page_index += 1;
+
+                CoreContextResult::<Vec<$type>>::Ok(retval)
+            }};
         }
 
-        // Then, update the email contacts.
-        page_index = 0;
-        debug!("Syncing contact emails");
-        loop {
-            let mut contact_emails: Vec<ContactEmail> = api
-                .get_contacts_emails(GetContactsEmailsOptions {
-                    email: None, // TODO: This is the existing behaviour, but seems wrong...
-                    label_id: None,
-                    page: page_index,
-                    page_size: SYNC_CONTACT_PAGE_SIZE,
-                })
-                .await
-                .map_err(|err| {
-                    error!("Failed to sync contact emails for page {page_index}: {err}");
-                    err
-                })?
-                .contact_emails
-                .into_iter()
-                .map(ContactEmail::from)
-                .collect();
-            if !contact_emails.is_empty() {
-                for contact_email in &mut contact_emails {
-                    contact_email.set_stash(stash);
-                    contact_email.save().await.map_err(|err: StashError| {
-                        error!("Failed to sync contact emails for page {page_index} to db: {err}");
-                        err
-                    })?;
-                }
-            }
-            debug!(
-                "Synced page {} of contact emails, {} contact emails fetched",
-                page_index,
-                contact_emails.len()
-            );
-            if contact_emails.len() < SYNC_CONTACT_PAGE_SIZE {
-                break;
-            }
-            page_index += 1;
+        let api_clone = api.clone();
+        let contacts_handle = tokio::spawn(async move {
+            request_pages!(
+                api_clone,
+                Contact,
+                contacts,
+                get_contacts,
+                GetContactsOptions
+            )
+        });
+
+        let api_clone = api.clone();
+        let contact_emails_handle = tokio::spawn(async move {
+            request_pages!(
+                api_clone,
+                ContactEmail,
+                contact_emails,
+                get_contacts_emails,
+                GetContactsEmailsOptions
+            )
+        });
+
+        #[allow(clippy::items_after_statements)]
+        fn map_err<T, E1, E2>(res: Result<Result<T, E1>, E2>) -> CoreContextResult<T>
+        where
+            E1: Into<CoreContextError>,
+            E2: Into<CoreContextError>,
+        {
+            res.map_err(Into::into).and_then(|r| r.map_err(Into::into))
         }
+
+        let (contacts, contact_emails) = tokio::join!(contacts_handle, contact_emails_handle);
+        let (contacts, contact_emails) = (map_err(contacts)?, map_err(contact_emails)?);
+
+        let tx = stash.transaction().await?;
+        // Reset the database state by deleting all contacts.
+        tx.execute("DELETE FROM contacts", vec![]).await?;
+        tx.execute("DELETE FROM contact_emails", vec![]).await?;
+        tx.execute("DELETE FROM contact_cards", vec![]).await?;
+        tx.execute("DELETE FROM contact_email_labels", vec![])
+            .await?;
+
+        for mut contact in contacts {
+            contact.save_using(&tx).await?;
+        }
+
+        for mut contact_email in contact_emails {
+            contact_email.save_using(&tx).await?;
+        }
+
+        tx.commit().await?;
+
         Ok(())
     }
 
@@ -889,6 +897,29 @@ impl Contact {
         Ok(())
     }
 
+    /// Returns a list of contacts grouped by the first letter of their name.
+    ///
+    /// # Parameters
+    ///
+    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
+    ///
+    /// # Errors
+    ///
+    /// when querying the database fails.
+    ///
+    pub async fn contact_list<A>(interface: &A) -> Result<Vec<GroupedContacts>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut contacts = Contact::all(interface, None).await?;
+
+        for contact in &mut contacts {
+            contact.emails().await?;
+        }
+
+        Ok(GroupedContacts::from_contacts(contacts))
+    }
+
     // pub async fn vcard<Provider: PGPProviderSync>(
     //     &mut self,
     //     pgp_provider: &Provider,
@@ -915,6 +946,27 @@ impl From<ApiContactBasic> for Contact {
             uid: value.uid.into(),
             row_id: None,
             stash: None,
+        }
+    }
+}
+
+#[cfg(any(test, debug_assertions))]
+impl Default for Contact {
+    #[allow(clippy::default_trait_access)]
+    fn default() -> Self {
+        Self {
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            cards: Default::default(),
+            contact_emails: Default::default(),
+            create_time: Default::default(),
+            label_ids: Default::default(),
+            modify_time: Default::default(),
+            name: Default::default(),
+            size: Default::default(),
+            uid: RemoteId::from(String::default()),
+            row_id: Default::default(),
+            stash: Default::default(),
         }
     }
 }
@@ -1110,6 +1162,30 @@ impl From<ApiContactEmail> for ContactEmail {
             name: value.name,
             row_id: None,
             stash: None,
+        }
+    }
+}
+
+#[cfg(any(test, debug_assertions))]
+impl Default for ContactEmail {
+    #[allow(clippy::default_trait_access)]
+    fn default() -> Self {
+        Self {
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            remote_contact_id: Default::default(),
+            local_contact_id: Default::default(),
+            canonical_email: Default::default(),
+            contact_type: Default::default(),
+            defaults: ContactSendingPreferences::Default,
+            display_order: Default::default(),
+            email: Default::default(),
+            is_proton: Default::default(),
+            label_ids: Default::default(),
+            last_used_time: Default::default(),
+            name: Default::default(),
+            row_id: Default::default(),
+            stash: Default::default(),
         }
     }
 }
