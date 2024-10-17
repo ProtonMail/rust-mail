@@ -1469,10 +1469,10 @@ impl Conversation {
         }
 
         if let Some(stats) = stats {
-            self.num_messages -= stats.count;
-            self.num_unread -= stats.unread_count;
-            self.num_attachments -= stats.attachment_count;
-            self.size -= stats.size;
+            self.num_messages = self.num_messages.saturating_sub(stats.count);
+            self.num_unread = self.num_unread.saturating_sub(stats.unread_count);
+            self.num_attachments = self.num_attachments.saturating_sub(stats.attachment_count);
+            self.size = self.size.saturating_sub(stats.size);
         }
 
         self.save_using(interface).await?;
@@ -3492,10 +3492,12 @@ impl ConversationLabel {
         A: Into<AgnosticInterface> + Interface,
     {
         if let Some(stats) = stats {
-            self.context_num_messages -= stats.count;
-            self.context_num_unread -= stats.unread_count;
-            self.context_num_attachments -= stats.attachment_count;
-            self.context_size -= stats.size;
+            self.context_num_messages = self.context_num_messages.saturating_sub(stats.count);
+            self.context_num_unread = self.context_num_unread.saturating_sub(stats.unread_count);
+            self.context_num_attachments = self
+                .context_num_attachments
+                .saturating_sub(stats.attachment_count);
+            self.context_size = self.context_size.saturating_sub(stats.size);
             self.save_using(interface).await?;
         }
 
