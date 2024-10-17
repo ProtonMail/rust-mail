@@ -6,6 +6,11 @@ edition = "2021"
 [dependencies]
 proton-sqlite3 = { workspace = true }
 serde = {workspace = true}
+stash = {workspace = true, optional = true}
 
 [lints]
 workspace = true
+
+[features]
+default = []
+sql = ["dep:stash"]
