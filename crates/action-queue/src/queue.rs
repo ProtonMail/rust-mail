@@ -4,7 +4,7 @@ mod tests;
 
 use crate::action::{
     Action, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult, Handler, Id, Metadata,
-    Priority, Resources,
+    Priority, Resources, Type,
 };
 use crate::db::{self, StoredAction};
 use chrono::DateTime;
@@ -13,12 +13,24 @@ use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Interface, Stash, StashError, Tether};
+use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Weak};
 use topological_sort::TopologicalSort;
 use tracing::{debug, error, Level};
+
+/// Execution context errors
+#[derive(Debug, thiserror::Error)]
+pub enum ContextError {
+    #[error("Could not find execution context for {0}")]
+    ContextNotFound(Type),
+    #[error("Could not upgrade execution context for {0}")]
+    ContextUpgrade(Type),
+}
 
 /// Errors which can occur while operating on the queue.
 #[derive(Debug, thiserror::Error)]
@@ -33,6 +45,8 @@ pub enum Error {
     Deserialization(#[from] rmp_serde::decode::Error),
     #[error("Action {0} was cancelled")]
     Cancelled(Id),
+    #[error("{0}")]
+    Context(#[from] ContextError),
 }
 
 /// Errors that result from queuing or apply actions via the queue.
@@ -81,6 +95,8 @@ pub enum QueuedError {
     ActionNotFound(Id),
     #[error("Another thread is currently operating the queue")]
     Busy,
+    #[error("{0}")]
+    Context(#[from] ContextError),
 }
 
 /// Helper trait to extract errors from queued actions.
@@ -221,6 +237,14 @@ impl From<StoredAction> for QueuedMetadata {
 /// using the [`QueuedError::action_error`] function. Alternatively you  can also
 /// extract the error from [`anyhow::Error`] directly using the [`AsActionError`] extension.
 ///
+///
+/// # Execution Contexts
+///
+/// Every action can be assigned an execution context which contains runtime
+/// data which is not represented by this API. The execution contexts need
+/// to be registered with the queue upfront so that they can also
+/// be used by actions that are queued for later execution.
+///
 /// # Remarks
 ///
 /// There can only be on queue per database connection. Multiple queues in the same database
@@ -230,14 +254,18 @@ impl From<StoredAction> for QueuedMetadata {
 ///
 /// The queue supports queuing actions from multiple threads, but modifying the queue (e.g.:
 /// deleting or executing actions) is guarded so that only the operation can be executed in
-/// isolation. If more than one location attempts to call these functions currently we
+/// isolation. If more than one location attempts to call these functions currently
 /// we will return [`QueuedError::Busy`].
 ///
 
 pub struct Queue {
     stash: Stash,
     factory: RwLock<Factory>,
+    execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
     exec_guard: AtomicBool,
+    // Keep the default context alive so that it is available for any action
+    // which does not need a custom context.
+    _default_context: Arc<()>,
 }
 
 /// Output of the [`Action`] after being applied with [`Queue::apply_action`] or
@@ -288,11 +316,18 @@ impl Queue {
     /// Returns error if the database migration failed.
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
         db::create_tables(&stash).await?;
-        Ok(Self {
+        let default_context = Arc::new(());
+        let default_context_downgraded = Arc::downgrade(&default_context);
+        let queue = Self {
             stash,
             factory: RwLock::new(factory),
             exec_guard: AtomicBool::new(false),
-        })
+            execution_contexts: RwLock::new(HashMap::new()),
+            _default_context: default_context,
+        };
+
+        queue.register_execution_context(default_context_downgraded);
+        Ok(queue)
     }
 
     /// Register an [`Action`] with the factory.
@@ -300,8 +335,18 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the action type was already registered before.
-    pub fn register<T: Action + 'static>(&self) -> FactoryResult<()> {
+    pub fn register<T: Action>(&self) -> FactoryResult<()> {
         self.factory.write().register::<T>()
+    }
+
+    /// Register an execution context with the queue.
+    ///
+    /// Execution context are used by actions to access runtime data.
+    ///
+    pub fn register_execution_context<E: Any + Send + Sync + 'static>(&self, context: Weak<E>) {
+        self.execution_contexts
+            .write()
+            .insert(TypeId::of::<E>(), context);
     }
 
     /// Return the database associated with the queue.
@@ -339,9 +384,12 @@ impl Queue {
     ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
         debug!("Queueing action: {} {:?}", T::TYPE, metadata,);
         let handler = T::Handler::default();
+        let context = self
+            .resolve_execution_context::<T>()
+            .map_err(|e| ActionError::Queue(e.into()))?;
 
         let (local_output, id) = self
-            .execute_action_local(&handler, &mut action, metadata)
+            .execute_action_local(context.as_ref(), &handler, &mut action, metadata)
             .await?;
         debug!("Action queued with id={id}");
 
@@ -397,15 +445,19 @@ impl Queue {
         debug!("Applying action: {} {:?}", T::TYPE, metadata,);
         let handler = T::Handler::default();
 
+        let context = self
+            .resolve_execution_context::<T>()
+            .map_err(|e| ActionError::Queue(e.into()))?;
+
         // 1) Apply local action and store in the queue
         let (local_output, id) = self
-            .execute_action_local(&handler, &mut action, metadata)
+            .execute_action_local(context.as_ref(), &handler, &mut action, metadata)
             .await?;
         debug!("Action queued with id={id}");
 
         // 2) Execute remote counter part
         let remote_output = self
-            .execute_action_remote(id, &handler, &mut action, session)
+            .execute_action_remote(id, context.as_ref(), &handler, &mut action, session)
             .await?;
 
         Ok(ActionOutput {
@@ -531,7 +583,7 @@ impl Queue {
 
             let (mut decoded, metadata) = self.decode_action(action)?;
             conn.transaction().await?;
-            decoded.cancel(&conn, metadata).await?;
+            decoded.cancel(self, &conn, metadata).await?;
             conn.commit().await?;
             Ok(())
         })
@@ -577,7 +629,7 @@ impl Queue {
 
                 let (mut decoded, metadata) = self.decode_action(action)?;
 
-                decoded.cancel(&tx, metadata).await?;
+                decoded.cancel(self, &tx, metadata).await?;
 
                 cancelled_actions.push(action_id);
             }
@@ -617,16 +669,20 @@ impl Queue {
     /// Shared snippet to execute actions locally.
     async fn execute_action_local<T: Action>(
         &self,
+        context: &T::Context,
         handler: &T::Handler,
         action: &mut T,
         metadata: Metadata,
     ) -> std::result::Result<(T::LocalOutput, Id), ActionError<T>> {
         let tx = self.stash.transaction().await?;
 
-        let local_output = handler.apply_local(action, &tx).await.map_err(|e| {
-            error!("Failed to apply local changes: {e}");
-            ActionError::Action(e)
-        })?;
+        let local_output = handler
+            .apply_local(context, action, &tx)
+            .await
+            .map_err(|e| {
+                error!("Failed to apply local changes: {e}");
+                ActionError::Action(e)
+            })?;
 
         let mut stored_action = StoredAction::new::<T>(action, metadata).map_err(|e| {
             error!("Failed to convert into stored action: {e}");
@@ -646,6 +702,7 @@ impl Queue {
     async fn execute_action_remote<T: Action>(
         &self,
         id: Id,
+        context: &T::Context,
         handler: &T::Handler,
         action: &mut T,
         session: &Session,
@@ -660,7 +717,9 @@ impl Queue {
         debug!("Applying action on remote");
 
         // let post_remote: Result< = post_remote(handler, action, session).await;
-        let result = handler.apply_remote(action, session, &self.stash).await;
+        let result = handler
+            .apply_remote(context, action, session, &self.stash)
+            .await;
 
         match result {
             Ok(result) => {
@@ -686,7 +745,7 @@ impl Queue {
                 if let Err(e) = async {
                     tether.transaction().await?;
                     handler
-                        .revert_local(action, &tether)
+                        .revert_local(context, action, &tether)
                         .await
                         .map_err(ActionError::<T>::Action)?;
                     StoredAction::delete(&tether, id).await?;
@@ -757,6 +816,20 @@ impl Queue {
         self.exec_guard.store(false, Ordering::SeqCst);
         r
     }
+
+    fn resolve_execution_context<T: Action>(
+        &self,
+    ) -> std::result::Result<Arc<T::Context>, ContextError> {
+        let type_id = TypeId::of::<T::Context>();
+        let exec_contexts = self.execution_contexts.read();
+        let context = exec_contexts
+            .get(&type_id)
+            .ok_or(ContextError::ContextNotFound(T::TYPE))?;
+        let context = context
+            .upgrade()
+            .ok_or(ContextError::ContextUpgrade(T::TYPE))?;
+        Ok(context.downcast::<T::Context>().expect("Should not fail"))
+    }
 }
 
 /// Wrapper trait around the actual action type.
@@ -768,8 +841,9 @@ pub(crate) trait QueuedAction {
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>>;
 
-    fn cancel<'a>(
+    fn cancel<'a, 'q: 'a>(
         &'a mut self,
+        queue: &'q Queue,
         tx: &'a Tether,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>>;
@@ -792,26 +866,41 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
         session: &'s Session,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>> {
-        Box::pin(async {
+        Box::pin(async move {
+            let context = queue.resolve_execution_context::<T>()?;
             // Can't return result here as there is no one to consume it.
             let _ = queue
-                .execute_action_remote(self.action_id, &self.handler, &mut self.action, session)
+                .execute_action_remote(
+                    self.action_id,
+                    context.as_ref(),
+                    &self.handler,
+                    &mut self.action,
+                    session,
+                )
                 .await
                 .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
             Ok(())
         })
     }
 
-    fn cancel<'a>(
+    fn cancel<'a, 'q: 'a>(
         &'a mut self,
+        queue: &'q Queue,
         tx: &'a Tether,
         metadata: QueuedMetadata,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a>> {
         Box::pin(async move {
+            let context = queue.resolve_execution_context::<T>()?;
             // Can't return result here as there is no one to consume it.
-            cancel_action_impl(tx, self.action_id, &self.handler, &mut self.action)
-                .await
-                .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
+            cancel_action_impl(
+                tx,
+                self.action_id,
+                context.as_ref(),
+                &self.handler,
+                &mut self.action,
+            )
+            .await
+            .map_err(|e| QueuedError::Action(anyhow::Error::new(e), Box::new(metadata)))?;
             Ok(())
         })
     }
@@ -821,15 +910,19 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
 async fn cancel_action_impl<T: Action>(
     tx: &Tether,
     id: Id,
+    context: &T::Context,
     handler: &T::Handler,
     action: &mut T,
 ) -> std::result::Result<(), ActionError<T>> {
     debug!("Reverting local state");
     // Revert local changes and remove action from queue.
-    handler.revert_local(action, tx).await.map_err(|e| {
-        error!("Failed to revert local changes: {e}");
-        ActionError::Action(e)
-    })?;
+    handler
+        .revert_local(context, action, tx)
+        .await
+        .map_err(|e| {
+            error!("Failed to revert local changes: {e}");
+            ActionError::Action(e)
+        })?;
     StoredAction::delete(tx, id).await.map_err(|e| {
         error!("Failed to delete action: {e}");
         e

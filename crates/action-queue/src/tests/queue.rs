@@ -21,7 +21,9 @@ impl Action for TestAction {
 
     type RemoteOutput = ();
     type LocalOutput = ();
+
     type Error = NoopError;
+    type Context = ();
 }
 
 #[tokio::test]

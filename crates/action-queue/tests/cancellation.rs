@@ -160,6 +160,7 @@ impl Action for CancelAction {
 
     type LocalOutput = ();
     type Error = DefaultError;
+    type Context = ();
 }
 
 #[derive(Default)]
@@ -167,9 +168,11 @@ pub struct CancelActionHandler {}
 
 impl Handler for CancelActionHandler {
     type Action = CancelAction;
+    type Context = ();
 
     async fn apply_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -178,6 +181,7 @@ impl Handler for CancelActionHandler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -186,6 +190,7 @@ impl Handler for CancelActionHandler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
@@ -207,9 +212,11 @@ impl Action for ChainCancelAction {
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ChainCancelActionHandler;
 
-    type LocalOutput = ();
     type RemoteOutput = u32;
+    type LocalOutput = ();
+
     type Error = DefaultError;
+    type Context = ();
 }
 
 #[derive(Default)]
@@ -217,8 +224,10 @@ pub struct ChainCancelActionHandler {}
 
 impl Handler for ChainCancelActionHandler {
     type Action = ChainCancelAction;
+    type Context = ();
     async fn apply_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -229,6 +238,7 @@ impl Handler for ChainCancelActionHandler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -237,6 +247,7 @@ impl Handler for ChainCancelActionHandler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,

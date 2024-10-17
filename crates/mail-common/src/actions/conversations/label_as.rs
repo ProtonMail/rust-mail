@@ -1,7 +1,7 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
 use crate::datatypes::{ExclusiveLocation, SystemLabelId};
 use crate::models::{Conversation, ConversationLabel, Label};
-use crate::AppError;
+use crate::{AppError, MailUserContext};
 use itertools::Itertools;
 use proton_action_queue::action::{
     Action, DefaultVersionConverter, Handler as ActionHandler, Type,
@@ -67,6 +67,8 @@ impl Action for LabelAs {
     type RemoteOutput = ();
     type LocalOutput = bool;
     type Error = ActionError;
+
+    type Context = MailUserContext;
 }
 
 #[derive(Default)]
@@ -108,9 +110,11 @@ impl Handler {
 
 impl ActionHandler for Handler {
     type Action = LabelAs;
+    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<bool, <Self::Action as Action>::Error> {
@@ -140,6 +144,7 @@ impl ActionHandler for Handler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -158,6 +163,7 @@ impl ActionHandler for Handler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,

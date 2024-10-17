@@ -27,7 +27,7 @@ pub async fn new_stash() -> Stash {
     stash
 }
 
-pub async fn new_queue_typed<T: Action>() -> Queue {
+pub async fn new_queue_typed<T: Action<Context: Default>>() -> Queue {
     new_queue(new_factory::<T>()).await
 }
 

@@ -50,6 +50,7 @@ impl Action for V1Action {
 
     type LocalOutput = ();
     type Error = DefaultError;
+    type Context = ();
 }
 
 #[derive(Default)]
@@ -57,9 +58,11 @@ struct V1ActionHandler {}
 
 impl Handler for V1ActionHandler {
     type Action = V1Action;
+    type Context = ();
 
     async fn apply_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -69,6 +72,7 @@ impl Handler for V1ActionHandler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -77,6 +81,7 @@ impl Handler for V1ActionHandler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
@@ -99,6 +104,7 @@ impl Action for V2Action {
 
     type LocalOutput = ();
     type Error = DefaultError;
+    type Context = ();
 }
 
 struct V2VersionConverter {}
@@ -120,9 +126,11 @@ struct V2ActionHandler {}
 
 impl Handler for V2ActionHandler {
     type Action = V2Action;
+    type Context = ();
 
     async fn apply_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -131,6 +139,7 @@ impl Handler for V2ActionHandler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -139,6 +148,7 @@ impl Handler for V2ActionHandler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         _: &Session,
         _: &Stash,
