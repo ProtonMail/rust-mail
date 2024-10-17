@@ -1069,7 +1069,13 @@ impl Conversation {
         A: Into<AgnosticInterface> + Interface,
     {
         for id in ids {
-            let Some(mut conversation) = Conversation::find_by_id(id, interface).await? else {
+            let Some(mut conversation) = Conversation::find_first(
+                "WHERE local_id=? AND deleted=0 AND is_known=1",
+                params![id],
+                interface,
+            )
+            .await?
+            else {
                 continue;
             };
 
@@ -1341,7 +1347,10 @@ impl Conversation {
         A: Into<AgnosticInterface> + Interface,
     {
         for id in ids {
-            let Some(mut conversation) = Conversation::find_by_id(id, interface).await? else {
+            let Some(mut conversation) =
+                Conversation::find_first("WHERE local_id=? AND is_known=1", params![id], interface)
+                    .await?
+            else {
                 continue;
             };
 
@@ -1449,7 +1458,7 @@ impl Conversation {
         A: Into<AgnosticInterface> + Interface,
     {
         let undeleted_messages = Message::count(
-            "WHERE local_conversation_id=? AND deleted = 0",
+            "WHERE local_conversation_id=? AND deleted=0",
             params![self.local_id],
             interface,
         )
@@ -4798,9 +4807,12 @@ impl Message {
         for (conversation_id, messages) in messages_by_conversation {
             let all_stats =
                 Message::update_message_counters_after_soft_delete(messages, interface).await?;
-            let conversation =
-                Conversation::find_first("WHERE local_id=?", params![conversation_id], interface)
-                    .await?;
+            let conversation = Conversation::find_first(
+                "WHERE local_id=? AND deleted=0 AND is_known=1",
+                params![conversation_id],
+                interface,
+            )
+            .await?;
 
             if let Some(mut conversation) = conversation {
                 let label_ids = all_stats.keys().copied().collect::<Vec<_>>();
