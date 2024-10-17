@@ -3268,7 +3268,7 @@ impl From<ApiConversation> for Conversation {
 /// [`ConversationLabel`] information is superimposed over the [`Conversation`]
 /// for that context.
 ///
-#[derive(Clone, Debug, Eq, Default, Model, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("conversation_labels")]
 pub struct ConversationLabel {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -3341,18 +3341,48 @@ impl ConversationLabel {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn labels_ids_for_conversation(
+    pub async fn labels_ids_for_conversation<A>(
         conversation_id: LocalId,
-        tether: &Tether,
-    ) -> Result<Vec<LocalId>, StashError> {
+        interface: &A,
+    ) -> Result<Vec<LocalId>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
         let query = format!(
-            "SELECT local_id FROM {} WHERE local_conversation_id = ?",
+            "SELECT local_label_id as value FROM {} WHERE local_conversation_id = ?",
             Self::table_name()
         );
 
-        tether
+        interface
             .query_values::<_, LocalId>(&query, params![conversation_id])
             .await
+    }
+
+    /// Get all local label with given IDs.
+    ///
+    /// # Parameters
+    ///
+    /// * `label_ids` - List of ids we want to find the corresponding `ConversationLabel`.
+    /// * `interface` - The database interface.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query failed.
+    ///
+    pub async fn find_by_ids<A>(
+        label_ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        ConversationLabel::find(
+            format!("WHERE local_id IN ({})", label_ids.into_iter().join(", ")),
+            vec![],
+            interface,
+            None,
+        )
+        .await
     }
 
     /// Save or update a Conversation Label.
