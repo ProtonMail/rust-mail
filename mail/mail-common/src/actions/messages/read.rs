@@ -1,6 +1,7 @@
 use crate::actions::{filter_responses, ActionError, GenericActionData};
 use crate::datatypes::RollbackItemType;
 use crate::models::Message;
+use crate::MailUserContext;
 use proton_action_queue::action::Handler as ActionHandler;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
 use proton_api_core::session::{CoreSession, Session};
@@ -31,6 +32,7 @@ impl Action for Read {
     type LocalOutput = ();
 
     type Error = ActionError;
+    type Context = MailUserContext;
 }
 
 #[derive(Default)]
@@ -39,8 +41,11 @@ pub struct Handler;
 impl ActionHandler for Handler {
     type Action = Read;
 
+    type Context = MailUserContext;
+
     async fn apply_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -51,6 +56,7 @@ impl ActionHandler for Handler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -64,6 +70,7 @@ impl ActionHandler for Handler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,

@@ -9,6 +9,7 @@ use stash::exports::{
 };
 use stash::sql_using_serde;
 use stash::stash::{Stash, Tether};
+use std::any::Any;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
@@ -144,6 +145,12 @@ impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
 /// Its is recommended to assign this trait to the part of the action which contains the
 /// data required for it to operate on. Execution of the action is defined by the [`Handler`] trait.
 ///
+/// Each action can also be assigned an execution context which can be
+/// used to pass in runtime data. The context needs to be registered with
+/// the queue before it can be used. See
+/// [`register_execution_context()`](`queue::Queue::register_execution_context()`)
+/// for more details.
+///
 pub trait Action: Serialize + DeserializeOwned + 'static {
     /// Unique type identifier.
     const TYPE: Type;
@@ -164,7 +171,7 @@ pub trait Action: Serialize + DeserializeOwned + 'static {
     /// Execution handler for this action.
     ///
     /// For more details see the [`Handler`] trait.
-    type Handler: Handler<Action = Self>;
+    type Handler: Handler<Context = Self::Context, Action = Self>;
 
     /// Output returned by executing this action on the remote.
     ///
@@ -180,6 +187,11 @@ pub trait Action: Serialize + DeserializeOwned + 'static {
     /// To ensure we can correctly implement network error detection errors need
     /// to implement the [`Error`] trait.
     type Error: Error;
+
+    /// Type of the execution context associated with this action.
+    ///
+    /// If no context is necessary simply use `()`.
+    type Context: Send + Sync + Any + 'static;
 
     /// Action version.
     fn version(&self) -> u32 {
@@ -205,6 +217,8 @@ pub trait Handler: Default + 'static {
     /// Action on which this handler operates.
     type Action: Action;
 
+    type Context: Any + Send + Sync + 'static;
+
     /// Apply the `action` to the local database using the given `tx` transaction.
     ///
     /// # Remarks
@@ -217,6 +231,7 @@ pub trait Handler: Default + 'static {
     /// Returns error if the operation failed.
     async fn apply_local(
         &self,
+        context: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>;
@@ -232,6 +247,7 @@ pub trait Handler: Default + 'static {
     /// Returns error if the operation failed.
     async fn revert_local(
         &self,
+        context: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error>;
@@ -252,6 +268,7 @@ pub trait Handler: Default + 'static {
     /// Returns error if the network request failed.
     async fn apply_remote(
         &self,
+        context: &Self::Context,
         action: &mut Self::Action,
         session: &Session,
         stash: &Stash,
@@ -487,7 +504,9 @@ trait Decoder: Send + Sync {
 }
 
 /// [`Decoder`] implementation that works for any [`Action`] type.
-struct TypeErasedDecoder<T: Action>(PhantomData<fn() -> T>);
+struct TypeErasedDecoder<T: Action> {
+    p: PhantomData<fn() -> T>,
+}
 
 impl<T: Action> Decoder for TypeErasedDecoder<T> {
     fn decode(
@@ -538,11 +557,11 @@ impl Factory {
     /// # Errors
     ///
     /// Returns error if the action type was already registered before.
-    pub fn register<T: Action + 'static>(&mut self) -> FactoryResult<()> {
+    pub fn register<T: Action>(&mut self) -> FactoryResult<()> {
         match self.factories.entry(T::TYPE.to_string()) {
             Entry::Occupied(_) => Err(FactoryError::AlreadyRegistered(T::TYPE)),
             Entry::Vacant(v) => {
-                v.insert(Box::new(TypeErasedDecoder::<T>(PhantomData)));
+                v.insert(Box::new(TypeErasedDecoder::<T> { p: PhantomData }));
                 Ok(())
             }
         }

@@ -58,6 +58,8 @@ impl Action for ErrorAction {
     type LocalOutput = ();
 
     type Error = DefaultError;
+
+    type Context = ();
 }
 
 #[derive(Default)]
@@ -66,8 +68,11 @@ struct ErrorActionHandler {}
 impl Handler for ErrorActionHandler {
     type Action = ErrorAction;
 
+    type Context = ();
+
     async fn apply_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -77,6 +82,7 @@ impl Handler for ErrorActionHandler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -85,6 +91,7 @@ impl Handler for ErrorActionHandler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         _: &Session,
         _: &Stash,

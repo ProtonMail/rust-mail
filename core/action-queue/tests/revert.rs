@@ -105,6 +105,7 @@ impl Action for RevertAction {
 
     type LocalOutput = ();
     type Error = DefaultError;
+    type Context = ();
 }
 
 #[derive(Default)]
@@ -112,9 +113,11 @@ struct RevertActionHandler {}
 
 impl Handler for RevertActionHandler {
     type Action = RevertAction;
+    type Context = ();
 
     async fn apply_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -123,6 +126,7 @@ impl Handler for RevertActionHandler {
 
     async fn revert_local(
         &self,
+        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -131,6 +135,7 @@ impl Handler for RevertActionHandler {
 
     async fn apply_remote(
         &self,
+        _: &Self::Context,
         _: &mut Self::Action,
         _: &Session,
         _: &Stash,
