@@ -15,6 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - All functions which interact on conversations now use their respective actions.
   - `mark_conversations_as_read` requires a `Maibox` rather than `MailUserSession`.
 
+### Fixed
+  - Fixed panic on overflow when `mark_deleted` for messages could overflow in some instances.
+
 ## [0.13.0] - 2024-10-11
 
 ### Added

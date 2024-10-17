@@ -1984,8 +1984,8 @@ impl Conversation {
             };
             // Find all messages that need to be marked as read.
             let message = Message::find_first(
-                "WHERE local_conversation_id=? 
-                AND unread=0 
+                "WHERE local_conversation_id=?
+                AND unread=0
                 ORDER BY time",
                 params![conversation_id],
                 tether,
@@ -2039,8 +2039,8 @@ impl Conversation {
 
             let label_ids = tether
                 .query_values::<_, LocalId>(
-                    "SELECT local_label_id AS value 
-                     FROM message_labels 
+                    "SELECT local_label_id AS value
+                     FROM message_labels
                      WHERE local_message_id=?",
                     params![message.id_value()?],
                 )
@@ -4753,50 +4753,59 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", ids);
-        let mut messages = Message::find(query, params, interface, None).await?;
-        let conv_ids = messages
-            .iter()
-            .filter_map(|m| m.local_conversation_id)
-            .collect_vec();
+        let messages = Message::find(query, params, interface, None).await?;
+        let mut messages_by_conversation = HashMap::new();
 
-        for message in messages.iter_mut() {
+        for mut message in messages {
             message.deleted = true;
             message.save_using(interface).await?;
+            messages_by_conversation
+                .entry(message.local_conversation_id)
+                .or_insert_with(Vec::new)
+                .push(message);
         }
 
-        let all_stats =
-            Message::update_message_counters_after_soft_delete(messages, interface).await?;
-        let (query, params) = find_in_query!("WHERE local_id IN ({})", conv_ids);
-        let conversations = Conversation::find(query, params, interface, None).await?;
+        for (conversation_id, messages) in messages_by_conversation {
+            let all_stats =
+                Message::update_message_counters_after_soft_delete(messages, interface).await?;
+            let conversation =
+                Conversation::find_first("WHERE local_id=?", params![conversation_id], interface)
+                    .await?;
 
-        for mut conversation in conversations {
-            let label_ids = all_stats.keys().copied().collect::<Vec<_>>();
-            let (query, mut params) = find_in_query!(
-                "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
-                label_ids
-            );
-            params.insert(
-                0,
-                Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
-            );
+            if let Some(mut conversation) = conversation {
+                let label_ids = all_stats.keys().copied().collect::<Vec<_>>();
+                let (query, mut params) = find_in_query!(
+                    "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
+                    label_ids
+                );
+                params.insert(
+                    0,
+                    Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
+                );
 
-            let conv_labels = ConversationLabel::find(query, params, interface, None).await?;
+                let conv_labels = ConversationLabel::find(query, params, interface, None).await?;
+                let all_mail_stats = SystemLabel::AllMail
+                    .local_id(interface)
+                    .await?
+                    .and_then(|id| all_stats.get(&id));
 
-            for mut conv_label in conv_labels {
-                let label_id = &conv_label.local_label_id.unwrap();
                 conversation
-                    .mark_delete_update_stats(all_stats.get(label_id), interface)
+                    .mark_delete_update_stats(all_mail_stats, interface)
                     .await?;
-                conv_label
-                    .mark_delete_update_stats(all_stats.get(label_id), interface)
-                    .await?;
-            }
 
-            if conversation.deleted {
-                for (label_id, stats) in all_stats.iter() {
-                    conversation
-                        .remove_conversation_from_label(*label_id, Some(stats), interface)
+                for mut conv_label in conv_labels {
+                    let label_id = &conv_label.local_label_id.unwrap();
+                    conv_label
+                        .mark_delete_update_stats(all_stats.get(label_id), interface)
                         .await?;
+                }
+
+                if conversation.deleted {
+                    for (label_id, stats) in all_stats.iter() {
+                        conversation
+                            .remove_conversation_from_label(*label_id, Some(stats), interface)
+                            .await?;
+                    }
                 }
             }
         }
@@ -4824,51 +4833,61 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         let (query, params) = find_in_query!("WHERE deleted = 1 AND local_id IN ({})", ids);
-        let mut messages = Message::find(query, params, interface, None).await?;
-        let conv_ids = messages
-            .iter()
-            .filter_map(|m| m.local_conversation_id)
-            .collect::<Vec<_>>();
+        let messages = Message::find(query, params, interface, None).await?;
+        let mut messages_by_conversation = HashMap::new();
 
-        for message in messages.iter_mut() {
+        for mut message in messages {
             message.deleted = false;
             message.save_using(interface).await?;
+            messages_by_conversation
+                .entry(message.local_conversation_id)
+                .or_insert_with(Vec::new)
+                .push(message);
         }
 
-        let all_stats =
-            Message::update_message_counters_after_soft_undelete(messages, interface).await?;
-        let (query, params) = find_in_query!("WHERE local_id IN ({})", conv_ids);
-        let conversations = Conversation::find(query, params, interface, None).await?;
+        for (conversation_id, messages) in messages_by_conversation {
+            let all_stats =
+                Message::update_message_counters_after_soft_undelete(messages, interface).await?;
+            let conversation =
+                Conversation::find_first("WHERE local_id=?", params![conversation_id], interface)
+                    .await?;
 
-        for mut conversation in conversations {
-            if conversation.deleted {
-                for (label_id, stats) in all_stats.iter() {
-                    conversation
-                        .add_conversation_to_label(*label_id, Some(stats), interface)
+            if let Some(mut conversation) = conversation {
+                if conversation.deleted {
+                    for (label_id, stats) in all_stats.iter() {
+                        conversation
+                            .add_conversation_to_label(*label_id, Some(stats), interface)
+                            .await?;
+                    }
+                }
+
+                let label_ids = all_stats.keys().copied().collect::<Vec<_>>();
+                let (query, mut params) = find_in_query!(
+                    "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
+                    label_ids
+                );
+                params.insert(
+                    0,
+                    Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
+                );
+
+                let conv_labels = ConversationLabel::find(query, params, interface, None).await?;
+                let all_mail_stats = SystemLabel::AllMail
+                    .local_id(interface)
+                    .await?
+                    .and_then(|id| all_stats.get(&id));
+
+                conversation
+                    .mark_undelete_update_stats(all_mail_stats, interface)
+                    .await?;
+
+                for mut conv_label in conv_labels {
+                    let label_id = &conv_label.local_label_id.unwrap();
+
+                    conv_label
+                        .mark_undelete_update_stats(all_stats.get(label_id), interface)
                         .await?;
                 }
-            }
-
-            let label_ids = all_stats.keys().copied().collect::<Vec<_>>();
-            let (query, mut params) = find_in_query!(
-                "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
-                label_ids
-            );
-            params.insert(
-                0,
-                Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
-            );
-
-            let conv_labels = ConversationLabel::find(query, params, interface, None).await?;
-
-            for mut conv_label in conv_labels {
-                let label_id = &conv_label.local_label_id.unwrap();
-                conversation
-                    .mark_undelete_update_stats(all_stats.get(label_id), interface)
-                    .await?;
-                conv_label
-                    .mark_undelete_update_stats(all_stats.get(label_id), interface)
-                    .await?;
             }
         }
 
