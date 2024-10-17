@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GeneralActions::ViewMessageInDarkMode` general action.
 - `LabelAs` action for conversations.
 - Available actions for messages in bottom bar.
 - `LabelAs` action for messages.
