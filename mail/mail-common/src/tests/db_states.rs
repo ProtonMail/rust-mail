@@ -191,11 +191,13 @@ pub fn new_test_delete_db_state() -> TestDBState {
                     CONV_LABEL2.to_owned(),
                     all_mail_conv_label.clone(),
                 ],
+                is_known: true,
                 ..Default::default()
             },
             Conversation {
                 remote_id: Some(conv_id2.clone()),
                 labels: vec![CONV_LABEL2.to_owned(), all_mail_conv_label.clone()],
+                is_known: true,
                 ..Default::default()
             },
         ],
