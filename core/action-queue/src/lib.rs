@@ -58,7 +58,8 @@
 //!     type Handler = MyActionHandler;
 //!     type RemoteOutput = ();
 //!     type LocalOutput = ();
-//!     type Error= MyActionError;
+//!     type Error = MyActionError;
+//!     type Context = ();
 //! }
 //!
 //! #[derive(Default)]
@@ -66,16 +67,17 @@
 //!
 //! impl Handler for MyActionHandler {
 //!     type Action = MyAction;
+//!     type Context = ();
 //!
-//!     async fn apply_local(&self, action: &mut Self::Action, tx: &Tether) -> Result<(), <Self::Action as Action>::Error> {
+//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(), <Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn revert_local(&self, action: &mut Self::Action, tx: &Tether) -> Result<(),<Self::Action as Action>::Error> {
+//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(),<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn apply_remote(&self, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
+//!     async fn apply_remote(&self, ctx: &Self::Context, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //! }
