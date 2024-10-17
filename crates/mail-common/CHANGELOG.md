@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Available actions for messages in bottom bar. 
+- Available actions for messages in bottom bar.
 - `LabelAs` action for messages.
 - `Move` actions for messages.
 - `Label` and `Unlabel` actions for messages.
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Cache key for attachments into (u64, String)
-- Split `ContextualLabel` in `CustomFolder`, `CustomLabel` and `SystemLabel`. 
+- Split `ContextualLabel` in `CustomFolder`, `CustomLabel` and `SystemLabel`.
 - `Sidebar::custom_folders` to return all custom_folders in a hierarchical way.
 - Grouped `total_conv` and `total_msg` from `ContextualLabel` as `total`.
 - Grouped `unread_conv` and `unread_msg` from `ContextualLabel` as `unread`.
@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
-- Removed `initialized_conv` and `initialized_msg` from `ContextualLabel` 
+- Removed `initialized_conv` and `initialized_msg` from `ContextualLabel`
 
 
 ## [0.5.31] - 2024-07-22
