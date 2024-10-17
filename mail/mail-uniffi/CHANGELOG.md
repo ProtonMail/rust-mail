@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+## [0.14.0] - 2024-10-17
+
 ### Added
+  - `Label_as` action for conversations
   - `contact_list` method which returns new set of data objects representing contact list
   - `all_available_bottom_bar_actions_for_messages` function who return available actions for messages in bottom bar.
 

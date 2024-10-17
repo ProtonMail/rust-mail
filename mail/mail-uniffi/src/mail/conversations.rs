@@ -689,3 +689,49 @@ pub async fn watch_conversations_for_label(
     })
     .await
 }
+
+/// Action to change labels on a batch of conversations.
+///
+/// All given conversations will get the selected labels.
+/// All given conversations will keep the partially selected labels.
+/// All given conversations will lose any other labels.
+///
+/// # Parameters
+///
+/// * `mailbox`                      - The current mailbox.
+/// * `conversation_ids`             - List of ids of the conversations to label.
+/// * `selected_label_ids`           - List of ids of the Labels to set.
+/// * `partially_selected_label_ids` - List of ids of the Labels to keep as is.
+/// * `must_archive`                 - If true, the given conversations must be archived.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be applied.
+///
+#[uniffi::export]
+pub async fn label_conversations_as(
+    mailbox: Arc<Mailbox>,
+    conversation_ids: Vec<Id>,
+    selected_label_ids: Vec<Id>,
+    partially_selected_label_ids: Vec<Id>,
+    must_archive: bool,
+) -> Result<bool, MailboxError> {
+    let user_context = mailbox.mbox().user_context();
+    let source_label_id = mailbox.label_id();
+    uniffi_async(async move {
+        Ok(RealConversation::action_label_as(
+            user_context.session(),
+            user_context.queue(),
+            source_label_id.into(),
+            conversation_ids.into_iter().map_into().collect(),
+            selected_label_ids.into_iter().map_into().collect(),
+            partially_selected_label_ids
+                .into_iter()
+                .map_into()
+                .collect(),
+            must_archive,
+        )
+        .await?)
+    })
+    .await
+}
