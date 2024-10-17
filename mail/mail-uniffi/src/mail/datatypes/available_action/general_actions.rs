@@ -7,12 +7,13 @@ use proton_mail_common::actions::GeneralActions as RealGeneralActions;
 ///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum GeneralActions {
-    ViewMessageInLightMode,
-    SaveAsPdf,
     Print,
+    ReportPhishing,
+    SaveAsPdf,
     ViewHeaders,
     ViewHtml,
-    ReportPhishing,
+    ViewMessageInDarkMode,
+    ViewMessageInLightMode,
 }
 
 impl From<RealGeneralActions> for GeneralActions {
@@ -24,6 +25,7 @@ impl From<RealGeneralActions> for GeneralActions {
             RealGeneralActions::ViewHeaders => GeneralActions::ViewHeaders,
             RealGeneralActions::ViewHtml => GeneralActions::ViewHtml,
             RealGeneralActions::ReportPhishing => GeneralActions::ReportPhishing,
+            RealGeneralActions::ViewMessageInDarkMode => GeneralActions::ViewMessageInDarkMode,
         }
     }
 }

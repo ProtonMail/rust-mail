@@ -4,18 +4,20 @@
 ///
 #[derive(Debug, Clone, PartialEq)]
 pub enum GeneralActions {
-    ViewMessageInLightMode,
-    SaveAsPdf,
     Print,
+    ReportPhishing,
+    SaveAsPdf,
     ViewHeaders,
     ViewHtml,
-    ReportPhishing,
+    ViewMessageInDarkMode,
+    ViewMessageInLightMode,
 }
 
 impl GeneralActions {
     pub fn all() -> Vec<Self> {
         vec![
             GeneralActions::ViewMessageInLightMode,
+            GeneralActions::ViewMessageInDarkMode,
             GeneralActions::SaveAsPdf,
             GeneralActions::Print,
             GeneralActions::ViewHeaders,
