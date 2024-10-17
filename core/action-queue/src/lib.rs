@@ -56,8 +56,10 @@
 //!     const PRIORITY: Priority = Priority::Normal;
 //!     type VersionConverter = DefaultVersionConverter<Self>;
 //!     type Handler = MyActionHandler;
-//!     type Output = u32;
-//!     type Error= MyActionError;
+//!     type RemoteOutput = ();
+//!     type LocalOutput = ();
+//!     type Error = MyActionError;
+//!     type Context = ();
 //! }
 //!
 //! #[derive(Default)]
@@ -65,16 +67,17 @@
 //!
 //! impl Handler for MyActionHandler {
 //!     type Action = MyAction;
+//!     type Context = ();
 //!
-//!     async fn apply_local(&self, action: &mut Self::Action, tx: &Tether) -> Result<(), <Self::Action as Action>::Error> {
+//!     async fn apply_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(), <Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn revert_local(&self, action: &mut Self::Action, tx: &Tether) -> Result<(),<Self::Action as Action>::Error> {
+//!     async fn revert_local(&self, ctx: &Self::Context, action: &mut Self::Action, tx: &Tether) -> Result<(),<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //!
-//!     async fn apply_remote(&self, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
+//!     async fn apply_remote(&self, ctx: &Self::Context, action: &mut Self::Action, session: &Session, stash: &Stash) -> Result<<Self::Action as Action>::RemoteOutput,<Self::Action as Action>::Error> {
 //!         todo!()
 //!     }
 //! }
@@ -87,9 +90,9 @@
 //!     // register action.
 //!     queue.register::<MyAction>().unwrap();
 //!     // Execute action immediately
-//!     let queued_id = match queue.apply_action(session, MyAction{value:10}).await.unwrap() {
+//!     let queued_id = match queue.apply_action(session, MyAction{value:10}).await.unwrap().remote {
 //!         ActionRemoteOutput::Executed(value) => {
-//!             println!("Action was executed and returned: {value}");
+//!             println!("Action was executed and returned: {:?}", value);
 //!             return;
 //!         }
 //!         ActionRemoteOutput::Queued(id) => {
