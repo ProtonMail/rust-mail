@@ -56,7 +56,8 @@
 //!     const PRIORITY: Priority = Priority::Normal;
 //!     type VersionConverter = DefaultVersionConverter<Self>;
 //!     type Handler = MyActionHandler;
-//!     type Output = u32;
+//!     type RemoteOutput = ();
+//!     type LocalOutput = ();
 //!     type Error= MyActionError;
 //! }
 //!
@@ -87,9 +88,9 @@
 //!     // register action.
 //!     queue.register::<MyAction>().unwrap();
 //!     // Execute action immediately
-//!     let queued_id = match queue.apply_action(session, MyAction{value:10}).await.unwrap() {
+//!     let queued_id = match queue.apply_action(session, MyAction{value:10}).await.unwrap().remote {
 //!         ActionRemoteOutput::Executed(value) => {
-//!             println!("Action was executed and returned: {value}");
+//!             println!("Action was executed and returned: {:?}", value);
 //!             return;
 //!         }
 //!         ActionRemoteOutput::Queued(id) => {

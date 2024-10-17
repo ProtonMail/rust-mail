@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/*", "xtask"]
+members = ["core/*", "mail/*", "xtask"]
 
 [workspace.dependencies]
 
@@ -65,57 +65,57 @@ zeroize = "1.7.0"
 
 [workspace.dependencies.proton-action-queue]
 version = "0.7"
-path = "crates/action-queue"
+path = "core/action-queue"
 registry = "proton"
 
 [workspace.dependencies.proton-api-core]
 version = "0.8"
-path = "crates/core-api"
-registry = "proton"
-
-[workspace.dependencies.proton-api-mail]
-version = "0.5"
-path = "crates/mail-api"
+path = "core/core-api"
 registry = "proton"
 
 [workspace.dependencies.proton-core-common]
 version = "0.9"
-path = "crates/core-common"
+path = "core/core-common"
 registry = "proton"
 
 [workspace.dependencies.proton-event-loop]
 version = "0.7"
-path = "crates/event-loop"
-registry = "proton"
-
-[workspace.dependencies.proton-mail-common]
-version = "0.8"
-path = "crates/mail-common"
-registry = "proton"
-
-[workspace.dependencies.proton-mail-uniffi]
-version = "0.12"
-path = "crates/mail-uniffi"
+path = "core/event-loop"
 registry = "proton"
 
 [workspace.dependencies.proton-sqlite3]
 version = "0.7"
-path = "crates/sqlite3"
+path = "core/sqlite3"
 registry = "proton"
 
 [workspace.dependencies.proton-vcard]
 version = "0.2"
-path = "crates/vcard"
+path = "core/vcard"
 registry = "proton"
 
 [workspace.dependencies.stash]
 version = "0.2"
-path = "crates/stash"
+path = "core/stash"
 registry = "proton"
 
 [workspace.dependencies.stash-macros]
 version = "0.2"
-path = "crates/stash-macros"
+path = "core/stash-macros"
+registry = "proton"
+
+[workspace.dependencies.proton-api-mail]
+version = "0.5"
+path = "mail/mail-api"
+registry = "proton"
+
+[workspace.dependencies.proton-mail-common]
+version = "0.8"
+path = "mail/mail-common"
+registry = "proton"
+
+[workspace.dependencies.proton-mail-uniffi]
+version = "0.12"
+path = "mail/mail-uniffi"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-inbox]
