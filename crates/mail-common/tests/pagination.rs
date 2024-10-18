@@ -14,6 +14,7 @@ use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::db::migrations::migrate_db;
+use proton_mail_common::models::PaginatorSearchOptions;
 use proton_mail_common::models::{Conversation, Message, PaginatorFilter};
 use proton_mail_common::{MailUserContext, Mailbox};
 use proton_mail_test_utils::common::{create_address, TestContext};
@@ -218,6 +219,7 @@ async fn paginate_messages() {
         page_size.try_into().unwrap(),
         None,
         PaginatorFilter::default(),
+        PaginatorSearchOptions::default(),
     )
     .await
     .unwrap();
@@ -547,10 +549,16 @@ async fn paginate_messages_for_label_with_filter() {
 
     // Test with unread filter
     let filter = PaginatorFilter { unread: Some(true) };
-    let paginator =
-        Message::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, None, filter.into())
-            .await
-            .unwrap();
+    let paginator = Message::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        filter.into(),
+        PaginatorSearchOptions::default(),
+    )
+    .await
+    .unwrap();
 
     let messages = paginator.next_page().await.unwrap();
     assert_eq!(messages.len(), 3, "Expected 3 unread messages");
@@ -561,10 +569,16 @@ async fn paginate_messages_for_label_with_filter() {
 
     // Test without filter (should return all messages)
     let filter = PaginatorFilter { unread: None };
-    let paginator =
-        Message::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, None, filter.into())
-            .await
-            .unwrap();
+    let paginator = Message::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        filter.into(),
+        PaginatorSearchOptions::default(),
+    )
+    .await
+    .unwrap();
 
     let messages = paginator.next_page().await.unwrap();
     assert_eq!(messages.len(), 5, "Expected all 5 messages");
@@ -573,10 +587,16 @@ async fn paginate_messages_for_label_with_filter() {
     let filter = PaginatorFilter {
         unread: Some(false),
     };
-    let paginator =
-        Message::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, None, filter.into())
-            .await
-            .unwrap();
+    let paginator = Message::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        filter.into(),
+        PaginatorSearchOptions::default(),
+    )
+    .await
+    .unwrap();
 
     let messages = paginator.next_page().await.unwrap();
     assert_eq!(messages.len(), 2, "Expected 2 read messages");
@@ -584,6 +604,112 @@ async fn paginate_messages_for_label_with_filter() {
         messages.iter().all(|m| !m.unread),
         "All messages should be read"
     );
+}
+
+#[tokio::test]
+async fn paginate_search() {
+    // Create a test context
+    let context = TestContext::new().await;
+    let user_ctx = context.user_context().await;
+    let stash = user_ctx.user_stash();
+    let tx = stash.connection();
+    migrate_core_db(&stash).await.unwrap();
+    migrate_db(&stash).await.unwrap();
+
+    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+        .await
+        .expect("failed to create mailbox");
+
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/messages"))
+        .and(query_param("PageSize", 50.to_string()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+                messages: vec![],
+                stale: false,
+                total: 1,
+            }),
+        )
+        .expect(2)
+        .mount(context.mock_server())
+        .await;
+
+    // Set up test data
+    let address = create_address(&tx).await;
+    let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
+    conversation.save_using(&tx).await.unwrap();
+
+    // Create 5 messages
+    let messages = vec![
+        message!(subject: "foo".to_owned(), remote_id: Some("msg1".into())),
+        message!(subject: "bar".to_owned(), remote_id: Some("msg2".into())),
+        message!(subject: "foo bar".to_owned(), remote_id: Some("msg3".into())),
+        message!(subject: "baz".to_owned(), remote_id: Some("msg4".into())),
+        message!(subject: "bar baz".to_owned(), remote_id: Some("msg5".into())),
+    ];
+
+    for mut msg in messages {
+        msg.local_address_id = address.local_id.unwrap();
+        msg.remote_address_id = address.remote_id.clone().unwrap();
+        msg.local_conversation_id = conversation.local_id;
+        msg.remote_conversation_id = conversation.remote_id.clone();
+        msg.save_using(&tx).await.expect("failed to create message");
+        Message::apply_label(mailbox_inbox.label_id(), vec![msg.local_id.unwrap()], &tx)
+            .await
+            .unwrap();
+    }
+
+    // Test with search term "foo"
+    let options = PaginatorSearchOptions {
+        keywords: Some("foo".to_owned()),
+    };
+    let paginator = Message::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        PaginatorFilter::default(),
+        options.into(),
+    )
+    .await
+    .unwrap();
+
+    let messages = paginator.next_page().await.unwrap();
+    assert_eq!(messages.len(), 2, "Expected 2 matching messages");
+
+    // Test without filter (should return all messages)
+    let options = PaginatorSearchOptions { keywords: None };
+    let paginator = Message::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        PaginatorFilter::default(),
+        options.into(),
+    )
+    .await
+    .unwrap();
+
+    let messages = paginator.next_page().await.unwrap();
+    assert_eq!(messages.len(), 5, "Expected all 5 messages");
+
+    // Test with multiple search terms
+    let options = PaginatorSearchOptions {
+        keywords: Some("foo bar".to_owned()),
+    };
+    let paginator = Message::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        PaginatorFilter::default(),
+        options.into(),
+    )
+    .await
+    .unwrap();
+
+    let messages = paginator.next_page().await.unwrap();
+    assert_eq!(messages.len(), 1, "Expected 1 matching message");
 }
 
 fn item_time(index: usize) -> u64 {

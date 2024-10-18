@@ -6,7 +6,9 @@ use proton_core_common::models::ModelExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain};
 use proton_core_common::paginator::DataSource;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, Label, Message, PaginatorCompat, PaginatorFilter};
+use proton_mail_common::models::{
+    Conversation, Label, Message, PaginatorCompat, PaginatorFilter, PaginatorSearchOptions,
+};
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
@@ -101,6 +103,7 @@ async fn main() {
             page_count,
             None,
             PaginatorFilter::default(),
+            PaginatorSearchOptions::default(),
         )
         .await
         .unwrap();

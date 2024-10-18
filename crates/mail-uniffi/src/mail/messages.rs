@@ -16,16 +16,19 @@ use crate::core::paginator::MessagePaginator;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSessionError, MailboxError};
 use crate::utils::damp;
-use crate::PaginatorFilter;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
+use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::LocalId as RealLocalId;
+use proton_core_common::datatypes::{LabelId as RealLabelId, LocalId as RealLocalId, LocalId};
+use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
-use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
 use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
+use proton_mail_common::models::{
+    PaginatorFilter as RealPaginatorFilter, PaginatorSearchOptions as RealPaginatorSearchOptions,
+};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
 use std::sync::Arc;
@@ -361,6 +364,51 @@ pub async fn paginate_messages_for_label(
             50,
             Some(msg_sender),
             RealPaginatorFilter::from(filter),
+            RealPaginatorSearchOptions::default(),
+        )
+        .await?;
+        Ok(MessagePaginator {
+            real_paginator,
+            handle: watch_channel(msg_receiver, callback),
+        })
+    })
+    .await
+}
+
+/// Paginate messages returned from a search.
+///
+/// Gets a paginator for messages returned from a search, which allows
+/// navigation through the messages by page/window, and watches for changes.
+/// When the messages change, the callback will be invoked.
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `options`  - The search options for pagination.
+/// * `callback` - The callback to use for updates. When the specified messages
+///                change, the callback will be invoked.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[allow(clippy::missing_panics_doc)]
+#[uniffi::export]
+pub async fn paginate_search(
+    session: Arc<MailUserSession>,
+    options: PaginatorSearchOptions,
+    callback: Box<dyn LiveQueryCallback>,
+) -> Result<MessagePaginator, MailboxError> {
+    let context = session.ctx();
+    let (msg_sender, msg_receiver) = flume::unbounded();
+    uniffi_async(async move {
+        let real_paginator = RealMessage::paginate_in_label(
+            &context,
+            LocalId::from(RealLabelId::inbox().parse::<u64>().unwrap()),
+            50,
+            Some(msg_sender),
+            RealPaginatorFilter::default(),
+            RealPaginatorSearchOptions::from(options),
         )
         .await?;
         Ok(MessagePaginator {

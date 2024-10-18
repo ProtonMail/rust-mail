@@ -6435,12 +6435,28 @@ impl Message {
         page_count: u32,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
         filter: PaginatorFilter,
+        options: PaginatorSearchOptions,
     ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
         let remote_source = MessageDataSource::new(context, local_label_id).await?;
         let mut conditions = vec!["messages.deleted = 0".to_owned()];
 
         if let Some(unread) = filter.unread {
             conditions.push(format!("messages.unread = {}", if unread { 1 } else { 0 }));
+        }
+        if let Some(keywords) = options.keywords {
+            let mut keyword_conditions = Vec::new();
+            for word in keywords.split_whitespace() {
+                keyword_conditions.push(formatdoc!(
+                    "(
+                        messages.subject LIKE '%{word}%' OR
+                        messages.to_list LIKE '%{word}%' OR
+                        messages.sender LIKE '%{word}%'
+                    )"
+                ));
+            }
+            if !keyword_conditions.is_empty() {
+                conditions.push(keyword_conditions.join(" AND "));
+            }
         }
 
         let query = formatdoc!(
@@ -7205,4 +7221,11 @@ impl<T: Model, R: DataSource<Item = T> + 'static> PaginatorCompat<T, R> {
 pub struct PaginatorFilter {
     /// If true, only return unread conversations/messages
     pub unread: Option<bool>,
+}
+
+/// Search options for pagination
+#[derive(Clone, Debug, Default)]
+pub struct PaginatorSearchOptions {
+    /// Keywords to use in search.
+    pub keywords: Option<String>,
 }
