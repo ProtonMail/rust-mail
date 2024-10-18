@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `MessageBodyMetadata` local_id is the same as the one from `Message`
 - Custom folders order are no more random.
+- `LabelAs` for conversations and messages where missing rollback.
 
 ### Removed
 

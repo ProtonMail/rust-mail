@@ -1,5 +1,5 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
-use crate::datatypes::SystemLabelId;
+use crate::datatypes::{LabelType, RollbackItemType, SystemLabelId};
 use crate::models::{Label, Message};
 use crate::MailUserContext;
 use itertools::Itertools;
@@ -40,12 +40,19 @@ impl LabelAs {
         }
     }
 
-    /// Save status of target conversations.
+    /// Memorize the data before applying LabelAs action so we can revert modifications later
     async fn memorize_original_data<A>(&mut self, interface: &A) -> Result<(), ActionError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        self.data.memorize_original_data(interface).await?;
+        let all_labels = Label::find_by_kind(LabelType::Label, interface).await?;
+        self.data.local_all_label_ids = all_labels
+            .iter()
+            .map(|l| l.local_id.expect("Should be set"))
+            .collect();
+
+        self.save_modifications(interface).await?;
+
         for message_id in &self.data.local_ids {
             let Some(message) = Message::load(*message_id, interface).await? else {
                 warn!("While memorizing labels, could not find message with id: {message_id:?}");
@@ -55,6 +62,34 @@ impl LabelAs {
             self.data
                 .original_location
                 .insert(*message_id, message.exclusive_location);
+        }
+        Ok(())
+    }
+
+    /// Keep track of labels added/removed
+    async fn save_modifications<A>(&mut self, interface: &A) -> Result<(), ActionError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let selected = HashSet::from_iter(self.data.local_selected_label_ids.iter().cloned());
+        let partial =
+            HashSet::from_iter(self.data.local_partially_selected_label_ids.iter().cloned());
+        for message_id in &self.data.local_ids {
+            if let Some(message) = Message::load(*message_id, interface).await? {
+                let labels = message
+                    .label_ids
+                    .into_iter()
+                    .map(|l| l.into_inner())
+                    .collect();
+                let labels = RemoteId::counterparts::<Label, _>(labels, interface).await?;
+                let labels = HashSet::from_iter(labels.into_iter());
+                self.data
+                    .added_labels
+                    .insert(*message_id, &selected - &labels);
+                self.data
+                    .removed_labels
+                    .insert(*message_id, &(&labels - &selected) - &partial);
+            }
         }
         Ok(())
     }
@@ -108,55 +143,22 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Tether,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let archive_id = RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), tx)
-            .await?
-            .expect("Archive label must have a RemoteId");
+        Message::undo_label_as(
+            action.data.local_ids.clone(),
+            action.data.source_label_id,
+            action.data.added_labels.clone(),
+            action.data.removed_labels.clone(),
+            action.data.original_location.clone(),
+            action.data.must_archive,
+            tx,
+        )
+        .await?;
 
-        for message_id in &action.data.local_ids {
-            let Some(mut message) = Message::load(*message_id, tx).await? else {
-                warn!("While reverting locally, could not find message with id: {message_id:?}");
-                continue;
-            };
-
-            let added_labels = action
-                .data
-                .added_labels
-                .remove(message_id)
-                .unwrap_or_default();
-            let removed_labels = action
-                .data
-                .removed_labels
-                .remove(message_id)
-                .unwrap_or_default();
-            let current_labels = RemoteId::counterparts::<Label, _>(
-                message
-                    .label_ids
-                    .iter()
-                    .map(|l| l.clone().into_inner())
-                    .collect(),
-                tx,
-            )
+        action
+            .data
+            .mark_rollback(RollbackItemType::Message, tx)
             .await?;
-            let current_labels = HashSet::from_iter(current_labels.into_iter());
-            let new_labels = &(&current_labels - &removed_labels) | &added_labels;
-            let new_labels =
-                LocalId::counterparts::<Label, _>(Vec::from_iter(new_labels), tx).await?;
-            message.label_ids = new_labels.into_iter().map_into().collect();
 
-            if let Some(location) = action.data.original_location.get(message_id) {
-                message.exclusive_location = location.clone();
-            }
-            if action.data.must_archive {
-                Message::move_messages(
-                    archive_id,
-                    action.data.source_label_id,
-                    action.data.local_ids.clone(),
-                    tx,
-                )
-                .await?;
-            }
-            message.save_using(tx).await?
-        }
         Ok(())
     }
 
