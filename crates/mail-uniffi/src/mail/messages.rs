@@ -16,6 +16,7 @@ use crate::core::paginator::MessagePaginator;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
 use crate::mail::{MailSessionError, MailboxError};
 use crate::utils::damp;
+use crate::PaginatorFilter;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
@@ -23,6 +24,7 @@ use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
 };
+use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
 use proton_mail_common::models::{self, Label as RealLabel, Message as RealMessage};
 use proton_mail_common::MailUserContext;
 use stash::orm::Model as _;
@@ -334,6 +336,7 @@ pub async fn messages_for_label(
 ///
 /// * `session`  - The session to use for the request.
 /// * `label_id` - The local ID of the label to watch.
+/// * `filter`   - The filter options for pagination.
 /// * `callback` - The callback to use for updates. When the specified messages
 ///                change, the callback will be invoked.
 ///
@@ -346,6 +349,7 @@ pub async fn messages_for_label(
 pub async fn paginate_messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
+    filter: PaginatorFilter,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<MessagePaginator, MailboxError> {
     let context = session.ctx();
@@ -356,6 +360,7 @@ pub async fn paginate_messages_for_label(
             RealLocalId::from(label_id),
             50,
             Some(msg_sender),
+            RealPaginatorFilter::from(filter),
         )
         .await?;
         Ok(MessagePaginator {

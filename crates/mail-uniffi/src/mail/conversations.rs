@@ -16,11 +16,13 @@ use crate::mail::datatypes::{
     MoveAction,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError, MailboxResult};
+use crate::PaginatorFilter;
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use itertools::Itertools;
 use proton_api_core::session::CoreSession;
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::{ContextualConversation, ContextualConversationAndMessages};
+use proton_mail_common::models::PaginatorFilter as RealPaginatorFilter;
 use proton_mail_common::models::{Conversation as RealConversation, Label as RealLabel};
 use stash::orm::Model;
 use std::sync::Arc;
@@ -419,6 +421,7 @@ pub async fn move_conversations(
 ///
 /// * `session`  - The session to use for the request.
 /// * `label_id` - The local ID of the label to watch.
+/// * `filter`   - The filter options for pagination.
 /// * `callback` - The callback to use for updates. When the specified
 ///                conversations change, the callback will be invoked.
 ///
@@ -431,6 +434,7 @@ pub async fn move_conversations(
 pub async fn paginate_conversations_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
+    filter: PaginatorFilter,
     callback: Box<dyn LiveQueryCallback>,
 ) -> Result<ConversationPaginator, MailboxError> {
     let context = session.ctx();
@@ -441,6 +445,7 @@ pub async fn paginate_conversations_for_label(
             RealLocalId::from(label_id),
             50,
             Some(msg_sender),
+            RealPaginatorFilter::from(filter),
         )
         .await?;
         Ok(ConversationPaginator {

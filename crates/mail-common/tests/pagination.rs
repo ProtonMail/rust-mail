@@ -7,16 +7,25 @@ use proton_api_mail::services::proton::response_data::{
     ConversationLabel as ApiConversationLabel, MessageCount as ApiMessageCount, MessageFlags,
     MessageMetadata as ApiMessageMetadata, MessageMetadata,
 };
+use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
 use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::db::migrations::migrate_core_db;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{Conversation, Message};
+use proton_mail_common::db::migrations::migrate_db;
+use proton_mail_common::models::{Conversation, Message, PaginatorFilter};
 use proton_mail_common::{MailUserContext, Mailbox};
-use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::common::{create_address, TestContext};
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
+use proton_mail_test_utils::{conversation, message};
+use stash::orm::Model;
+use stash::params;
+use stash::stash::Interface;
 use std::collections::HashMap;
 use std::sync::Arc;
+use wiremock::matchers::{method, path, query_param};
+use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn paginate_conversations() {
@@ -103,6 +112,7 @@ async fn paginate_conversations() {
         mailbox_inbox.label_id(),
         page_size.try_into().unwrap(),
         None,
+        PaginatorFilter::default(),
     )
     .await
     .unwrap();
@@ -207,6 +217,7 @@ async fn paginate_messages() {
         mailbox_inbox.label_id(),
         page_size.try_into().unwrap(),
         None,
+        PaginatorFilter::default(),
     )
     .await
     .unwrap();
@@ -355,6 +366,224 @@ fn test_init_params(count: usize) -> (TestParams, Vec<MessageMetadata>) {
         .collect();
 
     (params, messages)
+}
+
+#[tokio::test]
+async fn paginate_conversations_for_label_with_filter() {
+    // Create a test context
+    let context = TestContext::new().await;
+    let user_ctx = context.user_context().await;
+    let stash = user_ctx.user_stash();
+    let tx = stash.connection();
+    migrate_core_db(&stash).await.unwrap();
+    migrate_db(&stash).await.unwrap();
+
+    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+        .await
+        .expect("failed to create mailbox");
+
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/conversations"))
+        .and(query_param("PageSize", 50.to_string()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+                conversations: vec![],
+                stale: false,
+                total: 1,
+            }),
+        )
+        .expect(2)
+        .mount(context.mock_server())
+        .await;
+
+    // Create 5 conversations: 3 with unread messages, 2 without
+    let conversations = vec![
+        conversation!(num_unread: 1, remote_id: Some("conv1".into())),
+        conversation!(num_unread: 0, remote_id: Some("conv2".into())),
+        conversation!(num_unread: 2, remote_id: Some("conv3".into())),
+        conversation!(num_unread: 0, remote_id: Some("conv4".into())),
+        conversation!(num_unread: 3, remote_id: Some("conv5".into())),
+    ];
+
+    for mut conv in conversations {
+        conv.save_using(&tx)
+            .await
+            .expect("failed to create conversation");
+        Conversation::apply_label(mailbox_inbox.label_id(), vec![conv.local_id.unwrap()], &tx)
+            .await
+            .unwrap();
+        tx.execute(
+            "
+            UPDATE
+                conversation_labels
+            SET
+                context_num_unread = ?
+            WHERE
+                local_label_id = ?
+                AND local_conversation_id = ?
+            ",
+            params![conv.num_unread, mailbox_inbox.label_id(), conv.id()],
+        )
+        .await
+        .unwrap();
+    }
+
+    // Test with unread filter
+    let filter = PaginatorFilter { unread: Some(true) };
+    let paginator = Conversation::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        filter.into(),
+    )
+    .await
+    .unwrap();
+
+    let conversations = paginator.next_page().await.unwrap();
+    assert_eq!(
+        conversations.len(),
+        3,
+        "Expected 3 conversations with unread messages"
+    );
+    assert!(
+        conversations.iter().all(|c| c.num_unread > 0),
+        "All conversations should have unread messages"
+    );
+
+    // Test without filter (should return all conversations)
+    let filter = PaginatorFilter { unread: None };
+    let paginator = Conversation::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        filter.into(),
+    )
+    .await
+    .unwrap();
+
+    let conversations = paginator.next_page().await.unwrap();
+    assert_eq!(conversations.len(), 5, "Expected all 5 conversations");
+
+    // Test with read filter
+    let filter = PaginatorFilter {
+        unread: Some(false),
+    };
+    let paginator = Conversation::paginate_in_label(
+        &user_ctx,
+        mailbox_inbox.label_id(),
+        50,
+        None,
+        filter.into(),
+    )
+    .await
+    .unwrap();
+
+    let conversations = paginator.next_page().await.unwrap();
+    assert_eq!(
+        conversations.len(),
+        2,
+        "Expected 2 conversations without unread messages"
+    );
+    assert!(
+        conversations.iter().all(|c| c.num_unread == 0),
+        "All conversations should have no unread messages"
+    );
+}
+
+#[tokio::test]
+async fn paginate_messages_for_label_with_filter() {
+    // Create a test context
+    let context = TestContext::new().await;
+    let user_ctx = context.user_context().await;
+    let stash = user_ctx.user_stash();
+    let tx = stash.connection();
+    migrate_core_db(&stash).await.unwrap();
+    migrate_db(&stash).await.unwrap();
+
+    let mailbox_inbox = Mailbox::with_remote_id(user_ctx.clone(), LabelId::inbox())
+        .await
+        .expect("failed to create mailbox");
+
+    Mock::given(method("GET"))
+        .and(path("/api/mail/v4/messages"))
+        .and(query_param("PageSize", 50.to_string()))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+                messages: vec![],
+                stale: false,
+                total: 1,
+            }),
+        )
+        .expect(2)
+        .mount(context.mock_server())
+        .await;
+
+    // Set up test data
+    let address = create_address(&tx).await;
+    let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
+    conversation.save_using(&tx).await.unwrap();
+
+    // Create 5 messages: 3 unread, 2 read
+    let messages = vec![
+        message!(unread: true, remote_id: Some("msg1".into())),
+        message!(unread: false, remote_id: Some("msg2".into())),
+        message!(unread: true, remote_id: Some("msg3".into())),
+        message!(unread: false, remote_id: Some("msg4".into())),
+        message!(unread: true, remote_id: Some("msg5".into())),
+    ];
+
+    for mut msg in messages {
+        msg.local_address_id = address.local_id.unwrap();
+        msg.remote_address_id = address.remote_id.clone().unwrap();
+        msg.local_conversation_id = conversation.local_id;
+        msg.remote_conversation_id = conversation.remote_id.clone();
+        msg.save_using(&tx).await.expect("failed to create message");
+        Message::apply_label(mailbox_inbox.label_id(), vec![msg.local_id.unwrap()], &tx)
+            .await
+            .unwrap();
+    }
+
+    // Test with unread filter
+    let filter = PaginatorFilter { unread: Some(true) };
+    let paginator =
+        Message::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, None, filter.into())
+            .await
+            .unwrap();
+
+    let messages = paginator.next_page().await.unwrap();
+    assert_eq!(messages.len(), 3, "Expected 3 unread messages");
+    assert!(
+        messages.iter().all(|m| m.unread),
+        "All messages should be unread"
+    );
+
+    // Test without filter (should return all messages)
+    let filter = PaginatorFilter { unread: None };
+    let paginator =
+        Message::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, None, filter.into())
+            .await
+            .unwrap();
+
+    let messages = paginator.next_page().await.unwrap();
+    assert_eq!(messages.len(), 5, "Expected all 5 messages");
+
+    // Test with read filter
+    let filter = PaginatorFilter {
+        unread: Some(false),
+    };
+    let paginator =
+        Message::paginate_in_label(&user_ctx, mailbox_inbox.label_id(), 50, None, filter.into())
+            .await
+            .unwrap();
+
+    let messages = paginator.next_page().await.unwrap();
+    assert_eq!(messages.len(), 2, "Expected 2 read messages");
+    assert!(
+        messages.iter().all(|m| !m.unread),
+        "All messages should be read"
+    );
 }
 
 fn item_time(index: usize) -> u64 {
