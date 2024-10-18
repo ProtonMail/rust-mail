@@ -132,6 +132,7 @@
     "EnableFolderColor": 0,
     "FontFace": null,
     "HideRemoteImages": 1,
+    "HideEmbeddedImages": 1,
     "HideSenderImages": 1,
     "ImageProxy": 0,
     "InheritParentFolderColor": 1,

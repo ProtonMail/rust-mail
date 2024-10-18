@@ -4248,9 +4248,13 @@ pub struct MailSettings {
     #[DbField]
     pub font_face: Option<String>,
 
-    /// TODO: Document this field.
+    /// This enables or disables remote content in the HTML.
     #[DbField]
     pub hide_remote_images: bool,
+
+    /// This enables or disables embedded content (`Disposition::Inline`) in the HTML.
+    #[DbField]
+    pub hide_embedded_images: bool,
 
     /// TODO: Document this field.
     #[DbField]
@@ -4439,6 +4443,7 @@ impl From<ApiMailSettings> for MailSettings {
             enable_folder_color: value.enable_folder_color,
             font_face: value.font_face,
             hide_remote_images: value.hide_remote_images,
+            hide_embedded_images: value.hide_embedded_images,
             hide_sender_images: value.hide_sender_images,
             image_proxy: value.image_proxy,
             inherit_parent_folder_color: value.inherit_parent_folder_color,

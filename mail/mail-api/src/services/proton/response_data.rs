@@ -744,9 +744,13 @@ pub struct MailSettings {
     /// TODO: Document this field.
     pub font_face: Option<String>,
 
-    /// TODO: Document this field.
+    /// This enables or disables remote content in the HTML.
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub hide_remote_images: bool,
+
+    /// This enables or disables embedded content (`Disposition::Inline`) in the HTML.
+    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    pub hide_embedded_images: bool,
 
     /// TODO: Document this field.
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
