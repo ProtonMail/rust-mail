@@ -6,7 +6,7 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions};
-use crate::datatypes::{LabelType, MobileActions, SystemLabel, SystemLabelId};
+use crate::datatypes::{ExclusiveLocation, LabelType, MobileActions, SystemLabel, SystemLabelId};
 use crate::models::{Label, MailSettings, Message};
 use crate::AppError;
 use anyhow::anyhow;
@@ -18,7 +18,7 @@ use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use tracing::{error, warn};
 
@@ -669,5 +669,58 @@ impl Message {
             result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed));
         }
         result
+    }
+
+    /// Revert locally the LabelAs action for conversation.
+    pub(crate) async fn undo_label_as<A>(
+        local_ids: Vec<LocalId>,
+        source_label_id: LocalId,
+        mut added_labels: HashMap<LocalId, HashSet<LocalId>>,
+        mut removed_labels: HashMap<LocalId, HashSet<LocalId>>,
+        original_location: HashMap<LocalId, Option<ExclusiveLocation>>,
+        must_archive: bool,
+        interface: &A,
+    ) -> Result<(), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let archive_id =
+            RemoteId::counterpart::<Label, _>(&LabelId::archive().into_inner(), interface)
+                .await?
+                .expect("Archive label must have a RemoteId");
+
+        for message_id in &local_ids {
+            let Some(mut message) = Message::load(*message_id, interface).await? else {
+                warn!("While reverting locally, could not find message with id: {message_id:?}");
+                continue;
+            };
+
+            let added_labels = added_labels.remove(message_id).unwrap_or_default();
+            let removed_labels = removed_labels.remove(message_id).unwrap_or_default();
+            let current_labels = RemoteId::counterparts::<Label, _>(
+                message
+                    .label_ids
+                    .iter()
+                    .map(|l| l.clone().into_inner())
+                    .collect(),
+                interface,
+            )
+            .await?;
+            let current_labels = HashSet::from_iter(current_labels.into_iter());
+            let new_labels = &(&current_labels - &removed_labels) | &added_labels;
+            let new_labels =
+                LocalId::counterparts::<Label, _>(Vec::from_iter(new_labels), interface).await?;
+            message.label_ids = new_labels.into_iter().map_into().collect();
+
+            if let Some(location) = original_location.get(message_id) {
+                message.exclusive_location = location.clone();
+            }
+            if must_archive {
+                Message::move_messages(archive_id, source_label_id, local_ids.clone(), interface)
+                    .await?;
+            }
+            message.save_using(interface).await?
+        }
+        Ok(())
     }
 }

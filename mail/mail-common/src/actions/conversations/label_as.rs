@@ -1,5 +1,5 @@
 use crate::actions::{filter_responses, ActionError, LabelAsData};
-use crate::datatypes::{ExclusiveLocation, SystemLabelId};
+use crate::datatypes::{ExclusiveLocation, LabelType, RollbackItemType, SystemLabelId};
 use crate::models::{Conversation, ConversationLabel, Label};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
@@ -40,12 +40,18 @@ impl LabelAs {
         }
     }
 
-    /// Save status of target conversations.
+    /// Memorize the data before applying LabelAs action so we can revert modifications later
     async fn memorize_original_data<A>(&mut self, interface: &A) -> Result<(), ActionError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        self.data.memorize_original_data(interface).await?;
+        let all_labels = Label::find_by_kind(LabelType::Label, interface).await?;
+        self.data.local_all_label_ids = all_labels
+            .iter()
+            .map(|l| l.local_id.expect("Should be set"))
+            .collect();
+
+        self.save_modifications(interface).await?;
         for conversation_id in &self.data.local_ids {
             let Some(conversation) = Conversation::load(*conversation_id, interface).await? else {
                 warn!("Couldn't find conversation with id: {conversation_id:?}");
@@ -54,6 +60,28 @@ impl LabelAs {
             self.data
                 .original_location
                 .insert(*conversation_id, conversation.exclusive_location);
+        }
+        Ok(())
+    }
+
+    /// Keep track of labels added/removed
+    async fn save_modifications<A>(&mut self, interface: &A) -> Result<(), ActionError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let selected = HashSet::from_iter(self.data.local_selected_label_ids.iter().cloned());
+        let partial =
+            HashSet::from_iter(self.data.local_partially_selected_label_ids.iter().cloned());
+        for local_id in &self.data.local_ids {
+            let labels =
+                ConversationLabel::labels_ids_for_conversation(*local_id, interface).await?;
+            let labels = HashSet::from_iter(labels.into_iter());
+            self.data
+                .added_labels
+                .insert(*local_id, &selected - &labels);
+            self.data
+                .removed_labels
+                .insert(*local_id, &(&labels - &selected) - &partial);
         }
         Ok(())
     }
@@ -158,6 +186,12 @@ impl ActionHandler for Handler {
             tx,
         )
         .await?;
+
+        action
+            .data
+            .mark_rollback(RollbackItemType::Conversation, tx)
+            .await?;
+
         Ok(())
     }
 

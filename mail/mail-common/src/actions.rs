@@ -4,8 +4,8 @@ pub mod labels;
 pub mod messages;
 
 pub use self::available_action::*;
-use crate::datatypes::{ExclusiveLocation, LabelType, RollbackItemType};
-use crate::models::{ConversationLabel, Label, RollbackItem};
+use crate::datatypes::{ExclusiveLocation, RollbackItemType};
+use crate::models::{Label, RollbackItem};
 use crate::AppError;
 use itertools::Itertools;
 use proton_action_queue::action::Factory;
@@ -271,34 +271,18 @@ where
         Ok(())
     }
 
-    async fn memorize_original_data<A>(&mut self, interface: &A) -> Result<(), ActionError>
+    async fn mark_rollback<A>(
+        &self,
+        kind: RollbackItemType,
+        interface: &A,
+    ) -> Result<(), ActionError>
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let all_labels = Label::find_by_kind(LabelType::Label, interface).await?;
-        self.local_all_label_ids = all_labels
-            .iter()
-            .map(|l| l.local_id.expect("Should be set"))
-            .collect();
-
-        self.save_modifications(interface).await?;
-        Ok(())
-    }
-
-    async fn save_modifications<A>(&mut self, interface: &A) -> Result<(), ActionError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let selected = HashSet::from_iter(self.local_selected_label_ids.iter().cloned());
-        let partial = HashSet::from_iter(self.local_partially_selected_label_ids.iter().cloned());
-        for conversation_id in &self.local_ids {
-            let labels =
-                ConversationLabel::labels_ids_for_conversation(*conversation_id, interface).await?;
-            let labels = HashSet::from_iter(labels.into_iter());
-            self.added_labels
-                .insert(*conversation_id, &selected - &labels);
-            self.removed_labels
-                .insert(*conversation_id, &(&labels - &selected) - &partial);
+        for remote_id in &self.remote_ids {
+            RollbackItem::new(remote_id.clone(), kind)
+                .save_using(interface)
+                .await?;
         }
         Ok(())
     }
