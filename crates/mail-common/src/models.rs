@@ -3170,6 +3170,7 @@ impl Conversation {
     /// # Errors
     ///
     /// Returns error if the query fails.
+    ///
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
@@ -3177,7 +3178,8 @@ impl Conversation {
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
         filter: PaginatorFilter,
     ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
-        let remote_source = ConversationDataSource::new(context, local_label_id).await?;
+        let remote_source =
+            ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
 
         let mut query = formatdoc!(
             "
@@ -6425,10 +6427,12 @@ impl Message {
     /// * `page_count`     - Number of elements per page.
     /// * `queue`          - Optional subscriber for changes.
     /// * `filter`         - Filter options for pagination.
+    /// * `options`        - Search options for pagination.
     ///
     /// # Errors
     ///
     /// Returns error if the query fails.
+    ///
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
@@ -6437,7 +6441,9 @@ impl Message {
         filter: PaginatorFilter,
         options: PaginatorSearchOptions,
     ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
-        let remote_source = MessageDataSource::new(context, local_label_id).await?;
+        let remote_source =
+            MessageDataSource::new(context, local_label_id, filter.clone(), options.clone())
+                .await?;
         let mut conditions = vec!["messages.deleted = 0".to_owned()];
 
         if let Some(unread) = filter.unread {
@@ -6851,19 +6857,35 @@ impl ConversationMessageLabelStats {
 pub struct ConversationDataSource {
     /// Session for network request
     session: Session,
+
     /// Remote id of the label.
     remote_label_id: LabelId,
+
     /// Local id of the label.
     local_label_id: LocalId,
+
+    /// Filter options for pagination.
+    filter: PaginatorFilter,
 }
 
 impl ConversationDataSource {
     /// Create a new data source for the given `label_id`.
     ///
+    /// # Parameters
+    ///
+    /// * `context`  - Active user context.
+    /// * `label_id` - Local id of the label.
+    /// * `filter`   - Filter options for pagination.
+    ///
     /// # Errors
     ///
     /// Returns error if the remote id for the label can't be resolved.
-    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+    ///
+    pub async fn new(
+        context: &MailUserContext,
+        label_id: LocalId,
+        filter: PaginatorFilter,
+    ) -> Result<Self, AppError> {
         let Some(remote_id) = label_id
             .counterpart::<Label, _>(context.user_stash())
             .await?
@@ -6875,6 +6897,7 @@ impl ConversationDataSource {
             remote_label_id: remote_id.into(),
             session: context.session().clone(),
             local_label_id: label_id,
+            filter,
         })
     }
 }
@@ -6905,6 +6928,7 @@ impl DataSource for ConversationDataSource {
                 desc: Some(true),
                 label_id: Some(self.remote_label_id.clone().into()),
                 page_size: page_size.get() as u64,
+                unread: self.filter.unread,
                 ..Default::default()
             })
             .await?;
@@ -6963,6 +6987,7 @@ impl DataSource for ConversationDataSource {
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(self.remote_label_id.clone().into()),
                 page_size: page_size.get() as u64 + 1_u64,
+                unread: self.filter.unread,
                 ..Default::default()
             })
             .await?;
@@ -7017,19 +7042,39 @@ impl ConversationDataSource {
 pub struct MessageDataSource {
     /// Session for network request
     session: Session,
+
     /// Remote id of the label.
     remote_label_id: LabelId,
+
     /// Local id of the label.
     local_label_id: LocalId,
+
+    /// Filter options for pagination.
+    filter: PaginatorFilter,
+
+    /// Search options for pagination.
+    options: PaginatorSearchOptions,
 }
 
 impl MessageDataSource {
     /// Create a new data source for the given `label_id`.
     ///
+    /// # Parameters
+    ///
+    /// * `context`  - Active user context.
+    /// * `label_id` - Local id of the label.
+    /// * `filter`   - Filter options for pagination.
+    /// * `options`  - Search options for pagination.
+    ///
     /// # Errors
     ///
     /// Returns error if the remote id for the label can't be resolved.
-    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+    pub async fn new(
+        context: &MailUserContext,
+        label_id: LocalId,
+        filter: PaginatorFilter,
+        options: PaginatorSearchOptions,
+    ) -> Result<Self, AppError> {
         let Some(remote_id) = label_id
             .counterpart::<Label, _>(context.user_stash())
             .await?
@@ -7041,6 +7086,8 @@ impl MessageDataSource {
             remote_label_id: remote_id.into(),
             session: context.session().clone(),
             local_label_id: label_id,
+            filter,
+            options,
         })
     }
 }
@@ -7070,6 +7117,8 @@ impl DataSource for MessageDataSource {
                 desc: Some(true),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
                 page_size: page_size.get() as u64,
+                unread: self.filter.unread,
+                keyword: self.options.keywords.clone(),
                 ..Default::default()
             })
             .await?;
@@ -7116,6 +7165,8 @@ impl DataSource for MessageDataSource {
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
                 page_size: page_size.get() as u64 + 1_u64,
+                unread: self.filter.unread,
+                keyword: self.options.keywords.clone(),
                 ..Default::default()
             })
             .await?;
