@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use super::super::*;
-use crate::db::new_test_connection_file;
 use crate::AppError;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
@@ -14,6 +13,7 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
+use proton_mail_test_utils::db::new_test_connection_file;
 use stash::orm::Model;
 use stash::stash::Tether;
 

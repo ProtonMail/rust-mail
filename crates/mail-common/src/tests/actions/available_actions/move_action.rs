@@ -1,8 +1,8 @@
 use super::{CustomFolderAction, MoveAction, SystemFolderAction};
 use crate::datatypes::{LabelType, SystemLabel};
 use crate::models::Label;
-use crate::{label, lid, rid};
 use itertools::Itertools;
+use proton_mail_test_utils::{label, lid, rid};
 use test_case::test_case;
 
 #[test_case(&[], |_| false, &[]; "TEST1: empty")]

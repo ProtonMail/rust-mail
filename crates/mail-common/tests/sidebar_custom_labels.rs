@@ -1,13 +1,11 @@
-use crate::common::init::Params as TestParams;
-use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_mail_common::Sidebar;
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
 use test_case::test_case;
 use velcro::hash_map;
-
-mod common;
 
 #[test_case(&[], &[]; "empty")]
 #[test_case(&[(ApiRemoteId::from("foo"), "foo".to_owned(), 42)], &["foo".to_owned()]; "single")]

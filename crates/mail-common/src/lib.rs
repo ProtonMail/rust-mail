@@ -16,10 +16,12 @@ mod user_context;
 #[cfg(test)]
 mod tests;
 
-pub use context::*;
-pub use mailbox::*;
-pub use sidebar::*;
-pub use user_context::*;
+pub use context::{MailContext, MailContextError, MailContextResult};
+pub use mailbox::{decrypted_message, DecryptedAttachment, Mailbox, MailboxError, MailboxResult};
+pub use sidebar::{Sidebar, SidebarError, SidebarResult};
+pub use user_context::{
+    cache, MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
+};
 
 // re-exports
 use crate::datatypes::LabelType;

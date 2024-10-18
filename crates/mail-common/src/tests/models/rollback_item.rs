@@ -15,9 +15,10 @@ use wiremock::{
     Mock, MockServer, ResponseTemplate,
 };
 
-use crate::{
-    api_conversation, api_label, api_message, api_message_meta, conversation,
-    db::new_test_connection_file, label, message, tests::common::create_address,
+use proton_mail_test_utils::db::new_test_connection_file;
+use proton_mail_test_utils::{
+    api_conversation, api_label, api_message, api_message_meta, common::create_address,
+    conversation, label, message,
 };
 
 use super::*;

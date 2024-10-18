@@ -1,7 +1,3 @@
-mod common;
-
-use common::init::Params as TestParams;
-use common::TestContext;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -27,6 +23,8 @@ use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
 use proton_mail_common::Mailbox;
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
 use stash::orm::Model;
 use std::io::read_to_string;
 use std::iter;

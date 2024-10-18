@@ -1,7 +1,3 @@
-mod common;
-
-use crate::common::init::Params as TestParams;
-use common::TestContext;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Label as ApiLabel, MailSettings as ApiMailSettings,
@@ -11,6 +7,8 @@ use proton_core_common::datatypes::{Id, LabelId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
 use std::default::Default;
 use test_case::test_case;
 use velcro::hash_map;

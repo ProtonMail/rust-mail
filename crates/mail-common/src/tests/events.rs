@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
-use crate::db::new_test_connection;
 use proton_core_common::datatypes::RemoteId;
+use proton_mail_test_utils::db::new_test_connection;
 use stash::stash::Interface;
 
 #[tokio::test]

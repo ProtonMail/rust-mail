@@ -1,15 +1,15 @@
 use std::sync::LazyLock;
 
-use crate::datatypes::{
-    attachment, AttachmentMetadata, Disposition, MessageAddresses, SystemLabelId as _,
-};
-use crate::models::{Conversation, ConversationLabel, Label, Message};
-use crate::tests::common::{
+use crate::common::{
     test_address, test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
-use crate::tests::utils::TestDBState;
+use crate::utils::TestDBState;
 use lazy_static::lazy_static;
 use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_mail_common::datatypes::{
+    attachment, AttachmentMetadata, Disposition, MessageAddresses, SystemLabelId as _,
+};
+use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 
 // ------- TEST DATA -------
 

@@ -1,6 +1,6 @@
 use super::LabelAsAction;
 use crate::models::Label;
-use crate::{label, lid};
+use proton_mail_test_utils::{label, lid};
 use test_case::test_case;
 
 #[test_case(&[], |_| false, &[]; "TEST1: empty")]

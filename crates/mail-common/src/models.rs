@@ -40,7 +40,6 @@ use crate::actions::{
     ConversationAction, ConversationAvailableActions, LabelAsAction, MessageAction,
     MessageAvailableActions, MoveAction, ReplyAction,
 };
-use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
     self, attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
     AttachmentSignature, ComposerDirection, ComposerMode, ConversationCount, CustomLabel,
@@ -50,8 +49,9 @@ use crate::datatypes::{
     PmSignature, ShowImages, ShowMoved, SpamAction, SwipeAction, SystemLabel, SystemLabelId,
     ViewLayout, ViewMode,
 };
-use crate::decrypted_message::DecryptedMessageBody;
 use crate::find_in_query;
+use crate::mailbox::decrypted_message::DecryptedMessageBody;
+use crate::user_context::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
@@ -2669,7 +2669,7 @@ impl Conversation {
             if !is_conversation_in_view {
                 return Err(AppError::ConversationDoesNotHaveLabel(
                     conversation.local_id.unwrap(),
-                    view.name,
+                    view.name.clone(),
                 ));
             }
         }
@@ -4110,35 +4110,30 @@ impl From<ApiLabel> for Label {
     }
 }
 
-#[cfg(test)]
-mod default_label {
-    use crate::{datatypes::LabelType, models::Label};
-
-    impl Default for Label {
-        fn default() -> Self {
-            Self {
-                label_type: LabelType::Label,
-                local_id: Default::default(),
-                remote_id: Default::default(),
-                local_parent_id: Default::default(),
-                remote_parent_id: Default::default(),
-                color: Default::default(),
-                display: Default::default(),
-                expanded: Default::default(),
-                initialized_conv: Default::default(),
-                initialized_msg: Default::default(),
-                name: Default::default(),
-                notify: Default::default(),
-                display_order: Default::default(),
-                path: Default::default(),
-                sticky: Default::default(),
-                total_conv: Default::default(),
-                total_msg: Default::default(),
-                unread_conv: Default::default(),
-                unread_msg: Default::default(),
-                row_id: Default::default(),
-                stash: Default::default(),
-            }
+impl Default for Label {
+    fn default() -> Self {
+        Self {
+            label_type: LabelType::Label,
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            local_parent_id: Default::default(),
+            remote_parent_id: Default::default(),
+            color: Default::default(),
+            display: Default::default(),
+            expanded: Default::default(),
+            initialized_conv: Default::default(),
+            initialized_msg: Default::default(),
+            name: Default::default(),
+            notify: Default::default(),
+            display_order: Default::default(),
+            path: Default::default(),
+            sticky: Default::default(),
+            total_conv: Default::default(),
+            total_msg: Default::default(),
+            unread_conv: Default::default(),
+            unread_msg: Default::default(),
+            row_id: Default::default(),
+            stash: Default::default(),
         }
     }
 }
@@ -6560,47 +6555,42 @@ impl MessageLabelStats {
     }
 }
 
-#[cfg(test)]
-mod default_message {
-    use super::*;
-
-    impl Default for Message {
-        fn default() -> Self {
-            Self {
-                local_address_id: 0.into(),
-                remote_address_id: RemoteId::new(Default::default()),
-                // The rest are by default default.
-                flags: Default::default(),
-                local_id: Default::default(),
-                remote_id: Default::default(),
-                local_conversation_id: Default::default(),
-                remote_conversation_id: Default::default(),
-                attachments_metadata: Default::default(),
-                bcc_list: Default::default(),
-                cc_list: Default::default(),
-                deleted: Default::default(),
-                expiration_time: Default::default(),
-                external_id: Default::default(),
-                is_forwarded: Default::default(),
-                is_replied: Default::default(),
-                is_replied_all: Default::default(),
-                label_ids: Default::default(),
-                exclusive_location: Default::default(),
-                num_attachments: Default::default(),
-                display_order: Default::default(),
-                reply_tos: Default::default(),
-                sender: Default::default(),
-                size: Default::default(),
-                snooze_time: Default::default(),
-                subject: Default::default(),
-                time: Default::default(),
-                to_list: Default::default(),
-                unread: Default::default(),
-                cached: false,
-                custom_labels: Default::default(),
-                row_id: Default::default(),
-                stash: Default::default(),
-            }
+impl Default for Message {
+    fn default() -> Self {
+        Self {
+            local_address_id: 0.into(),
+            remote_address_id: RemoteId::new(Default::default()),
+            // The rest are by default default.
+            flags: Default::default(),
+            local_id: Default::default(),
+            remote_id: Default::default(),
+            local_conversation_id: Default::default(),
+            remote_conversation_id: Default::default(),
+            attachments_metadata: Default::default(),
+            bcc_list: Default::default(),
+            cc_list: Default::default(),
+            deleted: Default::default(),
+            expiration_time: Default::default(),
+            external_id: Default::default(),
+            is_forwarded: Default::default(),
+            is_replied: Default::default(),
+            is_replied_all: Default::default(),
+            label_ids: Default::default(),
+            exclusive_location: Default::default(),
+            num_attachments: Default::default(),
+            display_order: Default::default(),
+            reply_tos: Default::default(),
+            sender: Default::default(),
+            size: Default::default(),
+            snooze_time: Default::default(),
+            subject: Default::default(),
+            time: Default::default(),
+            to_list: Default::default(),
+            unread: Default::default(),
+            cached: false,
+            custom_labels: Default::default(),
+            row_id: Default::default(),
+            stash: Default::default(),
         }
     }
 }

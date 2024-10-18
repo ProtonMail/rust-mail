@@ -1,7 +1,5 @@
-mod common;
-
-use common::init::Params as TestParams;
-use common::TestContext;
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
 
 use ctor::ctor;
 

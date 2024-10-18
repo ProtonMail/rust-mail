@@ -1,14 +1,14 @@
-mod common;
-
-use crate::common::attachment::{testdata_attachment_data, testdata_expected_attachment_decrypted};
-use common::init::Params as TestParams;
-use common::TestContext;
 use proton_api_mail::services::proton::response_data::Attachment as ApiAttachment;
 use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_mail_common::cache::CacheAttachmentKey;
 use proton_mail_common::datatypes::{Disposition, SystemLabelId};
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::Mailbox;
+use proton_mail_test_utils::attachment::{
+    testdata_attachment_data, testdata_expected_attachment_decrypted,
+};
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface};
 use std::fs;

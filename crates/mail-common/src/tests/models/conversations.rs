@@ -2,22 +2,8 @@
 
 use super::super::*;
 use crate::datatypes::{
-    ContextualConversation, ConversationCount, LabelColor, LabelType, MessageAddress, MessageFlags,
+    ContextualConversation, ConversationCount, LabelType, MessageAddress, MessageFlags,
     SystemLabelId,
-};
-use crate::db::new_test_connection_file;
-use crate::label;
-use crate::tests::common::{
-    create_address, create_labels, test_conversation, test_starred_label, MY_ATTACHMENT_ID,
-    MY_LABEL_ID1, MY_LABEL_ID2,
-};
-use crate::tests::db_states::{
-    new_test_delete_db_state, new_test_label_db_state,
-    new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
-};
-use crate::tests::utils::{
-    conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
-    prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip, prepare_db_state_core,
 };
 use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
@@ -27,6 +13,20 @@ use proton_api_mail::services::proton::response_data::{
     Disposition as ApiDisposition,
 };
 use proton_core_common::datatypes::{Id, LabelId};
+use proton_mail_test_utils::common::{
+    create_address, create_labels, test_conversation, test_starred_label, MY_ATTACHMENT_ID,
+    MY_LABEL_ID1, MY_LABEL_ID2,
+};
+use proton_mail_test_utils::db::new_test_connection_file;
+use proton_mail_test_utils::db_states::{
+    new_test_delete_db_state, new_test_label_db_state,
+    new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
+};
+use proton_mail_test_utils::label;
+use proton_mail_test_utils::utils::{
+    conv_counts_as_map, message_counts_for_conversation, msg_counts_as_map,
+    prepare_and_patch_db_state, prepare_and_patch_db_state_and_skip, prepare_db_state_core,
+};
 use stash::orm::Model;
 use stash::params;
 
@@ -52,7 +52,7 @@ mod first_unread_message {
     &ALL_LABELS, &[], None; "TEST1 - empty messages"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED, false, &ALL_LABELS),], Some(0.into()); "TEST2 - read - recieved message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, false, &ALL_LABELS),], Some(0.into()); "TEST2 - read - received message"
 )]
     #[test_case(
     &ALL_LABELS, &[(MessageFlags::empty(), false, &ALL_LABELS),], None; "TEST3 - read - draft message"
@@ -64,13 +64,13 @@ mod first_unread_message {
     &ALL_LABELS, &[(MessageFlags::OPENED, true, &ALL_LABELS),], None; "TEST5 - unread - draft & opened message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true, &ALL_LABELS),], Some(0.into()); "TEST6 - unread - recieved & opened message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::OPENED, true, &ALL_LABELS),], Some(0.into()); "TEST6 - unread - received & opened message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED, true, &ALL_LABELS),], Some(0.into()); "TEST7 - unread - recieved message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED, true, &ALL_LABELS),], Some(0.into()); "TEST7 - unread - received message"
 )]
     #[test_case(
-    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true, &ALL_LABELS),], Some(0.into()); "TEST8 - unread - recieved & internal message"
+    &ALL_LABELS, &[(MessageFlags::RECEIVED | MessageFlags::INTERNAL, true, &ALL_LABELS),], Some(0.into()); "TEST8 - unread - received & internal message"
 )]
     #[test_case(
     &ALL_LABELS, &[(MessageFlags::SENT | MessageFlags::INTERNAL, true, &ALL_LABELS),], Some(0.into()); "TEST9 - unread - opened & internal message"
@@ -82,7 +82,7 @@ mod first_unread_message {
         (MessageFlags::RECEIVED | MessageFlags::INTERNAL | MessageFlags::OPENED, true, &ALL_LABELS),
         (MessageFlags::RECEIVED | MessageFlags::INTERNAL, true, &ALL_LABELS),
 
-    ], Some(2.into()); "TEST10 - all unread - recieved | internal | opened messages"
+    ], Some(2.into()); "TEST10 - all unread - received | internal | opened messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
@@ -90,7 +90,7 @@ mod first_unread_message {
         (MessageFlags::RECEIVED, true, &ALL_LABELS),
         (MessageFlags::empty(), true, &ALL_LABELS),
 
-    ], Some(0.into()); "TEST11 - all unread - recieved | draft messages"
+    ], Some(0.into()); "TEST11 - all unread - received | draft messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
@@ -98,7 +98,7 @@ mod first_unread_message {
         (MessageFlags::RECEIVED, true, &ALL_LABELS),
         (MessageFlags::empty(), false, &ALL_LABELS),
 
-    ], Some(0.into()); "TEST12 - some unread - recieved | draft messages"
+    ], Some(0.into()); "TEST12 - some unread - received | draft messages"
 )]
     #[test_case(
     &ALL_LABELS, &[
@@ -300,12 +300,11 @@ mod available_actions {
     use super::*;
     use crate::{
         actions::{ConversationAvailableActions, SystemFolderAction},
-        conversation,
         datatypes::SystemLabel,
-        db::new_test_connection,
-        rid,
     };
     use pretty_assertions::assert_eq;
+    use proton_mail_test_utils::db::new_test_connection;
+    use proton_mail_test_utils::{conversation, rid};
     use test_case::test_case;
 
     lazy_static! {
@@ -560,8 +559,9 @@ mod available_actions {
 
 mod available_label_as_actions {
     use super::*;
-    use crate::{conversation, db::new_test_connection, label, rid};
     use pretty_assertions::assert_eq;
+    use proton_mail_test_utils::db::new_test_connection;
+    use proton_mail_test_utils::{conversation, label, rid};
     use test_case::test_case;
 
     struct ConversationWithLabels {
@@ -699,12 +699,11 @@ mod available_label_as_actions {
 
 mod available_move_to_actions {
     use super::*;
-    use crate::{
-        conversation, datatypes::SystemLabel, db::new_test_connection, label, rid,
-        tests::common::remote_counterpart,
-    };
+    use crate::datatypes::SystemLabel;
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
+    use proton_mail_test_utils::db::new_test_connection;
+    use proton_mail_test_utils::{common::remote_counterpart, conversation, label, rid};
     use std::sync::LazyLock;
     use test_case::test_case;
 
@@ -2477,10 +2476,19 @@ async fn test_conversation_label_partially() {
     state.messages[1]
         .label_ids
         .push(MY_LABEL_ID1.clone().into());
-    state.conversations[0].labels.push(ConversationLabel {
-        remote_label_id: Some(MY_LABEL_ID1.clone().into()),
-        ..Default::default()
-    });
+    state.conversations[0].labels.push(
+        ApiConversationLabel {
+            id: MY_LABEL_ID1.clone().into(),
+            context_expiration_time: 0,
+            context_num_attachments: 0,
+            context_num_messages: 0,
+            context_num_unread: 0,
+            context_size: 0,
+            context_snooze_time: 0,
+            context_time: 0,
+        }
+        .into(),
+    );
     let (state, state_map) = prepare_and_patch_db_state(&tx, state).await;
 
     let local_conv_id = *state_map

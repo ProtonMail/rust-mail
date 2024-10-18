@@ -2,8 +2,7 @@ use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::{
-    PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
-    PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
+    PutMessagesLabelRequest, PutMessagesUnlabelRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageMetadata, OperationResult,
@@ -13,9 +12,7 @@ use proton_api_mail::services::proton::responses::{
     PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
     PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
-use proton_core_common::datatypes::RemoteId;
 use std::collections::HashSet;
-use std::path::Path;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 

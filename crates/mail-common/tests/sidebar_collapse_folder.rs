@@ -1,18 +1,16 @@
-use crate::common::init::Params;
-use crate::common::init::Params as TestParams;
-use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params;
+use proton_mail_test_utils::init::Params as TestParams;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
 use velcro::hash_map;
-
-mod common;
 
 #[tokio::test]
 async fn folder_expansion() {

@@ -1,6 +1,6 @@
 [package]
-name = "proton-mail-common"
-version = "0.8.0"
+name = "proton-mail-test-utils"
+version = "0.1.0"
 edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -9,12 +9,16 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
+#clap = { version = "4.5", features = ["derive"] }
+color-backtrace = { workspace = true }
+ctor = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 mime = { workspace = true }
+pretty_assertions = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
@@ -22,35 +26,28 @@ proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
-proton-mail-html-transformer = { version = "0.2.0", path = "../mail-html-transformer", registry = "proton" }
+proton-mail-common = { workspace = true }
+#proton-mail-html-transformer = { version = "0.2.0", path = "../mail-html-transformer", registry = "proton" }
 proton-sqlite3 = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 smart-default = { workspace = true }
 stash = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
-typed-builder = { workspace = true }
-url = { workspace = true }
-
-[dev-dependencies]
-clap = { version = "4.5", features = ["derive"] }
-ctor = { workspace = true }
-color-backtrace = { workspace = true }
-lazy_static = { workspace = true }
-pretty_assertions = { workspace = true }
-proton-api-core = { workspace = true }
-proton-api-mail = { workspace = true }
-proton-mail-test-utils = { workspace = true }
-secrecy = { workspace = true }
 tempdir = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-#tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
+tracing-test = { version = "0.2.4", features = ["no-env-filter"] }
+typed-builder = { workspace = true }
+url = { workspace = true }
 velcro = { workspace = true }
 wiremock = { workspace = true }
+
+[dev-dependencies]
 
 # not compatible with global clippy configuration yet
 # [lints]

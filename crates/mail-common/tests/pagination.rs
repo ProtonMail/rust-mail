@@ -1,7 +1,3 @@
-mod common;
-
-use crate::common::TestContext;
-use common::init::{NullCallback, Params as TestParams};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -17,6 +13,8 @@ use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Message};
 use proton_mail_common::{MailUserContext, Mailbox};
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
 use std::collections::HashMap;
 use std::sync::Arc;
 
