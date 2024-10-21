@@ -88,7 +88,12 @@ version = "0.7"
 path = "core/sqlite3"
 registry = "proton"
 
-[workspace.dependencies.proton-vcard]
+[workspace.dependencies.proton-canonical-email]
+version = "0.1"
+path = "core/proton-canonical-email"
+registry = "proton"
+
+[workspace.dependencies.proton-vcard] 
 version = "0.2"
 path = "core/vcard"
 registry = "proton"

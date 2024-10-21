@@ -1,0 +1,11 @@
+[package]
+name = "proton-canonical-email"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = {workspace = true}
+velcro = {workspace = true}
+
+[lints]
+workspace = true
