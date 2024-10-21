@@ -161,11 +161,11 @@ impl CanonicalizeScheme {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Clone)]
 #[serde(crate = "self::serde")]
-pub struct CanonicalEmail(pub String);
+pub struct CanonicalEmail(String);
 
 impl CanonicalEmail {
     /// Transforms the input to a canonical email with [`canonicalize`].
-    pub fn from_scheme<T: AsRef<str>>(value: T, scheme: CanonicalizeScheme) -> Self {
+    pub fn with_scheme<T: AsRef<str>>(value: T, scheme: CanonicalizeScheme) -> Self {
         canonicalize(value.as_ref(), scheme)
     }
 

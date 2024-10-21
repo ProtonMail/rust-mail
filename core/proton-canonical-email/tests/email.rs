@@ -1,7 +1,7 @@
 use proton_canonical_email::{CanonicalEmail, CanonicalizeScheme};
 
 fn test_canonicalize(email: &str, scheme: CanonicalizeScheme, expected: &str) {
-    let result = CanonicalEmail::from_scheme(email, scheme);
+    let result = CanonicalEmail::with_scheme(email, scheme);
     assert_eq!(result.as_str(), expected, "Failed on email: {email}");
 }
 
