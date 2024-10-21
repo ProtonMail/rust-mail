@@ -1,5 +1,5 @@
 use crate::errors::api_service_error::UserApiServiceError;
-use crate::errors::unexpected::UnexpectedError;
+use crate::errors::unexpected::Unexpected;
 use crate::mail::{LoginFlow, MailUserSession};
 use itertools::Itertools;
 use proton_api_core::services::proton::common::HumanVerificationType as RealHumanVerificationType;
@@ -41,7 +41,7 @@ pub enum UserLoginFlowError {
     InvalidAction(LoginReason),
     ServerError(UserApiServiceError),
     Network,
-    Unexpected(UnexpectedError),
+    Unexpected(Unexpected),
 }
 
 impl From<RealLoginFlowError> for UserLoginFlowError {
@@ -53,7 +53,7 @@ impl From<RealLoginFlowError> for UserLoginFlowError {
             }
             RealLoginFlowError::Network => Self::Network,
             RealLoginFlowError::Unexpected(unexpected) => {
-                Self::Unexpected(UnexpectedError::from(unexpected))
+                Self::Unexpected(Unexpected::from(unexpected))
             }
         }
     }

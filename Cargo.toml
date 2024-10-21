@@ -124,6 +124,11 @@ version = "0.12"
 path = "mail/mail-uniffi"
 registry = "proton"
 
+[workspace.dependencies.proton-uniffi-macros]
+version = "0.1"
+path = "mail/uniffi-macros"
+registry = "proton"
+
 [workspace.dependencies.proton-crypto-inbox]
 version = "0.7"
 registry = "proton"

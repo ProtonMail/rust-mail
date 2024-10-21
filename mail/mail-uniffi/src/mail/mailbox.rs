@@ -1,4 +1,4 @@
-mod attachments;
+pub mod attachments;
 
 use crate::core::datatypes::Id;
 use crate::mail::datatypes::ViewMode;

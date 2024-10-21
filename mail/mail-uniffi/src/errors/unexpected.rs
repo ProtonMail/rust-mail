@@ -2,7 +2,7 @@ use proton_mail_common::errors::unexpected::Unexpected as RealUnexpected;
 
 /// Categories for Unexpected error
 #[derive(Debug, uniffi::Enum)]
-pub enum UnexpectedError {
+pub enum Unexpected {
     /// Error related to API values (not API error)
     Api,
     /// Error related to cryptography
@@ -27,7 +27,7 @@ pub enum UnexpectedError {
     Unknown,
 }
 
-impl From<RealUnexpected> for UnexpectedError {
+impl From<RealUnexpected> for Unexpected {
     fn from(value: RealUnexpected) -> Self {
         match value {
             RealUnexpected::Api => Self::Api,
