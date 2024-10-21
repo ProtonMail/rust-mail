@@ -508,7 +508,7 @@ pub async fn available_move_to_actions_for_messages(
 /// # Parameters
 ///
 /// * `mailbox`     - The current Mailbox.
-/// * `message_ids` - The local IDs of the messages to calcualte available actions for.
+/// * `message_ids` - The local IDs of the messages to calculate available actions for.
 ///
 /// # Errors
 ///

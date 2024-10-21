@@ -32,6 +32,7 @@ pub enum BottomBarActions {
 }
 
 impl BottomBarActions {
+    /// Convert a MobileAction item into a BottomBarActions
     pub(crate) fn from_mobile_actions(
         mobile_actions: &MobileActions,
         any_unread: bool,
@@ -94,5 +95,74 @@ impl BottomBarActions {
         } else {
             Self::MoveToSystemFolder(SystemLabel::Trash)
         }
+    }
+
+    /// Get actions not displayed in bottom_bar when selecting messages or actions
+    pub(crate) fn hidden_bottom_bar_actions(
+        current_label: LabelId,
+        any_unread: bool,
+        any_read: bool,
+        any_unstarred: bool,
+        any_starred: bool,
+        visible_actions: &[BottomBarActions],
+    ) -> Vec<BottomBarActions> {
+        let mut result = Vec::new();
+
+        // Mark as read/unread
+        if any_unread && !visible_actions.contains(&BottomBarActions::MarkRead) {
+            result.push(BottomBarActions::MarkRead);
+        }
+        if any_read && !visible_actions.contains(&BottomBarActions::MarkUnread) {
+            result.push(BottomBarActions::MarkUnread);
+        }
+        // Star/Unstar
+        if any_unstarred && !visible_actions.contains(&BottomBarActions::Star) {
+            result.push(BottomBarActions::Star);
+        }
+        if any_starred && !visible_actions.contains(&BottomBarActions::Unstar) {
+            result.push(BottomBarActions::Unstar);
+        }
+        // Move to...
+        if !visible_actions.contains(&BottomBarActions::MoveTo) {
+            result.push(BottomBarActions::MoveTo);
+        }
+        // Label as...
+        if !visible_actions.contains(&BottomBarActions::LabelAs) {
+            result.push(BottomBarActions::LabelAs);
+        }
+        // Move to Inbox
+        if [LabelId::trash(), LabelId::archive()].contains(&current_label)
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox));
+        }
+        if current_label == LabelId::spam() && !visible_actions.contains(&BottomBarActions::NotSpam)
+        {
+            result.push(BottomBarActions::NotSpam);
+        }
+        // Archive
+        if current_label != LabelId::archive()
+            && !visible_actions
+                .contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Archive))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Archive));
+        }
+        // Move to Spam
+        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Spam))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Spam));
+        }
+        // Move to Trash
+        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Trash))
+        {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Trash));
+        }
+        // Snooze
+        if !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed)) {
+            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed));
+        }
+        result
     }
 }

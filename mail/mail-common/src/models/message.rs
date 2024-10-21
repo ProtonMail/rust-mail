@@ -6,8 +6,9 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions};
-use crate::datatypes::{ExclusiveLocation, LabelType, MobileActions, SystemLabel, SystemLabelId};
-use crate::models::{Label, MailSettings, Message};
+use crate::datatypes::{ExclusiveLocation, LabelType, MobileActions, SystemLabelId};
+use crate::find_in_query;
+use crate::models::{Label, Message};
 use crate::AppError;
 use anyhow::anyhow;
 use itertools::Itertools as _;
@@ -15,11 +16,11 @@ use proton_action_queue::queue::{ActionError, ActionOutput, ActionRemoteOutput, 
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
+use stash::exports::ToSql;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
 use tracing::{error, warn};
 
 impl Message {
@@ -508,22 +509,15 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        Message::find(
-            format!(
-                "WHERE local_id IN ({}) AND DELETED = 0",
-                message_ids.into_iter().join(", ")
-            ),
-            vec![],
-            interface,
-            None,
-        )
-        .await
+        let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", message_ids);
+        Message::find(query, params, interface, None).await
     }
 
     /// Get the available actions from bottom bar for given messages
     ///
     /// # Parameters
     ///
+    /// * `current_label_id`  - Id of the current mailbox.
     /// * `message_ids` - List of the messages IDs.
     /// * `interface`   - The database interface.
     ///
@@ -536,12 +530,12 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
-        let bottom_bar_actions = Self::bottom_bar_actions(interface).await?;
+        let bottom_bar_actions = MobileActions::bottom_bar_actions(interface).await?;
         let messages = Self::find_by_ids(message_ids.to_vec(), interface).await?;
         let visible_bottom_bar_actions =
             Self::visible_bottom_bar_actions(&current_label, &messages, &bottom_bar_actions)?;
         let hidden_bottom_bar_actions =
-            Self::hidden_bottom_bar_actions(current_label, messages, &visible_bottom_bar_actions);
+            Self::hidden_bottom_bar_actions(current_label, &messages, &visible_bottom_bar_actions);
 
         Ok(AllBottomBarMessageActions {
             hidden_bottom_bar_actions,
@@ -549,35 +543,10 @@ impl Message {
         })
     }
 
-    async fn bottom_bar_actions<A>(interface: &A) -> Result<Vec<MobileActions>, AppError>
-    where
-        A: Into<AgnosticInterface> + Interface,
-    {
-        let settings = MailSettings::get_or_default(interface).await;
-
-        if let Some(mobile_settings) = settings.mobile_settings {
-            if mobile_settings.message_toolbar.is_custom {
-                return mobile_settings
-                    .message_toolbar
-                    .actions
-                    .iter()
-                    .map(|a| MobileActions::from_str(a))
-                    .collect::<Result<_, _>>();
-            }
-        } else {
-            warn!("No mobile_settings defined in MailSettings");
-        }
-        Ok(vec![
-            MobileActions::ToggleRead,
-            MobileActions::Archive,
-            MobileActions::Trash,
-        ])
-    }
-
     /// Get actions to display in bottom_bar when selecting messages
     fn visible_bottom_bar_actions(
         current_label: &LabelId,
-        messages: &[Message],
+        messages: &[Self],
         bottom_bar_actions: &[MobileActions],
     ) -> Result<Vec<BottomBarActions>, AppError> {
         let any_unread = messages.iter().any(|m| m.unread);
@@ -600,75 +569,22 @@ impl Message {
     /// Get actions not displayed in bottom_bar when selecting messages
     fn hidden_bottom_bar_actions(
         current_label: LabelId,
-        messages: Vec<Message>,
+        messages: &[Self],
         visible_actions: &[BottomBarActions],
     ) -> Vec<BottomBarActions> {
-        let mut result = Vec::new();
+        let any_unread = messages.iter().any(|m| m.unread);
+        let any_read = messages.iter().any(|m| !m.unread);
+        let any_starred = messages.iter().any(|m| m.is_starred());
+        let any_unstarred = messages.iter().any(|m| !m.is_starred());
 
-        // Mark as read/unread
-        if messages.iter().any(|m| m.unread)
-            && !visible_actions.contains(&BottomBarActions::MarkRead)
-        {
-            result.push(BottomBarActions::MarkRead);
-        }
-        if messages.iter().any(|m| !m.unread)
-            && !visible_actions.contains(&BottomBarActions::MarkUnread)
-        {
-            result.push(BottomBarActions::MarkUnread);
-        }
-        // Star/Unstar
-        if messages.iter().any(|m| !m.is_starred())
-            && !visible_actions.contains(&BottomBarActions::Star)
-        {
-            result.push(BottomBarActions::Star);
-        }
-        if messages.iter().any(|m| m.is_starred())
-            && !visible_actions.contains(&BottomBarActions::Unstar)
-        {
-            result.push(BottomBarActions::Unstar);
-        }
-        // Move to...
-        if !visible_actions.contains(&BottomBarActions::MoveTo) {
-            result.push(BottomBarActions::MoveTo);
-        }
-        // Label as...
-        if !visible_actions.contains(&BottomBarActions::LabelAs) {
-            result.push(BottomBarActions::LabelAs);
-        }
-        // Move to Inbox
-        if [LabelId::trash(), LabelId::archive()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox))
-        {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox));
-        }
-        if current_label == LabelId::spam() && !visible_actions.contains(&BottomBarActions::NotSpam)
-        {
-            result.push(BottomBarActions::NotSpam);
-        }
-        // Archive
-        if current_label != LabelId::archive()
-            && !visible_actions
-                .contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Archive))
-        {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Archive));
-        }
-        // Move to Spam
-        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Spam))
-        {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Spam));
-        }
-        // Move to Trash
-        if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Trash))
-        {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Trash));
-        }
-        // Snooze
-        if !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed)) {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed));
-        }
-        result
+        BottomBarActions::hidden_bottom_bar_actions(
+            current_label,
+            any_unread,
+            any_read,
+            any_unstarred,
+            any_starred,
+            visible_actions,
+        )
     }
 
     /// Revert locally the LabelAs action for conversation.

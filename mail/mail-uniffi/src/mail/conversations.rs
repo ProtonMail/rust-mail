@@ -12,8 +12,8 @@
 use crate::core::datatypes::Id;
 use crate::core::paginator::ConversationPaginator;
 use crate::mail::datatypes::{
-    Conversation, ConversationAvailableActions, ConversationSearchOptions, LabelAsAction, Message,
-    MoveAction,
+    AllBottomBarMessageActions, Conversation, ConversationAvailableActions,
+    ConversationSearchOptions, LabelAsAction, Message, MoveAction,
 };
 use crate::mail::{MailSessionError, MailUserSession, Mailbox, MailboxError, MailboxResult};
 use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -188,6 +188,35 @@ pub async fn available_move_to_actions_for_conversations(
         .map_into()
         .collect_vec();
 
+        Ok(actions)
+    })
+    .await
+}
+
+/// Returns available actions for conversation bottom bar.
+///
+/// # Parameters
+///
+/// * `mailbox`          - The current Mailbox.
+/// * `conversation_ids` - The local IDs of the conversations to calculate available actions for.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi::export]
+pub async fn all_available_bottom_bar_actions_for_conversations(
+    mailbox: Arc<Mailbox>,
+    conversation_ids: Vec<Id>,
+) -> MailboxResult<AllBottomBarMessageActions> {
+    uniffi_async(async move {
+        let actions = RealConversation::all_available_bottom_bar_actions_for_conversations(
+            mailbox.label_id().into(),
+            conversation_ids.into_iter().map_into().collect(),
+            mailbox.stash(),
+        )
+        .await?
+        .into();
         Ok(actions)
     })
     .await

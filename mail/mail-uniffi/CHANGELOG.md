@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+  - `all_available_bottom_bar_actions_for_conversations` function who return available actions for conversations in bottom bar.
   - `GeneralActions::ViewMessageInDarkMode` general action.
   - `Draft` type to create/open draft messages
 
