@@ -5,12 +5,7 @@ edition = "2021"
 
 [dependencies]
 serde = {workspace = true}
-stash = {workspace = true, optional = true}
 velcro = {workspace = true}
 
 [lints]
 workspace = true
-
-[features]
-default = []
-sql = ["dep:stash"]

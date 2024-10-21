@@ -5,9 +5,6 @@ use serde::{self, Deserialize, Serialize};
 
 use velcro::hash_set;
 
-#[cfg(feature = "sql")]
-use stash::exports::{FromSql, ToSql};
-
 macro_rules! create_domain_set {
     ($fn_name:ident, $const_name:ident) => {
         fn $fn_name() -> &'static std::collections::HashSet<&'static str> {
@@ -185,24 +182,6 @@ impl<T: AsRef<str>> From<T> for CanonicalEmail {
 impl Display for CanonicalEmail {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-#[cfg(feature = "sql")]
-impl ToSql for CanonicalEmail {
-    fn to_sql(
-        &self,
-    ) -> proton_sqlite3::rusqlite::Result<proton_sqlite3::rusqlite::types::ToSqlOutput<'_>> {
-        self.0.to_sql()
-    }
-}
-
-#[cfg(feature = "sql")]
-impl FromSql for CanonicalEmail {
-    fn column_result(
-        value: proton_sqlite3::rusqlite::types::ValueRef<'_>,
-    ) -> proton_sqlite3::rusqlite::types::FromSqlResult<Self> {
-        String::column_result(value).map(CanonicalEmail)
     }
 }
 
