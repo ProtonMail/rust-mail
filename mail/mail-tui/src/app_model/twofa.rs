@@ -5,9 +5,9 @@ use crate::messages::Messages;
 use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
-use crossterm::event::{Event, KeyCode};
 use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
 use proton_mail_common::MailContext;
+use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
 
@@ -144,7 +144,7 @@ impl AppStateHandler for Model {
         );
 
         let (x, y) = self.input_state.frame_cursor();
-        frame.set_cursor(x, y);
+        frame.set_cursor_position(Position { x, y });
     }
 
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {

@@ -1,0 +1,304 @@
+use crate::app::Command;
+use crate::app_model::mailbox::model::StateHandler;
+use crate::app_model::mailbox::{BackgroundSender, Message};
+use crate::messages::Messages;
+use crate::widgets::{utils, TextInput, TextInputState};
+use crossterm::event::KeyCode;
+use proton_core_common::datatypes::LocalId;
+use proton_mail_common::draft::{Draft, ReplyMode};
+use proton_mail_common::models::MailSettings;
+use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
+use ratatui::crossterm::event::Event;
+use ratatui::layout::Rect;
+use ratatui::prelude::*;
+use ratatui::widgets::{Block, Borders, Clear};
+use ratatui::Frame;
+use std::io::Cursor;
+use std::sync::Arc;
+use tracing::error;
+use tui_textarea::TextArea;
+
+/// Composer to edit and view drafts.
+pub struct Composer {
+    _draft: Draft,
+    text_area: TextArea<'static>,
+    selected_input: SelectedInput,
+    sender_input_state: TextInputState,
+    to_input_state: TextInputState,
+    cc_input_state: TextInputState,
+    bcc_input_state: TextInputState,
+    subject_input_state: TextInputState,
+}
+
+impl Composer {
+    /// Create a new draft.
+    pub fn empty(ctx: Arc<MailUserContext>) -> Command<Messages> {
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Creating new draft...".to_owned(),
+            )),
+            Command::task(async move {
+                Command::batch([
+                    Command::message(Messages::DismissBackgroundProgress),
+                    match Draft::action_create_empty(ctx.queue()).await {
+                        Ok(queue_result) => Command::message(
+                            Message::OpenComposer(Composer::new(queue_result.local)).into(),
+                        ),
+                        Err(e) => {
+                            error!("Failed to create new draft:{e}");
+                            Command::Message(Messages::DisplayError(
+                                None,
+                                MailContextError::from(e).into(),
+                            ))
+                        }
+                    },
+                ])
+            }),
+        ])
+    }
+
+    /// Reply to a message with `message_id`.
+    ///
+    /// If the message is not a draft an error will be returned.
+    pub fn reply(
+        context: Arc<MailUserContext>,
+        message_id: LocalId,
+        reply_mode: ReplyMode,
+    ) -> Command<Messages> {
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Creating draft reply...".to_owned(),
+            )),
+            Command::task(async move {
+                Command::batch([
+                    Command::message(Messages::DismissBackgroundProgress),
+                    match Draft::action_create_reply(context.queue(), reply_mode, message_id).await
+                    {
+                        Ok(queue_output) => Command::message(
+                            Message::OpenComposer(Composer::new(queue_output.local)).into(),
+                        ),
+                        Err(e) => {
+                            error!("Failed to open message in composer: {e}");
+                            Command::batch([
+                                Command::message(Message::CloseComposer.into()),
+                                Command::message(Messages::DisplayError(None, e.into())),
+                            ])
+                        }
+                    },
+                ])
+            }),
+        ])
+    }
+
+    /// Open an existing draft with for `message_id`.
+    ///
+    /// If the message is not a draft an error will be returned.
+    pub fn open(context: Arc<MailUserContext>, message_id: LocalId) -> Command<Messages> {
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Opening draft...".to_owned(),
+            )),
+            Command::task(async move {
+                Command::batch([
+                    Command::message(Messages::DismissBackgroundProgress),
+                    match Draft::open(&context, message_id).await {
+                        Ok(draft) => {
+                            Command::message(Message::OpenComposer(Composer::new(draft)).into())
+                        }
+                        Err(e) => {
+                            error!("Failed to open message in composer: {e}");
+                            Command::batch([
+                                Command::message(Message::CloseComposer.into()),
+                                Command::message(Messages::from(e)),
+                            ])
+                        }
+                    },
+                ])
+            }),
+        ])
+    }
+
+    fn new(draft: Draft) -> Self {
+        let sender = utils::format_sender(&draft.sender);
+        let to_list = utils::format_senders_slice(&draft.to_list);
+        let cc_list = utils::format_senders_slice(&draft.cc_list);
+        let bcc_list = utils::format_senders_slice(&draft.bcc_list);
+        let config = html2text::config::plain();
+        let cursor = Cursor::new(&draft.body);
+        let text = config
+            .string_from_read(cursor, 80)
+            .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
+        let text_area = TextArea::new(text.split('\n').map(str::to_owned).collect());
+        let subject = draft.subject.clone();
+        Self {
+            _draft: draft,
+            text_area,
+            selected_input: SelectedInput::To,
+            sender_input_state: TextInputState::with_value(sender),
+            to_input_state: TextInputState::with_value(to_list).selected(true),
+            cc_input_state: TextInputState::with_value(cc_list),
+            bcc_input_state: TextInputState::with_value(bcc_list),
+            subject_input_state: TextInputState::with_value(subject),
+        }
+    }
+}
+
+impl StateHandler for Composer {
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let area = area.inner(Margin {
+            horizontal: 4,
+            vertical: 2,
+        });
+
+        frame.render_widget(Block::new().title("Composer").borders(Borders::ALL), area);
+
+        let area = area.inner(Margin {
+            horizontal: 1,
+            vertical: 1,
+        });
+
+        frame.render_widget(Clear {}, area);
+
+        let [sender_area, to_area, cc_area, bcc_area, subject_area, box_area, message_area, footer] =
+            Layout::vertical([
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(1),
+                Constraint::Percentage(100),
+                Constraint::Length(1),
+            ])
+            .areas(area);
+
+        for (title, state, area, input_selection) in [
+            ("From: ", &mut self.sender_input_state, sender_area, None),
+            (
+                "To: ",
+                &mut self.to_input_state,
+                to_area,
+                Some(SelectedInput::To),
+            ),
+            (
+                "CC: ",
+                &mut self.cc_input_state,
+                cc_area,
+                Some(SelectedInput::Cc),
+            ),
+            (
+                "BCC: ",
+                &mut self.bcc_input_state,
+                bcc_area,
+                Some(SelectedInput::Bcc),
+            ),
+            (
+                "Subject: ",
+                &mut self.subject_input_state,
+                subject_area,
+                Some(SelectedInput::Subject),
+            ),
+        ] {
+            frame.render_stateful_widget(TextInput::new(title), area, state);
+            if let Some(input_selection) = input_selection {
+                if input_selection == self.selected_input {
+                    let (x, y) = state.frame_cursor();
+                    frame.set_cursor_position(Position { x, y });
+                }
+            }
+        }
+
+        frame.render_widget(Block::new().borders(Borders::TOP), box_area);
+
+        frame.render_widget(&self.text_area, message_area);
+
+        let help_text = vec![
+            Span::from(" Esc: ").bold(),
+            Span::from("Exit"),
+            Span::from(" Tab: ").bold(),
+            Span::from("Switch"),
+            Span::from(" Shift+Tab: ").bold(),
+            Span::from("Switch"),
+            Span::from(" S: ").bold(),
+            Span::from("Switch"),
+        ];
+        frame.render_widget(Block::new().style(Style::new().reversed()), footer);
+        frame.render_widget(Line::from(help_text), footer);
+    }
+
+    fn handle_event(&mut self, _: &Mailbox, event: Event) -> Command<Messages> {
+        if let Event::Key(key) = &event {
+            match key.code {
+                KeyCode::Esc => return Command::message(Message::CloseComposer.into()),
+                KeyCode::Tab => {
+                    match self.selected_input {
+                        SelectedInput::To => {
+                            self.to_input_state.set_selected(false);
+                            self.selected_input = SelectedInput::Cc;
+                            self.cc_input_state.set_selected(true);
+                        }
+                        SelectedInput::Cc => {
+                            self.cc_input_state.set_selected(false);
+                            self.selected_input = SelectedInput::Bcc;
+                            self.bcc_input_state.set_selected(true);
+                        }
+                        SelectedInput::Bcc => {
+                            self.bcc_input_state.set_selected(false);
+                            self.selected_input = SelectedInput::Subject;
+                            self.subject_input_state.set_selected(true);
+                        }
+                        SelectedInput::Subject => {
+                            self.subject_input_state.set_selected(false);
+                            self.selected_input = SelectedInput::Body;
+                        }
+                        SelectedInput::Body => {
+                            self.selected_input = SelectedInput::To;
+                            self.to_input_state.set_selected(true);
+                        }
+                    };
+                    return Command::none();
+                }
+                _ => {}
+            };
+        }
+        match self.selected_input {
+            SelectedInput::To => {
+                self.to_input_state.handle_event(&event);
+            }
+            SelectedInput::Cc => {
+                self.cc_input_state.handle_event(&event);
+            }
+            SelectedInput::Bcc => {
+                self.bcc_input_state.handle_event(&event);
+            }
+            SelectedInput::Subject => {
+                self.subject_input_state.handle_event(&event);
+            }
+            SelectedInput::Body => {
+                self.text_area.input(tui_textarea::Input::from(event));
+            }
+        }
+
+        Command::none()
+    }
+
+    async fn update(
+        &mut self,
+        _ctx: &MailContext,
+        _message: Message,
+        _mbox: &Mailbox,
+        _mail_settings: &Arc<MailSettings>,
+        _sender: &BackgroundSender,
+    ) -> Command<Messages> {
+        Command::none()
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum SelectedInput {
+    To,
+    Cc,
+    Bcc,
+    Subject,
+    Body,
+}

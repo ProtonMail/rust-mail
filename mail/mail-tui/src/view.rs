@@ -1,5 +1,5 @@
 use crate::widgets::HelpCategory;
-use crossterm::event::Event;
+use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::Frame;
 

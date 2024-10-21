@@ -1,4 +1,5 @@
 use crate::app::Command;
+use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
@@ -8,7 +9,7 @@ use crate::app_model::{AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
-use crossterm::event::Event;
+use crossterm::event::{KeyCode, KeyModifiers};
 use flume::{Receiver, Sender};
 use futures::FutureExt;
 use log::warn;
@@ -19,6 +20,7 @@ use proton_mail_common::models::{Label, MailSettings};
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
 };
+use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
 use stash::orm::ResultsetChange;
@@ -40,7 +42,7 @@ impl State {
 }
 
 pub(super) trait StateHandler {
-    fn handle_event(&mut self, event: Event) -> Command<Messages>;
+    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages>;
 
     async fn update(
         &mut self,
@@ -60,6 +62,7 @@ pub struct Model {
     label_watcher: Option<WatchHandle>,
     state: State,
     cancel_token: Option<Sender<()>>,
+    composer: Option<Composer>,
 }
 
 impl Model {
@@ -79,6 +82,7 @@ impl Model {
             label,
             cancel_token: None,
             label_watcher: None,
+            composer: None,
         })
     }
 
@@ -298,13 +302,22 @@ impl AppStateHandler for Model {
         Command::message(Message::Sync(self.mailbox.clone()).into())
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        if let Some(composer) = &mut self.composer {
+            return composer.handle_event(&self.mailbox, event);
+        } else if let Event::Key(key) = &event {
+            if key.code == KeyCode::Char('n') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                let ctx = self.mailbox.user_context();
+                return Composer::empty(ctx);
+            }
+        }
+
         match &mut self.state {
             State::Syncing(_) => {
                 // Do nothing
                 Command::None
             }
-            State::Conversations(state) => state.handle_event(event),
-            State::Messages(state) => state.handle_event(event),
+            State::Conversations(state) => state.handle_event(&self.mailbox, event),
+            State::Messages(state) => state.handle_event(&self.mailbox, event),
         }
     }
 
@@ -317,6 +330,17 @@ impl AppStateHandler for Model {
         let Messages::Mailbox(message) = message else {
             return Command::None;
         };
+
+        if matches!(&message, Message::CloseComposer) {
+            self.composer = None;
+            return Command::None;
+        }
+
+        if let Some(composer) = &mut self.composer {
+            return composer
+                .update(ctx, message, &self.mailbox, &self.mail_settings, sender)
+                .await;
+        }
 
         match message {
             Message::Sync(mbox) => self.sync_mailbox(mbox, sender.clone()),
@@ -341,11 +365,22 @@ impl AppStateHandler for Model {
                 self.label = label;
                 Command::None
             }
+            Message::OpenComposer(composer) => {
+                self.composer = Some(composer);
+                Command::None
+            }
+            Message::CloseComposer => {
+                self.composer = None;
+                Command::None
+            }
         }
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
         self.state.view(frame, area);
+        if let Some(composer) = &mut self.composer {
+            composer.view(frame, area);
+        }
     }
 
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
@@ -378,6 +413,14 @@ impl AppStateHandler for Model {
             Span::from("Msg. Up"),
             Span::from(" Shift+▼: ").bold(),
             Span::from("Msg. Down"),
+            Span::from(" Crtl+N: ").bold(),
+            Span::from("New Msg."),
+            Span::from(" Crtl+R: ").bold(),
+            Span::from("Reply Msg."),
+            Span::from(" Crtl+T: ").bold(),
+            Span::from("Reply All Msg."),
+            Span::from(" Crtl+F: ").bold(),
+            Span::from("Forward Msg."),
         ];
         frame.render_widget(Line::from(spans), area);
     }
@@ -413,11 +456,11 @@ impl AppStateHandler for Model {
 }
 
 impl StateHandler for State {
-    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages> {
         match self {
             State::Syncing(_) => Command::None,
-            State::Conversations(state) => state.handle_event(event),
-            State::Messages(state) => state.handle_event(event),
+            State::Conversations(state) => state.handle_event(mbox, event),
+            State::Messages(state) => state.handle_event(mbox, event),
         }
     }
 

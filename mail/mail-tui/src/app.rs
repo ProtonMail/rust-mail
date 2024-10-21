@@ -1,8 +1,8 @@
 use crate::TerminalType;
 use anyhow::anyhow;
-use crossterm::event;
-use crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 use flume::{Receiver, Sender};
+use ratatui::crossterm::event;
+use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::prelude::*;
 use std::future::Future;
 use std::io;

@@ -33,14 +33,14 @@ impl KeyChain for AppKeyChain {
         let key = SecretString::new(key);
         self.entry
             .set_password(key.expose_secret())
-            .map_err(|e| KeyChainError::from(anyhow!(e)))?;
+            .map_err(|e| KeyChainError::new(anyhow!(e).into()))?;
         Ok(())
     }
 
     fn delete(&self) -> Result<(), KeyChainError> {
         if let Err(e) = self.entry.delete_credential() {
             if !matches!(e, keyring::Error::NoEntry) {
-                return Err(KeyChainError::from(anyhow!(e)));
+                return Err(KeyChainError::new(anyhow!(e).into()));
             }
         }
         Ok(())
@@ -51,7 +51,7 @@ impl KeyChain for AppKeyChain {
             Ok(str) => Ok(Some(str)),
             Err(e) => match e {
                 keyring::Error::NoEntry => Ok(None),
-                _ => Err(KeyChainError::from(anyhow!(e))),
+                _ => Err(KeyChainError::new(anyhow!(e).into())),
             },
         }
     }

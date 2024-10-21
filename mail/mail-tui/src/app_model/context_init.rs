@@ -4,11 +4,11 @@ use crate::app_model::{mailbox, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
-use crossterm::event::Event;
 use proton_mail_common::{
     MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage,
 };
+use ratatui::crossterm::event::Event;
 use ratatui::prelude::*;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;

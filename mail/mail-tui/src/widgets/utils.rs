@@ -32,3 +32,10 @@ pub fn format_senders(senders: &MessageAddresses) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
+pub fn format_senders_slice(senders: &[MessageAddress]) -> String {
+    senders
+        .iter()
+        .map(format_sender)
+        .collect::<Vec<_>>()
+        .join(", ")
+}

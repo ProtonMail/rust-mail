@@ -8,12 +8,12 @@ use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
-use crossterm::event::{Event, KeyCode};
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::models::{Conversation, MailSettings};
 use proton_mail_common::{MailContext, Mailbox, MailboxResult};
+use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::Frame;
@@ -125,7 +125,7 @@ impl ConversationsState {
 }
 
 impl StateHandler for ConversationsState {
-    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages> {
         let Event::Key(key) = &event else {
             return Command::None;
         };
@@ -134,7 +134,7 @@ impl StateHandler for ConversationsState {
             MessagesStatus::Loading(_) => return Command::None,
             MessagesStatus::Ready(message_state) => {
                 let is_esc = key.code == KeyCode::Esc;
-                let msg = message_state.handle_event(event);
+                let msg = message_state.handle_event(mbox, event);
                 return if msg.is_none() && is_esc {
                     Command::message(ConversationMessage::CloseConversation.into())
                 } else {

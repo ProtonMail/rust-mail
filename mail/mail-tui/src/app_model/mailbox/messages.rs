@@ -1,6 +1,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use crate::app::Command;
+use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{BackgroundSender, Item, Message, MessageMessage};
 use crate::app_model::watcher::WatchHandle;
@@ -11,13 +12,14 @@ use crate::widgets::{
     ScrollableTableState,
 };
 use anyhow::anyhow;
-use crossterm::event::{Event, KeyCode, KeyModifiers};
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::{ContextualConversation, MimeType};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
+use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::models::{MailSettings, Message as MailMessage};
 use proton_mail_common::{AppError, MailContext, Mailbox, MailboxResult};
+use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
@@ -192,7 +194,8 @@ impl MessagesState {
 }
 
 impl StateHandler for MessagesState {
-    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+    #[allow(clippy::too_many_lines)]
+    fn handle_event(&mut self, mbox: &Mailbox, event: Event) -> Command<Messages> {
         let Event::Key(key) = event else {
             return Command::None;
         };
@@ -232,14 +235,48 @@ impl StateHandler for MessagesState {
                 self.table_state.next();
                 Command::None
             }
+            KeyCode::Char('e') => {
+                let context = mbox.user_context();
+                self.selected_message_id()
+                    .map(|id| Composer::open(context, id))
+                    .unwrap_or_default()
+            }
             KeyCode::Char('u') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::MarkMessageUnread(id).into()))
                 .unwrap_or_default(),
             KeyCode::Char('r') => self
                 .selected_message_id()
-                .map(|id| Command::message(MessageMessage::MarkMessageRead(id).into()))
+                .map(|id| {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        if key.modifiers.contains(KeyModifiers::SHIFT) {
+                            Composer::reply(mbox.user_context(), id, ReplyMode::All)
+                        } else {
+                            Composer::reply(mbox.user_context(), id, ReplyMode::Sender)
+                        }
+                    } else {
+                        Command::message(MessageMessage::MarkMessageRead(id).into())
+                    }
+                })
                 .unwrap_or_default(),
+            KeyCode::Char('f') => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.selected_message_id()
+                        .map(|id| Composer::reply(mbox.user_context(), id, ReplyMode::Forward))
+                        .unwrap_or_default()
+                } else {
+                    Command::None
+                }
+            }
+            KeyCode::Char('t') => {
+                if key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.selected_message_id()
+                        .map(|id| Composer::reply(mbox.user_context(), id, ReplyMode::All))
+                        .unwrap_or_default()
+                } else {
+                    Command::None
+                }
+            }
             KeyCode::Char('d') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::DeleteMessage(id).into()))

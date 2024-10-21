@@ -10,8 +10,8 @@ use crate::app_model::mailbox::BackgroundSender;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use anyhow::anyhow;
-use crossterm::event::{Event, KeyCode, KeyEventKind};
 use proton_mail_common::MailContext;
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
@@ -228,11 +228,13 @@ impl Model<Messages> for AppModel {
             _ => message,
         };
 
+        // TODO: use async commands to perform async queries
+        #[allow(clippy::large_futures)]
         self.state.update(&self.context, message, sender).await
     }
 
     fn view(&mut self, frame: &mut Frame) {
-        let area = frame.size();
+        let area = frame.area();
         let [help_area, view_area, status_bar_area] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Percentage(100),
@@ -451,7 +453,7 @@ impl BackgroundProgress {
     }
 
     fn draw(&mut self, frame: &mut Frame) {
-        let area = frame.size();
+        let area = frame.area();
         let [_, content, _] = Layout::vertical([
             Constraint::Percentage(50),
             Constraint::Length(3),

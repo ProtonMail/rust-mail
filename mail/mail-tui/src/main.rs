@@ -36,6 +36,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
+    // TODO: use async commands to perform async queries
+    #[allow(clippy::large_futures)]
     let result = app.run(terminal).await;
     stdout().execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;

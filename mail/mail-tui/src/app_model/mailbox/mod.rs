@@ -1,9 +1,11 @@
+mod composer;
 mod conversations;
 mod messages;
 mod model;
 mod popups;
 
 use crate::app::Command;
+use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
 use crate::messages::Messages;
 use flume::Sender;
@@ -28,6 +30,8 @@ pub enum Message {
     LabelRefreshed(Label),
     #[allow(clippy::enum_variant_names)]
     MessageState(MessageMessage),
+    OpenComposer(Composer),
+    CloseComposer,
 }
 /// Messages related to conversation actions.
 pub enum ConversationMessage {
