@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members  = ["crates/*", "xtask"]
+members  = ["crates/*", "mail/*", "xtask"]
 
 [workspace.dependencies]
 aes-gcm = { version = "0.10", features = ["zeroize", "std"] }
@@ -87,7 +87,7 @@ registry = "proton"
 
 [workspace.dependencies.proton-mail-test-utils] 
 version = "0.1"
-path = "crates/mail-test-utils"
+path = "mail/test-utils"
 registry = "proton" 
 
 [workspace.dependencies.proton-sqlite3] 
