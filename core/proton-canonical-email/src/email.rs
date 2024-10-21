@@ -3,6 +3,8 @@ use std::fmt::Display;
 
 use serde::{self, Deserialize, Serialize};
 
+use velcro::hash_set;
+
 #[cfg(feature = "sql")]
 use stash::exports::{FromSql, ToSql};
 
@@ -12,11 +14,7 @@ macro_rules! create_domain_set {
             use std::collections::HashSet;
             use std::sync::OnceLock;
             static HASHSET: OnceLock<HashSet<&'static str>> = OnceLock::new();
-            HASHSET.get_or_init(|| {
-                let mut m = HashSet::with_capacity($const_name.len());
-                m.extend($const_name.iter().cloned());
-                m
-            })
+            HASHSET.get_or_init(|| hash_set![..$const_name])
         }
     };
 }
