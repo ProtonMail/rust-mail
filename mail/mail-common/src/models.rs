@@ -6292,7 +6292,7 @@ impl Message {
 
         let (mut message, _) = futures::try_join!(
             Message::find(
-                "WHERE local_id=?",
+                "WHERE local_id=? AND messages.deleted = 0",
                 params![local_id],
                 interface,
                 Some(msg_sender),
@@ -6428,6 +6428,7 @@ impl Message {
                     ON messages.local_id = message_labels.local_message_id
                 WHERE
                     message_labels.local_label_id = ?
+                    AND messages.deleted = 0
                 ORDER BY messages.time DESC, display_order DESC
                 "
             ),
@@ -6460,7 +6461,7 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         Message::find(
-            "WHERE local_conversation_id = ? ORDER BY time ASC, display_order ASC",
+            "WHERE local_conversation_id = ? AND messages.deleted = 0 ORDER BY time ASC, display_order ASC",
             params![local_conversation_id],
             interface,
             queue,
@@ -6495,6 +6496,7 @@ impl Message {
                     ON messages.local_id = message_labels.local_message_id
                 WHERE
                     message_labels.local_label_id = ?
+                    AND messages.deleted = 0
                 ORDER BY
                     messages.time DESC,
                     messages.display_order DESC
