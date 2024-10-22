@@ -5869,7 +5869,7 @@ impl Message {
             r"
         WHERE
           expiration_time < STRFTIME('%s', 'NOW')
-          AND deleted = 0;
+          AND expiration_time != 0
         ",
             vec![],
             interface,
