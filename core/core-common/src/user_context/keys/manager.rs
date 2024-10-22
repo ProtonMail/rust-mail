@@ -207,7 +207,7 @@ impl CryptoKeyManager {
             let imported_key = key.to_unlocked_key(pgp_provider)?;
             unlocked_user_keys.push(imported_key);
         }
-        Ok(unlocked_user_keys)
+        Ok(unlocked_user_keys.into())
     }
 
     /// Helper function to load address keys from the internal cache.
@@ -220,7 +220,7 @@ impl CryptoKeyManager {
             let imported_key = key.to_unlocked_key(pgp_provider)?;
             unlocked_address_keys.push(imported_key);
         }
-        Ok(unlocked_address_keys)
+        Ok(unlocked_address_keys.into())
     }
 
     /// Helper function to load and unlock user address keys from the DB.
@@ -243,6 +243,7 @@ impl CryptoKeyManager {
             .await?;
         let passphrase = secret_load_fn
             .key_secret()
+            .await
             .map(|user_key_secret| user_key_secret.0);
         // Unlock the address keys.
         let unlock_result = address
@@ -255,7 +256,7 @@ impl CryptoKeyManager {
         }
         // Update the cache.
         self.update_address_key_cache(pgp_provider, address_id, &unlock_result.unlocked_keys)?;
-        Ok(unlock_result.unlocked_keys)
+        Ok(unlock_result.unlocked_keys.into())
     }
 
     /// Helper function to load and unlock user keys from the DB.
@@ -274,6 +275,7 @@ impl CryptoKeyManager {
         // Load the user secret to unlock the key.
         let pw = secret_loader
             .key_secret()
+            .await
             .ok_or(KeyHandlingError::NoUserSecret)?;
         // Unlock the keys.
         let unlock_result = user.keys.unlock(pgp_provider, pw.expose_secret());
@@ -284,6 +286,6 @@ impl CryptoKeyManager {
         }
         // Update the cache.
         self.update_user_key_cache(pgp_provider, &unlock_result.unlocked_keys)?;
-        Ok(unlock_result.unlocked_keys)
+        Ok(unlock_result.unlocked_keys.into())
     }
 }
