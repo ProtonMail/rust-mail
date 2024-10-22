@@ -64,6 +64,8 @@ macro_rules! rid {
 #[macro_export]
 macro_rules! label {
     ($($field:tt)*) => {{
+        use proton_mail_common::models::Label;
+
         Label {
             $($field)*,
             ..Default::default()
@@ -86,6 +88,8 @@ macro_rules! api_label {
 #[macro_export]
 macro_rules! message {
     ($($field:tt)*) => {{
+        use proton_mail_common::models::Message;
+
         Message {
             $($field)*,
             ..Default::default()
@@ -120,6 +124,8 @@ macro_rules! api_message_meta {
 #[macro_export]
 macro_rules! conversation {
     ($($field:tt)*) => {{
+        use proton_mail_common::models::Conversation;
+
         Conversation {
             $($field)*,
             ..Default::default()

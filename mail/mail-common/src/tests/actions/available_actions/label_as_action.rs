@@ -1,4 +1,5 @@
 use super::LabelAsAction;
+use crate as proton_mail_common;
 use crate::models::Label;
 use proton_mail_test_utils::{label, lid};
 use test_case::test_case;

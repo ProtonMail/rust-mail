@@ -1,4 +1,5 @@
 use super::{CustomFolderAction, MoveAction, SystemFolderAction};
+use crate as proton_mail_common;
 use crate::datatypes::{LabelType, SystemLabel};
 use crate::models::Label;
 use itertools::Itertools;

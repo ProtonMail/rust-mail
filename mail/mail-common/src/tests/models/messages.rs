@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use super::super::*;
+use crate as proton_mail_common;
 use crate::datatypes::{
     attachment, ContextualConversation, ExclusiveLocation, MessageCount, MessageFlags, SystemLabel,
     SystemLabelId,
