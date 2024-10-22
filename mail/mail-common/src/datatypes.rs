@@ -44,7 +44,7 @@ pub mod labels;
 mod rollback_item_type;
 pub(crate) mod system_label;
 
-use crate::models::{Label, MessageBodyMetadata};
+use crate::models::{Label, MailSettings, MessageBodyMetadata};
 use crate::AppError;
 pub use contextual_conversation::*;
 use core::fmt;
@@ -76,11 +76,13 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
+use stash::stash::{AgnosticInterface, Interface};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 pub use system_label::SystemLabel;
+use tracing::warn;
 //  ENUMS
 //==============================================================================
 
@@ -1534,6 +1536,34 @@ pub enum MobileActions {
     Trash,
     ViewHeaders,
     ViewHTML,
+}
+
+impl MobileActions {
+    /// Compute the actions to be seen in the bottom bar
+    pub(crate) async fn bottom_bar_actions<A>(interface: &A) -> Result<Vec<MobileActions>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let settings = MailSettings::get_or_default(interface).await;
+
+        if let Some(mobile_settings) = settings.mobile_settings {
+            if mobile_settings.message_toolbar.is_custom {
+                return mobile_settings
+                    .message_toolbar
+                    .actions
+                    .iter()
+                    .map(|a| MobileActions::from_str(a))
+                    .collect::<Result<_, _>>();
+            }
+        } else {
+            warn!("No mobile_settings defined in MailSettings");
+        }
+        Ok(vec![
+            MobileActions::ToggleRead,
+            MobileActions::Archive,
+            MobileActions::Trash,
+        ])
+    }
 }
 
 impl FromStr for MobileActions {
