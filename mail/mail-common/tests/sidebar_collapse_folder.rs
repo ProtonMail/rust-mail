@@ -22,7 +22,7 @@ async fn folder_expansion() {
     let ctx = TestContext::new().await;
     ctx.setup_user(sidebar_test_params(name, false)).await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
@@ -54,7 +54,7 @@ async fn folder_collapse() {
     let ctx = TestContext::new().await;
     ctx.setup_user(sidebar_test_params(name, true)).await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());

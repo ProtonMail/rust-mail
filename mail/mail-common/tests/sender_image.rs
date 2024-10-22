@@ -15,7 +15,7 @@ async fn get_sender_image() {
     // Set up a user and initialise the inbox
     let ctx = TestContext::new().await;
     let mut params = TestParams::default_basic();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     params
         .labels
         .get_mut(&ApiLabelType::Label)

@@ -10,6 +10,8 @@ use proton_mail_test_utils::message_body::{
     message_body_test_message_simple, message_body_test_params, message_body_test_user_secret,
     TEST_MESSAGE_BODY_DECRYPTED, TEST_USER_ID,
 };
+use proton_test_utils::mail::message_body::*;
+use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use std::io::read_to_string;
 
@@ -22,7 +24,7 @@ async fn mailbox_message_body_simple() {
     )
     .await;
     let params = message_body_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let message = message_body_test_message_simple();
 

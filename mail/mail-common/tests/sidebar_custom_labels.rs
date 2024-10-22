@@ -34,7 +34,7 @@ async fn sidebar_custom_labels(labels: &[(ApiRemoteId, String, u32)], expected: 
 
     ctx.catch_all().await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx);
 

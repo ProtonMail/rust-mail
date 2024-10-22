@@ -1,3 +1,6 @@
+use proton_test_utils::mail::init::{NullCallback, Params as TestParams};
+use proton_test_utils::test_context::TestContext;
+
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -30,7 +33,7 @@ use wiremock::{Mock, ResponseTemplate};
 #[tokio::test]
 async fn paginate_conversations() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 2_usize;
     let conversation_count = 6_usize;
@@ -136,7 +139,7 @@ async fn paginate_conversations() {
 #[tokio::test]
 async fn paginate_messages() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 2_usize;
     let conversation_count = 6_usize;

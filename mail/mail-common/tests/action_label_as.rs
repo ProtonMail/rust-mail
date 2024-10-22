@@ -16,8 +16,9 @@ use proton_crypto_account::keys::{
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_test_utils::mail::init::Params as TestParams;
+use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use stash::params;
 use std::collections::{HashMap, HashSet};
@@ -29,7 +30,7 @@ const TEST_USER_ADDRESS_ID: &str =
 #[tokio::test]
 async fn action_label_as_without_archive() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
     let inbox_label = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)
@@ -195,7 +196,7 @@ async fn action_label_as_without_archive() {
 #[tokio::test]
 async fn action_label_as_with_archive() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
     let inbox_label = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], stash)

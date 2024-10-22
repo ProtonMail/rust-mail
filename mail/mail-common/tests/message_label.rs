@@ -21,8 +21,8 @@ use proton_crypto_account::keys::{
 use proton_mail_common::datatypes::{SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Label, Message};
 use proton_mail_common::{MailUserContext, Mailbox};
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
+use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use stash::params;
 use std::sync::Arc;
@@ -39,7 +39,7 @@ async fn label_message() {
     //  * Create a Label
     //  * Create a Message
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
     let label_id = LabelId::from("mylabel");
@@ -98,7 +98,7 @@ async fn unlabel_message() {
     //  * Create a Label
     //  * Create a Message with this label
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
     let label_id = LabelId::from("mylabel");
@@ -171,7 +171,7 @@ async fn message_action_read_unread() {
     //  * Create a Label
     //  * Create a Message
     let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
+    let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
 
     let label_id = LabelId::from("mylabel");
@@ -250,7 +250,7 @@ async fn message_action_delete() {
     //  * Create a Label
     //  * Create a Message
     let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
+    let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
 
     let label_id = LabelId::from("mylabel");

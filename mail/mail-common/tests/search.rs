@@ -5,12 +5,12 @@ use proton_core_common::{
     models::{Address, ModelExtension},
 };
 use proton_mail_common::models::{Conversation, Label, Message};
-use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::MailTestContext;
 
 #[tokio::test]
 async fn unsynced_conversations() {
-    let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
     let api = user_context.session().api();
 
@@ -39,8 +39,8 @@ async fn unsynced_conversations() {
 
 #[tokio::test]
 async fn unsynced_messages() {
-    let ctx = TestContext::new().await;
-    let user_context = ctx.user_context().await;
+    let ctx = MailTestContext::new().await;
+    let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
     let api = user_context.session().api();
 

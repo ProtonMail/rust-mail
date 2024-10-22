@@ -26,7 +26,7 @@ async fn sidebar_all_custom_folders(labels: &[(&str, Option<&str>, &str, u32)], 
 
     ctx.catch_all().await;
 
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
     ctx.init_user(user_ctx.clone()).await;
     let sidebar = Sidebar::new(user_ctx.clone());
 

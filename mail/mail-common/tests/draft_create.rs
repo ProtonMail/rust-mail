@@ -20,9 +20,8 @@ use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, Error, ReplyMode, DEFAULT_SUBJECT, REPLY_PREFIX};
 use proton_mail_common::models::{Conversation, MailSettings, Message, NewDraftMetadata};
 use proton_mail_common::MailContextError;
-use proton_mail_test_utils::common::TestContext;
-use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::message_body::*;
+use secrecy::zeroize::__internal::AssertZeroize;
 use stash::orm::Model;
 #[tokio::test]
 async fn create_empty_draft() {
@@ -33,7 +32,7 @@ async fn create_empty_draft() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts().into());
@@ -116,7 +115,7 @@ async fn create_draft_reply_without_body_is_error() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -163,7 +162,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -223,7 +222,7 @@ async fn create_draft_reply_impl(mime_type: MimeType) -> DecryptedMessageBody {
     )
     .await;
     let params = draft_test_params_with_mime_type(mime_type);
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();

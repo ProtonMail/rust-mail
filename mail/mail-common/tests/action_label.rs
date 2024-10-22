@@ -13,15 +13,16 @@ use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_test_utils::mail::init::Params as TestParams;
+use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use velcro::hash_map;
 
 #[tokio::test]
 async fn test_label_custom_label() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let (init_params, conv_id, label_id, _) = test_init_params_label();
     let conversations = init_params.conversations.clone();
@@ -56,7 +57,7 @@ async fn test_label_custom_label() {
 
     // Get the conversation id
     let remote_conv_id =
-        Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
             .await
             .unwrap()
             .unwrap()
@@ -65,7 +66,7 @@ async fn test_label_custom_label() {
 
     let label = Label::load(
         mailbox_label.label_id(),
-        ctx.user_context().await.user_stash(),
+        ctx.mail_user_context().await.user_stash(),
     )
     .await
     .unwrap()
@@ -76,7 +77,7 @@ async fn test_label_custom_label() {
         label.remote_id.clone().unwrap(),
         vec![remote_conv_id.clone()],
         None,
-        ctx.user_context().await.session().api(),
+        ctx.mail_user_context().await.session().api(),
     )
     .await
     .unwrap();
@@ -90,7 +91,7 @@ async fn test_label_custom_label() {
     Conversation::remove_label_from_multiple_remote(
         label.remote_id.unwrap(),
         vec![remote_conv_id],
-        ctx.user_context().await.session().api(),
+        ctx.mail_user_context().await.session().api(),
     )
     .await
     .unwrap();
@@ -104,7 +105,7 @@ async fn test_label_custom_label() {
 #[tokio::test]
 async fn test_label_starred() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let (init_params, conv_id, _, _) = test_init_params_label();
     let conversations = init_params.conversations.clone();
@@ -139,7 +140,7 @@ async fn test_label_starred() {
 
     // Get the conversation id
     let remote_conv_id =
-        Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
             .await
             .unwrap()
             .unwrap()
@@ -148,7 +149,7 @@ async fn test_label_starred() {
 
     let label = Label::load(
         mailbox_label.label_id(),
-        ctx.user_context().await.user_stash(),
+        ctx.mail_user_context().await.user_stash(),
     )
     .await
     .unwrap()
@@ -159,7 +160,7 @@ async fn test_label_starred() {
         label.remote_id.clone().unwrap(),
         vec![remote_conv_id.clone()],
         None,
-        ctx.user_context().await.session().api(),
+        ctx.mail_user_context().await.session().api(),
     )
     .await
     .unwrap();
@@ -173,7 +174,7 @@ async fn test_label_starred() {
     Conversation::remove_label_from_multiple_remote(
         label.remote_id.unwrap(),
         vec![remote_conv_id],
-        ctx.user_context().await.session().api(),
+        ctx.mail_user_context().await.session().api(),
     )
     .await
     .unwrap();
@@ -187,7 +188,7 @@ async fn test_label_starred() {
 #[tokio::test]
 async fn test_label_fails_when_labelling_folders() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let (init_params, _, _, folder_id) = test_init_params_label();
     let conversations = init_params.conversations.clone();
@@ -209,7 +210,7 @@ async fn test_label_fails_when_labelling_folders() {
 
     let label = Label::load(
         mailbox_folder.label_id(),
-        ctx.user_context().await.user_stash(),
+        ctx.mail_user_context().await.user_stash(),
     )
     .await
     .unwrap()
@@ -217,7 +218,7 @@ async fn test_label_fails_when_labelling_folders() {
 
     // Get the conversation id
     let remote_conv_id =
-        Conversation::find_first("", vec![], ctx.user_context().await.user_stash())
+        Conversation::find_first("", vec![], ctx.mail_user_context().await.user_stash())
             .await
             .unwrap()
             .unwrap()
@@ -229,7 +230,7 @@ async fn test_label_fails_when_labelling_folders() {
         label.remote_id.unwrap(),
         vec![remote_conv_id],
         None,
-        ctx.user_context().await.session().api(),
+        ctx.mail_user_context().await.session().api(),
     )
     .await
     .unwrap_err();
