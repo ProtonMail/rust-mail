@@ -1615,7 +1615,7 @@ impl From<RealMessage> for Message {
             conversation_id: value.local_conversation_id.unwrap().into(),
             address_id: value.local_address_id.into(),
             attachments_metadata: value
-                .attachments_metadata
+                .get_attachment_metadata()
                 .into_iter()
                 .map(Into::into)
                 .collect(),

@@ -6629,6 +6629,25 @@ impl Message {
             .await?
             .saturating_add(1))
     }
+
+    /// Only get Disposition::Attachment attachments
+    pub fn get_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
+        self.attachments_metadata
+            .iter()
+            .filter(|mdata| matches!(mdata.disposition, Disposition::Attachment))
+            .cloned()
+            .collect()
+    }
+
+    /// Only get Disposition::Inline attachments
+    #[allow(dead_code)] // Will get used later on
+    fn get_inline_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
+        self.attachments_metadata
+            .iter()
+            .filter(|mdata| matches!(mdata.disposition, Disposition::Inline))
+            .cloned()
+            .collect()
+    }
 }
 
 #[derive(Debug)]
