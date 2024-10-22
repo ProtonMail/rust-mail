@@ -17,8 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
- - `message_body` now returns `MailSessionError` on failure.
-- `Message::attachments_metadata` now doesn't return embedded attachments.
+  - `message_body` now returns `MailSessionError` on failure.
+  - `Message::attachments_metadata` now doesn't return embedded attachments.
+  - `Conversation::attachments_metadata` now doesn't return embedded attachments.
 
 ## [0.14.0] - 2024-10-17
 

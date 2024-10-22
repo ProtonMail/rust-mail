@@ -99,11 +99,12 @@ impl ContextualConversation {
             .find(|&label| label.local_label_id == Some(local_label_id))?;
 
         let is_starred = conversation.is_starred();
+        let attachments_metadata = conversation.get_attachment_metadata();
 
         Some(Self {
             local_id: conversation.local_id.expect("Should be set"),
             remote_id: conversation.remote_id,
-            attachments_metadata: conversation.attachments_metadata,
+            attachments_metadata,
             custom_labels: conversation.custom_labels,
             display_order: conversation.display_order,
             display_snooze_reminder: conversation.display_snooze_reminder,
