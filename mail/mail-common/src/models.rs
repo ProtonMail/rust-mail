@@ -2862,7 +2862,7 @@ impl Conversation {
         MoveAction::finalize(all_move_to_actions, interface).await
     }
 
-    /// Finds all of the messages from this conversation
+    /// Finds all the messages from this conversation
     pub async fn load_messages<A>(&self, interface: &A) -> Result<Vec<Message>, StashError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -2876,7 +2876,7 @@ impl Conversation {
         .await
     }
 
-    /// Finds all of the conversations that have expired and deletes them and all of its
+    /// Finds all the conversations that have expired and deletes them and all of its
     /// messages.
     pub async fn delete_expired<A>(interface: &A) -> Result<usize, AppError>
     where

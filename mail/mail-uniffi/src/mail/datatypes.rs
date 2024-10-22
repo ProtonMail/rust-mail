@@ -51,6 +51,7 @@
 mod attachment;
 mod available_action;
 pub(crate) mod labels;
+mod system_folder;
 mod system_label;
 
 use crate::core::datatypes::{AvatarInformation, Id};

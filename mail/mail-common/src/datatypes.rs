@@ -42,13 +42,18 @@ pub(crate) mod contextual_conversation;
 pub(crate) mod exclusive_location;
 pub mod labels;
 mod rollback_item_type;
+mod system_folder;
 pub(crate) mod system_label;
+
+pub use contextual_conversation::*;
+pub use exclusive_location::ExclusiveLocation;
+pub use rollback_item_type::RollbackItemType;
+pub use system_folder::MovableSystemFolder;
+pub use system_label::SystemLabel;
 
 use crate::models::{Label, MailSettings, MessageBodyMetadata};
 use crate::AppError;
-pub use contextual_conversation::*;
 use core::fmt;
-pub use exclusive_location::ExclusiveLocation;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
@@ -70,7 +75,6 @@ use proton_crypto_inbox::attachment::{
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
 use proton_crypto_inbox::message::{DecryptableMessage, GettablePGPMessage};
-pub use rollback_item_type::RollbackItemType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -81,8 +85,8 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
-pub use system_label::SystemLabel;
 use tracing::warn;
+
 //  ENUMS
 //==============================================================================
 

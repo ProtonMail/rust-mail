@@ -1,19 +1,20 @@
 use proton_mail_common::actions::MoveAction as RealMoveAction;
 use proton_mail_common::actions::{
-    CustomFolderAction as RealCustomFolderAction, SystemFolderAction as RealSystemFolderAction,
+    CustomFolderAction as RealCustomFolderAction,
+    MovableSystemFolderAction as RealMovableSystemFolderAction,
 };
 
-use crate::mail::datatypes::{Id, LabelColor, SystemLabel};
-use crate::{UniffiEnum, UniffiRecord};
-
 use super::IsSelected;
+use crate::mail::datatypes::system_folder::MovableSystemFolder;
+use crate::mail::datatypes::{Id, LabelColor};
+use crate::{UniffiEnum, UniffiRecord};
 
 /// This enum represents the action of moving a message or conversation to a folder.
 ///
 #[derive(Debug, Clone, PartialEq, UniffiEnum)]
 pub enum MoveAction {
-    /// Move to a sysem folder (e.g. Inbox, Sent, Archive, Trash).
-    SystemFolder(SystemFolderAction),
+    /// Move to a system folder (e.g. Inbox, Sent, Archive, Trash).
+    SystemFolder(MovableSystemFolderAction),
 
     /// Move to a custom folder.
     CustomFolder(CustomFolderAction),
@@ -31,15 +32,15 @@ impl From<RealMoveAction> for MoveAction {
 /// This struct represents a system folder that can be used as an action.
 ///
 #[derive(Debug, Clone, PartialEq, UniffiRecord)]
-pub struct SystemFolderAction {
+pub struct MovableSystemFolderAction {
     pub local_id: Id,
-    pub name: SystemLabel,
+    pub name: MovableSystemFolder,
     pub is_selected: IsSelected,
 }
 
-impl From<RealSystemFolderAction> for SystemFolderAction {
-    fn from(value: RealSystemFolderAction) -> Self {
-        SystemFolderAction {
+impl From<RealMovableSystemFolderAction> for MovableSystemFolderAction {
+    fn from(value: RealMovableSystemFolderAction) -> Self {
+        Self {
             local_id: value.local_id.into(),
             name: value.name.into(),
             is_selected: IsSelected::new(value.is_selected),
