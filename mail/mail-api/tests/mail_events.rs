@@ -10,6 +10,8 @@ fn test_deserialize() {
     let actual = serde_json::to_string_pretty(&mail_event).unwrap();
     let expected = read_to_string("tests/data/mail_events/expected.json").unwrap();
 
+    let actual = actual.trim();
+    let expected = expected.trim();
     if actual != expected {
         write("tests/data/mail_events/expected.json.new", &actual).unwrap();
     }

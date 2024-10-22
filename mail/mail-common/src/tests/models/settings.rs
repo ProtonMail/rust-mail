@@ -48,6 +48,7 @@ async fn test_mail_settings_store_read() {
         block_sender_confirmation: None,
         mobile_settings: None,
         hide_remote_images: Default::default(),
+        hide_embedded_images: Default::default(),
         hide_sender_images: Default::default(),
         row_id: None,
         stash: Some(stash.clone()),

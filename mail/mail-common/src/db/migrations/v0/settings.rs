@@ -18,6 +18,7 @@ pub async fn create_settings_table(tx: &Tether) -> Result<(), StashError> {
                 enable_folder_color INTEGER NOT NULL,
                 font_face TEXT DEFAULT NULL,
                 hide_remote_images INTEGER NOT NULL,
+                hide_embedded_images INTEGER NOT NULL,
                 hide_sender_images INTEGER NOT NULL,
                 image_proxy INTEGER NOT NULL,
                 inherit_parent_folder_color INTEGER NOT NULL DEFAULT 1,

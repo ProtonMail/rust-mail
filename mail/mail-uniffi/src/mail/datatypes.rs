@@ -1332,10 +1332,12 @@ pub struct MailSettings {
     /// TODO: Document this field.
     pub font_face: Option<String>,
 
-    /// TODO: Document this field.
+    /// This enables or disables remote content in the HTML.
     pub hide_remote_images: bool,
 
-    /// TODO: Document this field.
+    /// This enables or disables embedded content (`Disposition::Inline`) in the HTML.
+    pub hide_embedded_images: bool,
+
     pub hide_sender_images: bool,
 
     /// TODO: Document this field.
@@ -1437,6 +1439,7 @@ impl From<MailSettings> for RealMailSettings {
             enable_folder_color: value.enable_folder_color,
             font_face: value.font_face,
             hide_remote_images: value.hide_remote_images,
+            hide_embedded_images: value.hide_embedded_images,
             hide_sender_images: value.hide_sender_images,
             image_proxy: value.image_proxy,
             inherit_parent_folder_color: value.inherit_parent_folder_color,
@@ -1486,6 +1489,7 @@ impl From<RealMailSettings> for MailSettings {
             enable_folder_color: value.enable_folder_color,
             font_face: value.font_face,
             hide_remote_images: value.hide_remote_images,
+            hide_embedded_images: value.hide_embedded_images,
             hide_sender_images: value.hide_sender_images,
             image_proxy: value.image_proxy,
             inherit_parent_folder_color: value.inherit_parent_folder_color,
