@@ -1,5 +1,5 @@
 use crate::actions::BottomBarActions;
-use crate::datatypes::{MobileSetting, MobileSettings, SystemLabel, SystemLabelId};
+use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId};
 use crate::db::new_test_connection;
 use crate::models::{Conversation, Label, MailSettings, Message};
 use crate::tests::common::create_address;
@@ -31,22 +31,21 @@ impl<T> Default for TestCase<T> {
 }
 
 mod message {
-    use test_case::test_case;
-
     use super::*;
+    use crate::datatypes::MovableSystemFolder;
+    use test_case::test_case;
 
     static DEFAULT_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -63,16 +62,15 @@ mod message {
         ],
         expected_visible: vec![
             BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::Star,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -89,16 +87,15 @@ mod message {
         ],
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::Star,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -115,8 +112,8 @@ mod message {
         ],
         expected_visible: vec![
             BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
@@ -124,8 +121,7 @@ mod message {
             BottomBarActions::Star,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -147,10 +143,9 @@ mod message {
             BottomBarActions::MarkUnread,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -163,10 +158,9 @@ mod message {
             BottomBarActions::MarkUnread,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -186,10 +180,9 @@ mod message {
             BottomBarActions::Unstar,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -203,8 +196,8 @@ mod message {
         ],
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
@@ -212,8 +205,7 @@ mod message {
             BottomBarActions::Unstar,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -223,10 +215,9 @@ mod message {
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -239,16 +230,15 @@ mod message {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::LabelAs,
             BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             BottomBarActions::More,
         ],
-        expected_hidden: vec![
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
-        ],
+        expected_hidden: vec![BottomBarActions::MoveToSystemFolder(
+            MovableSystemFolder::Trash,
+        )],
         ..Default::default()
     });
     static TOO_MANY_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
@@ -263,29 +253,28 @@ mod message {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::LabelAs,
             BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
-        expected_hidden: vec![BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed)],
+        expected_hidden: vec![],
         ..Default::default()
     });
     static ARCHIVE_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
         current_local: LabelId::archive(),
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -293,15 +282,14 @@ mod message {
         current_local: LabelId::trash(),
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::PermanentDelete,
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
         ],
         ..Default::default()
     });
@@ -309,7 +297,7 @@ mod message {
         current_local: LabelId::spam(),
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::PermanentDelete,
             BottomBarActions::More,
         ],
@@ -317,7 +305,6 @@ mod message {
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
             BottomBarActions::NotSpam,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
         ],
         ..Default::default()
     });
@@ -401,15 +388,14 @@ mod conversation {
     static DEFAULT_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -428,16 +414,15 @@ mod conversation {
         ],
         expected_visible: vec![
             BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::Star,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -456,16 +441,15 @@ mod conversation {
         ],
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::Star,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -484,8 +468,8 @@ mod conversation {
         ],
         expected_visible: vec![
             BottomBarActions::MarkRead,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
@@ -493,8 +477,7 @@ mod conversation {
             BottomBarActions::Star,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -515,10 +498,9 @@ mod conversation {
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -530,10 +512,9 @@ mod conversation {
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -552,10 +533,9 @@ mod conversation {
             BottomBarActions::Unstar,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -569,8 +549,8 @@ mod conversation {
         ],
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
@@ -578,8 +558,7 @@ mod conversation {
             BottomBarActions::Unstar,
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -589,10 +568,9 @@ mod conversation {
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
         ],
         ..Default::default()
     });
@@ -605,16 +583,15 @@ mod conversation {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::LabelAs,
             BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             BottomBarActions::More,
         ],
-        expected_hidden: vec![
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
-        ],
+        expected_hidden: vec![BottomBarActions::MoveToSystemFolder(
+            MovableSystemFolder::Trash,
+        )],
         ..Default::default()
     });
     static TOO_MANY_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
@@ -629,29 +606,28 @@ mod conversation {
         ],
         is_custom: true,
         expected_visible: vec![
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::LabelAs,
             BottomBarActions::MoveTo,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
-        expected_hidden: vec![BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed)],
+        expected_hidden: vec![],
         ..Default::default()
     });
     static ARCHIVE_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
         current_local: LabelId::archive(),
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Trash),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Spam),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
     });
@@ -659,15 +635,14 @@ mod conversation {
         current_local: LabelId::trash(),
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::PermanentDelete,
             BottomBarActions::More,
         ],
         expected_hidden: vec![
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox),
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
         ],
         ..Default::default()
     });
@@ -675,7 +650,7 @@ mod conversation {
         current_local: LabelId::spam(),
         expected_visible: vec![
             BottomBarActions::MarkUnread,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Archive),
+            BottomBarActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             BottomBarActions::PermanentDelete,
             BottomBarActions::More,
         ],
@@ -683,7 +658,6 @@ mod conversation {
             BottomBarActions::MoveTo,
             BottomBarActions::LabelAs,
             BottomBarActions::NotSpam,
-            BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed),
         ],
         ..Default::default()
     });

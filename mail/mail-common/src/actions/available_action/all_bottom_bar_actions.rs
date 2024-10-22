@@ -2,8 +2,7 @@
 #[path = "../../tests/actions/available_actions/action_bottom_bar.rs"]
 mod tests;
 
-use crate::datatypes::system_label::SystemLabel;
-use crate::datatypes::{MobileActions, SystemLabelId};
+use crate::datatypes::{MobileActions, MovableSystemFolder, SystemLabelId};
 use proton_core_common::datatypes::LabelId;
 use tracing::warn;
 
@@ -24,7 +23,7 @@ pub enum BottomBarActions {
     MarkUnread,
     More,
     MoveTo,
-    MoveToSystemFolder(SystemLabel),
+    MoveToSystemFolder(MovableSystemFolder),
     NotSpam,
     PermanentDelete,
     Star,
@@ -43,7 +42,6 @@ impl BottomBarActions {
             MobileActions::Archive => Some(Self::toggle_archive(current_label)),
             MobileActions::Label => Some(Self::LabelAs),
             MobileActions::Move => Some(Self::MoveTo),
-            MobileActions::Snooze => Some(Self::MoveToSystemFolder(SystemLabel::Snoozed)),
             MobileActions::Spam => Some(Self::toggle_spam(current_label)),
             MobileActions::ToggleRead => Some(Self::toggle_read(any_unread)),
             MobileActions::ToggleStar => Some(Self::toggle_star(all_starred)),
@@ -65,9 +63,9 @@ impl BottomBarActions {
 
     pub(crate) fn toggle_archive(current_label: &LabelId) -> Self {
         if current_label == &LabelId::archive() {
-            Self::MoveToSystemFolder(SystemLabel::Inbox)
+            Self::MoveToSystemFolder(MovableSystemFolder::Inbox)
         } else {
-            Self::MoveToSystemFolder(SystemLabel::Archive)
+            Self::MoveToSystemFolder(MovableSystemFolder::Archive)
         }
     }
 
@@ -75,9 +73,9 @@ impl BottomBarActions {
         if current_label == &LabelId::spam() {
             Self::NotSpam
         } else if current_label == &LabelId::trash() {
-            Self::MoveToSystemFolder(SystemLabel::Inbox)
+            Self::MoveToSystemFolder(MovableSystemFolder::Inbox)
         } else {
-            Self::MoveToSystemFolder(SystemLabel::Spam)
+            Self::MoveToSystemFolder(MovableSystemFolder::Spam)
         }
     }
 
@@ -93,7 +91,7 @@ impl BottomBarActions {
         if [LabelId::trash(), LabelId::spam()].contains(current_label) {
             Self::PermanentDelete
         } else {
-            Self::MoveToSystemFolder(SystemLabel::Trash)
+            Self::MoveToSystemFolder(MovableSystemFolder::Trash)
         }
     }
 
@@ -132,9 +130,13 @@ impl BottomBarActions {
         }
         // Move to Inbox
         if [LabelId::trash(), LabelId::archive()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Inbox,
+            ))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Inbox));
+            result.push(BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Inbox,
+            ));
         }
         if current_label == LabelId::spam() && !visible_actions.contains(&BottomBarActions::NotSpam)
         {
@@ -142,26 +144,33 @@ impl BottomBarActions {
         }
         // Archive
         if current_label != LabelId::archive()
-            && !visible_actions
-                .contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Archive))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Archive,
+            ))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Archive));
+            result.push(BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Archive,
+            ));
         }
         // Move to Spam
         if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Spam))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Spam,
+            ))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Spam));
+            result.push(BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Spam,
+            ));
         }
         // Move to Trash
         if ![LabelId::trash(), LabelId::spam()].contains(&current_label)
-            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Trash))
+            && !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Trash,
+            ))
         {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Trash));
-        }
-        // Snooze
-        if !visible_actions.contains(&BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed)) {
-            result.push(BottomBarActions::MoveToSystemFolder(SystemLabel::Snoozed));
+            result.push(BottomBarActions::MoveToSystemFolder(
+                MovableSystemFolder::Trash,
+            ));
         }
         result
     }

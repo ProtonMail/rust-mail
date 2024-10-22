@@ -1,4 +1,5 @@
-use super::{GeneralActions, ReplyAction, SystemFolderAction};
+use super::{GeneralActions, ReplyAction};
+use crate::actions::MovableSystemFolderAction;
 use typed_builder::TypedBuilder;
 
 /// Struct to reflect what kind of actions
@@ -9,7 +10,7 @@ pub struct MessageAvailableActions {
     #[builder(default = ReplyAction::single_address())]
     pub reply_actions: Vec<ReplyAction>, // TODO: check reply_all field
     pub message_actions: Vec<MessageAction>,
-    pub move_actions: Vec<SystemFolderAction>,
+    pub move_actions: Vec<MovableSystemFolderAction>,
     #[builder(default = GeneralActions::all())]
     pub general_actions: Vec<GeneralActions>,
 }
