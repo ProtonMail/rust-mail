@@ -88,5 +88,5 @@ pub fn unlocked_user_key<Provider: PGPProviderSync>(
         private_key,
         public_key,
     };
-    vec![user_key]
+    UnlockedUserKeys::from(vec![user_key])
 }

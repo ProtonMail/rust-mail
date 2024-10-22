@@ -1,6 +1,8 @@
 //! Contains the logic to access PGP keys from the `UserContext`.
 mod cache;
 
+use std::future::Future;
+
 use bytes::Buf;
 use cache::{CachedAddressKey, CachedUserKey};
 mod manager;
@@ -40,6 +42,8 @@ pub type KeyHandlingResult<T> = Result<T, KeyHandlingError>;
 pub enum KeyHandlingError {
     #[error("No keys found in contacts")]
     NoKeys,
+    #[error("No primary key found")]
+    NoPrimaryKey,
     #[error("No user found")]
     NoUser,
     #[error("No user secret found")]
@@ -67,7 +71,7 @@ pub enum KeyHandlingError {
 /// A trait that loads the user secret to unlock the user keys.
 pub trait LoadKeySecret {
     /// Loads the user secret to unlock the user keys.
-    fn key_secret(&self) -> Option<UserKeySecret>;
+    fn key_secret(&self) -> impl Future<Output = Option<UserKeySecret>>;
 }
 
 impl UserContext {

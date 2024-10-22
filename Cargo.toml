@@ -125,11 +125,11 @@ path = "mail/mail-uniffi"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-inbox]
-version = "0.6"
+version = "0.7"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.6"
+version = "0.7"
 registry = "proton"
 features = ["sql"]
 

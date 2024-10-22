@@ -164,7 +164,7 @@ impl Mailbox {
             Vec::with_capacity(attachment_info.size.try_into().unwrap_or_default());
 
         let address_keys = user_context
-            .unlocked_address_keys_async(pgp_provider, remote_address_id)
+            .unlocked_address_keys(pgp_provider, remote_address_id)
             .await?;
 
         // TODO: Load the sender verification keys for correct signature verification.

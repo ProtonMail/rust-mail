@@ -15,6 +15,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::cache::ProtonCache;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
+use proton_core_common::KeyHandlingError;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_sqlite3::rusqlite;
@@ -676,11 +677,19 @@ async fn encrypt_draft_body(
     address_id: &RemoteId,
     body: &str,
 ) -> Result<EncryptedDraft, MailContextError> {
+    let draft_body = DraftBody { body };
     let pgp_provider = new_pgp_provider();
     let unlocked_keys = ctx.unlocked_address_keys(&pgp_provider, address_id).await?;
-    let draft_body = DraftBody { body };
+    let Some(draft_encryption_key) = unlocked_keys.primary() else {
+        error!(
+            "Unable to find the primary address key to encrypt the draft for address with id: {address_id}"
+        );
+        return Err(MailContextError::PGPKeyAccess(
+            KeyHandlingError::NoPrimaryKey,
+        ));
+    };
     draft_body
-        .encrypt_draft_body(&pgp_provider, &unlocked_keys[0])
+        .encrypt_draft_body(&pgp_provider, draft_encryption_key)
         .map_err(|e| {
             error!("Failed to encrypt draft: {e}");
             MailContextError::Crypto
