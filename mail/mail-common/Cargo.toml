@@ -9,10 +9,12 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
+chrono = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+html2text = { workspace = true }
 lazy_static = { workspace = true }
 mime = { workspace = true }
 proton-action-queue = { workspace = true }
@@ -38,6 +40,7 @@ url = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
 ctor = { workspace = true }
 color-backtrace = { workspace = true }
+insta = { workspace = true }
 lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
 proton-api-core = { workspace = true }
