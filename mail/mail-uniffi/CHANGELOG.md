@@ -8,7 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [unreleased] - 2024-00-00
 
 ### Added
-- `GeneralActions::ViewMessageInDarkMode` general action.
+
+  - `GeneralActions::ViewMessageInDarkMode` general action.
+  - `Draft` type to create/open draft messages
+
+### Changed
+
+ - `message_body` now returns `MailSessionError` on failure.
+
 
 ## [0.14.0] - 2024-10-17
 

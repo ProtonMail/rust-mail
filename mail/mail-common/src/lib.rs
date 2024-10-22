@@ -11,6 +11,7 @@ pub mod models;
 pub mod sidebar;
 mod user_context;
 
+pub mod draft;
 #[cfg(test)]
 mod tests;
 
@@ -101,6 +102,8 @@ pub enum AppError {
     IO(#[from] std::io::Error),
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
+    #[error("Could not load user info")]
+    UserNotFound,
     #[error("Other error: {0}")]
     Other(#[from] anyhow::Error),
 }

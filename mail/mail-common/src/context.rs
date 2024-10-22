@@ -1,5 +1,5 @@
 use crate::actions::ActionError;
-use crate::{AppError, MailUserContext};
+use crate::{draft, AppError, MailUserContext};
 use futures::executor::block_on;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
@@ -40,7 +40,7 @@ pub enum MailContextError {
     #[error("Action Queue: {0}")]
     ActionQueue(#[from] proton_action_queue::queue::Error),
     #[error("Action: {0}")]
-    Action(ActionError),
+    Action(#[from] ActionError),
     #[error("QueuedAction: {0}")]
     QueuedAction(#[from] QueuedError),
     #[error("Failed to access PGP keys: {0}")]
@@ -57,8 +57,19 @@ pub enum MailContextError {
     CacheError(#[from] CacheError),
     #[error("Problem with loading contact: {0}")]
     ContactError(#[from] ContactError),
+    #[error("Draft: {0}")]
+    Draft(#[from] draft::Error),
     #[error("{0}")]
     Other(anyhow::Error),
+}
+
+impl proton_action_queue::action::Error for MailContextError {
+    fn request_error(&self) -> Option<&ApiServiceError> {
+        match self {
+            Self::Api(err) => Some(err),
+            _ => None,
+        }
+    }
 }
 
 impl From<CoreContextError> for MailContextError {
@@ -82,10 +93,10 @@ impl From<CoreContextError> for MailContextError {
 }
 pub type MailContextResult<T> = Result<T, MailContextError>;
 
-impl<T: Action<Error = ActionError>> From<QueueActionError<T>> for MailContextError {
+impl<T: Action<Error: Into<MailContextError>>> From<QueueActionError<T>> for MailContextError {
     fn from(value: QueueActionError<T>) -> Self {
         match value {
-            QueueActionError::Action(e) => Self::Action(e),
+            QueueActionError::Action(e) => e.into(),
             QueueActionError::Queue(e) => Self::ActionQueue(e),
         }
     }

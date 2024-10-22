@@ -1,4 +1,3 @@
-use anyhow::anyhow;
 use proton_mail_common::proton_core_common::os::{KeyChain, KeyChainError};
 
 /// Errors for keychain operations.
@@ -37,7 +36,7 @@ impl From<Box<dyn OSKeyChain>> for FFIKeyChain {
 #[allow(clippy::from_over_into)] // we don't want conversions the other way.
 impl Into<KeyChainError> for OSKeyChainError {
     fn into(self) -> KeyChainError {
-        KeyChainError::from(anyhow!(self))
+        KeyChainError::new(self.into())
     }
 }
 impl KeyChain for FFIKeyChain {

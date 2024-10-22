@@ -32,6 +32,8 @@ mod message;
 mod network;
 mod rollback_item;
 
+mod draft;
+
 #[cfg(test)]
 #[path = "tests/models.rs"]
 mod tests;
@@ -51,10 +53,11 @@ use crate::datatypes::{
     ViewLayout, ViewMode,
 };
 use crate::decrypted_message::DecryptedMessageBody;
-use crate::find_in_query;
-use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
+use crate::{find_in_query, MailContextResult};
+use crate::{AppError, MailUserContext, ALL_LABEL_TYPES};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
+pub use draft::*;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use network::split_request;
@@ -3226,6 +3229,31 @@ impl Conversation {
     {
         split_request(ids, 1, endpoint).await
     }
+
+    /// Get the possible next display order.
+    ///
+    /// Finds the maximum display order value in all conversations and adds 1
+    /// to the existing value.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    ///
+    pub async fn next_display_order<A>(interface: &A) -> Result<u64, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query_value::<_, u64>(
+                format!(
+                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    Self::table_name()
+                ),
+                vec![],
+            )
+            .await?
+            .saturating_add(1))
+    }
 }
 
 impl From<ApiConversation> for Conversation {
@@ -5722,11 +5750,11 @@ impl Message {
     pub async fn message_body(
         user_context: &MailUserContext,
         id: LocalId,
-    ) -> MailboxResult<DecryptedMessageBody> {
+    ) -> MailContextResult<DecryptedMessageBody> {
         let cache = user_context.messages_cache();
         let saved_message = Message::load(id, user_context.user_stash())
             .await?
-            .ok_or(MailboxError::MessageNotFound(id))?;
+            .ok_or(AppError::MessageMissing(id))?;
 
         let pgp_provider = proton_crypto::new_pgp_provider();
         let address_id = saved_message.remote_address_id.clone();
@@ -6568,6 +6596,31 @@ impl Message {
         }
 
         Ok(label_stats)
+    }
+
+    /// Get the possible next display order.
+    ///
+    /// Finds the maximum display order value in all messages and adds 1
+    /// to the existing value.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    ///
+    pub async fn next_display_order<A>(interface: &A) -> Result<u64, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query_value::<_, u64>(
+                format!(
+                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    Self::table_name()
+                ),
+                vec![],
+            )
+            .await?
+            .saturating_add(1))
     }
 }
 

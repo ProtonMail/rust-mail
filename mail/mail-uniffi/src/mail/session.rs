@@ -24,7 +24,7 @@ use proton_event_loop::EventLoopError;
 use proton_mail_common::actions::ActionError;
 use proton_mail_common::db::DBMigrationError;
 use proton_mail_common::errors::login_flow::UserLoginFlowError as RealUserLoginFlowError;
-use proton_mail_common::MailContextError;
+use proton_mail_common::{draft, MailContextError};
 use proton_mail_common::{AppError, MailContext};
 use stash::stash::{Stash, StashError};
 use std::path::PathBuf;
@@ -80,6 +80,8 @@ pub enum MailSessionError {
     CacheError(#[from] CacheError),
     #[error("Problem with loading contact: {0}")]
     ContactError(#[from] ContactError),
+    #[error("Draft: {0}")]
+    Draft(#[from] draft::Error),
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -601,6 +603,7 @@ impl From<MailContextError> for MailSessionError {
             MailContextError::CacheError(e) => Self::CacheError(e),
             MailContextError::ContactError(e) => Self::ContactError(e),
             MailContextError::Other(err) => Self::Other(err),
+            MailContextError::Draft(err) => Self::Draft(err),
         }
     }
 }

@@ -1,22 +1,28 @@
 use crate::common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
+use proton_api_mail::services::proton::request_data::{
+    DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
+};
 use proton_api_mail::services::proton::requests::{
-    PutMessagesDeleteRequest, PutMessagesLabelRequest, PutMessagesReadRequest,
-    PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
+    PostCreateDraftRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest,
+    PutMessagesReadRequest, PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
 };
 use proton_api_mail::services::proton::response_data::{
-    Message as ApiMessage, MessageMetadata, OperationResult,
+    Message as ApiMessage, MessageMetadata, MimeType, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
-    GetMessageResponse, GetMessagesResponse, PostMessagesRelabelResponse,
+    GetMessageResponse, GetMessagesResponse, PostCreateDraftResponse, PostMessagesRelabelResponse,
     PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
     PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use proton_core_common::datatypes::RemoteId;
+use proton_crypto_inbox::message::EncryptedDraft;
+use serde::Serialize;
+use serde_with::{serde_as, BoolFromInt};
 use std::collections::HashSet;
 use std::path::Path;
-use wiremock::matchers::{body_json, method, path};
+use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 impl TestContext {
@@ -166,6 +172,38 @@ impl TestContext {
             .mount(self.mock_server())
             .await;
     }
+
+    /// Generate a new mock expectation for creating a draft.
+    ///
+    /// Note that this mock does not valid the draft body.
+    ///
+    /// # Parameters
+    ///
+    /// * `params` - Expected draft params.
+    /// * `reply`  - Expected server reply.
+    pub async fn mock_create_draft(
+        &self,
+        params: DraftParams,
+        action: DraftAction,
+        reply: ApiMessage,
+        parent_id: Option<ApiRemoteId>,
+    ) {
+        let response = PostCreateDraftResponse { message: reply };
+        Mock::given(method("POST"))
+            .and(body_partial_json(TestCreateOrUpdateDraftRequest::from(
+                PostCreateDraftRequest {
+                    message: params,
+                    action,
+                    attachment_key_packets: Default::default(),
+                    parent_id,
+                },
+            )))
+            .and(path(format!("/api/mail/v4/messages")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .mount(self.mock_server())
+            .await
+    }
 }
 
 /// Build a list of message responses.
@@ -200,4 +238,67 @@ fn build_message_responses(ids: &[ApiRemoteId], failed: Vec<ApiRemoteId>) -> Vec
             }
         })
         .collect()
+}
+
+/// We can't use the regular draft params as the encrypted message
+/// changes every time we attempt to create it. So we use version
+/// which does not include the body.
+///
+/// See [`DraftParams`] for more details.
+#[serde_as]
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TestDraftParams {
+    pub subject: String,
+    #[serde_as(as = "BoolFromInt")]
+    pub unread: bool,
+    pub sender: DraftSender,
+    pub to_list: Vec<DraftRecipient>,
+    pub cc_list: Vec<DraftRecipient>,
+    pub bcc_list: Vec<DraftRecipient>,
+    pub external_id: Option<String>,
+    pub draft_flags: u32,
+    pub mime_type: MimeType,
+}
+
+impl From<DraftParams> for TestDraftParams {
+    fn from(value: DraftParams) -> Self {
+        Self {
+            subject: value.subject,
+            unread: value.unread,
+            sender: value.sender,
+            to_list: value.to_list,
+            cc_list: value.cc_list,
+            bcc_list: value.bcc_list,
+            external_id: value.external_id,
+            draft_flags: value.draft_flags,
+            mime_type: value.mime_type,
+        }
+    }
+}
+
+#[serde_as]
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+/// We can't use the regular draft params as the encrypted message
+/// changes every time we attempt to create it. So we use version
+/// which does not include the body.
+pub struct TestCreateOrUpdateDraftRequest {
+    pub message: TestDraftParams,
+    pub action: DraftAction,
+    pub attachment_key_packets: DraftAttachmentKeyPackets,
+    #[serde(rename = "ParentID")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<proton_api_core::services::proton::common::RemoteId>,
+}
+
+impl From<PostCreateDraftRequest> for TestCreateOrUpdateDraftRequest {
+    fn from(value: PostCreateDraftRequest) -> Self {
+        Self {
+            message: value.message.into(),
+            action: value.action,
+            attachment_key_packets: value.attachment_key_packets,
+            parent_id: value.parent_id,
+        }
+    }
 }
