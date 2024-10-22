@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use futures::future::join_all;
 
 use super::{ArmoredPrivateKey, KeyId, LockedKey, UnlockResult};
@@ -18,8 +20,69 @@ pub const USER_KEY_USER_ID_EMAIL: &str = "not_for_email_use@domain.tld";
 pub type UnlockedUserKey<Provider: PGPProviderSync> =
     DecryptedUserKey<<Provider>::PrivateKey, <Provider>::PublicKey>;
 
+/// The unlocked user keys owned by a user.
 #[allow(clippy::module_name_repetitions)]
-pub type UnlockedUserKeys<Provider> = Vec<UnlockedUserKey<Provider>>;
+pub struct UnlockedUserKeys<Provider: PGPProviderSync>(Vec<UnlockedUserKey<Provider>>);
+
+impl<Provider: PGPProviderSync> Deref for UnlockedUserKeys<Provider> {
+    type Target = Vec<UnlockedUserKey<Provider>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsRef<Vec<UnlockedUserKey<Provider>>>
+    for UnlockedUserKeys<Provider>
+{
+    fn as_ref(&self) -> &Vec<UnlockedUserKey<Provider>> {
+        &self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsRef<[UnlockedUserKey<Provider>]> for UnlockedUserKeys<Provider> {
+    fn as_ref(&self) -> &[UnlockedUserKey<Provider>] {
+        &self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsMut<Vec<UnlockedUserKey<Provider>>>
+    for UnlockedUserKeys<Provider>
+{
+    fn as_mut(&mut self) -> &mut Vec<UnlockedUserKey<Provider>> {
+        &mut self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsMut<[UnlockedUserKey<Provider>]> for UnlockedUserKeys<Provider> {
+    fn as_mut(&mut self) -> &mut [UnlockedUserKey<Provider>] {
+        &mut self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> From<Vec<UnlockedUserKey<Provider>>>
+    for UnlockedUserKeys<Provider>
+{
+    fn from(value: Vec<UnlockedUserKey<Provider>>) -> Self {
+        Self(value)
+    }
+}
+
+impl<Provider: PGPProviderSync> Clone for UnlockedUserKeys<Provider> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<Provider: PGPProviderSync> UnlockedUserKeys<Provider> {
+    /// Retrieves the primary user key for encryption and signing operations
+    /// for the user who owns these keys.
+    pub fn primary(&self) -> Option<&UnlockedUserKey<Provider>> {
+        // For now we treat the first key in the list as primary.
+        // - This might change with key transparency in place.
+        self.0.first()
+    }
+}
 
 /// Represents locked user keys retrieved from the API.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]

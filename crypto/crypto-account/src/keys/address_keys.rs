@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use futures::future::join_all;
 
 use crate::{
@@ -22,8 +24,77 @@ use serde::{Deserialize, Serialize};
 #[allow(type_alias_bounds)]
 pub type UnlockedAddressKey<Provider: PGPProviderSync> =
     DecryptedAddressKey<<Provider>::PrivateKey, <Provider>::PublicKey>;
+
+/// Represents the unlocked address keys associated with a user's email address.
+///
+/// Provides utility methods for selecting and managing these keys.
 #[allow(clippy::module_name_repetitions)]
-pub type UnlockedAddressKeys<Provider> = Vec<UnlockedAddressKey<Provider>>;
+pub struct UnlockedAddressKeys<Provider: PGPProviderSync>(Vec<UnlockedAddressKey<Provider>>);
+
+impl<Provider: PGPProviderSync> Deref for UnlockedAddressKeys<Provider> {
+    type Target = Vec<UnlockedAddressKey<Provider>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsRef<Vec<UnlockedAddressKey<Provider>>>
+    for UnlockedAddressKeys<Provider>
+{
+    fn as_ref(&self) -> &Vec<UnlockedAddressKey<Provider>> {
+        &self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsRef<[UnlockedAddressKey<Provider>]>
+    for UnlockedAddressKeys<Provider>
+{
+    fn as_ref(&self) -> &[UnlockedAddressKey<Provider>] {
+        &self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsMut<Vec<UnlockedAddressKey<Provider>>>
+    for UnlockedAddressKeys<Provider>
+{
+    fn as_mut(&mut self) -> &mut Vec<UnlockedAddressKey<Provider>> {
+        &mut self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> AsMut<[UnlockedAddressKey<Provider>]>
+    for UnlockedAddressKeys<Provider>
+{
+    fn as_mut(&mut self) -> &mut [UnlockedAddressKey<Provider>] {
+        &mut self.0
+    }
+}
+
+impl<Provider: PGPProviderSync> From<Vec<UnlockedAddressKey<Provider>>>
+    for UnlockedAddressKeys<Provider>
+{
+    fn from(value: Vec<UnlockedAddressKey<Provider>>) -> Self {
+        Self(value)
+    }
+}
+
+impl<Provider: PGPProviderSync> Clone for UnlockedAddressKeys<Provider> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<Provider: PGPProviderSync> UnlockedAddressKeys<Provider> {
+    /// Retrieves the primary address key for encryption and signing operations.
+    pub fn primary(&self) -> Option<&UnlockedAddressKey<Provider>> {
+        // For now we treat the first key in the list as primary.
+        // - This will change with OpenPGP v6 and PQC keys, where
+        //   multiple primary address keys are present.
+        // - Key transparency
+        self.0.first()
+    }
+}
 
 /// Represents locked address keys of a user retrieved from the API.
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]

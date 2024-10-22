@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - 2024-00-00
 
+### Changed
+
+- Replaced `UnlockedUserKeys`, `UnlockedAddressKeys` type aliases with actual structs providing helper methods. 
+
 ## [0.6.3] - 2024-10-02
 
 ### Changed
