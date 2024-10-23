@@ -34,7 +34,6 @@ use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };
 use serde::Deserialize;
-#[cfg(any(test, debug_assertions))]
 use serde::Serialize;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
@@ -111,8 +110,7 @@ pub enum MessageButtons {
 }
 
 /// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum MimeType {
     /// TODO: Document this variant.
     #[serde(rename = "application/json")]
@@ -744,9 +742,13 @@ pub struct MailSettings {
     /// TODO: Document this field.
     pub font_face: Option<String>,
 
-    /// TODO: Document this field.
+    /// This enables or disables remote content in the HTML.
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
     pub hide_remote_images: bool,
+
+    /// This enables or disables embedded content (`Disposition::Inline`) in the HTML.
+    #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
+    pub hide_embedded_images: bool,
 
     /// TODO: Document this field.
     #[serde_as(as = "DefaultOnNull<BoolFromInt>")]
@@ -1201,6 +1203,7 @@ pub struct MessageMetadata {
     pub size: u64,
 
     /// TODO: Document this field.
+    #[serde(default)]
     pub snooze_time: u64,
 
     /// TODO: Document this field.

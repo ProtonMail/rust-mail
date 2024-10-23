@@ -1,6 +1,8 @@
-use super::{CustomFolderAction, MoveAction, SystemFolderAction};
+use super::{CustomFolderAction, MoveAction};
 use crate as proton_mail_common;
-use crate::datatypes::{LabelType, SystemLabel};
+use crate::actions::MovableSystemFolderAction;
+use crate::datatypes::LabelType;
+use crate::datatypes::MovableSystemFolder;
 use crate::models::Label;
 use itertools::Itertools;
 use proton_mail_test_utils::{label, lid, rid};
@@ -8,16 +10,16 @@ use test_case::test_case;
 
 #[test_case(&[], |_| false, &[]; "TEST1: empty")]
 #[test_case(&[label!(local_id: lid!(0), remote_id: rid!("0"), label_type: LabelType::System)], |_| false, &[
-    MoveAction::SystemFolder(SystemFolderAction {
+    MoveAction::SystemFolder(MovableSystemFolderAction {
         local_id: 0.into(),
-        name: SystemLabel::Inbox,
+        name: MovableSystemFolder::Inbox,
         is_selected: Some(false)
     })
 ]; "TEST2: single system folder, not selected")]
 #[test_case(&[label!(local_id: lid!(0), remote_id: rid!("0"), label_type: LabelType::System)], |_| true, &[
-    MoveAction::SystemFolder(SystemFolderAction {
+    MoveAction::SystemFolder(MovableSystemFolderAction {
         local_id: 0.into(),
-        name: SystemLabel::Inbox,
+        name: MovableSystemFolder::Inbox,
         is_selected: Some(true)
     })
 ]; "TEST3: single system folder, selected")]
@@ -27,9 +29,9 @@ use test_case::test_case;
         label!(local_id: lid!(0), remote_id: rid!("0"), label_type: LabelType::System),
     ],
     |_| true,
-    &[MoveAction::SystemFolder(SystemFolderAction {
+    &[MoveAction::SystemFolder(MovableSystemFolderAction {
         local_id: 0.into(),
-        name: SystemLabel::Inbox,
+        name: MovableSystemFolder::Inbox,
         is_selected: Some(true)
     })]; "TEST4: all system folder selected")]
 #[test_case(
@@ -38,9 +40,9 @@ use test_case::test_case;
             label!(local_id: lid!(0), remote_id: rid!("0"), label_type: LabelType::System),
         ],
         |_| false,
-        &[MoveAction::SystemFolder(SystemFolderAction {
+        &[MoveAction::SystemFolder(MovableSystemFolderAction {
             local_id: 0.into(),
-            name: SystemLabel::Inbox,
+            name: MovableSystemFolder::Inbox,
             is_selected: Some(false)
         })]; "TEST5: none system folder selected")]
 #[test_case(
@@ -49,9 +51,9 @@ use test_case::test_case;
         label!(local_id: lid!(0), name: format!("name"), remote_id: rid!("0"), label_type: LabelType::System),
     ],
     |label| label.name.as_str() == "name",
-    &[MoveAction::SystemFolder(SystemFolderAction {
+    &[MoveAction::SystemFolder(MovableSystemFolderAction {
         local_id: 0.into(),
-        name: SystemLabel::Inbox,
+        name: MovableSystemFolder::Inbox,
         is_selected: None
     })]; "TEST6: system folder partially selected")]
 #[test_case(

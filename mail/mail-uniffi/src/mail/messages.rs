@@ -10,7 +10,7 @@
 
 use super::datatypes::{AllBottomBarMessageActions, BlockQuote, RemoteContent};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
-use super::{MailUserSession, Mailbox, MailboxResult};
+use super::{MailSessionResult, MailUserSession, Mailbox, MailboxResult};
 use crate::core::datatypes::Id;
 use crate::core::paginator::MessagePaginator;
 use crate::mail::datatypes::{Message, MessageSearchOptions};
@@ -508,7 +508,7 @@ pub async fn available_move_to_actions_for_messages(
 /// # Parameters
 ///
 /// * `mailbox`     - The current Mailbox.
-/// * `message_ids` - The local IDs of the messages to calcualte available actions for.
+/// * `message_ids` - The local IDs of the messages to calculate available actions for.
 ///
 /// # Errors
 ///
@@ -538,7 +538,7 @@ pub async fn all_available_bottom_bar_actions_for_messages(
 /// the servers.
 /// Obtains a [`DecryptedMessage`] given a message id.
 #[uniffi::export]
-pub async fn get_message_body(mbox: &Mailbox, id: Id) -> MailboxResult<DecryptedMessage> {
+pub async fn get_message_body(mbox: &Mailbox, id: Id) -> MailSessionResult<DecryptedMessage> {
     let ctx = mbox.mbox().user_context();
     uniffi_async(async move {
         let body = models::Message::message_body(&ctx, id.into()).await?;

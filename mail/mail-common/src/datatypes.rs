@@ -42,13 +42,18 @@ pub(crate) mod contextual_conversation;
 pub(crate) mod exclusive_location;
 pub mod labels;
 mod rollback_item_type;
+mod system_folder;
 pub(crate) mod system_label;
 
-use crate::models::{Label, MessageBodyMetadata};
-use crate::AppError;
 pub use contextual_conversation::*;
-use core::fmt;
 pub use exclusive_location::ExclusiveLocation;
+pub use rollback_item_type::RollbackItemType;
+pub use system_folder::MovableSystemFolder;
+pub use system_label::SystemLabel;
+
+use crate::models::{Label, MailSettings, MessageBodyMetadata};
+use crate::AppError;
+use core::fmt;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
@@ -70,17 +75,18 @@ use proton_crypto_inbox::attachment::{
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
 };
 use proton_crypto_inbox::message::{DecryptableMessage, GettablePGPMessage};
-pub use rollback_item_type::RollbackItemType;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
+use stash::stash::{AgnosticInterface, Interface};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
-pub use system_label::SystemLabel;
+use tracing::warn;
+
 //  ENUMS
 //==============================================================================
 
@@ -373,6 +379,20 @@ impl From<ApiMimeType> for MimeType {
             ApiMimeType::MultipartRelated => Self::MultipartRelated,
             ApiMimeType::TextHtml => Self::TextHtml,
             ApiMimeType::TextPlain => Self::TextPlain,
+        }
+    }
+}
+
+impl From<MimeType> for ApiMimeType {
+    fn from(value: MimeType) -> Self {
+        match value {
+            MimeType::ApplicationJson => Self::ApplicationJson,
+            MimeType::ApplicationPdf => Self::ApplicationPdf,
+            MimeType::MessageRfc822 => Self::MessageRfc822,
+            MimeType::MultipartMixed => Self::MultipartMixed,
+            MimeType::MultipartRelated => Self::MultipartRelated,
+            MimeType::TextHtml => Self::TextHtml,
+            MimeType::TextPlain => Self::TextPlain,
         }
     }
 }
@@ -1529,6 +1549,34 @@ pub enum MobileActions {
     Trash,
     ViewHeaders,
     ViewHTML,
+}
+
+impl MobileActions {
+    /// Compute the actions to be seen in the bottom bar
+    pub(crate) async fn bottom_bar_actions<A>(interface: &A) -> Result<Vec<MobileActions>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let settings = MailSettings::get_or_default(interface).await;
+
+        if let Some(mobile_settings) = settings.mobile_settings {
+            if mobile_settings.message_toolbar.is_custom {
+                return mobile_settings
+                    .message_toolbar
+                    .actions
+                    .iter()
+                    .map(|a| MobileActions::from_str(a))
+                    .collect::<Result<_, _>>();
+            }
+        } else {
+            warn!("No mobile_settings defined in MailSettings");
+        }
+        Ok(vec![
+            MobileActions::ToggleRead,
+            MobileActions::Archive,
+            MobileActions::Trash,
+        ])
+    }
 }
 
 impl FromStr for MobileActions {

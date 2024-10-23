@@ -2,6 +2,8 @@
 
 use super::super::*;
 use crate as proton_mail_common;
+use crate::actions::MovableSystemFolderAction;
+use crate::datatypes::MovableSystemFolder;
 use crate::datatypes::{
     attachment, ContextualConversation, ExclusiveLocation, MessageCount, MessageFlags, SystemLabel,
     SystemLabelId,
@@ -41,7 +43,6 @@ mod available_actions {
     use std::sync::LazyLock;
 
     use super::*;
-    use crate::{actions::SystemFolderAction, datatypes::SystemLabel};
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
     use proton_mail_test_utils::{conversation, label, message, rid};
@@ -81,19 +82,19 @@ mod available_actions {
         }],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Archive,
+                    name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Spam,
+                    name: MovableSystemFolder::Spam,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Trash,
+                    name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
                 },
             ])
@@ -115,24 +116,24 @@ mod available_actions {
         }],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Inbox,
+                    name: MovableSystemFolder::Inbox,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Archive,
+                    name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Spam,
+                    name: MovableSystemFolder::Spam,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Trash,
+                    name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
                 },
             ])
@@ -153,19 +154,19 @@ mod available_actions {
         }],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Inbox,
+                    name: MovableSystemFolder::Inbox,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Archive,
+                    name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Trash,
+                    name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
                 },
             ])
@@ -193,19 +194,19 @@ mod available_actions {
         ],
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Archive,
+                    name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Spam,
+                    name: MovableSystemFolder::Spam,
                     is_selected: Some(false),
                 },
-                SystemFolderAction {
+                MovableSystemFolderAction {
                     local_id: 0.into(),
-                    name: SystemLabel::Trash,
+                    name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
                 },
             ])
@@ -464,7 +465,7 @@ mod available_move_to_actions {
     #[derive(Debug, Clone, PartialEq)]
     struct ExpectedSystemFolder {
         label_id: LabelId,
-        name: SystemLabel,
+        name: MovableSystemFolder,
         is_selected: Option<bool>,
     }
 
@@ -555,17 +556,17 @@ mod available_move_to_actions {
         Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
-                name: SystemLabel::Archive,
+                name: MovableSystemFolder::Archive,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
-                name: SystemLabel::Spam,
+                name: MovableSystemFolder::Spam,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
-                name: SystemLabel::Trash,
+                name: MovableSystemFolder::Trash,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
@@ -593,17 +594,17 @@ mod available_move_to_actions {
         Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
-                name: SystemLabel::Archive,
+                name: MovableSystemFolder::Archive,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
-                name: SystemLabel::Spam,
+                name: MovableSystemFolder::Spam,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
-                name: SystemLabel::Trash,
+                name: MovableSystemFolder::Trash,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
@@ -629,22 +630,22 @@ mod available_move_to_actions {
         Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Inbox.label_id(),
-                name: SystemLabel::Inbox,
+                name: MovableSystemFolder::Inbox,
                 is_selected: None,
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
-                name: SystemLabel::Archive,
+                name: MovableSystemFolder::Archive,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
-                name: SystemLabel::Spam,
+                name: MovableSystemFolder::Spam,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
-                name: SystemLabel::Trash,
+                name: MovableSystemFolder::Trash,
                 is_selected: Some(false),
             }),
         ]); "TEST4: One message in Inbox, other in Outbox when view is STARRED")]
@@ -660,22 +661,22 @@ mod available_move_to_actions {
             Ok(&[
                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                     label_id: SystemLabel::Inbox.label_id(),
-                    name: SystemLabel::Inbox,
+                    name: MovableSystemFolder::Inbox,
                     is_selected: Some(false),
                 }),
                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                     label_id: SystemLabel::Archive.label_id(),
-                    name: SystemLabel::Archive,
+                    name: MovableSystemFolder::Archive,
                     is_selected: Some(false),
                 }),
                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                     label_id: SystemLabel::Spam.label_id(),
-                    name: SystemLabel::Spam,
+                    name: MovableSystemFolder::Spam,
                     is_selected: Some(false),
                 }),
                 ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                     label_id: SystemLabel::Trash.label_id(),
-                    name: SystemLabel::Trash,
+                    name: MovableSystemFolder::Trash,
                     is_selected: Some(false),
                 }),
                 ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {
@@ -731,17 +732,17 @@ mod available_move_to_actions {
         Ok(&[
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Archive.label_id(),
-                name: SystemLabel::Archive,
+                name: MovableSystemFolder::Archive,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Spam.label_id(),
-                name: SystemLabel::Spam,
+                name: MovableSystemFolder::Spam,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::SystemFolder(ExpectedSystemFolder {
                 label_id: SystemLabel::Trash.label_id(),
-                name: SystemLabel::Trash,
+                name: MovableSystemFolder::Trash,
                 is_selected: Some(false),
             }),
             ExpectedMoveAction::CustomFolder(ExpectedCustomFolder {

@@ -1,4 +1,4 @@
-use crate::mail::datatypes::SystemLabel;
+use crate::mail::datatypes::system_folder::MovableSystemFolder;
 use crate::{UniffiEnum, UniffiRecord};
 use itertools::Itertools;
 use proton_mail_common::actions::{
@@ -41,7 +41,7 @@ pub enum BottomBarActions {
     MarkUnread,
     More,
     MoveTo,
-    MoveToSystemFolder(SystemLabel),
+    MoveToSystemFolder(MovableSystemFolder),
     NotSpam,
     PermanentDelete,
     Star,

@@ -28,6 +28,9 @@ pub mod init;
 pub mod labels;
 
 #[cfg(any(test, debug_assertions))]
+pub mod message_body;
+
+#[cfg(any(test, debug_assertions))]
 pub mod messages;
 
 #[cfg(any(test, debug_assertions))]

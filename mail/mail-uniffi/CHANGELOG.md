@@ -7,8 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - `Message::attachments_metadata` now doesn't return embedded attachments.
+  - `Conversation::attachments_metadata` now doesn't return embedded attachments.
+
+## [0.15.0] - 2024-10-22
+
 ### Added
-- `GeneralActions::ViewMessageInDarkMode` general action.
+
+  - `all_available_bottom_bar_actions_for_conversations` function who return available actions for conversations in bottom bar.
+  - `GeneralActions::ViewMessageInDarkMode` general action.
+  - `Draft` type to create/open draft messages
+
+### Changed
+
+  - `message_body` now returns `MailSessionError` on failure.
 
 ## [0.14.0] - 2024-10-17
 

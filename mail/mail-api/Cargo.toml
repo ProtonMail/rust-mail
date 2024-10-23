@@ -13,7 +13,7 @@ proton-crypto-inbox = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
-serde_with = "3.8.1"
+serde_with = { workspace = true }
 smart-default = { workspace = true }
 
 [dev-dependencies]

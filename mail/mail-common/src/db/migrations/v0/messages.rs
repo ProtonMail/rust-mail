@@ -151,5 +151,24 @@ pub async fn create_message_tables(tx: &Tether) -> Result<(), StashError> {
         vec![],
     )
     .await?;
+
+    // Draft metadata.
+    tx.execute(
+        indoc! {"
+        CREATE TABLE new_draft_metadata (
+            local_message_id INTEGER PRIMARY KEY NOT NULL,
+            remote_parent_id TEXT DEFAULT NULL,
+            reply_mode INTEGER DEFAULT NULL,
+
+            CONSTRAINT create_draft_metadata_message_id
+                FOREIGN KEY (local_message_id)
+                REFERENCES messages (local_id)
+                ON DELETE CASCADE
+        )"
+        },
+        vec![],
+    )
+    .await?;
+
     Ok(())
 }

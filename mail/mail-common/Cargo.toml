@@ -44,6 +44,7 @@ proton-api-core = { workspace = true }
 proton-api-mail = { workspace = true }
 proton-mail-test-utils = { workspace = true }
 secrecy = { workspace = true }
+serde_with = { workspace = true }
 tempdir = { workspace = true }
 tempfile = { workspace = true }
 test-case = { workspace = true }

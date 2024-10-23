@@ -9,7 +9,6 @@ use crate::user_context::action_queue::new_action_queue;
 use crate::user_context::cache::{Cache, CacheAttachmentConfig, CacheMessageConfig};
 use crate::{MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
-use futures::executor::block_on;
 pub use initialization::*;
 use proton_action_queue::queue::Queue;
 use proton_api_core::auth::UserKeySecret;
@@ -24,6 +23,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, Unlo
 use proton_event_loop::foreground_loop::EventLoop;
 use stash::orm::Model;
 use stash::stash::Stash;
+use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
@@ -150,12 +150,13 @@ impl MailUserContext {
 
     /// Returns the unlocked user keys of this user.
     ///
-    /// # Warning
-    /// Cannot be called from an async context as it uses the runtime to block.
-    /// Use [`MailUserContext::user_keys_unlocked_async`] instead.
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
     ///
     /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
+    /// Returns a wrapped [`MailContextError::KeyHandlingError`] if the operation fails.
+    ///
     pub async fn unlocked_user_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
@@ -167,30 +168,16 @@ impl MailUserContext {
         Ok(keys)
     }
 
-    /// Returns the unlocked user keys of this user from an async context..
+    /// Returns the unlocked address keys of this user for the provided address.
+    ///
+    /// # Parameters
+    ///
+    /// * `pgp_provider` - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
+    /// * `address_id`   - The address identifier to load the keys for.
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn unlocked_user_keys_async<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> MailContextResult<UnlockedUserKeys<Provider>> {
-        let secret_loader = CloneSecretLoader(self.session().expose_key_secret().await);
-        let keys = self
-            .user_context
-            .unlocked_user_keys(pgp_provider, &secret_loader)
-            .await?;
-        Ok(keys)
-    }
-
-    /// Returns the unlocked address keys for this user.
     ///
-    /// # Warning
-    /// Cannot be called from an async context as it uses the runtime to block.
-    /// Use [`MailUserContext::address_keys_unlocked_async`] instead.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     pub async fn unlocked_address_keys<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
@@ -199,24 +186,6 @@ impl MailUserContext {
         let keys = self
             .user_context
             .unlocked_address_keys(pgp_provider, self, address_id)
-            .await?;
-        Ok(keys)
-    }
-
-    /// Returns the unlocked address keys for this user from an async context.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn unlocked_address_keys_async<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-        address_id: &RemoteId,
-    ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
-        // TODO: This should not be necessary and handled by the UserContext
-        let secret = CloneSecretLoader(self.session().expose_key_secret().await);
-        let keys = self
-            .user_context
-            .unlocked_address_keys(pgp_provider, &secret, address_id)
             .await?;
         Ok(keys)
     }
@@ -238,16 +207,8 @@ impl MailUserContext {
     }
 }
 
-struct CloneSecretLoader(Option<UserKeySecret>);
-
-impl LoadKeySecret for CloneSecretLoader {
-    fn key_secret(&self) -> Option<UserKeySecret> {
-        self.0.clone()
-    }
-}
-
 impl LoadKeySecret for MailUserContext {
-    fn key_secret(&self) -> Option<UserKeySecret> {
-        block_on(self.session().expose_key_secret())
+    fn key_secret(&self) -> impl Future<Output = Option<UserKeySecret>> {
+        self.session().expose_key_secret()
     }
 }

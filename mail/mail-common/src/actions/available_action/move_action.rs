@@ -3,6 +3,7 @@
 mod tests;
 
 use crate::datatypes::labels::color_to_display;
+use crate::datatypes::MovableSystemFolder;
 use crate::{
     datatypes::{
         labels::hierarchy::{self, Hierarchy},
@@ -21,7 +22,7 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq)]
 pub enum MoveAction {
     /// Move to a sysem folder (e.g. Inbox, Sent, Archive, Trash).
-    SystemFolder(SystemFolderAction),
+    SystemFolder(MovableSystemFolderAction),
 
     /// Move to a custom folder.
     CustomFolder(CustomFolderAction),
@@ -44,9 +45,9 @@ impl MoveAction {
     ) -> Vec<Self> {
         iter.into_iter()
             .filter_map(|label| match label.label_type {
-                LabelType::System => Some(MoveAction::SystemFolder(SystemFolderAction {
+                LabelType::System => Some(MoveAction::SystemFolder(MovableSystemFolderAction {
                     local_id: label.local_id?,
-                    name: SystemLabel::new(label).filter(|sl| sl.is_movable_folder())?,
+                    name: MovableSystemFolder::new(label)?,
                     is_selected: Some(is_selected(label)),
                 })),
 
@@ -64,9 +65,9 @@ impl MoveAction {
             .collect()
     }
 
-    /// Method ustilzes map to calculate the final state of the label.
-    /// It requires all of the duplicated labels to be present from the `vec` method.
-    /// Besides that it allso calculates the color of the custom folders
+    /// Method utilizes map to calculate the final state of the label.
+    /// It requires all the duplicated labels to be present from the `vec` method.
+    /// Besides that it also calculates the color of the custom folders
     /// and builds their folder structure.
     ///
     /// # Arguments
@@ -88,9 +89,9 @@ impl MoveAction {
         Ok(actions.collect())
     }
 
-    /// Method analogical to finalize but it only operates on system labels.
+    /// Method analogical to finalize, but it only operates on system labels.
     /// So it does not calculate the color or build the folder structure.
-    /// It does however calculate the final state of the label as selction status.
+    /// It does however calculate the final state of the label as selection status.
     /// It is especially useful when dealing with the messages.
     /// Messages in Conversation context may be scattered across multiple folders.
     ///
@@ -98,7 +99,7 @@ impl MoveAction {
     ///
     /// * `actions` - An iterator over the actions. Duplicates for each item are expected.
     ///
-    pub fn system(actions: impl IntoIterator<Item = MoveAction>) -> Vec<SystemFolderAction> {
+    pub fn system(actions: impl IntoIterator<Item = MoveAction>) -> Vec<MovableSystemFolderAction> {
         MoveAction::calculate_selection(actions)
             .filter_map(|action| match action {
                 MoveAction::SystemFolder(action) => Some(action),
@@ -219,16 +220,39 @@ pub struct SystemFolderAction {
     /// The database id of the label.
     pub local_id: LocalId,
 
-    /// The name of the system folder embeded as finite enum list.
+    /// The name of the system folder embedded as finite enum list.
     pub name: SystemLabel,
 
     /// This field is used to determine if the folder is selected or not
     /// for given list of messages or conversations.
     ///
     /// Option<bool> is used to represent three states:
-    /// * Some(true) - All of the folder occurences across all of messages/conversations have them assigned.
-    /// * Some(false) - None of the folder occurences across all of messages/conversations have them assigned.
-    /// * None - Some of the folder occurences across all messages/conversations have them assigned and some don't.
+    /// * Some(true) - All the folder occurrences across all messages/conversations have them assigned.
+    /// * Some(false) - None of the folder occurrences across all messages/conversations have them assigned.
+    /// * None - Some of the folder occurrences across all messages/conversations have them assigned and some don't.
+    ///
+    /// Option type was chosen over dedicated enum to make it easier to calculate the final state of the folder.
+    /// Due to the fact algorithm calculate this value multiple times and then modify already existing fields.
+    pub is_selected: Option<bool>,
+}
+
+/// This struct represents a system folder that can be used as an action.
+///
+#[derive(Debug, Clone, PartialEq)]
+pub struct MovableSystemFolderAction {
+    /// The database id of the label.
+    pub local_id: LocalId,
+
+    /// The name of the system folder embedded as finite enum list.
+    pub name: MovableSystemFolder,
+
+    /// This field is used to determine if the folder is selected or not
+    /// for given list of messages or conversations.
+    ///
+    /// Option<bool> is used to represent three states:
+    /// * Some(true) - All the folder occurrences across all messages/conversations have them assigned.
+    /// * Some(false) - None of the folder occurrences across all messages/conversations have them assigned.
+    /// * None - Some of the folder occurrences across all messages/conversations have them assigned and some don't.
     ///
     /// Option type was chosen over dedicated enum to make it easier to calculate the final state of the folder.
     /// Due to the fact algorithm calculate this value multiple times and then modify already existing fields.

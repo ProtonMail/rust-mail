@@ -1,8 +1,9 @@
 use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
-use crate::actions::filter_responses;
-use crate::datatypes::{ExclusiveLocation, LabelType, SystemLabelId};
+use crate::actions::{filter_responses, AllBottomBarMessageActions, BottomBarActions};
+use crate::datatypes::{ExclusiveLocation, LabelType, MobileActions, SystemLabelId};
+use crate::find_in_query;
 use crate::models::Label;
 use crate::{actions::conversations::Delete, models::Conversation, AppError};
 use anyhow::anyhow;
@@ -11,8 +12,11 @@ use proton_action_queue::queue::{ActionError, ActionOutput, Queue};
 use proton_api_core::session::{CoreSession, Session};
 use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::datatypes::{Id, LabelId, LocalId, RemoteId};
-use stash::stash::{AgnosticInterface, Interface};
+use stash::exports::ToSql;
+use stash::orm::Model;
+use stash::stash::{AgnosticInterface, Interface, StashError};
 use std::collections::{HashMap, HashSet};
+use tracing::warn;
 
 impl Conversation {
     /// Label multiple conversations.
@@ -422,5 +426,102 @@ impl Conversation {
             }
         }
         Ok(())
+    }
+
+    /// Get the available actions from bottom bar for given conversations
+    ///
+    /// # Parameters
+    ///
+    /// * `current_label_id`  - Id of the current mailbox.
+    /// * `conversations_ids` - List of the conversations IDs.
+    /// * `interface`         - The database interface.
+    ///
+    pub async fn all_available_bottom_bar_actions_for_conversations<A>(
+        current_label_id: LocalId,
+        conversation_ids: Vec<LocalId>,
+        interface: &A,
+    ) -> Result<AllBottomBarMessageActions, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let current_label = Label::resolve_remote_label_id(current_label_id, interface).await?;
+        let bottom_bar_actions = MobileActions::bottom_bar_actions(interface).await?;
+        let messages = Self::find_by_ids(conversation_ids.to_vec(), interface).await?;
+        let visible_bottom_bar_actions =
+            Self::visible_bottom_bar_actions(&current_label, &messages, &bottom_bar_actions)?;
+        let hidden_bottom_bar_actions =
+            Self::hidden_bottom_bar_actions(current_label, &messages, &visible_bottom_bar_actions);
+
+        Ok(AllBottomBarMessageActions {
+            hidden_bottom_bar_actions,
+            visible_bottom_bar_actions,
+        })
+    }
+
+    /// Find a group of Conversations by their IDs.
+    ///
+    /// # Parameters
+    ///
+    /// * `conversation_ids` - The IDs of the conversations to find.
+    /// * `interface`        - The database interface.
+    ///
+    /// # Errors
+    ///
+    /// When database request fail.
+    ///
+    async fn find_by_ids<A>(
+        conversation_ids: impl IntoIterator<Item = LocalId>,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let (query, params) =
+            find_in_query!("WHERE deleted = 0 AND local_id IN ({})", conversation_ids);
+        Conversation::find(query, params, interface, None).await
+    }
+
+    /// Get actions to display in bottom_bar when selecting messages
+    fn visible_bottom_bar_actions(
+        current_label: &LabelId,
+        conversations: &[Self],
+        bottom_bar_actions: &[MobileActions],
+    ) -> Result<Vec<BottomBarActions>, AppError> {
+        let any_unread = conversations.iter().any(|c| c.num_unread > 0);
+        let all_starred = conversations.iter().all(|c| c.is_starred());
+
+        let mut result: Vec<_> = bottom_bar_actions
+            .iter()
+            .filter_map(|a| {
+                BottomBarActions::from_mobile_actions(a, any_unread, all_starred, current_label)
+            })
+            .collect();
+        if result.len() > 5 {
+            warn!("Too many actions to put in Bottom Bar, truncating to 5: {result:?}");
+            result.truncate(5);
+        }
+        result.push(BottomBarActions::More);
+        Ok(result)
+    }
+
+    /// Get actions not displayed in bottom_bar when selecting messages
+    fn hidden_bottom_bar_actions(
+        current_label: LabelId,
+        conversations: &[Self],
+        visible_actions: &[BottomBarActions],
+    ) -> Vec<BottomBarActions> {
+        let any_unread = conversations.iter().any(|m| m.num_unread > 0);
+        let any_read = conversations.iter().any(|m| m.num_unread < m.num_messages);
+        let any_starred = conversations.iter().any(|m| m.is_starred());
+        let any_unstarred = conversations.iter().any(|m| !m.is_starred());
+
+        BottomBarActions::hidden_bottom_bar_actions(
+            current_label,
+            any_unread,
+            any_read,
+            any_unstarred,
+            any_starred,
+            visible_actions,
+        )
     }
 }

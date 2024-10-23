@@ -32,6 +32,8 @@ mod message;
 mod network;
 mod rollback_item;
 
+mod draft;
+
 #[cfg(test)]
 #[path = "tests/models.rs"]
 mod tests;
@@ -52,9 +54,11 @@ use crate::datatypes::{
 use crate::find_in_query;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::user_context::cache::{CacheMessageConfig, CacheMessageKey};
-use crate::{AppError, MailUserContext, MailboxError, MailboxResult, ALL_LABEL_TYPES};
+use crate::MailContextResult;
+use crate::{AppError, MailUserContext, ALL_LABEL_TYPES};
 use anyhow::{anyhow, Context};
 use bytes::Bytes;
+pub use draft::*;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use network::split_request;
@@ -2859,7 +2863,7 @@ impl Conversation {
         MoveAction::finalize(all_move_to_actions, interface).await
     }
 
-    /// Finds all of the messages from this conversation
+    /// Finds all the messages from this conversation
     pub async fn load_messages<A>(&self, interface: &A) -> Result<Vec<Message>, StashError>
     where
         A: Into<AgnosticInterface> + Interface,
@@ -2873,7 +2877,7 @@ impl Conversation {
         .await
     }
 
-    /// Finds all of the conversations that have expired and deletes them and all of its
+    /// Finds all the conversations that have expired and deletes them and all of its
     /// messages.
     pub async fn delete_expired<A>(interface: &A) -> Result<usize, AppError>
     where
@@ -3225,6 +3229,50 @@ impl Conversation {
         Fut: Future<Output = Result<Vec<OperationResult>, ApiServiceError>>,
     {
         split_request(ids, 1, endpoint).await
+    }
+
+    /// Get the possible next display order.
+    ///
+    /// Finds the maximum display order value in all conversations and adds 1
+    /// to the existing value.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    ///
+    pub async fn next_display_order<A>(interface: &A) -> Result<u64, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query_value::<_, u64>(
+                format!(
+                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    Self::table_name()
+                ),
+                vec![],
+            )
+            .await?
+            .saturating_add(1))
+    }
+
+    /// Only get Disposition::Attachment attachments
+    pub fn get_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
+        self.attachments_metadata
+            .iter()
+            .filter(|mdata| matches!(mdata.disposition, Disposition::Attachment))
+            .cloned()
+            .collect()
+    }
+
+    /// Only get Disposition::Inline attachments
+    #[allow(dead_code)] // Will get used later on
+    fn get_inline_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
+        self.attachments_metadata
+            .iter()
+            .filter(|mdata| matches!(mdata.disposition, Disposition::Inline))
+            .cloned()
+            .collect()
     }
 }
 
@@ -4243,9 +4291,13 @@ pub struct MailSettings {
     #[DbField]
     pub font_face: Option<String>,
 
-    /// TODO: Document this field.
+    /// This enables or disables remote content in the HTML.
     #[DbField]
     pub hide_remote_images: bool,
+
+    /// This enables or disables embedded content (`Disposition::Inline`) in the HTML.
+    #[DbField]
+    pub hide_embedded_images: bool,
 
     /// TODO: Document this field.
     #[DbField]
@@ -4434,6 +4486,7 @@ impl From<ApiMailSettings> for MailSettings {
             enable_folder_color: value.enable_folder_color,
             font_face: value.font_face,
             hide_remote_images: value.hide_remote_images,
+            hide_embedded_images: value.hide_embedded_images,
             hide_sender_images: value.hide_sender_images,
             image_proxy: value.image_proxy,
             inherit_parent_folder_color: value.inherit_parent_folder_color,
@@ -5717,11 +5770,11 @@ impl Message {
     pub async fn message_body(
         user_context: &MailUserContext,
         id: LocalId,
-    ) -> MailboxResult<DecryptedMessageBody> {
+    ) -> MailContextResult<DecryptedMessageBody> {
         let cache = user_context.messages_cache();
         let saved_message = Message::load(id, user_context.user_stash())
             .await?
-            .ok_or(MailboxError::MessageNotFound(id))?;
+            .ok_or(AppError::MessageMissing(id))?;
 
         let pgp_provider = proton_crypto::new_pgp_provider();
         let address_id = saved_message.remote_address_id.clone();
@@ -5836,7 +5889,7 @@ impl Message {
             r"
         WHERE
           expiration_time < STRFTIME('%s', 'NOW')
-          AND deleted = 0;
+          AND expiration_time != 0
         ",
             vec![],
             interface,
@@ -6287,7 +6340,7 @@ impl Message {
 
         let (mut message, _) = futures::try_join!(
             Message::find(
-                "WHERE local_id=?",
+                "WHERE local_id=? AND messages.deleted = 0",
                 params![local_id],
                 interface,
                 Some(msg_sender),
@@ -6423,6 +6476,7 @@ impl Message {
                     ON messages.local_id = message_labels.local_message_id
                 WHERE
                     message_labels.local_label_id = ?
+                    AND messages.deleted = 0
                 ORDER BY messages.time DESC, display_order DESC
                 "
             ),
@@ -6455,7 +6509,7 @@ impl Message {
         A: Into<AgnosticInterface> + Interface,
     {
         Message::find(
-            "WHERE local_conversation_id = ? ORDER BY time ASC, display_order ASC",
+            "WHERE local_conversation_id = ? AND messages.deleted = 0 ORDER BY time ASC, display_order ASC",
             params![local_conversation_id],
             interface,
             queue,
@@ -6490,6 +6544,7 @@ impl Message {
                     ON messages.local_id = message_labels.local_message_id
                 WHERE
                     message_labels.local_label_id = ?
+                    AND messages.deleted = 0
                 ORDER BY
                     messages.time DESC,
                     messages.display_order DESC
@@ -6563,6 +6618,50 @@ impl Message {
         }
 
         Ok(label_stats)
+    }
+
+    /// Get the possible next display order.
+    ///
+    /// Finds the maximum display order value in all messages and adds 1
+    /// to the existing value.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    ///
+    pub async fn next_display_order<A>(interface: &A) -> Result<u64, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(interface
+            .query_value::<_, u64>(
+                format!(
+                    "SELECT IFNULL(MAX(display_order),0) AS value FROM {}",
+                    Self::table_name()
+                ),
+                vec![],
+            )
+            .await?
+            .saturating_add(1))
+    }
+
+    /// Only get Disposition::Attachment attachments
+    pub fn get_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
+        self.attachments_metadata
+            .iter()
+            .filter(|mdata| matches!(mdata.disposition, Disposition::Attachment))
+            .cloned()
+            .collect()
+    }
+
+    /// Only get Disposition::Inline attachments
+    #[allow(dead_code)] // Will get used later on
+    fn get_inline_attachment_metadata(&self) -> Vec<AttachmentMetadata> {
+        self.attachments_metadata
+            .iter()
+            .filter(|mdata| matches!(mdata.disposition, Disposition::Inline))
+            .cloned()
+            .collect()
     }
 }
 

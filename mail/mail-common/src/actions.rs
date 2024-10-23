@@ -1,5 +1,6 @@
 mod available_action;
 pub mod conversations;
+pub mod draft;
 pub mod labels;
 pub mod messages;
 
@@ -59,6 +60,7 @@ pub(crate) fn new_action_factory() -> Factory {
     factory
         .register::<messages::unlabel::Unlabel>()
         .expect(ERR_MSG);
+    factory.register::<draft::Create>().expect(ERR_MSG);
     factory
 }
 

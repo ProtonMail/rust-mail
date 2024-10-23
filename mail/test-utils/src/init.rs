@@ -391,6 +391,7 @@ impl TestContext {
                         block_sender_confirmation: None,
                         mobile_settings: None,
                         hide_remote_images: false,
+                        hide_embedded_images: false,
                         hide_sender_images: false,
                     }),
                 }),
