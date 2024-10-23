@@ -2007,6 +2007,12 @@ impl Timestamp {
 
         Self(now)
     }
+
+    /// Returns the inner value as a [`u64`].
+    #[must_use]
+    pub const fn as_u64(&self) -> u64 {
+        self.0
+    }
 }
 
 impl FromSql for Timestamp {
