@@ -58,6 +58,8 @@ pub enum AppError {
     ActionStillQueued(ActionId),
     #[error("Attachment missing in database for local_id {0}")]
     AttachmentMissing(LocalId),
+    #[error("Unknown attachment with remote id {0}")]
+    UnknownAttachment(RemoteId),
     #[error("Conversation with ID {0} is not in given view {1}")]
     ConversationDoesNotHaveLabel(LocalId, String),
     #[error("Conversation with ID {0} has no messages")]

@@ -232,6 +232,7 @@ impl Draft {
             header: "".to_string(),
             mime_type: mail_settings.draft_mime_type,
             parsed_headers: Default::default(),
+            attachments: Default::default(),
             row_id: None,
             stash: None,
         };
@@ -378,6 +379,7 @@ impl Draft {
             remote_message_id: None,
             header: "".to_string(),
             mime_type: mail_settings.draft_mime_type,
+            attachments: Default::default(),
             parsed_headers: Default::default(),
             row_id: None,
             stash: None,

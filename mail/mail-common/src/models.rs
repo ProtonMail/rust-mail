@@ -44,7 +44,7 @@ use crate::actions::{
 };
 use crate::cache::{CacheMessageConfig, CacheMessageKey};
 use crate::datatypes::{
-    self, attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
+    attachment, AlmostAllMail, AttachmentEncryptedSignature, AttachmentMetadata,
     AttachmentSignature, ComposerDirection, ComposerMode, ConversationCount, CustomLabel,
     Disposition, EncryptedMessageBody, ExclusiveLocation, KeyPackets, LabelColor, LabelType,
     MessageAddress, MessageAddresses, MessageAttachmentInfos, MessageButtons, MessageCount,
@@ -108,6 +108,7 @@ use std::future::Future;
 use std::io::Read;
 use std::num::NonZeroU32;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::vec;
 use tracing::{debug, error, info, warn};
@@ -243,6 +244,22 @@ pub struct Attachment {
     #[DbField]
     pub cached: bool,
 
+    #[DbField]
+    /// Content id of the attachment if inlined in the message.
+    pub content_id: Option<String>,
+
+    #[DbField]
+    /// Encoding of the attachment in the message.
+    pub transfer_encoding: Option<String>,
+
+    #[DbField]
+    /// Custom proton width for this image. Yes, API is returning this as a string.
+    pub image_width: Option<String>,
+
+    /// Custom proton Height for this image. Yes, API is returning this as a string.
+    #[DbField]
+    pub image_height: Option<String>,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -277,12 +294,15 @@ impl From<AttachmentMetadata> for Attachment {
             signature: None,
             size: value.size,
             cached: false,
+            content_id: None,
+            transfer_encoding: None,
+            image_width: None,
+            image_height: None,
             row_id: None,
             stash: None,
         }
     }
 }
-
 impl From<Attachment> for AttachmentMetadata {
     fn from(value: Attachment) -> Self {
         Self {
@@ -392,6 +412,22 @@ impl Attachment {
             }
         }
 
+        if self.local_message_id.is_none() {
+            if let Some(remote_message_id) = self.remote_message_id.clone() {
+                self.local_message_id = remote_message_id
+                    .counterpart::<Message, _>(interface)
+                    .await?;
+            }
+        }
+
+        if self.local_conversation_id.is_none() {
+            if let Some(remote_conversation_id) = self.remote_conversation_id.clone() {
+                self.local_conversation_id = remote_conversation_id
+                    .counterpart::<Conversation, _>(interface)
+                    .await?;
+            }
+        }
+
         <Self as Model>::save_using(self, interface).await
     }
 
@@ -490,6 +526,120 @@ impl Attachment {
         *self = attachment;
         Ok(Some(()))
     }
+
+    /// This function syncs the message attachments headers detailed in step 5
+    /// of the documentation of [`Attachment`] for the given `message`.
+    ///
+    /// This is the last piece of metadata which completes the attachment type.
+    ///
+    /// # Error
+    ///
+    /// Return error if the query failed.
+    pub async fn update_headers_from_api_message<A>(
+        message: &ApiMessage,
+        interface: &A,
+    ) -> Result<Vec<Self>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let mut result = Vec::with_capacity(message.attachments.len());
+
+        for message_attachment in &message.attachments {
+            let remote_id: RemoteId = message_attachment.id.clone().into();
+            let Some(mut attachment) = Attachment::find_by_id(remote_id, interface).await? else {
+                if message_attachment.disposition
+                    != proton_api_mail::services::proton::response_data::Disposition::Inline
+                {
+                    return Err(AppError::UnknownAttachment(
+                        message_attachment.id.clone().into(),
+                    ));
+                }
+
+                // If it's an inline attachment it's the first time we are
+                // seeing this data.
+                // Event though we have the key packets, there is a lot of data
+                // missing that we can only get from the getting the full
+                // attachment metadata request.
+                let mut new_attachment = Attachment {
+                    local_id: None,
+                    remote_id: Some(message_attachment.id.clone().into()),
+                    local_address_id: None,
+                    remote_address_id: Some(message.metadata.address_id.clone().into()),
+                    local_conversation_id: None,
+                    remote_conversation_id: Some(message.metadata.conversation_id.clone().into()),
+                    local_message_id: None,
+                    remote_message_id: Some(message.metadata.id.clone().into()),
+                    disposition: message_attachment.disposition.into(),
+                    enc_signature: None,
+                    is_auto_forwardee: false,
+                    key_packets: None,
+                    mime_type: attachment::MimeType::from_str(&message_attachment.mime_type)?,
+                    filename: message_attachment.name.clone(),
+                    sender: None,
+                    signature: None,
+                    size: message_attachment.size,
+                    cached: false,
+                    content_id: message_attachment.headers.content_id.clone(),
+                    transfer_encoding: message_attachment.headers.content_transfer_encoding.clone(),
+                    image_width: message_attachment.headers.image_width.clone(),
+                    image_height: message_attachment.headers.image_height.clone(),
+                    row_id: None,
+                    stash: None,
+                };
+                new_attachment
+                    .save_using(interface)
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            "Failed to save new inline attachment {}:{e}",
+                            message_attachment.id
+                        )
+                    })?;
+                result.push(new_attachment);
+                continue;
+            };
+
+            attachment.content_id = message_attachment.headers.content_id.clone();
+            attachment.transfer_encoding =
+                message_attachment.headers.content_transfer_encoding.clone();
+            attachment.image_width = message_attachment.headers.image_width.clone();
+            attachment.image_height = message_attachment.headers.image_height.clone();
+            attachment.signature = message_attachment.signature.clone().map(Into::into);
+            attachment.key_packets = Some(message_attachment.key_packets.clone().into());
+            attachment.enc_signature = message_attachment.enc_signature.clone().map(Into::into);
+            attachment.disposition = message_attachment.disposition.into();
+            attachment.save_using(interface).await?;
+            result.push(attachment);
+        }
+
+        Ok(result)
+    }
+
+    /// Get all attachments for a given message with `local_message_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn for_message<A>(
+        local_message_id: LocalId,
+        interface: &A,
+    ) -> Result<Vec<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Attachment::find(
+            indoc! {"
+            WHERE local_id IN (
+                SELECT local_attachment_id FROM message_attachments
+                WHERE local_message_id=?
+            )
+        "},
+            params![local_message_id],
+            interface,
+            None,
+        )
+        .await
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't
@@ -532,6 +682,10 @@ impl From<ApiAttachment> for Attachment {
             signature: value.signature.map(|v| v.into()),
             size: value.size,
             cached: false,
+            content_id: None,
+            transfer_encoding: None,
+            image_width: None,
+            image_height: None,
             row_id: None,
             stash: None,
         }
@@ -5494,33 +5648,16 @@ impl Message {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let conn = self.stash().ok_or(StashError::NoStashAvailable)?;
-
-        let mut mdata = if let Some(metadata) = self.get_message_body_metadata().await? {
+        let mdata = if let Some(metadata) = self.get_message_body_metadata(interface).await? {
             (metadata, None)
         } else {
             let message = self.get_api_message(api).await?;
 
-            // create message in the database and store body in the cache.
-            let mut metadata = MessageBodyMetadata {
-                local_message_id: self.local_id,
-                remote_message_id: self.remote_id.clone(),
-                header: message.header.clone(),
-                parsed_headers: datatypes::ParsedHeaders {
-                    headers: message.parsed_headers,
-                },
-                mime_type: message.mime_type.into(),
-                row_id: None,
-                stash: Some(conn.clone()),
-            };
-            metadata
-                .save()
-                .await
-                .inspect_err(|e| error!("Failed to store message body metadata in db: {e}"))?;
-            (metadata, Some(message.body))
+            let (metadata, body) =
+                MessageBodyMetadata::save_from_api_data(message, self.local_id.unwrap(), interface)
+                    .await?;
+            (metadata, Some(body))
         };
-
-        mdata.0.save_using(interface).await?;
         Ok(mdata)
     }
 
@@ -5530,18 +5667,18 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    async fn get_message_body_metadata(&self) -> Result<Option<MessageBodyMetadata>, AppError> {
-        let Some(conn) = self.stash() else {
-            return Err(StashError::NoStashAvailable.into());
-        };
-
-        Ok(MessageBodyMetadata::find_first(
-            "WHERE local_message_id = ?",
-            params![self.local_id],
-            conn,
+    async fn get_message_body_metadata<A>(
+        &self,
+        interface: &A,
+    ) -> Result<Option<MessageBodyMetadata>, AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        Ok(
+            MessageBodyMetadata::for_message(self.local_id.unwrap(), interface)
+                .await
+                .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?,
         )
-        .await
-        .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e}"))?)
     }
 
     /// Get message from remote
@@ -5842,7 +5979,7 @@ impl Message {
         let mut file = File::open(file_path)?;
         let mut body = String::new();
         file.read_to_string(&mut body)?;
-        let metadata = self.get_message_body_metadata().await?;
+        let metadata = self.get_message_body_metadata(interface).await?;
         let metadata = metadata.ok_or(AppError::MessageBodyMetadataMissing(
             self.local_id.expect("Should be set"),
         ))?;
@@ -6778,6 +6915,7 @@ mod default_message {
 ///
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("message_bodies")]
+#[ModelActions(on_load)]
 pub struct MessageBodyMetadata {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -6804,6 +6942,9 @@ pub struct MessageBodyMetadata {
     /// TODO: Document this field.
     #[DbField]
     pub parsed_headers: ParsedHeaders,
+
+    /// Attachments associated with the message body.
+    pub attachments: Vec<Attachment>,
 
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
@@ -6872,6 +7013,93 @@ impl MessageBodyMetadata {
         }
 
         <Self as Model>::save_using(self, interface).await
+    }
+
+    /// Extends [`Model::load()`] to pre-load attachments.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    pub async fn on_load<A>(&mut self, interface: &A) -> Result<(), StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        self.attachments = Attachment::for_message(self.local_message_id.unwrap(), interface)
+            .await
+            .inspect_err(|e| error!("Failed to load attachments for body metadata: {e}"))?;
+
+        Ok(())
+    }
+
+    /// Load a message for the message with `local_message_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn for_message<A>(
+        local_message_id: LocalId,
+        interface: &A,
+    ) -> Result<Option<Self>, StashError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        // There is no local id on this type so we can't use find_by_id.
+        Self::find_first(
+            "WHERE local_message_id =?",
+            params![local_message_id],
+            interface,
+        )
+        .await
+    }
+
+    /// Save the message body metadata from a `message`.
+    ///
+    /// The `local_message_id` is required since this function is expected
+    /// to be used with [`Message::sync_message_metadata()`].
+    ///
+    /// This function also takes care of updating the attachments' metadata
+    /// that is present in `message` and correctly applies this information
+    /// to the returned type.
+    ///
+    /// Returns the saved metadata and the message body.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the queries fail.
+    async fn save_from_api_data<A>(
+        message: ApiMessage,
+        local_message_id: LocalId,
+        interface: &A,
+    ) -> Result<(Self, String), AppError>
+    where
+        A: Into<AgnosticInterface> + Interface,
+    {
+        let attachments = Attachment::update_headers_from_api_message(&message, interface)
+            .await
+            .inspect_err(|e| {
+                error!("Failed to update attachment headers: {e}");
+            })?;
+
+        // create message in the database and store body in the cache.
+        let mut metadata = MessageBodyMetadata {
+            local_message_id: Some(local_message_id),
+            remote_message_id: Some(message.metadata.id.into()),
+            header: message.header.clone(),
+            parsed_headers: ParsedHeaders {
+                headers: message.parsed_headers,
+            },
+            mime_type: message.mime_type.into(),
+            attachments,
+            row_id: None,
+            stash: Some(interface.stash().clone()),
+        };
+        metadata
+            .save_using(interface)
+            .await
+            .inspect_err(|e| error!("Failed to store message body metadata in db: {e}"))?;
+
+        Ok((metadata, message.body))
     }
 }
 
