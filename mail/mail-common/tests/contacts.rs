@@ -1,6 +1,3 @@
-use proton_test_utils::mail::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
-
 use proton_api_core::services::proton::response_data::{
     ContactBasic as ApiContactBasic, ContactEmail as ApiContactEmail, ContactSendingPreferences,
 };
@@ -8,6 +5,8 @@ use proton_core_common::datatypes::{
     AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts,
 };
 use proton_core_common::models::Contact;
+use proton_test_utils::mail::init::Params as TestParams;
+use proton_test_utils::test_context::TestContext;
 
 #[tokio::test]
 async fn contact_list() {

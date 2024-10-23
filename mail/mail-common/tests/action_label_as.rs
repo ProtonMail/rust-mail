@@ -17,7 +17,6 @@ use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelI
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_test_utils::mail::init::Params as TestParams;
 use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use stash::params;

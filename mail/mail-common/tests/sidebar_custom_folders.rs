@@ -3,8 +3,8 @@ use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, Label
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_mail_common::datatypes::labels::custom_folder::CustomFolder;
 use proton_mail_common::Sidebar;
-use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_test_utils::test_context::TestContext;
 use std::iter::zip;
 use test_case::test_case;
 use velcro::hash_map;

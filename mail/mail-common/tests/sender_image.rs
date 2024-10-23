@@ -5,8 +5,9 @@ use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
-use proton_mail_test_utils::common::TestContext;
+
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use std::fs;
 

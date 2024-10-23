@@ -1,8 +1,7 @@
-use common::TestContext;
-
-mod common;
+use proton_test_utils::test_context::TestContext;
 
 #[tokio::test]
+#[allow(unused_variables)]
 async fn test_session_state() {
     let ctx = TestContext::new().await;
     let real_ctx = ctx.context();
@@ -10,6 +9,7 @@ async fn test_session_state() {
 }
 
 #[tokio::test]
+#[allow(unused_variables)]
 async fn test_session_state_watcher() {
     let ctx = TestContext::new().await;
     let real_ctx = ctx.context();

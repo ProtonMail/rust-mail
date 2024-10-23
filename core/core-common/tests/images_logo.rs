@@ -1,13 +1,11 @@
-use common::TestContext;
 use futures::future::join_all;
 use proton_core_common::models::sender_image_cache::{
     ReceivedFormat, SenderImage, SenderImageMetadata,
 };
+use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use std::fs;
 use test_case::test_case;
-
-mod common;
 
 const TEST_ADDRESS: &str = "test@example.com";
 
@@ -166,6 +164,7 @@ async fn image_extension(bytes: &[u8], expected: &str) {
     assert_eq!(format!("{received_format}"), expected);
 }
 
+#[allow(clippy::field_reassign_with_default)]
 fn create_test_key(address: &str, received_format: Option<ReceivedFormat>) -> SenderImage {
     let mut key = SenderImage::default();
     key.address = Some(address.to_owned());

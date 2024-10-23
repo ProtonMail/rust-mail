@@ -53,7 +53,7 @@ impl TestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
-            .mount(&self.mock_web_server)
+            .mount(self.mock_server())
             .await;
     }
 
@@ -90,7 +90,7 @@ impl TestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
-            .mount(&self.mock_web_server)
+            .mount(self.mock_server())
             .await;
     }
 
@@ -121,7 +121,7 @@ impl TestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
-            .mount(&self.mock_web_server)
+            .mount(self.mock_server())
             .await;
     }
 
@@ -145,7 +145,7 @@ impl TestContext {
             )))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
-            .mount(&self.mock_web_server)
+            .mount(self.mock_server())
             .await;
     }
 
@@ -154,7 +154,7 @@ impl TestContext {
             .and(path("/api/core/v4/images/logo"))
             .respond_with(ResponseTemplate::new(200).set_body_bytes(response))
             .expect(1)
-            .mount(&self.mock_web_server)
+            .mount(self.mock_server())
             .await;
     }
 }

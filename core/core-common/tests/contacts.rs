@@ -1,4 +1,3 @@
-use common::{account::unlocked_user_key, TestContext, TestCoreEvent};
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -17,11 +16,12 @@ use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::proton_crypto::crypto::AccessKeyInfo;
 use proton_crypto_account::proton_crypto::new_pgp_provider;
 use proton_event_loop::subscriber::Subscriber;
+use proton_test_utils::core::account::unlocked_user_key;
+use proton_test_utils::test_context::{TestContext, TestCoreEvent};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;
 use std::sync::Arc;
-mod common;
 
 macro_rules! prune_email {
     ($email:expr) => {{

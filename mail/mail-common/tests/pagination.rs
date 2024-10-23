@@ -1,6 +1,3 @@
-use proton_test_utils::mail::init::{NullCallback, Params as TestParams};
-use proton_test_utils::test_context::TestContext;
-
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -20,9 +17,10 @@ use proton_mail_common::db::migrations::migrate_db;
 use proton_mail_common::models::PaginatorSearchOptions;
 use proton_mail_common::models::{Conversation, Message, PaginatorFilter};
 use proton_mail_common::{MailUserContext, Mailbox};
-use proton_mail_test_utils::common::{create_address, TestContext};
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
 use proton_mail_test_utils::{conversation, message};
+use proton_test_utils::mail::init::{NullCallback, Params as TestParams};
+use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Interface;

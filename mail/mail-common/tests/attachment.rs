@@ -7,9 +7,6 @@ use proton_mail_common::Mailbox;
 use proton_mail_test_utils::attachment::{
     testdata_attachment_data, testdata_expected_attachment_decrypted,
 };
-use proton_test_utils::mail::attachment::{
-    testdata_attachment_data, testdata_expected_attachment_decrypted,
-};
 use proton_test_utils::mail::init::Params as TestParams;
 use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;

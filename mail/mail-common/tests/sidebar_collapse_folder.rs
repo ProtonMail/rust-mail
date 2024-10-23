@@ -4,9 +4,11 @@ use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::RemoteId;
 use proton_mail_common::models::Label;
 use proton_mail_common::Sidebar;
-use proton_mail_test_utils::common::TestContext;
+
 use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_test_utils::test_context::TestContext;
+
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;

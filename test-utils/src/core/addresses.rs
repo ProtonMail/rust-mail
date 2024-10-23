@@ -11,7 +11,7 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path("/api/core/v4/addresses"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
-            .mount(&self.mock_web_server)
+            .mount(self.mock_server())
             .await;
     }
 
@@ -23,7 +23,7 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path(format!("/api/core/v4/addresses/{}", address.id)))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
-            .mount(&self.mock_web_server)
+            .mount(self.mock_server())
             .await;
     }
 }

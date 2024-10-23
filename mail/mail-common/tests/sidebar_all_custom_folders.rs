@@ -2,8 +2,10 @@ use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, LabelType};
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_mail_common::Sidebar;
-use proton_mail_test_utils::common::TestContext;
+
 use proton_mail_test_utils::init::Params as TestParams;
+use proton_test_utils::test_context::TestContext;
+
 use test_case::test_case;
 use velcro::hash_map;
 

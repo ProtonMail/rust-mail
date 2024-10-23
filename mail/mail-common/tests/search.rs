@@ -5,7 +5,7 @@ use proton_core_common::{
     models::{Address, ModelExtension},
 };
 use proton_mail_common::models::{Conversation, Label, Message};
-use proton_mail_test_utils::MailTestContext;
+use proton_test_utils::test_context::TestContext;
 
 #[tokio::test]
 async fn unsynced_conversations() {

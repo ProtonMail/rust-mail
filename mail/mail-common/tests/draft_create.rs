@@ -23,6 +23,7 @@ use proton_mail_common::MailContextError;
 use proton_mail_test_utils::message_body::*;
 use secrecy::zeroize::__internal::AssertZeroize;
 use stash::orm::Model;
+
 #[tokio::test]
 async fn create_empty_draft() {
     // Set up a user and initialise the inbox
