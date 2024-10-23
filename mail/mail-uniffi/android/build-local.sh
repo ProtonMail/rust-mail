@@ -16,5 +16,5 @@ mkdir /tmp/rust-builds/
 # Copy artifacts
 cp ./mail/mail-uniffi/android/lib/build/outputs/aar/lib-release.aar /tmp/rust-builds/
 # Pubish
-CRATE_VERSION=$(cargo pkgid --manifest-path=./mail/mail-uniffi/Cargo.toml | cut -d "#" -f2)
+CRATE_VERSION=$(cargo pkgid --manifest-path=./mail/mail-uniffi/Cargo.toml | cut -d "@" -f2)
 mvn install:install-file -Dfile=/tmp/rust-builds/lib-release.aar -DgroupId=me.proton.mail.common -DartifactId=lib -Dversion=$CRATE_VERSION -Dpackaging=aar
