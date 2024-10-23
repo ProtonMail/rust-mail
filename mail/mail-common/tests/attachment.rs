@@ -236,6 +236,10 @@ where
         signature: None,
         size: attachment.size,
         cached: false,
+        content_id: None,
+        transfer_encoding: None,
+        image_width: None,
+        image_height: None,
         row_id: None,
         stash: None,
     }
