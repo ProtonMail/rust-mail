@@ -1,17 +1,13 @@
-use crate::test_context::TestContext;
-use proton_api_core::services::proton::common::RemoteId;
+use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
-use proton_api_mail::services::proton::common::LabelType;
-use proton_api_mail::services::proton::requests::{GetLabelsOptions, PatchLabelRequest};
+use proton_api_mail::services::proton::requests::PatchLabelRequest;
 use proton_api_mail::services::proton::response_data::{Label as ApiLabel, OperationResult};
 use proton_api_mail::services::proton::responses::{GetLabelsResponse, PatchLabelResponse};
 use proton_core_common::datatypes::LabelId;
-use proton_mail_common::actions::labels::Expand;
-use proton_mail_common::ALL_LABEL_TYPES;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-impl TestContext {
+impl MailTestContext {
     // Gets 3 labels called Label1, Label2, Label3
     pub async fn mock_get_all_labels(&self, labels: Vec<ApiLabel>) {
         let response = GetLabelsResponse { labels };

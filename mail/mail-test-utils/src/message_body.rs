@@ -1,7 +1,4 @@
 //! Message body related state and test data
-
-use crate::mail::init::Params as TestParams;
-use crate::test_context::TestContext;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -10,32 +7,26 @@ use proton_api_core::services::proton::response_data::{
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageAddress,
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::LabelId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_account::salts::KeySalt;
-use proton_crypto_inbox::proton_crypto::{new_pgp_provider, new_srp_provider};
+use proton_crypto_inbox::proton_crypto::new_srp_provider;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
 };
 use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
-use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::Message;
-use proton_mail_common::Mailbox;
-use stash::orm::Model;
 use std::collections::HashMap;
-use std::io::read_to_string;
 use std::iter;
 
 #[must_use]
-pub fn message_body_test_params() -> crate::mail::init::Params {
-    crate::mail::init::Params {
+pub fn message_body_test_params() -> crate::init::Params {
+    crate::init::Params {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
         mail_settings: Some(message_body_test_mail_settings()),

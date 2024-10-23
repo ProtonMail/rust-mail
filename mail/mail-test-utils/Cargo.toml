@@ -1,5 +1,5 @@
 [package]
-name = "proton-test-utils"
+name = "proton-mail-test-utils"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -44,6 +44,7 @@ lazy_static = { workspace = true }
 once_cell = "1.12.0"
 velcro = "0.5.4"
 serde_with = { workspace = true }
+proton-core-test-utils = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
@@ -56,4 +57,4 @@ workspace = true
 
 [features]
 default = []
-integration-tests=[]
+test-utils = []

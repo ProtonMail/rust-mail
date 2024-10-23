@@ -1,5 +1,5 @@
-use proton_test_utils::mail::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 
 use ctor::ctor;
 
@@ -10,7 +10,7 @@ fn init_color_backtrace() {
 
 #[tokio::test]
 async fn test_init_after_login() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let init_params = TestParams::default_basic();
 
@@ -20,7 +20,7 @@ async fn test_init_after_login() {
 
 #[tokio::test]
 async fn test_double_init_does_not_fail() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let init_params = TestParams::default_basic();
 

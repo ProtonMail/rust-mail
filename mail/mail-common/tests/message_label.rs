@@ -22,7 +22,7 @@ use proton_mail_common::datatypes::{SystemLabel, SystemLabelId};
 use proton_mail_common::models::{Label, Message};
 use proton_mail_common::{MailUserContext, Mailbox};
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::params;
 use std::sync::Arc;
@@ -38,7 +38,7 @@ async fn label_message() {
     // Setup:
     //  * Create a Label
     //  * Create a Message
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -97,7 +97,7 @@ async fn unlabel_message() {
     // Setup:
     //  * Create a Label
     //  * Create a Message with this label
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -170,7 +170,7 @@ async fn message_action_read_unread() {
     // Setup:
     //  * Create a Label
     //  * Create a Message
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
 
@@ -249,7 +249,7 @@ async fn message_action_delete() {
     // Setup:
     //  * Create a Label
     //  * Create a Message
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_context = ctx.mail_user_context().await;
     let stash = user_context.user_stash();
 

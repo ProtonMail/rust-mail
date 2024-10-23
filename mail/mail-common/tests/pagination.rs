@@ -18,8 +18,8 @@ use proton_mail_common::models::PaginatorSearchOptions;
 use proton_mail_common::models::{Conversation, Message, PaginatorFilter};
 use proton_mail_common::{MailUserContext, Mailbox};
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
+use proton_mail_test_utils::test_context::MailTestContext;
 use proton_mail_test_utils::{conversation, message};
-use proton_test_utils::mail::init::{NullCallback, Params as TestParams};
 use proton_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use stash::params;
@@ -30,7 +30,7 @@ use wiremock::{Mock, ResponseTemplate};
 
 #[tokio::test]
 async fn paginate_conversations() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 2_usize;
@@ -136,7 +136,7 @@ async fn paginate_conversations() {
 
 #[tokio::test]
 async fn paginate_messages() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 2_usize;

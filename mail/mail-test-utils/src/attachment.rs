@@ -1,16 +1,14 @@
-use crate::core::account::TEST_ADDRESS_ID;
-use crate::test_context::TestContext;
+use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
-    Disposition as ApiDisposition, MimeType as ApiMimeType,
+    Disposition as ApiDisposition,
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
-use proton_core_common::datatypes::RemoteId;
+use proton_core_test_utils::account::TEST_ADDRESS_ID;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_common::datatypes::attachment;
-use std::{fmt::format, io};
-use wiremock::matchers::{body_json, method, path};
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 const TEST_ATTACHMENT_ID: &str =
@@ -71,7 +69,7 @@ pub fn testdata_expected_attachment_decrypted() -> Vec<u8> {
     b"attachment".to_vec()
 }
 
-impl TestContext {
+impl MailTestContext {
     /// Generate new mock for retrieving complete attachment metadata.
     ///
     /// This function will mock the response for the give attachment metadata.

@@ -1,12 +1,11 @@
-use crate::test_context::TestContext;
+use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::requests::{
-    PostCreateDraftRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest,
-    PutMessagesReadRequest, PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
+    PostCreateDraftRequest, PutMessagesLabelRequest, PutMessagesUnlabelRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageMetadata, MimeType, OperationResult,
@@ -16,16 +15,13 @@ use proton_api_mail::services::proton::responses::{
     PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
     PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
-use proton_core_common::datatypes::RemoteId;
-use proton_crypto_inbox::message::EncryptedDraft;
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-impl TestContext {
+impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
     pub async fn mock_get_message(&self, message_id: &ApiRemoteId, message: ApiMessage) {
         let resp = GetMessageResponse { message };

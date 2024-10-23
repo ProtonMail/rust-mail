@@ -1,4 +1,4 @@
-use proton_test_utils::test_context::TestContext;
+use proton_core_test_utils::test_context::TestContext;
 
 #[tokio::test]
 #[allow(unused_variables)]

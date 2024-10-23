@@ -14,13 +14,13 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use velcro::hash_map;
 
 #[tokio::test]
 async fn test_label_custom_label() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let (init_params, conv_id, label_id, _) = test_init_params_label();
@@ -103,7 +103,7 @@ async fn test_label_custom_label() {
 
 #[tokio::test]
 async fn test_label_starred() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let (init_params, conv_id, _, _) = test_init_params_label();
@@ -186,7 +186,7 @@ async fn test_label_starred() {
 
 #[tokio::test]
 async fn test_label_fails_when_labelling_folders() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
 
     let (init_params, _, _, folder_id) = test_init_params_label();

@@ -6,6 +6,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
 use proton_mail_common::Mailbox;
 <<<<<<< HEAD
+<<<<<<< HEAD
 use proton_mail_test_utils::common::TestContext;
 use proton_mail_test_utils::message_body::{
     message_body_test_message_simple, message_body_test_params, message_body_test_user_secret,
@@ -15,13 +16,17 @@ use proton_mail_test_utils::message_body::{
 >>>>>>> 3e8d6e58 (Fixed rust formatter issues.)
 use proton_test_utils::mail::message_body::*;
 use proton_test_utils::test_context::TestContext;
+=======
+use proton_mail_test_utils::message_body::*;
+use proton_mail_test_utils::test_context::MailTestContext;
+>>>>>>> 56f39424 (Moved test utils to their respective crates.)
 use stash::orm::Model;
 use std::io::read_to_string;
 
 #[tokio::test]
 async fn mailbox_message_body_simple() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::with_user_secret_and_user_id(
+    let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )

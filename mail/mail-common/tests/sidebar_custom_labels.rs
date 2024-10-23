@@ -3,7 +3,7 @@ use proton_api_mail::services::proton::common::{LabelType as ApiLabelType, Label
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_mail_common::Sidebar;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 use test_case::test_case;
 use velcro::hash_map;
 
@@ -29,7 +29,7 @@ async fn sidebar_custom_labels(labels: &[(ApiRemoteId, String, u32)], expected: 
     //     + Create Custom Folders
     //   * Create Sidebar
 
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     ctx.setup_user(sidebar_test_params(labels)).await;
 
     ctx.catch_all().await;

@@ -12,12 +12,12 @@ use proton_core_common::datatypes::{
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelExtension};
 use proton_core_common::{CoreEventSubscriber, UserContext};
+use proton_core_test_utils::account::unlocked_user_key;
+use proton_core_test_utils::test_context::{TestContext, TestCoreEvent};
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::proton_crypto::crypto::AccessKeyInfo;
 use proton_crypto_account::proton_crypto::new_pgp_provider;
 use proton_event_loop::subscriber::Subscriber;
-use proton_test_utils::core::account::unlocked_user_key;
-use proton_test_utils::test_context::{TestContext, TestCoreEvent};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Stash;

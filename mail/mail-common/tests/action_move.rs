@@ -14,7 +14,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::collections::HashMap;
 use velcro::hash_map;
@@ -22,7 +22,7 @@ use velcro::hash_map;
 #[tokio::test]
 #[ignore]
 async fn test_move_between_folders() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let folder_id = LabelId::from("myfolder");
     let conv_id = RemoteId::from("conv_id");
@@ -138,7 +138,7 @@ async fn test_move_between_folders() {
 #[tokio::test]
 #[ignore]
 async fn test_move_from_label_does_not_unlabel() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let label_id = LabelId::from("mylabel");
     let conv_id = RemoteId::from("conv_id");
@@ -225,7 +225,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
     // setup
     //   + Create Conversation in inbox with a label
 
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
     let label_id = LabelId::from("mylabel");
@@ -360,7 +360,7 @@ async fn test_move_into_trash_remove_labels_and_mark_read() {
 async fn test_move_into_spam_remove_labels() {
     // setup
     //   + Create Conversation in inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
     let label_id = LabelId::from("mylabel");
@@ -468,7 +468,7 @@ async fn move_out_of_trash_set_almost_all_mail() {
     // setup
     //   + Create a Conversation in trash
 
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
 
@@ -551,7 +551,7 @@ async fn test_move_out_of_spam_set_almost_all_mail() {
     // setup
     //   + Create Conversation in spam
 
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let conv_id = RemoteId::from("conv_id");
 

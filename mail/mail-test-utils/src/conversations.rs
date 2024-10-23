@@ -1,4 +1,4 @@
-use crate::test_context::TestContext;
+use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::ApiErrorInfo;
 use proton_api_mail::services::proton::requests::{
@@ -8,14 +8,14 @@ use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, MessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
-    GetConversationResponse, GetConversationsResponse, PutConversationsLabelResponse,
-    PutConversationsReadResponse, PutConversationsUnlabelResponse,
+    GetConversationResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
+    PutConversationsUnlabelResponse,
 };
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-impl TestContext {
+impl MailTestContext {
     /// Generate new mock expectations for labeling conversations.
     ///
     /// This function will mock the response for the given `ids` and `failed`

@@ -2,7 +2,7 @@ use futures::future::join_all;
 use proton_core_common::models::sender_image_cache::{
     ReceivedFormat, SenderImage, SenderImageMetadata,
 };
-use proton_test_utils::test_context::TestContext;
+use proton_core_test_utils::test_context::TestContext;
 use stash::orm::Model;
 use std::fs;
 use test_case::test_case;

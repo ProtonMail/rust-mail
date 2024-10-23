@@ -19,8 +19,8 @@ use proton_crypto_account::keys::{
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Label, Message};
 use proton_mail_common::Mailbox;
-use proton_test_utils::mail::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::params;
 use std::collections::HashMap;
@@ -36,7 +36,7 @@ async fn move_between_folders() {
     // Setup:
     // * create 2 folder labels
     // * create a message in one of those folders
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -113,7 +113,7 @@ async fn move_from_label_does_not_unlabel() {
     // Setup:
     // * create 2 custom labels
     // * create a message in one of those label
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -191,7 +191,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
     // * create a message in inbox (or any non-trash mailbox)
     // * add the label to the message
     // * the message is unread
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -271,7 +271,7 @@ async fn move_into_spam_remove_labels() {
     // * create a label
     // * create a message in inbox (or any non-spam mailbox)
     // * add the label to the message
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -348,7 +348,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
     // Setup:
     // * create a message in spam
     // * the message doesn't have `almost_all_mail` label
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 

@@ -1,7 +1,5 @@
-use crate::core::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
-use crate::helpers::Helpers;
+use crate::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use futures::executor::block_on;
-use once_cell::sync::Lazy;
 use proton_api_core::auth::{AuthSession, AuthState, SecretString, UserKeySecret};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -22,14 +20,11 @@ use proton_core_common::{
     UserDatabaseInitializer,
 };
 use proton_event_loop::Event;
-use proton_mail_common::{MailContext, MailUserContext};
 use proton_sqlite3::MigratorError;
 use serde::Deserialize;
 use stash::stash::Stash;
 use std::io::stdout;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::MutexGuard;
 use std::sync::Weak;
 use tempdir::TempDir;
 use tracing::subscriber::set_global_default;
@@ -42,13 +37,7 @@ use url::Url;
 use wiremock::MockServer;
 use wiremock::{matchers::any, Mock, Request};
 
-static HELPERS: Lazy<Mutex<Helpers>> = Lazy::new(|| Mutex::new(Helpers::new()));
-
 pub trait BaseTestContext {
-    fn helpers() -> MutexGuard<'static, Helpers> {
-        HELPERS.lock().unwrap()
-    }
-
     /// Generate a test UID.
     #[must_use]
     fn test_uid() -> RemoteId {
@@ -129,11 +118,10 @@ impl UserDatabaseInitializer for TestCoreDatabaseInitializer {
 pub struct TestContext {
     this: Weak<Self>,
     pub context: Arc<Context>,
-    pub tmp_dir: Arc<TempDir>,
+    pub tmp_dir: TempDir,
     pub core_account: CoreAccount,
     pub core_session: CoreSession,
-    pub mock_web_server: MockServer,
-    pub mail_context: MailContext,
+    pub mock_web_server: Arc<MockServer>,
 }
 
 impl BaseTestContext for TestContext {}
@@ -145,37 +133,44 @@ impl TestContext {
     }
 
     #[must_use]
-    pub fn mail_context(&self) -> MailContext {
-        self.mail_context.clone()
-    }
-
-    #[must_use]
     pub fn mock_server(&self) -> &MockServer {
         &self.mock_web_server
     }
 
     /// Create and initialize test context.
     pub async fn new() -> Arc<Self> {
-        Self::_new(None, None).await
+        Self::_new(None, None, None).await
     }
 
     /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
     pub async fn with_user_secret_and_user_id(
         user_key_secret: UserKeySecret,
         user_id: RemoteId,
+        initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
     ) -> Arc<Self> {
-        Self::_new(Some(user_key_secret), Some(user_id)).await
+        Self::_new(Some(user_key_secret), Some(user_id), initializers).await
     }
 
-    async fn _new(user_key_secret: Option<UserKeySecret>, user_id: Option<RemoteId>) -> Arc<Self> {
+    /// Create and initialize test context and override the default `user_key_secret` and `user_id`.
+    pub async fn with_initializers(
+        initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
+    ) -> Arc<Self> {
+        Self::_new(None, None, initializers).await
+    }
+
+    async fn _new(
+        user_key_secret: Option<UserKeySecret>,
+        user_id: Option<RemoteId>,
+        initializers: Option<Vec<Box<dyn UserDatabaseInitializer>>>,
+    ) -> Arc<Self> {
         drop(set_global_default(
             registry()
                 .with(EnvFilter::new("debug,stash=debug"))
                 .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
         ));
 
-        let mock_web_server = MockServer::start().await;
-        let tmp_dir = Self::helpers().provide_tmp_dir("core_test");
+        let mock_web_server = Arc::new(MockServer::start().await);
+        let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         let keychain: Arc<InMemoryKeyChain> = Self::keychain();
         let api_config: proton_api_core::services::proton::Config =
             Self::api_config(&mock_web_server);
@@ -189,20 +184,24 @@ impl TestContext {
         let user_id = user_id.unwrap_or_else(Self::test_user_id);
         let user_key_secret = user_key_secret.unwrap_or_else(testdata_user_secret);
 
+        let mut all_initializers: Vec<Box<dyn UserDatabaseInitializer>> =
+            vec![TestCoreDatabaseInitializer.boxed()];
+
+        if let Some(mut additional_initializers) = initializers {
+            all_initializers.append(&mut additional_initializers);
+        }
+
         // Create core test context
         let context = Context::new(
             tmp_dir.path(),
             tmp_dir.path(),
             keychain.clone(),
-            [TestCoreDatabaseInitializer.boxed()],
+            all_initializers,
             api_config.clone(),
             None,
         )
         .await
-        .expect("failed to create mail context");
-
-        let mail_cache_path = tmp_dir.path().join("mail-cache");
-        std::fs::create_dir_all(&mail_cache_path).expect("failed to create mail cache dir");
+        .expect("failed to create core context");
 
         // Generate a fake session and write it to the database
         let (core_account, core_session) = {
@@ -248,19 +247,6 @@ impl TestContext {
             (account, session)
         };
 
-        // Create mail test context
-        let mail_context = MailContext::new(
-            tmp_dir.path(),
-            tmp_dir.path(),
-            mail_cache_path,
-            100_000, // ~100kB
-            keychain,
-            api_config,
-            None,
-        )
-        .await
-        .expect("failed to create mail context");
-
         Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             context,
@@ -268,7 +254,6 @@ impl TestContext {
             core_account,
             core_session,
             mock_web_server,
-            mail_context,
         })
     }
 
@@ -283,16 +268,6 @@ impl TestContext {
                 cache_path,
                 100_000, // ~100kB
             )
-            .await
-            .expect("failed to create user context")
-    }
-
-    /// Get the test user mail context.
-    ///
-    /// # Panics
-    pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
-        self.mail_context
-            .user_context_from_session(&self.core_session)
             .await
             .expect("failed to create user context")
     }

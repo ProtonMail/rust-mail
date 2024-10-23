@@ -144,6 +144,19 @@ impl MailContext {
         })
     }
 
+    /// Creates MailContext instance based on provided core Context.
+    pub async fn new_with_core_context(
+        core_context: Arc<Context>,
+        mail_cache_path: PathBuf,
+        mail_cache_size: u32,
+    ) -> Result<Self, MailContextError> {
+        Ok(Self {
+            core_context,
+            mail_cache_path,
+            mail_cache_size,
+        })
+    }
+
     /// Begin a login flow.
     ///
     /// This method initiates a new [`Flow`], used to log in to a Proton account.
@@ -400,7 +413,7 @@ impl MailContext {
     }
 }
 
-struct MailUserDatabaseInitializer {}
+pub struct MailUserDatabaseInitializer {}
 
 impl UserDatabaseInitializer for MailUserDatabaseInitializer {
     fn initialize(&self, stash: &Stash) -> Result<(), MigratorError> {

@@ -1,25 +1,16 @@
-use crate::test_context::TestContext;
+use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::response_data::AddressSignedKeyList;
-use proton_api_core::{
-    services::proton::{
-        common::RemoteId as ApiRemoteId,
-        response_data::{Address as ApiAddress, AddressStatus, AddressType},
-    },
-    session::CoreSession,
+use proton_api_core::services::proton::{
+    common::RemoteId as ApiRemoteId,
+    response_data::{Address as ApiAddress, AddressStatus, AddressType},
 };
-use proton_api_mail::services::proton::{
-    requests::{GetConversationsOptions, GetMessagesOptions},
-    response_data::{
-        Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-        Label as ApiLabel, MessageMetadata,
-    },
+use proton_api_mail::services::proton::response_data::{
+    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel, Label as ApiLabel,
+    MessageMetadata,
 };
-use proton_core_common::datatypes::RemoteId;
-use proton_core_common::models::{Address, ModelExtension};
 use proton_crypto_account::keys::AddressKeys;
-use proton_mail_common::models::{Conversation, Label, Message};
 
-impl TestContext {
+impl MailTestContext {
     #[must_use]
     pub fn get_test_labels(&self) -> Vec<ApiLabel> {
         let label1 = ApiLabel {

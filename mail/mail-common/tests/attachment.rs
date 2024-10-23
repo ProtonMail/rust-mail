@@ -7,8 +7,8 @@ use proton_mail_common::Mailbox;
 use proton_mail_test_utils::attachment::{
     testdata_attachment_data, testdata_expected_attachment_decrypted,
 };
-use proton_test_utils::mail::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::stash::{AgnosticInterface, Interface};
 use std::fs;
@@ -16,7 +16,7 @@ use std::fs;
 #[tokio::test]
 #[ignore]
 async fn test_load_attachment_buffer() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     let user_ctx = ctx.mail_user_context().await;
 
@@ -71,7 +71,7 @@ async fn test_load_attachment_buffer() {
 #[tokio::test]
 #[ignore]
 async fn load_attachment_from_cache() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     let user_ctx = ctx.mail_user_context().await;
 
@@ -123,7 +123,7 @@ async fn load_attachment_content_first_time() {
     // Setup
     //   * Create an attachment
     //   * Check cache is empty
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
@@ -163,7 +163,7 @@ async fn load_attachment_content_from_cache() {
     // Setup
     //   * Create an attachment
     //   * Add attachment data into cache
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
     let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();

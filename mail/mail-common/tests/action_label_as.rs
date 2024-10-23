@@ -17,7 +17,7 @@ use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelI
 use proton_mail_common::models::{Conversation, Label};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use stash::params;
 use std::collections::{HashMap, HashSet};
@@ -28,7 +28,7 @@ const TEST_USER_ADDRESS_ID: &str =
 
 #[tokio::test]
 async fn action_label_as_without_archive() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -194,7 +194,7 @@ async fn action_label_as_without_archive() {
 
 #[tokio::test]
 async fn action_label_as_with_archive() {
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 

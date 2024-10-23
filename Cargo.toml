@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core/*", "mail/*", "test-utils", "xtask"]
+members = ["core/*", "mail/*", "xtask"]
 
 [workspace.dependencies]
 
@@ -154,10 +154,18 @@ features = [
     "socks",
 ]
 
-[workspace.dependencies.proton-test-utils] 
+[workspace.dependencies.proton-core-test-utils] 
 version = "0.1"
-path = "test-utils"
+path = "core/core-test-utils"
 registry = "proton"
+features = ["test-utils"]
+
+[workspace.dependencies.proton-mail-test-utils] 
+version = "0.1"
+path = "mail/mail-test-utils"
+registry = "proton"
+features = ["test-utils"]
+
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"

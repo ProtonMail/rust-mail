@@ -9,14 +9,14 @@ use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::sync::Arc;
 
 #[tokio::test]
 async fn test_new_mailbox_sync_conversations() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     params
         .labels
@@ -151,7 +151,7 @@ async fn test_new_mailbox_sync_conversations() {
 //     // messages.
 //
 //     // Set up a user and initialise the inbox
-//     let ctx = TestContext::new();
+//     let ctx = MailTestContext::new();
 //     let mut params = TestParams::default_basic();
 //     params
 //         .labels

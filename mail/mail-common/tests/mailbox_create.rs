@@ -8,13 +8,13 @@ use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
-use proton_test_utils::test_context::TestContext;
+use proton_mail_test_utils::test_context::MailTestContext;
 
 #[tokio::test]
 #[ignore]
 async fn test_new_mailbox_sync_conversations() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     params
         .labels
@@ -77,7 +77,7 @@ async fn test_new_mailbox_sync_conversations() {
 #[ignore]
 async fn test_new_mailbox_sync_messages() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     let mut mail_settings = ApiMailSettings::default();
     mail_settings.view_mode = ApiViewMode::Messages;
@@ -170,7 +170,7 @@ async fn test_new_mailbox_sync_messages() {
 #[ignore]
 async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     // Set up a user and initialise the inbox
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
     // For view mode to conversations.
     let mut mail_settings = ApiMailSettings::default();

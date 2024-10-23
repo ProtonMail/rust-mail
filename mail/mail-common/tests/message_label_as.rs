@@ -20,7 +20,11 @@ use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabel, SystemLabelI
 use proton_mail_common::models::{Label, Message};
 use proton_mail_common::Mailbox;
 use proton_mail_test_utils::init::Params as TestParams;
+<<<<<<< HEAD
 use proton_test_utils::test_context::TestContext;
+=======
+use proton_mail_test_utils::test_context::MailTestContext;
+>>>>>>> 56f39424 (Moved test utils to their respective crates.)
 use stash::orm::Model;
 use stash::params;
 use std::collections::HashMap;
@@ -44,7 +48,7 @@ async fn label_as_without_archive() {
     //   + one with 1 + 3
     //   + one with all three labels
     //
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
@@ -210,7 +214,7 @@ async fn label_as_with_archive() {
     //   + one without label
     //   + one with all three labels
     //
-    let ctx = TestContext::new().await;
+    let ctx = MailTestContext::new().await;
     let user_ctx = ctx.mail_user_context().await;
     let stash = user_ctx.user_stash();
 
