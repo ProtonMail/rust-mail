@@ -19,6 +19,7 @@ use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
 use proton_mail_common::models::Label;
 use stash::orm::Model;
 use stash::stash::{Interface, Tether};
+use std::collections::BTreeMap;
 
 lazy_static! {
     pub static ref MY_ADDRESS_ID: ApiRemoteId = ApiRemoteId::from("MyRemoteId");
@@ -38,7 +39,7 @@ macro_rules! lid {
 }
 
 /// Macro wrapping &str into Option<RemoteId> for easier model definition.
-/// Since it calls .into() on the RemoteId, it allows creation of Option<LabelId> as well.
+/// Since it calls ``.into()`` on the `RemoteId`, it allows creation of Option<LabelId> as well.
 #[macro_export]
 macro_rules! rid {
     ($id:expr) => {{
@@ -243,15 +244,18 @@ impl MailTestContext {
     }
 }
 
+/// # Panics
 pub async fn remote_counterpart<T: Model>(id: LocalId, tx: &Tether) -> RemoteId {
     id.counterpart::<T, _>(tx).await.unwrap().unwrap()
 }
 
 #[allow(dead_code)]
+/// # Panics
 pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
     id.counterpart::<T, _>(tx).await.unwrap().unwrap()
 }
 
+/// # Panics
 pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
     let mut labels = [test_label1(), test_label2()];
     for label in &mut labels {
@@ -268,6 +272,7 @@ pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
     labels.into_iter().map(|l| l.local_id.unwrap()).collect()
 }
 
+/// # Panics
 pub async fn create_address(core_tx: &Tether) -> Address {
     let mut address = test_address();
     address
@@ -278,6 +283,7 @@ pub async fn create_address(core_tx: &Tether) -> Address {
     address
 }
 
+#[must_use]
 pub fn test_address() -> Address {
     Address {
         local_id: None,
@@ -308,6 +314,7 @@ pub fn test_address() -> Address {
     }
 }
 
+#[must_use]
 pub fn test_label1() -> Label {
     label!(
         remote_id: Some(MY_LABEL_ID1.clone().into()),
@@ -317,6 +324,7 @@ pub fn test_label1() -> Label {
     )
 }
 
+#[must_use]
 pub fn test_label2() -> Label {
     label!(
        remote_id: Some(MY_LABEL_ID2.clone().into()),
@@ -329,6 +337,7 @@ pub fn test_label2() -> Label {
     )
 }
 
+#[must_use]
 pub fn test_starred_label() -> Label {
     label!(
        remote_id: Some(LabelId::starred().clone()),
@@ -373,6 +382,6 @@ pub fn test_conversation(
         labels: Vec::from_iter(labels),
         display_snooze_reminder: false,
         attachments_metadata: Vec::from_iter(attachments),
-        attachment_info: Default::default(),
+        attachment_info: BTreeMap::default(),
     }
 }

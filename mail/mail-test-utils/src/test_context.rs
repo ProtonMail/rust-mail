@@ -1,32 +1,11 @@
 use proton_api_core::auth::UserKeySecret;
-use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
-use proton_api_core::services::proton::response_data::{
-    Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
-};
-use proton_api_mail::services::proton::response_data::{
-    AttachmentMetadata as ApiAttachmentMetadata, Conversation as ApiConversation,
-    ConversationLabel as ApiConversationLabel, MessageAddress as ApiMessageAddress,
-};
-use proton_api_mail::services::proton::response_data::{Label as ApiLabel, MessageMetadata};
 use proton_core_common::datatypes::RemoteId;
-use proton_core_common::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, Id, LabelId, LocalId,
-    PasswordMode, TfaStatus,
-};
 use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_common::models::{Address, ModelExtension};
 use proton_core_common::UserDatabaseInitializer;
-use proton_core_test_utils::account::{testdata_user_secret, TEST_USER_ID, TEST_USER_MAIL};
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
-use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use proton_mail_common::context::MailUserDatabaseInitializer;
-use proton_mail_common::datatypes::{LabelColor, LabelType, SystemLabelId};
-use proton_mail_common::models::Label;
 use proton_mail_common::{MailContext, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
-use stash::orm::Model;
-use stash::stash::Stash;
-use stash::stash::{Interface, Tether};
 use std::sync::Arc;
 use tempdir::TempDir;
 use wiremock::matchers::any;

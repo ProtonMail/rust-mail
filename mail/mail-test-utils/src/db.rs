@@ -3,6 +3,7 @@ use proton_mail_common::db::migrations::migrate_db;
 use stash::stash::Stash;
 use tempfile::{tempdir, TempDir};
 
+/// # Panics
 pub async fn new_test_connection() -> Stash {
     use std::io::stdout;
     use tracing::subscriber::set_global_default;
@@ -23,6 +24,7 @@ pub async fn new_test_connection() -> Stash {
     stash
 }
 
+/// # Panics
 pub async fn new_test_connection_file() -> (Stash, TempDir) {
     use std::io::stdout;
     use tracing::subscriber::set_global_default;
