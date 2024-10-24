@@ -10,13 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - `Message::attachments_metadata` now doesn't return embedded attachments.
-  - `Conversation::attachments_metadata` now doesn't return embedded attachments.
+  - `Conversation::attachments_metadata` now doesn't return embedded
+    attachments.
+
 
 ## [0.15.0] - 2024-10-22
 
 ### Added
 
-  - `all_available_bottom_bar_actions_for_conversations` function who return available actions for conversations in bottom bar.
+  - `all_available_bottom_bar_actions_for_conversations` function who return
+    available actions for conversations in bottom bar.
   - `GeneralActions::ViewMessageInDarkMode` general action.
   - `Draft` type to create/open draft messages
 
@@ -24,72 +27,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - `message_body` now returns `MailSessionError` on failure.
 
+
 ## [0.14.0] - 2024-10-17
 
 ### Added
+
   - `Label_as` action for conversations
-  - `contact_list` method which returns new set of data objects representing contact list
-  - `all_available_bottom_bar_actions_for_messages` function who return available actions for messages in bottom bar.
+  - `contact_list` method which returns new set of data objects representing
+    contact list
+  - `all_available_bottom_bar_actions_for_messages` function who return
+    available actions for messages in bottom bar.
 
 
 ### Changed
-  - All functions which interact on conversations now use their respective actions.
-  - `mark_conversations_as_read` requires a `Maibox` rather than `MailUserSession`.
+
+  - All functions which interact on conversations now use their respective
+    actions.
+  - `mark_conversations_as_read` requires a `Maibox` rather than
+    `MailUserSession`.
 
 ### Fixed
-  - Fixed panic on overflow when `mark_deleted` for messages could overflow in some instances.
+
+  - Fixed panic on overflow when `mark_deleted` for messages could overflow in
+    some instances.
+
 
 ## [0.13.0] - 2024-10-11
 
 ### Added
+
   - `NotReady` account state
+
 
 ## [0.12.1] - 2024-10-10
 
 ### Fixed
   - Ensure only logged in accounts are returned as primary
 
+
 ## [0.12.0] - 2024-10-07
 
 ### Changed
-  - `mark_messages_read`, `mark_messages_unread` and `mark_messages_deleted` no longer require a label.
+
+  - `mark_messages_read`, `mark_messages_unread` and `mark_messages_deleted` no
+    longer require a label.
 
 ### Added
+
   - Add account and session state directly in StoredAccount/StoredSession
   - Blocking forms of `get_account[s]` and `get_session[s]`
   - Blocking forms of `get_account_state` and `get_session_state`
   - Blocking form of `get_primary_account`
   - `LabelAs` action set labels to a group of messages
 
+
 ## [0.11.56] - 2024-10-03
 
 ### Fixed
+
   - `MailUserContext::image_for_sender` now return None for empty images.
   - Bring back soft delete for messages.
 
 ### Added
+
   - `move_messages` which moves many messages from a label into another.
   - Expose actions to star and unstar messages.
 
 ### Changed
+
   - Rename `Ready` variant of `StoredSessionState` to `Authenticated`
+
 
 ## [0.11.54] - 2024-09-27
 
 ### Fixed
-  - adjusted watcher dump time from 5s to 200ms.
+
+  - Adjusted watcher damp time from 5s to 200ms.
 
 ## [0.11.53] - 2024-09-25
 
 ### Fixed
+
   - Bring back soft delete for conversations
   - HTML messages no longer have extra padding.
   - Plain text messsages get properly rendered.
   - Revert pagination changes without breaking new API.
 
+
 ## [0.11.52] - 2024-09-25
 
 ### Fixed
+
   - Restored paginator `has_next_page()`
   - Login after log out
 
@@ -97,15 +125,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - Paginators now only work with `next_page()`. The of the result set is reached when
-    nothing is returned.
+  - Paginators now only work with `next_page()`. The of the result set is
+    reached when nothing is returned.
   - Paginator construction loads initial page in the background.
   - Disable contact related events
+
 
 ## [0.11.50] - 2024-09-23
 
 ### Added
-
 
   - Expose `CoreAccount` and related types
   - Add methods to query an account's login state
@@ -115,11 +143,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Split `StoredSession` into `StoredAccount` / `StoredSession`
 
+
 ## [0.11.49] - 2024-09-20
 
 ### Fixed
 
   - Do not trigger callbacks for synced pages
+
 
 ## [0.11.48] - 2024-09-19
 
@@ -127,24 +157,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Crash in paginator.reload()
 
+
 ## [0.11.47] - 2024-09-19
 
 ### Fixed
 
   - Message and Conversation pagination counters and element scroll
 
+
 ## [0.11.46] - 2024-09-18
 
 ### Changed
 
-  - Removed first argument (`mail_settings`) from `MailUserSession::image_for_sender`.
+  - Removed first argument (`mail_settings`) from
+    `MailUserSession::image_for_sender`.
   - `MailUserSession::initialize` now fetches data in parallel.
+
 
 ## [0.11.45] - 2024-09-18
 
 ### Added
 
-  - Added the following APIs: `delete_messages`, `mark_messages_read`, `mark_messages_unread`.
+  - Added the following APIs: `delete_messages`, `mark_messages_read`,
+    `mark_messages_unread`.
   - Added `reload()` method to the message and conversation paginators
 
 ### Fixed
@@ -154,36 +189,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - `paginate_conversations_for_label` and `paginate_message_for_label` now sync data from the
-     server.
+  - `paginate_conversations_for_label` and `paginate_message_for_label` now sync
+    data from the server.
   - `Mailbox` syncs 50 elements to match pagination behavior.
+
 
 ## [0.11.44] - 2024-09-12
 
 ### Changed
 
   - Errors for login flow are now returned as contextual Enums
-  - `mark_conversations_as_unread` now expects a `Mailbox` rather than `MailUserSession`
-  - Renamed `available_actions_for_conversation` to `available_actions_for_conversations`
-    - Paramters changed from Id of the conversation to Vec<Id> of conversations and include view - Id of the Label
+  - `mark_conversations_as_unread` now expects a `Mailbox` rather than
+    `MailUserSession`
+  - Renamed `available_actions_for_conversation` to
+    `available_actions_for_conversations`
+      - Paramters changed from Id of the conversation to Vec<Id> of
+        conversations and include view - Id of the Label
   - Renamed `available_actions_for_message` to `available_actions_for_messages`
-    - Paramters changed from Id of the message to Vec<Id> of messages and include view - Id of the Label
-  - Reimagined `ConversationAvailableAction` to contain each actions section representing final view.
-    - renamed to `ConversationAvailableActions`
-  - Reimagined `MessageAvailableAction` to contain each actions section representing final view.
-    - renamed to `MessageAvailableActions`
+      - Paramters changed from Id of the message to Vec<Id> of messages and
+        include view - Id of the Label
+  - Reimagined `ConversationAvailableAction` to contain each actions section
+    representing final view.
+      - renamed to `ConversationAvailableActions`
+  - Reimagined `MessageAvailableAction` to contain each actions section
+    representing final view.
+      - renamed to `MessageAvailableActions`
   - Logs now always contain debug info, except for database debug logs.
-  - When `MailSessionParams::log_debug` is set to true, database debug logs are also included.
+  - When `MailSessionParams::log_debug` is set to true, database debug logs are
+    also included.
 
 ### Added
 
-  - `available_label_as_actions_for_messages` & `available_label_as_actions_for_conversations` methods exposing label_as actions
-  - `available_move_to_actions_for_messages` & `available_move_to_actions_for_conversations` methods exposing move_to actions
+  - `available_label_as_actions_for_messages` &
+    `available_label_as_actions_for_conversations` methods exposing label_as
+    actions
+  - `available_move_to_actions_for_messages` &
+    `available_move_to_actions_for_conversations` methods exposing move_to
+    actions
   - `GeneralActions` enum representing static actions on message handled by FE.
   - `ReplyActions` enum respresenting reply options.
   - `IsSelected` enum representing selection state for Move & LabelAs actions.
-  - `MoveAction` enum representing folder (either system or custom) to which item can be moved to.
+  - `MoveAction` enum representing folder (either system or custom) to which
+    item can be moved to.
   - `LabelAsAction` enum representing user applicable labels
+
 
 ## [0.11.43] - 2024-09-12
 
@@ -191,11 +240,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Pagination query errors
 
+
 ## [0.11.42] - 2024-09-12
 
 ### Fixed
 
   - Pagination query errors
+
 
 ## [0.11.41] - 2024-09-12
 
@@ -208,6 +259,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Message display order in message views.
   - Message pagination query
 
+
 ## [0.11.40] - 2024-09-12
 
 ### Added
@@ -218,11 +270,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - HTML formatting
 
+
 ## [0.11.39] - 2024-09-11
 
 ### Fixed
 
   - Missing pagination exports
+
 
 ## [0.11.38] - 2024-09-11
 
@@ -232,14 +286,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - `ExclusiveLocation` enum now instead of listing all system exclusive locations, wraps them
-    in `System { name: SystemLabel, id: Id }`
+  - `ExclusiveLocation` enum now instead of listing all system exclusive
+    locations, wraps them in `System { name: SystemLabel, id: Id }`
+
 
 ## [0.11.37] - 2024-09-09
 
 ### Fixed
 
 - Login should now fail on wrong password
+
 
 ## [0.11.36] - 2024-09-09
 
@@ -251,6 +307,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Update uniffi to v0.28.1
 
+
 ## [0.11.35] - 2024-09-09
 
 ### Fixed
@@ -260,13 +317,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - Errors for login flow are now returned as contextual Enums
-  - `mark_conversations_as_unread` now expects a `Mailbox` rather than `MailUserSession`
+  - `mark_conversations_as_unread` now expects a `Mailbox` rather than
+    `MailUserSession`
+
 
 ## [0.11.34] - 2024-09-05
 
 ### Fixed
 
   - Query error in `Mailbox.watchUnreadCount`.
+
 
 ## [0.11.33] - 2024-09-03
 
@@ -280,17 +340,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Fix callback leak in `wath_conversation_for_label`
 
+
 ## [0.11.31] - 2024-09-03
 
 ### Fixed
 
   - Fix callback leak in `wath_conversation`
 
+
 ## [0.11.30] - 2024-09-03
 
 ### Fixed
 
   - Query error in `ContextualConversation::watch_conversation_and_messages`
+
 
 ## [0.11.29] - 2024-09-03
 
@@ -307,22 +370,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reduced how often callbacks get called.
   - Use `GET` for fetching messages.
 
+
 ## [0.11.28] - 2024-09-03
 
 ### Fixed
 
   - Add attachment file name to cached attachment.
 
+
 ## [0.11.27] - 2024-09-02
 
 ### Added
 
-  - `apply_label_to_messages` who apply a label to many messages.
-  - `remove_label_from_messages` who remove a label from many messages.
+  - `apply_label_to_messages()` who apply a label to many messages.
+  - `remove_label_from_messages()` who remove a label from many messages.
 
 ### Fixed
 
-  - Fixed crash in `watchConversation`
+  - Fixed crash in `watchConversation()`
+
 
 ## [0.11.26] - 2024-09-02
 
@@ -333,11 +399,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - `conversation` now returns the conversation and the messages.
-  - `conversation` may return null if the conversation is not found.
-  - `watch_conversation` now only returns on handle.
-  - `watch_conversation` may return null if the conversation is not found.
-  - `conversation` and `watch_conversation` now sync the conversation's messages at least once.
+  - `conversation()` now returns the conversation and the messages.
+  - `conversation()` may return null if the conversation is not found.
+  - `watch_conversation()` now only returns on handle.
+  - `watch_conversation()` may return null if the conversation is not found.
+  - `conversation()` and `watch_conversation()` now sync the conversation's
+    messages at least once.
+
 
 ## [0.11.25] - 2024-08-30
 
@@ -345,32 +413,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Fixed some notifications not being tracked.
 
+
 ## [0.11.24] - 2024-08-29
 
 ### Changed
 
   - `image_for_sender` now return a String who is a path to the image.
 
+
 ## [0.11.23] - 2024-08-29
 
 ### Changed
 
- - [iOS] library renamed to `proton_app_uniffi`
+  - [iOS] library renamed to `proton_app_uniffi`
+
 
 ## [0.11.22] - 2024-08-28
 
 ### Added
 
-  - Added new function `DecryptedMessage::get_multipart_data` that clients have to use to check if the message is multipart and they should show attachments.
+  - Added new function `DecryptedMessage::get_multipart_data` that clients have
+    to use to check if the message is multipart and they should show
+    attachments.
 
 ### Changed
 
-  - Rework `message_id_to_open` from `Option<Id>` to `Id` on `WatchedConversation` type
+  - Rework `message_id_to_open` from `Option<Id>` to `Id` on
+    `WatchedConversation` type
   - Removed callback from `MailUserSession::poll_events`
 
 ### Removed
 
  - `EventCallback` type.
+
 
 ## [0.11.21] - 2024-08-28
 
@@ -384,12 +459,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
- - `StoredSession` `email` and `name` have been replaced with `name_or_address`.
- - `MailUserSession::poll_events` method now require callback_interface `EventCallback`.
- - Changed the following methods to be sync
-    * `MailSession::create`
-    * `MailSession::user_context_from_session`
-    * `MailSession::stored_sessions`
+  - `StoredSession` `email` and `name` have been replaced with `name_or_address`.
+  - `MailUserSession::poll_events` method now require callback_interface
+    `EventCallback`.
+  - Changed the following methods to be sync
+      - `MailSession::create`
+      - `MailSession::user_context_from_session`
+      - `MailSession::stored_sessions`
+
 
 ## [0.11.20] - 2024-08-27
 
@@ -397,25 +474,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
  - Renamed `Mailbox::load_attachment_to_buffer` to `Mailbox::get_attachment`.
 
+
 ## [0.11.19] - 2024-08-26
 
 ### Added
 
-  - `Sidebar::all_custom_folders` method (return all custom folders in a flat way).
+  - `Sidebar::all_custom_folders` method (return all custom folders in a flat
+    way).
 
 ### Changed
 
-  - Split `ContextualLabel` in `SidebarCustomFolder`, `SidebarCustomLabel` and `SidebarSystemLabel`.
+  - Split `ContextualLabel` in `SidebarCustomFolder`, `SidebarCustomLabel` and
+    `SidebarSystemLabel`.
 
 ### Fixed
 
   - DB query error in `watch_messages_for_label`.
+
 
 ## [0.11.18] - 2024-08-26
 
 ### Fixed
 
   - DB query error in `watch_conversations_for_label`.
+
 
 ## [0.11.17] - 2024-08-26
 
@@ -429,13 +511,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-  - `Sidebar::custom_folders` to return all custom_folders in a hierarchical way.
+  - `Sidebar::custom_folders` to return all custom_folders in a hierarchical
+    way.
+
 
 ## [0.11.16] - 2024-08-23
 
 ### Fixed
 
-  - Mail functions which accepted `MailSession` have been updated to `MailUserSession` instead.
+  - Mail functions which accepted `MailSession` have been updated to
+    `MailUserSession` instead.
+
 
 ## [0.11.15] - 2024-08-23
 
@@ -456,6 +542,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Removed `initialized_conv` and `initialized_msg` from `Label`
 
+
 ## [0.11.13] - 2024-08-21
 
 ### Added
@@ -470,6 +557,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Removed `headers` from the `Message` type, see `DecryptedMessage instead`.
   - Removed `MessageBodyMetadata` and `EncryptedMessage` types.
+
 
 ## [0.11.12] - 2024-08-21
 
@@ -541,6 +629,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed `Mailbox.with_remote_id()`.
   - Removed `RemoteId` type.
 
+
 ## [0.11.11] - 2024-08-20
 
 ### Added
@@ -561,6 +650,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed `Label.remote_parent_id` and `Message.remote_conversation_id`.
   - Removed `RemoteIds` as it is no longer used/needed.
 
+
 ## [0.11.10] - 2024-08-20
 
 ### Added
@@ -569,7 +659,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - Added `category` field to determin media icon for attachment
   - Added `SystemLabel` enum available on `Label.label_description` field.
   - Added `LabelDescription` enum
-      - `LabelDescription` enum contains `System` field with optional `SystemLabel` information
+      - `LabelDescription` enum contains `System` field with optional
+        `SystemLabel` information
 
 ### Changed
 
@@ -580,11 +671,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Error storing credentials after login.
 
+
 ## [0.11.9] - 2024-08-19
 
 ### Fixed
 
   - Execute all exported functions on our own async runtime.
+
 
 ## [0.11.8] - 2024-08-19
 
@@ -621,6 +714,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `watch()` -> `watch_conversation()`
   - Corrected `starred` field to be `is_starred`.
 
+
 ## [0.11.7] - 2024-08-16
 
 ### Added
@@ -639,6 +733,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `RemoteId` removed from exported types
   - `LocalId`s are non-optional
 
+
 ## [0.11.6] - 2024-08-13
 
 ### Changed
@@ -652,6 +747,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added callbacks `watch_standard_labels()`, `watch_folder_labels()` and
     `watch_system_labels()` to `Sidebar`.
 
+
 ## [0.11.5] - 2024-08-09
 
 ### Added
@@ -661,6 +757,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
   - Attachments, message bodies and sender images are now stored in the cache
+
 
 ## [0.11.4] - 2024-08-08
 
@@ -676,15 +773,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `labels::watch_system_labels()` (replacement for
         `MailUserSession::new_system_labels_observed_query()`)
 
+
 ## [0.11.2] - 2024-08-07
 
 ### Fixed
 
   - Session login and storage.
 
+
 ## [0.11.1] - 2024-08-05
 
   - Internal tag update.
+
 
 ## [0.11.0] - 2024-08-05
 
@@ -737,11 +837,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - `unlabel_conversations()` -> `mail::conversations::remove_label()`
       - `unstar_conversations()` -> `mail::conversations::unstar()`
 
+
 ## [0.10.34] - 2024-07-22
 
 ### Changed
 
   - `DecryptedMessage` now reads mail settings from the database.
+
 
 ## [0.10.33] - 2024-07-19
 
@@ -758,12 +860,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Renamed `DecryptedMessageBody` to `DecryptedMessage`.
 
+
 ## [0.10.32] - 2024-07-15
 
 ### Added
 
   - Strip UTM parameters from HTML content
   - [iOS] Inject viewport metadata for web view
+
 
 ## [0.10.31] - 2024-07-02
 
@@ -773,6 +877,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed conversation message selection.
   - Use Get with query parameters for message metadata.
 
+
 ## [0.10.30] - 2024-06-21
 
 ## Changed
@@ -780,11 +885,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `MailUserSession::filter_converstions` to require a label id for
     context.
 
+
 ## [0.10.29] - 2024-06-21
 
 ### Changed
 
   - Adds additional debug logs.
+
 
 ## [0.10.28] - 2024-06-18
 
@@ -792,6 +899,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Correctly initialize address id in attachments when created from message
     data.
+
 
 ## [0.10.27] - 2024-06-12
 
@@ -804,6 +912,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `MailUserSession::conversation_with_id_and_context()`
     - `MailUserSession::conversation_with_id_with_all_mail_context()`
     - `MailUserSession::message_metadata_with_remote_id()`
+
 
 ## [0.10.26] - 2024-06-10
 
