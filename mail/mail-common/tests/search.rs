@@ -5,19 +5,7 @@ use proton_core_common::{
     models::{Address, ModelExtension},
 };
 use proton_mail_common::models::{Conversation, Label, Message};
-<<<<<<< HEAD
-use proton_test_utils::test_context::TestContext;
-=======
-<<<<<<< HEAD
-<<<<<<< HEAD
-use proton_mail_test_utils::MailTestContext;
-=======
-use proton_test_utils::test_context::TestContext;
->>>>>>> 3e8d6e58 (Fixed rust formatter issues.)
-=======
 use proton_mail_test_utils::test_context::MailTestContext;
->>>>>>> 56f39424 (Moved test utils to their respective crates.)
->>>>>>> b9b1bb97 (Moved test utils to their respective crates.)
 
 #[tokio::test]
 async fn unsynced_conversations() {

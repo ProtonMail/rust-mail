@@ -1,7 +1,7 @@
 //! Everything Proton Mailbox related.
 
 pub mod actions;
-mod context;
+pub mod context;
 pub mod datatypes;
 pub mod db;
 pub mod errors;

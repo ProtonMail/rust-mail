@@ -1,4 +1,5 @@
 //! Message body related state and test data
+use crate::init::Params as TestParams;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -26,7 +27,7 @@ use std::iter;
 
 #[must_use]
 pub fn message_body_test_params() -> crate::init::Params {
-    crate::init::Params {
+    TestParams {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
         mail_settings: Some(message_body_test_mail_settings()),
@@ -150,9 +151,10 @@ pub fn message_body_test_addresses() -> Vec<ApiAddress> {
 #[must_use]
 #[allow(clippy::field_reassign_with_default)]
 pub fn message_body_test_mail_settings() -> ApiMailSettings {
-    let mut settings: ApiMailSettings = ApiMailSettings::default();
-    settings.view_mode = ApiViewMode::Messages;
-    settings
+    ApiMailSettings {
+        view_mode: ApiViewMode::Messages,
+        ..Default::default()
+    }
 }
 
 /* User salts {

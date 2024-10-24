@@ -11,8 +11,8 @@ use proton_api_mail::{
 use proton_core_common::{datatypes::LocalId, models::ModelExtension};
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::{
-    api_conversation, api_label, api_message, api_message_meta, common::create_address,
-    conversation, label, message,
+    api_conversation, api_label, api_message, api_message_meta, conversation, label, message,
+    search::create_address,
 };
 use test_case::test_case;
 #[allow(unused_imports)]
