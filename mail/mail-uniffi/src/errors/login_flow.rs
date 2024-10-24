@@ -1,47 +1,20 @@
 use crate::errors::api_service_error::UserApiServiceError;
-use crate::errors::unexpected::Unexpected;
-use crate::mail::{LoginFlow, MailUserSession};
+use crate::errors::unexpected::UnexpectedError;
+use crate::export_void_result;
 use itertools::Itertools;
 use proton_api_core::services::proton::common::HumanVerificationType as RealHumanVerificationType;
 use proton_api_core::services::proton::response_data::HumanVerificationChallenge as RealHumanVerificationChallenge;
 use proton_mail_common::errors::login_flow::Reason as RealReason;
 use proton_mail_common::errors::login_flow::UserLoginFlowError as RealLoginFlowError;
-use std::sync::Arc;
 
-/// Representation of a `Result<(), Error>` for the clients
-#[derive(Debug, uniffi::Enum)]
-pub enum UserLoginFlowVoidResult {
-    Ok,
-    Error(UserLoginFlowError),
-}
-
-impl<T, E: Into<RealLoginFlowError>> From<Result<T, E>> for UserLoginFlowVoidResult {
-    fn from(value: Result<T, E>) -> Self {
-        match value {
-            Ok(_) => Self::Ok,
-            Err(error) => Self::Error(error.into().into()),
-        }
-    }
-}
-
-impl From<()> for UserLoginFlowVoidResult {
-    fn from(_value: ()) -> Self {
-        Self::Ok
-    }
-}
-
-impl From<RealLoginFlowError> for UserLoginFlowVoidResult {
-    fn from(error: RealLoginFlowError) -> Self {
-        Self::Error(error.into())
-    }
-}
+export_void_result!(VoidUserLoginFlowResult, UserLoginFlowError);
 
 #[derive(Debug, uniffi::Enum)]
 pub enum UserLoginFlowError {
     InvalidAction(LoginReason),
     ServerError(UserApiServiceError),
     Network,
-    Unexpected(Unexpected),
+    Unexpected(UnexpectedError),
 }
 
 impl From<RealLoginFlowError> for UserLoginFlowError {
@@ -53,7 +26,7 @@ impl From<RealLoginFlowError> for UserLoginFlowError {
             }
             RealLoginFlowError::Network => Self::Network,
             RealLoginFlowError::Unexpected(unexpected) => {
-                Self::Unexpected(Unexpected::from(unexpected))
+                Self::Unexpected(UnexpectedError::from(unexpected))
             }
         }
     }
@@ -124,39 +97,3 @@ impl From<RealHumanVerificationType> for HumanVerificationType {
         }
     }
 }
-
-macro_rules! result_builder {
-    ($name:ident, $type:ty) => {
-        #[allow(clippy::large_enum_variant)]
-        #[derive(uniffi::Enum)]
-        pub enum $name {
-            Ok($type),
-            Error(UserLoginFlowError),
-        }
-
-        impl<E: Into<RealLoginFlowError>> From<Result<$type, E>> for $name {
-            fn from(value: Result<$type, E>) -> Self {
-                match value {
-                    Ok(value) => Self::Ok(value),
-                    Err(error) => Self::Error(error.into().into()),
-                }
-            }
-        }
-
-        impl From<$type> for $name {
-            fn from(value: $type) -> Self {
-                Self::Ok(value)
-            }
-        }
-
-        impl From<RealLoginFlowError> for $name {
-            fn from(error: RealLoginFlowError) -> Self {
-                Self::Error(error.into())
-            }
-        }
-    };
-}
-
-result_builder!(UserLoginFlowArcMailUserSessionResult, Arc<MailUserSession>);
-result_builder!(UserLoginFlowArcLoginFlowResult, Arc<LoginFlow>);
-result_builder!(UserLoginFlowStringResult, String);

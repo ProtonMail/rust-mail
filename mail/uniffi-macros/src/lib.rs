@@ -216,20 +216,42 @@ fn create_enum_type(
     ok_type: syn::Type,
     err_type: syn::Type,
 ) -> proc_macro2::TokenStream {
-    quote! {
-        #[derive(Debug, uniffi::Enum)]
-        pub enum #enum_name {
-            Ok(#ok_type),
-            Error(#err_type),
-        }
+    match &ok_type {
+        syn::Type::Tuple(tuple) if tuple.elems.is_empty() => {
+            quote! {
+            #[derive(uniffi::Enum)]
+                    pub enum #enum_name {
+                        Ok,
+                        Error(#err_type),
+                    }
 
-        impl From<Result<#ok_type, #err_type>> for #enum_name {
-            fn from(value: Result<#ok_type, #err_type>) -> Self {
-                match value {
-                    Ok(value) => #enum_name::Ok(value),
-                    Err(err) => #enum_name::Error(err),
+                    impl From<Result<#ok_type, #err_type>> for #enum_name {
+                        fn from(value: Result<#ok_type, #err_type>) -> Self {
+                            match value {
+                                Ok(value) => #enum_name::Ok,
+                                Err(err) => #enum_name::Error(err),
+                            }
+                        }
+                    }
                 }
-            }
+        }
+        _ => {
+            quote! {
+            #[derive(uniffi::Enum)]
+                    pub enum #enum_name {
+                        Ok(#ok_type),
+                        Error(#err_type),
+                    }
+
+                    impl From<Result<#ok_type, #err_type>> for #enum_name {
+                        fn from(value: Result<#ok_type, #err_type>) -> Self {
+                            match value {
+                                Ok(value) => #enum_name::Ok(value),
+                                Err(err) => #enum_name::Error(err),
+                            }
+                        }
+                    }
+                }
         }
     }
 }

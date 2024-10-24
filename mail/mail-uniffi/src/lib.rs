@@ -157,6 +157,7 @@ use tracing::{debug, warn};
 use utils::damp;
 
 pub mod core;
+#[macro_use]
 pub mod errors;
 mod log;
 pub mod mail;

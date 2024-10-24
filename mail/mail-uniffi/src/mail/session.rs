@@ -4,7 +4,7 @@ use crate::core::{
     StoredSessionState,
 };
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::login_flow::UserLoginFlowArcLoginFlowResult;
+use crate::errors::login_flow::UserLoginFlowError;
 use crate::mail::logging::init_log;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{async_runtime, uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
@@ -113,6 +113,43 @@ pub struct MailSessionParams {
     pub api_env_config: Option<ApiConfig>,
 }
 
+#[proton_uniffi_macros::export_result]
+impl MailSession {
+    /// Start new login flow.
+    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, UserLoginFlowError> {
+        let ctx = self.ctx.clone();
+        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
+            let flow = ctx
+                .new_login_flow()
+                .await
+                .map_err(RealUserLoginFlowError::from)?;
+            Ok(LoginFlow::new(flow, ctx))
+        })
+        .await
+        .map_err(Into::into)
+    }
+
+    /// Resume an existing login flow.
+    pub async fn resume_login_flow(
+        &self,
+        user_id: String,
+        session_id: String,
+    ) -> Result<Arc<LoginFlow>, UserLoginFlowError> {
+        let ctx = self.ctx.clone();
+
+        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
+            let flow = ctx
+                .resume_login_flow(user_id.into(), session_id.into())
+                .await
+                .map_err(RealUserLoginFlowError::from)?;
+
+            Ok(LoginFlow::new(flow, ctx))
+        })
+        .await
+        .map_err(Into::into)
+    }
+}
+
 #[uniffi::export]
 impl MailSession {
     // NOTE: Callbacks can not be stored in record types, which is why they are still in the
@@ -187,40 +224,6 @@ impl MailSession {
             .await?;
             Ok(Arc::new(Self { ctx: mail_ctx }))
         })
-    }
-
-    /// Start new login flow.
-    pub async fn new_login_flow(&self) -> UserLoginFlowArcLoginFlowResult {
-        let ctx = self.ctx.clone();
-        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
-            let flow = ctx
-                .new_login_flow()
-                .await
-                .map_err(RealUserLoginFlowError::from)?;
-            Ok(LoginFlow::new(flow, ctx))
-        })
-        .await
-        .into()
-    }
-
-    /// Resume an existing login flow.
-    pub async fn resume_login_flow(
-        &self,
-        user_id: String,
-        session_id: String,
-    ) -> UserLoginFlowArcLoginFlowResult {
-        let ctx = self.ctx.clone();
-
-        uniffi_async::<_, RealUserLoginFlowError, _>(async move {
-            let flow = ctx
-                .resume_login_flow(user_id.into(), session_id.into())
-                .await
-                .map_err(RealUserLoginFlowError::from)?;
-
-            Ok(LoginFlow::new(flow, ctx))
-        })
-        .await
-        .into()
     }
 
     /// Create an user context from a stored session.
