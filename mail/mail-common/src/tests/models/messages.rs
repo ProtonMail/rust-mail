@@ -36,7 +36,7 @@ use proton_mail_test_utils::utils::{
 };
 use serde_json::json;
 use stash::orm::Model;
-use stash::stash::{StashError, Tether};
+use stash::stash::Tether;
 use velcro::hash_map;
 
 mod available_actions {
@@ -1550,10 +1550,11 @@ async fn test_create_message_and_body() {
         local_message_id: None,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
+        attachments: vec![],
         row_id: None,
         stash: Some(stash.clone()),
     };
@@ -1575,10 +1576,11 @@ async fn test_create_message_and_body() {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
+        attachments: vec![],
         row_id: Some(1),
         stash: Some(stash.clone()),
     };
@@ -1622,10 +1624,11 @@ async fn test_update_message_and_body() {
         local_message_id: None,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
+        attachments: vec![],
         row_id: None,
         stash: Some(stash.clone()),
     };
@@ -1639,7 +1642,7 @@ async fn test_update_message_and_body() {
         .insert("marco".to_owned(), json!("polo"));
 
     MessageBodyMetadata {
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: MimeType::TextHtml,
@@ -1659,10 +1662,11 @@ async fn test_update_message_and_body() {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
         header: "new header".to_string(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers,
         },
         mime_type: MimeType::TextHtml,
+        attachments: vec![],
         row_id: Some(1),
         stash: Some(stash.clone()),
     };
@@ -1728,20 +1732,17 @@ async fn test_create_message_and_body_with_attachments() {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
-        row_id: db_message.row_id,
+        row_id: None,
         stash: Some(stash.clone()),
+        attachments: vec![],
     };
     metadata
         .save()
         .await
-        .or_else(|err| match err {
-            StashError::NoRowsUpdated => Ok(()),
-            _ => Err(err),
-        })
         .expect("failed to store message body metadata in db");
 
     let local_attachment = message.attachments.first().unwrap();
@@ -1762,6 +1763,19 @@ async fn test_create_message_and_body_with_attachments() {
         local_attachment.headers.image_height,
         message.attachments[0].headers.image_height
     );
+
+    let new_metadata = MessageBodyMetadata::for_message(db_message.local_id.unwrap(), &tx)
+        .await
+        .unwrap()
+        .unwrap();
+    let attachment =
+        Attachment::find_by_id(db_message.attachments_metadata[0].local_id.unwrap(), &tx)
+            .await
+            .unwrap()
+            .unwrap();
+
+    assert_eq!(new_metadata.attachments.len(), 1);
+    assert_eq!(attachment, new_metadata.attachments[0]);
 }
 
 #[tokio::test]
