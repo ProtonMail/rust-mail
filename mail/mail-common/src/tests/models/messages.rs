@@ -1717,33 +1717,24 @@ async fn test_create_message_and_body_with_attachments() {
             },
         }],
     };
-    let id = Message::create_or_update_messages_from_metadata(vec![message.metadata], tx.stash())
-        .await
-        .expect("failed to create message")
-        .into_iter()
-        .next()
-        .unwrap();
+    let id = Message::create_or_update_messages_from_metadata(
+        vec![message.metadata.clone()],
+        tx.stash(),
+    )
+    .await
+    .expect("failed to create message")
+    .into_iter()
+    .next()
+    .unwrap();
 
     let db_message = Message::load(id, tx.stash())
         .await
         .expect("failed to get message")
         .expect("must have a value");
-    let mut metadata = MessageBodyMetadata {
-        local_message_id: db_message.local_id,
-        remote_message_id: db_message.remote_id.clone(),
-        header: message.header.clone(),
-        parsed_headers: ParsedHeaders {
-            headers: message.parsed_headers.clone(),
-        },
-        mime_type: message.mime_type.into(),
-        row_id: None,
-        stash: Some(stash.clone()),
-        attachments: vec![],
-    };
-    metadata
-        .save()
+
+    MessageBodyMetadata::save_from_api_data(message.clone(), None, &tx)
         .await
-        .expect("failed to store message body metadata in db");
+        .unwrap();
 
     let local_attachment = message.attachments.first().unwrap();
 

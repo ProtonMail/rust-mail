@@ -175,14 +175,20 @@ impl TestContext {
     ///
     /// # Parameters
     ///
-    /// * `params` - Expected draft params.
-    /// * `reply`  - Expected server reply.
+    /// * `params`                 - Expected draft params.
+    /// * `action`                 - Draft action (Reply, ReplyAll, Forward)
+    /// * `reply`                  - Expected server reply.
+    /// * `parent_id`              - Parent id to from which we are
+    ///                              replying/forwarding to/from
+    /// * `attachment_key_packets` - Attachment key packets for the attachment.
+    ///                              included in this request.
     pub async fn mock_create_draft(
         &self,
         params: DraftParams,
         action: DraftAction,
         reply: ApiMessage,
         parent_id: Option<ApiRemoteId>,
+        attachment_key_packets: DraftAttachmentKeyPackets,
     ) {
         let response = PostCreateDraftResponse { message: reply };
         Mock::given(method("POST"))
@@ -190,7 +196,7 @@ impl TestContext {
                 PostCreateDraftRequest {
                     message: params,
                     action,
-                    attachment_key_packets: Default::default(),
+                    attachment_key_packets,
                     parent_id,
                 },
             )))

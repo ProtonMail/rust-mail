@@ -62,6 +62,8 @@ pub enum AppError {
     AttachmentMissing(LocalId),
     #[error("Unknown attachment with remote id {0}")]
     UnknownAttachment(RemoteId),
+    #[error("Attachment {0} does not have a remote id")]
+    AttachmentDoesNotHaveRemoteId(LocalId),
     #[error("Conversation with ID {0} is not in given view {1}")]
     ConversationDoesNotHaveLabel(LocalId, String),
     #[error("Conversation with ID {0} has no messages")]
@@ -90,6 +92,8 @@ pub enum AppError {
     MessageHasNoRemoteId(LocalId),
     #[error("Message missing in database for local_id {0}")]
     MessageMissing(LocalId),
+    #[error("Unknown Message with remote id {0}")]
+    UnknownMessage(RemoteId),
     #[error("No conversation found in the current page which has a remote id")]
     NoConversationWithValidRemoteIdFoundInPage,
     #[error("No message found in the current page which has a remote id")]

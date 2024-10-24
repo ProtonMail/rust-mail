@@ -558,9 +558,6 @@ impl Attachment {
 
                 // If it's an inline attachment it's the first time we are
                 // seeing this data.
-                // Event though we have the key packets, there is a lot of data
-                // missing that we can only get from the getting the full
-                // attachment metadata request.
                 let mut new_attachment = Attachment {
                     local_id: None,
                     remote_id: Some(message_attachment.id.clone().into()),
@@ -571,13 +568,13 @@ impl Attachment {
                     local_message_id: None,
                     remote_message_id: Some(message.metadata.id.clone().into()),
                     disposition: message_attachment.disposition.into(),
-                    enc_signature: None,
+                    enc_signature: message_attachment.enc_signature.clone().map(Into::into),
                     is_auto_forwardee: false,
-                    key_packets: None,
+                    key_packets: Some(message_attachment.key_packets.clone().into()),
                     mime_type: attachment::MimeType::from_str(&message_attachment.mime_type)?,
                     filename: message_attachment.name.clone(),
-                    sender: None,
-                    signature: None,
+                    sender: Some(message.metadata.sender.clone().into()),
+                    signature: message_attachment.signature.clone().map(Into::into),
                     size: message_attachment.size,
                     cached: false,
                     content_id: message_attachment.headers.content_id.clone(),
@@ -3065,7 +3062,7 @@ impl Conversation {
     // TODO: Figure out how we want to do this in the future.
     ///
     /// Intended for testing only
-    ///
+    /// (local_attachment_id, local_message_id)
     /// Sets a conversation to be deleted in `expire_in` ms
     pub async fn set_expiration_time_in<A>(
         id: LocalId,
@@ -5667,9 +5664,12 @@ impl Message {
         } else {
             let message = self.get_api_message(api).await?;
 
-            let (metadata, body) =
-                MessageBodyMetadata::save_from_api_data(message, self.local_id.unwrap(), interface)
-                    .await?;
+            let (metadata, body) = MessageBodyMetadata::save_from_api_data(
+                message,
+                Some(self.local_id.unwrap()),
+                interface,
+            )
+            .await?;
             (metadata, Some(body))
         };
         Ok(mdata)
@@ -6954,7 +6954,7 @@ impl Default for Message {
 ///
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
 #[TableName("message_bodies")]
-#[ModelActions(on_load)]
+#[ModelActions(on_load, on_save)]
 pub struct MessageBodyMetadata {
     /// The local ID of the record, i.e. the ID assigned by the client
     /// application. This is a restricted-scope unique identifier for the record
@@ -7071,6 +7071,32 @@ impl MessageBodyMetadata {
         Ok(())
     }
 
+    /// Extends [`Model::on_save()`] to insert attachment links.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::save()`].
+    ///
+    pub async fn on_save(&mut self, interface: &AgnosticInterface) -> Result<(), StashError> {
+        // Update all attachment links - When creating drafts we can update
+        // and create new ones.
+        interface
+            .execute(
+                "DELETE FROM message_attachments WHERE local_message_id=?",
+                params![self.local_message_id],
+            )
+            .await?;
+        for attachment in &self.attachments {
+            interface
+                .execute(
+                    "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
+                    params![attachment.local_id.unwrap(), self.local_message_id],
+                )
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Load a message for the message with `local_message_id`.
     ///
     /// # Errors
@@ -7094,8 +7120,8 @@ impl MessageBodyMetadata {
 
     /// Save the message body metadata from a `message`.
     ///
-    /// The `local_message_id` is required since this function is expected
-    /// to be used with [`Message::sync_message_metadata()`].
+    /// If the `local_message_id` is known, it can be passed in. If `None` it
+    /// will be resolved from the database.
     ///
     /// This function also takes care of updating the attachments' metadata
     /// that is present in `message` and correctly applies this information
@@ -7106,9 +7132,9 @@ impl MessageBodyMetadata {
     /// # Errors
     ///
     /// Returns error if the queries fail.
-    async fn save_from_api_data<A>(
+    pub async fn save_from_api_data<A>(
         message: ApiMessage,
-        local_message_id: LocalId,
+        local_message_id: Option<LocalId>,
         interface: &A,
     ) -> Result<(Self, String), AppError>
     where
@@ -7119,6 +7145,16 @@ impl MessageBodyMetadata {
             .inspect_err(|e| {
                 error!("Failed to update attachment headers: {e}");
             })?;
+
+        let local_message_id = if let Some(id) = local_message_id {
+            id
+        } else {
+            let remote_id: RemoteId = message.metadata.id.clone().into();
+            remote_id
+                .counterpart::<Message, _>(interface)
+                .await?
+                .ok_or(AppError::UnknownMessage(remote_id))?
+        };
 
         // create message in the database and store body in the cache.
         let mut metadata = MessageBodyMetadata {
