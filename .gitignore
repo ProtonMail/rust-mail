@@ -4,3 +4,5 @@ Cargo.lock
 flamegraph.svg
 perf.data
 .DS_Store
+.gradle
+mail/mail-uniffi/android/lib/src/main/java/
