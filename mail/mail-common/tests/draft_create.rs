@@ -15,7 +15,8 @@ use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{MimeType, SystemLabelId};
+use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, Error, ReplyMode, DEFAULT_SUBJECT, REPLY_PREFIX};
 use proton_mail_common::models::{Conversation, MailSettings, Message, NewDraftMetadata};
 use proton_mail_common::MailContextError;
@@ -203,14 +204,25 @@ async fn create_draft_reply_should_fail_for_drafts() {
 }
 
 #[tokio::test]
-async fn create_draft_reply() {
+async fn create_draft_reply_html() {
+    let draft_body = create_draft_reply_impl(MimeType::TextHtml).await;
+    insta::assert_snapshot!(draft_body.body)
+}
+
+#[tokio::test]
+async fn create_draft_reply_plain_text() {
+    let draft_body = create_draft_reply_impl(MimeType::TextPlain).await;
+    insta::assert_snapshot!(draft_body.body)
+}
+
+async fn create_draft_reply_impl(mime_type: MimeType) -> DecryptedMessageBody {
     // Set up a user and initialise the inbox
     let ctx = TestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         RemoteId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
+    let params = draft_test_params_with_mime_type(mime_type);
     let user_ctx = ctx.user_context().await;
 
     // Create one message we can reply to.
@@ -231,7 +243,7 @@ async fn create_draft_reply() {
         .unwrap();
     let existing_message = existing_message;
 
-    let expected_draft_params = expected_create_reply_draft_params(&existing_message);
+    let expected_draft_params = expected_create_reply_draft_params(&existing_message, mime_type);
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts().into());
 
@@ -255,7 +267,7 @@ async fn create_draft_reply() {
         .unwrap();
 
     // Create draft.
-    let draft_output = Draft::action_create_reply(
+    let draft_output = Draft::action_create_reply_utc(
         user_ctx.queue(),
         ReplyMode::Sender,
         existing_message.local_id.unwrap(),
@@ -286,7 +298,7 @@ async fn create_draft_reply() {
     assert!(draft_message.label_ids.contains(&LabelId::drafts().into()));
 
     // Loading the message body should not trigger any network requests.
-    let _ = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
+    let draft_body = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
         .await
         .unwrap();
 
@@ -310,14 +322,24 @@ async fn create_draft_reply() {
             .is_none()
     );
 
-    //TODO(ET-1361): Check body
+    draft_body
 }
 
 fn draft_test_params() -> TestParams {
+    draft_test_params_impl(None)
+}
+fn draft_test_params_with_mime_type(mime_type: MimeType) -> TestParams {
+    draft_test_params_impl(Some(mime_type))
+}
+fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
+    let mut mail_settings = message_body_test_mail_settings();
+    if let Some(mime_type) = mime_type {
+        mail_settings.draft_mime_type = mime_type.into();
+    }
     let mut params = TestParams {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
-        mail_settings: Some(message_body_test_mail_settings()),
+        mail_settings: Some(mail_settings),
         ..Default::default()
     };
 
@@ -382,7 +404,7 @@ fn expected_create_draft_params() -> DraftParams {
         mime_type: MailSettings::default().draft_mime_type.into(),
     }
 }
-fn expected_create_reply_draft_params(message: &Message) -> DraftParams {
+fn expected_create_reply_draft_params(message: &Message, mime_type: MimeType) -> DraftParams {
     let address = message_body_test_addresses();
     DraftParams {
         subject: format!("{} {}", REPLY_PREFIX, message.subject),
@@ -401,6 +423,6 @@ fn expected_create_reply_draft_params(message: &Message) -> DraftParams {
         external_id: None,
         draft_flags: 0,
         body: EncryptedDraft(String::new()),
-        mime_type: MailSettings::default().draft_mime_type.into(),
+        mime_type: mime_type.into(),
     }
 }

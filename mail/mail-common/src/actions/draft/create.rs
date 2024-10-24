@@ -26,24 +26,32 @@ pub struct Create {
     message_id: Option<LocalId>,
     conversation_id: Option<LocalId>,
     address_id: Option<RemoteId>,
+    use_utc: bool,
 }
 
 impl Create {
+    /// Create a new empty draft.
     pub fn empty() -> Self {
         Self {
             reply_mode: None,
             message_id: None,
             conversation_id: None,
             address_id: None,
+            use_utc: false,
         }
     }
 
-    pub fn reply(reply_mode: ReplyMode, message_id: LocalId) -> Self {
+    /// Create a draft which is a reply to `message_id` with `reply_mode.
+    ///
+    /// `use_utc` controls whether the time formatting should be done
+    /// in Utc timezone or in Local timezone.
+    pub fn reply(reply_mode: ReplyMode, message_id: LocalId, use_utc: bool) -> Self {
         Self {
             reply_mode: Some((reply_mode, message_id)),
             message_id: None,
             conversation_id: None,
             address_id: None,
+            use_utc,
         }
     }
 }
@@ -76,7 +84,7 @@ impl proton_action_queue::action::Handler for Handler {
         tether: &Tether,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         let draft = if let Some((reply_mode, message_id)) = action.reply_mode {
-            Draft::reply(ctx, message_id, reply_mode, tether).await
+            Draft::reply(ctx, message_id, reply_mode, action.use_utc, tether).await
         } else {
             Draft::empty(ctx, tether).await
         }?;

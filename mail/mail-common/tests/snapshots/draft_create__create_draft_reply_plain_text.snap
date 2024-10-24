@@ -1,0 +1,7 @@
+---
+source: mail/mail-common/tests/draft_create.rs
+expression: draft_body.body
+---
+-------- Original Message --------
+On Thursday, 05/16/24 at 12:45  wrote:
+This is a test body.
