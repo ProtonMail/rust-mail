@@ -1,0 +1,71 @@
+[package]
+name = "proton-mail-tui"
+version = "0.4.1"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+dirs = "5"
+anyhow = "1"
+thiserror = "1"
+crossterm = "0.28.1"
+ratatui = { version = "0.28.1", features = ["all-widgets"] }
+secrecy = "0.8"
+log = "0.4"
+tui-input = "0.10.1"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+tracing-error = "0.2"
+hex = "0.4"
+tui-logger = { version = "0.12.1", features = ["tracing-support"] }
+unicode-width = "0.1"
+chrono = { version = "0.4" }
+throbber-widgets-tui = "0.7.1"
+scopeguard = "1.2"
+html2text = "0.12.5"
+tracing = "0.1.40"
+tokio = { version = "1.40.0", features = ["rt-multi-thread", "macros", "time", "sync"] }
+flume = "0.11.0"
+futures = "0.3.31"
+tui-textarea = { version = "0.6.1", features = ["ratatui"] }
+
+[target.'cfg(target_os="linux")'.dependencies]
+keyring = { version = "3.0.3", features = ["linux-native"] }
+
+[target.'cfg(target_os="macos")'.dependencies]
+keyring = { version = "3.0.3", features = ["apple-native"] }
+
+
+[dependencies.proton-core-common]
+path = "sdk/core/core-common"
+#path = "../../proton-rust/core/core-common"
+
+[dependencies.proton-mail-common]
+path = "sdk/mail/mail-common"
+#path = "../../proton-rust/mail/mail-common"
+
+[dependencies.stash]
+path = "sdk/core/stash"
+#path = "../../proton-rust/core/stash"
+
+[lints.rust]
+trivial_numeric_casts = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+trivial_casts = "warn"
+unused_qualifications = "warn"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_precision_loss = "warn"
+cast_sign_loss = "warn"
+# Useful to track missing comments on private items/code.
+# missing_docs_in_private_items ="warn"
+mut_mut = "warn"
+#Disallow `println!`. Use `debug!` for debug output
+# (which is provided by the `log` crate).
+print_stdout = "warn"
+unseparated_literal_suffix = "warn"
+wrong_self_convention = "warn"
