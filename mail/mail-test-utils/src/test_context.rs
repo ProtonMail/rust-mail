@@ -17,6 +17,7 @@ use wiremock::{Mock, Request};
 /// This struct provides a test context with a handcrafted new session, so that
 /// we can bypass authentication. It also spins up a mock server.
 ///
+/// TODO: Remove more shared code as part of ET-1381. Use `TestContext` instead.
 #[allow(dead_code)]
 pub struct MailTestContext {
     pub core_test_context: Arc<TestContext>,

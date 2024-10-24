@@ -255,6 +255,10 @@ pub async fn local_counterpart<T: Model>(id: RemoteId, tx: &Tether) -> LocalId {
     id.counterpart::<T, _>(tx).await.unwrap().unwrap()
 }
 
+/// Can panic if the local conversation `id` is not set, the remote
+/// `label_id` is not set, the local `label` can not be found or the query
+/// failed.
+///
 /// # Panics
 pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
     let mut labels = [test_label1(), test_label2()];
@@ -272,6 +276,9 @@ pub async fn create_labels(tx: &Tether) -> Vec<LocalId> {
     labels.into_iter().map(|l| l.local_id.unwrap()).collect()
 }
 
+/// Can panic if the local conversation `id` is not set, the remote
+/// `label_id` is not set, the local `label` can not be found.
+///
 /// # Panics
 pub async fn create_address(core_tx: &Tether) -> Address {
     let mut address = test_address();
