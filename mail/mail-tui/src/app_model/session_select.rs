@@ -1,5 +1,4 @@
 use crate::app::Command;
-use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{login, mailbox, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
@@ -11,12 +10,14 @@ use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, List, ListItem};
 use ratatui::Frame;
+use std::sync::Arc;
 
 pub enum Message {
     Submit,
     NewAccount,
     Init,
     Delete,
+    DeleteSuccess(String),
 }
 
 pub struct Model {
@@ -60,43 +61,12 @@ impl AppStateHandler for Model {
         }
     }
 
-    async fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        _sender: &BackgroundSender,
-    ) -> Command<Messages> {
+    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::SessionSelect(message) = message else {
             return Command::None;
         };
         match message {
             Message::Delete => {
-                let Some(index) = self.session_list_state.selected() else {
-                    return Command::message(Messages::DisplayError(
-                        None,
-                        anyhow!("No session selected"),
-                    ));
-                };
-
-                {
-                    let Some(account) = self.accounts.get(index) else {
-                        return Command::message(Messages::DisplayError(
-                            None,
-                            anyhow!("Invalid session index",),
-                        ));
-                    };
-
-                    if let Err(e) = ctx.delete_account(account.remote_id.clone()).await {
-                        let e = anyhow!("Failed to delete session: {e}");
-                        tracing::error!("{e}");
-                        return Command::message(Messages::DisplayError(None, e));
-                    }
-                };
-
-                self.accounts.remove(index);
-                Command::None
-            }
-            Message::Submit => {
                 let Some(index) = self.session_list_state.selected() else {
                     return Command::message(Messages::DisplayError(
                         None,
@@ -111,30 +81,61 @@ impl AppStateHandler for Model {
                     ));
                 };
 
-                match ctx.get_sessions(account.remote_id.clone()).await {
-                    Ok(sessions) => {
-                        if sessions.is_empty() {
-                            Command::message(Messages::SwitchAppState(
-                                login::Model::with_email(account.name_or_addr.clone()).into(),
-                            ))
-                        } else {
-                            match ctx.user_context_from_session(&sessions[0]).await {
-                                Ok(context) => {
-                                    Command::message(match mailbox::Model::new(context).await {
-                                        Ok(model) => Messages::SwitchAppState(model.into()),
-                                        Err(e) => e.into(),
-                                    })
-                                }
-                                Err(e) => {
-                                    let e = anyhow!("Failed to load session: {e}");
-                                    tracing::error!("{e}");
-                                    Command::message(Messages::DisplayError(None, e))
+                let account_email = account.name_or_addr.clone();
+                let remote_id = account.remote_id.clone();
+                let ctx = Arc::clone(ctx);
+                Command::task(async move {
+                    if let Err(e) = ctx.delete_account(remote_id).await {
+                        let e = anyhow!("Failed to delete session: {e}");
+                        tracing::error!("{e}");
+                        return Command::message(Messages::DisplayError(None, e));
+                    }
+
+                    Command::message(Message::DeleteSuccess(account_email).into())
+                })
+            }
+            Message::Submit => {
+                let Some(index) = self.session_list_state.selected() else {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("No session selected"),
+                    ));
+                };
+
+                let Some(account) = self.accounts.get(index).cloned() else {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Invalid session index",),
+                    ));
+                };
+
+                let ctx = Arc::clone(ctx);
+                Command::task(async move {
+                    match ctx.get_sessions(account.remote_id.clone()).await {
+                        Ok(sessions) => {
+                            if sessions.is_empty() {
+                                Command::message(Messages::SwitchAppState(
+                                    login::Model::with_email(account.name_or_addr.clone()).into(),
+                                ))
+                            } else {
+                                match ctx.user_context_from_session(&sessions[0]).await {
+                                    Ok(context) => {
+                                        Command::message(match mailbox::Model::new(context).await {
+                                            Ok(model) => Messages::SwitchAppState(model.into()),
+                                            Err(e) => e.into(),
+                                        })
+                                    }
+                                    Err(e) => {
+                                        let e = anyhow!("Failed to load session: {e}");
+                                        tracing::error!("{e}");
+                                        Command::message(Messages::DisplayError(None, e))
+                                    }
                                 }
                             }
                         }
+                        Err(e) => Command::message(e.into()),
                     }
-                    Err(e) => Command::message(e.into()),
-                }
+                })
             }
             Message::NewAccount => {
                 Command::message(Messages::SwitchAppState(login::Model::new().into()))
@@ -145,6 +146,11 @@ impl AppStateHandler for Model {
                 } else {
                     Command::None
                 }
+            }
+            Message::DeleteSuccess(email) => {
+                self.accounts
+                    .retain(|account| account.name_or_addr != email);
+                Command::none()
             }
         }
     }

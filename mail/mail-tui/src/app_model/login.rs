@@ -1,5 +1,4 @@
 use crate::app::Command;
-use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{context_init, twofa, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
@@ -10,6 +9,7 @@ use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use secrecy::{ExposeSecret, SecretString};
+use std::sync::Arc;
 
 pub enum Message {
     Submit,
@@ -75,12 +75,7 @@ impl AppStateHandler for Model {
         }
     }
 
-    async fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        _: &BackgroundSender,
-    ) -> Command<Messages> {
+    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::Login(message) = message else {
             return Command::None;
         };
@@ -105,20 +100,20 @@ impl AppStateHandler for Model {
                     ));
                 }
 
-                let mut flow = match ctx.new_login_flow().await {
-                    Ok(f) => f,
-                    Err(e) => {
-                        return Command::message(e.into());
-                    }
-                };
-
                 let email = self.email_input_state.value().trim().to_owned();
                 let password = SecretString::new(self.password_input_state.value().to_owned());
+                let ctx = Arc::clone(ctx);
                 Command::batch([
                     Command::message(Messages::DisplayBackgroundProgress(
                         "Performing Login ...".to_owned(),
                     )),
                     Command::task(async move {
+                        let mut flow = match ctx.new_login_flow().await {
+                            Ok(f) => f,
+                            Err(e) => {
+                                return Command::message(e.into());
+                            }
+                        };
                         let message = if let Err(e) = flow
                             .login(email.clone(), password.expose_secret().to_owned(), None)
                             .await
@@ -138,16 +133,19 @@ impl AppStateHandler for Model {
                 if flow.is_awaiting_2fa() {
                     Command::message(Messages::SwitchAppState(twofa::Model::new(flow).into()))
                 } else {
-                    match ctx.user_context_from_login_flow(&flow).await {
-                        Ok(context) => Command::message(Messages::SwitchAppState(
-                            context_init::Model::new(context).into(),
-                        )),
-                        Err(e) => {
-                            let e = anyhow!("Failed to login: {e}");
-                            tracing::error!("{e}");
-                            Command::message(Messages::DisplayError(None, e))
+                    let ctx = Arc::clone(ctx);
+                    Command::task(async move {
+                        match ctx.user_context_from_login_flow(&flow).await {
+                            Ok(context) => Command::message(Messages::SwitchAppState(
+                                context_init::Model::new(context).into(),
+                            )),
+                            Err(e) => {
+                                let e = anyhow!("Failed to login: {e}");
+                                tracing::error!("{e}");
+                                Command::message(Messages::DisplayError(None, e))
+                            }
                         }
-                    }
+                    })
                 }
             }
             Message::LoginFailed(err) => {

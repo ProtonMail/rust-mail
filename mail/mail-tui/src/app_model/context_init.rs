@@ -1,5 +1,4 @@
 use crate::app::Command;
-use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{mailbox, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
@@ -40,12 +39,7 @@ impl AppStateHandler for Model {
         Command::none()
     }
 
-    async fn update(
-        &mut self,
-        _: &MailContext,
-        message: Messages,
-        _: &BackgroundSender,
-    ) -> Command<Messages> {
+    fn update(&mut self, _: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::ContextInit(message) = message else {
             return Command::None;
         };
@@ -68,10 +62,15 @@ impl AppStateHandler for Model {
                     Command::message(msg)
                 })
             }
-            Message::InitComplete => match mailbox::Model::new(self.ctx.clone()).await {
-                Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
-                Err(e) => Command::message(e.into()),
-            },
+            Message::InitComplete => {
+                let ctx = Arc::clone(&self.ctx);
+                Command::task(async move {
+                    match mailbox::Model::new(ctx).await {
+                        Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
+                        Err(e) => Command::message(e.into()),
+                    }
+                })
+            }
             Message::InitFailed(e) => {
                 Command::message(Messages::DisplayError(None, anyhow!("{e}")))
             }

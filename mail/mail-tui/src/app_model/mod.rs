@@ -6,7 +6,6 @@ pub mod twofa;
 mod watcher;
 
 use crate::app::{Command, Model};
-use crate::app_model::mailbox::BackgroundSender;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use anyhow::anyhow;
@@ -19,6 +18,7 @@ use std::error::Error;
 use std::path::Path;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
+use tokio::runtime::Runtime;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -51,12 +51,7 @@ pub trait AppStateHandler {
     /// Called when there is an input event.
     fn handle_event(&mut self, event: Event) -> Command<Messages>;
     /// Called when there is a message to be handled.
-    async fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        sender: &BackgroundSender,
-    ) -> Command<Messages>;
+    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages>;
     /// Called to display the current state.
     fn view(&mut self, frame: &mut Frame, area: Rect);
 
@@ -81,7 +76,7 @@ pub trait Popup {
 }
 
 pub struct AppModel {
-    context: MailContext,
+    context: Arc<MailContext>,
     state: AppState,
     popup: Option<Box<dyn Popup>>,
     bg_progress: Option<BackgroundProgress>,
@@ -90,7 +85,7 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub async fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new(runtime: &Runtime) -> Result<Self, Box<dyn Error>> {
         let cache_dir = dirs::cache_dir()
             .ok_or(anyhow!("Failed to get cache dir"))?
             .join(APP_ID);
@@ -113,26 +108,28 @@ impl AppModel {
         tracing::info!("Creating Async Runtime...");
         let mut keychain = AppKeyChain::new()?;
         keychain.init()?;
-        let context = MailContext::new(
-            config_dir,
-            user_db_path,
-            mail_cache_dir,
-            100 * 1024 * 1024,
-            Arc::new(keychain),
-            #[allow(clippy::default_trait_access)]
-            Default::default(),
-            None,
-        )
-        .await?;
+        runtime.block_on(async move {
+            let context = MailContext::new(
+                config_dir,
+                user_db_path,
+                mail_cache_dir,
+                100 * 1024 * 1024,
+                Arc::new(keychain),
+                #[allow(clippy::default_trait_access)]
+                Default::default(),
+                None,
+            )
+            .await?;
 
-        let sessions_model = session_select::Model::new(&context).await?;
-        Ok(Self {
-            context,
-            state: AppState::SessionSelect(sessions_model),
-            popup: None,
-            bg_progress: None,
-            tui_logger_state: TuiWidgetState::new(),
-            display_log: false,
+            let sessions_model = session_select::Model::new(&context).await?;
+            Ok(Self {
+                context: Arc::new(context),
+                state: AppState::SessionSelect(sessions_model),
+                popup: None,
+                bg_progress: None,
+                tui_logger_state: TuiWidgetState::new(),
+                display_log: false,
+            })
         })
     }
 
@@ -196,7 +193,7 @@ impl Model<Messages> for AppModel {
         self.state.handle_event(event)
     }
 
-    async fn update(&mut self, message: Messages, sender: &BackgroundSender) -> Command<Messages> {
+    fn update(&mut self, message: Messages) -> Command<Messages> {
         let message = match message {
             Messages::DisplayBackgroundProgress(text) => {
                 self.bg_progress = Some(BackgroundProgress::new(text));
@@ -230,7 +227,7 @@ impl Model<Messages> for AppModel {
 
         // TODO: use async commands to perform async queries
         #[allow(clippy::large_futures)]
-        self.state.update(&self.context, message, sender).await
+        self.state.update(&self.context, message)
     }
 
     fn view(&mut self, frame: &mut Frame) {
@@ -316,18 +313,13 @@ impl AppStateHandler for AppState {
         }
     }
 
-    async fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        sender: &BackgroundSender,
-    ) -> Command<Messages> {
+    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         match self {
-            AppState::SessionSelect(state) => state.update(ctx, message, sender).await,
-            AppState::Login(state) => state.update(ctx, message, sender).await,
-            AppState::TwoFA(state) => state.update(ctx, message, sender).await,
-            AppState::ContextInit(state) => state.update(ctx, message, sender).await,
-            AppState::Mailbox(state) => state.update(ctx, message, sender).await,
+            AppState::SessionSelect(state) => state.update(ctx, message),
+            AppState::Login(state) => state.update(ctx, message),
+            AppState::TwoFA(state) => state.update(ctx, message),
+            AppState::ContextInit(state) => state.update(ctx, message),
+            AppState::Mailbox(state) => state.update(ctx, message),
         }
     }
 

@@ -3,7 +3,7 @@
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{BackgroundSender, Item, Message, MessageMessage};
+use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage};
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
@@ -17,8 +17,8 @@ use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::{ContextualConversation, MimeType};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::ReplyMode;
-use proton_mail_common::models::{MailSettings, Message as MailMessage};
-use proton_mail_common::{AppError, MailContext, Mailbox, MailboxResult};
+use proton_mail_common::models::{Label, MailSettings, Message as MailMessage};
+use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
@@ -39,51 +39,82 @@ pub struct MessagesState {
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
 impl MessagesState {
-    pub async fn new(mbox: &Mailbox, sender: BackgroundSender) -> MailboxResult<Self> {
-        let (messages, receiver) =
-            MailMessage::watch_in_label(mbox.label_id(), mbox.user_context().user_stash()).await?;
-
-        let ctx_cloned = mbox.user_context();
+    pub(super) fn build(mbox: Mailbox, label: Label) -> Command<Messages> {
+        let ctx = mbox.user_context();
         let label_id = mbox.label_id();
-        let watcher = WatchHandle::new_dampened(
-            receiver,
-            move || {
-                let ctx_cloned = Arc::clone(&ctx_cloned);
-                async move {
-                    Some(
-                        match MailMessage::in_label(label_id, ctx_cloned.user_stash(), None).await {
-                            Ok(messages) => MessageMessage::Refreshed(messages).into(),
-                            Err(e) => {
-                                let e = anyhow!("Message list Query error: {e}");
-                                tracing::error!("{e}");
-                                e.into()
-                            }
-                        },
-                    )
-                }
-                .boxed()
-            },
-            sender,
-        );
-
-        Ok(Self {
-            _query: watcher,
-            messages,
-            table_state: ScrollableTableState::new(Some(0)),
-            open_message: DecryptedMessageStatus::None,
+        Command::task(async move {
+            match Self::new_impl(ctx, label_id).await {
+                Ok((state, background_command)) => Command::batch([
+                    Command::message(Message::OpenMessageView(mbox, label, state).into()),
+                    background_command,
+                ]),
+                Err(e) => Command::message(e.into()),
+            }
         })
     }
+    async fn new_impl(
+        ctx: Arc<MailUserContext>,
+        label_id: LocalId,
+    ) -> MailboxResult<(Self, Command<Messages>)> {
+        let (messages, receiver) = MailMessage::watch_in_label(label_id, ctx.user_stash()).await?;
 
-    pub async fn from_conversation(
-        mbox: &Mailbox,
+        let (watcher, background_command) = WatchHandle::new_dampened(receiver, move || {
+            let ctx_cloned = Arc::clone(&ctx);
+            async move {
+                Some(
+                    match MailMessage::in_label(label_id, ctx_cloned.user_stash(), None).await {
+                        Ok(messages) => MessageMessage::Refreshed(messages).into(),
+                        Err(e) => {
+                            let e = anyhow!("Message list Query error: {e}");
+                            tracing::error!("{e}");
+                            e.into()
+                        }
+                    },
+                )
+            }
+            .boxed()
+        });
+
+        Ok((
+            Self {
+                _query: watcher,
+                messages,
+                table_state: ScrollableTableState::new(Some(0)),
+                open_message: DecryptedMessageStatus::None,
+            },
+            background_command,
+        ))
+    }
+
+    pub(super) fn from_conversation(mbox: &Mailbox, conversation_id: LocalId) -> Command<Messages> {
+        let ctx = mbox.user_context();
+        let label_id = mbox.label_id();
+        Command::task(async move {
+            match Self::from_conversation_impl(ctx, label_id, conversation_id).await {
+                Ok((state, background_command)) => Command::batch([
+                    Command::message(
+                        ConversationMessage::OpenConversationSuccess(Box::new(state)).into(),
+                    ),
+                    background_command,
+                ]),
+                Err(e) => {
+                    let e = anyhow!("Failed to open conversation {conversation_id}: {e}");
+                    tracing::error!("{e}");
+                    Command::message(ConversationMessage::OpenConversationFailed(e).into())
+                }
+            }
+        })
+    }
+    async fn from_conversation_impl(
+        ctx: Arc<MailUserContext>,
+        label_id: LocalId,
         conversation_id: LocalId,
-        sender: BackgroundSender,
-    ) -> MailboxResult<Self> {
+    ) -> MailboxResult<(Self, Command<Messages>)> {
         let Some(conv_and_messages) = ContextualConversation::conversation_and_messages(
             conversation_id,
-            mbox.label_id(),
-            mbox.user_context().user_stash(),
-            mbox.user_context().api(),
+            label_id,
+            ctx.user_stash(),
+            ctx.api(),
         )
         .await?
         else {
@@ -92,37 +123,32 @@ impl MessagesState {
 
         let receiver = ContextualConversation::watch_conversation_and_messages(
             conversation_id,
-            mbox.user_context().user_stash(),
+            ctx.user_stash(),
         )
         .await?;
 
-        let context_cloned = mbox.user_context();
-        let watcher = WatchHandle::new_dampened(
-            receiver,
-            move || {
-                let context_cloned = Arc::clone(&context_cloned);
-                async move {
-                    Some(
-                        match MailMessage::in_conversation(
-                            conversation_id,
-                            context_cloned.user_stash(),
-                            None,
-                        )
-                        .await
-                        {
-                            Ok(m) => MessageMessage::Refreshed(m).into(),
-                            Err(e) => {
-                                let e = anyhow!("Message list Query error: {e}");
-                                tracing::error!("{e}");
-                                e.into()
-                            }
-                        },
+        let (watcher, background_command) = WatchHandle::new_dampened(receiver, move || {
+            let context_cloned = Arc::clone(&ctx);
+            async move {
+                Some(
+                    match MailMessage::in_conversation(
+                        conversation_id,
+                        context_cloned.user_stash(),
+                        None,
                     )
-                }
-                .boxed()
-            },
-            sender,
-        );
+                    .await
+                    {
+                        Ok(m) => MessageMessage::Refreshed(m).into(),
+                        Err(e) => {
+                            let e = anyhow!("Message list Query error: {e}");
+                            tracing::error!("{e}");
+                            e.into()
+                        }
+                    },
+                )
+            }
+            .boxed()
+        });
 
         let index = conv_and_messages
             .messages
@@ -130,12 +156,15 @@ impl MessagesState {
             .position(|m| m.local_id.unwrap() == conv_and_messages.message_id_to_open)
             .unwrap_or(0);
 
-        Ok(Self {
-            _query: watcher,
-            messages: conv_and_messages.messages,
-            table_state: ScrollableTableState::new(Some(index)),
-            open_message: DecryptedMessageStatus::None,
-        })
+        Ok((
+            Self {
+                _query: watcher,
+                messages: conv_and_messages.messages,
+                table_state: ScrollableTableState::new(Some(index)),
+                open_message: DecryptedMessageStatus::None,
+            },
+            background_command,
+        ))
     }
 
     pub fn open_message_body(&mut self, _: &MailContext, mbox: &Mailbox) -> Command<Messages> {
@@ -302,13 +331,12 @@ impl StateHandler for MessagesState {
         }
     }
 
-    async fn update(
+    fn update(
         &mut self,
         ctx: &MailContext,
         message: Message,
         mbox: &Mailbox,
         _: &Arc<MailSettings>,
-        _: &BackgroundSender,
     ) -> Command<Messages> {
         let Message::MessageState(message) = message else {
             return Command::None;
@@ -326,22 +354,22 @@ impl StateHandler for MessagesState {
             }
             MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
             MessageMessage::DeleteMessage(id) => {
-                return delete_message(mbox, id).await;
+                return delete_message(mbox, id);
             }
             MessageMessage::MoveMessage(msg_id, id) => {
-                return move_message(mbox, msg_id, id).await;
+                return move_message(mbox, msg_id, id);
             }
             MessageMessage::LabelMessage(msg_id, id) => {
-                return label_message(mbox, msg_id, id).await;
+                return label_message(mbox, msg_id, id);
             }
             MessageMessage::UnlabelMessage(msg_id, id) => {
-                return unlabel_message(mbox, msg_id, id).await;
+                return unlabel_message(mbox, msg_id, id);
             }
             MessageMessage::MarkMessageRead(id) => {
-                return mark_message_read(mbox, id).await;
+                return mark_message_read(mbox, id);
             }
             MessageMessage::MarkMessageUnread(id) => {
-                return mark_message_unread(mbox, id).await;
+                return mark_message_unread(mbox, id);
             }
         }
         Command::None
@@ -516,85 +544,109 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
-async fn mark_message_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn mark_message_read(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
-    match MailMessage::action_mark_read(ctx.session(), ctx.queue(), mailbox.label_id(), vec![id])
+    let current_label_id = mailbox.label_id();
+    Command::task(async move {
+        match MailMessage::action_mark_read(ctx.session(), ctx.queue(), current_label_id, vec![id])
+            .await
+        {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to mark message as read: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
+}
+
+fn mark_message_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    let current_label_id = mailbox.label_id();
+    Command::task(async move {
+        match MailMessage::action_mark_unread(
+            ctx.session(),
+            ctx.queue(),
+            current_label_id,
+            vec![id],
+        )
         .await
-    {
-        Ok(_) => Command::None,
-        Err(e) => {
-            let e = anyhow!("Failed to mark message as read: {e}");
-            tracing::error!("{e}");
-            Command::message(e.into())
+        {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to mark message as unread: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
         }
-    }
+    })
 }
 
-async fn mark_message_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
+fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
-    match MailMessage::action_mark_unread(ctx.session(), ctx.queue(), mailbox.label_id(), vec![id])
+    let current_label_id = mailbox.label_id();
+    Command::task(async move {
+        match MailMessage::action_delete(ctx.session(), ctx.queue(), current_label_id, vec![id])
+            .await
+        {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to delete message: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
+}
+fn label_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    Command::task(async move {
+        match MailMessage::action_apply_label(ctx.session(), ctx.queue(), label_id, vec![id]).await
+        {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to apply label to message: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
+}
+
+fn unlabel_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    Command::task(async move {
+        match MailMessage::action_remove_label(ctx.session(), ctx.queue(), label_id, vec![id]).await
+        {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to apply label to message: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
+        }
+    })
+}
+fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
+    let ctx = mailbox.user_context();
+    let current_label_id = mailbox.label_id();
+    Command::task(async move {
+        match MailMessage::action_move(
+            ctx.session(),
+            ctx.queue(),
+            current_label_id,
+            label_id,
+            vec![id],
+        )
         .await
-    {
-        Ok(_) => Command::None,
-        Err(e) => {
-            let e = anyhow!("Failed to mark message as unread: {e}");
-            tracing::error!("{e}");
-            Command::message(e.into())
+        {
+            Ok(_) => Command::None,
+            Err(e) => {
+                let e = anyhow!("Failed to apply label to message: {e}");
+                tracing::error!("{e}");
+                Command::message(e.into())
+            }
         }
-    }
-}
-
-async fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
-    match MailMessage::action_delete(ctx.session(), ctx.queue(), mailbox.label_id(), vec![id]).await
-    {
-        Ok(_) => Command::None,
-        Err(e) => {
-            let e = anyhow!("Failed to delete message: {e}");
-            tracing::error!("{e}");
-            Command::message(e.into())
-        }
-    }
-}
-async fn label_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
-    match MailMessage::action_apply_label(ctx.session(), ctx.queue(), label_id, vec![id]).await {
-        Ok(_) => Command::None,
-        Err(e) => {
-            let e = anyhow!("Failed to apply label to message: {e}");
-            tracing::error!("{e}");
-            Command::message(e.into())
-        }
-    }
-}
-
-async fn unlabel_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
-    match MailMessage::action_remove_label(ctx.session(), ctx.queue(), label_id, vec![id]).await {
-        Ok(_) => Command::None,
-        Err(e) => {
-            let e = anyhow!("Failed to apply label to message: {e}");
-            tracing::error!("{e}");
-            Command::message(e.into())
-        }
-    }
-}
-async fn move_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
-    let ctx = mailbox.user_context();
-    match MailMessage::action_move(
-        ctx.session(),
-        ctx.queue(),
-        mailbox.label_id(),
-        label_id,
-        vec![id],
-    )
-    .await
-    {
-        Ok(_) => Command::None,
-        Err(e) => {
-            let e = anyhow!("Failed to apply label to message: {e}");
-            tracing::error!("{e}");
-            Command::message(e.into())
-        }
-    }
+    })
 }

@@ -1,6 +1,6 @@
 use crate::app::Command;
 use crate::app_model::mailbox::model::StateHandler;
-use crate::app_model::mailbox::{BackgroundSender, Message};
+use crate::app_model::mailbox::Message;
 use crate::messages::Messages;
 use crate::widgets::{utils, TextInput, TextInputState};
 use crossterm::event::KeyCode;
@@ -282,13 +282,12 @@ impl StateHandler for Composer {
         Command::none()
     }
 
-    async fn update(
+    fn update(
         &mut self,
         _ctx: &MailContext,
         _message: Message,
         _mbox: &Mailbox,
         _mail_settings: &Arc<MailSettings>,
-        _sender: &BackgroundSender,
     ) -> Command<Messages> {
         Command::none()
     }

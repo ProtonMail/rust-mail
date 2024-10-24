@@ -4,11 +4,11 @@ mod messages;
 mod model;
 mod popups;
 
-use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
+use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
+use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
-use flume::Sender;
 pub use model::Model;
 use proton_core_common::datatypes::LocalId;
 use proton_mail_common::datatypes::ContextualConversation;
@@ -19,8 +19,8 @@ const ITEM_LIMIT: usize = 50;
 
 pub enum Message {
     Sync(Mailbox),
-    OpenConversationView(Mailbox, Label),
-    OpenMessageView(Mailbox, Label),
+    OpenConversationView(Mailbox, Label, ConversationsState),
+    OpenMessageView(Mailbox, Label, MessagesState),
     OpenLabelSelectPopup,
     OpenMoveItemPopup(Item),
     OpenLabelItemPopup(Item),
@@ -32,6 +32,7 @@ pub enum Message {
     MessageState(MessageMessage),
     OpenComposer(Composer),
     CloseComposer,
+    NewLabelWatcher(WatchHandle),
 }
 /// Messages related to conversation actions.
 pub enum ConversationMessage {
@@ -42,7 +43,8 @@ pub enum ConversationMessage {
     LabelConversation(LocalId, LocalId),
     UnlabelConversation(LocalId, LocalId),
     OpenConversation(LocalId),
-    OpenConversationResult(anyhow::Result<Box<MessagesState>>),
+    OpenConversationSuccess(Box<MessagesState>),
+    OpenConversationFailed(anyhow::Error),
     Refreshed(Vec<ContextualConversation>),
     CloseConversation,
 }
@@ -79,8 +81,6 @@ pub enum Item {
     #[allow(dead_code)]
     Message(LocalId),
 }
-
-pub type BackgroundSender = Sender<Command<Messages>>;
 
 impl From<Message> for Messages {
     fn from(value: Message) -> Self {

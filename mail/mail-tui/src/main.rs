@@ -15,6 +15,7 @@ use crossterm::ExecutableCommand;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{stdout, Stdout};
+use tokio::runtime::Runtime;
 
 pub type TerminalType = Terminal<CrosstermBackend<Stdout>>;
 
@@ -26,19 +27,17 @@ fn initialize_panic_handler() {
         original_hook(panic_info);
     }));
 }
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     initialize_panic_handler();
 
-    let state = AppModel::new().await?;
-    let mut app = App::new(state);
+    let runtime = Runtime::new()?;
+    let state = AppModel::new(&runtime)?;
+    let mut app = App::new(runtime, state);
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
-    // TODO: use async commands to perform async queries
-    #[allow(clippy::large_futures)]
-    let result = app.run(terminal).await;
+    let result = app.run(terminal);
     stdout().execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;
     result

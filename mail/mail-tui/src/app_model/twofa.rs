@@ -1,5 +1,4 @@
 use crate::app::Command;
-use crate::app_model::mailbox::BackgroundSender;
 use crate::app_model::{context_init, login, AppState, AppStateHandler};
 use crate::messages::Messages;
 use crate::messages::Messages::DismissBackgroundProgress;
@@ -10,6 +9,7 @@ use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
+use std::sync::Arc;
 
 pub enum Message {
     Abort,
@@ -47,12 +47,7 @@ impl AppStateHandler for Model {
         }
     }
 
-    async fn update(
-        &mut self,
-        ctx: &MailContext,
-        message: Messages,
-        _: &BackgroundSender,
-    ) -> Command<Messages> {
+    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::TwoFA(message) = message else {
             return Command::None;
         };
@@ -100,16 +95,19 @@ impl AppStateHandler for Model {
             }
             Message::TwoFASuccess(flow) => {
                 if flow.is_logged_in() {
-                    match ctx.user_context_from_login_flow(&flow).await {
-                        Ok(context) => Command::message(Messages::SwitchAppState(
-                            context_init::Model::new(context).into(),
-                        )),
-                        Err(e) => {
-                            let e = anyhow!("Failed to login: {e}");
-                            tracing::error!("{e}");
-                            Command::message(Messages::DisplayError(None, e))
+                    let ctx = Arc::clone(ctx);
+                    Command::task(async move {
+                        match ctx.user_context_from_login_flow(&flow).await {
+                            Ok(context) => Command::message(Messages::SwitchAppState(
+                                context_init::Model::new(context).into(),
+                            )),
+                            Err(e) => {
+                                let e = anyhow!("Failed to login: {e}");
+                                tracing::error!("{e}");
+                                Command::message(Messages::DisplayError(None, e))
+                            }
                         }
-                    }
+                    })
                 } else {
                     Command::message(Messages::DisplayError(None, anyhow!("Invalid State")))
                 }
