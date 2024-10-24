@@ -1,3 +1,4 @@
+use crate as proton_mail_common;
 use proton_api_core::services::proton::{Config, Proton};
 #[allow(unused_imports)]
 use proton_api_mail::{
@@ -8,16 +9,16 @@ use proton_api_mail::{
     MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64,
 };
 use proton_core_common::{datatypes::LocalId, models::ModelExtension};
+use proton_mail_test_utils::db::new_test_connection_file;
+use proton_mail_test_utils::{
+    api_conversation, api_label, api_message, api_message_meta, common::create_address,
+    conversation, label, message,
+};
 use test_case::test_case;
 #[allow(unused_imports)]
 use wiremock::{
     matchers::{body_json, method, path, query_param_contains},
     Mock, MockServer, ResponseTemplate,
-};
-
-use crate::{
-    api_conversation, api_label, api_message, api_message_meta, conversation,
-    db::new_test_connection_file, label, message, tests::common::create_address,
 };
 
 use super::*;

@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::datatypes::{LabelColor, LabelType};
-use crate::db::new_test_connection;
+use proton_mail_test_utils::db::new_test_connection;
 
 const REMOTE_ID: &str = "RemoteID";
 

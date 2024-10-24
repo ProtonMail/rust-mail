@@ -1,6 +1,6 @@
 use super::account::{
     testdata_address_keys_for_user_address, testdata_user_keys, TEST_ADDRESS_ID,
-    TEST_ADDRESS_KEY_SIGNATURE, TEST_ADDRESS_KEY_TOKEN, TEST_USER_ID, TEST_USER_MAIL,
+    TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
 };
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::common::TestContext;
@@ -20,31 +20,20 @@ use proton_api_core::services::proton::responses::{
     GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
 };
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
-use proton_api_mail::services::proton::requests::GetConversationsOptions;
 use proton_api_mail::services::proton::response_data::MessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, Conversation as ApiConversation,
     ConversationCount as ApiConversationCount, ConversationLabel as ApiConversationLabel,
-    Label as ApiLabel, MailSettings as ApiMailSettings, Message as ApiMessage,
-    MessageAddress as ApiMessageAddress, MessageCount as ApiMessageCount,
-    MessageMetadata as ApiMessageMetadata,
+    Label as ApiLabel, MailSettings as ApiMailSettings, MessageAddress as ApiMessageAddress,
+    MessageCount as ApiMessageCount, MessageMetadata as ApiMessageMetadata,
 };
-use proton_api_mail::services::proton::responses::GetMessageResponse;
 use proton_api_mail::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
     GetLabelsResponse, GetMessagesCountResponse, GetMessagesResponse,
     GetSettingsResponse as GetMailSettingsResponse,
 };
-use proton_core_common::datatypes::{
-    AddressStatus, AddressType, DateFormat, Density, Email, Flags, HighSecurity, LabelId, LocalId,
-    LogAuth, Password, Phone, ProductUsedSpace, RemoteId, SettingsFlags, TfaStatus, TimeFormat,
-    TwoFa, UserMnemonicStatus, UserType, WeekStart,
-};
-use proton_core_common::models::{Address, User, UserSettings};
-use proton_mail_common::datatypes::{ConversationCount, LabelType, MessageCount, SystemLabelId};
-use proton_mail_common::models::{
-    Attachment, Conversation, ConversationLabel, Label, MailSettings,
-};
+use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::{
     MailContextError, MailUserContext, MailUserContextInitializationCallback,
     MailUserContextLoadingStage, ALL_LABEL_TYPES,
@@ -210,7 +199,7 @@ impl TestContext {
     ///
     /// * `params` - The parameters to use for the setup.
     ///
-    pub async fn setup_user(&self, mut params: Params) {
+    pub async fn setup_user(&self, params: Params) {
         self.setup_user_repeated(params, 1).await;
     }
 
@@ -597,7 +586,7 @@ impl TestContext {
         end_id: Option<RemoteId>,
         end_time: Option<u64>,
         page_size: u64,
-        total: u64,
+        _total: u64,
         expect: u64,
     ) {
         let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages"));

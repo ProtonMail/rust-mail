@@ -1,6 +1,4 @@
-mod common;
-
-use common::TestContext;
+use proton_mail_test_utils::common::TestContext;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 

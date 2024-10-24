@@ -8,8 +8,8 @@ use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, MessageMetadata, OperationResult,
 };
 use proton_api_mail::services::proton::responses::{
-    GetConversationResponse, GetConversationsResponse, PutConversationsLabelResponse,
-    PutConversationsReadResponse, PutConversationsUnlabelResponse,
+    GetConversationResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
+    PutConversationsUnlabelResponse,
 };
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};

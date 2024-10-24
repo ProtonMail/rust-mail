@@ -1,9 +1,9 @@
 use crate::actions::BottomBarActions;
 use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId};
-use crate::db::new_test_connection;
 use crate::models::{Conversation, Label, MailSettings, Message};
-use crate::tests::common::create_address;
 use proton_core_common::datatypes::{Id, LabelId};
+use proton_mail_test_utils::common::create_address;
+use proton_mail_test_utils::db::new_test_connection;
 use stash::orm::Model;
 use std::borrow::ToOwned;
 use std::sync::LazyLock;

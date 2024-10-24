@@ -121,6 +121,11 @@ version = "0.8"
 path = "mail/mail-common"
 registry = "proton"
 
+[workspace.dependencies.proton-mail-test-utils]
+version = "0.1"
+path = "mail/test-utils"
+registry = "proton"
+
 [workspace.dependencies.proton-mail-uniffi]
 version = "0.12"
 path = "mail/mail-uniffi"

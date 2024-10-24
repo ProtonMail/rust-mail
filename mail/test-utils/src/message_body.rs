@@ -1,7 +1,6 @@
 //! Message body related state and test data
 
-use crate::common::init::Params as TestParams;
-use crate::common::TestContext;
+use crate::init::Params as TestParams;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -10,29 +9,23 @@ use proton_api_core::services::proton::response_data::{
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::response_data::{
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageFlags as ApiMessageFlags,
     MessageMetadata as ApiMessageMetadata, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_core_common::datatypes::LabelId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_account::salts::KeySalt;
-use proton_crypto_inbox::proton_crypto::{new_pgp_provider, new_srp_provider};
+use proton_crypto_inbox::proton_crypto::new_srp_provider;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
 };
 use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
-use proton_mail_common::cache::CacheMessageKey;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::Message;
-use proton_mail_common::Mailbox;
-use stash::orm::Model;
-use std::io::read_to_string;
 use std::iter;
 
-pub fn message_body_test_params() -> crate::common::init::Params {
-    crate::common::init::Params {
+pub fn message_body_test_params() -> TestParams {
+    TestParams {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),
         mail_settings: Some(message_body_test_mail_settings()),
@@ -152,9 +145,10 @@ pub fn message_body_test_addresses() -> Vec<ApiAddress> {
 }
 
 pub fn message_body_test_mail_settings() -> ApiMailSettings {
-    let mut settings: ApiMailSettings = ApiMailSettings::default();
-    settings.view_mode = ApiViewMode::Messages;
-    settings
+    ApiMailSettings {
+        view_mode: ApiViewMode::Messages,
+        ..Default::default()
+    }
 }
 
 /* User salts {

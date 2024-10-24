@@ -5,8 +5,7 @@ use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
 use proton_api_mail::services::proton::requests::{
-    PostCreateDraftRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest,
-    PutMessagesReadRequest, PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
+    PostCreateDraftRequest, PutMessagesLabelRequest, PutMessagesUnlabelRequest,
 };
 use proton_api_mail::services::proton::response_data::{
     Message as ApiMessage, MessageMetadata, MimeType, OperationResult,
@@ -16,12 +15,9 @@ use proton_api_mail::services::proton::responses::{
     PutMessagesDeleteResponse, PutMessagesLabelResponse, PutMessagesReadResponse,
     PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
-use proton_core_common::datatypes::RemoteId;
-use proton_crypto_inbox::message::EncryptedDraft;
 use serde::Serialize;
 use serde_with::{serde_as, BoolFromInt};
 use std::collections::HashSet;
-use std::path::Path;
 use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -198,7 +194,7 @@ impl TestContext {
                     parent_id,
                 },
             )))
-            .and(path(format!("/api/mail/v4/messages")))
+            .and(path("/api/mail/v4/messages"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
             .mount(self.mock_server())

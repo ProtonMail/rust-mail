@@ -1,8 +1,3 @@
-mod common;
-
-use common::init::Params as TestParams;
-use common::message_body::*;
-use common::TestContext;
 use proton_action_queue::queue::ActionError;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::services::proton::response_data::{
@@ -25,7 +20,9 @@ use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, Error, ReplyMode, DEFAULT_SUBJECT, REPLY_PREFIX};
 use proton_mail_common::models::{Conversation, MailSettings, Message, NewDraftMetadata};
 use proton_mail_common::MailContextError;
-use secrecy::zeroize::__internal::AssertZeroize;
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
+use proton_mail_test_utils::message_body::*;
 use stash::orm::Model;
 #[tokio::test]
 async fn create_empty_draft() {

@@ -1,7 +1,9 @@
-use crate::datatypes::{ConversationCount, MessageAddress, MessageAddresses, MessageCount};
-use crate::models::{Conversation, ConversationLabel, Label, Message};
 use proton_core_common::datatypes::{LabelId, LocalId, RemoteId};
 use proton_core_common::models::{Address, ModelExtension};
+use proton_mail_common::datatypes::{
+    ConversationCount, MessageAddress, MessageAddresses, MessageCount,
+};
+use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 use stash::orm::Model;
 use stash::stash::{Interface, Tether};
 use std::collections::{BTreeMap, HashMap};

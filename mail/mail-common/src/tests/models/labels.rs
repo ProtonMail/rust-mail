@@ -2,12 +2,12 @@
 
 use super::super::*;
 use crate::datatypes::{ConversationCount, LabelColor, LabelType, MessageCount};
-use crate::db::new_test_connection;
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
 use proton_api_mail::services::proton::response_data::Label as ApiLabel;
 use proton_core_common::datatypes::LabelId;
+use proton_mail_test_utils::db::new_test_connection;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, Tether};

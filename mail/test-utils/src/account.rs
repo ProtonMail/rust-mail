@@ -9,7 +9,7 @@ use proton_crypto_inbox::{
     proton_crypto::new_srp_provider,
     proton_crypto_account::{
         keys::{AddressKeys, KeyFlag, KeyId, LockedKey, UserKeys},
-        salts::{KeySecret, Salt, Salts},
+        salts::{Salt, Salts},
     },
 };
 

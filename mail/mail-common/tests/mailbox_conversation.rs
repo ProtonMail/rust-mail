@@ -1,7 +1,3 @@
-mod common;
-
-use common::init::Params as TestParams;
-use common::TestContext;
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::common::LabelType as ApiLabelType;
@@ -12,6 +8,8 @@ use proton_core_common::datatypes::LabelId;
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::Conversation;
 use proton_mail_common::Mailbox;
+use proton_mail_test_utils::common::TestContext;
+use proton_mail_test_utils::init::Params as TestParams;
 use stash::orm::Model;
 use std::sync::Arc;
 

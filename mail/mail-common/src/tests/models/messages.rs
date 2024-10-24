@@ -1,22 +1,12 @@
 #![allow(non_snake_case)]
 
 use super::super::*;
-use crate::datatypes;
+use crate as proton_mail_common;
+use crate::actions::MovableSystemFolderAction;
+use crate::datatypes::MovableSystemFolder;
 use crate::datatypes::{
     attachment, ContextualConversation, ExclusiveLocation, MessageCount, MessageFlags, SystemLabel,
     SystemLabelId,
-};
-use crate::db::new_test_connection_file;
-use crate::tests::common::{
-    create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
-    MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
-};
-use crate::tests::db_states::{
-    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
-};
-use crate::tests::utils::{
-    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
-    prepare_db_state_core,
 };
 use futures::future::BoxFuture;
 use futures::FutureExt;
@@ -32,6 +22,18 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_core_common::datatypes::{LabelId, RemoteId};
 use proton_crypto_inbox::attachment::KeyPackets;
+use proton_mail_test_utils::common::{
+    create_address, create_labels, test_conversation, test_starred_label, MY_ADDRESS_ID,
+    MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2,
+};
+use proton_mail_test_utils::db::new_test_connection_file;
+use proton_mail_test_utils::db_states::{
+    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+};
+use proton_mail_test_utils::utils::{
+    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
+    prepare_db_state_core,
+};
 use serde_json::json;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -41,10 +43,9 @@ mod available_actions {
     use std::sync::LazyLock;
 
     use super::*;
-    use crate::actions::MovableSystemFolderAction;
-    use crate::datatypes::MovableSystemFolder;
-    use crate::{conversation, db::new_test_connection, label, message, rid};
     use pretty_assertions::assert_eq;
+    use proton_mail_test_utils::db::new_test_connection;
+    use proton_mail_test_utils::{conversation, label, message, rid};
     use test_case::test_case;
 
     lazy_static! {
@@ -288,7 +289,8 @@ mod available_actions {
 
 mod available_label_as_actions {
     use super::*;
-    use crate::{conversation, db::new_test_connection, label, message, rid};
+    use proton_mail_test_utils::db::new_test_connection;
+    use proton_mail_test_utils::{conversation, label, message, rid};
     use test_case::test_case;
 
     struct MessageWithLabels {
@@ -434,13 +436,10 @@ mod available_label_as_actions {
 
 mod available_move_to_actions {
     use super::*;
-    use crate::datatypes::MovableSystemFolder;
-    use crate::{
-        conversation, db::new_test_connection, label, message, rid,
-        tests::common::remote_counterpart,
-    };
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
+    use proton_mail_test_utils::db::new_test_connection;
+    use proton_mail_test_utils::{common::remote_counterpart, conversation, label, message, rid};
     use std::sync::LazyLock;
     use test_case::test_case;
 
@@ -1551,7 +1550,7 @@ async fn test_create_message_and_body() {
         local_message_id: None,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
@@ -1577,7 +1576,7 @@ async fn test_create_message_and_body() {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
@@ -1625,7 +1624,7 @@ async fn test_update_message_and_body() {
         local_message_id: None,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
@@ -1643,7 +1642,7 @@ async fn test_update_message_and_body() {
         .insert("marco".to_owned(), json!("polo"));
 
     MessageBodyMetadata {
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: MimeType::TextHtml,
@@ -1663,7 +1662,7 @@ async fn test_update_message_and_body() {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
         header: "new header".to_string(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers,
         },
         mime_type: MimeType::TextHtml,
@@ -1733,7 +1732,7 @@ async fn test_create_message_and_body_with_attachments() {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
         header: message.header.clone(),
-        parsed_headers: datatypes::ParsedHeaders {
+        parsed_headers: ParsedHeaders {
             headers: message.parsed_headers.clone(),
         },
         mime_type: message.mime_type.into(),
@@ -1901,8 +1900,7 @@ async fn messages_mark_read() {
     Message::mark_read(std::iter::once(local_msg_id4), &tx)
         .await
         .expect("failed to mark as read");
-    // All conversation messages on label_1 have been marked as read, we should now see an
-    // updated
+    // All conversation messages on label_1 have been marked as read, we should now see an updated
     // conversation count.
     check_counters(tx.clone(), 3, 1).await;
 
@@ -2044,8 +2042,7 @@ async fn messages_mark_unread() {
     Message::mark_unread(std::iter::once(local_msg_id4), &tx)
         .await
         .expect("failed to mark as read");
-    // All conversation messages on label_1 have been marked as read, we should now see an
-    // updated
+    // All conversation messages on label_1 have been marked as read, we should now see an updated
     // conversation count.
     check_counters(tx.clone(), 0, 0).await;
 

@@ -1,15 +1,15 @@
 use std::sync::LazyLock;
 
-use crate::datatypes::{
-    attachment, AttachmentMetadata, Disposition, MessageAddresses, SystemLabelId as _,
-};
-use crate::models::{Conversation, ConversationLabel, Label, Message};
-use crate::tests::common::{
+use crate::common::{
     test_address, test_label1, test_label2, MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2,
 };
-use crate::tests::utils::TestDBState;
+use crate::utils::TestDBState;
 use lazy_static::lazy_static;
 use proton_core_common::datatypes::{LabelId, RemoteId};
+use proton_mail_common::datatypes::{
+    attachment, AttachmentMetadata, Disposition, MessageAddresses, SystemLabelId as _,
+};
+use proton_mail_common::models::{Conversation, ConversationLabel, Label, Message};
 
 // ------- TEST DATA -------
 
@@ -177,7 +177,7 @@ pub fn new_test_delete_db_state() -> TestDBState {
         ..Default::default()
     };
     let all_mail_conv_label = ConversationLabel {
-        remote_label_id: Some(all_mail.remote_id.clone().unwrap().into()),
+        remote_label_id: Some(all_mail.remote_id.clone().unwrap()),
         ..Default::default()
     };
     TestDBState {
@@ -207,21 +207,21 @@ pub fn new_test_delete_db_state() -> TestDBState {
                 num_attachments: 1,
                 label_ids: vec![
                     MY_LABEL_ID2.clone().into(),
-                    all_mail.remote_id.clone().unwrap().into(),
+                    all_mail.remote_id.clone().unwrap(),
                 ],
                 ..CONV1_MSG1.to_owned()
             },
             Message {
                 label_ids: vec![
                     MY_LABEL_ID1.clone().into(),
-                    all_mail.remote_id.clone().unwrap().into(),
+                    all_mail.remote_id.clone().unwrap(),
                 ],
                 ..CONV1_MSG2.to_owned()
             },
             Message {
                 label_ids: vec![
                     MY_LABEL_ID1.clone().into(),
-                    all_mail.remote_id.clone().unwrap().into(),
+                    all_mail.remote_id.clone().unwrap(),
                 ],
                 ..CONV1_MSG3.to_owned()
             },
@@ -229,23 +229,19 @@ pub fn new_test_delete_db_state() -> TestDBState {
                 unread: true,
                 label_ids: vec![
                     MY_LABEL_ID2.clone().into(),
-                    all_mail.remote_id.clone().unwrap().into(),
+                    all_mail.remote_id.clone().unwrap(),
                 ],
                 ..CONV1_MSG4.to_owned()
             },
             // conversation 2
             {
                 let mut msg_1 = CONV2_MSG1.to_owned();
-                msg_1
-                    .label_ids
-                    .push(all_mail.remote_id.clone().unwrap().into());
+                msg_1.label_ids.push(all_mail.remote_id.clone().unwrap());
                 msg_1
             },
             {
                 let mut msg_2 = CONV2_MSG2.to_owned();
-                msg_2
-                    .label_ids
-                    .push(all_mail.remote_id.clone().unwrap().into());
+                msg_2.label_ids.push(all_mail.remote_id.clone().unwrap());
                 msg_2
             },
         ],

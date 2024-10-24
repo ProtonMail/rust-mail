@@ -1,15 +1,13 @@
-use super::{account::TEST_ADDRESS_ID, TestContext};
+use crate::{account::TEST_ADDRESS_ID, common::TestContext};
 use proton_api_core::services::proton::common::RemoteId as ApiRemoteId;
 use proton_api_mail::services::proton::response_data::{
     Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
-    Disposition as ApiDisposition, MimeType as ApiMimeType,
+    Disposition as ApiDisposition,
 };
 use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
-use proton_core_common::datatypes::RemoteId;
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_common::datatypes::attachment;
-use std::{fmt::format, io};
-use wiremock::matchers::{body_json, method, path};
+use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
 const TEST_ATTACHMENT_ID: &str =
