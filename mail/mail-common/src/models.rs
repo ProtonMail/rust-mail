@@ -7342,6 +7342,11 @@ impl DataSource for ConversationDataSource {
         elements: Vec<Self::Item>,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
+        if elements.is_empty() {
+            warn!("No element to sync");
+            return Ok(vec![]);
+        }
+
         // Find the first last element with a valid remote id.
         let Some(last_element) = elements
             .iter()
@@ -7532,6 +7537,11 @@ impl DataSource for MessageDataSource {
         elements: Vec<Self::Item>,
         stash: &Stash,
     ) -> Result<Vec<Self::Item>, Self::Error> {
+        if elements.is_empty() {
+            warn!("No element to sync");
+            return Ok(vec![]);
+        }
+
         // Find the first last element with a valid remote id.
         let Some(last_element) = elements
             .iter()
