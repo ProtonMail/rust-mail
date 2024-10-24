@@ -12,7 +12,6 @@ use anyhow::anyhow;
 use crossterm::event::{KeyCode, KeyModifiers};
 use flume::{Receiver, Sender};
 use futures::FutureExt;
-use log::warn;
 use proton_core_common::datatypes::{LabelId, LocalId};
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::datatypes::{SystemLabelId, ViewMode};
@@ -156,7 +155,7 @@ impl Model {
                                     match change {
                                         ResultsetChange::Deleted(id) => {
                                             if label_id == id {
-                                                warn!("Received delete on current label");
+                                                tracing::warn!("Received delete on current label");
                                             }
                                             None
                                         }
