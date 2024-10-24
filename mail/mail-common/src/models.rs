@@ -3332,37 +3332,55 @@ impl Conversation {
     /// * `local_label_id` - Label where to paginate in.
     /// * `page_count`     - Number of elements per page.
     /// * `queue`          - Optional subscriber for changes.
+    /// * `filter`         - Filter options for pagination.
     ///
     /// # Errors
     ///
     /// Returns error if the query fails.
+    ///
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+        filter: PaginatorFilter,
     ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
-        let remote_source = ConversationDataSource::new(context, local_label_id).await?;
+        let remote_source =
+            ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
+
+        let mut query = formatdoc!(
+            "
+            JOIN conversation_labels
+                ON conversations.local_id = conversation_labels.local_conversation_id
+            WHERE
+                conversation_labels.local_label_id = ?
+            AND
+                conversation_labels.deleted = 0
+            "
+        );
+
+        let params = vec![Param::Integer(
+            i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
+            })?,
+        )];
+
+        if let Some(unread) = filter.unread {
+            query += &format!(
+                "AND conversation_labels.context_num_unread {} 0 ",
+                if unread { ">" } else { "=" }
+            );
+        }
+
+        query += "ORDER BY
+            conversation_labels.context_time DESC,
+            conversations.display_order DESC
+        ";
+
         Ok(PaginatorCompat::new(
             Paginator::new(
-                formatdoc!(
-                    "
-                JOIN conversation_labels
-                    ON conversations.local_id = conversation_labels.local_conversation_id
-                WHERE
-                    conversation_labels.local_label_id = ?
-                ORDER BY
-                    conversation_labels.context_time DESC,
-                    conversations.display_order DESC
-                "
-                ),
-                vec![Param::Integer(
-                    i64::try_from(local_label_id.as_u64()).map_err(|err| {
-                        StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(
-                            err,
-                        )))
-                    })?,
-                )],
+                query,
+                params,
                 context.user_stash(),
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
@@ -6662,38 +6680,68 @@ impl Message {
     /// * `local_label_id` - Label where to paginate in.
     /// * `page_count`     - Number of elements per page.
     /// * `queue`          - Optional subscriber for changes.
+    /// * `filter`         - Filter options for pagination.
+    /// * `options`        - Search options for pagination.
     ///
     /// # Errors
     ///
     /// Returns error if the query fails.
+    ///
     pub async fn paginate_in_label(
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
         queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
+        filter: PaginatorFilter,
+        options: PaginatorSearchOptions,
     ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
-        let remote_source = MessageDataSource::new(context, local_label_id).await?;
+        let remote_source =
+            MessageDataSource::new(context, local_label_id, filter.clone(), options.clone())
+                .await?;
+        let mut conditions = vec!["messages.deleted = 0".to_owned()];
+
+        if let Some(unread) = filter.unread {
+            conditions.push(format!("messages.unread = {}", if unread { 1 } else { 0 }));
+        }
+        if let Some(keywords) = options.keywords {
+            let mut keyword_conditions = Vec::new();
+            for word in keywords.split_whitespace() {
+                keyword_conditions.push(formatdoc!(
+                    "(
+                        messages.subject LIKE '%{word}%' OR
+                        messages.to_list LIKE '%{word}%' OR
+                        messages.sender LIKE '%{word}%'
+                    )"
+                ));
+            }
+            if !keyword_conditions.is_empty() {
+                conditions.push(keyword_conditions.join(" AND "));
+            }
+        }
+
+        let query = formatdoc!(
+            "
+            JOIN message_labels
+                ON messages.local_id = message_labels.local_message_id
+            WHERE
+                message_labels.local_label_id = ?
+                AND {}
+            ORDER BY
+                messages.time DESC
+            ",
+            conditions.join(" AND ")
+        );
+
+        let params = vec![Param::Integer(
+            i64::try_from(local_label_id.as_u64()).map_err(|err| {
+                StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(err)))
+            })?,
+        )];
+
         Ok(PaginatorCompat::new(
             Paginator::new(
-                formatdoc!(
-                    "
-                JOIN message_labels
-                    ON messages.local_id = message_labels.local_message_id
-                WHERE
-                    message_labels.local_label_id = ?
-                    AND messages.deleted = 0
-                ORDER BY
-                    messages.time DESC,
-                    messages.display_order DESC
-                "
-                ),
-                vec![Param::Integer(
-                    i64::try_from(local_label_id.as_u64()).map_err(|err| {
-                        StashError::ExecutionError(SqliteError::ToSqlConversionFailure(Box::new(
-                            err,
-                        )))
-                    })?,
-                )],
+                query,
+                params,
                 context.user_stash(),
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
@@ -7198,19 +7246,35 @@ impl ConversationMessageLabelStats {
 pub struct ConversationDataSource {
     /// Session for network request
     session: Session,
+
     /// Remote id of the label.
     remote_label_id: LabelId,
+
     /// Local id of the label.
     local_label_id: LocalId,
+
+    /// Filter options for pagination.
+    filter: PaginatorFilter,
 }
 
 impl ConversationDataSource {
     /// Create a new data source for the given `label_id`.
     ///
+    /// # Parameters
+    ///
+    /// * `context`  - Active user context.
+    /// * `label_id` - Local id of the label.
+    /// * `filter`   - Filter options for pagination.
+    ///
     /// # Errors
     ///
     /// Returns error if the remote id for the label can't be resolved.
-    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+    ///
+    pub async fn new(
+        context: &MailUserContext,
+        label_id: LocalId,
+        filter: PaginatorFilter,
+    ) -> Result<Self, AppError> {
         let Some(remote_id) = label_id
             .counterpart::<Label, _>(context.user_stash())
             .await?
@@ -7222,6 +7286,7 @@ impl ConversationDataSource {
             remote_label_id: remote_id.into(),
             session: context.session().clone(),
             local_label_id: label_id,
+            filter,
         })
     }
 }
@@ -7252,6 +7317,7 @@ impl DataSource for ConversationDataSource {
                 desc: Some(true),
                 label_id: Some(self.remote_label_id.clone().into()),
                 page_size: page_size.get() as u64,
+                unread: self.filter.unread,
                 ..Default::default()
             })
             .await?;
@@ -7310,6 +7376,7 @@ impl DataSource for ConversationDataSource {
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(self.remote_label_id.clone().into()),
                 page_size: page_size.get() as u64 + 1_u64,
+                unread: self.filter.unread,
                 ..Default::default()
             })
             .await?;
@@ -7364,19 +7431,39 @@ impl ConversationDataSource {
 pub struct MessageDataSource {
     /// Session for network request
     session: Session,
+
     /// Remote id of the label.
     remote_label_id: LabelId,
+
     /// Local id of the label.
     local_label_id: LocalId,
+
+    /// Filter options for pagination.
+    filter: PaginatorFilter,
+
+    /// Search options for pagination.
+    options: PaginatorSearchOptions,
 }
 
 impl MessageDataSource {
     /// Create a new data source for the given `label_id`.
     ///
+    /// # Parameters
+    ///
+    /// * `context`  - Active user context.
+    /// * `label_id` - Local id of the label.
+    /// * `filter`   - Filter options for pagination.
+    /// * `options`  - Search options for pagination.
+    ///
     /// # Errors
     ///
     /// Returns error if the remote id for the label can't be resolved.
-    pub async fn new(context: &MailUserContext, label_id: LocalId) -> Result<Self, AppError> {
+    pub async fn new(
+        context: &MailUserContext,
+        label_id: LocalId,
+        filter: PaginatorFilter,
+        options: PaginatorSearchOptions,
+    ) -> Result<Self, AppError> {
         let Some(remote_id) = label_id
             .counterpart::<Label, _>(context.user_stash())
             .await?
@@ -7388,6 +7475,8 @@ impl MessageDataSource {
             remote_label_id: remote_id.into(),
             session: context.session().clone(),
             local_label_id: label_id,
+            filter,
+            options,
         })
     }
 }
@@ -7417,6 +7506,8 @@ impl DataSource for MessageDataSource {
                 desc: Some(true),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
                 page_size: page_size.get() as u64,
+                unread: self.filter.unread,
+                keyword: self.options.keywords.clone(),
                 ..Default::default()
             })
             .await?;
@@ -7463,6 +7554,8 @@ impl DataSource for MessageDataSource {
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(vec![self.remote_label_id.clone().into_inner().into()]),
                 page_size: page_size.get() as u64 + 1_u64,
+                unread: self.filter.unread,
+                keyword: self.options.keywords.clone(),
                 ..Default::default()
             })
             .await?;
@@ -7561,4 +7654,18 @@ impl<T: Model, R: DataSource<Item = T> + 'static> PaginatorCompat<T, R> {
     pub async fn reload(&self) -> Result<Vec<T>, StashError> {
         self.paginator.reload().await
     }
+}
+
+/// Filter options for pagination
+#[derive(Clone, Debug, Default)]
+pub struct PaginatorFilter {
+    /// If true, only return unread conversations/messages
+    pub unread: Option<bool>,
+}
+
+/// Search options for pagination
+#[derive(Clone, Debug, Default)]
+pub struct PaginatorSearchOptions {
+    /// Keywords to use in search.
+    pub keywords: Option<String>,
 }
