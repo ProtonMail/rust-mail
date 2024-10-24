@@ -88,6 +88,12 @@ impl StoredAccount {
         self.account.primary_addr.clone()
     }
 
+    /// Timestamp of when the account was last set as the primary account.
+    #[must_use]
+    pub fn primary_at(&self) -> Option<u64> {
+        self.account.primary_at.map(|ts| ts.as_u64())
+    }
+
     /// Get the state of the account.
     #[must_use]
     pub fn state(&self) -> StoredAccountState {
