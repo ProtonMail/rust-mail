@@ -141,12 +141,17 @@ impl ContextualConversation {
     where
         A: Into<AgnosticInterface> + Interface,
     {
-        let Some(conversation) = Conversation::find_by_id(local_conversation_id, interface).await?
-        else {
-            return Ok(None);
-        };
-
-        Ok(Self::new(conversation, local_label_id))
+        if let Some(conversation) = Conversation::find_first(
+            "WHERE local_id = ? AND deleted = 0",
+            params![local_conversation_id],
+            interface,
+        )
+        .await?
+        {
+            Ok(Self::new(conversation, local_label_id))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Retrieve all the conversations which are the label with `local_label_id`.
