@@ -5,6 +5,7 @@ use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage};
 use crate::app_model::watcher::WatchHandle;
+use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_sender, format_senders};
 use crate::widgets::{
@@ -586,18 +587,24 @@ fn mark_message_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
 fn delete_message(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
-    Command::task(async move {
-        match MailMessage::action_delete(ctx.session(), ctx.queue(), current_label_id, vec![id])
-            .await
-        {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to delete message: {e}");
-                tracing::error!("{e}");
-                Command::message(e.into())
+    Command::message(Messages::raise_popup(
+        YesNoPopup::new(
+            "Confirm Message Delete",
+            "Are you sure you wish to permanently delete the currently selected message?",
+        )
+        .on_accept(Command::task(async move {
+            match MailMessage::action_delete(ctx.session(), ctx.queue(), current_label_id, vec![id])
+                .await
+            {
+                Ok(_) => Command::None,
+                Err(e) => {
+                    let e = anyhow!("Failed to delete message: {e}");
+                    tracing::error!("{e}");
+                    Command::message(e.into())
+                }
             }
-        }
-    })
+        })),
+    ))
 }
 fn label_message(mailbox: &Mailbox, id: LocalId, label_id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();

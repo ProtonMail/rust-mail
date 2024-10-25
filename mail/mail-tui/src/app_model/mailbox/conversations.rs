@@ -5,6 +5,7 @@ use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{ConversationMessage, Item, Message};
 use crate::app_model::watcher::WatchHandle;
+use crate::app_model::YesNoPopup;
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
@@ -301,23 +302,29 @@ fn mark_conversation_unread(mailbox: &Mailbox, id: LocalId) -> Command<Messages>
 fn delete_conversation(mailbox: &Mailbox, id: LocalId) -> Command<Messages> {
     let ctx = mailbox.user_context();
     let current_label_id = mailbox.label_id();
-    Command::task(async move {
-        match Conversation::action_mark_deleted(
-            ctx.session(),
-            ctx.queue(),
-            current_label_id,
-            std::iter::once(id),
+    Command::message(Messages::raise_popup(
+        YesNoPopup::new(
+            "Confirm Conversation Delete",
+            "Are you sure you wish to permanently delete the currently selected conversation?",
         )
-        .await
-        {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to delete conversation: {e}");
-                tracing::error!("{e}");
-                Command::message(e.into())
+        .on_accept(Command::task(async move {
+            match Conversation::action_mark_deleted(
+                ctx.session(),
+                ctx.queue(),
+                current_label_id,
+                std::iter::once(id),
+            )
+            .await
+            {
+                Ok(_) => Command::None,
+                Err(e) => {
+                    let e = anyhow!("Failed to delete conversation: {e}");
+                    tracing::error!("{e}");
+                    Command::message(e.into())
+                }
             }
-        }
-    })
+        })),
+    ))
 }
 
 fn move_conversation(
