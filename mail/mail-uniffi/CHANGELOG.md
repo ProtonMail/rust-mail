@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2024-00-00
 
+### Changed
+
+  - `UserLoginFlowVoidResult` was renamed to `VoidUserLoginFlowResult`
+  - `LoginFlow::user_id()` method now return `UserIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
+  - `LoginFlow::session_id()` method now return `SessionIdResult` instead of `UserLoginFlowStringResult` which differ only by a name.
+  - `LoginFlow::to_user_context()` method now return `ToUserContextResult` instead of `UserLoginFlowArcMailUserSessionResult` which differ only by a name.
+  - `MailSession::new_login_flow()` method now return `NewLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
+  - `MailSession::resume_login_flow()` method now return `ResumeLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
 
 ## [0.16.0] - 2024-10-24
 

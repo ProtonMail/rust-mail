@@ -28,3 +28,24 @@ macro_rules! export_void_result {
         }
     };
 }
+
+#[macro_export]
+macro_rules! export_typed_result {
+    ($name: ident, $ok_type: ty, $err_type: ty) => {
+        #[allow(clippy::large_enum_variant)]
+        #[derive(uniffi::Object)]
+        pub enum $name {
+            Ok($ok_type),
+            Error($err_type),
+        }
+
+        impl<T: Into<$ok_type>, E: Into<$err_type>> From<Result<T, E>> for $name {
+            fn from(value: Result<T, E>) -> Self {
+                match value {
+                    Ok(val) => Self::Ok(val.into()),
+                    Err(error) => Self::Error(error.into()),
+                }
+            }
+        }
+    };
+}
