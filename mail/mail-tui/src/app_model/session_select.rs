@@ -1,5 +1,5 @@
 use crate::app::Command;
-use crate::app_model::{login, mailbox, AppState, AppStateHandler};
+use crate::app_model::{login, mailbox, AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::anyhow;
@@ -84,15 +84,23 @@ impl AppStateHandler for Model {
                 let account_email = account.name_or_addr.clone();
                 let remote_id = account.remote_id.clone();
                 let ctx = Arc::clone(ctx);
-                Command::task(async move {
-                    if let Err(e) = ctx.delete_account(remote_id).await {
-                        let e = anyhow!("Failed to delete session: {e}");
-                        tracing::error!("{e}");
-                        return Command::message(Messages::DisplayError(None, e));
-                    }
+                Command::message(Messages::raise_popup(
+                    YesNoPopup::new(
+                        "Confirm Account Delete",
+                        format!(
+                            "Are you sure you wish to delete '{account_email}' and all its data",
+                        ),
+                    )
+                    .on_accept(Command::task(async move {
+                        if let Err(e) = ctx.delete_account(remote_id).await {
+                            let e = anyhow!("Failed to delete session: {e}");
+                            tracing::error!("{e}");
+                            return Command::message(Messages::DisplayError(None, e));
+                        }
 
-                    Command::message(Message::DeleteSuccess(account_email).into())
-                })
+                        Command::message(Message::DeleteSuccess(account_email).into())
+                    })),
+                ))
             }
             Message::Submit => {
                 let Some(index) = self.session_list_state.selected() else {

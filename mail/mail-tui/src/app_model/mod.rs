@@ -482,3 +482,95 @@ impl BackgroundProgress {
         frame.render_stateful_widget(full, spinner_area, &mut self.state);
     }
 }
+
+/// Simple confirmation popup.
+pub struct YesNoPopup {
+    title: String,
+    description: String,
+    accept_command: Option<Command<Messages>>,
+    reject_command: Option<Command<Messages>>,
+}
+
+impl YesNoPopup {
+    /// Create new instance with a `title` and a `description`;
+    pub fn new(title: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            description: description.into(),
+            accept_command: None,
+            reject_command: None,
+        }
+    }
+
+    /// Set the command that should be executed when the prompt is accepted.
+    pub fn on_accept(mut self, command: impl Into<Command<Messages>>) -> Self {
+        self.accept_command = Some(command.into());
+        self
+    }
+
+    /// Set the command that should be executed when the prompt is rejected.
+    #[allow(dead_code)]
+    pub fn on_reject(mut self, command: impl Into<Command<Messages>>) -> Self {
+        self.reject_command = Some(command.into());
+        self
+    }
+}
+
+impl Popup for YesNoPopup {
+    fn title(&self) -> Option<String> {
+        Some(self.title.clone())
+    }
+
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        if let Event::Key(key) = event {
+            match key.code {
+                KeyCode::Esc | KeyCode::Char('n' | 'N') => {
+                    return Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        self.reject_command.take().unwrap_or_default(),
+                    ])
+                }
+                KeyCode::Char('y' | 'Y') => {
+                    return Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        self.accept_command.take().unwrap_or_default(),
+                    ])
+                }
+                _ => {}
+            }
+        }
+
+        Command::None
+    }
+
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let [_, msg, _, instructions] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Min(3),
+            Constraint::Fill(1),
+            Constraint::Length(2),
+        ])
+        .flex(Flex::Center)
+        .areas(area.inner(Margin::new(2, 2)));
+        frame.render_widget(Block::new(), area);
+        frame.render_widget(
+            Paragraph::new(self.description.to_string())
+                .centered()
+                .wrap(Wrap { trim: false }),
+            msg,
+        );
+        frame.render_widget(
+            Text::from(Line::from(vec![
+                Span::from("Y/y:").bold(),
+                Span::from(" Accept "),
+                Span::from("            "),
+                Span::from("Esc/N/n:").bold(),
+                Span::from(" Reject"),
+            ]))
+            .centered()
+            .white()
+            .bold(),
+            instructions,
+        );
+    }
+}
