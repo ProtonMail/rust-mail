@@ -5,53 +5,24 @@
 //!
 
 use crate::core::datatypes::Id;
+use crate::errors::user_actions::{UserActionError, VoidUserActionResult};
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::mail::datatypes::labels::system_labels::SidebarSystemLabel;
 use crate::mail::datatypes::LabelType;
-use crate::mail::{MailSessionError, MailUserSession};
+use crate::mail::MailUserSession;
 use crate::utils::damp;
 use crate::{spawn_async, uniffi_async, LiveQueryCallback, WatchHandle};
 use proton_core_common::datatypes::LocalId as RealLocalId;
 use proton_mail_common::datatypes::LabelType as RealLabelType;
+use proton_mail_common::errors::user_actions::UserActionError as RealUserActionError;
 use proton_mail_common::models::Label as RealLabel;
-use proton_mail_common::AppError;
 use stash::orm::{Model, ResultsetChange};
 use stash::params;
-use stash::stash::StashError;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio::task::JoinError;
 use tracing::debug;
 use tracing::warn;
-
-#[derive(Debug, thiserror::Error, uniffi::Error)]
-#[uniffi(flat_error)]
-pub enum SidebarError {
-    #[error("App Error: {0}")]
-    AppError(#[from] AppError),
-    #[error("Mailbox Error: {0}")]
-    MailSessionError(#[from] MailSessionError),
-    #[error("Stash Error: {0}")]
-    Stash(#[from] StashError),
-}
-
-impl From<JoinError> for SidebarError {
-    fn from(value: JoinError) -> Self {
-        Self::MailSessionError(value.into())
-    }
-}
-type SidebarResult<T> = Result<T, SidebarError>;
-
-impl From<proton_mail_common::SidebarError> for SidebarError {
-    fn from(error: proton_mail_common::SidebarError) -> Self {
-        match error {
-            proton_mail_common::SidebarError::AppError(e) => Self::AppError(e),
-            proton_mail_common::SidebarError::MailContext(e) => Self::MailSessionError(e.into()),
-            proton_mail_common::SidebarError::Stash(e) => Self::Stash(e),
-        }
-    }
-}
 
 /// A [`Sidebar`] provides a gateway to manipulating actions accessible from sidebar
 #[derive(uniffi::Object)]
@@ -71,6 +42,37 @@ impl Sidebar {
         }
     }
 
+    /// Set folder `expanded` field to it's collapsed state
+    ///
+    /// # Errors
+    ///   * Database request fail
+    ///
+    pub async fn collapse_folder(&self, local_id: Id) -> VoidUserActionResult {
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move {
+            Result::<_, RealUserActionError>::Ok(sidebar.collapse_folder(local_id.into()).await?)
+        })
+        .await
+        .into()
+    }
+
+    /// Set folder `expanded` field to it's expanded state
+    ///
+    /// # Errors
+    ///   * Database request fail
+    ///
+    pub async fn expand_folder(&self, local_id: Id) -> VoidUserActionResult {
+        let sidebar = self.sidebar.clone();
+        uniffi_async(async move {
+            Result::<_, RealUserActionError>::Ok(sidebar.expand_folder(local_id.into()).await?)
+        })
+        .await
+        .into()
+    }
+}
+
+#[proton_uniffi_macros::export_result]
+impl Sidebar {
     /// Get the list of the System Folder to display in the sidebar.
     ///
     /// That list is filtered in function of [`MailSettings::almost_all_mail`] and some are hidden
@@ -79,13 +81,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn system_labels(&self) -> SidebarResult<Vec<SidebarSystemLabel>> {
+    pub async fn system_labels(&self) -> Result<Vec<SidebarSystemLabel>, UserActionError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.system_labels().await?;
-            Ok(labels.into_iter().map(SidebarSystemLabel::from).collect())
+            Result::<_, RealUserActionError>::Ok(
+                labels.into_iter().map(SidebarSystemLabel::from).collect(),
+            )
         })
         .await
+        .map_err(Into::into)
     }
 
     /// Get the list of Custom Folders to display in the sidebar.
@@ -93,13 +98,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_folders(&self) -> SidebarResult<Vec<SidebarCustomFolder>> {
+    pub async fn custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserActionError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.custom_folders().await?;
-            Ok(labels.into_iter().map(SidebarCustomFolder::from).collect())
+            Result::<_, RealUserActionError>::Ok(
+                labels.into_iter().map(SidebarCustomFolder::from).collect(),
+            )
         })
         .await
+        .map_err(Into::into)
     }
 
     /// Get the list of all the Custom Folders.
@@ -107,13 +115,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn all_custom_folders(&self) -> SidebarResult<Vec<SidebarCustomFolder>> {
+    pub async fn all_custom_folders(&self) -> Result<Vec<SidebarCustomFolder>, UserActionError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.all_custom_folders().await?;
-            Ok(labels.into_iter().map(SidebarCustomFolder::from).collect())
+            Result::<_, RealUserActionError>::Ok(
+                labels.into_iter().map(SidebarCustomFolder::from).collect(),
+            )
         })
         .await
+        .map_err(Into::into)
     }
 
     /// Get the list of Custom Labels to display in the sidebar.
@@ -121,33 +132,16 @@ impl Sidebar {
     /// # Errors
     ///   * Database request fail
     ///
-    pub async fn custom_labels(&self) -> SidebarResult<Vec<SidebarCustomLabel>> {
+    pub async fn custom_labels(&self) -> Result<Vec<SidebarCustomLabel>, UserActionError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let labels = sidebar.custom_labels().await?;
-            Ok(labels.into_iter().map(SidebarCustomLabel::from).collect())
+            Result::<_, RealUserActionError>::Ok(
+                labels.into_iter().map(SidebarCustomLabel::from).collect(),
+            )
         })
         .await
-    }
-
-    /// Set folder `expanded` field to it's collapsed state
-    ///
-    /// # Errors
-    ///   * Database request fail
-    ///
-    pub async fn collapse_folder(&self, local_id: Id) -> SidebarResult<()> {
-        let sidebar = self.sidebar.clone();
-        uniffi_async(async move { Ok(sidebar.collapse_folder(local_id.into()).await?) }).await
-    }
-
-    /// Set folder `expanded` field to it's expanded state
-    ///
-    /// # Errors
-    ///   * Database request fail
-    ///
-    pub async fn expand_folder(&self, local_id: Id) -> SidebarResult<()> {
-        let sidebar = self.sidebar.clone();
-        uniffi_async(async move { Ok(sidebar.expand_folder(local_id.into()).await?) }).await
+        .map_err(Into::into)
     }
 
     /// Watch labels of a given type.
@@ -169,7 +163,7 @@ impl Sidebar {
         &self,
         label_type: LabelType,
         callback: Box<dyn LiveQueryCallback>,
-    ) -> SidebarResult<Arc<WatchHandle>> {
+    ) -> Result<Arc<WatchHandle>, UserActionError> {
         let sidebar = self.sidebar.clone();
         uniffi_async(async move {
             let (sender, receiver) = flume::unbounded::<ResultsetChange<RealLabel, RealLocalId>>();
@@ -228,7 +222,7 @@ impl Sidebar {
                     };
                 }
             });
-            Ok(Arc::new(WatchHandle { stop_flag }))
-        }).await
+            Result::<_, RealUserActionError>::Ok(Arc::new(WatchHandle { stop_flag }))
+        }).await.map_err(Into::into)
     }
 }

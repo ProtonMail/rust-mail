@@ -35,4 +35,4 @@ Default locations unless you have local overwrites.
 ### Mac OS
 
 * ~/Library/Caches/com.proton.proton-mail-tui
-* ~/Library/Application Support/com.proton.proton-mail-tui
+* ~/Library/Application\ Support/com.proton.proton-mail-tui
