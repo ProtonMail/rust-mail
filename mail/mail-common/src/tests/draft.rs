@@ -150,7 +150,7 @@ fn message_signature_with_signature_only() {
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = MailSettings::default();
     let signature = get_signature(&address, &mail_settings);
-    assert_eq!(signature, format!("\n\n{ADDRESS_SIGNATURE}"));
+    insta::assert_snapshot!(signature);
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn message_signature_with_mail_settings_signature_only() {
     let address = address_with_signature("");
     let mail_settings = mail_settings_with_signature();
     let signature = get_signature(&address, &mail_settings);
-    assert_eq!(signature, format!("\n\n{MAIL_SETTINGS_SIGNATURE}"));
+    insta::assert_snapshot!(signature);
 }
 
 #[test]
@@ -166,10 +166,15 @@ fn message_signature_with_address_and_mail_settings_signature() {
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature();
     let signature = get_signature(&address, &mail_settings);
-    assert_eq!(
-        signature,
-        format!("\n\n{ADDRESS_SIGNATURE}\n\n{MAIL_SETTINGS_SIGNATURE}")
-    );
+    insta::assert_snapshot!(signature);
+}
+
+#[test]
+fn message_signature_with_all_signatures() {
+    let address = address_with_signature(ADDRESS_SIGNATURE);
+    let mail_settings = mail_settings_with_signature_and_pm_signautre();
+    let signature = get_signature(&address, &mail_settings);
+    insta::assert_snapshot!(signature);
 }
 
 fn address_with_signature(signature: impl Into<String>) -> Address {
@@ -197,6 +202,13 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
 fn mail_settings_with_signature() -> MailSettings {
     let mut settings = MailSettings::default();
     settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
+    settings
+}
+
+fn mail_settings_with_signature_and_pm_signautre() -> MailSettings {
+    let mut settings = MailSettings::default();
+    settings.signature = MAIL_SETTINGS_SIGNATURE.to_owned();
+    settings.pm_signature = PmSignature::Enabled;
     settings
 }
 
