@@ -334,6 +334,11 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///                   not be zero.
     /// * `remote`      - Implementation of [`DataSource`] where pagination
     ///                   data will be synchronized from.
+    /// * `local_first` - Load local data immediately, to return to the caller
+    ///                   without the delay of remote lookup. If set to `false`,
+    ///                   no results will be returned until the remote API calls
+    ///                   have completed. This only affects the first call to
+    ///                   the paginator.
     /// * `queue`       - An optional queue to send changes to. If this is
     ///                   provided, the function will listen for changes to the
     ///                   result set and send them to the queue. This is useful
@@ -349,6 +354,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
         interface: &A,
         page_size: NonZeroU32,
         remote: R,
+        local_first: bool,
         queue: Option<QueueSender<ResultsetChange<T, T::IdType>>>,
     ) -> Result<Self, R::Error>
     where
@@ -370,7 +376,7 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
             remote: Arc::new(remote),
         };
 
-        paginator.initialize(interface).await?;
+        paginator.initialize(interface, local_first).await?;
 
         paginator.start_update_listener(queue);
 
@@ -381,15 +387,22 @@ impl<T: Model, R: DataSource<Item = T>> Paginator<T, R> {
     ///
     /// # Parameters
     ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///                 use for finding the records. Note that this will only be
-    ///                 respected for the initial query, and not for any
-    ///                 subsequent queries that are performed as a result of
-    ///                 updates to the result set when pagination is active —
-    ///                 those will use the underlying [`Stash`] instance.
+    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
+    ///                   to use for finding the records. Note that this will
+    ///                   only be respected for the initial query, and not for
+    ///                   any subsequent queries that are performed as a result
+    ///                   of updates to the result set when pagination is active
+    ///                   — those will use the underlying [`Stash`] instance.
+    /// * `local_first` - Load local data immediately, to return to the caller
+    ///                   without the delay of remote lookup. If set to `false`,
+    ///                   no results will be returned until the remote API calls
+    ///                   have completed. This only affects the first call to
+    ///                   the paginator. **NOTE:** At present the background API
+    ///                   query has been disabled and so the behaviour is as if
+    ///                   `local_first` is always `true`.
     ///
     #[allow(clippy::cast_possible_truncation)]
-    async fn initialize<A>(&self, interface: &A) -> Result<(), R::Error>
+    async fn initialize<A>(&self, interface: &A, _local_first: bool) -> Result<(), R::Error>
     where
         A: Into<AgnosticInterface> + Interface,
     {

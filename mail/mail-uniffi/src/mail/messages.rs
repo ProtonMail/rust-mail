@@ -20,7 +20,7 @@ use crate::{uniffi_async, watch_channel, LiveQueryCallback, WatchHandle};
 use crate::{PaginatorFilter, PaginatorSearchOptions};
 use itertools::Itertools as _;
 use proton_api_core::session::CoreSession;
-use proton_core_common::datatypes::{LabelId as RealLabelId, LocalId as RealLocalId, LocalId};
+use proton_core_common::datatypes::{LabelId as RealLabelId, LocalId as RealLocalId};
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput as RealBodyOutput, DecryptedMessageBody,
@@ -362,9 +362,10 @@ pub async fn paginate_messages_for_label(
             &context,
             RealLocalId::from(label_id),
             50,
-            Some(msg_sender),
             RealPaginatorFilter::from(filter),
             RealPaginatorSearchOptions::default(),
+            true,
+            Some(msg_sender),
         )
         .await?;
         Ok(MessagePaginator {
@@ -404,11 +405,12 @@ pub async fn paginate_search(
     uniffi_async(async move {
         let real_paginator = RealMessage::paginate_in_label(
             &context,
-            LocalId::from(RealLabelId::inbox().parse::<u64>().unwrap()),
+            RealLocalId::from(RealLabelId::all_mail().parse::<u64>().unwrap()),
             50,
-            Some(msg_sender),
             RealPaginatorFilter::default(),
             RealPaginatorSearchOptions::from(options),
+            false,
+            Some(msg_sender),
         )
         .await?;
         Ok(MessagePaginator {
