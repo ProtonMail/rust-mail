@@ -359,7 +359,14 @@ where
         key: Config::Key,
         extra: Option<Config::ExtraMetadata>,
     ) -> CacheResult<bool> {
-        let file_path = self.path_from_key(&key, extra.as_ref())?;
+        let file_path = match self.path_from_key(&key, extra.as_ref()) {
+            Ok(file_path) => file_path,
+            Err(CacheError::NeedExtraMetadata) => {
+                warn!("Can't generate path from key without extra metadata");
+                return Ok(false);
+            }
+            Err(error) => return Err(error),
+        };
         let Ok(metadata) = file_path.metadata() else {
             warn!("Cache item {key:?} don't exist");
             return Ok(false);
