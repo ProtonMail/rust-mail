@@ -867,7 +867,7 @@ async fn test_create_message() {
         .await
         .expect("failed to get message")
         .expect("must have a value");
-    let mut expected = Message::from_api_data(message, &tx).await.unwrap();
+    let (mut expected, _, _) = Message::from_api_data(message, &tx).await.unwrap();
     let label = Label::find_by_id(RemoteId::from(MY_LABEL_ID1.clone()), &stash)
         .await
         .unwrap()
@@ -1102,7 +1102,7 @@ async fn test_update_message() {
         .await
         .unwrap()
         .unwrap();
-    let mut expected = Message::from_api_data(metadata_updated, &stash)
+    let (mut expected, _, _) = Message::from_api_data(metadata_updated, &stash)
         .await
         .unwrap();
     expected.set_stash(&stash);
@@ -1527,59 +1527,53 @@ async fn test_create_message_and_body() {
     test_create_message_dependencies(&tx).await;
     let message = ApiMessage {
         metadata: test_message_metadata(vec![MY_LABEL_ID1.clone()], vec![]),
-        header: "my headers".to_owned(),
-        parsed_headers: hash_map! {
-            "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
-            "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
+        body: ApiMessageBody {
+            header: "my headers".to_owned(),
+            parsed_headers: hash_map! {
+                "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+                "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
+            },
+            body: "my_message".to_owned(),
+            mime_type: ApiMimeType::TextPlain,
+            attachments: vec![],
         },
-        body: "my_message".to_owned(),
-        mime_type: ApiMimeType::TextPlain,
-        attachments: vec![],
     };
-    let id = Message::create_or_update_messages_from_metadata(vec![message.metadata], tx.stash())
+    let (mut metadata, mut body_metadata, _) =
+        Message::from_api_data(message.clone(), &tx).await.unwrap();
+    metadata
+        .save_using(&tx)
         .await
-        .expect("failed to create message")
-        .into_iter()
-        .next()
-        .unwrap();
-    let db_message = Message::load(id, tx.stash())
+        .expect("failed to create message");
+    body_metadata
+        .save_using(&tx)
+        .await
+        .expect("failed to store message body metadata in db");
+    let db_message = Message::load(metadata.local_id.unwrap(), &tx)
         .await
         .expect("failed to get message")
         .expect("must have a value");
-    let mut metadata = MessageBodyMetadata {
-        local_message_id: None,
-        remote_message_id: db_message.remote_id.clone(),
-        header: message.header.clone(),
-        parsed_headers: ParsedHeaders {
-            headers: message.parsed_headers.clone(),
-        },
-        mime_type: message.mime_type.into(),
-        attachments: vec![],
-        row_id: None,
-        stash: Some(stash.clone()),
-    };
-    metadata
-        .save()
-        .await
-        .expect("failed to store message body metadata in db");
 
-    assert_eq!(id, metadata.local_message_id.unwrap());
+    assert_eq!(
+        metadata.local_id.unwrap(),
+        body_metadata.local_message_id.unwrap()
+    );
 
-    let db_message_body = MessageBodyMetadata::load(id, tx.stash())
+    let db_message_body = MessageBodyMetadata::load(metadata.local_id.unwrap(), &tx)
         .await
         .expect("failed to get message body")
         .expect("must have a value");
 
-    assert_eq!(metadata, db_message_body);
+    body_metadata.set_stash(tx.stash());
+    assert_eq!(body_metadata, db_message_body);
 
     let expected = MessageBodyMetadata {
         local_message_id: db_message.local_id,
         remote_message_id: db_message.remote_id.clone(),
-        header: message.header.clone(),
+        header: message.body.header.clone(),
         parsed_headers: ParsedHeaders {
-            headers: message.parsed_headers.clone(),
+            headers: message.body.parsed_headers.clone(),
         },
-        mime_type: message.mime_type.into(),
+        mime_type: message.body.mime_type.into(),
         attachments: vec![],
         row_id: Some(1),
         stash: Some(stash.clone()),
@@ -1597,59 +1591,50 @@ async fn test_update_message_and_body() {
 
     let mut message = ApiMessage {
         metadata: test_message_metadata(vec![MY_LABEL_ID1.clone()], vec![]),
-        header: "my headers".to_owned(),
-        parsed_headers: hash_map! {
-            "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
-            "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
+        body: ApiMessageBody {
+            header: "my headers".to_owned(),
+            parsed_headers: hash_map! {
+                "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+                "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
+            },
+            body: "my_message".to_owned(),
+            mime_type: ApiMimeType::TextPlain,
+            attachments: vec![],
         },
-        body: "my_message".to_owned(),
-        mime_type: ApiMimeType::TextPlain,
-        attachments: vec![],
     };
-    let id = Message::create_or_update_messages_from_metadata(
-        vec![message.metadata.clone()],
-        tx.stash(),
-    )
-    .await
-    .expect("failed to create message")
-    .into_iter()
-    .next()
-    .unwrap();
+
+    let (mut metadata, mut body_metadata, _) =
+        Message::from_api_data(message.clone(), &tx).await.unwrap();
+    metadata
+        .save_using(&tx)
+        .await
+        .expect("failed to create message");
+
+    body_metadata
+        .save_using(&tx)
+        .await
+        .expect("failed to store message body metadata in db");
+    let id = metadata.local_id.unwrap();
 
     let db_message = Message::load(id, tx.stash())
         .await
         .expect("failed to get message")
         .expect("must have a value");
-    let mut metadata = MessageBodyMetadata {
-        local_message_id: None,
-        remote_message_id: db_message.remote_id.clone(),
-        header: message.header.clone(),
-        parsed_headers: ParsedHeaders {
-            headers: message.parsed_headers.clone(),
-        },
-        mime_type: message.mime_type.into(),
-        attachments: vec![],
-        row_id: None,
-        stash: Some(stash.clone()),
-    };
-    metadata
-        .save()
-        .await
-        .expect("failed to store message body metadata in db");
 
     message
+        .body
         .parsed_headers
         .insert("marco".to_owned(), json!("polo"));
 
     MessageBodyMetadata {
         parsed_headers: ParsedHeaders {
-            headers: message.parsed_headers.clone(),
+            headers: message.body.parsed_headers.clone(),
         },
         mime_type: MimeType::TextHtml,
         header: "new header".to_string(),
-        ..metadata
+        ..body_metadata
     }
-    .save()
+    .save_using(&tx)
     .await
     .unwrap();
 
@@ -1663,7 +1648,7 @@ async fn test_update_message_and_body() {
         remote_message_id: db_message.remote_id.clone(),
         header: "new header".to_string(),
         parsed_headers: ParsedHeaders {
-            headers: message.parsed_headers,
+            headers: message.body.parsed_headers,
         },
         mime_type: MimeType::TextHtml,
         attachments: vec![],
@@ -1692,67 +1677,69 @@ async fn test_create_message_and_body_with_attachments() {
                 disposition: ApiDisposition::Inline,
             }],
         ),
-        header: "my headers".to_owned(),
-        parsed_headers: hash_map! {
-            "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
-            "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
-        },
-        body: "my_message".to_owned(),
-        mime_type: ApiMimeType::TextPlain,
-        attachments: vec![ApiMessageAttachment {
-            id: attachment_id.clone().into(),
-            name: "fooo".to_owned(),
-            size: 1024,
-            mime_type: attachment::MimeType::text_html().to_string(),
-            disposition: ApiDisposition::Inline,
-            key_packets: KeyPackets::from("packets"),
-            signature: None,
-            enc_signature: None,
-            headers: ApiMessageAttachmentHeaders {
-                content_disposition: "inline".to_owned(),
-                content_id: Some("mycontent_id".to_owned()),
-                content_transfer_encoding: Some("base64".to_owned()),
-                image_width: Some("1280".to_owned()),
-                image_height: Some("720".to_owned()),
+        body: ApiMessageBody {
+            header: "my headers".to_owned(),
+            parsed_headers: hash_map! {
+                "foo".to_owned(): serde_json::Value::String("bar".to_owned()),
+                "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
             },
-        }],
+            body: "my_message".to_owned(),
+            mime_type: ApiMimeType::TextPlain,
+            attachments: vec![ApiMessageAttachment {
+                id: attachment_id.clone().into(),
+                name: "fooo".to_owned(),
+                size: 1024,
+                mime_type: attachment::MimeType::text_html().to_string(),
+                disposition: ApiDisposition::Inline,
+                key_packets: KeyPackets::from("packets"),
+                signature: None,
+                enc_signature: None,
+                headers: ApiMessageAttachmentHeaders {
+                    content_disposition: "inline".to_owned(),
+                    content_id: Some("mycontent_id".to_owned()),
+                    content_transfer_encoding: Some("base64".to_owned()),
+                    image_width: Some("1280".to_owned()),
+                    image_height: Some("720".to_owned()),
+                },
+            }],
+        },
     };
-    let id = Message::create_or_update_messages_from_metadata(
-        vec![message.metadata.clone()],
-        tx.stash(),
-    )
-    .await
-    .expect("failed to create message")
-    .into_iter()
-    .next()
-    .unwrap();
+
+    let (mut metadata, mut body_metadata, _) =
+        Message::from_api_data(message.clone(), &tx).await.unwrap();
+
+    metadata
+        .save_using(&tx)
+        .await
+        .expect("failed to create message");
+    body_metadata.save_using(&tx).await.unwrap();
+
+    let id = metadata.local_id.unwrap();
 
     let db_message = Message::load(id, tx.stash())
         .await
         .expect("failed to get message")
         .expect("must have a value");
 
-    MessageBodyMetadata::save_from_api_data(message.clone(), None, &tx)
-        .await
-        .unwrap();
-
-    let local_attachment = message.attachments.first().unwrap();
+    let local_attachment = message.body.attachments.first().unwrap();
 
     assert_eq!(
         local_attachment.headers.content_id,
-        message.attachments[0].headers.content_id
+        message.body.attachments[0].headers.content_id
     );
     assert_eq!(
         local_attachment.headers.content_transfer_encoding,
-        message.attachments[0].headers.content_transfer_encoding
+        message.body.attachments[0]
+            .headers
+            .content_transfer_encoding
     );
     assert_eq!(
         local_attachment.headers.image_width,
-        message.attachments[0].headers.image_width
+        message.body.attachments[0].headers.image_width
     );
     assert_eq!(
         local_attachment.headers.image_height,
-        message.attachments[0].headers.image_height
+        message.body.attachments[0].headers.image_height
     );
 
     let new_metadata = MessageBodyMetadata::for_message(db_message.local_id.unwrap(), &tx)
@@ -2404,11 +2391,13 @@ fn test_message_with_metadata(
     attachments: Vec<ApiAttachmentMetadata>,
 ) -> ApiMessage {
     ApiMessage {
-        attachments: vec![],
-        body: "".to_owned(),
-        header: "".to_owned(),
-        mime_type: Default::default(),
-        parsed_headers: Default::default(),
+        body: ApiMessageBody {
+            attachments: vec![],
+            body: "".to_owned(),
+            header: "".to_owned(),
+            mime_type: Default::default(),
+            parsed_headers: Default::default(),
+        },
         metadata: ApiMessageMetadata {
             id: MY_MESSAGE_ID.clone().into(),
             conversation_id: MY_CONVERSATION_ID.clone(),
