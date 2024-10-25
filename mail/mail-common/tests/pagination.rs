@@ -111,8 +111,9 @@ async fn paginate_conversations() {
         &user_ctx,
         mailbox_inbox.label_id(),
         page_size.try_into().unwrap(),
-        None,
         PaginatorFilter::default(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -216,9 +217,10 @@ async fn paginate_messages() {
         &user_ctx,
         mailbox_inbox.label_id(),
         page_size.try_into().unwrap(),
-        None,
         PaginatorFilter::default(),
         PaginatorSearchOptions::default(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -431,8 +433,9 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         filter.into(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -454,8 +457,9 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         filter.into(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -471,8 +475,9 @@ async fn paginate_conversations_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         filter.into(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -548,9 +553,10 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         filter.into(),
         PaginatorSearchOptions::default(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -568,9 +574,10 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         filter.into(),
         PaginatorSearchOptions::default(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -586,9 +593,10 @@ async fn paginate_messages_for_label_with_filter() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         filter.into(),
         PaginatorSearchOptions::default(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -662,9 +670,10 @@ async fn paginate_search() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         PaginatorFilter::default(),
         options.into(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -678,9 +687,10 @@ async fn paginate_search() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         PaginatorFilter::default(),
         options.into(),
+        true,
+        None,
     )
     .await
     .unwrap();
@@ -696,9 +706,10 @@ async fn paginate_search() {
         &user_ctx,
         mailbox_inbox.label_id(),
         50,
-        None,
         PaginatorFilter::default(),
         options.into(),
+        true,
+        None,
     )
     .await
     .unwrap();

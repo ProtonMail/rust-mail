@@ -76,6 +76,7 @@ pub async fn paginate_test_models(
         stash,
         NonZeroU32::new(50).unwrap(),
         data_source,
+        true,
         Some(msg_sender),
     )
     .await
@@ -133,6 +134,7 @@ mod basic_pagination {
             &stash,
             NonZeroU32::new(50).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -157,6 +159,7 @@ mod basic_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -194,6 +197,7 @@ mod basic_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -231,6 +235,7 @@ mod basic_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -269,6 +274,7 @@ mod basic_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -308,6 +314,7 @@ mod basic_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -336,6 +343,7 @@ mod extended_pagination {
             &stash,
             NonZeroU32::new(10).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -446,6 +454,7 @@ mod extended_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -523,6 +532,7 @@ mod extended_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await
@@ -613,6 +623,7 @@ mod changes_during_pagination {
             &stash,
             NonZeroU32::new(5).unwrap(),
             data_source,
+            true,
             Some(msg_sender),
         )
         .await

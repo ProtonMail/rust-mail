@@ -3329,10 +3329,15 @@ impl Conversation {
     /// # Params
     ///
     /// * `context`        - Active user context.
-    /// * `local_label_id` - Label where to paginate in.
+    /// * `local_label_id` - Label to paginate in.
     /// * `page_count`     - Number of elements per page.
-    /// * `queue`          - Optional subscriber for changes.
     /// * `filter`         - Filter options for pagination.
+    /// * `local_first`    - Load local data immediately, to return to the
+    ///                      caller without the delay of remote lookup. If set
+    ///                      to `false`, no results will be returned until the
+    ///                      remote API calls have completed. This only affects
+    ///                      the first call to the paginator.
+    /// * `queue`          - Optional subscriber for changes.
     ///
     /// # Errors
     ///
@@ -3342,8 +3347,9 @@ impl Conversation {
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
         filter: PaginatorFilter,
+        local_first: bool,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<PaginatorCompat<Self, ConversationDataSource>, AppError> {
         let remote_source =
             ConversationDataSource::new(context, local_label_id, filter.clone()).await?;
@@ -3385,6 +3391,7 @@ impl Conversation {
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
                 remote_source,
+                local_first,
                 queue,
             )
             .await?,
@@ -6677,11 +6684,16 @@ impl Message {
     /// # Params
     ///
     /// * `context`        - Active user context.
-    /// * `local_label_id` - Label where to paginate in.
+    /// * `local_label_id` - Label to paginate in.
     /// * `page_count`     - Number of elements per page.
-    /// * `queue`          - Optional subscriber for changes.
     /// * `filter`         - Filter options for pagination.
     /// * `options`        - Search options for pagination.
+    /// * `local_first`    - Load local data immediately, to return to the
+    ///                      caller without the delay of remote lookup. If set
+    ///                      to `false`, no results will be returned until the
+    ///                      remote API calls have completed. This only affects
+    ///                      the first call to the paginator.
+    /// * `queue`          - Optional subscriber for changes.
     ///
     /// # Errors
     ///
@@ -6691,9 +6703,10 @@ impl Message {
         context: &MailUserContext,
         local_label_id: LocalId,
         page_count: u32,
-        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
         filter: PaginatorFilter,
         options: PaginatorSearchOptions,
+        local_first: bool,
+        queue: Option<flume::Sender<ResultsetChange<Self, <Self as Model>::IdType>>>,
     ) -> Result<PaginatorCompat<Self, MessageDataSource>, AppError> {
         let remote_source =
             MessageDataSource::new(context, local_label_id, filter.clone(), options.clone())
@@ -6746,6 +6759,7 @@ impl Message {
                 NonZeroU32::new(page_count)
                     .ok_or(StashError::Custom("Invalid Page Count value".to_owned()))?,
                 remote_source,
+                local_first,
                 queue,
             )
             .await?,

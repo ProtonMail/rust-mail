@@ -167,6 +167,7 @@ async fn data_source_sync() {
         &stash,
         NonZeroU32::new(5).unwrap(),
         source,
+        true,
         None,
     )
     .await
@@ -212,6 +213,7 @@ async fn data_source_sync_first_page_if_existing_less_than_page_size() {
         &stash,
         NonZeroU32::new(5).unwrap(),
         source,
+        true,
         None,
     )
     .await
@@ -237,6 +239,7 @@ async fn data_source_skips_sync_first_page_if_existing_greater_than_page_size() 
         &stash,
         NonZeroU32::new(5).unwrap(),
         SkipFirstSyncSource(source),
+        true,
         None,
     )
     .await
@@ -265,6 +268,7 @@ async fn data_source_sync_with_callback() {
         &stash,
         NonZeroU32::new(5).unwrap(),
         source,
+        true,
         Some(sender),
     )
     .await
