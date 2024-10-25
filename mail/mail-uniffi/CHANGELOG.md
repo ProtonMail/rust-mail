@@ -16,6 +16,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `LoginFlow::to_user_context()` method now return `ToUserContextResult` instead of `UserLoginFlowArcMailUserSessionResult` which differ only by a name.
   - `MailSession::new_login_flow()` method now return `NewLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
   - `MailSession::resume_login_flow()` method now return `ResumeLoginFlowResult` instead of `UserLoginFlowArcLoginFlowResult` which differ only by a name.
+  - `apply_label_to_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `delete_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `available_actions_for_conversations` function now returns `AvailableActionsForConversationsResult` instead of `Result<ConversationAvailableActions, MailboxError>`.
+  - `available_label_as_actions_for_conversations` function now returns `AvailableLabelAsActionsForConversationsResult` instead of `MailboxResult<Vec<LabelAsAction>>`.
+  - `available_move_to_actions_for_conversations` function now returns `AvailableMoveToActionsForConversationsResult` instead of `MailboxResult<Vec<MoveAction>>`.
+  - `all_available_bottom_bar_actions_for_conversations` function now returns `AllAvailableBottomBarActionsForConversationsResult` instead of `MailboxResult<AllBottomBarMessageActions>`.
+  - `conversation` function now returns `ConversationResult` instead of `Result<Option<ConversationAndMessages>, MailboxError>`.
+  - `conversations_for_label` function now returns `ConversationsForLabelResult` instead of `Result<Vec<Conversation>, MailboxError>`.
+  - `load_conversation` function now returns `LoadConversationResult` instead of `Result<Option<Conversation>, MailboxError>`.
+  - `mark_conversations_as_read` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `mark_conversations_as_unread` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `move_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `paginate_conversations_for_label` function now returns `PaginateConversationsForLabelResult` instead of `Result<ConversationPaginator, MailboxError>`.
+  - `remove_label_from_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `search_for_conversations` function now returns `SearchForConversationsResult` instead of `Result<Vec<Conversation>, MailSessionError>`.
+  - `star_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `unstar_conversations` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `watch_conversation` function now returns `WatchConversationResult` instead of `Result<Option<WatchedConversation>, MailboxError>`.
+  - `watch_conversations_for_label` function now returns `WatchConversationsForLabelResult` instead of `Result<WatchedConversations, MailboxError>`.
+  - `label_conversations_as` function now returns `LabelConversationsAsResult` instead of `Result<bool, MailboxError>`.
+  - `get_attachment` function now returns `GetAttachmentResult` instead of `Result<DecryptedAttachment, MailboxError>`.
+  - `body` method of `DecryptedMessage` now returns `BodyResult` instead of `Result<BodyOutput, MailboxError>`.
+  - `message` function now returns `MessageResult` instead of `Result<Option<Message>, MailboxError>`.
+  - `watch_message` function now returns `WatchMessageResult` instead of `Result<Option<WatchedMessage>, MailboxError>`.
+  - `messages_for_conversation` function now returns `MessagesForConversationResult` instead of `Result<Vec<Message>, MailboxError>`.
+  - `messages_for_label` function now returns `MessagesForLabelResult` instead of `Result<Vec<Message>, MailboxError>`.
+  - `paginate_messages_for_label` function now returns `PaginateMessagesForLabelResult` instead of `Result<MessagePaginator, MailboxError>`.
+  - `paginate_search` function now returns `PaginateSearchResult` instead of `Result<MessagePaginator, MailboxError>`.
+  - `search_for_messages` function now returns `SearchForMessagesResult` instead of `Result<Vec<Message>, MailSessionError>`.
+  - `available_actions_for_messages` function now returns `AvailableActionsForMessagesResult` instead of `MailboxResult<MessageAvailableActions>`.
+  - `available_label_as_actions_for_messages` function now returns `AvailableLabelAsActionsForMessagesResult` instead of `MailboxResult<Vec<LabelAsAction>>`.
+  - `available_move_to_actions_for_messages` function now returns `AvailableMoveToActionsForMessagesResult` instead of `MailboxResult<Vec<MoveAction>>`.
+  - `all_available_bottom_bar_actions_for_messages` function now returns `AllAvailableBottomBarActionsForMessagesResult` instead of `MailboxResult<AllBottomBarMessageActions>`.
+  - `get_message_body` function now returns `GetMessageBodyResult` instead of `MailSessionResult<DecryptedMessage>`.
+  - `watch_messages_for_label` function now returns `WatchMessagesForLabelResult` instead of `Result<WatchedMessages, MailboxError>`.
+  - `apply_label_to_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `star_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `unstar_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `remove_label_from_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `mark_messages_read` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `mark_messages_unread` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `delete_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `move_messages` function now returns `VoidUserActionResult` instead of `Result<(), MailSessionError>`.
+  - `label_messages_as` function now returns `LabelMessagesAsResult` instead of `Result<bool, MailSessionError>`.
+  - `Sidebar::system_labels` method now returns `SystemLabelsResult` instead of `SidebarResult<Vec<SidebarSystemLabel>>`.
+  - `Sidebar::custom_folders` method now returns `CustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
+  - `Sidebar::all_custom_folders` method now returns `AllCustomFoldersResult` instead of `SidebarResult<Vec<SidebarCustomFolder>>`.
+  - `Sidebar::custom_labels` method now returns `CustomLabelsResult` instead of `SidebarResult<Vec<SidebarCustomLabel>>`.
+  - `Sidebar::collapse_folder` method now returns `VoidUserActionResult` instead of `SidebarResult<()>`.
+  - `Sidebar::expand_folder` method now returns `VoidUserActionResult` instead of `SidebarResult<()>`.
+  - `Sidebar::watch_labels` method now returns `WatchLabelsResult` instead of `SidebarResult<Arc<WatchHandle>>`.
 
 ## [0.16.0] - 2024-10-24
 
